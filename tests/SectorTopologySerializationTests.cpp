@@ -1214,6 +1214,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModel.position = Vector3{12.0f, -2.5f, 20.0f};
     staticModel.yawRadians = 0.5f;
     staticModel.staticModel.modelPath = "assets/models/props/nested/crate.glb";
+    staticModel.staticModel.instanceId = "crate_18";
     staticModel.staticModel.rotationXRadians = 0.25f;
     staticModel.staticModel.rotationZRadians = -0.75f;
     staticModel.staticModel.heightOffsetWorld = 0.75f;
@@ -1223,6 +1224,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModelMap.runtimeObjects.push_back(staticModel);
     const Json staticModelSaved = Json::parse(SaveText(staticModelMap));
     Check(staticModelSaved["runtimeObjects"][0]["kind"] == "static_model"
+                  && staticModelSaved["runtimeObjects"][0]["staticModel"]["instanceId"]
+                             == "crate_18"
                   && staticModelSaved["runtimeObjects"][0]["staticModel"]["modelPath"]
                              == "assets/models/props/nested/crate.glb"
                   && Near(
@@ -1256,6 +1259,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
             game::FindSectorPlacedRuntimeObject(staticModelLoaded, 18);
     Check(loadedStaticModel != nullptr
                   && loadedStaticModel->kind == "static_model"
+                  && loadedStaticModel->staticModel.instanceId == "crate_18"
                   && loadedStaticModel->staticModel.modelPath
                           == "assets/models/props/nested/crate.glb"
                   && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f)
@@ -1271,14 +1275,17 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModelMap.runtimeObjects[0].staticModel = game::SectorPlacedStaticModel{};
     const Json unassignedStaticModelSaved = Json::parse(SaveText(staticModelMap));
     Check(unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].is_object()
-                  && unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].empty(),
-          "unassigned static prop saves an empty payload and omits default fields");
+                  && unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].size() == 1
+                  && unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"]["instanceId"]
+                             == "prop_18",
+          "unassigned static prop saves its generated ID and omits other default fields");
     SectorTopologyMap unassignedStaticModelLoaded;
     Check(LoadText(unassignedStaticModelSaved.dump(), unassignedStaticModelLoaded, error),
           "unassigned static prop with missing optional fields loads");
     const SectorPlacedRuntimeObject* unassignedStaticModel =
             game::FindSectorPlacedRuntimeObject(unassignedStaticModelLoaded, 18);
     Check(unassignedStaticModel != nullptr
+                  && unassignedStaticModel->staticModel.instanceId == "prop_18"
                   && unassignedStaticModel->staticModel.modelPath.empty()
                   && Near(unassignedStaticModel->staticModel.rotationXRadians, 0.0f)
                   && Near(unassignedStaticModel->staticModel.rotationZRadians, 0.0f)
@@ -1287,6 +1294,53 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !unassignedStaticModel->staticModel.collision
                   && unassignedStaticModel->staticModel.castsShadow,
           "missing static prop payload fields use backward-compatible defaults");
+
+    Json missingStaticInstanceId = staticModelSaved;
+    missingStaticInstanceId["runtimeObjects"][0]["staticModel"].erase(
+            "instanceId");
+    SectorTopologyMap migratedStaticModel;
+    Check(LoadText(missingStaticInstanceId.dump(), migratedStaticModel, error),
+          "legacy static prop without an instance ID loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(
+            migratedStaticModel,
+            18);
+    Check(loadedStaticModel != nullptr
+                  && loadedStaticModel->staticModel.instanceId == "prop_18",
+          "legacy static prop receives a deterministic generated instance ID");
+
+    Json generatedStaticCollision = missingStaticInstanceId;
+    generatedStaticCollision["runtimeObjects"].push_back(Json{
+            {"id", 19},
+            {"kind", "dynamic_model"},
+            {"position", Json::array({0.0f, 0.0f, 0.0f})},
+            {"yawDegrees", 0.0f},
+            {"dynamicModel", Json{{"instanceId", "prop_18"}}}});
+    Check(LoadText(generatedStaticCollision.dump(), migratedStaticModel, error),
+          "legacy static prop ID generation avoids explicit dynamic prop IDs");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(
+            migratedStaticModel,
+            18);
+    Check(loadedStaticModel != nullptr
+                  && loadedStaticModel->staticModel.instanceId == "prop_18_2",
+          "generated static prop IDs receive deterministic collision suffixes");
+
+    Json invalidStaticInstanceId = staticModelSaved;
+    invalidStaticInstanceId["runtimeObjects"][0]["staticModel"]["instanceId"] =
+            "bad instance";
+    ExpectRejected(
+            invalidStaticInstanceId,
+            "static prop rejects an invalid instance ID");
+
+    Json duplicatePropInstanceId = staticModelSaved;
+    duplicatePropInstanceId["runtimeObjects"].push_back(Json{
+            {"id", 19},
+            {"kind", "dynamic_model"},
+            {"position", Json::array({0.0f, 0.0f, 0.0f})},
+            {"yawDegrees", 0.0f},
+            {"dynamicModel", Json{{"instanceId", "crate_18"}}}});
+    ExpectRejected(
+            duplicatePropInstanceId,
+            "static and dynamic prop instance IDs share one namespace");
 
     Json invalidStaticModelShadow = staticModelSaved;
     invalidStaticModelShadow["runtimeObjects"][0]["staticModel"]["castsShadow"] = "yes";

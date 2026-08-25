@@ -204,6 +204,17 @@ void TestViewmodelIsolationAndFiniteHandling()
     invalidMaterial=game::NormalizeSectorPbrMaterial(invalidMaterial);
     Check(Near(invalidMaterial.emissiveStrength,65504.0f),
           "glTF emissive strength is limited only by finite-half storage");
+    Check(Near(game::ScaleSectorPbrEmissiveStrength(3.0f, 0.0f), 0.0f)
+                    && Near(game::ScaleSectorPbrEmissiveStrength(3.0f, 0.5f), 1.5f)
+                    && Near(game::ScaleSectorPbrEmissiveStrength(
+                               40000.0f,
+                               2.0f),
+                               engine::Rgba16fMaximumFinite)
+                    && Near(game::ScaleSectorPbrEmissiveStrength(
+                               3.0f,
+                               std::numeric_limits<float>::quiet_NaN()),
+                               3.0f),
+          "per-prop emissive scaling supports off, dimming, HDR boost, and finite fallback");
 
     game::SectorViewmodelLightingContext overrideLighting;
     overrideLighting.materialOverrideEnabled = true;
@@ -327,6 +338,29 @@ void TestRemovedShaderPathsStayRemoved()
     Check(source.find("directDiffuse += staticDirectSpecular")
                     == std::string::npos,
           "static authored lights do not duplicate baked diffuse lighting");
+    const std::size_t emissionShapeStart = source.find(
+            "vec3 ShapeModelEmissive(");
+    const std::size_t emissionShapeEnd = source.find(
+            ")\"\nSECTOR_DYNAMIC_SURFACE_SHADOW_GLSL",
+            emissionShapeStart);
+    const std::string emissionShape = emissionShapeStart != std::string::npos
+                    && emissionShapeEnd != std::string::npos
+            ? source.substr(
+                    emissionShapeStart,
+                    emissionShapeEnd - emissionShapeStart)
+            : std::string{};
+    Check(!emissionShape.empty()
+                    && emissionShape.find(
+                               "mix(0.70, 1.0, smoothstep(0.0, 0.60, facing))")
+                            != std::string::npos
+                    && emissionShape.find(
+                               "0.70 * smoothstep(1.0, 4.0, peak)")
+                            != std::string::npos
+                    && emissionShape.find("vec3(peak)") != std::string::npos
+                    && emissionShape.find("roughness") == std::string::npos
+                    && emissionShape.find("materialAo") == std::string::npos
+                    && emissionShape.find("normalTexture") == std::string::npos,
+          "model emission uses fixed branch-free white-core and soft-edge shaping without repurposing PBR textures");
     Check(source.find(
                       "float visibility = DynamicLightShadowVisibility(")
                             != std::string::npos

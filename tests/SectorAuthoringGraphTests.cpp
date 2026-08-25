@@ -12534,6 +12534,7 @@ void TestStaticPropEditingPlacementMutationAndFloorRelativeDrag()
                   && map.runtimeObjects[0].kind == "static_model"
                   && Near(map.runtimeObjects[0].position, Vector3{24.0f, 16.0f, 24.0f})
                   && map.runtimeObjects[0].staticModel.modelPath.empty()
+                  && map.runtimeObjects[0].staticModel.instanceId == "prop_1"
                   && Near(map.runtimeObjects[0].staticModel.heightOffsetWorld, 0.0f)
                   && Near(map.runtimeObjects[0].staticModel.scale, 1.0f),
           "static prop placement creates an empty floor-anchored authored object");
@@ -12555,6 +12556,28 @@ void TestStaticPropEditingPlacementMutationAndFloorRelativeDrag()
                   && documentState.lifecycle.topologyDocumentDirty
                   && !renderCache.valid,
           "static prop model assignment is serialized state and invalidates the cache");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    const uint64_t revisionBeforeInstanceId = renderRevision;
+    std::string staticInstanceIdError;
+    Check(editing.SetSelectedStaticModelInstanceId(
+                  "hall_lamp",
+                  staticInstanceIdError)
+                  && staticInstanceIdError.empty()
+                  && map.runtimeObjects[0].staticModel.instanceId == "hall_lamp"
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == revisionBeforeInstanceId + 1
+                  && !renderCache.valid,
+          "static prop instance ID editing persists and invalidates the 2D cache");
+    Check(!editing.SetSelectedStaticModelInstanceId(
+                  "bad instance",
+                  staticInstanceIdError)
+                  && !staticInstanceIdError.empty()
+                  && map.runtimeObjects[0].staticModel.instanceId == "hall_lamp",
+          "static prop instance ID editing rejects invalid identifiers");
 
     FillRuntimeObjectTestSectorCache(renderCache, map);
     Check(editing.MutateSelected(

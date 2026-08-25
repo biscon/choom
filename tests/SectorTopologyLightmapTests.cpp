@@ -1623,6 +1623,12 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelCollision)
                   == staticModelHash,
           "hash excludes static prop gameplay collision");
+    game::SectorTopologyMap changedStaticModelInstanceId = changedStaticModel;
+    changedStaticModelInstanceId.runtimeObjects[0].staticModel.instanceId =
+            "script_only_prop_id";
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelInstanceId)
+                  == staticModelHash,
+          "hash excludes static prop script instance IDs");
     game::SectorTopologyMap changedStaticModelShadow = changedStaticModel;
     changedStaticModelShadow.runtimeObjects[0].staticModel.castsShadow = false;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelShadow)

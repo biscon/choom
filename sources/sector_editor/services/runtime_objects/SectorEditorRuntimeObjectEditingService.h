@@ -57,6 +57,9 @@ public:
             const char* status,
             const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
     bool AssignSelectedStaticModel(const std::string& modelPath);
+    bool SetSelectedStaticModelInstanceId(
+            const std::string& instanceId,
+            std::string& outError);
     bool AssignSelectedDynamicModel(const std::string& modelPath);
     bool SetSelectedDynamicModelInstanceId(
             const std::string& instanceId,

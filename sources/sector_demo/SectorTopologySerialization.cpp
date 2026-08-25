@@ -1025,6 +1025,8 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
 
     SectorPlacedStaticModel staticModel;
     staticModel.modelPath = ReadOptionalString(value, "modelPath", context, staticModel.modelPath);
+    staticModel.instanceId = ReadOptionalString(
+            value, "instanceId", context, staticModel.instanceId);
     staticModel.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
             value,
             "rotationXDegrees",
@@ -2164,6 +2166,10 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
                 Fail(context + ".staticModel.scale must be a finite positive value");
             }
             Json staticModel = Json::object();
+            if (!IsValidSectorScriptInstanceId(object.staticModel.instanceId)) {
+                Fail(context + ".staticModel.instanceId is invalid");
+            }
+            staticModel["instanceId"] = object.staticModel.instanceId;
             if (!object.staticModel.modelPath.empty()) {
                 staticModel["modelPath"] = object.staticModel.modelPath;
             }
@@ -3054,7 +3060,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
     std::vector<int> objectIds;
     objectIds.reserve(map.runtimeObjects.size());
     std::set<std::string> npcInstanceIds;
-    std::set<std::string> dynamicModelInstanceIds;
+    std::set<std::string> propInstanceIds;
     std::set<std::string> doorInstanceIds;
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         const std::string objectContext = context + ".runtimeObjects[" + std::to_string(object.id) + "]";
@@ -3067,6 +3073,16 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
             } else if (object.kind == RuntimeObjectKindStaticModel) {
+                if (!IsValidSectorScriptInstanceId(
+                            object.staticModel.instanceId)) {
+                    Fail(objectContext
+                            + ".staticModel.instanceId is invalid");
+                }
+                if (!propInstanceIds.insert(
+                            object.staticModel.instanceId).second) {
+                    Fail(objectContext
+                            + ".staticModel.instanceId duplicates another prop instance ID");
+                }
                 if (!std::isfinite(object.staticModel.rotationXRadians)) {
                     Fail(objectContext + ".staticModel.rotationXRadians must be finite");
                 }
@@ -3085,9 +3101,9 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 if (!IsValidSectorDynamicModelInstanceId(model.instanceId)) {
                     Fail(objectContext + ".dynamicModel.instanceId is invalid");
                 }
-                if (!dynamicModelInstanceIds.insert(model.instanceId).second) {
+                if (!propInstanceIds.insert(model.instanceId).second) {
                     Fail(objectContext
-                            + ".dynamicModel.instanceId duplicates another dynamic prop instance ID");
+                            + ".dynamicModel.instanceId duplicates another prop instance ID");
                 }
                 if (!IsValidSectorUseTitle(model.useTitle)) {
                     Fail(objectContext + ".dynamicModel.useTitle is invalid");
@@ -3425,7 +3441,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             const std::string context = "root.runtimeObjects[" + std::to_string(i) + "]";
             map.runtimeObjects.push_back(ReadRuntimeObject(runtimeObjects[i], context));
         }
-        AssignMissingSectorDynamicModelInstanceIds(map);
+        AssignMissingSectorPropInstanceIds(map);
         AssignMissingSectorDoorInstanceIds(map);
     }
 
@@ -4504,7 +4520,7 @@ Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
 {
     SectorTopologyMap normalizedMap = document.mapData;
     normalizedMap.audioSettings = document.graph.audioSettings;
-    AssignMissingSectorDynamicModelInstanceIds(normalizedMap);
+    AssignMissingSectorPropInstanceIds(normalizedMap);
     AssignMissingSectorDoorInstanceIds(normalizedMap);
     AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
     ValidateAuthoringMapData(normalizedMap);
@@ -4629,7 +4645,7 @@ SectorTopologyMap ParseMap(const Json& root)
 Json SerializeMap(const SectorTopologyMap& sourceMap)
 {
     SectorTopologyMap normalizedMap = sourceMap;
-    AssignMissingSectorDynamicModelInstanceIds(normalizedMap);
+    AssignMissingSectorPropInstanceIds(normalizedMap);
     AssignMissingSectorDoorInstanceIds(normalizedMap);
     AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
     const SectorTopologyMap& map = normalizedMap;

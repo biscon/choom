@@ -768,6 +768,14 @@ void StableDoorAndDynamicLightBindingsMutateRuntimeTargets()
     game::SectorTopologyMap map;
     game::SectorScriptHost host;
     const engine::Entity door = AddDoor(context, objects);
+    const engine::Entity staticProp = context.world.CreateEntity();
+    game::SectorStaticModel staticModel;
+    staticModel.instanceId = "static_lamp";
+    context.world.Add(staticProp, staticModel);
+    const engine::Entity dynamicProp = context.world.CreateEntity();
+    game::SectorDynamicModel dynamicModel;
+    dynamicModel.instanceId = "dynamic_lamp";
+    context.world.Add(dynamicProp, dynamicModel);
     game::SectorTopologyDynamicPointLight light;
     light.id = 7;
     light.instanceId = "warning_light";
@@ -781,7 +789,12 @@ function init()
     local disabled = setDynamicLightEnabled("warning_light", false)
     local intensity = setDynamicLightIntensity("warning_light", 3.5)
     local colored = setDynamicLightColor("warning_light", 255, 40, 20)
-    setPersistentBool("bindings_ok", opened and disabled and intensity and colored)
+    local staticEmission = setPropEmissiveScale("static_lamp", 0.0)
+    local dynamicEmission = setPropEmissiveScale("dynamic_lamp", 2.5)
+    local missingEmission, missingReason = setPropEmissiveScale("missing_lamp", 1.0)
+    setPersistentBool("bindings_ok", opened and disabled and intensity and colored
+        and staticEmission and dynamicEmission and not missingEmission
+        and type(missingReason) == "string")
 end
 )");
     assert(Create(context, runtime, persistent, host, files));
@@ -792,7 +805,22 @@ end
     assert(map.dynamicPointLights[0].color.r == 255
             && map.dynamicPointLights[0].color.g == 40
             && map.dynamicPointLights[0].color.b == 20);
+    assert(context.world.Get<game::SectorStaticModel>(staticProp).emissiveScale
+            == 0.0f);
+    assert(std::fabs(
+            context.world.Get<game::SectorDynamicModel>(dynamicProp).emissiveScale
+                    - 2.5f) < 0.0001f);
     assert(host.dynamicLightsDirty);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function init()
+    setPropEmissiveScale("static_lamp", -0.5)
+end
+)");
+    assert(!Create(context, runtime, persistent, host, files));
     engine::ScriptSystemShutdownForMap(context, runtime);
     game::ResetSectorScriptHost(host);
 }

@@ -154,6 +154,21 @@ inline engine::ModelMaterialAsset NormalizeSectorPbrMaterial(
     return material;
 }
 
+inline float ScaleSectorPbrEmissiveStrength(
+        float authoredStrength,
+        float propScale)
+{
+    const double strength = std::isfinite(authoredStrength)
+            ? std::max(static_cast<double>(authoredStrength), 0.0)
+            : 1.0;
+    const double scale = std::isfinite(propScale)
+            ? std::max(static_cast<double>(propScale), 0.0)
+            : 1.0;
+    return static_cast<float>(std::min(
+            strength * scale,
+            static_cast<double>(engine::Rgba16fMaximumFinite)));
+}
+
 inline SectorPbrDrawState BuildSectorPbrDrawState(
         SectorPbrLightingPath path,
         bool validObjectProbe,
@@ -373,6 +388,7 @@ private:
             bool allowSkinning,
             const engine::AnimatedModelInstance* animatedInstance = nullptr,
             const std::vector<Matrix>* meshNodeMatrices = nullptr,
+            float emissiveScale = 1.0f,
             float opacity = 1.0f);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,

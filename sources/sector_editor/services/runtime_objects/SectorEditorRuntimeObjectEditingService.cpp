@@ -126,6 +126,13 @@ bool SectorEditorRuntimeObjectEditingService::AddStaticModel(Vector2 mapPoint)
     object.kind = "static_model";
     object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
     object.staticModel = SectorPlacedStaticModel{};
+    object.staticModel.instanceId =
+            AllocateSectorPropInstanceId(context_.map, objectId);
+    if (object.staticModel.instanceId.empty()) {
+        context_.statusText =
+                "3D prop placement failed: no instance IDs available";
+        return false;
+    }
     context_.map.runtimeObjects.push_back(std::move(object));
     SelectObject(objectId);
     MarkEdited(TextFormat("Added 3D prop %d", objectId));
@@ -293,6 +300,37 @@ bool SectorEditorRuntimeObjectEditingService::AssignSelectedStaticModel(
             });
 }
 
+bool SectorEditorRuntimeObjectEditingService::SetSelectedStaticModelInstanceId(
+        const std::string& instanceId,
+        std::string& outError)
+{
+    const SectorPlacedRuntimeObject* selected = SelectedObject();
+    if (selected == nullptr || selected->kind != "static_model") {
+        outError = "No 3D prop is selected";
+        return false;
+    }
+    if (!IsValidSectorScriptInstanceId(instanceId)) {
+        outError =
+                "Instance ID must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    const SectorPlacedRuntimeObject* existing =
+            FindSectorPlacedModelByInstanceId(context_.map, instanceId);
+    if (existing != nullptr && existing->id != selected->id) {
+        outError = "Instance ID must be unique among 3D and dynamic props in this map";
+        return false;
+    }
+    outError.clear();
+    if (selected->staticModel.instanceId == instanceId) return true;
+    return MutateSelected(
+            "Updated 3D prop instance ID",
+            [&instanceId](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "static_model") return false;
+                object.staticModel.instanceId = instanceId;
+                return true;
+            });
+}
+
 bool SectorEditorRuntimeObjectEditingService::AssignSelectedDynamicModel(
         const std::string& modelPath)
 {
@@ -380,9 +418,9 @@ bool SectorEditorRuntimeObjectEditingService::SetSelectedDynamicModelInstanceId(
         return false;
     }
     const SectorPlacedRuntimeObject* existing =
-            FindSectorPlacedDynamicModelByInstanceId(context_.map, instanceId);
+            FindSectorPlacedModelByInstanceId(context_.map, instanceId);
     if (existing != nullptr && existing->id != selected->id) {
-        outError = "Instance ID must be unique among dynamic props in this map";
+        outError = "Instance ID must be unique among 3D and dynamic props in this map";
         return false;
     }
     outError.clear();

@@ -4,7 +4,9 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <functional>
 #include <string>
 
@@ -65,7 +67,7 @@ float MeasureSectorEditorStaticModelInspectorContentHeight(
         const SectorEditorPlacedObjectInspectorMeasureContext&,
         const SectorPlacedRuntimeObject&)
 {
-    return 38.0f * 2.0f + 48.0f * 9.0f + 8.0f * 11.0f + 40.0f
+    return 38.0f * 2.0f + 48.0f * 10.0f + 8.0f * 12.0f + 80.0f
             + 48.0f;
 }
 
@@ -122,6 +124,47 @@ void DrawSectorEditorStaticModelInspector(
                             ? context.config.accentColor
                             : context.config.mutedTextColor));
     y += 34.0f + gap;
+
+    if (context.uiState.staticModelInstanceIdObjectId != object->id) {
+        std::snprintf(
+                context.uiState.staticModelInstanceIdBuffer,
+                sizeof(context.uiState.staticModelInstanceIdBuffer),
+                "%s",
+                object->staticModel.instanceId.c_str());
+        context.uiState.staticModelInstanceIdObjectId = object->id;
+        context.uiState.staticModelInstanceIdError.clear();
+    }
+    engine::Text(
+            context.ui, context.config, context.assets,
+            Rectangle{0.0f, y, 118.0f, rowH}, context.font,
+            "Instance ID", engine::UITextJustify::Left,
+            context.config.mutedTextColor);
+    const engine::UITextInputResult instanceResult = engine::TextInput(
+            context.ui, context.config, context.input, context.assets,
+            "sector_editor_static_model_instance_id",
+            Rectangle{122.0f, y, std::max(0.0f, contentW - 122.0f), rowH},
+            context.font,
+            context.uiState.staticModelInstanceIdBuffer,
+            sizeof(context.uiState.staticModelInstanceIdBuffer),
+            1,
+            sizeof(context.uiState.staticModelInstanceIdBuffer) - 1,
+            engine::UITextJustify::Left);
+    if (instanceResult.submitted) {
+        context.editing.SetSelectedStaticModelInstanceId(
+                std::string{context.uiState.staticModelInstanceIdBuffer},
+                context.uiState.staticModelInstanceIdError);
+    }
+    y += rowH + gap;
+    if (!context.uiState.staticModelInstanceIdError.empty()) {
+        engine::Text(
+                context.ui, context.config, context.assets,
+                Rectangle{0.0f, y, contentW, 36.0f}, context.smallFont,
+                context.uiState.staticModelInstanceIdError.c_str(),
+                engine::UITextJustify::Left,
+                context.config.invalidColor,
+                true);
+        y += 40.0f;
+    }
 
     if (engine::Button(
                 context.ui,

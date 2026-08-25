@@ -47,6 +47,9 @@ struct RuntimeObjectEditingState {
 };
 
 struct RuntimeObjectEditingUiState {
+    char staticModelInstanceIdBuffer[64] = {};
+    int staticModelInstanceIdObjectId = -1;
+    std::string staticModelInstanceIdError;
     char dynamicModelInstanceIdBuffer[64] = {};
     int dynamicModelInstanceIdObjectId = -1;
     std::string dynamicModelInstanceIdError;

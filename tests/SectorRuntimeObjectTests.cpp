@@ -4865,6 +4865,7 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
     object.position = Vector3{2.0f, 8.0f, 2.0f};
     object.yawRadians = 0.75f;
     object.staticModel.modelPath = "assets/models/props/missing_fixture.glb";
+    object.staticModel.instanceId = "crate_18";
     object.staticModel.rotationXRadians = 0.25f;
     object.staticModel.rotationZRadians = -0.5f;
     object.staticModel.heightOffsetWorld = 0.625f;
@@ -4907,6 +4908,11 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
           "assigned static prop stores a model asset handle");
     Check(world.Get<game::SectorStaticModel>(entity).placedObjectId == 18,
           "assigned static prop stores its stable placed-object ID");
+    Check(world.Get<game::SectorStaticModel>(entity).instanceId == "crate_18"
+                  && Near(
+                          world.Get<game::SectorStaticModel>(entity).emissiveScale,
+                          1.0f),
+          "static prop copies its script ID and defaults runtime emission to authored strength");
     Check(Near(world.Get<game::SectorStaticModel>(entity).scale, 1.75f),
           "static prop copies authored uniform scale to ECS model data");
     Check(Near(world.Get<game::SectorStaticModel>(entity).environmentExposure, 0.35f),
@@ -5025,10 +5031,11 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
                   && Near(transform.rotationXRadians, 0.25f)
                   && Near(transform.rotationZRadians, -0.5f)
                   && dynamic.instanceId == "prop_27"
+                  && Near(dynamic.emissiveScale, 1.0f)
                   && Near(dynamic.scale, 1.75f)
                   && dynamic.shadowMode
                           == game::SectorDynamicModelShadowMode::Dynamic,
-          "dynamic prop copies its stable ID, movable authored transform, scale, and shadow mode");
+          "dynamic prop copies its stable ID, default emission, movable authored transform, scale, and shadow mode");
     Check(animatedModel.poseSource
                     == engine::AnimatedModelPoseSource::GltfScene,
           "dynamic props opt into exact glTF scene and skin evaluation");

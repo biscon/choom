@@ -300,6 +300,19 @@ vec2 EnvironmentBrdfApprox(float roughness, float ndotv)
     return vec2(-1.04, 1.04) * a004 + r.zw;
 }
 
+vec3 ShapeModelEmissive(
+        vec3 emissive,
+        vec3 geometricNormal,
+        vec3 viewDirection)
+{
+    float facing = clamp(abs(dot(geometricNormal, viewDirection)), 0.0, 1.0);
+    float edgeFactor = mix(0.70, 1.0, smoothstep(0.0, 0.60, facing));
+    emissive *= edgeFactor;
+    float peak = max(emissive.r, max(emissive.g, emissive.b));
+    float whitening = 0.70 * smoothstep(1.0, 4.0, peak);
+    return mix(emissive, vec3(peak), whitening);
+}
+
 )"
 SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL
 R"(
@@ -578,6 +591,10 @@ void main()
                 emissiveTextureHardwareSrgb);
     }
     emissive *= max(emissiveStrength, 0.0);
+    emissive = ShapeModelEmissive(
+            emissive,
+            geometricNormal,
+            viewDirection);
     vec3 linearColor = indirectDiffuse
             + directDiffuse
             + dynamicDirectSpecular
@@ -1388,6 +1405,7 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         bool allowSkinning,
         const engine::AnimatedModelInstance* animatedInstance,
         const std::vector<Matrix>* meshNodeMatrices,
+        float emissiveScale,
         float opacity)
 {
     const int noStaticLightmap = 0;
@@ -1500,6 +1518,9 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
                     maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
         }
         pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
+        pbrMaterial.emissiveStrength = ScaleSectorPbrEmissiveStrength(
+                pbrMaterial.emissiveStrength,
+                emissiveScale);
         if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbrMaterial.baseColorFactor, SHADER_UNIFORM_VEC4);
         if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
         if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbrMaterial.emissiveStrength, SHADER_UNIFORM_FLOAT);
@@ -1817,6 +1838,9 @@ void SectorStaticModelRenderer::Draw(
                                 maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
                     }
                     pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
+                    pbrMaterial.emissiveStrength = ScaleSectorPbrEmissiveStrength(
+                            pbrMaterial.emissiveStrength,
+                            staticModel.emissiveScale);
                     if (baseColorFactorLoc >= 0) {
                         SetShaderValue(
                                 shader,
@@ -2000,6 +2024,7 @@ void SectorStaticModelRenderer::Draw(
                         true,
                         &instance,
                         &instance.meshNodeMatrices,
+                        dynamicModel.emissiveScale,
                         dynamicModel.opacity);
                 if (fading) {
                     rlDisableColorBlend();

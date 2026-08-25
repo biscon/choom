@@ -166,6 +166,7 @@ struct SectorPlacedBillboard {
 
 struct SectorPlacedStaticModel {
     std::string modelPath;
+    std::string instanceId;
     float rotationXRadians = 0.0f;
     float rotationZRadians = 0.0f;
     float heightOffsetWorld = 0.0f;
@@ -393,7 +394,10 @@ bool IsValidSectorUseTitle(std::string_view title);
 std::string AllocateSectorDynamicModelInstanceId(
         const SectorTopologyMap& map,
         int placedObjectId);
-void AssignMissingSectorDynamicModelInstanceIds(SectorTopologyMap& map);
+std::string AllocateSectorPropInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId);
+void AssignMissingSectorPropInstanceIds(SectorTopologyMap& map);
 std::string AllocateSectorDoorInstanceId(
         const SectorTopologyMap& map,
         int placedObjectId);
@@ -447,6 +451,9 @@ bool RemoveSectorTopologyDynamicRectLight(SectorTopologyMap& map, int id);
 const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopologyMap& map, int id);
 SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 const SectorPlacedRuntimeObject* FindSectorPlacedDynamicModelByInstanceId(
+        const SectorTopologyMap& map,
+        std::string_view instanceId);
+const SectorPlacedRuntimeObject* FindSectorPlacedModelByInstanceId(
         const SectorTopologyMap& map,
         std::string_view instanceId);
 

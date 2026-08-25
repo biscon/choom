@@ -758,6 +758,30 @@ light budget and do not fall back to contact shadows when unavailable. Older
 `projected_silhouette` map values load as `Dynamic` and save back as `dynamic`.
 These runtime shadow choices do not affect baked lightmaps or their source hash.
 
+Static 3D props and dynamic props have stable script instance IDs in one shared
+prop namespace. Static props missing an ID in older maps receive a deterministic
+`prop_<objectId>` ID during load. Editing a static prop ID uses the normal
+runtime-object mutation path, so it dirties the document, invalidates the 2D
+topology render cache, and refreshes preview objects.
+
+All glTF model emission uses the authored emissive texture/factor and
+`KHR_materials_emissive_strength`, followed by a lightweight HDR appearance
+curve. Grazing angles are attenuated to 70 percent at the silhouette and strong
+radiance is blended up to 70 percent toward an equal-channel white core between
+linear values 1 and 4. The maximum channel is preserved, so the shaping does not
+independently push a material across the bloom threshold. This applies to
+static/dynamic models, model doors, and viewmodels without extra textures,
+passes, draw calls, or model naming conventions. It does not repurpose
+roughness, AO, metallic, or normal textures. Scene-wide bloom still depends on
+HDR strength and screen coverage; its default soft threshold begins at linear
+value 1.
+
+Lua may change a static or dynamic prop's runtime emissive scale by stable ID.
+The scale defaults to 1 after spawning, affects every emissive material in that
+prop instance, and does not mutate the shared model asset. Script IDs and
+runtime emissive scales are visual/gameplay state and are excluded from the
+lightmap source hash.
+
 Door interaction is deliberately small. Authored `autoOpen` doors open as the
 player approaches and close when the player leaves the configured distance.
 Non-auto doors can be targeted and toggled with the Interact key `F` when the

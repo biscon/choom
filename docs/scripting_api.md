@@ -312,6 +312,30 @@ setPropAnimationProgress("wall_switch", 0.0)
 setPropAnimationProgress("wall_switch", 1.0, "switch|switchAction")
 ```
 
+## 3D prop emission
+
+Static 3D props and dynamic props share one stable `instanceId` namespace for
+model presentation controls. Both inspectors expose the ID. New and legacy
+static props receive a deterministic `prop_<objectId>` ID when needed.
+
+### `setPropEmissiveScale(propId, scale) -> true | false, reason`
+
+Multiplies every glTF emissive material in one prop instance. `0` turns model
+emission off, `1` restores the model-authored value, fractional values dim it,
+and values above `1` boost it. The scale must be a finite, non-negative float.
+The model must already contain an emissive factor or texture; this function
+does not infer an emissive mask from ordinary base color.
+
+Prop and dynamic-light IDs use separate namespaces, so a lamp may deliberately
+give both objects the same ID:
+
+```lua
+local function setHallLamp(enabled)
+    setDynamicLightEnabled("hall_lamp", enabled)
+    setPropEmissiveScale("hall_lamp", enabled and 1.0 or 0.0)
+end
+```
+
 ## Dynamic lights
 
 Point, spot, and rectangular dynamic lights share one global stable-ID

@@ -1079,7 +1079,9 @@ void SpawnPlacedRuntimeObjects(
                             map,
                             object.currentSectorId,
                             sectorAmbient),
-                    placedObject.staticModel.castsShadow});
+                    placedObject.staticModel.castsShadow,
+                    placedObject.staticModel.instanceId,
+                    1.0f});
             if (placedObject.staticModel.collision) {
                 world.Add(entity, SectorStaticModelCollider{
                         placedObject.id});

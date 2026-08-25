@@ -30,6 +30,10 @@ function setOfficeLight(enabled)
     setDynamicLightEnabled("light_point_9", enabled)
     setDynamicLightEnabled("light_point_12", enabled)
     setDynamicLightEnabled("light_point_11", enabled)
+    setPropEmissiveScale("office_lamp_1", enabled and 1.0 or 0.0)
+    setPropEmissiveScale("office_lamp_2", enabled and 1.0 or 0.0)
+    setPropEmissiveScale("office_lamp_3", enabled and 1.0 or 0.0)
+    setPropEmissiveScale("office_lamp_4", enabled and 1.0 or 0.0)
 end
 
 function toggleOfficeLights()

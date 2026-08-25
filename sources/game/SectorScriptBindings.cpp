@@ -117,6 +117,29 @@ engine::Entity FindPropEntity(
     return found;
 }
 
+bool SetPropEmissiveScale(
+        engine::World& world,
+        std::string_view instanceId,
+        float scale)
+{
+    bool found = false;
+    world.ForEach<SectorStaticModel>(
+            [&](engine::Entity, SectorStaticModel& prop) {
+                if (!found && prop.instanceId == instanceId) {
+                    prop.emissiveScale = scale;
+                    found = true;
+                }
+            });
+    world.ForEach<SectorDynamicModel>(
+            [&](engine::Entity, SectorDynamicModel& prop) {
+                if (!found && prop.instanceId == instanceId) {
+                    prop.emissiveScale = scale;
+                    found = true;
+                }
+            });
+    return found;
+}
+
 bool ReadDoorReference(
         lua_State* state,
         int argument,
@@ -1003,6 +1026,31 @@ int LuaSetDynamicLightColor(lua_State* state)
     return 1;
 }
 
+int LuaSetPropEmissiveScale(lua_State* state)
+{
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const lua_Number rawScale = luaL_checknumber(state, 2);
+    if (!std::isfinite(static_cast<double>(rawScale))
+            || rawScale < 0.0
+            || rawScale > std::numeric_limits<float>::max()) {
+        return luaL_argerror(
+                state,
+                2,
+                "scale must be a finite, non-negative float");
+    }
+    if (!SetPropEmissiveScale(
+            context.world,
+            std::string_view{rawId, length},
+            static_cast<float>(rawScale))) {
+        return PushBindingError(state, "prop was not found");
+    }
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
 int LuaChangeMap(lua_State* state)
 {
     size_t mapLength = 0;
@@ -1227,6 +1275,7 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "resumePropAnimation", LuaResumePropAnimation);
     Register(state, "stopPropAnimation", LuaStopPropAnimation);
     Register(state, "setPropAnimationProgress", LuaSetPropAnimationProgress);
+    Register(state, "setPropEmissiveScale", LuaSetPropEmissiveScale);
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
     Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);

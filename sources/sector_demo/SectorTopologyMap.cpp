@@ -587,9 +587,16 @@ std::string AllocateSectorDynamicModelInstanceId(
         const SectorTopologyMap& map,
         int placedObjectId)
 {
+    return AllocateSectorPropInstanceId(map, placedObjectId);
+}
+
+std::string AllocateSectorPropInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId)
+{
     const std::string base = "prop_" + std::to_string(placedObjectId);
     const auto available = [&map](const std::string& candidate) {
-        return FindSectorPlacedDynamicModelByInstanceId(map, candidate) == nullptr;
+        return FindSectorPlacedModelByInstanceId(map, candidate) == nullptr;
     };
     if (available(base)) return base;
     for (int suffix = 2; suffix < std::numeric_limits<int>::max(); ++suffix) {
@@ -600,12 +607,14 @@ std::string AllocateSectorDynamicModelInstanceId(
     return {};
 }
 
-void AssignMissingSectorDynamicModelInstanceIds(SectorTopologyMap& map)
+void AssignMissingSectorPropInstanceIds(SectorTopologyMap& map)
 {
     std::vector<SectorPlacedRuntimeObject*> missing;
     missing.reserve(map.runtimeObjects.size());
     for (SectorPlacedRuntimeObject& object : map.runtimeObjects) {
-        if (object.kind == "dynamic_model" && object.dynamicModel.instanceId.empty()) {
+        if ((object.kind == "static_model" && object.staticModel.instanceId.empty())
+                || (object.kind == "dynamic_model"
+                        && object.dynamicModel.instanceId.empty())) {
             missing.push_back(&object);
         }
     }
@@ -613,8 +622,10 @@ void AssignMissingSectorDynamicModelInstanceIds(SectorTopologyMap& map)
         return left->id < right->id;
     });
     for (SectorPlacedRuntimeObject* object : missing) {
-        object->dynamicModel.instanceId =
-                AllocateSectorDynamicModelInstanceId(map, object->id);
+        std::string& instanceId = object->kind == "static_model"
+                ? object->staticModel.instanceId
+                : object->dynamicModel.instanceId;
+        instanceId = AllocateSectorPropInstanceId(map, object->id);
     }
 }
 
@@ -925,6 +936,22 @@ const SectorPlacedRuntimeObject* FindSectorPlacedDynamicModelByInstanceId(
             [instanceId](const SectorPlacedRuntimeObject& object) {
                 return object.kind == "dynamic_model"
                         && object.dynamicModel.instanceId == instanceId;
+            });
+    return found != map.runtimeObjects.end() ? &*found : nullptr;
+}
+
+const SectorPlacedRuntimeObject* FindSectorPlacedModelByInstanceId(
+        const SectorTopologyMap& map,
+        std::string_view instanceId)
+{
+    const auto found = std::find_if(
+            map.runtimeObjects.begin(),
+            map.runtimeObjects.end(),
+            [instanceId](const SectorPlacedRuntimeObject& object) {
+                return (object.kind == "static_model"
+                                && object.staticModel.instanceId == instanceId)
+                        || (object.kind == "dynamic_model"
+                                && object.dynamicModel.instanceId == instanceId);
             });
     return found != map.runtimeObjects.end() ? &*found : nullptr;
 }

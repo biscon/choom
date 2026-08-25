@@ -65,6 +65,8 @@ struct SectorStaticModel {
     float scale = 1.0f;
     float environmentExposure = 0.15f;
     bool castsShadow = true;
+    std::string instanceId;
+    float emissiveScale = 1.0f;
 };
 
 struct SectorDynamicModel {
@@ -83,6 +85,7 @@ struct SectorDynamicModel {
     std::string onUseScript;
     bool singleUse = false;
     bool useConsumed = false;
+    float emissiveScale = 1.0f;
 };
 
 } // namespace game
