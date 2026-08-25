@@ -394,6 +394,19 @@ void TestRemovedShaderPathsStayRemoved()
                                "                false,")
                             != std::string::npos,
           "dynamic props and model doors share the non-lightmapped world PBR draw helper");
+    const std::size_t itemPass = source.find("SectorItem>(");
+    const std::size_t itemHighlightReset = source.find(
+            "UploadInteractionHighlightStrength(0.0f);",
+            itemPass);
+    const std::size_t staticPropPass = source.find(
+            "SectorStaticModel>(",
+            itemPass);
+    Check(itemPass != std::string::npos
+                    && itemHighlightReset != std::string::npos
+                    && staticPropPass != std::string::npos
+                    && itemPass < itemHighlightReset
+                    && itemHighlightReset < staticPropPass,
+          "item selection highlight is cleared before the static-prop draw pass");
 }
 
 std::string ReadSource(const char* path)

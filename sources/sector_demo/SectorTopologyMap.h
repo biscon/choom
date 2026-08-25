@@ -201,6 +201,23 @@ struct SectorPlacedDynamicModel {
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
 
+struct SectorPlacedItem {
+    std::string definitionId;
+    std::string instanceId;
+    int quantity = 1;
+    float takeDistance = 1.5f;
+    std::string onTakeScript;
+    std::string onUseScript;
+    float rotationXRadians = 0.0f;
+    float rotationZRadians = 0.0f;
+    float heightOffsetWorld = 0.0f;
+    float scale = 1.0f;
+    SectorDynamicModelShadowMode shadowMode =
+            SectorDynamicModelShadowMode::Contact;
+    // Runtime-only campaign provenance. Never serialized into level JSON.
+    bool sessionDrop = false;
+};
+
 struct SectorPlacedNpc {
     std::string definitionId;
     std::string instanceId;
@@ -316,6 +333,7 @@ struct SectorPlacedRuntimeObject {
     SectorPlacedBillboard billboard;
     SectorPlacedStaticModel staticModel;
     SectorPlacedDynamicModel dynamicModel;
+    SectorPlacedItem item;
     SectorPlacedNpc npc;
     SectorPlacedDoor door;
 };
@@ -392,6 +410,9 @@ bool IsValidSectorDynamicModelInstanceId(std::string_view id);
 bool IsValidSectorScriptInstanceId(std::string_view id);
 bool IsValidSectorUseTitle(std::string_view title);
 std::string AllocateSectorDynamicModelInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId);
+std::string AllocateSectorItemInstanceId(
         const SectorTopologyMap& map,
         int placedObjectId);
 std::string AllocateSectorPropInstanceId(

@@ -484,10 +484,14 @@ void TestMainMenuWorkspaceAndToolsLayouts()
             rowH, gap, false);
     const float expanded = game::MeasureSectorEditorToolsContentHeight(
             rowH, gap, true);
+    const float itemExpanded = game::MeasureSectorEditorToolsContentHeight(
+            rowH, gap, false, true);
     Check(Near(expanded - collapsed, rowH + gap),
           "tools content height includes the conditional Trigger mode row");
+    Check(Near(itemExpanded - collapsed, rowH + gap),
+          "tools content height includes the conditional Item definition row");
     Check(Near(collapsed, 26.0f + 5.0f * (rowH + gap)
-                  + 22.0f + 26.0f + 16.0f * (rowH + gap)
+                  + 22.0f + 26.0f + 17.0f * (rowH + gap)
                   + 22.0f + 2.0f * (rowH + gap)
                   + 22.0f + (rowH + gap) + 12.0f),
           "tools content height reaches the final Grid control with padding");

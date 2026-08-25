@@ -266,6 +266,28 @@ A callback may yield and must eventually return boolean `true` to allow the
 requested open/close; `false`, no return value, a missing function, or an error
 denies it. A blank callback preserves the default engine behavior.
 
+## World item pickup callbacks
+
+An authored item's optional `onTakeScript` field names a global Lua function
+called with no arguments when the player presses E on that item. The engine
+checks that the complete placement quantity fits before starting the callback.
+The callback may yield and must eventually return boolean `true` to permit the
+pickup. Boolean `false`, no boolean return value, a missing function, or a
+script error leaves the item in the world. A blank callback permits pickup
+immediately.
+
+Capacity and item identity are checked again after a yielding callback. Pickup
+remains atomic: the complete quantity is added or no inventory/world state is
+changed. Foreground callbacks are serialized, and the same item cannot start a
+second pickup while its callback is pending.
+
+```lua
+function canTakePistolAmmo()
+    delay(100)
+    return alarmDisabled
+end
+```
+
 ## Dynamic props and animation
 
 A dynamic prop becomes usable when its `onUseScript` inspector field names a

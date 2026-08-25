@@ -138,6 +138,42 @@ SectorUseTarget FindSectorUseTarget(
     }
     forward = Vector3Normalize(forward);
 
+    world.ForEach<SectorItem, SectorObjectTransform>(
+            [&](engine::Entity entity,
+                    SectorItem& item,
+                    SectorObjectTransform& transform) {
+                if (item.takePending || item.title.empty()
+                        || !std::isfinite(item.takeDistance)
+                        || item.takeDistance <= 0.0f) {
+                    return;
+                }
+                Vector3 point = transform.position;
+                if (assets != nullptr) {
+                    const engine::ModelAsset* asset =
+                            assets->GetModelAsset(item.model);
+                    if (asset != nullptr && asset->hasLocalBounds) {
+                        const Matrix authored = BuildSectorStaticModelAuthoredTransform(
+                                transform.position,
+                                transform.rotationXRadians,
+                                transform.yawRadians,
+                                transform.rotationZRadians,
+                                item.scale);
+                        point = ClosestPoint(
+                                TransformBounds(asset->localBounds, authored),
+                                eyePosition);
+                    }
+                }
+                ConsiderTarget(
+                        entity,
+                        SectorUseTargetKind::Item,
+                        point,
+                        item.takeDistance,
+                        eyePosition,
+                        forward,
+                        collisionWorld,
+                        best);
+            });
+
     if (includeDynamicProps) {
         world.ForEach<SectorDynamicModel, SectorObjectTransform, engine::AnimatedModelInstance>(
                 [&](engine::Entity entity,
@@ -214,6 +250,10 @@ std::string_view SectorUseTargetTitle(
         const SectorUseTarget& target)
 {
     if (!world.IsAlive(target.entity)) return {};
+    if (target.kind == SectorUseTargetKind::Item
+            && world.Has<SectorItem>(target.entity)) {
+        return world.Get<SectorItem>(target.entity).title;
+    }
     if (target.kind == SectorUseTargetKind::DynamicProp
             && world.Has<SectorDynamicModel>(target.entity)) {
         return world.Get<SectorDynamicModel>(target.entity).useTitle;
@@ -251,7 +291,8 @@ void UpdateSectorUseHighlight(
 {
     dt = std::isfinite(dt) && dt > 0.0f ? dt : 0.0f;
     const bool hasDynamicPropTarget =
-            target.kind == SectorUseTargetKind::DynamicProp
+            (target.kind == SectorUseTargetKind::DynamicProp
+                    || target.kind == SectorUseTargetKind::Item)
             && !engine::IsNull(target.entity);
     if (hasDynamicPropTarget) {
         if (state.highlight.entity != target.entity || state.releasing) {
@@ -290,13 +331,18 @@ void UpdateSectorUseHighlight(
 void DrawSectorUsePrompt(
         Rectangle viewport,
         const engine::FontAsset* font,
-        std::string_view title)
+        std::string_view title,
+        std::string_view action)
 {
-    if (font == nullptr || title.empty()) return;
-    constexpr const char* prefix = "Use ";
+    if (font == nullptr || title.empty() || action.empty()) return;
+    std::array<char, 24> prefix{};
+    std::snprintf(
+            prefix.data(), prefix.size(), "%.*s ",
+            static_cast<int>(action.size()), action.data());
     const float size = static_cast<float>(font->pixelSize);
     const float spacing = 1.0f;
-    const Vector2 prefixSize = MeasureTextEx(font->font, prefix, size, spacing);
+    const Vector2 prefixSize = MeasureTextEx(
+            font->font, prefix.data(), size, spacing);
     std::array<char, 128> titleText{};
     std::snprintf(
             titleText.data(),
@@ -310,7 +356,7 @@ void DrawSectorUsePrompt(
             viewport.x + (viewport.width - prefixSize.x - titleSize.x) * 0.5f,
             viewport.y + viewport.height - size - 48.0f};
     const Vector2 shadow = Vector2Add(origin, Vector2{3.0f, 3.0f});
-    DrawTextEx(font->font, prefix, shadow, size, spacing, Color{0, 0, 0, 220});
+    DrawTextEx(font->font, prefix.data(), shadow, size, spacing, Color{0, 0, 0, 220});
     DrawTextEx(
             font->font,
             titleText.data(),
@@ -318,7 +364,7 @@ void DrawSectorUsePrompt(
             size,
             spacing,
             Color{0, 0, 0, 220});
-    DrawTextEx(font->font, prefix, origin, size, spacing, RAYWHITE);
+    DrawTextEx(font->font, prefix.data(), origin, size, spacing, RAYWHITE);
     DrawTextEx(
             font->font,
             titleText.data(),
@@ -326,6 +372,44 @@ void DrawSectorUsePrompt(
             size,
             spacing,
             RAYWHITE);
+}
+
+void DrawSectorUseMessage(
+        Rectangle viewport,
+        const engine::FontAsset* font,
+        std::string_view message,
+        float elapsedSeconds)
+{
+    if (font == nullptr || message.empty()) return;
+    const float fade = elapsedSeconds <= 1.5f
+            ? 1.0f
+            : std::clamp(1.0f - (elapsedSeconds - 1.5f) / 0.75f, 0.0f, 1.0f);
+    if (fade <= 0.0f) return;
+    std::array<char, 160> text{};
+    std::snprintf(
+            text.data(), text.size(), "%.*s",
+            static_cast<int>(message.size()), message.data());
+    const float size = static_cast<float>(font->pixelSize);
+    const float spacing = 1.0f;
+    const Vector2 measured = MeasureTextEx(
+            font->font, text.data(), size, spacing);
+    const Vector2 origin{
+            std::round(viewport.x + (viewport.width - measured.x) * 0.5f),
+            std::round(viewport.y + viewport.height - size - 48.0f)};
+    DrawTextEx(
+            font->font,
+            text.data(),
+            Vector2Add(origin, Vector2{3.0f, 3.0f}),
+            size,
+            spacing,
+            Fade(BLACK, 0.86f * fade));
+    DrawTextEx(
+            font->font,
+            text.data(),
+            origin,
+            size,
+            spacing,
+            Fade(RAYWHITE, fade));
 }
 
 } // namespace game

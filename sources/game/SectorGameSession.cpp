@@ -137,7 +137,216 @@ std::string NavigationLoadFailure(const SectorNavigationWorld& navigation)
             + SectorNavigationStateName(navigation.State());
 }
 
+bool FirstScriptValueIsTrue(const std::vector<engine::ScriptValue>& values)
+{
+    return !values.empty()
+            && std::holds_alternative<bool>(values.front())
+            && std::get<bool>(values.front());
+}
+
 } // namespace
+
+void SectorGameSession::ShowCarryRefusal()
+{
+    std::snprintf(
+            itemMessage.data(),
+            itemMessage.size(),
+            "%s",
+            "I can't carry anymore.");
+    itemMessageElapsedSeconds = 0.0f;
+}
+
+bool SectorGameSession::CommitItemTake(
+        engine::EngineContext& context,
+        SectorSceneRuntime& scene,
+        engine::Entity entity,
+        int placedObjectId,
+        const std::string& instanceId)
+{
+    if (itemRegistry == nullptr || itemCampaign == nullptr
+            || applicationSettings == nullptr
+            || !context.world.IsAlive(entity)
+            || !context.world.Has<SectorItem>(entity)) {
+        return false;
+    }
+    SectorItem& item = context.world.Get<SectorItem>(entity);
+    if (item.placedObjectId != placedObjectId
+            || item.instanceId != instanceId) {
+        return false;
+    }
+    const ItemPickupPlan plan = PreflightItemPickup(
+            itemCampaign->inventory,
+            *itemRegistry,
+            applicationSettings->playerInventory,
+            item.definitionId,
+            item.quantity);
+    if (plan.result != ItemPickupCapacityResult::Fits) {
+        item.takePending = false;
+        if (plan.result == ItemPickupCapacityResult::WeightLimit
+                || plan.result == ItemPickupCapacityResult::SlotLimit
+                || plan.result == ItemPickupCapacityResult::NumericOverflow) {
+            ShowCarryRefusal();
+        }
+        return false;
+    }
+    ItemLevelCampaignState& level = FindOrCreateItemLevelCampaignState(
+            *itemCampaign, levelName, topologyMap.runtimeObjects.size());
+    if (item.origin == SectorItemOrigin::SessionDrop) {
+        const bool exists = std::any_of(
+                level.droppedItems.begin(), level.droppedItems.end(),
+                [placedObjectId](const SectorPlacedRuntimeObject& object) {
+                    return object.id == placedObjectId;
+                });
+        if (!exists) {
+            item.takePending = false;
+            return false;
+        }
+    }
+    const bool runtimeTracked = std::any_of(
+            scene.RuntimeObjects().placedObjectEntities.begin(),
+            scene.RuntimeObjects().placedObjectEntities.end(),
+            [entity](const SectorPlacedRuntimeObjectEntity& entry) {
+                return entry.entity == entity;
+            });
+    if (!runtimeTracked) {
+        item.takePending = false;
+        return false;
+    }
+    if (!CommitItemPickup(
+                itemCampaign->inventory, plan, item.onUseScript)) {
+        item.takePending = false;
+        return false;
+    }
+    if (item.origin == SectorItemOrigin::SessionDrop) {
+        RemoveSessionDroppedItem(level, placedObjectId);
+    } else {
+        RecordAuthoredItemCollected(level, placedObjectId);
+    }
+    topologyMap.runtimeObjects.erase(
+            std::remove_if(
+                    topologyMap.runtimeObjects.begin(),
+                    topologyMap.runtimeObjects.end(),
+                    [placedObjectId](const SectorPlacedRuntimeObject& object) {
+                        return object.id == placedObjectId;
+                    }),
+            topologyMap.runtimeObjects.end());
+    if (!QueueRemoveSectorRuntimeObjectByEntity(
+                context.world, scene.RuntimeObjects(), entity)) {
+        TraceLog(
+                LOG_ERROR,
+                "Item pickup committed but runtime entity %u could not be queued for removal",
+                entity.index);
+        return false;
+    }
+    context.world.FlushDestroyedEntities();
+    useTarget = {};
+    ResetSectorUseHighlight(useHighlightState);
+    usePromptTitle = {};
+    return true;
+}
+
+bool SectorGameSession::RequestItemTake(
+        engine::EngineContext& context,
+        SectorSceneRuntime& scene,
+        engine::Entity entity)
+{
+    if (pendingItemTake.active || itemRegistry == nullptr
+            || itemCampaign == nullptr || applicationSettings == nullptr
+            || !context.world.IsAlive(entity)
+            || !context.world.Has<SectorItem>(entity)) {
+        return false;
+    }
+    SectorItem& item = context.world.Get<SectorItem>(entity);
+    if (item.takePending) return false;
+    const ItemPickupPlan plan = PreflightItemPickup(
+            itemCampaign->inventory,
+            *itemRegistry,
+            applicationSettings->playerInventory,
+            item.definitionId,
+            item.quantity);
+    if (plan.result != ItemPickupCapacityResult::Fits) {
+        if (plan.result == ItemPickupCapacityResult::WeightLimit
+                || plan.result == ItemPickupCapacityResult::SlotLimit
+                || plan.result == ItemPickupCapacityResult::NumericOverflow) {
+            ShowCarryRefusal();
+        }
+        return true;
+    }
+    if (item.onTakeScript.empty()) {
+        CommitItemTake(
+                context, scene, entity, item.placedObjectId, item.instanceId);
+        return true;
+    }
+    const engine::ScriptCallOutcome outcome =
+            engine::ScriptSystemCallObservedForegroundHook(
+                    scripts, item.onTakeScript);
+    if (outcome.result == engine::ScriptCallResult::Completed) {
+        if (FirstScriptValueIsTrue(outcome.immediateValues)) {
+            CommitItemTake(
+                    context, scene, entity,
+                    item.placedObjectId, item.instanceId);
+        }
+        return true;
+    }
+    if (outcome.result == engine::ScriptCallResult::Started) {
+        item.takePending = true;
+        pendingItemTake.task = outcome.task;
+        pendingItemTake.entity = entity;
+        pendingItemTake.placedObjectId = item.placedObjectId;
+        pendingItemTake.instanceId = item.instanceId;
+        pendingItemTake.active = true;
+        return true;
+    }
+    if (outcome.result == engine::ScriptCallResult::Missing) {
+        TraceLog(
+                LOG_WARNING,
+                "[Lua WARNING] item '%s' has no callable take function '%s'",
+                item.instanceId.c_str(), item.onTakeScript.c_str());
+        return true;
+    }
+    if (outcome.result == engine::ScriptCallResult::Error) {
+        TraceLog(
+                LOG_ERROR,
+                "[Lua ERROR] item '%s' take function '%s' failed: %s",
+                item.instanceId.c_str(),
+                item.onTakeScript.c_str(),
+                outcome.error.c_str());
+        return true;
+    }
+    return false;
+}
+
+void SectorGameSession::UpdatePendingItemTake(
+        engine::EngineContext& context,
+        SectorSceneRuntime& scene)
+{
+    if (!pendingItemTake.active) return;
+    engine::ScriptObservedCallOutcome outcome;
+    if (!engine::ScriptSystemTakeObservedCallOutcome(
+                scripts, pendingItemTake.task, outcome)) {
+        return;
+    }
+    const PendingItemTake pending = pendingItemTake;
+    pendingItemTake = {};
+    if (context.world.IsAlive(pending.entity)
+            && context.world.Has<SectorItem>(pending.entity)) {
+        context.world.Get<SectorItem>(pending.entity).takePending = false;
+    }
+    if (outcome.state == engine::ScriptTaskState::Completed
+            && FirstScriptValueIsTrue(outcome.values)) {
+        CommitItemTake(
+                context,
+                scene,
+                pending.entity,
+                pending.placedObjectId,
+                pending.instanceId);
+    } else if (outcome.state == engine::ScriptTaskState::Failed) {
+        TraceLog(
+                LOG_ERROR,
+                "[Lua ERROR] item take callback failed: %s",
+                outcome.error.c_str());
+    }
+}
 
 bool SectorGameSession::StartNew(
         engine::EngineContext& context,
@@ -145,6 +354,8 @@ bool SectorGameSession::StartNew(
         const SectorLevelEntryRequest& entry,
         const SectorMaterialRegistry& materials,
         const FpsWeaponRegistry& registry,
+        const ItemRegistry& items,
+        ItemCampaignState& campaign,
         const FpsApplicationSettings& settings,
         PlayerAudioRuntime& playerAudioRuntime,
         engine::PersistentScriptStore& persistentStore,
@@ -167,6 +378,7 @@ bool SectorGameSession::StartNew(
     if (!LoadSectorRuntimeLevel(path, materials, loaded, error)) {
         return false;
     }
+    ReconcileItemCampaignLevel(campaign, requestedLevelName, loaded);
     const SectorCompiledLevelMarker* entryMarker = nullptr;
     if (!ResolveSectorLevelEntryMarker(loaded, entry.markerId, entryMarker, error)) {
         return false;
@@ -201,6 +413,9 @@ bool SectorGameSession::StartNew(
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
+    itemMessage = {};
+    itemMessageElapsedSeconds = 0.0f;
+    pendingItemTake = {};
     navigationDebug = SectorGameNavigationDebugState{};
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
@@ -222,6 +437,8 @@ bool SectorGameSession::StartNew(
     }
     EnterSectorFreeflyController(controller.freeflyController);
     weaponRegistry = &registry;
+    itemRegistry = &items;
+    itemCampaign = &campaign;
     materialRegistry = &materials;
     applicationSettings = &settings;
     playerAudio = &playerAudioRuntime;
@@ -285,7 +502,12 @@ void SectorGameSession::Shutdown(
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
+    itemMessage = {};
+    itemMessageElapsedSeconds = 0.0f;
+    pendingItemTake = {};
     weaponRegistry = nullptr;
+    itemRegistry = nullptr;
+    itemCampaign = nullptr;
     materialRegistry = nullptr;
     applicationSettings = nullptr;
     playerAudio = nullptr;
@@ -297,6 +519,7 @@ void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
     Pause();
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
+    pendingItemTake = {};
 }
 
 void SectorGameSession::Pause()
@@ -343,6 +566,13 @@ void SectorGameSession::Update(
     }
     if (!running || paused) {
         return;
+    }
+    if (itemMessage[0] != '\0') {
+        itemMessageElapsedSeconds += std::max(0.0f, dt);
+        if (itemMessageElapsedSeconds >= 2.25f) {
+            itemMessage = {};
+            itemMessageElapsedSeconds = 0.0f;
+        }
     }
 
     context.input.ForEachEvent(
@@ -479,13 +709,16 @@ void SectorGameSession::Update(
     if (!consoleInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [this, &context](engine::InputEvent& event) {
+            [this, &context, &scene](engine::InputEvent& event) {
                 if (event.key.key != KEY_E
                         || useTarget.kind == SectorUseTargetKind::None) {
                     return;
                 }
                 bool handled = false;
-                if (useTarget.kind == SectorUseTargetKind::Door) {
+                if (useTarget.kind == SectorUseTargetKind::Item) {
+                    handled = RequestItemTake(
+                            context, scene, useTarget.entity);
+                } else if (useTarget.kind == SectorUseTargetKind::Door) {
                     handled = RequestSectorScriptDoorUse(
                             context, scriptHost, useTarget.entity);
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
@@ -521,6 +754,7 @@ void SectorGameSession::Update(
                 if (handled) engine::ConsumeEvent(event);
             });
     engine::ScriptSystemUpdate(context, scripts, dt);
+    UpdatePendingItemTake(context, scene);
     UpdateSectorScriptDoorPermission(context, scriptHost);
     if (scriptHost.dynamicLightsDirty) {
         scene.Renderer().RefreshDynamicLightSources(topologyMap);
@@ -761,10 +995,20 @@ void SectorGameSession::RenderHud(
                 assets.GetFont(font),
                 &playerHealth,
                 &playerStamina);
-        DrawSectorUsePrompt(
-                playableViewport,
-                assets.GetFont(usePromptFont),
-                usePromptTitle.data());
+        if (itemMessage[0] != '\0') {
+            DrawSectorUseMessage(
+                    playableViewport,
+                    assets.GetFont(usePromptFont),
+                    itemMessage.data(),
+                    itemMessageElapsedSeconds);
+        } else {
+            DrawSectorUsePrompt(
+                    playableViewport,
+                    assets.GetFont(usePromptFont),
+                    usePromptTitle.data(),
+                    useTarget.kind == SectorUseTargetKind::Item
+                            ? "Take" : "Use");
+        }
     }
 }
 
@@ -807,10 +1051,16 @@ bool SectorGameSession::RebuildFromMap(
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
+    pendingItemTake = {};
     const SectorFpsControllerState savedPlayer = controller.fpsControllerState;
+    SectorTopologyMap reconciledMap = map;
+    if (itemCampaign != nullptr) {
+        ReconcileItemCampaignLevel(
+                *itemCampaign, levelName, reconciledMap);
+    }
     if (!scene.Rebuild(
-                context,
-                map,
+            context,
+            reconciledMap,
                 "sector_game",
                 applicationSettings != nullptr
                         ? applicationSettings->footsteps.defaultSet
@@ -821,7 +1071,7 @@ bool SectorGameSession::RebuildFromMap(
                 error)) {
         return false;
     }
-    topologyMap = map;
+    topologyMap = std::move(reconciledMap);
     ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
@@ -866,12 +1116,15 @@ bool SectorGameSession::ReloadCurrentMap(
     }
     const std::string mapId = levelName;
     const FpsWeaponRegistry* savedWeaponRegistry = weaponRegistry;
+    const ItemRegistry* savedItemRegistry = itemRegistry;
+    ItemCampaignState* savedItemCampaign = itemCampaign;
     const SectorMaterialRegistry* savedMaterialRegistry = materialRegistry;
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
     Shutdown(context, scene);
-    if (savedWeaponRegistry == nullptr || savedMaterialRegistry == nullptr
+    if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
+            || savedItemCampaign == nullptr || savedMaterialRegistry == nullptr
             || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
         error = "Game services became unavailable during reload";
@@ -883,6 +1136,8 @@ bool SectorGameSession::ReloadCurrentMap(
                 SectorLevelEntryRequest{mapId, std::nullopt},
                 *savedMaterialRegistry,
                 *savedWeaponRegistry,
+                *savedItemRegistry,
+                *savedItemCampaign,
                 *savedSettings,
                 *savedPlayerAudio,
                 *savedPersistent,
@@ -922,6 +1177,8 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     scripts.requestedSpawnId.clear();
 
     const FpsWeaponRegistry* savedWeaponRegistry = weaponRegistry;
+    const ItemRegistry* savedItemRegistry = itemRegistry;
+    ItemCampaignState* savedItemCampaign = itemCampaign;
     const SectorMaterialRegistry* savedMaterialRegistry = materialRegistry;
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
@@ -929,7 +1186,8 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     const Health savedHealth = playerHealth;
     const PlayerStamina savedStamina = playerStamina;
     Shutdown(context, scene);
-    if (savedWeaponRegistry == nullptr || savedMaterialRegistry == nullptr
+    if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
+            || savedItemCampaign == nullptr || savedMaterialRegistry == nullptr
             || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
         failureError = "Map change failed because session services are unavailable";
@@ -948,6 +1206,8 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
                 entry,
                 *savedMaterialRegistry,
                 *savedWeaponRegistry,
+                *savedItemRegistry,
+                *savedItemCampaign,
                 *savedSettings,
                 *savedPlayerAudio,
                 *savedPersistent,

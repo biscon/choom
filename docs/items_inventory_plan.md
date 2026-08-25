@@ -38,7 +38,7 @@ Before executing a slice:
 | Slice | Title | Status | Completed |
 |---|---|---|---|
 | 1 | Global item definitions, settings, assets, and Item Editor | Completed | 2026-08-25 |
-| 2 | Authored item placements, world rendering, pickup, and session inventory | Not Started | — |
+| 2 | Authored item placements, world rendering, pickup, and session inventory | Completed | 2026-08-25 |
 | 3 | Runtime icon atlas, inventory UI, health use, and safe dropping | Not Started | — |
 | 4 | Object-on-prop use mode, scripting completion, and integration hardening | Not Started | — |
 
@@ -232,9 +232,21 @@ Completion requires:
   The editor's existing weapon-registry editing session remains separate, so
   item validation uses the editor weapon registry while application startup
   validates against the runtime weapon registry loaded from the same file.
-- Before Slice 2 adds graph-native item placement structs, reference-safe item
-  deletion scans v4 authoring-graph JSON `runtimeObjects` directly and fails
-  closed on malformed item payloads or incomplete filesystem traversal.
+- Slice 1's reference-safe deletion scanner reads the intentionally map-level
+  v4 `runtimeObjects` collection directly and fails closed on malformed item
+  payloads or incomplete filesystem traversal; Slice 2's typed placement
+  payload preserves that ownership and scanner contract.
+- Slice 2 keeps item placements in the accepted transitional, map-level
+  `runtimeObjects` collection. Authoring derivation copies that intentionally
+  topology-owned level data while geometry and editable sector properties
+  remain authoring-graph-owned.
+- Campaign item state is application-owned. A per-level ledger suppresses
+  collected authored IDs and appends session-drop records before scene rebuild,
+  so map changes, revisits, reloads, and editor suspend/resume share one
+  reconciliation boundary.
+- Runtime item models reuse the dynamic-prop world renderer and shadow policy
+  with an explicit nonanimated shadow-caster path. They receive no animation or
+  collision component and remain absent from baked receiver/occluder inputs.
 
 ## Target Contracts
 
@@ -859,3 +871,61 @@ entry.
   post-save registry rebuilds, never from steady update or render. Icon atlas
   allocation/GPU baking remains deferred to Slice 3.
 - Remaining follow-up within this plan: Slices 2-4.
+
+### 2026-08-25 — Slice 2 — Completed
+
+- Summary: Added backward-compatible authored Item placements; the Item tool,
+  definition picker, inspector, cached marker, selection/drag/delete paths;
+  runtime ECS spawning and nonanimated PBR rendering; contact/dynamic shadows,
+  visibility and interaction highlighting; atomic inventory transactions;
+  application-owned campaign ledgers; centered-view Take interaction; refusal
+  messaging; observed/yielding `onTakeScript` gating; and focused ECS removal.
+- Decisions/deviations folded back into plan: Item placements remain in the
+  accepted transitional topology-map `runtimeObjects` owner rather than
+  introducing geometry ownership into the authoring graph. Missing definitions
+  are structural-load-safe but produce editor/runtime invalid diagnostics and
+  are skipped at spawn. No Slice 3 inventory UI, healing, icon baking, or drop
+  placement behavior was pulled forward.
+- New compacted findings: Campaign reconciliation must run before each scene
+  rebuild, including editor resume. Yielding pickup state must be cancelled
+  when the map script runtime is shut down. Dynamic item shadows need a
+  nonanimated caster discriminator because the existing dynamic-prop path
+  otherwise requires `AnimatedModelInstance` pose data.
+- Files/modules materially affected: Topology runtime-object schema and
+  serialization; `sources/game/items/ItemInventory`; game application/session
+  ownership and pickup flow; runtime object/scene spawning; world model and
+  shadow renderers; use interaction; editor tool/cache/runtime-object editing
+  service and Item inspector; scripting documentation; CMake; and focused
+  serialization, editor, runtime, inventory, lightmap, and layout tests.
+- Automated verification: `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 31 tests;
+  focused coverage includes Item JSON defaults/validation/round-trip, editor
+  placement/cache/picking/invalidation, runtime spawn/removal/shadow policy,
+  interaction fallback/pending gating, inventory boundaries/stacking/overflow,
+  campaign revisit reconciliation, and lightmap-hash exclusion. Final diff and
+  status checks completed as listed below.
+- Manual verification: Not performed (user-owned).
+- Cache invalidation behavior: Item add, assignment, inspector edits,
+  selection drag completion, and delete all use
+  `SectorEditorRuntimeObjectEditingService::MarkEdited()`, which marks the
+  document dirty, increments the topology render revision, and invalidates the
+  2D cache. Item-registry revision participates in cache currency and triggers
+  an item-label/validity rebuild without dirtying the level. Steady cached draw
+  and picking perform no topology validation, loop extraction, index rebuild,
+  triangulation, registry file I/O, or model inspection.
+- Lightmap source-hash behavior: Every Item placement field, including
+  definition/instance IDs, quantity, scripts, transforms, scale, shadow mode,
+  and runtime campaign provenance, remains excluded from
+  `ComputeSectorLightmapSourceHash()`. Item models are neither baked receivers
+  nor occluders; existing static-light, AO, and geometry hash inputs are
+  unchanged.
+- Collision/sector lookup/physics behavior: Items add no collider component or
+  collision-world entry. Existing topology collision, sector lookup, door
+  collision, player physics, and camera behavior are unchanged; sector lookup
+  is read only to choose item lighting/visibility context.
+- Allocation/load-phase behavior: Item ECS/component capacity and campaign
+  inventory/level collections are pre-reserved, with warnings on unexpected
+  growth. Item spawn resolves application-global pre-requested model handles
+  and performs no model load. Editor definition-picker storage rebuilds only on
+  registry revision changes, not during steady state.
+- Remaining follow-up within this plan: Slices 3-4.

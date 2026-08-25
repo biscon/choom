@@ -11917,7 +11917,8 @@ game::SectorEditorRuntimeObjectEditingService MakeRuntimeObjectEditingServiceFor
         uint64_t& renderRevision,
         game::SectorEditorTopologyRenderCache& renderCache,
         std::string& statusText,
-        bool derivationCurrent)
+        bool derivationCurrent,
+        const game::ItemRegistry* itemRegistry = nullptr)
 {
     return game::SectorEditorRuntimeObjectEditingService{
             game::SectorEditorRuntimeObjectEditingServiceContext{
@@ -11933,7 +11934,127 @@ game::SectorEditorRuntimeObjectEditingService MakeRuntimeObjectEditingServiceFor
                     renderCache,
                     statusText,
                     nullptr,
-                    derivationCurrent}};
+                    derivationCurrent,
+                    itemRegistry}};
+}
+
+void TestItemPlacementEditingCacheAndPicking()
+{
+    game::SectorTopologyMap map = MakeSingleSectorSquareMap();
+    game::ItemRegistry registry;
+    game::ItemDefinition definition;
+    definition.id = "test_item";
+    definition.title = "Test Item";
+    definition.description = "Editor item fixture";
+    definition.modelPath = "assets/models/test_item.glb";
+    registry.items.push_back(definition);
+    registry.revision = 7;
+
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RuntimeObjectEditingState editingState;
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    game::SectorEditorDocumentState documentState;
+    uint64_t renderRevision = 12;
+    game::SectorEditorTopologyRenderCache renderCache;
+    std::string statusText;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    game::SectorEditorRuntimeObjectEditingService editing =
+            MakeRuntimeObjectEditingServiceForTest(
+                    map,
+                    runtimeObjects,
+                    editingState,
+                    uiState,
+                    selectionState,
+                    documentState,
+                    renderRevision,
+                    renderCache,
+                    statusText,
+                    true,
+                    &registry);
+
+    const Vector2 placement{1.0f, 1.0f};
+    Check(editing.AddItem(placement, "test_item"),
+          "Item tool places a registry-backed item in a derived sector");
+    Check(map.runtimeObjects.size() == 1
+                  && map.runtimeObjects[0].kind == "item"
+                  && map.runtimeObjects[0].item.definitionId == "test_item"
+                  && map.runtimeObjects[0].item.instanceId == "item_1"
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == 13
+                  && !renderCache.valid,
+          "Item placement selects the item and uses document/cache invalidation");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    documentState.lifecycle.topologyDocumentDirty = false;
+    const uint64_t beforeEditRevision = renderRevision;
+    Check(editing.MutateSelected(
+                  "Edited item placement",
+                  [](game::SectorPlacedRuntimeObject& object) {
+                      if (object.kind != "item") return false;
+                      object.item.quantity = 3;
+                      object.item.takeDistance = 2.0f;
+                      object.item.onTakeScript = "canTakeItem";
+                      object.item.scale = 1.25f;
+                      return true;
+                  })
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && renderRevision == beforeEditRevision + 1
+                  && !renderCache.valid,
+          "Item inspector-style edits use document/cache invalidation");
+
+    game::SectorAuthoringGraph graph =
+            game::ImportSectorTopologyMapToAuthoringGraph(map);
+    game::SectorAuthoringDerivationResult derivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    derivation.topology.runtimeObjects = map.runtimeObjects;
+    game::SectorEditorTopologyRenderCache cached =
+            game::BuildSectorEditorTopologyRenderCache(
+                    derivation.topology,
+                    graph,
+                    derivation,
+                    renderRevision,
+                    nullptr,
+                    0,
+                    &registry,
+                    registry.revision);
+    Check(cached.valid && cached.runtimeObjects.size() == 1
+                  && cached.runtimeObjects[0].isItem
+                  && cached.runtimeObjects[0].definitionKnown
+                  && cached.runtimeObjects[0].itemLabel == "Test Item",
+          "2D render cache resolves item marker label and definition status");
+    Check(game::IsSectorEditorTopologyRenderCacheCurrent(
+                  cached, renderRevision, 0, registry.revision)
+                  && !game::IsSectorEditorTopologyRenderCacheCurrent(
+                          cached, renderRevision, 0, registry.revision + 1),
+          "Item registry revision participates in 2D cache currency");
+
+    game::SectorEditorTopologyDrawContext drawContext;
+    drawContext.canvasRect = Rectangle{0.0f, 0.0f, 100.0f, 100.0f};
+    drawContext.viewZoom = 1.0f;
+    drawContext.viewCenter = game::SectorAuthoringToWorldPosition(placement);
+    std::vector<game::SectorEditorPickCandidate> candidates;
+    game::AppendCachedRuntimeObjectPickCandidates(
+            cached,
+            drawContext,
+            Vector2{50.0f, 50.0f},
+            2.0f,
+            candidates);
+    Check(candidates.size() == 1
+                  && candidates[0].target.kind
+                          == game::SectorEditorPickKind::RuntimeObject
+                  && candidates[0].target.id == map.runtimeObjects[0].id,
+          "cached Item marker remains pickable at its drawn center");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    editing.SelectObject(map.runtimeObjects[0].id);
+    const uint64_t beforeDeleteRevision = renderRevision;
+    Check(editing.DeleteById(map.runtimeObjects[0].id)
+                  && map.runtimeObjects.empty()
+                  && renderRevision == beforeDeleteRevision + 1
+                  && !renderCache.valid,
+          "Item deletion uses the focused runtime-object edit/cache path");
 }
 
 void TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime()
@@ -14481,6 +14602,7 @@ int main()
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
     TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag();
+    TestItemPlacementEditingCacheAndPicking();
     TestNpcEditingPlacementSelectionPickingAndFloorRelativeDrag();
     TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
     TestDoorConfigClipboardPreservesAnchorAndInstanceId();

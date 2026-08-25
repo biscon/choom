@@ -1438,16 +1438,7 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opacity, SHADER_UNIFORM_FLOAT);
     }
-    interactionHighlightStrength = std::isfinite(interactionHighlightStrength)
-            ? std::clamp(interactionHighlightStrength, 0.0f, 0.14f)
-            : 0.0f;
-    if (interactionHighlightStrengthLoc >= 0) {
-        SetShaderValue(
-                shader,
-                interactionHighlightStrengthLoc,
-                &interactionHighlightStrength,
-                SHADER_UNIFORM_FLOAT);
-    }
+    UploadInteractionHighlightStrength(interactionHighlightStrength);
     if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
     if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
     if (containingSectorAmbientLoc >= 0) {
@@ -1612,6 +1603,21 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
     return drewMesh;
 }
 
+void SectorStaticModelRenderer::UploadInteractionHighlightStrength(
+        float strength)
+{
+    strength = std::isfinite(strength)
+            ? std::clamp(strength, 0.0f, 0.14f)
+            : 0.0f;
+    if (interactionHighlightStrengthLoc >= 0) {
+        SetShaderValue(
+                shader,
+                interactionHighlightStrengthLoc,
+                &strength,
+                SHADER_UNIFORM_FLOAT);
+    }
+}
+
 void SectorStaticModelRenderer::Draw(
         engine::AssetManager& assets,
         engine::World& runtimeObjectWorld,
@@ -1637,14 +1643,7 @@ void SectorStaticModelRenderer::Draw(
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opaque, SHADER_UNIFORM_FLOAT);
     }
-    const float noInteractionHighlight = 0.0f;
-    if (interactionHighlightStrengthLoc >= 0) {
-        SetShaderValue(
-                shader,
-                interactionHighlightStrengthLoc,
-                &noInteractionHighlight,
-                SHADER_UNIFORM_FLOAT);
-    }
+    UploadInteractionHighlightStrength(0.0f);
 
     SectorDynamicLightShaderLocations dynamicLocations;
     dynamicLocations.dynamicLightCount = dynamicLightCountLoc;
@@ -1695,6 +1694,95 @@ void SectorStaticModelRenderer::Draw(
     rlDisableBackfaceCulling();
     rlEnableDepthTest();
     rlEnableDepthMask();
+
+    runtimeObjectWorld.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorObjectLighting,
+            SectorItem>(
+            [this,
+             &assets,
+             &dynamicLightContext,
+             &staticSpecularLights,
+             &visibility,
+             environment,
+             objectProbeBakeCurrent,
+             &considered,
+             &drawn,
+             &portalCulled,
+             &skipped,
+             staticCaptureOnly,
+             useHighlight](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorObjectLighting& lighting,
+                    SectorItem& item) {
+                if (staticCaptureOnly) return;
+                ++considered;
+                if (!ShouldDrawRuntimeSectorForVisibility(
+                            object.currentSectorId, visibility)) {
+                    ++portalCulled;
+                    return;
+                }
+                if (!object.visible) {
+                    ++skipped;
+                    return;
+                }
+                const engine::ModelAsset* asset = assets.GetModelAsset(item.model);
+                if (asset == nullptr) {
+                    ++skipped;
+                    return;
+                }
+                const Matrix authoredTransform =
+                        BuildSectorStaticModelAuthoredTransform(
+                                transform.position,
+                                transform.rotationXRadians,
+                                transform.yawRadians,
+                                transform.rotationZRadians,
+                                item.scale);
+                const Matrix modelTransform = MatrixMultiply(
+                        asset->model.transform, authoredTransform);
+                const SectorReceiverBounds receiverBounds = asset->hasLocalBounds
+                        ? TransformSectorStaticSpecularReceiverBounds(
+                                asset->localBounds,
+                                authoredTransform,
+                                object.currentSectorId,
+                                transform.position)
+                        : SectorReceiverBounds{
+                                object.currentSectorId,
+                                transform.position,
+                                transform.position};
+                const bool drewMesh = DrawWorldDynamicModel(
+                        *asset,
+                        asset->model,
+                        item.model,
+                        modelTransform,
+                        item.placedObjectId,
+                        object.currentSectorId,
+                        receiverBounds,
+                        item.containingSectorAmbient,
+                        item.environmentExposure,
+                        lighting.vertical,
+                        dynamicLightContext,
+                        staticSpecularLights,
+                        visibility,
+                        objectProbeBakeCurrent,
+                        environment,
+                        false,
+                        nullptr,
+                        nullptr,
+                        1.0f,
+                        1.0f,
+                        entity == useHighlight.entity
+                                ? useHighlight.strength : 0.0f);
+                if (drewMesh) ++drawn;
+                else ++skipped;
+            });
+
+    // The item pass sets a shared shader uniform per entity. Static props use
+    // their own draw path, so clear it explicitly before entering that pass.
+    UploadInteractionHighlightStrength(0.0f);
 
     runtimeObjectWorld.ForEach<
             SectorObjectTransform,
@@ -2216,14 +2304,7 @@ void SectorStaticModelRenderer::DrawViewmodel(
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opaque, SHADER_UNIFORM_FLOAT);
     }
-    const float noInteractionHighlight = 0.0f;
-    if (interactionHighlightStrengthLoc >= 0) {
-        SetShaderValue(
-                shader,
-                interactionHighlightStrengthLoc,
-                &noInteractionHighlight,
-                SHADER_UNIFORM_FLOAT);
-    }
+    UploadInteractionHighlightStrength(0.0f);
 
     SectorDynamicLightShaderLocations dynamicLocations;
     dynamicLocations.dynamicLightCount = dynamicLightCountLoc;

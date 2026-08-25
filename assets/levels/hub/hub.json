@@ -2644,6 +2644,21 @@
         -34.0
       ],
       "yawDegrees": -35.0
+    },
+    {
+      "id": 158,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_2",
+        "instanceId": "boomstick_01",
+        "heightOffsetWorld": 1.0
+      },
+      "position": [
+        -93.0,
+        -16.0,
+        -74.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [

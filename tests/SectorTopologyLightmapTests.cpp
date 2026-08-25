@@ -1366,6 +1366,35 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
           "hash excludes dynamic prop ID, transform, playback, and runtime shadow changes");
 
+    game::SectorTopologyMap itemMap = base;
+    game::SectorPlacedRuntimeObject item;
+    item.id = 79;
+    item.kind = "item";
+    item.position = Vector3{24.0f, 0.0f, 24.0f};
+    item.yawRadians = 0.75f;
+    item.item.definitionId = "pistol_ammo";
+    item.item.instanceId = "ammo_crate";
+    item.item.quantity = 12;
+    item.item.takeDistance = 2.25f;
+    item.item.onTakeScript = "canTakeAmmo";
+    item.item.onUseScript = "futureObjectUse";
+    item.item.rotationXRadians = 0.25f;
+    item.item.rotationZRadians = -0.5f;
+    item.item.heightOffsetWorld = 0.75f;
+    item.item.scale = 1.5f;
+    item.item.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    item.item.sessionDrop = true;
+    itemMap.runtimeObjects.push_back(item);
+    Check(game::ComputeSectorLightmapSourceHash(itemMap) == hash,
+          "hash excludes every authored and campaign-only item placement field");
+    itemMap.runtimeObjects[0].position.x += 16.0f;
+    itemMap.runtimeObjects[0].item.definitionId = "different_item";
+    itemMap.runtimeObjects[0].item.quantity = 1;
+    itemMap.runtimeObjects[0].item.shadowMode =
+            game::SectorDynamicModelShadowMode::None;
+    Check(game::ComputeSectorLightmapSourceHash(itemMap) == hash,
+          "item identity, quantity, transform, and shadow edits do not stale baked lightmaps");
+
     game::SectorTopologyMap npcMap = base;
     game::SectorPlacedRuntimeObject npc;
     npc.id = 78;

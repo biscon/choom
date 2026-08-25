@@ -5,6 +5,7 @@
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingState.h"
 #include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardTypes.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "game/items/ItemDefinitions.h"
 
 #include <functional>
 #include <string>
@@ -28,6 +29,7 @@ struct SectorEditorRuntimeObjectEditingServiceContext {
     std::string& statusText;
     engine::EngineContext* engineContext = nullptr;
     bool authoringDerivationCurrent = false;
+    const ItemRegistry* itemRegistry = nullptr;
 };
 
 struct SectorEditorRuntimeObjectDeleteRequest {
@@ -44,12 +46,14 @@ public:
 
     SectorPlacedRuntimeObject* SelectedObject();
     const SectorPlacedRuntimeObject* SelectedObject() const;
+    const ItemRegistry* ItemRegistryView() const { return context_.itemRegistry; }
     void SelectObject(int objectId);
 
     bool AddBillboard(int sectorId, Vector2 mapPoint);
     bool AddDoor(int lineDefId);
     bool AddStaticModel(Vector2 mapPoint);
     bool AddDynamicModel(Vector2 mapPoint);
+    bool AddItem(Vector2 mapPoint, const std::string& definitionId);
     bool AddNpc(Vector2 mapPoint, const std::string& definitionId);
     bool CopySelectedConfig(
             SectorEditorConfigClipboardState& clipboard) const;
@@ -66,6 +70,10 @@ public:
             const std::string& instanceId,
             std::string& outError);
     bool AssignSelectedDynamicModel(const std::string& modelPath);
+    bool AssignSelectedItemDefinition(const std::string& definitionId);
+    bool SetSelectedItemInstanceId(
+            const std::string& instanceId,
+            std::string& outError);
     bool SetSelectedDynamicModelInstanceId(
             const std::string& instanceId,
             std::string& outError);

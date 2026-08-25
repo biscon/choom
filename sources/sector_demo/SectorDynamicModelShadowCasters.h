@@ -21,6 +21,7 @@ struct SectorDynamicModelShadowCaster {
     engine::ModelHandle model = engine::NullModelHandle();
     Matrix transform = {};
     uint64_t contentFingerprint = 0;
+    bool animated = true;
 };
 
 struct SectorDynamicModelShadowCasterCollection {

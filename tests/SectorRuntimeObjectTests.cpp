@@ -120,6 +120,113 @@ void TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps()
           "use targeting rejects objects outside the forward view cone");
 }
 
+void TestSectorItemUseTargetFallbackAndPendingGate()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity itemEntity = world.CreateEntity();
+    game::SectorItem item;
+    item.title = "Pistol Ammunition";
+    item.takeDistance = 3.0f;
+    world.Add(itemEntity, item);
+    world.Add(itemEntity, game::SectorObjectTransform{
+            Vector3{2.0f, 0.0f, 0.0f}});
+
+    const game::SectorUseTarget target = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(target.kind == game::SectorUseTargetKind::Item
+                  && target.entity == itemEntity
+                  && game::SectorUseTargetTitle(world, target)
+                          == "Pistol Ammunition",
+          "pending-model items remain safely targetable by their point fallback");
+
+    world.Get<game::SectorItem>(itemEntity).takePending = true;
+    const game::SectorUseTarget pending = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(pending.kind == game::SectorUseTargetKind::None,
+          "an item with a yielding pickup hook cannot start a second take");
+}
+
+void TestItemRuntimeSpawnAndFocusedRemoval()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map;
+    game::ItemRegistry registry;
+    game::ItemDefinition definition;
+    definition.id = "ammo";
+    definition.title = "Ammunition";
+    definition.type = game::ItemType::Ammo;
+    definition.weightKg = 0.1f;
+    registry.items.push_back(definition);
+    game::ItemModelAssetState itemAssets;
+    itemAssets.entries.push_back(game::ItemModelAssetEntry{
+            "ammo",
+            "assets/models/ammo.glb",
+            engine::ModelHandle{7, 2}});
+
+    game::SectorPlacedRuntimeObject known;
+    known.id = 70;
+    known.kind = "item";
+    known.position = Vector3{2.0f, 3.0f, 4.0f};
+    known.item.definitionId = "ammo";
+    known.item.instanceId = "ammo_70";
+    known.item.quantity = 8;
+    known.item.onTakeScript = "canTakeAmmo";
+    known.item.onUseScript = "ignoredForAmmo";
+    known.item.heightOffsetWorld = 0.25f;
+    known.item.scale = 1.5f;
+    known.item.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    map.runtimeObjects.push_back(known);
+    game::SectorPlacedRuntimeObject missing = known;
+    missing.id = 71;
+    missing.item.definitionId = "missing";
+    missing.item.instanceId = "missing_71";
+    map.runtimeObjects.push_back(missing);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(
+            world, assets, state, map, &registry, &itemAssets);
+    Check(state.placedObjectEntities.size() == 1
+                  && state.placedObjectEntities.front().placedObjectId == 70
+                  && state.skippedObjectCount == 1,
+          "item spawning skips missing definitions with a diagnostic");
+    if (state.placedObjectEntities.empty()) return;
+    const engine::Entity entity = state.placedObjectEntities.front().entity;
+    Check(world.Has<game::SectorItem>(entity)
+                  && world.Has<game::SectorObjectTransform>(entity)
+                  && world.Has<game::SectorObjectLighting>(entity)
+                  && !world.Has<engine::AnimatedModelInstance>(entity)
+                  && !world.Has<game::SectorStaticModelCollider>(entity),
+          "world items spawn lit but without animation or collision components");
+    const game::SectorItem& item = world.Get<game::SectorItem>(entity);
+    Check(item.model == engine::ModelHandle{7, 2}
+                  && item.quantity == 8
+                  && item.onTakeScript == "canTakeAmmo"
+                  && item.onUseScript.empty()
+                  && std::fabs(item.scale - 1.5f) <= 0.00001f
+                  && item.shadowMode
+                          == game::SectorDynamicModelShadowMode::Dynamic,
+          "item spawn resolves the global model and copies gameplay/render fields");
+    Check(game::QueueRemoveSectorRuntimeObjectByEntity(world, state, entity)
+                  && state.placedObjectEntities.empty(),
+          "focused item removal updates runtime tracking without a full rebuild");
+    world.FlushDestroyedEntities();
+    Check(!world.IsAlive(entity),
+          "focused item removal destroys the selected ECS entity after the explicit flush");
+}
+
 bool Near(float actual, float expected, float epsilon = 0.00001f)
 {
     return std::fabs(actual - expected) <= epsilon;
@@ -6839,6 +6946,46 @@ void TestDynamicModelShadowCasterCollectionAndRevision()
     game::UpdateSectorDynamicModelShadowCasters(collection, &world);
     Check(collection.revision == disabledRevision,
           "an unchanged empty dynamic caster set keeps its revision stable");
+
+    const engine::Entity itemEntity = world.CreateEntity();
+    const game::SectorObjectTransform itemTransform{
+            Vector3{-2.0f, 1.0f, 4.0f},
+            0.15f,
+            0.25f,
+            -0.1f};
+    world.Add(itemEntity, itemTransform);
+    world.Add(itemEntity, game::SectorObject{8, true});
+    game::SectorItem item;
+    item.placedObjectId = 53;
+    item.model = engine::ModelHandle{8, 3};
+    item.scale = 0.75f;
+    item.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    world.Add(itemEntity, item);
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t itemRevision = collection.revision;
+    const Matrix expectedItem = game::BuildSectorStaticModelAuthoredTransform(
+            itemTransform.position,
+            itemTransform.rotationXRadians,
+            itemTransform.yawRadians,
+            itemTransform.rotationZRadians,
+            item.scale);
+    Check(collection.casters.size() == 1
+                  && collection.casters.front().entity == itemEntity
+                  && collection.casters.front().placedObjectId == 53
+                  && collection.casters.front().model
+                          == engine::ModelHandle{8, 3}
+                  && !collection.casters.front().animated
+                  && Near(
+                          Vector3Transform(
+                                  Vector3{},
+                                  collection.casters.front().transform),
+                          Vector3Transform(Vector3{}, expectedItem)),
+          "Dynamic-shadow items join the caster set in their nonanimated authored pose");
+    world.Get<game::SectorItem>(itemEntity).shadowMode =
+            game::SectorDynamicModelShadowMode::Contact;
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    Check(collection.casters.empty() && collection.revision != itemRevision,
+          "Contact-shadow items stay out of the dynamic spotlight caster set");
 }
 
 void TestViewmodelMaterialOverrideResolution()
@@ -8726,6 +8873,8 @@ int main()
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
+    TestSectorItemUseTargetFallbackAndPendingGate();
+    TestItemRuntimeSpawnAndFocusedRemoval();
     TestSectorUseHighlightPulsesAndReleases();
     TestNpcVocalPriorityDelayAndShufflePolicy();
     TestSectorSpatialSoundOcclusion();

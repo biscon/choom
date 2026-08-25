@@ -8,6 +8,7 @@
 #include "game/FpsWeaponRegistry.h"
 #include "game/items/ItemAssets.h"
 #include "game/items/ItemDefinitions.h"
+#include "game/items/ItemInventory.h"
 #include "game/GameMainMenu.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorGameSession.h"
@@ -108,6 +109,7 @@ private:
     SectorMaterialRegistry materialRegistry;
     ItemRegistry itemRegistry;
     ItemModelAssetState itemModelAssets;
+    ItemCampaignState itemCampaign;
     SectorEditor editor;
     SectorGameSession gameSession;
     SectorSceneRuntime gameScene;

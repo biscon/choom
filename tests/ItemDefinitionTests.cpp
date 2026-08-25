@@ -1,5 +1,6 @@
 #include "game/items/ItemDefinitions.h"
 #include "game/items/ItemIconLayout.h"
+#include "game/items/ItemInventory.h"
 #include "sector_editor/items/SectorEditorItemEditorService.h"
 #include "sector_editor/items/SectorItemReferenceScanner.h"
 
@@ -304,6 +305,131 @@ void ReferenceScanningAndEditorService()
     std::filesystem::remove_all(root, ignored);
 }
 
+game::ItemDefinition MakeInventoryDefinition(
+        std::string id,
+        game::ItemType type,
+        float weightKg)
+{
+    game::ItemDefinition definition = MakeObject(std::move(id));
+    definition.type = type;
+    definition.weightKg = weightKg;
+    if (type == game::ItemType::Weapon || type == game::ItemType::Ammo) {
+        definition.weaponId = "pistol";
+    }
+    if (type == game::ItemType::Health) definition.healAmount = 10;
+    return definition;
+}
+
+void InventoryTransactionsAndCampaignReconciliation()
+{
+    game::ItemRegistry registry;
+    registry.items.push_back(MakeInventoryDefinition(
+            "ammo", game::ItemType::Ammo, 0.1f));
+    registry.items.push_back(MakeInventoryDefinition(
+            "object", game::ItemType::Object, 0.5f));
+    registry.items.push_back(MakeInventoryDefinition(
+            "weapon", game::ItemType::Weapon, 1.0f));
+
+    game::PlayerInventoryApplicationSettings settings;
+    settings.maxCarryWeightKg = 10.0f;
+    settings.maxSlots = 6;
+    game::ItemCampaignState campaign;
+    game::InitializeItemCampaignState(campaign, settings);
+
+    game::ItemPickupPlan plan = game::PreflightItemPickup(
+            campaign.inventory, registry, settings, "ammo", 10);
+    assert(plan.result == game::ItemPickupCapacityResult::Fits);
+    assert(game::CommitItemPickup(campaign.inventory, plan, {}));
+    assert(campaign.inventory.entries.size() == 1);
+    assert(campaign.inventory.entries.front().quantity == 10);
+    plan = game::PreflightItemPickup(
+            campaign.inventory, registry, settings, "ammo", 5);
+    assert(plan.result == game::ItemPickupCapacityResult::Fits);
+    assert(plan.addedSlots == 0);
+    assert(game::CommitItemPickup(campaign.inventory, plan, {}));
+    assert(campaign.inventory.entries.front().quantity == 15);
+
+    plan = game::PreflightItemPickup(
+            campaign.inventory, registry, settings, "object", 2);
+    assert(plan.result == game::ItemPickupCapacityResult::Fits);
+    assert(game::CommitItemPickup(
+            campaign.inventory, plan, "useCarriedObject"));
+    assert(campaign.inventory.entries.size() == 3);
+    assert(campaign.inventory.entries[1].quantity == 1);
+    assert(campaign.inventory.entries[2].quantity == 1);
+    assert(campaign.inventory.entries[1].onUseScript == "useCarriedObject");
+
+    plan = game::PreflightItemPickup(
+            campaign.inventory, registry, settings, "weapon", 2);
+    assert(plan.result == game::ItemPickupCapacityResult::Fits);
+    assert(game::CommitItemPickup(campaign.inventory, plan, {}));
+    assert(campaign.inventory.entries.size() == 5);
+    assert(campaign.inventory.entries[3].runtimeId
+            != campaign.inventory.entries[4].runtimeId);
+
+    const std::size_t entryCount = campaign.inventory.entries.size();
+    const std::uint64_t ammoQuantity = campaign.inventory.entries.front().quantity;
+    plan = game::PreflightItemPickup(
+            campaign.inventory, registry, settings, "weapon", 2);
+    assert(plan.result == game::ItemPickupCapacityResult::WeightLimit
+            || plan.result == game::ItemPickupCapacityResult::SlotLimit);
+    assert(campaign.inventory.entries.size() == entryCount);
+    assert(campaign.inventory.entries.front().quantity == ammoQuantity);
+
+    game::PlayerInventoryState overflowInventory;
+    overflowInventory.entries.push_back(game::ItemInventoryEntry{
+            1,
+            "ammo",
+            std::numeric_limits<std::uint64_t>::max(),
+            {}});
+    registry.items.front().weightKg = 0.0f;
+    plan = game::PreflightItemPickup(
+            overflowInventory, registry, settings, "ammo", 1);
+    assert(plan.result == game::ItemPickupCapacityResult::NumericOverflow);
+
+    game::SectorTopologyMap authoredMap;
+    for (int id : {1, 2}) {
+        game::SectorPlacedRuntimeObject item;
+        item.id = id;
+        item.kind = "item";
+        item.item.definitionId = "object";
+        item.item.instanceId = "authored_" + std::to_string(id);
+        authoredMap.runtimeObjects.push_back(std::move(item));
+    }
+    game::ItemLevelCampaignState& level =
+            game::FindOrCreateItemLevelCampaignState(campaign, "test_map", 2);
+    assert(game::RecordAuthoredItemCollected(level, 1));
+    game::SectorPlacedRuntimeObject drop;
+    drop.id = 2;
+    drop.kind = "item";
+    drop.item.definitionId = "object";
+    drop.item.instanceId = "session_drop";
+    level.droppedItems.push_back(drop);
+
+    game::ReconcileItemCampaignLevel(campaign, "test_map", authoredMap);
+    assert(authoredMap.runtimeObjects.size() == 2);
+    assert(authoredMap.runtimeObjects.front().id == 2);
+    const int rebasedDropId = authoredMap.runtimeObjects.back().id;
+    assert(rebasedDropId > 2);
+    assert(authoredMap.runtimeObjects.back().item.sessionDrop);
+    assert(level.droppedItems.front().id == rebasedDropId);
+
+    game::SectorTopologyMap revisited;
+    for (int id : {1, 2}) {
+        game::SectorPlacedRuntimeObject item;
+        item.id = id;
+        item.kind = "item";
+        item.item.definitionId = "object";
+        item.item.instanceId = "authored_" + std::to_string(id);
+        revisited.runtimeObjects.push_back(std::move(item));
+    }
+    game::ReconcileItemCampaignLevel(campaign, "test_map", revisited);
+    assert(revisited.runtimeObjects.size() == 2);
+    assert(revisited.runtimeObjects.back().id == rebasedDropId);
+    assert(game::RemoveSessionDroppedItem(level, rebasedDropId));
+    assert(level.droppedItems.empty());
+}
+
 } // namespace
 
 int main()
@@ -312,5 +438,6 @@ int main()
     ApplicationSettingsInventoryFields();
     IconLayoutAndCameraFit();
     ReferenceScanningAndEditorService();
+    InventoryTransactionsAndCampaignReconciliation();
     std::cout << "Item definition tests passed\n";
 }

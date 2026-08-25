@@ -5,6 +5,8 @@
 #include "game/Health.h"
 #include "game/SectorLevelLoader.h"
 #include "game/FpsPlayerRuntime.h"
+#include "game/items/ItemAssets.h"
+#include "game/items/ItemInventory.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
@@ -26,6 +28,8 @@ public:
             const SectorLevelEntryRequest& entry,
             const SectorMaterialRegistry& materialRegistry,
             const FpsWeaponRegistry& weaponRegistry,
+            const ItemRegistry& itemRegistry,
+            ItemCampaignState& itemCampaign,
             const FpsApplicationSettings& applicationSettings,
             PlayerAudioRuntime& playerAudioRuntime,
             engine::PersistentScriptStore& persistentScripts,
@@ -105,6 +109,28 @@ public:
     const PlayerStamina& PlayerStaminaState() const { return playerStamina; }
 
 private:
+    struct PendingItemTake {
+        engine::ScriptTaskHandle task{};
+        engine::Entity entity = engine::NullEntity();
+        int placedObjectId = 0;
+        std::string instanceId;
+        bool active = false;
+    };
+
+    bool RequestItemTake(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            engine::Entity entity);
+    bool CommitItemTake(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            engine::Entity entity,
+            int placedObjectId,
+            const std::string& instanceId);
+    void UpdatePendingItemTake(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene);
+    void ShowCarryRefusal();
     bool BuildCollisionAndPlayer(
             SectorSceneRuntime& scene,
             bool initializePlayer,
@@ -134,6 +160,8 @@ private:
     GameLevelLoadingState loading;
     FpsPlayerRuntime fpsPlayer;
     const FpsWeaponRegistry* weaponRegistry = nullptr;
+    const ItemRegistry* itemRegistry = nullptr;
+    ItemCampaignState* itemCampaign = nullptr;
     const SectorMaterialRegistry* materialRegistry = nullptr;
     const FpsApplicationSettings* applicationSettings = nullptr;
     PlayerAudioRuntime* playerAudio = nullptr;
@@ -149,6 +177,9 @@ private:
     SectorUseTarget useTarget;
     SectorUseHighlightState useHighlightState;
     std::array<char, 128> usePromptTitle{};
+    std::array<char, 128> itemMessage{};
+    float itemMessageElapsedSeconds = 0.0f;
+    PendingItemTake pendingItemTake;
 };
 
 } // namespace game

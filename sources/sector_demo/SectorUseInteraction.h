@@ -18,6 +18,7 @@ class SectorCollisionWorld;
 
 enum class SectorUseTargetKind {
     None,
+    Item,
     DynamicProp,
     Door
 };
@@ -65,6 +66,13 @@ void UpdateSectorUseHighlight(
 void DrawSectorUsePrompt(
         Rectangle viewport,
         const engine::FontAsset* font,
-        std::string_view title);
+        std::string_view title,
+        std::string_view action = "Use");
+
+void DrawSectorUseMessage(
+        Rectangle viewport,
+        const engine::FontAsset* font,
+        std::string_view message,
+        float elapsedSeconds);
 
 } // namespace game

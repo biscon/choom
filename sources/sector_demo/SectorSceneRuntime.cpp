@@ -63,7 +63,9 @@ bool SectorSceneRuntime::Rebuild(
             context.world,
             context.assets,
             runtimeObjects,
-            map);
+            map,
+            itemRegistry,
+            itemModelAssets);
     InitializeNpcAudioRuntime(
             context.world,
             context.assets,
@@ -127,7 +129,9 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
             context.world,
             context.assets,
             runtimeObjects,
-            map);
+            map,
+            itemRegistry,
+            itemModelAssets);
     InitializeNpcAudioRuntime(
             context.world,
             context.assets,

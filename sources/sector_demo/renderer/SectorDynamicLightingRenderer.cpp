@@ -1465,7 +1465,8 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 const Matrix transform = MatrixMultiply(
                         asset->model.transform,
                         caster.transform);
-                const BoundingBox localBounds = asset->hasAnimatedLocalBounds
+                const BoundingBox localBounds = caster.animated
+                                && asset->hasAnimatedLocalBounds
                         ? asset->animatedLocalBounds
                         : asset->localBounds;
                 currentDynamicShadowCasterBounds.push_back(
@@ -1837,7 +1838,8 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 const Matrix modelTransform = MatrixMultiply(
                         asset->model.transform,
                         caster.transform);
-                const BoundingBox localBounds = asset->hasAnimatedLocalBounds
+                const BoundingBox localBounds = caster.animated
+                                && asset->hasAnimatedLocalBounds
                         ? asset->animatedLocalBounds
                         : asset->localBounds;
                 const SectorAabb3 casterBounds = ToSectorAabb3(
@@ -1849,6 +1851,21 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                             matrix,
                             casterBounds)) {
                     ++shadowRenderStats.objectCastersCulled;
+                    continue;
+                }
+                if (!caster.animated) {
+                    ++shadowRenderStats.objectCastersDrawn;
+                    for (int meshIndex = 0;
+                            meshIndex < asset->model.meshCount;
+                            ++meshIndex) {
+                        if (asset->model.meshes[meshIndex].vertexCount <= 0) {
+                            continue;
+                        }
+                        DrawMesh(
+                                asset->model.meshes[meshIndex],
+                                activeMaterial,
+                                modelTransform);
+                    }
                     continue;
                 }
                 if (!context.runtimeObjectWorld->IsAlive(caster.entity)

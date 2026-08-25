@@ -73,6 +73,7 @@ bool GameApplication::Init(
         return false;
     }
     RebuildItemModelAssets(context.assets, itemRegistry, itemModelAssets);
+    gameScene.SetItemRuntimeAssets(&itemRegistry, &itemModelAssets);
     RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
     RequestPlayerAudioAssets(
             context.assets,
@@ -119,6 +120,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     persistentScripts = engine::PersistentScriptStore{};
     weaponRegistry = FpsWeaponRegistry{};
     itemRegistry = ItemRegistry{};
+    itemCampaign = ItemCampaignState{};
     materialRegistry = SectorMaterialRegistry{};
     menuStatus.clear();
     pendingMenuAction.reset();
@@ -657,12 +659,16 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
     editor.SuspendRuntime(context);
     std::string error;
     persistentScripts = engine::PersistentScriptStore{};
+    InitializeItemCampaignState(
+            itemCampaign, applicationSettings.playerInventory);
     if (!gameSession.StartNew(
                 context,
                 gameScene,
                 SectorLevelEntryRequest{applicationSettings.firstLevel, std::nullopt},
                 materialRegistry,
                 weaponRegistry,
+                itemRegistry,
+                itemCampaign,
                 applicationSettings,
                 playerAudio,
                 persistentScripts,

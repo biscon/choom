@@ -355,6 +355,11 @@ if(BUILD_TESTING)
 
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
+            sources/game/items/ItemAssets.cpp
+            sources/game/items/ItemDefinitions.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
@@ -423,6 +428,10 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_serialization_tests
             tests/SectorTopologySerializationTests.cpp
+            sources/game/items/ItemDefinitions.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/game/SectorLevelLoader.cpp
@@ -574,6 +583,11 @@ if(BUILD_TESTING)
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/game/items/ItemAssets.cpp
+            sources/game/items/ItemDefinitions.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
             sources/game/navigation/SectorNavigationBuildInput.cpp
             sources/game/navigation/SectorNavigationCompression.cpp
             sources/game/navigation/SectorNavigationTypes.cpp
@@ -689,9 +703,11 @@ if(BUILD_TESTING)
             tests/ItemDefinitionTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp
+            sources/game/items/ItemInventory.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_editor/items/SectorEditorItemEditorService.cpp
             sources/sector_editor/items/SectorItemReferenceScanner.cpp
     )
