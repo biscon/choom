@@ -330,8 +330,11 @@ void TestDoorInspectorHeightCountsConditionalRows()
             true);
     const float stacked =
             game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
+    const float scriptRowsAndValidation =
+            (rowH + gap) * 4.0f + 36.0f;
     const float expectedProceduralSlideHeight =
             38.0f + 34.0f
+            + scriptRowsAndValidation
             + anchorStatusHeight + gap
             + (rowH + gap) * 4.0f
             + stacked
@@ -340,7 +343,7 @@ void TestDoorInspectorHeightCountsConditionalRows()
             + assetStatusHeight + gap
             + (rowH + gap) * 5.0f;
     Check(Near(proceduralSlideHeight, expectedProceduralSlideHeight),
-          "door inspector height includes target dimensions, normal offset, and height offset rows");
+          "door inspector height includes script fields, validation space, target dimensions, normal offset, and height offset rows");
     Check(Near(proceduralSwingHeight - proceduralSlideHeight, stacked * 2.0f),
           "procedural swing inspector reserves two additional stacked hinge/side rows without clipping later controls");
     Check(modelSwingHeight > proceduralSwingHeight

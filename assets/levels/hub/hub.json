@@ -2069,7 +2069,6 @@
         "instanceId": "ceiling_vent_01",
         "modelPath": "assets/models/dynamic/ceiling_ventilator_fixed.glb",
         "heightOffsetWorld": 3.75,
-        "loop": false,
         "animationSpeed": 0.5,
         "shadowMode": "dynamic"
       },
@@ -2158,6 +2157,79 @@
         -93.0
       ],
       "yawDegrees": 15.0
+    },
+    {
+      "id": 131,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_131",
+        "modelPath": "assets/models/furniture/free_wooden_round_dining_table_3d_model.glb",
+        "scale": 0.6000000238418579,
+        "collision": true
+      },
+      "position": [
+        -74.0,
+        -16.0,
+        -80.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 132,
+      "kind": "door",
+      "door": {
+        "instanceId": "door_132",
+        "anchor": {
+          "lineDefId": 271,
+          "frontSectorId": 52,
+          "backSectorId": 56,
+          "frontSideDefId": 273,
+          "backSideDefId": 254,
+          "endpointA": [
+            -2048,
+            -720
+          ],
+          "endpointB": [
+            -2048,
+            -560
+          ]
+        },
+        "width": 1.25,
+        "height": 2.643749952316284,
+        "normalOffset": 0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_009",
+        "motion": "swing",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "openDistance": 2.643749952316284,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_01"
+      },
+      "position": [
+        -128.0,
+        -14.5,
+        -40.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 133,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_133",
+        "modelPath": "assets/models/furniture/chair.glb",
+        "scale": 0.8500000238418579,
+        "collision": true
+      },
+      "position": [
+        -107.0,
+        -16.0,
+        -83.0
+      ],
+      "yawDegrees": -84.99999237060547
     }
   ],
   "staticLights": [
@@ -5310,6 +5382,7 @@
       },
       "outerConeDegrees": 55.0,
       "castsShadow": true,
+      "shadowStrength": 0.800000011920929,
       "shadowSoftness": 2.0,
       "atmosphere": {
         "proxy": {
@@ -5358,6 +5431,7 @@
       },
       "outerConeDegrees": 55.0,
       "castsShadow": true,
+      "shadowStrength": 0.800000011920929,
       "shadowSoftness": 2.0,
       "atmosphere": {
         "proxy": {
@@ -5432,8 +5506,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -5532,7 +5605,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "53a76067106ae680",
+    "sourceHash": "36ae38df86fadb22",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -5540,19 +5613,19 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.666015625,
-        1.666015625
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 1379
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 839
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "53a76067106ae680",
+      "sourceHash": "36ae38df86fadb22",
       "count": 2667,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -5565,31 +5638,24 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.192941665649414,
+          1.9389466047286987,
+          1.8518656492233276
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 16002,
-        "rgbChannelsAboveOne": 32
+        "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "53a76067106ae680",
-      "modelCount": 47,
-      "objectCount": 110,
+      "sourceHash": "36ae38df86fadb22",
+      "modelCount": 49,
+      "objectCount": 112,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
@@ -16803,7 +16869,7 @@
           }
         },
         "upper": {
-          "materialId": "wood_table_worn",
+          "materialId": "plastered_wall_02",
           "uv": {
             "scale": [
               1.0,
@@ -16949,7 +17015,7 @@
         "lineId": 399,
         "side": "front",
         "wall": {
-          "materialId": "wood_table_worn",
+          "materialId": "plastered_wall_02",
           "uv": {
             "scale": [
               1.0,
@@ -16992,7 +17058,7 @@
         "lineId": 400,
         "side": "front",
         "wall": {
-          "materialId": "wood_table_worn",
+          "materialId": "plastered_wall_02",
           "uv": {
             "scale": [
               1.0,
@@ -17078,7 +17144,7 @@
         "lineId": 402,
         "side": "front",
         "wall": {
-          "materialId": "wood_table_worn",
+          "materialId": "plastered_wall_02",
           "uv": {
             "scale": [
               1.0,
@@ -17121,7 +17187,7 @@
         "lineId": 403,
         "side": "front",
         "wall": {
-          "materialId": "wood_table_worn",
+          "materialId": "plastered_wall_02",
           "uv": {
             "scale": [
               1.0,
@@ -21842,7 +21908,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.014999999664723873,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -21891,7 +21957,7 @@
         "floorZ": -15.0,
         "ceilingZ": 10.0,
         "floorMaterialId": "wood_table_worn",
-        "ceilingMaterialId": "wood_table_worn",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -21914,8 +21980,8 @@
         },
         "ambientColor": {
           "r": 255,
-          "g": 250,
-          "b": 241,
+          "g": 245,
+          "b": 225,
           "a": 255
         },
         "ambientIntensity": 0.014999999664723873,
@@ -22326,9 +22392,9 @@
       {
         "editorId": 1,
         "id": "default",
-        "x": 64,
+        "x": -1664,
         "y": 0.0,
-        "z": -128,
+        "z": -640,
         "orientationDegrees": 90.0
       },
       {

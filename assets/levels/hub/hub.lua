@@ -2,6 +2,7 @@ function init()
     log("hub script initialized")
     setPropAnimationProgress("ceiling_switch_01", 0.0, "switch|switchAction")
     setPropAnimationProgress("ceiling_vent_01", 0.0, "Ventilator")
+    playPropAnimation("ceiling_vent_01", "Ventilator", "loop")
     startScript("patrolZombie01")
     startScript("patrolZombie02")
     startScript("patrolZombie03")
@@ -19,8 +20,8 @@ function trigger_2()
     log("trigger_2")
 end
 
-local ceilingVentOn = false
-local ceilingVentStarted = false
+local ceilingVentOn = true
+local ceilingVentStarted = true
 local officeLightsOn = true
 
 function setOfficeLight(enabled)
