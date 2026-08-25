@@ -2712,6 +2712,8 @@ Json WriteRectLightCommon(const T& light, const std::string& context)
 Json WriteStaticRectLight(const SectorTopologyStaticRectLight& light, const std::string& context)
 {
     Json lightJson = WriteRectLightCommon(light, context);
+    RequireFinite(light.startFeather, context + ".startFeather");
+    if (light.startFeather != 0.0f) lightJson["startFeather"] = light.startFeather;
     if (!light.castsShadow) lightJson["castsShadow"] = false;
     WriteOptionalLightAtmosphere(lightJson, light);
     return lightJson;
@@ -3529,6 +3531,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.width = ReadFloat(value, "width", context);
             light.height = ReadFloat(value, "height", context);
             light.range = ReadFloat(value, "range", context);
+            light.startFeather = ReadOptionalFloat(value, "startFeather", context, 0.0f);
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
             light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);

@@ -938,6 +938,7 @@ game::SectorEditorLightEditingService MakeLightEditingService(
                             uiState.lightInnerConeInput,
                             uiState.lightOuterConeInput,
                             uiState.lightSourceRadiusInput,
+                            uiState.lightStartFeatherInput,
                             uiState.lightFlickerSpeedInput,
                             uiState.lightFlickerAmountInput,
                             uiState.lightShadowPriorityInput,

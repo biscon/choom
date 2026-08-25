@@ -303,6 +303,8 @@ void TestEnvironmentEligibility()
           "cleared eligibility suppresses a still-bound texture");
 }
 
+std::string ReadSource(const char* path);
+
 void TestRemovedShaderPathsStayRemoved()
 {
     std::ifstream input(PBR_SHADER_SOURCE_PATH);
@@ -338,6 +340,18 @@ void TestRemovedShaderPathsStayRemoved()
     Check(source.find("directDiffuse += staticDirectSpecular")
                     == std::string::npos,
           "static authored lights do not duplicate baked diffuse lighting");
+    const std::string sectorSource = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const std::string doorSource = ReadSource(DOOR_SHADER_SOURCE_PATH);
+    const auto hasStaticRectFeather = [](const std::string& shaderSource) {
+        return shaderSource.find("staticSpecularLightStartFeathers") != std::string::npos
+                && shaderSource.find("staticSpecularLightTypes[i] == 2") != std::string::npos
+                && shaderSource.find("smoothstep(0.0, startFeather, frontDistance)")
+                        != std::string::npos;
+    };
+    Check(hasStaticRectFeather(source)
+                    && hasStaticRectFeather(sectorSource)
+                    && hasStaticRectFeather(doorSource),
+          "static model, sector, and door specular paths apply rect start feathering");
     const std::size_t emissionShapeStart = source.find(
             "vec3 ShapeModelEmissive(");
     const std::size_t emissionShapeEnd = source.find(

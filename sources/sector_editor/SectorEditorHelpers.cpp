@@ -489,6 +489,11 @@ float ClampLightSourceRadius(float value, float lightRadius)
     return std::min(clamped, std::max(0.0f, lightRadius * 0.5f));
 }
 
+float ClampRectLightStartFeather(float value, float lightRange)
+{
+    return std::clamp(value, 0.0f, std::max(0.0f, lightRange));
+}
+
 float ClampAmbientOcclusionRadius(float value)
 {
     return std::clamp(value, SectorWorldToAuthoringDistance(0.05f), SectorWorldToAuthoringDistance(16.0f));

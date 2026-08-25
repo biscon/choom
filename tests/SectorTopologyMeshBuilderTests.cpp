@@ -4,6 +4,7 @@
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorRectLight.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 #include "sector_demo/renderer/SectorStaticSpecularLighting.h"
@@ -2764,6 +2765,33 @@ void TestStaticSpecularReceiverBoundsTransform()
           "static specular receiver bounds follow model transforms");
 }
 
+void TestStaticRectStartFeatherAndSpecularPacking()
+{
+    Check(Near(game::SectorRectLightStartFeatherAttenuation(-0.25f, 1.0f), 0.0f)
+                  && Near(game::SectorRectLightStartFeatherAttenuation(0.25f, 1.0f), 0.15625f)
+                  && Near(game::SectorRectLightStartFeatherAttenuation(0.5f, 1.0f), 0.5f)
+                  && Near(game::SectorRectLightStartFeatherAttenuation(1.0f, 1.0f), 1.0f)
+                  && Near(game::SectorRectLightStartFeatherAttenuation(0.01f, 0.0f), 1.0f),
+          "static rect start feather fades only in front and zero preserves the hard start");
+
+    game::SectorTopologyMap map;
+    game::SectorTopologyStaticRectLight rect;
+    rect.id = 31;
+    rect.position = game::SectorWorldToAuthoringPosition({0.0f, 2.0f, 0.0f});
+    rect.target = game::SectorWorldToAuthoringPosition({0.0f, 1.0f, 0.0f});
+    rect.range = game::SectorWorldToAuthoringDistance(8.0f);
+    rect.startFeather = game::SectorWorldToAuthoringDistance(0.75f);
+    map.staticRectLights.push_back(rect);
+    const std::vector<game::SectorReceiverBounds> bounds = {
+            Bounds(1, {-1.0f, 0.0f, -1.0f}, {1.0f, 1.0f, 1.0f})};
+    game::SectorStaticSpecularLightState state;
+    game::RebuildSectorStaticSpecularLights(map, nullptr, bounds, state);
+    Check(state.sources.size() == 1
+                  && state.sources[0].kind == game::SectorStaticSpecularLightKind::Rect
+                  && Near(state.sources[0].startFeather, 0.75f),
+          "static rect specular sources pack their distinct kind and world-space start feather");
+}
+
 void TestDynamicRectLightPackingAndShadow()
 {
     game::SectorTopologyDynamicRectLight authored;
@@ -2944,6 +2972,7 @@ int main()
     TestStaticSpecularLightRebuildRankingAndCap();
     TestStaticSpecularSpotConeAndPortalVisibility();
     TestStaticSpecularReceiverBoundsTransform();
+    TestStaticRectStartFeatherAndSpecularPacking();
     TestDynamicRectLightPackingAndShadow();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");

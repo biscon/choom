@@ -4,6 +4,7 @@
 #include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorRectLight.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 
@@ -127,6 +128,14 @@ float StaticSpecularLightScore(
                 light.outerConeCos,
                 light.innerConeCos,
                 Vector3DotProduct(light.direction, fromLight));
+        if (!(cone > 0.0f)) return -1.0f;
+    } else if (light.kind == SectorStaticSpecularLightKind::Rect) {
+        const Vector3 center = SectorAabb3Center(bounds);
+        cone = SectorRectLightStartFeatherAttenuation(
+                Vector3DotProduct(
+                        Vector3Subtract(center, light.position),
+                        light.direction),
+                light.startFeather);
         if (!(cone > 0.0f)) return -1.0f;
     }
 
@@ -259,15 +268,17 @@ bool MakeRectSource(
     outSource.lightId = authored.id;
     outSource.ownerSectorId = sectorLookupWorld != nullptr
             ? sectorLookupWorld->FindSectorContainingPoint({position.x, position.z}) : 0;
-    outSource.kind = SectorStaticSpecularLightKind::Spot;
+    outSource.kind = SectorStaticSpecularLightKind::Rect;
     outSource.position = position;
     outSource.direction = Vector3Normalize(Vector3Subtract(target, position));
     if (!IsFinite(outSource.direction)) outSource.direction = {0.0f, -1.0f, 0.0f};
     outSource.color = engine::SrgbColorBytesToLinearSceneRgb(authored.color);
     outSource.radius = radius;
     outSource.intensity = authored.intensity;
-    outSource.innerConeCos = 0.0f;
-    outSource.outerConeCos = 0.0f;
+    outSource.startFeather = std::clamp(
+            SectorAuthoringToWorldDistance(authored.startFeather),
+            0.0f,
+            radius);
     return true;
 }
 
@@ -433,6 +444,7 @@ SectorStaticSpecularLightContext SelectSectorStaticSpecularLights(
         result.directions[outputIndex] = source.direction;
         result.innerConeCos[outputIndex] = source.innerConeCos;
         result.outerConeCos[outputIndex] = source.outerConeCos;
+        result.startFeathers[outputIndex] = source.startFeather;
     }
     return result;
 }
@@ -450,6 +462,7 @@ SectorStaticSpecularShaderLocations GetSectorStaticSpecularShaderLocations(
     locations.directions = GetShaderArrayLocation(shader, "staticSpecularLightDirections");
     locations.innerConeCos = GetShaderArrayLocation(shader, "staticSpecularLightInnerConeCos");
     locations.outerConeCos = GetShaderArrayLocation(shader, "staticSpecularLightOuterConeCos");
+    locations.startFeathers = GetShaderArrayLocation(shader, "staticSpecularLightStartFeathers");
     return locations;
 }
 
@@ -474,6 +487,7 @@ void UploadSectorStaticSpecularLights(
     if (locations.directions >= 0) SetShaderValueV(shader, locations.directions, context.directions.data(), SHADER_UNIFORM_VEC3, context.lightCount);
     if (locations.innerConeCos >= 0) SetShaderValueV(shader, locations.innerConeCos, context.innerConeCos.data(), SHADER_UNIFORM_FLOAT, context.lightCount);
     if (locations.outerConeCos >= 0) SetShaderValueV(shader, locations.outerConeCos, context.outerConeCos.data(), SHADER_UNIFORM_FLOAT, context.lightCount);
+    if (locations.startFeathers >= 0) SetShaderValueV(shader, locations.startFeathers, context.startFeathers.data(), SHADER_UNIFORM_FLOAT, context.lightCount);
 }
 
 } // namespace game

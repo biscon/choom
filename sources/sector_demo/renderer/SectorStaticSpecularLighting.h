@@ -18,7 +18,8 @@ constexpr std::size_t MaxStaticSpecularLights = 4;
 
 enum class SectorStaticSpecularLightKind : int {
     Point = 0,
-    Spot = 1
+    Spot = 1,
+    Rect = 2
 };
 
 struct SectorStaticSpecularLightSource {
@@ -33,6 +34,7 @@ struct SectorStaticSpecularLightSource {
     float intensity = 0.0f;
     float innerConeCos = -1.0f;
     float outerConeCos = -1.0f;
+    float startFeather = 0.0f;
 };
 
 struct SectorStaticSpecularSectorCandidates {
@@ -56,6 +58,7 @@ struct SectorStaticSpecularLightContext {
     std::array<Vector3, MaxStaticSpecularLights> directions{};
     std::array<float, MaxStaticSpecularLights> innerConeCos{};
     std::array<float, MaxStaticSpecularLights> outerConeCos{};
+    std::array<float, MaxStaticSpecularLights> startFeathers{};
 };
 
 struct SectorStaticSpecularShaderLocations {
@@ -68,6 +71,7 @@ struct SectorStaticSpecularShaderLocations {
     int directions = -1;
     int innerConeCos = -1;
     int outerConeCos = -1;
+    int startFeathers = -1;
 };
 
 void ResetSectorStaticSpecularLights(

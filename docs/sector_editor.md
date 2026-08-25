@@ -429,6 +429,13 @@ Static light fields:
 - radius
 - sourceRadius
 
+Static rectangular lights additionally expose `width`, `height`, `range`, and
+optional `startFeather`. Width and height define the sampled area emitter and
+therefore its soft-shadow source size. `startFeather` is a separate authored
+distance that fades direct light in from the front of the emitter plane; it
+does not emit light behind the rectangle. A missing or zero value preserves the
+hard start used by older maps.
+
 Select mode picks lights before linedefs/sidedefs/sectors. The Move tool drags
 lights in X/Z and keeps their Y value unchanged. The inspector edits position,
 color, intensity, radius, and sourceRadius. Deleting a selected light removes it

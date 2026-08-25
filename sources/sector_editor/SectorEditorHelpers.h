@@ -68,6 +68,7 @@ float ClampAmbientIntensity(float value);
 float ClampLightIntensity(float value);
 float ClampLightRadius(float value);
 float ClampLightSourceRadius(float value, float lightRadius);
+float ClampRectLightStartFeather(float value, float lightRange);
 float ClampAmbientOcclusionRadius(float value);
 float ClampAmbientOcclusionStrength(float value);
 float ClampIndirectBounceRadius(float value);

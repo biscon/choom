@@ -2514,6 +2514,22 @@
         -40.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 150,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_150",
+        "modelPath": "assets/models/environment/vent.glb",
+        "heightOffsetWorld": 2.0,
+        "collision": true
+      },
+      "position": [
+        -312.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 90.0
     }
   ],
   "staticLights": [
@@ -4859,6 +4875,7 @@
         "a": 255
       },
       "rollDegrees": 90.0,
+      "startFeather": 4.0,
       "atmosphere": {
         "proxy": {
           "shaft": {
@@ -4912,6 +4929,7 @@
         "a": 255
       },
       "rollDegrees": 90.0,
+      "startFeather": 4.0,
       "atmosphere": {
         "proxy": {
           "shaft": {
@@ -4964,6 +4982,7 @@
         "b": 255,
         "a": 255
       },
+      "startFeather": 4.0,
       "atmosphere": {
         "proxy": {
           "shaft": {
@@ -5003,6 +5022,7 @@
         "b": 255,
         "a": 255
       },
+      "startFeather": 4.0,
       "atmosphere": {
         "proxy": {
           "shaft": {
@@ -5069,7 +5089,7 @@
       "id": 7,
       "position": [
         -200.0,
-        14.0,
+        13.5,
         -40.0
       ],
       "target": [
@@ -5087,6 +5107,7 @@
         "b": 241,
         "a": 255
       },
+      "startFeather": 4.0,
       "atmosphere": {
         "proxy": {
           "shaft": {
@@ -5108,7 +5129,7 @@
       "id": 8,
       "position": [
         -240.0,
-        14.0,
+        13.5,
         -40.0
       ],
       "target": [
@@ -5126,6 +5147,7 @@
         "b": 241,
         "a": 255
       },
+      "startFeather": 4.0,
       "atmosphere": {
         "proxy": {
           "shaft": {
@@ -5147,7 +5169,7 @@
       "id": 9,
       "position": [
         -280.0,
-        14.0,
+        13.5,
         -40.0
       ],
       "target": [
@@ -5165,6 +5187,7 @@
         "b": 241,
         "a": 255
       },
+      "startFeather": 4.0,
       "atmosphere": {
         "proxy": {
           "shaft": {
@@ -5181,6 +5204,78 @@
           }
         }
       }
+    },
+    {
+      "id": 10,
+      "position": [
+        -200.0,
+        -2.6000003814697266,
+        -40.0
+      ],
+      "target": [
+        -200.0,
+        15.0,
+        -40.0
+      ],
+      "width": 20.0,
+      "height": 20.0,
+      "range": 32.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 11,
+      "position": [
+        -240.0,
+        -2.6000003814697266,
+        -40.0
+      ],
+      "target": [
+        -240.0,
+        15.0,
+        -40.0
+      ],
+      "width": 20.0,
+      "height": 20.0,
+      "range": 32.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 12,
+      "position": [
+        -280.0,
+        -2.6000003814697266,
+        -40.0
+      ],
+      "target": [
+        -280.0,
+        15.0,
+        -40.0
+      ],
+      "width": 20.0,
+      "height": 20.0,
+      "range": 32.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": false
     }
   ],
   "dynamicPointLights": [
@@ -6031,32 +6126,7 @@
       }
     }
   ],
-  "dynamicRectLights": [
-    {
-      "id": 1,
-      "position": [
-        -200.0,
-        -2.6000003814697266,
-        -40.0
-      ],
-      "target": [
-        -200.0,
-        15.0,
-        -40.0
-      ],
-      "width": 20.0,
-      "height": 20.0,
-      "range": 24.0,
-      "intensity": 0.25,
-      "color": {
-        "r": 255,
-        "g": 250,
-        "b": 241,
-        "a": 255
-      },
-      "instanceId": "light_rect_1"
-    }
-  ],
+  "dynamicRectLights": [],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
@@ -6163,7 +6233,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "fdcdcc8c8ca1f413",
+    "sourceHash": "81c9d81d046aa344",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6183,7 +6253,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "fdcdcc8c8ca1f413",
+      "sourceHash": "81c9d81d046aa344",
       "count": 2667,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -6209,17 +6279,11 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "fdcdcc8c8ca1f413",
+      "sourceHash": "81c9d81d046aa344",
       "modelCount": 50,
       "objectCount": 126,
       "format": "staticModelUvRemapF32LE"
     }
-  },
-  "bakedReflectionProbes": {
-    "path": "assets/levels/hub/hub.reflection-probes.bin",
-    "version": 1,
-    "count": 8,
-    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
@@ -21973,7 +22037,7 @@
         "x": -2929,
         "y": 446,
         "floorZ": -14.5,
-        "ceilingZ": 6.650000095367432,
+        "ceilingZ": 6.199999809265137,
         "floorMaterialId": "worn_gray_metal_step_512",
         "ceilingMaterialId": "dirty_gray_concrete_wall_512",
         "floorUv": {
@@ -22208,7 +22272,7 @@
         "x": -2449,
         "y": -702,
         "floorZ": -14.5,
-        "ceilingZ": 6.650000095367432,
+        "ceilingZ": 6.199999809265137,
         "floorMaterialId": "worn_gray_metal_step_512",
         "ceilingMaterialId": "painted_plaster_wall",
         "floorUv": {
@@ -22437,7 +22501,7 @@
         "x": -2033,
         "y": -702,
         "floorZ": -14.5,
-        "ceilingZ": 6.650000095367432,
+        "ceilingZ": 6.199999809265137,
         "floorMaterialId": "worn_gray_metal_step_512",
         "ceilingMaterialId": "painted_plaster_wall",
         "floorUv": {

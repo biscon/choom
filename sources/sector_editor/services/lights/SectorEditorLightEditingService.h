@@ -62,6 +62,7 @@ struct SectorEditorLightEditingServiceContext {
         engine::UIFloatInputState& lightInnerConeInput;
         engine::UIFloatInputState& lightOuterConeInput;
         engine::UIFloatInputState& lightSourceRadiusInput;
+        engine::UIFloatInputState& lightStartFeatherInput;
         engine::UIFloatInputState& lightFlickerSpeedInput;
         engine::UIFloatInputState& lightFlickerAmountInput;
         engine::UIIntInputState& lightShadowPriorityInput;
@@ -222,6 +223,7 @@ public:
     bool SetStaticRectLightWidth(SectorTopologyStaticRectLight& light, float value);
     bool SetStaticRectLightHeight(SectorTopologyStaticRectLight& light, float value);
     bool SetStaticRectLightRange(SectorTopologyStaticRectLight& light, float value);
+    bool SetStaticRectLightStartFeather(SectorTopologyStaticRectLight& light, float value);
     bool SetStaticRectLightIntensity(SectorTopologyStaticRectLight& light, float value);
     bool SetStaticRectLightCastsShadow(SectorTopologyStaticRectLight& light, bool value);
     bool SetStaticRectLightColor(SectorTopologyStaticRectLight& light, Color value);

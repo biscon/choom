@@ -170,6 +170,7 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     uiState.lightInnerConeInput = engine::UIFloatInputState{};
     uiState.lightOuterConeInput = engine::UIFloatInputState{};
     uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
+    uiState.lightStartFeatherInput = engine::UIFloatInputState{};
     uiState.lightFlickerSpeedInput = engine::UIFloatInputState{};
     uiState.lightFlickerAmountInput = engine::UIFloatInputState{};
     uiState.lightShadowPriorityInput = engine::UIIntInputState{};
@@ -370,6 +371,7 @@ bool SameStaticRectLight(
             && SameColor(a.color, b.color)
             && a.intensity == b.intensity
             && a.range == b.range
+            && a.startFeather == b.startFeather
             && SameAtmosphere(a.atmosphere, b.atmosphere)
             && a.castsShadow == b.castsShadow;
 }
@@ -2307,7 +2309,20 @@ bool SectorEditorLightEditingService::PointStaticRectLightDown(SectorTopologySta
 RECT_SETTER(SetStaticRectLightRoll, SectorTopologyStaticRectLight, rollDegrees, float, value, "static rect light")
 RECT_SETTER(SetStaticRectLightWidth, SectorTopologyStaticRectLight, width, float, ClampLightRadius(value), "static rect light")
 RECT_SETTER(SetStaticRectLightHeight, SectorTopologyStaticRectLight, height, float, ClampLightRadius(value), "static rect light")
-RECT_SETTER(SetStaticRectLightRange, SectorTopologyStaticRectLight, range, float, ClampLightRadius(value), "static rect light")
+bool SectorEditorLightEditingService::SetStaticRectLightRange(
+        SectorTopologyStaticRectLight& light,
+        float value)
+{
+    value = ClampLightRadius(value);
+    const float startFeather = ClampRectLightStartFeather(light.startFeather, value);
+    if (light.range == value && light.startFeather == startFeather) return false;
+    light.range = value;
+    light.startFeather = startFeather;
+    MarkEdited(TextFormat("Updated static rect light %d", light.id));
+    return true;
+}
+RECT_SETTER(SetStaticRectLightStartFeather, SectorTopologyStaticRectLight, startFeather,
+        float, ClampRectLightStartFeather(value, light.range), "static rect light")
 RECT_SETTER(SetStaticRectLightIntensity, SectorTopologyStaticRectLight, intensity, float, ClampLightIntensity(value), "static rect light")
 RECT_SETTER(SetStaticRectLightCastsShadow, SectorTopologyStaticRectLight, castsShadow, bool, value, "static rect light")
 bool SectorEditorLightEditingService::SetStaticRectLightColor(SectorTopologyStaticRectLight& light, Color value)

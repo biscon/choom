@@ -58,4 +58,16 @@ inline Vector3 ClosestPointOnSectorRectLight(
             Vector3Add(Vector3Scale(basis.right, x), Vector3Scale(basis.up, y)));
 }
 
+inline float SectorRectLightStartFeatherAttenuation(
+        float forwardDistance,
+        float startFeather)
+{
+    if (!(startFeather > 0.000001f) || !std::isfinite(startFeather)) {
+        return forwardDistance >= 0.0f ? 1.0f : 0.0f;
+    }
+    if (!(forwardDistance > 0.0f)) return 0.0f;
+    const float t = std::clamp(forwardDistance / startFeather, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
 } // namespace game

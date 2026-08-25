@@ -108,6 +108,7 @@ game::SectorEditorLightEditingService MakeService(
                             uiState.lightInnerConeInput,
                             uiState.lightOuterConeInput,
                             uiState.lightSourceRadiusInput,
+                            uiState.lightStartFeatherInput,
                             uiState.lightFlickerSpeedInput,
                             uiState.lightFlickerAmountInput,
                             uiState.lightShadowPriorityInput,
@@ -476,7 +477,7 @@ void TestAddRectLightsPointDownByDefault()
             TestPreviewSelectionState(), selectionState, manipulationState,
             lightState, uiState, inspectorIdUiState, statusText);
     const auto staticResult = service.AddStaticRectLight(1, Vector2{2.0f, 3.0f});
-    const game::SectorTopologyStaticRectLight& staticRect =
+    game::SectorTopologyStaticRectLight& staticRect =
             documentState.map.topologyMap.staticRectLights.front();
     Check(staticResult.changed
                   && Near(staticRect.position.x, staticRect.target.x)
@@ -486,6 +487,31 @@ void TestAddRectLightsPointDownByDefault()
                   && Near(staticRect.rollDegrees, 0.0f),
           "new static rect lights point directly down with zero roll");
     CheckDirtyOnce(state, documentState, statusText, "Added static rect light 1");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.SetStaticRectLightStartFeather(staticRect, 48.0f)
+                  && Near(staticRect.startFeather, 48.0f),
+          "static rect start feather edits within its range");
+    CheckDirtyOnce(state, documentState, statusText, "Updated static rect light 1");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.SetStaticRectLightRange(staticRect, 24.0f)
+                  && Near(staticRect.range, 24.0f)
+                  && Near(staticRect.startFeather, 24.0f),
+          "reducing static rect range clamps its start feather");
+    CheckDirtyOnce(state, documentState, statusText, "Updated static rect light 1");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.SetStaticRectLightStartFeather(staticRect, -10.0f)
+                  && Near(staticRect.startFeather, 0.0f),
+          "static rect start feather clamps below zero");
+    CheckDirtyOnce(state, documentState, statusText, "Updated static rect light 1");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.SetStaticRectLightStartFeather(staticRect, 100.0f)
+                  && Near(staticRect.startFeather, staticRect.range),
+          "static rect start feather clamps to range");
+    CheckDirtyOnce(state, documentState, statusText, "Updated static rect light 1");
 
     ResetDirty(state, documentState, statusText);
     const auto dynamicResult = service.AddDynamicRectLight(1, Vector2{4.0f, 5.0f});

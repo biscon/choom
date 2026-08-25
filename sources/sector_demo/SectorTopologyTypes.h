@@ -279,6 +279,8 @@ struct SectorTopologyStaticRectLight {
     Color color = WHITE;
     float intensity = 1.0f;
     float range = SectorWorldToAuthoringDistance(8.0f);
+    // Front-side distance over which emission ramps up from the light plane.
+    float startFeather = 0.0f;
     SectorLightAtmosphereSettings atmosphere;
     bool castsShadow = true;
 };
