@@ -375,8 +375,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 376,
-          "backSideDefId": 377,
+          "frontSideDefId": 382,
+          "backSideDefId": 383,
           "endpointA": [
             -704,
             1296
@@ -415,8 +415,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 346,
-          "backSideDefId": 366,
+          "frontSideDefId": 352,
+          "backSideDefId": 372,
           "endpointA": [
             -992,
             1456
@@ -486,8 +486,8 @@
           "lineDefId": 127,
           "frontSectorId": 33,
           "backSectorId": 26,
-          "frontSideDefId": 210,
-          "backSideDefId": 231,
+          "frontSideDefId": 214,
+          "backSideDefId": 237,
           "endpointA": [
             -2560,
             1376
@@ -1512,8 +1512,8 @@
           "lineDefId": 234,
           "frontSectorId": 50,
           "backSectorId": 43,
-          "frontSideDefId": 182,
-          "backSideDefId": 195,
+          "frontSideDefId": 186,
+          "backSideDefId": 199,
           "endpointA": [
             -2944,
             592
@@ -2190,11 +2190,11 @@
       "door": {
         "instanceId": "door_132",
         "anchor": {
-          "lineDefId": 271,
+          "lineDefId": 270,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 273,
-          "backSideDefId": 254,
+          "frontSideDefId": 279,
+          "backSideDefId": 260,
           "endpointA": [
             -2048,
             -720
@@ -2432,8 +2432,8 @@
           "lineDefId": 256,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 269,
-          "backSideDefId": 238,
+          "frontSideDefId": 275,
+          "backSideDefId": 244,
           "endpointA": [
             -2432,
             -560
@@ -2521,8 +2521,9 @@
       "dynamicModel": {
         "instanceId": "prop_150",
         "modelPath": "assets/models/environment/vent.glb",
-        "heightOffsetWorld": 2.0,
-        "collision": true
+        "heightOffsetWorld": 2.5999999046325684,
+        "collision": true,
+        "shadowMode": "none"
       },
       "position": [
         -312.0,
@@ -2530,6 +2531,119 @@
         -40.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 151,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_151",
+        "modelPath": "assets/models/dynamic/ceiling_fan.glb",
+        "heightOffsetWorld": 3.9749999046325684,
+        "scale": 0.6499999761581421,
+        "animationSpeed": 2.0
+      },
+      "position": [
+        -260.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 152,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_152",
+        "modelPath": "assets/models/dynamic/ceiling_fan.glb",
+        "heightOffsetWorld": 3.9749999046325684,
+        "scale": 0.6499999761581421,
+        "animationSpeed": 2.0
+      },
+      "position": [
+        -220.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 153,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_153",
+        "modelPath": "assets/models/furniture/carpet.glb",
+        "heightOffsetWorld": 0.0010000000474974513,
+        "scale": 0.75,
+        "castsShadow": false
+      },
+      "position": [
+        -182.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 91.99999237060547
+    },
+    {
+      "id": 154,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_154",
+        "modelPath": "assets/models/furniture/stool.glb",
+        "collision": true
+      },
+      "position": [
+        -307.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 3.0
+    },
+    {
+      "id": 155,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_155",
+        "modelPath": "assets/models/furniture/free_wooden_round_dining_table_3d_model.glb",
+        "scale": 0.75,
+        "collision": true
+      },
+      "position": [
+        -296.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 45.0
+    },
+    {
+      "id": 156,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_156",
+        "modelPath": "assets/models/furniture/chair.glb",
+        "scale": 0.75,
+        "collision": true
+      },
+      "position": [
+        -288.0,
+        -17.0,
+        -45.0
+      ],
+      "yawDegrees": -45.0
+    },
+    {
+      "id": 157,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_157",
+        "modelPath": "assets/models/furniture/stool.glb",
+        "collision": true
+      },
+      "position": [
+        -292.0,
+        -17.0,
+        -34.0
+      ],
+      "yawDegrees": -35.0
     }
   ],
   "staticLights": [
@@ -4456,6 +4570,23 @@
           }
         }
       }
+    },
+    {
+      "id": 63,
+      "position": [
+        -316.0,
+        14.399999618530273,
+        -40.0
+      ],
+      "radius": 8.0,
+      "sourceRadius": 1.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      }
     }
   ],
   "staticSpotLights": [
@@ -5122,6 +5253,13 @@
             "maxExtinction": 0.0,
             "edgeSoftness": 0.8999999761581421
           }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.013000000268220901,
+          "opacity": 0.15000000596046448
         }
       }
     },
@@ -5162,6 +5300,13 @@
             "maxExtinction": 0.0,
             "edgeSoftness": 0.8999999761581421
           }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.013000000268220901,
+          "opacity": 0.15000000596046448
         }
       }
     },
@@ -5202,6 +5347,13 @@
             "maxExtinction": 0.0,
             "edgeSoftness": 0.8999999761581421
           }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.013000000268220901,
+          "opacity": 0.15000000596046448
         }
       }
     },
@@ -6134,7 +6286,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -6233,7 +6386,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "81c9d81d046aa344",
+    "sourceHash": "b7cff0fdbcf94036",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6241,20 +6394,20 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.2421875,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 839
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 1379
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "81c9d81d046aa344",
-      "count": 2667,
+      "sourceHash": "b7cff0fdbcf94036",
+      "count": 2671,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -6266,24 +6419,37 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 16002,
-        "rgbChannelsAboveOne": 33
+        "sampleCount": 16026,
+        "rgbChannelsAboveOne": 32
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "81c9d81d046aa344",
-      "modelCount": 50,
-      "objectCount": 126,
+      "sourceHash": "b7cff0fdbcf94036",
+      "modelCount": 51,
+      "objectCount": 131,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
+  },
+  "bakedReflectionProbes": {
+    "path": "assets/levels/hub/hub.reflection-probes.bin",
+    "version": 1,
+    "count": 8,
+    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
@@ -7499,6 +7665,26 @@
         "id": 255,
         "x": -1904,
         "y": -496
+      },
+      {
+        "id": 256,
+        "x": -4992,
+        "y": -704
+      },
+      {
+        "id": 257,
+        "x": -5504,
+        "y": -704
+      },
+      {
+        "id": 258,
+        "x": -5504,
+        "y": -576
+      },
+      {
+        "id": 259,
+        "x": -4992,
+        "y": -576
       }
     ],
     "lines": [
@@ -8829,11 +9015,6 @@
         "endVertexId": 235
       },
       {
-        "id": 389,
-        "startVertexId": 235,
-        "endVertexId": 236
-      },
-      {
         "id": 390,
         "startVertexId": 236,
         "endVertexId": 237
@@ -8957,6 +9138,36 @@
         "id": 415,
         "startVertexId": 255,
         "endVertexId": 244
+      },
+      {
+        "id": 416,
+        "startVertexId": 235,
+        "endVertexId": 256
+      },
+      {
+        "id": 418,
+        "startVertexId": 256,
+        "endVertexId": 257
+      },
+      {
+        "id": 419,
+        "startVertexId": 257,
+        "endVertexId": 258
+      },
+      {
+        "id": 420,
+        "startVertexId": 256,
+        "endVertexId": 259
+      },
+      {
+        "id": 421,
+        "startVertexId": 259,
+        "endVertexId": 236
+      },
+      {
+        "id": 422,
+        "startVertexId": 258,
+        "endVertexId": 259
       }
     ],
     "lineSides": [
@@ -17247,49 +17458,6 @@
         }
       },
       {
-        "lineId": 389,
-        "side": "back",
-        "wall": {
-          "materialId": "painted_plaster_wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -0.9375
-            ]
-          }
-        },
-        "lower": {
-          "materialId": "beige_wall_001",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "materialId": "beige_wall_001",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 390,
         "side": "back",
         "wall": {
@@ -18174,6 +18342,264 @@
             ],
             "offset": [
               0.10000000149011612,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 416,
+        "side": "back",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 418,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 419,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 420,
+        "side": "back",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.5,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 421,
+        "side": "back",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 422,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
               0.0
             ]
           }
@@ -22182,7 +22608,6 @@
             ]
           }
         },
-        "footstepSet": "BootsLinoleum",
         "roomtone": {
           "mode": "play",
           "soundId": "roomtone_02",
@@ -22762,6 +23187,82 @@
         "ambientIntensity": 0.014999999664723873,
         "defaultWall": {
           "materialId": "plastered_wall_02",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 60,
+        "name": "Sector 60",
+        "x": -5185,
+        "y": -642,
+        "floorZ": 0.0,
+        "ceilingZ": 7.800000190734863,
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_gray_metal_step_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.0,
+        "defaultWall": {
+          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
