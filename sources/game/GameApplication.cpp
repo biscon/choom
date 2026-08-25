@@ -99,6 +99,31 @@ bool GameApplication::Init(
     return true;
 }
 
+void GameApplication::UpdateMainThreadPreparation(
+        engine::EngineContext& context)
+{
+    if (!initialized) return;
+    UpdateItemIconPreparation(context.assets, itemRegistry, itemModelAssets);
+    if (itemModelAssets.iconPreparation
+            == ItemIconPreparationState::WaitingForModels) {
+        itemIconDiagnosticReported = false;
+    }
+    if (itemModelAssets.iconPreparation == ItemIconPreparationState::Failed
+            && !itemIconDiagnosticReported) {
+        itemIconDiagnosticReported = true;
+        const std::string diagnostic = itemModelAssets.iconDiagnostic.empty()
+                ? "Item icon preparation failed"
+                : itemModelAssets.iconDiagnostic;
+        TraceLog(LOG_WARNING, "%s", diagnostic.c_str());
+        if (menuStatus.empty()) menuStatus = diagnostic;
+    }
+}
+
+bool GameApplication::IsGlobalPreparationFinished() const
+{
+    return IsItemIconPreparationTerminal(itemModelAssets);
+}
+
 void GameApplication::Shutdown(engine::EngineContext& context)
 {
     context.audio.StopAll(context.assets);
@@ -129,6 +154,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     graphicsSettingsDraft = FpsApplicationSettings{};
     graphicsSettingsOpen = false;
     editorAttachedToGame = false;
+    itemIconDiagnosticReported = false;
     initialized = false;
 }
 
@@ -230,6 +256,14 @@ void GameApplication::RenderInteractiveUI(
                 smallFont);
     }
     if (flow.screen == ApplicationScreen::Game) {
+        gameSession.RenderInventoryUI(
+                contentUi,
+                config,
+                input,
+                assets,
+                font,
+                smallFont,
+                usePromptFont);
         gameSession.RenderNavigationDebugPanel(
                 config, assets, smallFont, gameScene);
     }
@@ -338,8 +372,12 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
                 true,
-                [&menuRequested](engine::InputEvent& event) {
+                [this, &menuRequested](engine::InputEvent& event) {
                     if (event.key.key != KEY_ESCAPE) {
+                        return;
+                    }
+                    if (gameSession.HandleEscape()) {
+                        engine::ConsumeEvent(event);
                         return;
                     }
                     menuRequested = true;
@@ -668,6 +706,7 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
                 materialRegistry,
                 weaponRegistry,
                 itemRegistry,
+                itemModelAssets,
                 itemCampaign,
                 applicationSettings,
                 playerAudio,

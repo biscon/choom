@@ -148,6 +148,24 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
     BindRuntimeObjectAudio(context.world);
 }
 
+bool SectorSceneRuntime::SpawnItemRuntimeObject(
+        engine::EngineContext& context,
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& object,
+        engine::Entity* outEntity)
+{
+    if (itemRegistry == nullptr || itemModelAssets == nullptr) return false;
+    return SpawnSectorItemRuntimeObject(
+            context.world,
+            context.assets,
+            runtimeObjects,
+            map,
+            object,
+            *itemRegistry,
+            *itemModelAssets,
+            outEntity);
+}
+
 void SectorSceneRuntime::Update(
         engine::EngineContext& context,
         const SectorTopologyMap& map,

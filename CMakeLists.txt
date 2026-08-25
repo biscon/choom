@@ -357,6 +357,7 @@ if(BUILD_TESTING)
             tests/SectorAuthoringGraphTests.cpp
             sources/game/items/ItemAssets.cpp
             sources/game/items/ItemDefinitions.cpp
+            sources/game/items/ItemIconLayout.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -560,6 +561,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_collision_movement_tests
             tests/SectorCollisionMovementTests.cpp
+            sources/game/items/ItemDropPlacement.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -585,6 +587,7 @@ if(BUILD_TESTING)
             tests/SectorScriptBindingTests.cpp
             sources/game/items/ItemAssets.cpp
             sources/game/items/ItemDefinitions.cpp
+            sources/game/items/ItemIconLayout.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -704,6 +707,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp
             sources/game/items/ItemInventory.cpp
+            sources/game/items/ItemInventoryUILayout.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp

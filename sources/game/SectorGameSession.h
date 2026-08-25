@@ -7,6 +7,7 @@
 #include "game/FpsPlayerRuntime.h"
 #include "game/items/ItemAssets.h"
 #include "game/items/ItemInventory.h"
+#include "game/items/ItemInventoryUI.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
@@ -29,6 +30,7 @@ public:
             const SectorMaterialRegistry& materialRegistry,
             const FpsWeaponRegistry& weaponRegistry,
             const ItemRegistry& itemRegistry,
+            const ItemModelAssetState& itemModelAssets,
             ItemCampaignState& itemCampaign,
             const FpsApplicationSettings& applicationSettings,
             PlayerAudioRuntime& playerAudioRuntime,
@@ -59,6 +61,16 @@ public:
             engine::AssetManager& assets,
             engine::FontHandle smallFont,
             const SectorSceneRuntime& scene) const;
+    void RenderInventoryUI(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont,
+            engine::FontHandle usePromptFont);
+    bool HandleEscape();
+    bool IsInventoryOpen() const { return inventoryUi.open; }
 
     bool RebuildFromMap(
             engine::EngineContext& context,
@@ -131,6 +143,16 @@ private:
             engine::EngineContext& context,
             SectorSceneRuntime& scene);
     void ShowCarryRefusal();
+    void ShowDropRefusal();
+    void SetInventoryOpen(bool open);
+    void ProcessInventoryAction(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene);
+    bool DropInventoryEntry(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            std::uint64_t runtimeId,
+            std::size_t& affectedIndex);
     bool BuildCollisionAndPlayer(
             SectorSceneRuntime& scene,
             bool initializePlayer,
@@ -161,6 +183,7 @@ private:
     FpsPlayerRuntime fpsPlayer;
     const FpsWeaponRegistry* weaponRegistry = nullptr;
     const ItemRegistry* itemRegistry = nullptr;
+    const ItemModelAssetState* itemModelAssets = nullptr;
     ItemCampaignState* itemCampaign = nullptr;
     const SectorMaterialRegistry* materialRegistry = nullptr;
     const FpsApplicationSettings* applicationSettings = nullptr;
@@ -180,6 +203,8 @@ private:
     std::array<char, 128> itemMessage{};
     float itemMessageElapsedSeconds = 0.0f;
     PendingItemTake pendingItemTake;
+    ItemInventoryUIState inventoryUi;
+    ItemInventoryUIAction pendingInventoryAction;
 };
 
 } // namespace game

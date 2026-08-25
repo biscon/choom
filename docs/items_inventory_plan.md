@@ -39,7 +39,7 @@ Before executing a slice:
 |---|---|---|---|
 | 1 | Global item definitions, settings, assets, and Item Editor | Completed | 2026-08-25 |
 | 2 | Authored item placements, world rendering, pickup, and session inventory | Completed | 2026-08-25 |
-| 3 | Runtime icon atlas, inventory UI, health use, and safe dropping | Not Started | — |
+| 3 | Runtime icon atlas, inventory UI, health use, and safe dropping | Completed | 2026-08-26 |
 | 4 | Object-on-prop use mode, scripting completion, and integration hardening | Not Started | — |
 
 ## Goal And Acceptance Criteria
@@ -929,3 +929,62 @@ entry.
   and performs no model load. Editor definition-picker storage rebuilds only on
   registry revision changes, not during steady state.
 - Remaining follow-up within this plan: Slices 3-4.
+
+### 2026-08-26 — Slice 3 — Completed
+
+- Summary: Added explicit main-thread item-icon preparation with deterministic
+  model framing, placeholder cells, CPU atlas assembly, AssetManager upload,
+  startup gating, and registry-rebuild lifecycle; a six-column campaign
+  inventory modal with stable selection, scrolling, summaries, health Use, and
+  Drop actions; exact instant/timed overlapping healing; and safe incremental
+  session drops with refusal messaging.
+- Decisions/deviations folded back into plan: Ammo and Weapon expose no Use
+  action, and Object Use remains intentionally deferred to Slice 4. Drop
+  topology clearance conservatively tests the transformed bounds' enclosing
+  horizontal circle. Missing or malformed model resources receive the same
+  deterministic placeholder treatment as failed models.
+- New compacted findings: Session drops can use the existing topology runtime
+  object ownership transition without rebuilding scene runtime objects. A
+  read-only prism query can reuse the collision world's pre-reserved footprint
+  traversal scratch while preserving all movement behavior. Timed-healing
+  progress belongs to campaign state and therefore survives level changes
+  without becoming save-ID or ECS state.
+- Files/modules materially affected: Application startup/preparation and game
+  UI routing; item assets, inventory, UI layout, healing, and drop-placement
+  helpers under `sources/game/items`; game-session input/action/campaign flow;
+  collision-world read queries; incremental sector item spawning and runtime
+  object tracking; prompt rounding; CMake; and focused item, movement, and
+  runtime-object tests.
+- Automated verification: `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 31 tests.
+  Coverage includes deterministic atlas layout/camera/state classification,
+  integral and clamped inventory layout, stable selection, exact and
+  overlapping healing with maximum-health discard and campaign persistence,
+  topology/wall/ceiling/door/prop/player drop clearance, and incremental item
+  spawn/removal tracking. Final diff and status checks completed as listed
+  below.
+- Manual verification: Not performed (user-owned). Icon GPU baking and modal
+  rendering were not manually inspected.
+- Cache invalidation behavior: Item Editor saves continue to rebuild the
+  dedicated item asset scope and invalidate the item-dependent 2D topology
+  render cache without marking the level document dirty; the next explicit
+  main-thread preparation pass rebuilds the atlas. Slice 3 adds no editor
+  authoring mutation path. Session drop/pick mutations are runtime campaign and
+  scene state, not editor document/cache mutations, and no expensive derived
+  topology work was added to steady drawing.
+- Lightmap source-hash behavior: Unchanged. Item definitions, authored/session
+  placements, models, and generated icons remain excluded from
+  `ComputeSectorLightmapSourceHash()`; item meshes remain neither baked
+  receivers nor occluders, and existing lighting/AO inputs are unchanged.
+- Collision/sector lookup/physics behavior: Drop clearance adds a read-only
+  topology/ceiling prism query and visual-bounds overlap checks. Dropped items
+  still add no collider. Static topology collision data, door collision,
+  normal sector lookup, player movement/physics, and camera behavior are
+  unchanged.
+- Allocation/load-phase behavior: Icon render-target/readback work, CPU atlas
+  allocation, shader creation, and GPU upload occur only during startup or an
+  explicit item-registry rebuild on the main thread. Campaign effects, level
+  drop ledgers, topology runtime objects, ECS components, and incremental
+  tracking receive load-time reservations; the collision query reuses
+  preallocated traversal storage and performs no steady-call allocation.
+- Remaining follow-up within this plan: Slice 4.

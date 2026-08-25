@@ -1,6 +1,9 @@
 #include "game/SectorGameSession.h"
 
 #include "sector_demo/SectorFpsController.h"
+#include "game/items/ItemDropPlacement.h"
+#include "engine/components/AnimatedModel.h"
+#include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
 #include "sector_demo/SectorUnits.h"
 
@@ -9,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 namespace game {
 
@@ -144,6 +148,31 @@ bool FirstScriptValueIsTrue(const std::vector<engine::ScriptValue>& values)
             && std::get<bool>(values.front());
 }
 
+BoundingBox ItemVisualBounds(
+        const engine::AssetManager& assets,
+        engine::ModelHandle model,
+        const SectorObjectTransform& transform,
+        float scale,
+        bool animated)
+{
+    BoundingBox local = kItemDropFallbackLocalBounds;
+    if (const engine::ModelAsset* asset = assets.GetModelAsset(model)) {
+        if (animated && asset->hasAnimatedLocalBounds) {
+            local = asset->animatedLocalBounds;
+        } else if (asset->hasLocalBounds) {
+            local = asset->localBounds;
+        }
+    }
+    return TransformItemDropBounds(
+            local,
+            BuildSectorStaticModelAuthoredTransform(
+                    transform.position,
+                    transform.rotationXRadians,
+                    transform.yawRadians,
+                    transform.rotationZRadians,
+                    scale));
+}
+
 } // namespace
 
 void SectorGameSession::ShowCarryRefusal()
@@ -154,6 +183,283 @@ void SectorGameSession::ShowCarryRefusal()
             "%s",
             "I can't carry anymore.");
     itemMessageElapsedSeconds = 0.0f;
+}
+
+void SectorGameSession::ShowDropRefusal()
+{
+    std::snprintf(
+            itemMessage.data(),
+            itemMessage.size(),
+            "%s",
+            "I can't drop that here.");
+    itemMessageElapsedSeconds = 0.0f;
+}
+
+void SectorGameSession::SetInventoryOpen(bool open)
+{
+    if (inventoryUi.open == open) return;
+    inventoryUi.open = open;
+    if (open) {
+        if (itemCampaign != nullptr) {
+            NormalizeItemInventorySelection(
+                    inventoryUi, itemCampaign->inventory);
+        }
+        useTarget = {};
+        ResetSectorUseHighlight(useHighlightState);
+        usePromptTitle = {};
+    }
+    if (running && !paused) {
+        SetSectorFreeflyMouseLookEnabled(
+                controller.freeflyController,
+                !open && !consoleInputCaptured);
+    }
+}
+
+bool SectorGameSession::HandleEscape()
+{
+    if (!inventoryUi.open) return false;
+    SetInventoryOpen(false);
+    return true;
+}
+
+void SectorGameSession::RenderInventoryUI(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont,
+        engine::FontHandle usePromptFont)
+{
+    if (!IsActive() || !inventoryUi.open || itemRegistry == nullptr
+            || itemModelAssets == nullptr || itemCampaign == nullptr
+            || applicationSettings == nullptr) {
+        return;
+    }
+    const ItemInventoryUIAction action = DrawItemInventoryUI(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            smallFont,
+            *itemRegistry,
+            *itemModelAssets,
+            *itemCampaign,
+            applicationSettings->playerInventory,
+            playerHealth,
+            inventoryUi);
+    if (pendingInventoryAction.type == ItemInventoryUIActionType::None
+            && action.type != ItemInventoryUIActionType::None) {
+        pendingInventoryAction = action;
+        if (action.type == ItemInventoryUIActionType::UseHealth) {
+            SetInventoryOpen(false);
+        }
+    }
+    if (itemMessage[0] != '\0') {
+        DrawSectorUseMessage(
+                config.overlayBounds,
+                assets.GetFont(usePromptFont),
+                itemMessage.data(),
+                itemMessageElapsedSeconds);
+    }
+}
+
+bool SectorGameSession::DropInventoryEntry(
+        engine::EngineContext& context,
+        SectorSceneRuntime& scene,
+        std::uint64_t runtimeId,
+        std::size_t& affectedIndex)
+{
+    affectedIndex = 0;
+    if (itemRegistry == nullptr || itemModelAssets == nullptr
+            || itemCampaign == nullptr || applicationSettings == nullptr
+            || !collision.sectorCollisionWorldValid) {
+        return false;
+    }
+    const auto entryIt = std::find_if(
+            itemCampaign->inventory.entries.begin(),
+            itemCampaign->inventory.entries.end(),
+            [runtimeId](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == runtimeId;
+            });
+    if (entryIt == itemCampaign->inventory.entries.end()) return false;
+    affectedIndex = static_cast<std::size_t>(
+            entryIt - itemCampaign->inventory.entries.begin());
+    const ItemDefinition* definition = FindItemDefinition(
+            *itemRegistry, entryIt->definitionId);
+    if (definition == nullptr) return false;
+    const std::uint64_t dropQuantity = definition->type == ItemType::Ammo
+            ? entryIt->quantity : 1u;
+    if (dropQuantity == 0 || dropQuantity > 1000000u) return false;
+
+    BoundingBox localBounds = kItemDropFallbackLocalBounds;
+    if (const ItemModelAssetEntry* modelEntry = FindItemModelAsset(
+                *itemModelAssets, definition->id)) {
+        if (const engine::ModelAsset* model = context.assets.GetModelAsset(
+                    modelEntry->model)) {
+            if (model->hasLocalBounds) localBounds = model->localBounds;
+        }
+    }
+    Vector3 forward = GameplayForward(controller);
+    forward.y = 0.0f;
+    const float forwardLength = std::sqrt(
+            forward.x * forward.x + forward.z * forward.z);
+    if (!(forwardLength > 0.0001f)) return false;
+    forward.x /= forwardLength;
+    forward.z /= forwardLength;
+    const Vector3 desired{
+            controller.fpsControllerState.feetPosition.x + forward.x * 0.9f,
+            0.0f,
+            controller.fpsControllerState.feetPosition.z + forward.z * 0.9f};
+    const ItemDropCandidate candidate = BuildItemDropCandidate(
+            collision.sectorCollisionWorld,
+            controller.fpsControllerState.currentSectorId,
+            desired,
+            localBounds);
+    if (!candidate.valid
+            || !ItemDropFitsTopology(collision.sectorCollisionWorld, candidate)) {
+        return false;
+    }
+    const SectorRuntimeObjectState& objects = scene.RuntimeObjects();
+    for (const SectorDynamicDoorCollider& door : objects.dynamicDoorColliders) {
+        if (ItemDropBoundsOverlap(candidate.worldBounds, door)) return false;
+    }
+    bool blocked = false;
+    context.world.ForEach<SectorObjectTransform, SectorStaticModel>(
+            [&context, &candidate, &blocked](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorStaticModel& model) {
+                if (blocked) return;
+                blocked = ItemDropBoundsOverlap(
+                        candidate.worldBounds,
+                        ItemVisualBounds(
+                                context.assets,
+                                model.model,
+                                transform,
+                                model.scale,
+                                false));
+            });
+    if (blocked) return false;
+    context.world.ForEach<
+            SectorObjectTransform,
+            SectorDynamicModel,
+            engine::AnimatedModelInstance>(
+            [&context, &candidate, &blocked](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorDynamicModel& model,
+                    engine::AnimatedModelInstance& animated) {
+                if (blocked) return;
+                blocked = ItemDropBoundsOverlap(
+                        candidate.worldBounds,
+                        ItemVisualBounds(
+                                context.assets,
+                                animated.model,
+                                transform,
+                                model.scale,
+                                true));
+            });
+    if (blocked) return false;
+    context.world.ForEach<SectorObjectTransform, SectorItem>(
+            [&context, &candidate, &blocked](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorItem& item) {
+                if (blocked) return;
+                blocked = ItemDropBoundsOverlap(
+                        candidate.worldBounds,
+                        ItemVisualBounds(
+                                context.assets,
+                                item.model,
+                                transform,
+                                item.scale,
+                                false));
+            });
+    if (blocked) return false;
+    const SectorFpsControllerConfig playerConfig =
+            EffectiveSectorFpsControllerConfig(
+                    controller.fpsControllerState,
+                    controller.fpsControllerConfig);
+    if (ItemDropBoundsOverlapPlayer(
+                candidate.worldBounds,
+                controller.fpsControllerState.feetPosition,
+                playerConfig.playerRadius,
+                playerConfig.playerHeight)) {
+        return false;
+    }
+
+    ItemLevelCampaignState& level = FindOrCreateItemLevelCampaignState(
+            *itemCampaign, levelName, topologyMap.runtimeObjects.size());
+    int objectId = std::max(1, level.nextDroppedObjectId);
+    while (FindSectorPlacedRuntimeObject(topologyMap, objectId) != nullptr) {
+        if (objectId == std::numeric_limits<int>::max()) return false;
+        ++objectId;
+    }
+    SectorPlacedRuntimeObject drop;
+    drop.id = objectId;
+    drop.kind = "item";
+    drop.position = SectorWorldToAuthoringPosition(candidate.originWorld);
+    drop.item.definitionId = definition->id;
+    drop.item.instanceId = AllocateSectorItemInstanceId(topologyMap, objectId);
+    drop.item.quantity = static_cast<int>(dropQuantity);
+    drop.item.onUseScript = definition->type == ItemType::Object
+            ? entryIt->onUseScript : std::string{};
+    drop.item.sessionDrop = true;
+    engine::Entity spawned = engine::NullEntity();
+    if (!scene.SpawnItemRuntimeObject(
+                context, topologyMap, drop, &spawned)) {
+        return false;
+    }
+    if (!RemoveInventoryEntryQuantity(
+                itemCampaign->inventory,
+                runtimeId,
+                dropQuantity,
+                nullptr)) {
+        QueueRemoveSectorRuntimeObjectByEntity(
+                context.world, scene.RuntimeObjects(), spawned);
+        context.world.FlushDestroyedEntities();
+        return false;
+    }
+    level.droppedItems.push_back(drop);
+    topologyMap.runtimeObjects.push_back(drop);
+    level.nextDroppedObjectId = objectId == std::numeric_limits<int>::max()
+            ? objectId : objectId + 1;
+    return true;
+}
+
+void SectorGameSession::ProcessInventoryAction(
+        engine::EngineContext& context,
+        SectorSceneRuntime& scene)
+{
+    if (pendingInventoryAction.type == ItemInventoryUIActionType::None) return;
+    const ItemInventoryUIAction action = pendingInventoryAction;
+    pendingInventoryAction = {};
+    if (itemCampaign == nullptr || itemRegistry == nullptr) return;
+    std::size_t affectedIndex = 0;
+    if (action.type == ItemInventoryUIActionType::UseHealth) {
+        const auto found = std::find_if(
+                itemCampaign->inventory.entries.begin(),
+                itemCampaign->inventory.entries.end(),
+                [&action](const ItemInventoryEntry& entry) {
+                    return entry.runtimeId == action.runtimeId;
+                });
+        affectedIndex = found == itemCampaign->inventory.entries.end()
+                ? 0u
+                : static_cast<std::size_t>(
+                        found - itemCampaign->inventory.entries.begin());
+        UseHealthInventoryEntry(
+                *itemCampaign, *itemRegistry, playerHealth, action.runtimeId);
+    } else if (action.type == ItemInventoryUIActionType::Drop) {
+        if (!DropInventoryEntry(
+                    context, scene, action.runtimeId, affectedIndex)) {
+            ShowDropRefusal();
+            return;
+        }
+    }
+    NormalizeItemInventorySelection(
+            inventoryUi, itemCampaign->inventory, affectedIndex);
 }
 
 bool SectorGameSession::CommitItemTake(
@@ -355,6 +661,7 @@ bool SectorGameSession::StartNew(
         const SectorMaterialRegistry& materials,
         const FpsWeaponRegistry& registry,
         const ItemRegistry& items,
+        const ItemModelAssetState& itemAssets,
         ItemCampaignState& campaign,
         const FpsApplicationSettings& settings,
         PlayerAudioRuntime& playerAudioRuntime,
@@ -379,6 +686,14 @@ bool SectorGameSession::StartNew(
         return false;
     }
     ReconcileItemCampaignLevel(campaign, requestedLevelName, loaded);
+    ItemLevelCampaignState& campaignLevel = FindOrCreateItemLevelCampaignState(
+            campaign, requestedLevelName, loaded.runtimeObjects.size());
+    const std::size_t dropCapacity = campaignLevel.droppedItems.size()
+            + static_cast<std::size_t>(std::max(1, settings.playerInventory.maxSlots));
+    campaignLevel.droppedItems.reserve(dropCapacity);
+    loaded.runtimeObjects.reserve(
+            loaded.runtimeObjects.size()
+            + static_cast<std::size_t>(std::max(1, settings.playerInventory.maxSlots)));
     const SectorCompiledLevelMarker* entryMarker = nullptr;
     if (!ResolveSectorLevelEntryMarker(loaded, entry.markerId, entryMarker, error)) {
         return false;
@@ -403,6 +718,8 @@ bool SectorGameSession::StartNew(
     }
 
     topologyMap = std::move(loaded);
+    scene.RuntimeObjects().placedObjectEntities.reserve(
+            topologyMap.runtimeObjects.capacity());
     entryMarker = resolvedEntryMarkerId.empty()
             ? nullptr
             : FindSectorCompiledLevelMarker(topologyMap, resolvedEntryMarkerId);
@@ -416,6 +733,8 @@ bool SectorGameSession::StartNew(
     itemMessage = {};
     itemMessageElapsedSeconds = 0.0f;
     pendingItemTake = {};
+    inventoryUi = {};
+    pendingInventoryAction = {};
     navigationDebug = SectorGameNavigationDebugState{};
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
@@ -438,6 +757,7 @@ bool SectorGameSession::StartNew(
     EnterSectorFreeflyController(controller.freeflyController);
     weaponRegistry = &registry;
     itemRegistry = &items;
+    itemModelAssets = &itemAssets;
     itemCampaign = &campaign;
     materialRegistry = &materials;
     applicationSettings = &settings;
@@ -505,8 +825,11 @@ void SectorGameSession::Shutdown(
     itemMessage = {};
     itemMessageElapsedSeconds = 0.0f;
     pendingItemTake = {};
+    inventoryUi = {};
+    pendingInventoryAction = {};
     weaponRegistry = nullptr;
     itemRegistry = nullptr;
+    itemModelAssets = nullptr;
     itemCampaign = nullptr;
     materialRegistry = nullptr;
     applicationSettings = nullptr;
@@ -541,7 +864,8 @@ void SectorGameSession::Resume(SectorSceneRuntime& scene)
     }
     paused = false;
     SetSectorFreeflyMouseLookEnabled(
-            controller.freeflyController, !consoleInputCaptured);
+            controller.freeflyController,
+            !consoleInputCaptured && !inventoryUi.open);
     ApplyPlayerPose(scene);
 }
 
@@ -551,7 +875,8 @@ void SectorGameSession::SetConsoleInputCaptured(bool captured)
     consoleInputCaptured = captured;
     if (!paused) {
         SetSectorFreeflyMouseLookEnabled(
-                controller.freeflyController, !consoleInputCaptured);
+                controller.freeflyController,
+                !consoleInputCaptured && !inventoryUi.open);
     }
 }
 
@@ -567,6 +892,18 @@ void SectorGameSession::Update(
     if (!running || paused) {
         return;
     }
+    if (!consoleInputCaptured) {
+        context.input.ForEachEvent(
+                engine::InputEventType::KeyPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.key.key != KEY_I) return;
+                    SetInventoryOpen(!inventoryUi.open);
+                    engine::ConsumeEvent(event);
+                });
+    }
+    const bool gameplayInputCaptured =
+            consoleInputCaptured || inventoryUi.open;
     if (itemMessage[0] != '\0') {
         itemMessageElapsedSeconds += std::max(0.0f, dt);
         if (itemMessageElapsedSeconds >= 2.25f) {
@@ -601,11 +938,15 @@ void SectorGameSession::Update(
             &playerPosition,
             controller.fpsControllerState.currentSectorId,
             &playerObstacle);
+    ProcessInventoryAction(context, scene);
+    if (itemCampaign != nullptr) {
+        UpdateItemHealingEffects(*itemCampaign, playerHealth, dt);
+    }
     UpdateSectorScriptOperations(context, scriptHost);
     SectorRuntimeObjectState& objects = scene.RuntimeObjects();
 
     SectorFpsControllerInput input;
-    if (!consoleInputCaptured) {
+    if (!gameplayInputCaptured) {
         input.moveForward = context.input.IsKeyDown(KEY_W);
         input.moveBackward = context.input.IsKeyDown(KEY_S);
         input.strafeLeft = context.input.IsKeyDown(KEY_A);
@@ -615,7 +956,7 @@ void SectorGameSession::Update(
         input.mouseLookEnabled = true;
         input.mouseDelta = context.input.MouseDelta();
     }
-    if (!consoleInputCaptured) context.input.ForEachEvent(
+    if (!gameplayInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [&input](engine::InputEvent& event) {
@@ -630,7 +971,7 @@ void SectorGameSession::Update(
                 engine::ConsumeEvent(event);
             });
 
-    if (applicationSettings != nullptr) {
+    if (applicationSettings != nullptr && itemCampaign != nullptr) {
         if (input.run && !CanPlayerStaminaSprint(playerStamina)) {
             input.run = false;
         }
@@ -683,30 +1024,35 @@ void SectorGameSession::Update(
                     controller.fpsControllerState.feetPosition.x,
                     controller.fpsControllerState.feetPosition.z},
             dt);
-    const SectorViewPose interactionPose = SectorFpsControllerPose(
-            controller.fpsControllerState,
-            controller.fpsControllerConfig);
-    useTarget = FindSectorUseTarget(
-            context.world,
-            &context.assets,
-            interactionPose.position,
-            GameplayForward(controller),
-            collision.sectorCollisionWorldValid
-                    ? &collision.sectorCollisionWorld : nullptr,
-            true);
-    UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
     usePromptTitle = {};
-    const std::string_view promptTitle = SectorUseTargetTitle(
-            context.world, useTarget);
-    if (!promptTitle.empty()) {
-        std::snprintf(
-                usePromptTitle.data(),
-                usePromptTitle.size(),
-                "%.*s",
-                static_cast<int>(promptTitle.size()),
-                promptTitle.data());
+    if (!inventoryUi.open) {
+        const SectorViewPose interactionPose = SectorFpsControllerPose(
+                controller.fpsControllerState,
+                controller.fpsControllerConfig);
+        useTarget = FindSectorUseTarget(
+                context.world,
+                &context.assets,
+                interactionPose.position,
+                GameplayForward(controller),
+                collision.sectorCollisionWorldValid
+                        ? &collision.sectorCollisionWorld : nullptr,
+                true);
+        UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
+        const std::string_view promptTitle = SectorUseTargetTitle(
+                context.world, useTarget);
+        if (!promptTitle.empty()) {
+            std::snprintf(
+                    usePromptTitle.data(),
+                    usePromptTitle.size(),
+                    "%.*s",
+                    static_cast<int>(promptTitle.size()),
+                    promptTitle.data());
+        }
+    } else {
+        useTarget = {};
+        ResetSectorUseHighlight(useHighlightState);
     }
-    if (!consoleInputCaptured) context.input.ForEachEvent(
+    if (!gameplayInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [this, &context, &scene](engine::InputEvent& event) {
@@ -814,8 +1160,8 @@ void SectorGameSession::Update(
                         : nullptr,
                 scene.Renderer(),
                 true,
-                !consoleInputCaptured,
-                consoleInputCaptured);
+                !gameplayInputCaptured,
+                gameplayInputCaptured);
         if (acceptedShot) {
             const FpsShotResult request = fpsPlayer.State().firing.lastShot;
             FpsShotResult resolvedShot;
@@ -1001,7 +1347,7 @@ void SectorGameSession::RenderHud(
                     assets.GetFont(usePromptFont),
                     itemMessage.data(),
                     itemMessageElapsedSeconds);
-        } else {
+        } else if (!inventoryUi.open) {
             DrawSectorUsePrompt(
                     playableViewport,
                     assets.GetFont(usePromptFont),
@@ -1058,6 +1404,19 @@ bool SectorGameSession::RebuildFromMap(
         ReconcileItemCampaignLevel(
                 *itemCampaign, levelName, reconciledMap);
     }
+    if (applicationSettings != nullptr) {
+        ItemLevelCampaignState& campaignLevel =
+                FindOrCreateItemLevelCampaignState(
+                        *itemCampaign,
+                        levelName,
+                        reconciledMap.runtimeObjects.size());
+        const std::size_t extra = static_cast<std::size_t>(std::max(
+                1, applicationSettings->playerInventory.maxSlots));
+        campaignLevel.droppedItems.reserve(
+                campaignLevel.droppedItems.size() + extra);
+        reconciledMap.runtimeObjects.reserve(
+                reconciledMap.runtimeObjects.size() + extra);
+    }
     if (!scene.Rebuild(
             context,
             reconciledMap,
@@ -1072,6 +1431,8 @@ bool SectorGameSession::RebuildFromMap(
         return false;
     }
     topologyMap = std::move(reconciledMap);
+    scene.RuntimeObjects().placedObjectEntities.reserve(
+            topologyMap.runtimeObjects.capacity());
     ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
@@ -1117,13 +1478,16 @@ bool SectorGameSession::ReloadCurrentMap(
     const std::string mapId = levelName;
     const FpsWeaponRegistry* savedWeaponRegistry = weaponRegistry;
     const ItemRegistry* savedItemRegistry = itemRegistry;
+    const ItemModelAssetState* savedItemModelAssets = itemModelAssets;
     ItemCampaignState* savedItemCampaign = itemCampaign;
     const SectorMaterialRegistry* savedMaterialRegistry = materialRegistry;
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
+    const Health savedHealth = playerHealth;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
+            || savedItemModelAssets == nullptr
             || savedItemCampaign == nullptr || savedMaterialRegistry == nullptr
             || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
@@ -1137,6 +1501,7 @@ bool SectorGameSession::ReloadCurrentMap(
                 *savedMaterialRegistry,
                 *savedWeaponRegistry,
                 *savedItemRegistry,
+                *savedItemModelAssets,
                 *savedItemCampaign,
                 *savedSettings,
                 *savedPlayerAudio,
@@ -1146,6 +1511,7 @@ bool SectorGameSession::ReloadCurrentMap(
         return false;
     }
     if (remainPaused) Pause();
+    playerHealth = savedHealth;
     error.clear();
     return true;
 }
@@ -1178,6 +1544,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
 
     const FpsWeaponRegistry* savedWeaponRegistry = weaponRegistry;
     const ItemRegistry* savedItemRegistry = itemRegistry;
+    const ItemModelAssetState* savedItemModelAssets = itemModelAssets;
     ItemCampaignState* savedItemCampaign = itemCampaign;
     const SectorMaterialRegistry* savedMaterialRegistry = materialRegistry;
     const FpsApplicationSettings* savedSettings = applicationSettings;
@@ -1187,6 +1554,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     const PlayerStamina savedStamina = playerStamina;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
+            || savedItemModelAssets == nullptr
             || savedItemCampaign == nullptr || savedMaterialRegistry == nullptr
             || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
@@ -1207,6 +1575,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
                 *savedMaterialRegistry,
                 *savedWeaponRegistry,
                 *savedItemRegistry,
+                *savedItemModelAssets,
                 *savedItemCampaign,
                 *savedSettings,
                 *savedPlayerAudio,

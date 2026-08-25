@@ -225,6 +225,30 @@ void TestItemRuntimeSpawnAndFocusedRemoval()
     world.FlushDestroyedEntities();
     Check(!world.IsAlive(entity),
           "focused item removal destroys the selected ECS entity after the explicit flush");
+
+    game::SectorPlacedRuntimeObject dropped = known;
+    dropped.id = 72;
+    dropped.item.instanceId = "item_72";
+    dropped.item.sessionDrop = true;
+    engine::Entity droppedEntity = engine::NullEntity();
+    Check(game::SpawnSectorItemRuntimeObject(
+                  world,
+                  assets,
+                  state,
+                  map,
+                  dropped,
+                  registry,
+                  itemAssets,
+                  &droppedEntity),
+          "single dropped item spawns incrementally");
+    Check(world.IsAlive(droppedEntity)
+                  && world.Has<game::SectorItem>(droppedEntity)
+                  && state.placedObjectEntities.size() == 1
+                  && state.placedObjectEntities.front().placedObjectId == 72,
+          "incremental drop spawn updates only item ECS tracking");
+    Check(world.Get<game::SectorItem>(droppedEntity).origin
+                  == game::SectorItemOrigin::SessionDrop,
+          "incremental drop spawn preserves session provenance");
 }
 
 bool Near(float actual, float expected, float epsilon = 0.00001f)

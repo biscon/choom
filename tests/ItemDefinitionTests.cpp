@@ -1,6 +1,8 @@
 #include "game/items/ItemDefinitions.h"
+#include "game/items/ItemAssets.h"
 #include "game/items/ItemIconLayout.h"
 #include "game/items/ItemInventory.h"
+#include "game/items/ItemInventoryUI.h"
 #include "sector_editor/items/SectorEditorItemEditorService.h"
 #include "sector_editor/items/SectorItemReferenceScanner.h"
 
@@ -430,6 +432,101 @@ void InventoryTransactionsAndCampaignReconciliation()
     assert(level.droppedItems.empty());
 }
 
+void HealthUseAndInventoryLayout()
+{
+    game::ItemRegistry registry;
+    game::ItemDefinition instant = MakeInventoryDefinition(
+            "instant_health", game::ItemType::Health, 0.25f);
+    instant.healAmount = 10;
+    game::ItemDefinition timed = MakeInventoryDefinition(
+            "timed_health", game::ItemType::Health, 0.25f);
+    timed.healAmount = 10;
+    timed.healOverTime = true;
+    timed.healDurationSeconds = 1.0f;
+    registry.items = {instant, timed};
+
+    game::PlayerInventoryApplicationSettings settings;
+    game::ItemCampaignState campaign;
+    game::InitializeItemCampaignState(campaign, settings);
+    campaign.inventory.entries = {
+            game::ItemInventoryEntry{1, instant.id, 1, {}},
+            game::ItemInventoryEntry{2, timed.id, 1, {}},
+            game::ItemInventoryEntry{3, timed.id, 1, {}}};
+    game::Health health = game::MakeHealth(100);
+    health.current = 50;
+    assert(game::UseHealthInventoryEntry(campaign, registry, health, 1)
+            == game::ItemHealthUseResult::AppliedInstantly);
+    assert(health.current == 60 && campaign.inventory.entries.size() == 2);
+    assert(game::UseHealthInventoryEntry(campaign, registry, health, 2)
+            == game::ItemHealthUseResult::StartedTimedEffect);
+    assert(game::UseHealthInventoryEntry(campaign, registry, health, 3)
+            == game::ItemHealthUseResult::StartedTimedEffect);
+    game::UpdateItemHealingEffects(campaign, health, 0.25f);
+    assert(health.current == 64);
+    game::UpdateItemHealingEffects(campaign, health, 0.26f);
+    assert(health.current == 70);
+    game::UpdateItemHealingEffects(campaign, health, 0.49f);
+    assert(health.current == 80 && campaign.healingEffects.empty());
+
+    campaign.inventory.entries.push_back(
+            game::ItemInventoryEntry{4, instant.id, 1, {}});
+    health.current = health.maximum;
+    assert(game::UseHealthInventoryEntry(campaign, registry, health, 4)
+            == game::ItemHealthUseResult::DisabledAtFullHealth);
+    assert(campaign.inventory.entries.size() == 1);
+
+    campaign.inventory.entries.push_back(
+            game::ItemInventoryEntry{5, timed.id, 1, {}});
+    health.current = 98;
+    assert(game::UseHealthInventoryEntry(campaign, registry, health, 5)
+            == game::ItemHealthUseResult::StartedTimedEffect);
+    game::UpdateItemHealingEffects(campaign, health, 0.5f);
+    assert(health.current == 100);
+    game::SectorTopologyMap transitionMap;
+    game::ReconcileItemCampaignLevel(campaign, "transition", transitionMap);
+    assert(campaign.healingEffects.size() == 1);
+    health.current = 90;
+    game::UpdateItemHealingEffects(campaign, health, 0.5f);
+    assert(health.current == 95 && campaign.healingEffects.empty());
+
+    const game::ItemInventoryUILayout layout =
+            game::BuildItemInventoryUILayout(
+                    Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
+                    24,
+                    1200.0f);
+    assert(layout.columns == 6 && layout.totalRows == 4);
+    assert(layout.detailScrolls);
+    assert(std::floor(layout.modal.x) == layout.modal.x);
+    assert(std::floor(layout.modal.y) == layout.modal.y);
+    const Rectangle cell = game::ItemInventoryCellBounds(layout, 7, 0);
+    assert(std::floor(cell.x) == cell.x && std::floor(cell.y) == cell.y);
+    const game::ItemInventoryUILayout narrowLayout =
+            game::BuildItemInventoryUILayout(
+                    Rectangle{0.0f, 0.0f, 1400.0f, 900.0f},
+                    24,
+                    120.0f);
+    assert(narrowLayout.detail.x + narrowLayout.detail.width
+            <= narrowLayout.modal.x + narrowLayout.modal.width);
+
+    game::ItemInventoryUIState uiState;
+    game::PlayerInventoryState inventory;
+    inventory.entries = {
+            game::ItemInventoryEntry{11, instant.id, 1, {}},
+            game::ItemInventoryEntry{12, timed.id, 1, {}}};
+    game::NormalizeItemInventorySelection(uiState, inventory, 0);
+    assert(uiState.selectedRuntimeId == 11);
+    inventory.entries.erase(inventory.entries.begin());
+    game::NormalizeItemInventorySelection(uiState, inventory, 0);
+    assert(uiState.selectedRuntimeId == 12);
+
+    assert(game::ClassifyItemIconPreparation(8, 0, 2, false)
+            == game::ItemIconPreparationState::WaitingForModels);
+    assert(game::ClassifyItemIconPreparation(8, 8, 0, false)
+            == game::ItemIconPreparationState::Ready);
+    assert(game::ClassifyItemIconPreparation(8, 0, 0, true)
+            == game::ItemIconPreparationState::Failed);
+}
+
 } // namespace
 
 int main()
@@ -439,5 +536,6 @@ int main()
     IconLayoutAndCameraFit();
     ReferenceScanningAndEditorService();
     InventoryTransactionsAndCampaignReconciliation();
+    HealthUseAndInventoryLayout();
     std::cout << "Item definition tests passed\n";
 }

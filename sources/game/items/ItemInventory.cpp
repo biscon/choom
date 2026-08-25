@@ -31,7 +31,121 @@ void InitializeItemCampaignState(
     state = ItemCampaignState{};
     state.inventory.entries.reserve(static_cast<std::size_t>(
             std::max(1, settings.maxSlots)));
+    state.healingEffects.reserve(static_cast<std::size_t>(
+            std::max(1, settings.maxSlots)));
     state.levels.reserve(16);
+}
+
+bool RemoveInventoryEntryQuantity(
+        PlayerInventoryState& inventory,
+        std::uint64_t runtimeId,
+        std::uint64_t quantity,
+        std::size_t* removedIndex)
+{
+    if (runtimeId == 0 || quantity == 0) return false;
+    const auto found = std::find_if(
+            inventory.entries.begin(), inventory.entries.end(),
+            [runtimeId](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == runtimeId;
+            });
+    if (found == inventory.entries.end() || found->quantity < quantity) {
+        return false;
+    }
+    const std::size_t index = static_cast<std::size_t>(
+            found - inventory.entries.begin());
+    if (found->quantity == quantity) {
+        inventory.entries.erase(found);
+        if (removedIndex != nullptr) *removedIndex = index;
+    } else {
+        found->quantity -= quantity;
+        if (removedIndex != nullptr) *removedIndex = inventory.entries.size();
+    }
+    return true;
+}
+
+ItemHealthUseResult UseHealthInventoryEntry(
+        ItemCampaignState& campaign,
+        const ItemRegistry& registry,
+        Health& health,
+        std::uint64_t runtimeId)
+{
+    const auto found = std::find_if(
+            campaign.inventory.entries.begin(),
+            campaign.inventory.entries.end(),
+            [runtimeId](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == runtimeId;
+            });
+    if (found == campaign.inventory.entries.end()) {
+        return ItemHealthUseResult::MissingEntry;
+    }
+    const ItemDefinition* definition = FindItemDefinition(
+            registry, found->definitionId);
+    if (definition == nullptr || definition->type != ItemType::Health
+            || definition->healAmount <= 0) {
+        return ItemHealthUseResult::InvalidDefinition;
+    }
+    if (health.current >= health.maximum) {
+        return ItemHealthUseResult::DisabledAtFullHealth;
+    }
+    if (!definition->healOverTime) {
+        ApplyHealing(health, definition->healAmount);
+        RemoveInventoryEntryQuantity(
+                campaign.inventory, runtimeId, 1, nullptr);
+        return ItemHealthUseResult::AppliedInstantly;
+    }
+    if (!std::isfinite(definition->healDurationSeconds)
+            || definition->healDurationSeconds <= 0.0f) {
+        return ItemHealthUseResult::InvalidDefinition;
+    }
+    if (campaign.healingEffects.size()
+            == campaign.healingEffects.capacity()) {
+        WarnCapacity("healing effect", campaign.capacityWarnings);
+    }
+    campaign.healingEffects.push_back(ItemHealingEffect{
+            definition->healAmount,
+            definition->healDurationSeconds,
+            0.0f,
+            0});
+    RemoveInventoryEntryQuantity(campaign.inventory, runtimeId, 1, nullptr);
+    return ItemHealthUseResult::StartedTimedEffect;
+}
+
+void UpdateItemHealingEffects(
+        ItemCampaignState& campaign,
+        Health& health,
+        float dt)
+{
+    if (!std::isfinite(dt) || dt <= 0.0f) return;
+    for (ItemHealingEffect& effect : campaign.healingEffects) {
+        if (effect.totalAmount <= 0
+                || !std::isfinite(effect.durationSeconds)
+                || effect.durationSeconds <= 0.0f) {
+            effect.elapsedSeconds = effect.durationSeconds;
+            effect.appliedAmount = std::max(0, effect.totalAmount);
+            continue;
+        }
+        effect.elapsedSeconds = std::min(
+                effect.durationSeconds, effect.elapsedSeconds + dt);
+        const int cumulativeTarget = effect.elapsedSeconds
+                        >= effect.durationSeconds
+                ? effect.totalAmount
+                : static_cast<int>(std::floor(
+                        static_cast<double>(effect.totalAmount)
+                        * static_cast<double>(effect.elapsedSeconds)
+                        / static_cast<double>(effect.durationSeconds)));
+        const int delta = std::max(0, cumulativeTarget - effect.appliedAmount);
+        ApplyHealing(health, delta);
+        // Count attempted healing, including healing discarded at maximum.
+        effect.appliedAmount = cumulativeTarget;
+    }
+    campaign.healingEffects.erase(
+            std::remove_if(
+                    campaign.healingEffects.begin(),
+                    campaign.healingEffects.end(),
+                    [](const ItemHealingEffect& effect) {
+                        return effect.appliedAmount >= effect.totalAmount;
+                    }),
+            campaign.healingEffects.end());
 }
 
 double ComputeInventoryWeightKg(

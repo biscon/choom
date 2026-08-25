@@ -16,6 +16,7 @@ inline constexpr int kItemIconMaximumColumns = 8;
 struct ItemIconRegion {
     std::string definitionId;
     Rectangle source = {};
+    bool placeholder = false;
 };
 
 struct ItemIconAtlasLayout {

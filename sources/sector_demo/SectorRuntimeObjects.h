@@ -229,6 +229,16 @@ void SpawnPlacedRuntimeObjects(
         const ItemRegistry* itemRegistry = nullptr,
         const ItemModelAssetState* itemAssets = nullptr);
 
+bool SpawnSectorItemRuntimeObject(
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& placedObject,
+        const ItemRegistry& itemRegistry,
+        const ItemModelAssetState& itemAssets,
+        engine::Entity* outEntity = nullptr);
+
 bool QueueRemoveSectorRuntimeObjectByEntity(
         engine::World& world,
         SectorRuntimeObjectState& state,

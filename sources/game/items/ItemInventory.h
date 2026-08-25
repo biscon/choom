@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/FpsWeaponRegistry.h"
+#include "game/Health.h"
 #include "game/items/ItemDefinitions.h"
 #include "sector_demo/SectorTopologyMap.h"
 
@@ -24,6 +25,13 @@ struct PlayerInventoryState {
     std::uint64_t capacityWarnings = 0;
 };
 
+struct ItemHealingEffect {
+    int totalAmount = 0;
+    float durationSeconds = 0.0f;
+    float elapsedSeconds = 0.0f;
+    int appliedAmount = 0;
+};
+
 struct ItemLevelCampaignState {
     std::string levelId;
     std::vector<int> collectedAuthoredItemIds;
@@ -34,8 +42,17 @@ struct ItemLevelCampaignState {
 
 struct ItemCampaignState {
     PlayerInventoryState inventory;
+    std::vector<ItemHealingEffect> healingEffects;
     std::vector<ItemLevelCampaignState> levels;
     std::uint64_t capacityWarnings = 0;
+};
+
+enum class ItemHealthUseResult {
+    AppliedInstantly,
+    StartedTimedEffect,
+    DisabledAtFullHealth,
+    MissingEntry,
+    InvalidDefinition
 };
 
 enum class ItemPickupCapacityResult {
@@ -76,6 +93,23 @@ bool CommitItemPickup(
         PlayerInventoryState& inventory,
         const ItemPickupPlan& plan,
         std::string_view onUseScript);
+
+ItemHealthUseResult UseHealthInventoryEntry(
+        ItemCampaignState& campaign,
+        const ItemRegistry& registry,
+        Health& health,
+        std::uint64_t runtimeId);
+
+void UpdateItemHealingEffects(
+        ItemCampaignState& campaign,
+        Health& health,
+        float dt);
+
+bool RemoveInventoryEntryQuantity(
+        PlayerInventoryState& inventory,
+        std::uint64_t runtimeId,
+        std::uint64_t quantity,
+        std::size_t* removedIndex = nullptr);
 
 ItemLevelCampaignState& FindOrCreateItemLevelCampaignState(
         ItemCampaignState& campaign,

@@ -353,14 +353,17 @@ void DrawSectorUsePrompt(
     const Vector2 titleSize = MeasureTextEx(
             font->font, titleText.data(), size, spacing);
     const Vector2 origin{
-            viewport.x + (viewport.width - prefixSize.x - titleSize.x) * 0.5f,
-            viewport.y + viewport.height - size - 48.0f};
-    const Vector2 shadow = Vector2Add(origin, Vector2{3.0f, 3.0f});
+            std::round(viewport.x
+                    + (viewport.width - prefixSize.x - titleSize.x) * 0.5f),
+            std::round(viewport.y + viewport.height - size - 48.0f)};
+    const float titleX = std::round(origin.x + prefixSize.x);
+    const Vector2 shadow = Vector2{
+            std::round(origin.x + 3.0f), std::round(origin.y + 3.0f)};
     DrawTextEx(font->font, prefix.data(), shadow, size, spacing, Color{0, 0, 0, 220});
     DrawTextEx(
             font->font,
             titleText.data(),
-            Vector2Add(shadow, Vector2{prefixSize.x, 0.0f}),
+            Vector2{std::round(titleX + 3.0f), shadow.y},
             size,
             spacing,
             Color{0, 0, 0, 220});
@@ -368,7 +371,7 @@ void DrawSectorUsePrompt(
     DrawTextEx(
             font->font,
             titleText.data(),
-            Vector2Add(origin, Vector2{prefixSize.x, 0.0f}),
+            Vector2{titleX, origin.y},
             size,
             spacing,
             RAYWHITE);

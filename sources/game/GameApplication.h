@@ -50,6 +50,8 @@ public:
             engine::FontHandle font,
             engine::FontHandle smallFont);
     void Update(engine::EngineContext& context, float dt);
+    void UpdateMainThreadPreparation(engine::EngineContext& context);
+    bool IsGlobalPreparationFinished() const;
     void UpdateDebugConsole(engine::EngineContext& context, float dt);
     void ProcessDeferredDebugActions(engine::EngineContext& context);
     void RenderDebugConsole(
@@ -126,6 +128,7 @@ private:
     bool editorAttachedToGame = false;
     engine::FontHandle usePromptFont = engine::NullFontHandle();
     bool initialized = false;
+    bool itemIconDiagnosticReported = false;
 };
 
 } // namespace game

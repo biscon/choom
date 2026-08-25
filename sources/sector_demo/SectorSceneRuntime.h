@@ -42,6 +42,11 @@ public:
     void RefreshMapRuntimeObjects(
             engine::EngineContext& context,
             const SectorTopologyMap& map);
+    bool SpawnItemRuntimeObject(
+            engine::EngineContext& context,
+            const SectorTopologyMap& map,
+            const SectorPlacedRuntimeObject& object,
+            engine::Entity* outEntity = nullptr);
     bool RebuildNavigationForMap(
             engine::EngineContext& context,
             const SectorTopologyMap& map);
