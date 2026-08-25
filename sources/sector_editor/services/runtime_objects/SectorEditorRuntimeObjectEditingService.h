@@ -51,9 +51,9 @@ public:
     bool AddStaticModel(Vector2 mapPoint);
     bool AddDynamicModel(Vector2 mapPoint);
     bool AddNpc(Vector2 mapPoint, const std::string& definitionId);
-    bool CopySelectedDoorConfig(
+    bool CopySelectedConfig(
             SectorEditorConfigClipboardState& clipboard) const;
-    bool PasteSelectedDoorConfig(
+    bool PasteSelectedConfig(
             const SectorEditorConfigClipboardState& clipboard);
     SectorEditorRuntimeObjectDeleteRequest RequestDeleteSelected() const;
     bool DeleteById(int objectId);

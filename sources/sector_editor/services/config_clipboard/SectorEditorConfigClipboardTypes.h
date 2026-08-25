@@ -10,6 +10,8 @@ enum class SectorEditorConfigKind {
     None,
     Sector,
     Door,
+    StaticModel,
+    DynamicModel,
     StaticPointLight,
     StaticSpotLight,
     StaticRectLight,
@@ -29,10 +31,22 @@ struct SectorEditorConfigTarget {
     TopologySurfaceEditTarget surface;
 };
 
+struct SectorEditorStaticModelConfig {
+    float yawRadians = 0.0f;
+    SectorPlacedStaticModel model;
+};
+
+struct SectorEditorDynamicModelConfig {
+    float yawRadians = 0.0f;
+    SectorPlacedDynamicModel model;
+};
+
 using SectorEditorConfigPayload = std::variant<
         std::monostate,
         SectorAuthoringFaceAnchor,
         SectorPlacedDoor,
+        SectorEditorStaticModelConfig,
+        SectorEditorDynamicModelConfig,
         SectorTopologyStaticPointLight,
         SectorTopologyStaticSpotLight,
         SectorTopologyStaticRectLight,
@@ -51,6 +65,8 @@ inline const char* SectorEditorConfigKindName(SectorEditorConfigKind kind)
     switch (kind) {
         case SectorEditorConfigKind::Sector: return "sector";
         case SectorEditorConfigKind::Door: return "door";
+        case SectorEditorConfigKind::StaticModel: return "3D prop";
+        case SectorEditorConfigKind::DynamicModel: return "dynamic prop";
         case SectorEditorConfigKind::StaticPointLight: return "static point light";
         case SectorEditorConfigKind::StaticSpotLight: return "static spot light";
         case SectorEditorConfigKind::StaticRectLight: return "static rect light";

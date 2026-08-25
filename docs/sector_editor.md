@@ -462,6 +462,13 @@ target surface; it does not edit the opposite sidedef, sector defaults, ambient
 lighting, or geometry. `Ctrl+C` and `Ctrl+V` invoke the same enabled copy/paste
 commands as the inspector and 3D panel buttons.
 
+Selected 3D Props and Dynamic Props also support `Copy config` / `Paste config`.
+Each copied prop config pastes only to the same prop type. Paste copies the
+model, orientation, height offset, scale, collision, and shadow settings; a
+Dynamic Prop additionally copies its animation and interaction settings. The
+destination object ID, script instance ID, and world position remain unchanged.
+Static-model bake fingerprints are transient and are not copied.
+
 The Material Editor has a scrolling material list and an albedo preview. Each
 definition exposes editable ID, albedo PNG selection, filtering, metalness,
 roughness, and normal strength. The albedo button opens a modal that rescans

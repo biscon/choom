@@ -96,6 +96,13 @@ bool IsSurfaceKind(SectorEditorConfigKind kind)
             || kind == SectorEditorConfigKind::SurfaceUpper;
 }
 
+bool IsRuntimeObjectKind(SectorEditorConfigKind kind)
+{
+    return kind == SectorEditorConfigKind::Door
+            || kind == SectorEditorConfigKind::StaticModel
+            || kind == SectorEditorConfigKind::DynamicModel;
+}
+
 bool ValidLightTarget(
         const SectorTopologyMap& map,
         const SelectionState& selection,
@@ -180,8 +187,20 @@ SectorEditorConfigTarget ResolveSectorEditorConfigTarget(
     const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
             map,
             selectionState.selectedRuntimeObjectId);
-    if (object != nullptr && object->kind == "door") {
-        return SectorEditorConfigTarget{SectorEditorConfigKind::Door, object->id};
+    if (object != nullptr) {
+        if (object->kind == "door") {
+            return SectorEditorConfigTarget{SectorEditorConfigKind::Door, object->id};
+        }
+        if (object->kind == "static_model") {
+            return SectorEditorConfigTarget{
+                    SectorEditorConfigKind::StaticModel,
+                    object->id};
+        }
+        if (object->kind == "dynamic_model") {
+            return SectorEditorConfigTarget{
+                    SectorEditorConfigKind::DynamicModel,
+                    object->id};
+        }
     }
 
     if (selectionState.selectedAuthoring.kind
@@ -271,9 +290,8 @@ bool SectorEditorConfigClipboardService::Copy()
         context_.statusText = "Copied sector config.";
         return true;
     }
-    if (target.kind == SectorEditorConfigKind::Door) {
-        return context_.runtimeObjectEditing.CopySelectedDoorConfig(
-                context_.clipboard);
+    if (IsRuntimeObjectKind(target.kind)) {
+        return context_.runtimeObjectEditing.CopySelectedConfig(context_.clipboard);
     }
     if (IsLightKind(target.kind)) {
         return context_.lightEditing.CopySelectedConfig(context_.clipboard);
@@ -336,9 +354,8 @@ bool SectorEditorConfigClipboardService::Paste()
         }
         return changed;
     }
-    if (target.kind == SectorEditorConfigKind::Door) {
-        return context_.runtimeObjectEditing.PasteSelectedDoorConfig(
-                context_.clipboard);
+    if (IsRuntimeObjectKind(target.kind)) {
+        return context_.runtimeObjectEditing.PasteSelectedConfig(context_.clipboard);
     }
     if (IsLightKind(target.kind)) {
         return context_.lightEditing.PasteSelectedConfig(context_.clipboard).changed;

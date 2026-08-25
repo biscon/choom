@@ -1749,10 +1749,11 @@
       "staticModel": {
         "instanceId": "prop_105",
         "modelPath": "assets/models/furniture/bunk_bed.glb",
-        "scale": 1.25
+        "scale": 1.25,
+        "collision": true
       },
       "position": [
-        -200.0,
+        -196.0,
         -17.0,
         -67.0
       ],
@@ -2241,18 +2242,278 @@
       "yawDegrees": -84.99999237060547
     },
     {
-      "id": 134,
+      "id": 135,
       "kind": "static_model",
       "staticModel": {
-        "instanceId": "prop_134",
-        "modelPath": "assets/models/furniture/metalshopshelf.glb"
+        "instanceId": "prop_135",
+        "modelPath": "assets/models/furniture/bedside_wood_table.glb",
+        "heightOffsetWorld": 0.5,
+        "scale": 0.3499999940395355,
+        "collision": true
+      },
+      "position": [
+        -176.0,
+        -17.0,
+        -69.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 136,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_136",
+        "modelPath": "assets/models/furniture/bedside_wood_table.glb",
+        "heightOffsetWorld": 0.5,
+        "scale": 0.3499999940395355,
+        "collision": true
+      },
+      "position": [
+        -220.0,
+        -17.0,
+        -69.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 137,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_137",
+        "modelPath": "assets/models/furniture/bunk_bed.glb",
+        "scale": 1.25,
+        "collision": true
+      },
+      "position": [
+        -240.0,
+        -17.0,
+        -67.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 138,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_138",
+        "modelPath": "assets/models/furniture/bedside_wood_table.glb",
+        "heightOffsetWorld": 0.5,
+        "scale": 0.3499999940395355,
+        "collision": true
       },
       "position": [
         -264.0,
         -17.0,
-        -47.0
+        -69.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 139,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_139",
+        "modelPath": "assets/models/furniture/bunk_bed.glb",
+        "scale": 1.25,
+        "collision": true
+      },
+      "position": [
+        -284.0,
+        -17.0,
+        -67.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 140,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_140",
+        "modelPath": "assets/models/furniture/bedside_wood_table.glb",
+        "heightOffsetWorld": 0.5,
+        "scale": 0.3499999940395355,
+        "collision": true
+      },
+      "position": [
+        -176.0,
+        -17.0,
+        -11.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 141,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_141",
+        "modelPath": "assets/models/furniture/bunk_bed.glb",
+        "scale": 1.25,
+        "collision": true
+      },
+      "position": [
+        -196.0,
+        -17.0,
+        -13.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 142,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_142",
+        "modelPath": "assets/models/furniture/bedside_wood_table.glb",
+        "heightOffsetWorld": 0.5,
+        "scale": 0.3499999940395355,
+        "collision": true
+      },
+      "position": [
+        -220.0,
+        -17.0,
+        -11.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 143,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_143",
+        "modelPath": "assets/models/furniture/bunk_bed.glb",
+        "scale": 1.25,
+        "collision": true
+      },
+      "position": [
+        -240.0,
+        -17.0,
+        -13.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 144,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_144",
+        "modelPath": "assets/models/furniture/bedside_wood_table.glb",
+        "heightOffsetWorld": 0.5,
+        "scale": 0.3499999940395355,
+        "collision": true
+      },
+      "position": [
+        -264.0,
+        -17.0,
+        -11.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 145,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_145",
+        "modelPath": "assets/models/furniture/bunk_bed.glb",
+        "scale": 1.25,
+        "collision": true
+      },
+      "position": [
+        -284.0,
+        -17.0,
+        -13.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 146,
+      "kind": "door",
+      "door": {
+        "instanceId": "door_146",
+        "anchor": {
+          "lineDefId": 256,
+          "frontSectorId": 52,
+          "backSectorId": 53,
+          "frontSideDefId": 269,
+          "backSideDefId": 238,
+          "endpointA": [
+            -2432,
+            -560
+          ],
+          "endpointB": [
+            -2432,
+            -720
+          ]
+        },
+        "width": 1.25,
+        "height": 2.643749952316284,
+        "normalOffset": 0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_009",
+        "motion": "swing",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "openDistance": 2.643749952316284,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_01"
+      },
+      "position": [
+        -152.0,
+        -14.5,
+        -40.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 147,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_147",
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 3.9749999046325684,
+        "scale": 1.5
+      },
+      "position": [
+        -200.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 148,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_148",
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 3.9749999046325684,
+        "scale": 1.5
+      },
+      "position": [
+        -240.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 149,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_149",
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 3.9749999046325684,
+        "scale": 1.5
+      },
+      "position": [
+        -280.0,
+        -17.0,
+        -40.0
+      ],
+      "yawDegrees": 90.0
     }
   ],
   "staticLights": [
@@ -3939,23 +4200,6 @@
       }
     },
     {
-      "id": 55,
-      "position": [
-        -296.0,
-        -2.6000003814697266,
-        -24.0
-      ],
-      "radius": 64.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 250,
-        "b": 241,
-        "a": 255
-      }
-    },
-    {
       "id": 56,
       "position": [
         -104.0714340209961,
@@ -4820,6 +5064,123 @@
         "b": 255,
         "a": 255
       }
+    },
+    {
+      "id": 7,
+      "position": [
+        -200.0,
+        14.0,
+        -40.0
+      ],
+      "target": [
+        -200.0,
+        -9.0,
+        -40.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 64.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.00252532958984375,
+              0.08274221420288086,
+              -0.017996788024902344
+            ],
+            "lengthScale": 0.22499999403953552,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.8999999761581421
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "position": [
+        -240.0,
+        14.0,
+        -40.0
+      ],
+      "target": [
+        -240.0,
+        -9.0,
+        -40.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 64.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.00252532958984375,
+              0.08274221420288086,
+              -0.017996788024902344
+            ],
+            "lengthScale": 0.22499999403953552,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.8999999761581421
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "position": [
+        -280.0,
+        14.0,
+        -40.0
+      ],
+      "target": [
+        -280.0,
+        -9.0,
+        -40.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 64.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.00252532958984375,
+              0.08274221420288086,
+              -0.017996788024902344
+            ],
+            "lengthScale": 0.22499999403953552,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.8999999761581421
+          }
+        }
+      }
     }
   ],
   "dynamicPointLights": [
@@ -4942,18 +5303,19 @@
       "id": 7,
       "instanceId": "light_point_7",
       "position": [
-        -200.0,
+        -259.0,
         -2.6000003814697266,
-        -48.0
+        -32.0
       ],
       "radius": 64.0,
       "intensity": 1.0,
       "color": {
         "r": 255,
-        "g": 214,
-        "b": 81,
+        "g": 220,
+        "b": 180,
         "a": 255
-      }
+      },
+      "enabled": false
     },
     {
       "id": 8,
@@ -5669,7 +6031,32 @@
       }
     }
   ],
-  "dynamicRectLights": [],
+  "dynamicRectLights": [
+    {
+      "id": 1,
+      "position": [
+        -200.0,
+        -2.6000003814697266,
+        -40.0
+      ],
+      "target": [
+        -200.0,
+        15.0,
+        -40.0
+      ],
+      "width": 20.0,
+      "height": 20.0,
+      "range": 24.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "instanceId": "light_rect_1"
+    }
+  ],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
@@ -5776,7 +6163,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "4a7b0323beb50178",
+    "sourceHash": "fdcdcc8c8ca1f413",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -5796,7 +6183,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "4a7b0323beb50178",
+      "sourceHash": "fdcdcc8c8ca1f413",
       "count": 2667,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -5822,9 +6209,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "4a7b0323beb50178",
-      "modelCount": 49,
-      "objectCount": 112,
+      "sourceHash": "fdcdcc8c8ca1f413",
+      "modelCount": 50,
+      "objectCount": 126,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -21926,7 +22313,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.03999999910593033,
+        "ambientIntensity": 0.019999999552965164,
         "defaultWall": {
           "materialId": "worn_white_ceiling_512",
           "uv": {
@@ -22002,7 +22389,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.05000000074505806,
+        "ambientIntensity": 0.019999999552965164,
         "defaultWall": {
           "materialId": "beige_wall_001",
           "uv": {
