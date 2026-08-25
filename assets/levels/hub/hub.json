@@ -7,6 +7,7 @@
       "id": 1,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_1",
         "modelPath": "assets/models/tool_cart/tool_cart_1k.gltf",
         "collision": true
       },
@@ -21,6 +22,7 @@
       "id": 2,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_2",
         "modelPath": "assets/models/worn_metal_rack/worn_metal_rack_1k.gltf",
         "collision": true
       },
@@ -35,6 +37,7 @@
       "id": 3,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_3",
         "modelPath": "assets/models/lighting/wall_lamp.glb",
         "rotationZDegrees": 180.0,
         "heightOffsetWorld": 2.0999999046325684
@@ -50,6 +53,7 @@
       "id": 4,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_4",
         "modelPath": "assets/models/lighting/industrial_light.glb",
         "rotationXDegrees": 180.0,
         "heightOffsetWorld": 3.390000104904175,
@@ -66,6 +70,7 @@
       "id": 5,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_5",
         "modelPath": "assets/models/electric_box_31.glb"
       },
       "position": [
@@ -79,6 +84,7 @@
       "id": 8,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_8",
         "modelPath": "assets/models/lighting/garage_ceiling_light.glb",
         "heightOffsetWorld": 2.700000047683716
       },
@@ -93,6 +99,7 @@
       "id": 9,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_9",
         "modelPath": "assets/models/fuel_canister.glb"
       },
       "position": [
@@ -106,6 +113,7 @@
       "id": 10,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_10",
         "modelPath": "assets/models/generator.glb",
         "collision": true
       },
@@ -137,6 +145,7 @@
       "id": 13,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_13",
         "modelPath": "assets/models/retro_lowpoly_bed.glb",
         "heightOffsetWorld": 0.2639999985694885,
         "collision": true
@@ -152,6 +161,7 @@
       "id": 15,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_15",
         "modelPath": "assets/models/metal_desk.glb",
         "heightOffsetWorld": 0.5,
         "collision": true
@@ -167,6 +177,7 @@
       "id": 16,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_16",
         "modelPath": "assets/models/low_poly_retro_pc.glb",
         "heightOffsetWorld": 1.0,
         "scale": 0.30000001192092896,
@@ -183,6 +194,7 @@
       "id": 17,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_17",
         "modelPath": "assets/models/office_chair.glb",
         "scale": 1.149999976158142,
         "collision": true
@@ -198,6 +210,7 @@
       "id": 18,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_18",
         "modelPath": "assets/models/corkevidence_board.glb",
         "heightOffsetWorld": 1.2000000476837158,
         "scale": 2.0
@@ -213,6 +226,7 @@
       "id": 19,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_19",
         "modelPath": "assets/models/storage_shelves.glb",
         "collision": true
       },
@@ -227,6 +241,7 @@
       "id": 20,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_20",
         "modelPath": "assets/models/bookshelf_short_lowpoly.glb",
         "scale": 1.2000000476837158
       },
@@ -241,6 +256,7 @@
       "id": 21,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_21",
         "modelPath": "assets/models/desk_lamp_low_poly.glb",
         "heightOffsetWorld": 0.9700000286102295,
         "scale": 1.5
@@ -256,6 +272,7 @@
       "id": 22,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_22",
         "modelPath": "assets/models/low_poly_sofa.glb",
         "heightOffsetWorld": 0.25,
         "scale": 1.5,
@@ -272,6 +289,7 @@
       "id": 23,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_23",
         "modelPath": "assets/models/lighting/pendant_lamp.glb",
         "heightOffsetWorld": 2.625,
         "scale": 1.5
@@ -287,6 +305,7 @@
       "id": 24,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_24",
         "modelPath": "assets/models/lighting/pendant_lamp.glb",
         "heightOffsetWorld": 2.625,
         "scale": 1.5
@@ -302,6 +321,7 @@
       "id": 25,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_25",
         "modelPath": "assets/models/furniture/carpet.glb",
         "heightOffsetWorld": 0.004999999888241291
       },
@@ -316,6 +336,7 @@
       "id": 26,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_26",
         "modelPath": "assets/models/lighting/industrial_light.glb",
         "rotationXDegrees": 180.0,
         "heightOffsetWorld": 3.390000104904175,
@@ -332,6 +353,7 @@
       "id": 27,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_27",
         "modelPath": "assets/models/lighting/industrial_light.glb",
         "rotationXDegrees": 180.0,
         "heightOffsetWorld": 3.390000104904175,
@@ -428,6 +450,7 @@
       "id": 31,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_31",
         "modelPath": "assets/models/lighting/pendant_lamp.glb",
         "heightOffsetWorld": 2.625,
         "scale": 2.0
@@ -443,6 +466,7 @@
       "id": 32,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_32",
         "modelPath": "assets/models/barrel.glb",
         "collision": true
       },
@@ -602,6 +626,7 @@
       "id": 38,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_38",
         "modelPath": "assets/models/environment/free_container_gameready.glb",
         "collision": true
       },
@@ -616,6 +641,7 @@
       "id": 39,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_39",
         "modelPath": "assets/models/environment/free_container_gameready.glb",
         "collision": true
       },
@@ -630,6 +656,7 @@
       "id": 40,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_40",
         "modelPath": "assets/models/environment/free_container_gameready.glb",
         "collision": true
       },
@@ -644,6 +671,7 @@
       "id": 41,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_41",
         "modelPath": "assets/models/environment/free_container_gameready.glb",
         "collision": true
       },
@@ -658,6 +686,7 @@
       "id": 42,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_42",
         "modelPath": "assets/models/environment/horizontal_fuel_tank.glb",
         "collision": true
       },
@@ -672,6 +701,7 @@
       "id": 43,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_43",
         "modelPath": "assets/models/environment/garbage_container_blue.glb",
         "scale": 1.5,
         "collision": true
@@ -687,6 +717,7 @@
       "id": 44,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_44",
         "modelPath": "assets/models/furniture/welding_and_assembly_table_lowpoly.glb",
         "scale": 1.149999976158142,
         "collision": true
@@ -702,6 +733,7 @@
       "id": 45,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_45",
         "modelPath": "assets/models/storage_shelves.glb",
         "collision": true
       },
@@ -716,6 +748,7 @@
       "id": 46,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_46",
         "modelPath": "assets/models/environment/container_on_wheels.glb",
         "scale": 2.0,
         "collision": true
@@ -731,6 +764,7 @@
       "id": 47,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_47",
         "modelPath": "assets/models/environment/tall_wooden_box_lowpoly.glb",
         "collision": true
       },
@@ -745,6 +779,7 @@
       "id": 48,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_48",
         "modelPath": "assets/models/environment/palletes.glb",
         "scale": 2.5,
         "collision": true
@@ -760,6 +795,7 @@
       "id": 49,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_49",
         "modelPath": "assets/models/environment/pallet_of_bricks.glb",
         "collision": true
       },
@@ -774,6 +810,7 @@
       "id": 50,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_50",
         "modelPath": "assets/models/storage_shelves.glb",
         "collision": true
       },
@@ -788,6 +825,7 @@
       "id": 51,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_51",
         "modelPath": "assets/models/environment/wooden_box.glb",
         "collision": true
       },
@@ -802,6 +840,7 @@
       "id": 52,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_52",
         "modelPath": "assets/models/environment/tall_wooden_box_lowpoly.glb",
         "collision": true
       },
@@ -816,6 +855,7 @@
       "id": 53,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_53",
         "modelPath": "assets/models/environment/wooden_box.glb",
         "collision": true
       },
@@ -830,6 +870,7 @@
       "id": 54,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_54",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationXDegrees": -90.0,
         "heightOffsetWorld": 1.5,
@@ -846,6 +887,7 @@
       "id": 55,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_55",
         "modelPath": "assets/models/lighting/light_fixture_ceiling_recessed.glb",
         "heightOffsetWorld": 3.0999999046325684,
         "scale": 1.5
@@ -861,6 +903,7 @@
       "id": 56,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_56",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationXDegrees": -90.0,
         "heightOffsetWorld": 1.5,
@@ -877,6 +920,7 @@
       "id": 57,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_57",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationXDegrees": -90.0,
         "heightOffsetWorld": 1.5,
@@ -893,6 +937,7 @@
       "id": 58,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_58",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationXDegrees": 90.0,
         "heightOffsetWorld": 1.5,
@@ -909,6 +954,7 @@
       "id": 59,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_59",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationXDegrees": 90.0,
         "heightOffsetWorld": 1.5,
@@ -925,6 +971,7 @@
       "id": 60,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_60",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationXDegrees": 90.0,
         "heightOffsetWorld": 1.5,
@@ -941,6 +988,7 @@
       "id": 61,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_61",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 4.949999809265137,
@@ -957,6 +1005,7 @@
       "id": 62,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_62",
         "modelPath": "assets/models/lighting/wall_lamp.glb",
         "rotationZDegrees": 180.0,
         "heightOffsetWorld": 2.0
@@ -972,6 +1021,7 @@
       "id": 63,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_63",
         "modelPath": "assets/models/lighting/wall_lamp.glb",
         "rotationZDegrees": 180.0,
         "heightOffsetWorld": 2.0
@@ -987,6 +1037,7 @@
       "id": 64,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_64",
         "modelPath": "assets/models/lighting/generic_work_light.glb",
         "collision": true
       },
@@ -1001,6 +1052,7 @@
       "id": 65,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_65",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1017,6 +1069,7 @@
       "id": 66,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_66",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1033,6 +1086,7 @@
       "id": 67,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_67",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1049,6 +1103,7 @@
       "id": 68,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_68",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1065,6 +1120,7 @@
       "id": 69,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_69",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1081,6 +1137,7 @@
       "id": 70,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_70",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1097,6 +1154,7 @@
       "id": 71,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_71",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1113,6 +1171,7 @@
       "id": 72,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_72",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1129,6 +1188,7 @@
       "id": 73,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_73",
         "modelPath": "assets/models/worn_metal_rack/worn_metal_rack_1k.gltf",
         "collision": true
       },
@@ -1143,6 +1203,7 @@
       "id": 74,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_74",
         "modelPath": "assets/models/lighting/fluorescent_light_horror.glb",
         "heightOffsetWorld": 3.700000047683716,
         "scale": 0.75
@@ -1158,6 +1219,7 @@
       "id": 75,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_75",
         "modelPath": "assets/models/lighting/fluorescent_light_horror.glb",
         "heightOffsetWorld": 3.700000047683716,
         "scale": 0.75
@@ -1173,6 +1235,7 @@
       "id": 76,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_76",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1189,6 +1252,7 @@
       "id": 77,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_77",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1205,6 +1269,7 @@
       "id": 78,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_78",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1221,6 +1286,7 @@
       "id": 79,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_79",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1237,6 +1303,7 @@
       "id": 80,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_80",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1253,6 +1320,7 @@
       "id": 81,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_81",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1269,6 +1337,7 @@
       "id": 82,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_82",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1285,6 +1354,7 @@
       "id": 83,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_83",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1301,6 +1371,7 @@
       "id": 84,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_84",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1317,6 +1388,7 @@
       "id": 85,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_85",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1333,6 +1405,7 @@
       "id": 86,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_86",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1349,6 +1422,7 @@
       "id": 87,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_87",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1365,6 +1439,7 @@
       "id": 88,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_88",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1381,6 +1456,7 @@
       "id": 89,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_89",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1397,6 +1473,7 @@
       "id": 90,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_90",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1413,6 +1490,7 @@
       "id": 91,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_91",
         "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
         "rotationZDegrees": 90.0,
         "heightOffsetWorld": 1.0,
@@ -1469,6 +1547,7 @@
       "id": 93,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_93",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1484,6 +1563,7 @@
       "id": 94,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_94",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1499,6 +1579,7 @@
       "id": 95,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_95",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1514,6 +1595,7 @@
       "id": 96,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_96",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1529,6 +1611,7 @@
       "id": 97,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_97",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1544,6 +1627,7 @@
       "id": 98,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_98",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1559,6 +1643,7 @@
       "id": 99,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_99",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1574,6 +1659,7 @@
       "id": 100,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_100",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1589,6 +1675,7 @@
       "id": 101,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_101",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 2.0,
         "scale": 0.25
@@ -1604,6 +1691,7 @@
       "id": 102,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_102",
         "modelPath": "assets/models/furniture/psx_painting.glb",
         "heightOffsetWorld": 1.2000000476837158
       },
@@ -1618,6 +1706,7 @@
       "id": 103,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_103",
         "modelPath": "assets/models/lighting/simple_spotlight.glb",
         "heightOffsetWorld": 3.740000009536743
       },
@@ -1632,6 +1721,7 @@
       "id": 104,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_104",
         "modelPath": "assets/models/furniture/horse_painting.glb",
         "rotationXDegrees": 180.0,
         "heightOffsetWorld": 1.75,
@@ -1648,6 +1738,7 @@
       "id": 105,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_105",
         "modelPath": "assets/models/furniture/bunk_bed.glb",
         "scale": 1.25
       },
@@ -1662,6 +1753,7 @@
       "id": 106,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_106",
         "modelPath": "assets/models/furniture/painting_lowpoly.glb",
         "heightOffsetWorld": 1.0
       },
@@ -1676,6 +1768,7 @@
       "id": 107,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_107",
         "modelPath": "assets/models/furniture/the_matrix_chair.glb",
         "heightOffsetWorld": 0.800000011920929,
         "scale": 1.649999976158142,
@@ -1692,6 +1785,7 @@
       "id": 108,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_108",
         "modelPath": "assets/models/metal_desk.glb",
         "heightOffsetWorld": 0.5,
         "collision": true
@@ -1707,6 +1801,7 @@
       "id": 109,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_109",
         "modelPath": "assets/models/furniture/victorian_bookshelf.glb",
         "scale": 1.100000023841858,
         "collision": true
@@ -1722,6 +1817,7 @@
       "id": 110,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_110",
         "modelPath": "assets/models/furniture/vintage_wooden_drawer_01_4k.glb",
         "scale": 1.25,
         "collision": true
@@ -1737,6 +1833,7 @@
       "id": 111,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_111",
         "modelPath": "assets/models/furniture/side_table_dresser.glb",
         "scale": 1.2999999523162842,
         "collision": true
@@ -1752,6 +1849,7 @@
       "id": 112,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_112",
         "modelPath": "assets/models/furniture/coat_hanger.glb",
         "scale": 1.25,
         "collision": true
@@ -1767,6 +1865,7 @@
       "id": 113,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_113",
         "modelPath": "assets/models/furniture/antique_wooden_wardrobe.glb",
         "heightOffsetWorld": 1.100000023841858,
         "scale": 1.100000023841858,
@@ -1783,6 +1882,7 @@
       "id": 114,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_114",
         "modelPath": "assets/models/furniture/carpet.glb",
         "heightOffsetWorld": 0.0010000000474974513,
         "scale": 0.75
@@ -1798,6 +1898,7 @@
       "id": 115,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_115",
         "modelPath": "assets/models/furniture/horse_painting.glb",
         "heightOffsetWorld": 1.0,
         "scale": 3.5
@@ -1813,6 +1914,7 @@
       "id": 116,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_116",
         "modelPath": "assets/models/furniture/side_table_dresser.glb",
         "scale": 1.2999999523162842,
         "collision": true
@@ -1828,6 +1930,7 @@
       "id": 117,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_117",
         "modelPath": "assets/models/lighting/antique_lamp.glb",
         "scale": 1.149999976158142,
         "collision": true,
@@ -1844,6 +1947,7 @@
       "id": 118,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "office_lamp_2",
         "modelPath": "assets/models/lighting/lamp_02_lowpoly.glb",
         "heightOffsetWorld": 1.4049999713897705,
         "scale": 0.800000011920929,
@@ -1860,6 +1964,7 @@
       "id": 119,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "office_lamp_1",
         "modelPath": "assets/models/lighting/lamp_02_lowpoly.glb",
         "heightOffsetWorld": 1.4049999713897705,
         "scale": 0.800000011920929,
@@ -1876,9 +1981,11 @@
       "id": 120,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "office_lamp_3",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 0.6000000238418579,
-        "scale": 0.25
+        "scale": 0.25,
+        "castsShadow": false
       },
       "position": [
         -72.0,
@@ -1891,9 +1998,11 @@
       "id": 121,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_121",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 0.6000000238418579,
-        "scale": 0.25
+        "scale": 0.25,
+        "castsShadow": false
       },
       "position": [
         -104.0,
@@ -1906,9 +2015,11 @@
       "id": 122,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_122",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 0.6000000238418579,
-        "scale": 0.25
+        "scale": 0.25,
+        "castsShadow": false
       },
       "position": [
         -56.0,
@@ -1921,6 +2032,7 @@
       "id": 124,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "office_lamp_4",
         "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
         "heightOffsetWorld": 0.6000000238418579,
         "scale": 0.25,
@@ -1937,6 +2049,7 @@
       "id": 125,
       "kind": "static_model",
       "staticModel": {
+        "instanceId": "prop_125",
         "modelPath": "assets/models/desk_lamp_low_poly.glb",
         "heightOffsetWorld": 0.9700000286102295,
         "scale": 1.5,
@@ -3822,6 +3935,24 @@
           }
         }
       }
+    },
+    {
+      "id": 58,
+      "position": [
+        -116.14620208740234,
+        -4.100623607635498,
+        -85.75123596191406
+      ],
+      "radius": 3.0,
+      "sourceRadius": 0.5,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "castsShadow": false
     }
   ],
   "staticSpotLights": [
@@ -5302,7 +5433,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -5342,14 +5473,12 @@
       "b": 20,
       "a": 255
     },
-    "startDistanceWorld": 2.5,
+    "startDistanceWorld": 4.0,
     "density": 0.02500000037252903,
     "maxOpacity": 0.3499999940395355,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.0,
-    "mode": "distance",
     "endDistanceWorld": 15.0,
-    "falloffExponent": 0.5,
     "brightness": 0.75
   },
   "audio": {
@@ -5403,7 +5532,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "38da45f929ba1cb1",
+    "sourceHash": "53a76067106ae680",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -5411,19 +5540,19 @@
         0.0
       ],
       "rgbMax": [
-        2.203125,
-        1.4501953125,
-        1.3837890625
+        2.2421875,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 177
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 1379
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "38da45f929ba1cb1",
+      "sourceHash": "53a76067106ae680",
       "count": 2667,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -5436,24 +5565,31 @@
           0.0
         ],
         "rgbMax": [
-          2.204270601272583,
-          1.935850739479065,
-          1.8489267826080322
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 16002,
-        "rgbChannelsAboveOne": 35
+        "rgbChannelsAboveOne": 32
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "38da45f929ba1cb1",
+      "sourceHash": "53a76067106ae680",
       "modelCount": 47,
       "objectCount": 110,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",

@@ -23,6 +23,7 @@
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
+#include "sector_demo/SectorUseInteraction.h"
 
 #include <raylib.h>
 
@@ -100,7 +101,8 @@ public:
             engine::World* runtimeObjectWorld = nullptr,
             SectorRuntimeDoorLightingContext doorLighting = {},
             const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{},
-            bool staticCaptureOnly = false);
+            bool staticCaptureOnly = false,
+            SectorUseHighlight useHighlight = {});
     bool CaptureReflectionProbe(
             engine::AssetManager& assets,
             Vector3 capturePosition,

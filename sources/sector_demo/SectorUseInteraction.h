@@ -30,6 +30,11 @@ struct SectorUseTarget {
     float distance = 0.0f;
 };
 
+struct SectorUseHighlight {
+    engine::Entity entity = engine::NullEntity();
+    float strength = 0.0f;
+};
+
 SectorUseTarget FindSectorUseTarget(
         engine::World& world,
         const engine::AssetManager* assets,
@@ -41,6 +46,10 @@ SectorUseTarget FindSectorUseTarget(
 std::string_view SectorUseTargetTitle(
         engine::World& world,
         const SectorUseTarget& target);
+
+SectorUseHighlight BuildSectorUseHighlight(
+        const SectorUseTarget& target,
+        float targetElapsedSeconds);
 
 void DrawSectorUsePrompt(
         Rectangle viewport,

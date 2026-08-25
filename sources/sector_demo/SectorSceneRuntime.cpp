@@ -974,7 +974,8 @@ void SectorSceneRuntime::RenderShadowMaps(engine::EngineContext& context)
 void SectorSceneRuntime::RenderScene(
         engine::EngineContext& context,
         const SectorTopologyMap& map,
-        bool useBakedAmbientOcclusion)
+        bool useBakedAmbientOcclusion,
+        SectorUseHighlight useHighlight)
 {
     renderer.DrawScene(
             context.assets,
@@ -984,7 +985,9 @@ void SectorSceneRuntime::RenderScene(
                     &runtimeObjects.objectLightProbes,
                     &map,
                     runtimeObjects.staticLightingRevision},
-            map.fogSettings);
+            map.fogSettings,
+            false,
+            useHighlight);
     BeginMode3D(renderer.RenderCamera());
     impactParticles.Draw(
             renderer.RenderCamera(),

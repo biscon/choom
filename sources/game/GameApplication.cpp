@@ -426,7 +426,11 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
 void GameApplication::Render3DScene(engine::EngineContext& context)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameScene.RenderScene(context, gameSession.Map());
+        gameScene.RenderScene(
+                context,
+                gameSession.Map(),
+                true,
+                gameSession.UseHighlight());
     } else {
         editor.RenderPreview3DScene(context);
     }

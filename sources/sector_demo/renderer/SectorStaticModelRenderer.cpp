@@ -113,6 +113,7 @@ uniform float roughnessFactor;
 uniform float normalScale;
 uniform float occlusionStrength;
 uniform float modelOpacity;
+uniform float interactionHighlightStrength;
 uniform int hasBaseColorTexture;
 uniform int hasMetallicTexture;
 uniform int hasNormalTexture;
@@ -622,6 +623,13 @@ void main()
     // only the unavoidable finite RGBA16F storage boundary.
     linearColor = max(linearColor, vec3(0.0));
     if (pbrDiagnosticMode == 0) {
+        // Treat the prop's own albedo as a small emissive-like lift. This
+        // preserves material hue and saturation instead of washing the model
+        // toward a neutral selection color.
+        linearColor += albedo * clamp(
+                interactionHighlightStrength,
+                0.0,
+                0.14);
         linearColor *= outputBrightnessMultiplier;
         linearColor = ApplySectorFog(
                 linearColor,
@@ -996,6 +1004,8 @@ bool SectorStaticModelRenderer::Load()
     normalScaleLoc = GetShaderLocation(shader, "normalScale");
     occlusionStrengthLoc = GetShaderLocation(shader, "occlusionStrength");
     modelOpacityLoc = GetShaderLocation(shader, "modelOpacity");
+    interactionHighlightStrengthLoc = GetShaderLocation(
+            shader, "interactionHighlightStrength");
     hasBaseColorTextureLoc = GetShaderLocation(shader, "hasBaseColorTexture");
     hasMetallicTextureLoc = GetShaderLocation(shader, "hasMetallicTexture");
     hasNormalTextureLoc = GetShaderLocation(shader, "hasNormalTexture");
@@ -1121,6 +1131,7 @@ void SectorStaticModelRenderer::Shutdown()
     normalScaleLoc = -1;
     occlusionStrengthLoc = -1;
     modelOpacityLoc = -1;
+    interactionHighlightStrengthLoc = -1;
     hasBaseColorTextureLoc = -1;
     hasMetallicTextureLoc = -1;
     hasNormalTextureLoc = -1;
@@ -1406,13 +1417,24 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         const engine::AnimatedModelInstance* animatedInstance,
         const std::vector<Matrix>* meshNodeMatrices,
         float emissiveScale,
-        float opacity)
+        float opacity,
+        float interactionHighlightStrength)
 {
     const int noStaticLightmap = 0;
     const int noBakedAo = 0;
     opacity = std::isfinite(opacity) ? std::clamp(opacity, 0.0f, 1.0f) : 1.0f;
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opacity, SHADER_UNIFORM_FLOAT);
+    }
+    interactionHighlightStrength = std::isfinite(interactionHighlightStrength)
+            ? std::clamp(interactionHighlightStrength, 0.0f, 0.14f)
+            : 0.0f;
+    if (interactionHighlightStrengthLoc >= 0) {
+        SetShaderValue(
+                shader,
+                interactionHighlightStrengthLoc,
+                &interactionHighlightStrength,
+                SHADER_UNIFORM_FLOAT);
     }
     if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
     if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
@@ -1592,7 +1614,8 @@ void SectorStaticModelRenderer::Draw(
         const TextureCubemap* environment,
         bool useBakedAmbientOcclusion,
         std::string& renderDebugText,
-        bool staticCaptureOnly)
+        bool staticCaptureOnly,
+        SectorUseHighlight useHighlight)
 {
     if (!shaderLoaded || shader.id == 0) {
         AppendStaticModelDebugText(renderDebugText, 0, 0, 0, 0);
@@ -1601,6 +1624,14 @@ void SectorStaticModelRenderer::Draw(
     const float opaque = 1.0f;
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opaque, SHADER_UNIFORM_FLOAT);
+    }
+    const float noInteractionHighlight = 0.0f;
+    if (interactionHighlightStrengthLoc >= 0) {
+        SetShaderValue(
+                shader,
+                interactionHighlightStrengthLoc,
+                &noInteractionHighlight,
+                SHADER_UNIFORM_FLOAT);
     }
 
     SectorDynamicLightShaderLocations dynamicLocations;
@@ -1946,7 +1977,8 @@ void SectorStaticModelRenderer::Draw(
              &portalCulled,
              &skipped,
              staticCaptureOnly,
-             &runtimeObjectWorld](
+             &runtimeObjectWorld,
+             useHighlight](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
@@ -2025,7 +2057,10 @@ void SectorStaticModelRenderer::Draw(
                         &instance,
                         &instance.meshNodeMatrices,
                         dynamicModel.emissiveScale,
-                        dynamicModel.opacity);
+                        dynamicModel.opacity,
+                        entity == useHighlight.entity
+                                ? useHighlight.strength
+                                : 0.0f);
                 if (fading) {
                     rlDisableColorBlend();
                     rlEnableDepthMask();
@@ -2168,6 +2203,14 @@ void SectorStaticModelRenderer::DrawViewmodel(
     const float opaque = 1.0f;
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opaque, SHADER_UNIFORM_FLOAT);
+    }
+    const float noInteractionHighlight = 0.0f;
+    if (interactionHighlightStrengthLoc >= 0) {
+        SetShaderValue(
+                shader,
+                interactionHighlightStrengthLoc,
+                &noInteractionHighlight,
+                SHADER_UNIFORM_FLOAT);
     }
 
     SectorDynamicLightShaderLocations dynamicLocations;

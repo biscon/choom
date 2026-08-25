@@ -87,6 +87,10 @@ public:
     }
     std::string TakeFailureError();
     const SectorTopologyMap& Map() const { return topologyMap; }
+    SectorUseHighlight UseHighlight() const
+    {
+        return BuildSectorUseHighlight(useTarget, useTargetElapsedSeconds);
+    }
     const std::string& LevelName() const { return levelName; }
     const std::string& LevelPath() const { return levelPath; }
     engine::ScriptRuntime* ConsoleScriptRuntime()
@@ -143,6 +147,7 @@ private:
     PlayerBreathingAudioRuntime breathingAudio;
     std::string failureError;
     SectorUseTarget useTarget;
+    float useTargetElapsedSeconds = 0.0f;
     std::array<char, 128> usePromptTitle{};
 };
 

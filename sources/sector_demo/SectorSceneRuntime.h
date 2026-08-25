@@ -67,7 +67,8 @@ public:
     void RenderScene(
             engine::EngineContext& context,
             const SectorTopologyMap& map,
-            bool useBakedAmbientOcclusion = true);
+            bool useBakedAmbientOcclusion = true,
+            SectorUseHighlight useHighlight = {});
     void ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,

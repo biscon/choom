@@ -4,6 +4,7 @@
 #include "engine/assets/ModelAssets.h"
 #include "engine/render/HdrEffectPolicy.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/SectorUseInteraction.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorStaticSpecularLighting.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
@@ -306,7 +307,8 @@ public:
             const TextureCubemap* environment,
             bool useBakedAmbientOcclusion,
             std::string& renderDebugText,
-            bool staticCaptureOnly = false);
+            bool staticCaptureOnly = false,
+            SectorUseHighlight useHighlight = {});
 
     void DrawViewmodel(
             const engine::ModelAsset& asset,
@@ -389,7 +391,8 @@ private:
             const engine::AnimatedModelInstance* animatedInstance = nullptr,
             const std::vector<Matrix>* meshNodeMatrices = nullptr,
             float emissiveScale = 1.0f,
-            float opacity = 1.0f);
+            float opacity = 1.0f,
+            float interactionHighlightStrength = 0.0f);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,
             int lightmapModelIndex) const;
@@ -405,6 +408,7 @@ private:
     int normalScaleLoc = -1;
     int occlusionStrengthLoc = -1;
     int modelOpacityLoc = -1;
+    int interactionHighlightStrengthLoc = -1;
     int hasBaseColorTextureLoc = -1;
     int hasMetallicTextureLoc = -1;
     int hasNormalTextureLoc = -1;

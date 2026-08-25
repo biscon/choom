@@ -24,6 +24,10 @@ namespace {
 
 constexpr float UseFacingDotThreshold = 0.65f;
 constexpr float UseOcclusionTolerance = 0.05f;
+constexpr float UseHighlightPeriodSeconds = 2.4f;
+constexpr float UseHighlightAttackSeconds = 0.18f;
+constexpr float UseHighlightMinimumStrengthRatio = 0.4f;
+constexpr float UseHighlightMaximumStrength = 0.14f;
 
 bool Finite(Vector3 value)
 {
@@ -220,6 +224,33 @@ std::string_view SectorUseTargetTitle(
         return world.Get<SectorDoorInteraction>(target.entity).useTitle;
     }
     return {};
+}
+
+SectorUseHighlight BuildSectorUseHighlight(
+        const SectorUseTarget& target,
+        float targetElapsedSeconds)
+{
+    if (target.kind != SectorUseTargetKind::DynamicProp
+            || engine::IsNull(target.entity)
+            || !std::isfinite(targetElapsedSeconds)
+            || targetElapsedSeconds < 0.0f) {
+        return {};
+    }
+    constexpr float Tau = 6.28318530717958647692f;
+    const float phase = std::fmod(
+            targetElapsedSeconds,
+            UseHighlightPeriodSeconds) / UseHighlightPeriodSeconds;
+    const float pulse = 0.5f - 0.5f * std::cos(Tau * phase);
+    const float attack = std::clamp(
+            targetElapsedSeconds / UseHighlightAttackSeconds,
+            0.0f,
+            1.0f);
+    return SectorUseHighlight{
+            target.entity,
+            attack * UseHighlightMaximumStrength
+                    * (UseHighlightMinimumStrengthRatio
+                            + (1.0f - UseHighlightMinimumStrengthRatio)
+                                    * pulse)};
 }
 
 void DrawSectorUsePrompt(
