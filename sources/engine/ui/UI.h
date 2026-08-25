@@ -299,6 +299,20 @@ UITextInputResult TextInput(
         size_t maxCharacters,
         UITextJustify justify = UITextJustify::Left);
 
+// Multiline UTF-8 editor. Enter inserts a newline; Escape releases focus.
+UITextInputResult TextArea(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        AssetManager& assets,
+        const char* id,
+        Rectangle bounds,
+        FontHandle font,
+        char* buffer,
+        size_t bufferCapacity,
+        size_t minCharacters,
+        size_t maxCharacters);
+
 bool Button(
         UIContext& ui,
         const UIConfig& config,

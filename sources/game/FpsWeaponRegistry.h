@@ -307,6 +307,11 @@ struct FpsGraphicsSettings {
     int horizontalFovDegrees = DefaultFpsHorizontalFovDegrees;
 };
 
+struct PlayerInventoryApplicationSettings {
+    float maxCarryWeightKg = 30.0f;
+    int maxSlots = 24;
+};
+
 struct FpsApplicationSettings {
     int version = 1;
     std::string firstLevel = "hub";
@@ -314,6 +319,7 @@ struct FpsApplicationSettings {
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
     PlayerStaminaApplicationSettings playerStamina;
+    PlayerInventoryApplicationSettings playerInventory;
     FpsGraphicsSettings graphics;
     engine::HdrBloomSettings hdrBloom;
     std::vector<FpsApplicationSettingsEntry> weapons;

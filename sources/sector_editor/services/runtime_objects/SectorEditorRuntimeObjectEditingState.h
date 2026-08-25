@@ -15,6 +15,7 @@ enum class ModelPickerTarget {
     StaticModel,
     DynamicModel,
     NpcDefinition,
+    ItemDefinition,
     WeaponArms,
     WeaponAttachment
 };

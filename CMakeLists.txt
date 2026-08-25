@@ -665,6 +665,7 @@ if(BUILD_TESTING)
 
     add_executable(weapon_editor_service_tests
             tests/WeaponEditorServiceTests.cpp
+            sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/FpsWeaponAudio.cpp
             sources/game/PlayerStamina.cpp
@@ -683,6 +684,22 @@ if(BUILD_TESTING)
             ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(weapon_editor_service_tests PRIVATE raylib)
     add_test(NAME weapon_editor_service COMMAND weapon_editor_service_tests)
+
+    add_executable(item_definition_tests
+            tests/ItemDefinitionTests.cpp
+            sources/game/items/ItemDefinitions.cpp
+            sources/game/items/ItemIconLayout.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
+            sources/sector_editor/items/SectorEditorItemEditorService.cpp
+            sources/sector_editor/items/SectorItemReferenceScanner.cpp
+    )
+    target_include_directories(item_definition_tests PRIVATE sources)
+    target_compile_definitions(item_definition_tests PRIVATE
+            ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(item_definition_tests PRIVATE raylib)
+    add_test(NAME item_definition COMMAND item_definition_tests)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp

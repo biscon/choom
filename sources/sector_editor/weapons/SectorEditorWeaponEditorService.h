@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_editor/weapons/SectorEditorWeaponEditorState.h"
+#include "game/items/ItemDefinitions.h"
 
 #include <filesystem>
 #include <string>
@@ -16,6 +17,7 @@ public:
             SectorEditorWeaponEditorState& state,
             SectorEditorWeaponEditorSessionState& session,
             FpsWeaponRegistry& registry,
+            const ItemRegistry& itemRegistry,
             FpsApplicationSettings& applicationSettings,
             std::string& statusText,
             std::filesystem::path registryPath,
@@ -68,6 +70,7 @@ private:
     SectorEditorWeaponEditorState& state_;
     SectorEditorWeaponEditorSessionState& session_;
     FpsWeaponRegistry& registry_;
+    const ItemRegistry& itemRegistry_;
     FpsApplicationSettings& applicationSettings_;
     std::string& statusText_;
     std::filesystem::path registryPath_;

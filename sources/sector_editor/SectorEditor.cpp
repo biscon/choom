@@ -7,6 +7,7 @@
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
+#include "sector_editor/items/SectorEditorItemEditorPanel.h"
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorPanel.h"
 #include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
@@ -304,6 +305,7 @@ bool SectorEditor::Init(engine::EngineContext& context)
         return false;
     }
     RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
+    itemRegistryPath = ASSETS_PATH "config/items.json";
     applicationSettingsPath = ASSETS_PATH "config/application_settings.json";
     RequestPlayerAudioAssets(
             context.assets,
@@ -378,6 +380,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     BuildNpcEditorService().Shutdown(assets);
     audioPicker.Close(weaponEditorState.audioPicker);
     BuildWeaponEditorService().Shutdown();
+    BuildItemEditorService().Shutdown();
     BuildMaterialRegistryEditorService().Shutdown(assets);
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
@@ -403,6 +406,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     npcEditorSessionState = SectorEditorNpcEditorSessionState{};
     weaponEditorState = SectorEditorWeaponEditorState{};
     weaponEditorSessionState = SectorEditorWeaponEditorSessionState{};
+    itemEditorState = SectorEditorItemEditorState{};
+    itemEditorSessionState = SectorEditorItemEditorSessionState{};
     materialRegistryEditorState = SectorEditorMaterialRegistryEditorState{};
     soundEditorState = SectorEditorSoundEditorState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
@@ -428,6 +433,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     playerAudio = PlayerAudioRuntime{};
     canvasRect = {};
     statusText.clear();
+    gameSessionExists = false;
     engineContext = nullptr;
     initialized = false;
 }
@@ -497,6 +503,7 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || state.decalTintModal.open
             || state.previewSettingsModal.open
             || npcEditorState.open
+            || itemEditorState.open
             || weaponEditorState.open
             || materialRegistryEditorState.open
             || uiState.mainMenu.openRootIndex >= 0
@@ -637,6 +644,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 || state.footstepPicker.open
                 || runtimeObjectEditingState.spritePicker.open
                 || runtimeObjectEditingState.staticModelPicker.open
+                || itemEditorState.open
                 || weaponEditorState.open
                 || uiState.mainMenu.openRootIndex >= 0
                 || HasDocumentModalOpen();
@@ -721,6 +729,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
             || state.footstepPicker.open
             || soundEditorState.open
             || npcEditorState.open
+            || itemEditorState.open
             || weaponEditorState.open
             || uiState.mainMenu.openRootIndex >= 0
             || runtimeObjectEditingState.spritePicker.open
@@ -807,6 +816,12 @@ void SectorEditor::RenderUI(
         }
         if (state.lightmapBakeSetupModal.open) {
             DrawLightmapBakeSetupModal(ui, config, input, assets, font);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
+        if (itemEditorState.open) {
+            DrawItemEditor(ui, config, input, assets, font, smallFont);
             uiState.keyboardCaptured = true;
             engine::EndUI(ui, config, input, assets);
             return;
@@ -910,6 +925,12 @@ void SectorEditor::RenderUI(
     }
     if (state.lightmapBakeSetupModal.open) {
         DrawLightmapBakeSetupModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (itemEditorState.open) {
+        DrawItemEditor(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -1029,6 +1050,7 @@ void SectorEditor::RenderUI(
             || state.footstepPicker.open
             || soundEditorState.open
             || npcEditorState.open
+            || itemEditorState.open
             || weaponEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
@@ -1339,6 +1361,7 @@ bool SectorEditor::IsMainMenuInteractionEnabled() const
             && !materialRegistryEditorState.open
             && !soundEditorState.open
             && !npcEditorState.open
+            && !itemEditorState.open
             && !weaponEditorState.open
             && !state.texturePicker.open
             && !state.soundPicker.open
@@ -1393,6 +1416,9 @@ void SectorEditor::HandleMainMenuCommand(
             break;
         case SectorEditorMainMenuCommand::OpenWeaponEditor:
             OpenWeaponEditor(state.mode == SectorEditorMode::Preview3D);
+            break;
+        case SectorEditorMainMenuCommand::OpenItemEditor:
+            BuildItemEditorService().Open();
             break;
         case SectorEditorMainMenuCommand::ToggleShowGrid:
             state.showGrid = !state.showGrid;
@@ -2424,6 +2450,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             || state.soundPicker.open
             || state.decalTintModal.open
             || state.previewSettingsModal.open
+            || itemEditorState.open
             || weaponEditorState.open;
     fpsPlayer.HandleWeaponSlotInput(
             input,
@@ -6224,6 +6251,34 @@ void SectorEditor::DrawWeaponEditor(
     }
 }
 
+void SectorEditor::DrawItemEditor(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    SectorEditorItemEditorService editor = BuildItemEditorService();
+    SectorEditorStaticModelPickerService modelPicker{
+            runtimeObjectEditingState.staticModelPicker,
+            statusText};
+    const SectorEditorItemEditorPanelResult result =
+            DrawSectorEditorItemEditorPanel(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    smallFont,
+                    editor,
+                    modelPicker);
+    if (result.saved) {
+        RebuildItemModelAssets(assets, itemRegistry, itemModelAssets);
+        InvalidateTopologyRenderCache();
+    }
+}
+
 void SectorEditor::DrawMaterialRegistryEditor(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -7551,10 +7606,24 @@ SectorEditorWeaponEditorService SectorEditor::BuildWeaponEditorService()
             weaponEditorState,
             weaponEditorSessionState,
             weaponRegistry,
+            itemRegistry,
             applicationSettings,
             statusText,
             weaponRegistryPath,
             applicationSettingsPath};
+}
+
+SectorEditorItemEditorService SectorEditor::BuildItemEditorService()
+{
+    return SectorEditorItemEditorService{
+            itemEditorState,
+            itemEditorSessionState,
+            itemRegistry,
+            weaponRegistry,
+            gameSessionExists,
+            statusText,
+            itemRegistryPath,
+            std::filesystem::path(ASSETS_PATH) / "levels"};
 }
 
 SectorEditorMaterialRegistryEditorService SectorEditor::BuildMaterialRegistryEditorService()

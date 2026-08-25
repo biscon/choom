@@ -61,6 +61,18 @@ bool GameApplication::Init(
                 : weaponError;
         return false;
     }
+    std::string itemError;
+    if (!LoadItemRegistry(
+                ASSETS_PATH "config/items.json",
+                weaponRegistry,
+                itemRegistry,
+                itemError)) {
+        menuStatus = itemError.empty()
+                ? "Item registry initialization failed"
+                : itemError;
+        return false;
+    }
+    RebuildItemModelAssets(context.assets, itemRegistry, itemModelAssets);
     RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
     RequestPlayerAudioAssets(
             context.assets,
@@ -95,6 +107,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
         gameScene.Shutdown(context);
     }
     editor.Shutdown(context);
+    ShutdownItemModelAssets(context.assets, itemModelAssets);
     if (debugConsole.initialized) {
         engine::FlushPendingDebugConsoleLogs(debugConsole);
         engine::SetDebugConsoleLogCaptureEnabled(false);
@@ -105,6 +118,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     playerAudio = PlayerAudioRuntime{};
     persistentScripts = engine::PersistentScriptStore{};
     weaponRegistry = FpsWeaponRegistry{};
+    itemRegistry = ItemRegistry{};
     materialRegistry = SectorMaterialRegistry{};
     menuStatus.clear();
     pendingMenuAction.reset();
@@ -204,6 +218,7 @@ void GameApplication::RenderInteractiveUI(
 {
     if (gameSession.IsLoadOverlayVisible()) return;
     if (flow.screen == ApplicationScreen::Editor) {
+        editor.SetGameSessionExists(gameSession.IsRunning());
         editor.RenderUI(
                 contentUi,
                 config,
@@ -345,6 +360,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         return;
     }
 
+    editor.SetGameSessionExists(gameSession.IsRunning());
     editor.Update(context, dt);
     if (editor.IsPreview3DActive()) {
         return;

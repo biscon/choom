@@ -6,6 +6,8 @@
 #include "engine/scripting/ScriptData.h"
 #include "game/ApplicationFlow.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/items/ItemAssets.h"
+#include "game/items/ItemDefinitions.h"
 #include "game/GameMainMenu.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorGameSession.h"
@@ -25,7 +27,12 @@ enum class ApplicationContentKind {
 
 class GameApplication {
 public:
-    GameApplication() : editor(applicationSettings, materialRegistry) {}
+    GameApplication()
+        : editor(
+                applicationSettings,
+                materialRegistry,
+                itemRegistry,
+                itemModelAssets) {}
 
     bool Init(
             engine::EngineContext& context,
@@ -99,6 +106,8 @@ private:
     ApplicationFlowState flow;
     FpsApplicationSettings applicationSettings;
     SectorMaterialRegistry materialRegistry;
+    ItemRegistry itemRegistry;
+    ItemModelAssetState itemModelAssets;
     SectorEditor editor;
     SectorGameSession gameSession;
     SectorSceneRuntime gameScene;

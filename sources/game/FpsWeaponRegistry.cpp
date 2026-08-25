@@ -1202,6 +1202,37 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             }
             parsed.consoleEnabled = consoleEnabled->get<bool>();
         }
+        const auto playerInventory = root.find("playerInventory");
+        if (playerInventory != root.end()) {
+            if (!playerInventory->is_object()) {
+                Fail("application settings.playerInventory must be an object");
+            }
+            const auto maxCarryWeightKg = playerInventory->find(
+                    "maxCarryWeightKg");
+            if (maxCarryWeightKg != playerInventory->end()) {
+                if (!maxCarryWeightKg->is_number()) {
+                    Fail("application settings.playerInventory.maxCarryWeightKg must be a number");
+                }
+                const double value = maxCarryWeightKg->get<double>();
+                if (!std::isfinite(value) || value <= 0.0
+                        || value > std::numeric_limits<float>::max()) {
+                    Fail("application settings.playerInventory.maxCarryWeightKg must be finite and positive");
+                }
+                parsed.playerInventory.maxCarryWeightKg =
+                        static_cast<float>(value);
+            }
+            const auto maxSlots = playerInventory->find("maxSlots");
+            if (maxSlots != playerInventory->end()) {
+                if (!maxSlots->is_number_integer()) {
+                    Fail("application settings.playerInventory.maxSlots must be an integer");
+                }
+                parsed.playerInventory.maxSlots = maxSlots->get<int>();
+                if (parsed.playerInventory.maxSlots < 1
+                        || parsed.playerInventory.maxSlots > 1024) {
+                    Fail("application settings.playerInventory.maxSlots must be between 1 and 1024");
+                }
+            }
+        }
         const auto graphics = root.find("graphics");
         if (graphics != root.end()) {
             if (!graphics->is_object()) {
@@ -1704,6 +1735,16 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings landing footstep volume multiplier must be non-negative");
         return false;
     }
+    if (!std::isfinite(settings.playerInventory.maxCarryWeightKg)
+            || settings.playerInventory.maxCarryWeightKg <= 0.0f) {
+        SetError(error, "application settings playerInventory.maxCarryWeightKg must be finite and positive");
+        return false;
+    }
+    if (settings.playerInventory.maxSlots < 1
+            || settings.playerInventory.maxSlots > 1024) {
+        SetError(error, "application settings playerInventory.maxSlots must be between 1 and 1024");
+        return false;
+    }
     const std::string staminaError = PlayerStaminaSettingsError(
             settings.playerStamina);
     if (!staminaError.empty()) {
@@ -1753,6 +1794,9 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},
             {"horizontalFovDegrees", graphics.horizontalFovDegrees}};
+    root["playerInventory"] = {
+            {"maxCarryWeightKg", settings.playerInventory.maxCarryWeightKg},
+            {"maxSlots", settings.playerInventory.maxSlots}};
     const engine::HdrBloomSettings hdrBloom =
             engine::NormalizeHdrBloomSettings(settings.hdrBloom);
     root["hdrBloom"] = {

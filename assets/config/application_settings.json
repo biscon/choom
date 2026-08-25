@@ -2,6 +2,10 @@
   "version": 1,
   "firstLevel": "hub",
   "consoleEnabled": true,
+  "playerInventory": {
+    "maxCarryWeightKg": 30.0,
+    "maxSlots": 24
+  },
   "footsteps": {
     "defaultSet": "Tile_Mono",
     "volume": 0.6499999761581421,

@@ -16,6 +16,9 @@ const char* PickerTitle(ModelPickerTarget target)
     if (target == ModelPickerTarget::NpcDefinition) {
         return "Choose NPC Character Model";
     }
+    if (target == ModelPickerTarget::ItemDefinition) {
+        return "Choose Item Model";
+    }
     if (target == ModelPickerTarget::WeaponArms) {
         return "Choose Animated Arms Model";
     }

@@ -7,6 +7,7 @@
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
+#include "sector_editor/items/SectorEditorItemEditorPanel.h"
 #include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
 #include "sector_demo/SectorLightmap.h"
 
@@ -702,6 +703,24 @@ void TestWeaponEditorLayouts()
     }
 }
 
+void TestItemEditorLayouts()
+{
+    const game::SectorEditorItemEditorLayout layout =
+            game::BuildSectorEditorItemEditorLayoutForViewport(1920.0f, 1080.0f);
+    Check(layout.panel.width > 0.0f && layout.panel.height > 0.0f,
+          "item editor panel has positive dimensions");
+    Check(layout.listBounds.x + layout.listBounds.width
+                    < layout.formBounds.x,
+          "item editor keeps list and detail panes separate");
+    Check(layout.saveButton.x + layout.saveButton.width
+                    < layout.cancelButton.x + layout.cancelButton.width,
+          "item editor footer actions are ordered");
+    const game::SectorEditorItemEditorLayout compact =
+            game::BuildSectorEditorItemEditorLayoutForViewport(1000.0f, 720.0f);
+    Check(compact.panel.x >= 16.0f && compact.panel.y >= 16.0f,
+          "item editor respects compact viewport margins");
+}
+
 void TestNpcEditorModalSplitPaneLayout()
 {
     const game::SectorEditorNpcEditorModalLayout layout =
@@ -902,6 +921,7 @@ int main()
     TestNpcEditorModalSplitPaneLayout();
     TestSoundEditorSplitPaneLayout();
     TestWeaponEditorLayouts();
+    TestItemEditorLayouts();
     TestPreviewSettingsModalFogDraftApplyAndReset();
     TestPreviewNavigationTabLayout();
     TestLightProxyPlacementMath();

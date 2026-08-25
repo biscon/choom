@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "new_item",
+      "title": "Pistol 9mm",
+      "description": "It's a pistol, point it at things you want to die.",
+      "modelPath": "assets/models/weapons/pistol.glb",
+      "type": "weapon",
+      "weightKg": 0.5,
+      "weaponId": "pistol"
+    },
+    {
+      "id": "new_item_2",
+      "title": "Boomstick",
+      "description": "A double-barreled shotgun.",
+      "modelPath": "assets/models/weapons/double_barrel_shotgun.glb",
+      "type": "weapon",
+      "weightKg": 3.25,
+      "weaponId": "shotgun"
+    }
+  ]
+}

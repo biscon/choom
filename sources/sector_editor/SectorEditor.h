@@ -49,10 +49,14 @@
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
+#include "sector_editor/items/SectorEditorItemEditorService.h"
+#include "sector_editor/items/SectorEditorItemEditorState.h"
 #include "sector_demo/SectorSceneRuntime.h"
 #include "sector_demo/SectorUseInteraction.h"
 #include "sector_demo/SectorMaterialRegistry.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/items/ItemAssets.h"
+#include "game/items/ItemDefinitions.h"
 
 #include <raylib.h>
 
@@ -71,8 +75,12 @@ class SectorEditor {
 public:
     SectorEditor(
             FpsApplicationSettings& sharedApplicationSettings,
-            SectorMaterialRegistry& sharedMaterialRegistry)
+            SectorMaterialRegistry& sharedMaterialRegistry,
+            ItemRegistry& sharedItemRegistry,
+            ItemModelAssetState& sharedItemModelAssets)
         : materialRegistry(sharedMaterialRegistry),
+          itemRegistry(sharedItemRegistry),
+          itemModelAssets(sharedItemModelAssets),
           applicationSettings(sharedApplicationSettings) {}
 
     bool Init(engine::EngineContext& context);
@@ -96,6 +104,7 @@ public:
     }
 
     void Update(engine::EngineContext& context, float dt);
+    void SetGameSessionExists(bool exists) { gameSessionExists = exists; }
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::EngineContext& context);
@@ -497,8 +506,16 @@ private:
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorNpcEditorService BuildNpcEditorService();
     SectorEditorWeaponEditorService BuildWeaponEditorService();
+    SectorEditorItemEditorService BuildItemEditorService();
     SectorEditorMaterialRegistryEditorService BuildMaterialRegistryEditorService();
     void OpenWeaponEditor(bool fromPreview3D);
+    void DrawItemEditor(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     SectorEditorDocumentLifecycleAccess Lifecycle();
     SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
     SectorTopologyMap& TopologyMap();
@@ -552,6 +569,8 @@ private:
     SectorEditorNpcEditorSessionState npcEditorSessionState;
     SectorEditorWeaponEditorState weaponEditorState;
     SectorEditorWeaponEditorSessionState weaponEditorSessionState;
+    SectorEditorItemEditorState itemEditorState;
+    SectorEditorItemEditorSessionState itemEditorSessionState;
     SectorEditorMaterialRegistryEditorState materialRegistryEditorState;
     SectorEditorSoundEditorState soundEditorState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
@@ -584,15 +603,19 @@ private:
     FpsPlayerRuntime fpsPlayer;
     FpsWeaponRegistry weaponRegistry;
     SectorMaterialRegistry& materialRegistry;
+    ItemRegistry& itemRegistry;
+    ItemModelAssetState& itemModelAssets;
     FpsApplicationSettings& applicationSettings;
     PlayerAudioRuntime playerAudio;
     std::string applicationSettingsPath;
     std::string weaponRegistryPath;
+    std::string itemRegistryPath;
     std::string weaponRegistryError;
     SectorUseTarget previewUseTarget;
     std::array<char, 128> previewUsePromptTitle{};
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
+    bool gameSessionExists = false;
 };
 
 } // namespace game

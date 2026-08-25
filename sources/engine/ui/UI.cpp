@@ -229,6 +229,28 @@ bool InsertCodepointAtCursor(
     return true;
 }
 
+bool InsertNewlineAtCursor(
+        char* buffer,
+        size_t bufferCapacity,
+        size_t maxCharacters,
+        size_t& cursorByteIndex)
+{
+    if (buffer == nullptr || bufferCapacity == 0
+            || CountUtf8Characters(buffer) >= maxCharacters) {
+        return false;
+    }
+    const size_t byteCount = TextByteLength(buffer);
+    if (byteCount + 1 >= bufferCapacity) return false;
+    cursorByteIndex = ClampToUtf8Boundary(buffer, cursorByteIndex);
+    std::memmove(
+            buffer + cursorByteIndex + 1,
+            buffer + cursorByteIndex,
+            byteCount - cursorByteIndex + 1);
+    buffer[cursorByteIndex] = '\n';
+    ++cursorByteIndex;
+    return true;
+}
+
 bool RemoveUtf8CharacterLeftOfCursor(char* buffer, size_t& cursorByteIndex)
 {
     if (buffer == nullptr) {
@@ -1851,6 +1873,141 @@ UITextInputResult TextInput(
         }
     }
 
+    return result;
+}
+
+UITextInputResult TextArea(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        AssetManager& assets,
+        const char* id,
+        Rectangle bounds,
+        FontHandle font,
+        char* buffer,
+        size_t bufferCapacity,
+        size_t minCharacters,
+        size_t maxCharacters)
+{
+    const uint32_t widgetId = HashId(id);
+    const bool focusedBeforePointerInput = ui.focusedId == widgetId;
+    const bool hovered = ContainsWidget(ui, bounds, ui.mousePosition);
+    if (hovered) {
+        ui.hotId = widgetId;
+        ConsumeMousePresses(ui, input, bounds);
+    }
+    if (ConsumeMouseClick(ui, input, bounds)) {
+        ui.focusedId = widgetId;
+        ui.activeId = widgetId;
+        ui.textCursorByteIndex = TextByteLength(buffer);
+        ui.textCursorBlinkStartTime = GetTime();
+    }
+
+    bool clickedOutside = false;
+    input.ForEachEvent(
+            InputEventType::MouseClick,
+            true,
+            [&ui, bounds, &clickedOutside](InputEvent& event) {
+                if (event.mouseClick.button == MOUSE_LEFT_BUTTON
+                        && !ContainsWidget(
+                                ui, bounds, event.mouseClick.releasePosition)) {
+                    clickedOutside = true;
+                }
+            });
+    if (clickedOutside && ui.focusedId == widgetId) ui.focusedId = 0;
+
+    UITextInputResult result;
+    result.focusLost = clickedOutside && focusedBeforePointerInput;
+    if (ui.focusedId == widgetId && buffer != nullptr && bufferCapacity > 0) {
+        ui.textCursorByteIndex = ClampToUtf8Boundary(
+                buffer, ui.textCursorByteIndex);
+        input.ForEachEvent(
+                InputEventType::TextInput,
+                true,
+                [&ui, buffer, bufferCapacity, maxCharacters,
+                 &result](InputEvent& event) {
+                    if (event.text.codepoint != '\r'
+                            && InsertCodepointAtCursor(
+                                    buffer,
+                                    bufferCapacity,
+                                    maxCharacters,
+                                    ui.textCursorByteIndex,
+                                    event.text.codepoint)) {
+                        result.changed = true;
+                        ui.textCursorBlinkStartTime = GetTime();
+                    }
+                    ConsumeEvent(event);
+                });
+
+        auto handleKey = [&ui, buffer, bufferCapacity, maxCharacters,
+                          &result](InputEvent& event) {
+            if (event.key.key == KEY_LEFT) {
+                ui.textCursorByteIndex = PreviousUtf8Boundary(
+                        buffer, ui.textCursorByteIndex);
+                ui.textCursorBlinkStartTime = GetTime();
+                ConsumeEvent(event);
+            } else if (event.key.key == KEY_RIGHT) {
+                ui.textCursorByteIndex = NextUtf8Boundary(
+                        buffer, ui.textCursorByteIndex);
+                ui.textCursorBlinkStartTime = GetTime();
+                ConsumeEvent(event);
+            } else if (event.key.key == KEY_HOME) {
+                ui.textCursorByteIndex = 0;
+                ui.textCursorBlinkStartTime = GetTime();
+                ConsumeEvent(event);
+            } else if (event.key.key == KEY_END) {
+                ui.textCursorByteIndex = TextByteLength(buffer);
+                ui.textCursorBlinkStartTime = GetTime();
+                ConsumeEvent(event);
+            } else if (event.key.key == KEY_BACKSPACE) {
+                if (RemoveUtf8CharacterLeftOfCursor(
+                            buffer, ui.textCursorByteIndex)) {
+                    result.changed = true;
+                    ui.textCursorBlinkStartTime = GetTime();
+                }
+                ConsumeEvent(event);
+            } else if (event.key.key == KEY_DELETE) {
+                if (RemoveUtf8CharacterAtCursor(
+                            buffer, ui.textCursorByteIndex)) {
+                    result.changed = true;
+                    ui.textCursorBlinkStartTime = GetTime();
+                }
+                ConsumeEvent(event);
+            } else if (event.key.key == KEY_ENTER
+                    || event.key.key == KEY_KP_ENTER) {
+                if (InsertNewlineAtCursor(
+                            buffer,
+                            bufferCapacity,
+                            maxCharacters,
+                            ui.textCursorByteIndex)) {
+                    result.changed = true;
+                    ui.textCursorBlinkStartTime = GetTime();
+                }
+                ConsumeEvent(event);
+            } else if (event.key.key == KEY_ESCAPE) {
+                result.cancelled = true;
+                ui.focusedId = 0;
+                ConsumeEvent(event);
+            }
+        };
+        input.ForEachEvent(InputEventType::KeyPressed, true, handleKey);
+        input.ForEachEvent(InputEventType::KeyRepeated, true, handleKey);
+    }
+
+    const size_t characterCount = CountUtf8Characters(buffer);
+    result.valid = characterCount >= minCharacters
+            && characterCount <= maxCharacters;
+    DrawWidgetBackground(
+            ui,
+            config,
+            bounds,
+            InteractiveFill(config, ui, widgetId),
+            result.valid ? config.borderColor : config.invalidColor);
+    Text(ui, config, assets, bounds, font,
+            buffer == nullptr ? "" : buffer,
+            UITextJustify::Left,
+            result.valid ? config.textColor : config.invalidColor,
+            true);
     return result;
 }
 

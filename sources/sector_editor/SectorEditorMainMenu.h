@@ -19,6 +19,7 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     OpenSoundEditor,
     OpenNpcEditor,
     OpenWeaponEditor,
+    OpenItemEditor,
     ToggleShowGrid,
     ToggleShowAxes,
     ToggleShowIds,
