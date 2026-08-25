@@ -170,6 +170,7 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     uiState.lightInnerConeInput = engine::UIFloatInputState{};
     uiState.lightOuterConeInput = engine::UIFloatInputState{};
     uiState.lightSourceRadiusInput = engine::UIFloatInputState{};
+    uiState.lightStartFeatherInput = engine::UIFloatInputState{};
     uiState.lightFlickerSpeedInput = engine::UIFloatInputState{};
     uiState.lightFlickerAmountInput = engine::UIFloatInputState{};
     uiState.lightShadowPriorityInput = engine::UIIntInputState{};
@@ -324,6 +325,128 @@ bool SameAtmosphere(
             && left.dust.driftSpeedWorld == right.dust.driftSpeedWorld
             && left.dust.turbulenceWorld == right.dust.turbulenceWorld
             && sameColor(left.dust.scatteringTint, right.dust.scatteringTint);
+}
+
+bool SameStaticPointLight(
+        const SectorTopologyStaticPointLight& a,
+        const SectorTopologyStaticPointLight& b)
+{
+    return a.id == b.id
+            && SameVector3(a.position, b.position)
+            && SameColor(a.color, b.color)
+            && a.intensity == b.intensity
+            && a.radius == b.radius
+            && a.sourceRadius == b.sourceRadius
+            && SameAtmosphere(a.atmosphere, b.atmosphere)
+            && a.castsShadow == b.castsShadow;
+}
+
+bool SameStaticSpotLight(
+        const SectorTopologyStaticSpotLight& a,
+        const SectorTopologyStaticSpotLight& b)
+{
+    return a.id == b.id
+            && SameVector3(a.position, b.position)
+            && SameVector3(a.target, b.target)
+            && SameColor(a.color, b.color)
+            && a.intensity == b.intensity
+            && a.range == b.range
+            && a.innerConeDegrees == b.innerConeDegrees
+            && a.outerConeDegrees == b.outerConeDegrees
+            && a.sourceRadius == b.sourceRadius
+            && SameAtmosphere(a.atmosphere, b.atmosphere)
+            && a.castsShadow == b.castsShadow;
+}
+
+bool SameStaticRectLight(
+        const SectorTopologyStaticRectLight& a,
+        const SectorTopologyStaticRectLight& b)
+{
+    return a.id == b.id
+            && SameVector3(a.position, b.position)
+            && SameVector3(a.target, b.target)
+            && a.rollDegrees == b.rollDegrees
+            && a.width == b.width
+            && a.height == b.height
+            && SameColor(a.color, b.color)
+            && a.intensity == b.intensity
+            && a.range == b.range
+            && a.startFeather == b.startFeather
+            && SameAtmosphere(a.atmosphere, b.atmosphere)
+            && a.castsShadow == b.castsShadow;
+}
+
+bool SameDynamicPointLight(
+        const SectorTopologyDynamicPointLight& a,
+        const SectorTopologyDynamicPointLight& b)
+{
+    return a.id == b.id
+            && SameVector3(a.position, b.position)
+            && SameColor(a.color, b.color)
+            && a.intensity == b.intensity
+            && a.radius == b.radius
+            && a.enabled == b.enabled
+            && a.flicker == b.flicker
+            && a.flickerSpeed == b.flickerSpeed
+            && a.flickerAmount == b.flickerAmount
+            && SameAtmosphere(a.atmosphere, b.atmosphere)
+            && a.castsShadow == b.castsShadow
+            && a.shadowPriority == b.shadowPriority
+            && a.shadowBias == b.shadowBias
+            && a.shadowStrength == b.shadowStrength
+            && a.shadowSoftness == b.shadowSoftness
+            && a.instanceId == b.instanceId;
+}
+
+bool SameDynamicSpotLight(
+        const SectorTopologyDynamicSpotLight& a,
+        const SectorTopologyDynamicSpotLight& b)
+{
+    return a.id == b.id
+            && SameVector3(a.position, b.position)
+            && SameVector3(a.target, b.target)
+            && SameColor(a.color, b.color)
+            && a.intensity == b.intensity
+            && a.range == b.range
+            && a.innerConeDegrees == b.innerConeDegrees
+            && a.outerConeDegrees == b.outerConeDegrees
+            && a.enabled == b.enabled
+            && a.flicker == b.flicker
+            && a.flickerSpeed == b.flickerSpeed
+            && a.flickerAmount == b.flickerAmount
+            && a.castsShadow == b.castsShadow
+            && a.shadowPriority == b.shadowPriority
+            && a.shadowBias == b.shadowBias
+            && a.shadowStrength == b.shadowStrength
+            && a.shadowSoftness == b.shadowSoftness
+            && SameAtmosphere(a.atmosphere, b.atmosphere)
+            && a.instanceId == b.instanceId;
+}
+
+bool SameDynamicRectLight(
+        const SectorTopologyDynamicRectLight& a,
+        const SectorTopologyDynamicRectLight& b)
+{
+    return a.id == b.id
+            && SameVector3(a.position, b.position)
+            && SameVector3(a.target, b.target)
+            && a.rollDegrees == b.rollDegrees
+            && a.width == b.width
+            && a.height == b.height
+            && SameColor(a.color, b.color)
+            && a.intensity == b.intensity
+            && a.range == b.range
+            && a.enabled == b.enabled
+            && a.flicker == b.flicker
+            && a.flickerSpeed == b.flickerSpeed
+            && a.flickerAmount == b.flickerAmount
+            && a.castsShadow == b.castsShadow
+            && a.shadowPriority == b.shadowPriority
+            && a.shadowBias == b.shadowBias
+            && a.shadowStrength == b.shadowStrength
+            && a.shadowSoftness == b.shadowSoftness
+            && SameAtmosphere(a.atmosphere, b.atmosphere)
+            && a.instanceId == b.instanceId;
 }
 
 SectorTopologyDynamicPointLight ToDynamicLight(
@@ -832,6 +955,181 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedL
     result.changed = FinishTopologyActionResult(deleteResult);
     result.dynamicLightRendererRefreshNeeded = result.changed;
     return result;
+}
+
+bool SectorEditorLightEditingService::CopySelectedConfig(
+        SectorEditorConfigClipboardState& clipboard) const
+{
+    const TopologySelectionKind kind = context_.selection.topologySelectionKind;
+    if (kind == TopologySelectionKind::StaticLight) {
+        const auto* light = FindSectorTopologyStaticLight(
+                context_.map, context_.selection.selectedTopologyLightId);
+        if (light == nullptr) return false;
+        clipboard.kind = SectorEditorConfigKind::StaticPointLight;
+        clipboard.payload = *light;
+    } else if (kind == TopologySelectionKind::StaticSpotLight) {
+        const auto* light = FindSectorTopologyStaticSpotLight(
+                context_.map, context_.selection.selectedTopologyStaticSpotLightId);
+        if (light == nullptr) return false;
+        clipboard.kind = SectorEditorConfigKind::StaticSpotLight;
+        clipboard.payload = *light;
+    } else if (kind == TopologySelectionKind::StaticRectLight) {
+        const auto* light = FindSectorTopologyStaticRectLight(
+                context_.map, context_.selection.selectedTopologyStaticSpotLightId);
+        if (light == nullptr) return false;
+        clipboard.kind = SectorEditorConfigKind::StaticRectLight;
+        clipboard.payload = *light;
+    } else if (kind == TopologySelectionKind::DynamicLight) {
+        const auto* light = FindSectorTopologyDynamicLight(
+                context_.map, context_.selection.selectedTopologyDynamicLightId);
+        if (light == nullptr) return false;
+        clipboard.kind = SectorEditorConfigKind::DynamicPointLight;
+        clipboard.payload = *light;
+    } else if (kind == TopologySelectionKind::DynamicSpotLight) {
+        const auto* light = FindSectorTopologyDynamicSpotLight(
+                context_.map, context_.selection.selectedTopologyDynamicSpotLightId);
+        if (light == nullptr) return false;
+        clipboard.kind = SectorEditorConfigKind::DynamicSpotLight;
+        clipboard.payload = *light;
+    } else if (kind == TopologySelectionKind::DynamicRectLight) {
+        const auto* light = FindSectorTopologyDynamicRectLight(
+                context_.map, context_.selection.selectedTopologyDynamicSpotLightId);
+        if (light == nullptr) return false;
+        clipboard.kind = SectorEditorConfigKind::DynamicRectLight;
+        clipboard.payload = *light;
+    } else {
+        return false;
+    }
+    context_.statusText = TextFormat(
+            "Copied %s config.",
+            SectorEditorConfigKindName(clipboard.kind));
+    return true;
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::PasteSelectedConfig(
+        const SectorEditorConfigClipboardState& clipboard)
+{
+    bool changed = false;
+    const TopologySelectionKind kind = context_.selection.topologySelectionKind;
+    if (kind == TopologySelectionKind::StaticLight
+            && clipboard.kind == SectorEditorConfigKind::StaticPointLight) {
+        auto* destination = FindSectorTopologyStaticLight(
+                context_.map, context_.selection.selectedTopologyLightId);
+        const auto* source = std::get_if<SectorTopologyStaticPointLight>(
+                &clipboard.payload);
+        if (destination == nullptr || source == nullptr) return {};
+        SectorTopologyStaticPointLight candidate = *source;
+        candidate.id = destination->id;
+        candidate.position = destination->position;
+        candidate.atmosphere = NormalizeSectorLightAtmosphereSettings(candidate.atmosphere);
+        if (!SameStaticPointLight(*destination, candidate)) {
+            *destination = std::move(candidate);
+            changed = true;
+        }
+    } else if (kind == TopologySelectionKind::StaticSpotLight
+            && clipboard.kind == SectorEditorConfigKind::StaticSpotLight) {
+        auto* destination = FindSectorTopologyStaticSpotLight(
+                context_.map, context_.selection.selectedTopologyStaticSpotLightId);
+        const auto* source = std::get_if<SectorTopologyStaticSpotLight>(
+                &clipboard.payload);
+        if (destination == nullptr || source == nullptr) return {};
+        SectorTopologyStaticSpotLight candidate = *source;
+        candidate.id = destination->id;
+        candidate.position = destination->position;
+        candidate.target = Vector3Add(
+                destination->position,
+                Vector3Subtract(source->target, source->position));
+        candidate.atmosphere = NormalizeSectorLightAtmosphereSettings(candidate.atmosphere);
+        if (!SameStaticSpotLight(*destination, candidate)) {
+            *destination = std::move(candidate);
+            changed = true;
+        }
+    } else if (kind == TopologySelectionKind::StaticRectLight
+            && clipboard.kind == SectorEditorConfigKind::StaticRectLight) {
+        auto* destination = FindSectorTopologyStaticRectLight(
+                context_.map, context_.selection.selectedTopologyStaticSpotLightId);
+        const auto* source = std::get_if<SectorTopologyStaticRectLight>(
+                &clipboard.payload);
+        if (destination == nullptr || source == nullptr) return {};
+        SectorTopologyStaticRectLight candidate = *source;
+        candidate.id = destination->id;
+        candidate.position = destination->position;
+        candidate.target = Vector3Add(
+                destination->position,
+                Vector3Subtract(source->target, source->position));
+        candidate.atmosphere = NormalizeSectorLightAtmosphereSettings(candidate.atmosphere);
+        if (!SameStaticRectLight(*destination, candidate)) {
+            *destination = std::move(candidate);
+            changed = true;
+        }
+    } else if (kind == TopologySelectionKind::DynamicLight
+            && clipboard.kind == SectorEditorConfigKind::DynamicPointLight) {
+        auto* destination = FindSectorTopologyDynamicLight(
+                context_.map, context_.selection.selectedTopologyDynamicLightId);
+        const auto* source = std::get_if<SectorTopologyDynamicPointLight>(
+                &clipboard.payload);
+        if (destination == nullptr || source == nullptr) return {};
+        SectorTopologyDynamicPointLight candidate = *source;
+        candidate.id = destination->id;
+        candidate.position = destination->position;
+        candidate.instanceId = destination->instanceId;
+        candidate.atmosphere = NormalizeSectorLightAtmosphereSettings(candidate.atmosphere);
+        if (!SameDynamicPointLight(*destination, candidate)) {
+            *destination = std::move(candidate);
+            changed = true;
+        }
+    } else if (kind == TopologySelectionKind::DynamicSpotLight
+            && clipboard.kind == SectorEditorConfigKind::DynamicSpotLight) {
+        auto* destination = FindSectorTopologyDynamicSpotLight(
+                context_.map, context_.selection.selectedTopologyDynamicSpotLightId);
+        const auto* source = std::get_if<SectorTopologyDynamicSpotLight>(
+                &clipboard.payload);
+        if (destination == nullptr || source == nullptr) return {};
+        SectorTopologyDynamicSpotLight candidate = *source;
+        candidate.id = destination->id;
+        candidate.position = destination->position;
+        candidate.target = Vector3Add(
+                destination->position,
+                Vector3Subtract(source->target, source->position));
+        candidate.instanceId = destination->instanceId;
+        candidate.atmosphere = NormalizeSectorLightAtmosphereSettings(candidate.atmosphere);
+        if (!SameDynamicSpotLight(*destination, candidate)) {
+            *destination = std::move(candidate);
+            changed = true;
+        }
+    } else if (kind == TopologySelectionKind::DynamicRectLight
+            && clipboard.kind == SectorEditorConfigKind::DynamicRectLight) {
+        auto* destination = FindSectorTopologyDynamicRectLight(
+                context_.map, context_.selection.selectedTopologyDynamicSpotLightId);
+        const auto* source = std::get_if<SectorTopologyDynamicRectLight>(
+                &clipboard.payload);
+        if (destination == nullptr || source == nullptr) return {};
+        SectorTopologyDynamicRectLight candidate = *source;
+        candidate.id = destination->id;
+        candidate.position = destination->position;
+        candidate.target = Vector3Add(
+                destination->position,
+                Vector3Subtract(source->target, source->position));
+        candidate.instanceId = destination->instanceId;
+        candidate.atmosphere = NormalizeSectorLightAtmosphereSettings(candidate.atmosphere);
+        if (!SameDynamicRectLight(*destination, candidate)) {
+            *destination = std::move(candidate);
+            changed = true;
+        }
+    } else {
+        context_.statusText = "Copied config does not match the selected light type.";
+        return {};
+    }
+
+    if (!changed) {
+        context_.statusText = "Selected light already matches copied config.";
+        return {};
+    }
+    ResetLightInspectorUiState(context_.ui);
+    MarkEdited(TextFormat(
+            "Pasted %s config",
+            SectorEditorConfigKindName(clipboard.kind)));
+    return FinishLightMutationResult(true);
 }
 
 bool SectorEditorLightEditingService::BeginLightDrag(
@@ -2011,7 +2309,20 @@ bool SectorEditorLightEditingService::PointStaticRectLightDown(SectorTopologySta
 RECT_SETTER(SetStaticRectLightRoll, SectorTopologyStaticRectLight, rollDegrees, float, value, "static rect light")
 RECT_SETTER(SetStaticRectLightWidth, SectorTopologyStaticRectLight, width, float, ClampLightRadius(value), "static rect light")
 RECT_SETTER(SetStaticRectLightHeight, SectorTopologyStaticRectLight, height, float, ClampLightRadius(value), "static rect light")
-RECT_SETTER(SetStaticRectLightRange, SectorTopologyStaticRectLight, range, float, ClampLightRadius(value), "static rect light")
+bool SectorEditorLightEditingService::SetStaticRectLightRange(
+        SectorTopologyStaticRectLight& light,
+        float value)
+{
+    value = ClampLightRadius(value);
+    const float startFeather = ClampRectLightStartFeather(light.startFeather, value);
+    if (light.range == value && light.startFeather == startFeather) return false;
+    light.range = value;
+    light.startFeather = startFeather;
+    MarkEdited(TextFormat("Updated static rect light %d", light.id));
+    return true;
+}
+RECT_SETTER(SetStaticRectLightStartFeather, SectorTopologyStaticRectLight, startFeather,
+        float, ClampRectLightStartFeather(value, light.range), "static rect light")
 RECT_SETTER(SetStaticRectLightIntensity, SectorTopologyStaticRectLight, intensity, float, ClampLightIntensity(value), "static rect light")
 RECT_SETTER(SetStaticRectLightCastsShadow, SectorTopologyStaticRectLight, castsShadow, bool, value, "static rect light")
 bool SectorEditorLightEditingService::SetStaticRectLightColor(SectorTopologyStaticRectLight& light, Color value)

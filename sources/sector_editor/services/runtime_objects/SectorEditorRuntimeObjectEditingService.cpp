@@ -29,6 +29,85 @@ bool PointInOrOnTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
     return !(hasNegative && hasPositive);
 }
 
+bool SameDoorFaceUvs(
+        const SectorDoorFaceUvSet& a,
+        const SectorDoorFaceUvSet& b)
+{
+    for (int index = 0; index < SectorDoorFaceCount; ++index) {
+        if (a.faces[index].scale.x != b.faces[index].scale.x
+                || a.faces[index].scale.y != b.faces[index].scale.y
+                || a.faces[index].offset.x != b.faces[index].offset.x
+                || a.faces[index].offset.y != b.faces[index].offset.y) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SameDoorConfig(const SectorPlacedDoor& a, const SectorPlacedDoor& b)
+{
+    return a.useTitle == b.useTitle
+            && a.canOpenScript == b.canOpenScript
+            && a.canCloseScript == b.canCloseScript
+            && a.width == b.width
+            && a.height == b.height
+            && a.thickness == b.thickness
+            && a.normalOffset == b.normalOffset
+            && a.heightOffsetWorld == b.heightOffsetWorld
+            && a.visual == b.visual
+            && a.modelAssetId == b.modelAssetId
+            && a.modelFit == b.modelFit
+            && a.modelScale == b.modelScale
+            && a.motion == b.motion
+            && a.hinge == b.hinge
+            && a.swingSide == b.swingSide
+            && a.openAngleDegrees == b.openAngleDegrees
+            && a.angularSpeedDegrees == b.angularSpeedDegrees
+            && a.openDistance == b.openDistance
+            && a.speed == b.speed
+            && a.initialOpenFraction == b.initialOpenFraction
+            && a.autoOpen == b.autoOpen
+            && a.interactionDistance == b.interactionDistance
+            && a.autoOpenDistance == b.autoOpenDistance
+            && a.materialId == b.materialId
+            && a.openSoundId == b.openSoundId
+            && a.closeSoundId == b.closeSoundId
+            && SameDoorFaceUvs(a.faceUvs, b.faceUvs);
+}
+
+bool SameStaticModelConfig(
+        const SectorPlacedStaticModel& a,
+        const SectorPlacedStaticModel& b)
+{
+    return a.modelPath == b.modelPath
+            && a.rotationXRadians == b.rotationXRadians
+            && a.rotationZRadians == b.rotationZRadians
+            && a.heightOffsetWorld == b.heightOffsetWorld
+            && a.scale == b.scale
+            && a.collision == b.collision
+            && a.castsShadow == b.castsShadow;
+}
+
+bool SameDynamicModelConfig(
+        const SectorPlacedDynamicModel& a,
+        const SectorPlacedDynamicModel& b)
+{
+    return a.modelPath == b.modelPath
+            && a.useTitle == b.useTitle
+            && a.useDistance == b.useDistance
+            && a.onUseScript == b.onUseScript
+            && a.singleUse == b.singleUse
+            && a.rotationXRadians == b.rotationXRadians
+            && a.rotationZRadians == b.rotationZRadians
+            && a.heightOffsetWorld == b.heightOffsetWorld
+            && a.scale == b.scale
+            && a.collision == b.collision
+            && a.animation == b.animation
+            && a.loop == b.loop
+            && a.animationSpeed == b.animationSpeed
+            && a.shadowMode == b.shadowMode;
+}
+
 } // namespace
 
 SectorEditorRuntimeObjectEditingService::SectorEditorRuntimeObjectEditingService(
@@ -92,6 +171,136 @@ bool SectorEditorRuntimeObjectEditingService::AddDoor(int lineDefId)
     MarkEdited(result.status.c_str());
     RefreshPreviewObjects();
     return true;
+}
+
+bool SectorEditorRuntimeObjectEditingService::CopySelectedConfig(
+        SectorEditorConfigClipboardState& clipboard) const
+{
+    const SectorPlacedRuntimeObject* object = SelectedObject();
+    if (object == nullptr) {
+        context_.statusText = "Select a supported runtime object first.";
+        return false;
+    }
+    if (object->kind == "door") {
+        clipboard.kind = SectorEditorConfigKind::Door;
+        clipboard.payload = object->door;
+    } else if (object->kind == "static_model") {
+        SectorEditorStaticModelConfig config;
+        config.yawRadians = object->yawRadians;
+        config.model = object->staticModel;
+        config.model.instanceId.clear();
+        config.model.geometryFingerprint.clear();
+        clipboard.kind = SectorEditorConfigKind::StaticModel;
+        clipboard.payload = std::move(config);
+    } else if (object->kind == "dynamic_model") {
+        SectorEditorDynamicModelConfig config;
+        config.yawRadians = object->yawRadians;
+        config.model = object->dynamicModel;
+        config.model.instanceId.clear();
+        clipboard.kind = SectorEditorConfigKind::DynamicModel;
+        clipboard.payload = std::move(config);
+    } else {
+        context_.statusText = "Selected runtime object does not support config copy.";
+        return false;
+    }
+    context_.statusText = TextFormat(
+            "Copied %s config.",
+            SectorEditorConfigKindName(clipboard.kind));
+    return true;
+}
+
+bool SectorEditorRuntimeObjectEditingService::PasteSelectedConfig(
+        const SectorEditorConfigClipboardState& clipboard)
+{
+    const SectorPlacedRuntimeObject* selected = SelectedObject();
+    if (selected == nullptr) {
+        context_.statusText = "Select a supported runtime object first.";
+        return false;
+    }
+
+    if (selected->kind == "door"
+            && clipboard.kind == SectorEditorConfigKind::Door) {
+        const auto* source = std::get_if<SectorPlacedDoor>(&clipboard.payload);
+        if (source == nullptr) return false;
+        SectorPlacedDoor candidate = *source;
+        candidate.instanceId = selected->door.instanceId;
+        candidate.anchor = selected->door.anchor;
+        if (SameDoorConfig(selected->door, candidate)) {
+            context_.statusText = "Selected door already matches copied config.";
+            return false;
+        }
+        const bool changed = MutateSelected(
+                "Pasted door config",
+                [candidate](SectorPlacedRuntimeObject& object) {
+                    if (object.kind != "door") return false;
+                    object.door = candidate;
+                    return true;
+                });
+        if (changed) ResetInspectorUi();
+        return changed;
+    }
+
+    if (selected->kind == "static_model"
+            && clipboard.kind == SectorEditorConfigKind::StaticModel) {
+        const auto* source = std::get_if<SectorEditorStaticModelConfig>(
+                &clipboard.payload);
+        if (source == nullptr) return false;
+        SectorPlacedStaticModel candidate = source->model;
+        candidate.instanceId = selected->staticModel.instanceId;
+        if (candidate.modelPath == selected->staticModel.modelPath) {
+            candidate.geometryFingerprint =
+                    selected->staticModel.geometryFingerprint;
+        } else {
+            candidate.geometryFingerprint.clear();
+        }
+        if (selected->yawRadians == source->yawRadians
+                && SameStaticModelConfig(selected->staticModel, candidate)) {
+            context_.statusText =
+                    "Selected 3D prop already matches copied config.";
+            return false;
+        }
+        const float yawRadians = source->yawRadians;
+        const bool changed = MutateSelected(
+                "Pasted 3D prop config",
+                [candidate, yawRadians](SectorPlacedRuntimeObject& object) {
+                    if (object.kind != "static_model") return false;
+                    object.yawRadians = yawRadians;
+                    object.staticModel = candidate;
+                    return true;
+                });
+        if (changed) ResetInspectorUi();
+        return changed;
+    }
+
+    if (selected->kind == "dynamic_model"
+            && clipboard.kind == SectorEditorConfigKind::DynamicModel) {
+        const auto* source = std::get_if<SectorEditorDynamicModelConfig>(
+                &clipboard.payload);
+        if (source == nullptr) return false;
+        SectorPlacedDynamicModel candidate = source->model;
+        candidate.instanceId = selected->dynamicModel.instanceId;
+        if (selected->yawRadians == source->yawRadians
+                && SameDynamicModelConfig(selected->dynamicModel, candidate)) {
+            context_.statusText =
+                    "Selected dynamic prop already matches copied config.";
+            return false;
+        }
+        const float yawRadians = source->yawRadians;
+        const bool changed = MutateSelected(
+                "Pasted dynamic prop config",
+                [candidate, yawRadians](SectorPlacedRuntimeObject& object) {
+                    if (object.kind != "dynamic_model") return false;
+                    object.yawRadians = yawRadians;
+                    object.dynamicModel = candidate;
+                    return true;
+                });
+        if (changed) ResetInspectorUi();
+        return changed;
+    }
+
+    context_.statusText =
+            "Copied config does not match the selected runtime object type.";
+    return false;
 }
 
 bool SectorEditorRuntimeObjectEditingService::AddStaticModel(Vector2 mapPoint)

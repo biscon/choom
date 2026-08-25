@@ -3,6 +3,7 @@
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingState.h"
+#include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardTypes.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include <functional>
@@ -50,6 +51,10 @@ public:
     bool AddStaticModel(Vector2 mapPoint);
     bool AddDynamicModel(Vector2 mapPoint);
     bool AddNpc(Vector2 mapPoint, const std::string& definitionId);
+    bool CopySelectedConfig(
+            SectorEditorConfigClipboardState& clipboard) const;
+    bool PasteSelectedConfig(
+            const SectorEditorConfigClipboardState& clipboard);
     SectorEditorRuntimeObjectDeleteRequest RequestDeleteSelected() const;
     bool DeleteById(int objectId);
 

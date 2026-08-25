@@ -126,7 +126,7 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
 
     constexpr float panelWidth = 620.0f;
-    constexpr float panelHeight = 914.0f;
+    constexpr float panelHeight = 970.0f;
     constexpr float padding = 44.0f;
     constexpr float rowHeight = 48.0f;
     const Rectangle panel{
@@ -263,6 +263,10 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     engine::Checkbox(ui, config, input, assets, "graphics_bloom",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
             smallFont, "HDR bloom", draft.hdrBloom.enabled);
+    y += rowHeight + 8.0f;
+    engine::Checkbox(ui, config, input, assets, "graphics_fps_counter",
+            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
+            smallFont, "FPS counter", draft.graphics.showFpsCounter);
     y += rowHeight + 8.0f;
     engine::Checkbox(ui, config, input, assets, "graphics_performance_overlay",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},

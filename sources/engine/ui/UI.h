@@ -5,12 +5,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <string>
 #include <vector>
 
 namespace engine {
 
 inline constexpr float DefaultScrollAreaPaddingPx = 4.0f;
+inline constexpr size_t UIMainMenuMaxDepth = 8;
+inline constexpr size_t UIMainMenuMaxOverlayRows = 64;
+inline constexpr size_t UIMainMenuMaxRoots = 16;
 
 enum class UITextJustify {
     Left,
@@ -68,6 +72,66 @@ struct UIScrollAreaResult {
     bool drawFrame = true;
 };
 
+enum class UIMenuItemKind : uint8_t {
+    Action,
+    Checkbox,
+    Separator,
+    Submenu
+};
+
+struct UIMenuShortcut {
+    int key = 0;
+    bool control = false;
+    bool shift = false;
+    bool alt = false;
+};
+
+constexpr bool MatchesUIMenuShortcut(
+        const UIMenuShortcut& shortcut,
+        int pressedKey,
+        bool control,
+        bool shift,
+        bool alt)
+{
+    return shortcut.key != 0
+            && shortcut.key == pressedKey
+            && shortcut.control == control
+            && shortcut.shift == shift
+            && shortcut.alt == alt;
+}
+
+struct UIMenuItem {
+    const char* label = "";
+    uint32_t commandId = 0;
+    UIMenuItemKind kind = UIMenuItemKind::Action;
+    bool enabled = true;
+    bool checked = false;
+    const char* shortcutLabel = "";
+    UIMenuShortcut shortcut = {};
+    const UIMenuItem* children = nullptr;
+    size_t childCount = 0;
+};
+
+struct UIMenuRoot {
+    const char* label = "";
+    const UIMenuItem* items = nullptr;
+    size_t itemCount = 0;
+    bool enabled = true;
+};
+
+struct UIMainMenuState {
+    int openRootIndex = -1;
+    size_t openDepth = 0;
+    std::array<size_t, UIMainMenuMaxDepth> openItemIndices = {};
+    std::array<size_t, UIMainMenuMaxDepth> firstVisibleIndices = {};
+};
+
+struct UIMainMenuResult {
+    bool activated = false;
+    uint32_t commandId = 0;
+    bool open = false;
+};
+
 struct UIContext {
     struct OptionOverlay {
         bool active = false;
@@ -79,6 +143,32 @@ struct UIContext {
         size_t firstVisibleIndex = 0;
         size_t visibleOptionCount = 0;
         int selectedIndexSnapshot = -1;
+    };
+
+    struct MainMenuOverlayRow {
+        Rectangle bounds = {};
+        const char* label = "";
+        const char* shortcutLabel = "";
+        UIMenuItemKind kind = UIMenuItemKind::Action;
+        bool enabled = true;
+        bool checked = false;
+        bool hovered = false;
+    };
+
+    struct MainMenuOverlayPopup {
+        Rectangle bounds = {};
+        size_t firstRow = 0;
+        size_t rowCount = 0;
+    };
+
+    struct MainMenuOverlay {
+        bool active = false;
+        FontHandle font = NullFontHandle();
+        FontHandle shortcutFont = NullFontHandle();
+        std::array<MainMenuOverlayPopup, UIMainMenuMaxDepth> popups = {};
+        size_t popupCount = 0;
+        std::array<MainMenuOverlayRow, UIMainMenuMaxOverlayRows> rows = {};
+        size_t rowCount = 0;
     };
 
     uint32_t hotId = 0;
@@ -98,6 +188,8 @@ struct UIContext {
     Rectangle scrollViewport = {};
     Vector2 scrollOffset = {};
     OptionOverlay optionOverlay;
+    MainMenuOverlay mainMenuOverlay;
+    bool mainMenuBlocksNormalInput = false;
     bool openOptionIssuedThisFrame = false;
     bool openOptionBoundsValid = false;
     Rectangle openOptionFieldBounds = {};
@@ -324,6 +416,27 @@ bool Option(
         const char* const* options,
         size_t optionCount,
         int& selectedIndex);
+
+UIMainMenuResult MainMenu(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        AssetManager& assets,
+        Rectangle bounds,
+        FontHandle font,
+        FontHandle shortcutFont,
+        const UIMenuRoot* roots,
+        size_t rootCount,
+        UIMainMenuState& state,
+        bool enabled = true);
+
+UIMainMenuResult ActivateMainMenuShortcut(
+        Input& input,
+        const UIMenuRoot* roots,
+        size_t rootCount,
+        bool enabled = true);
+
+void CloseMainMenu(UIMainMenuState& state);
 
 bool Option(
         UIContext& ui,

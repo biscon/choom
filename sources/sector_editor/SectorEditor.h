@@ -6,10 +6,12 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/SectorEditorMainMenu.h"
 #include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
+#include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorState.h"
@@ -63,6 +65,7 @@
 namespace game {
 
 struct SectorEditorToolContext;
+struct SectorEditorSaveLevelPlan;
 
 class SectorEditor {
 public:
@@ -125,6 +128,7 @@ public:
             engine::FontHandle font,
             engine::FontHandle smallFont);
     bool IsPreview3DActive() const;
+    float VisibleMainMenuHeight() const;
     bool OpenLevel(
             engine::EngineContext& context,
             const std::string& levelName,
@@ -144,6 +148,11 @@ private:
     Rectangle BuildRightPanelRect() const;
     Rectangle BuildBottomPanelRect() const;
     Rectangle BuildCanvasRect() const;
+    bool IsMainMenuInteractionEnabled() const;
+    void HandleMainMenuCommand(
+            SectorEditorMainMenuCommand command,
+            engine::UIContext& ui,
+            engine::AssetManager& assets);
 
     bool IsMouseOverCanvas(const engine::Input& input) const;
     void UpdateHoverAndMouse(engine::Input& input);
@@ -400,7 +409,12 @@ private:
     void OpenSaveLevelModal();
     void OpenLoadLevelModal();
     void OpenConfirmation(const char* title, const char* message, std::function<void()> onOkay);
+    bool SaveCurrentLevel();
     bool SaveLevelFromModal(bool overwriteConfirmed = false);
+    bool SaveLevelWithPlan(
+            const std::string& name,
+            const SectorEditorSaveLevelPlan& savePlan,
+            std::string& errorMessage);
     void RefreshLevelList();
     bool HasDocumentModalOpen() const;
     bool TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui);
@@ -470,6 +484,8 @@ private:
     Rectangle BuildPreviewUvPanelRect() const;
     bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
+    bool CopySelectedConfig(engine::AssetManager& assets);
+    bool PasteSelectedConfig(engine::AssetManager& assets);
     SectorEditorFootstepService BuildFootstepService();
     SectorEditorLightEditingService BuildLightEditingService();
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
@@ -542,7 +558,7 @@ private:
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
     SectorEditorSoundCatalogState soundCatalogState;
-    MaterialEditingState materialEditingState;
+    SectorEditorConfigClipboardState configClipboardState;
     MaterialEditingUiState materialEditingUiState;
     FogVolumeEditingUiState fogVolumeEditingUiState;
     ReflectionProbeEditingUiState reflectionProbeEditingUiState;

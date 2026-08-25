@@ -404,34 +404,6 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         return true;
     }
 
-    if (layer == TopologyMaterialLayer::Base && !selectedMiddle) {
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_material_sidedef_copy_material",
-                    Rectangle{0.0f, y, contentW, 38.0f},
-                    font,
-                    TextFormat("Copy %s Material", TopologyWallPartName(selectionState.selectedTopologyWallPart)))) {
-            materialEditing.CopyMaterial(selectedMaterialTarget);
-        }
-        y += 38.0f + gap;
-
-        if (engine::Button(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    "sector_editor_material_sidedef_paste_material",
-                    Rectangle{0.0f, y, contentW, 38.0f},
-                    font,
-                    TextFormat("Paste %s Material", TopologyWallPartName(selectionState.selectedTopologyWallPart)))) {
-            materialEditing.PasteMaterial(selectedMaterialTarget, assets);
-        }
-        y += 38.0f + gap;
-    }
-
     const SectorTopologyUvSettings& selectedUv = layer == TopologyMaterialLayer::Decal
             ? selectedPart.decal.uv
             : selectedPart.uv;

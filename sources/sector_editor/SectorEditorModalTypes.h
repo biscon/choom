@@ -232,6 +232,10 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState objectProbeSpacingInput;
     engine::UIFloatInputState objectProbeLowerHeightInput;
     engine::UIFloatInputState objectProbeUpperHeightInput;
+    engine::UIFloatInputState ambientOcclusionRadiusInput;
+    engine::UIFloatInputState ambientOcclusionStrengthInput;
+    engine::UIFloatInputState indirectBounceRadiusInput;
+    engine::UIFloatInputState indirectBounceStrengthInput;
     engine::UIFloatInputState bloomThresholdInput;
     engine::UIFloatInputState bloomSoftKneeInput;
     engine::UIFloatInputState bloomIntensityInput;

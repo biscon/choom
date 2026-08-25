@@ -42,8 +42,8 @@ inline float MeasureSectorPreviewSettingsLightingContentHeight(
     constexpr float sectionTitleHeight = 38.0f;
     constexpr float swatchHeight = 36.0f;
     constexpr float trailingPadding = 12.0f;
-    return 16.0f * (rowHeight + gap)
-            + 4.0f * (sectionLead + sectionTitleHeight)
+    return 20.0f * (rowHeight + gap)
+            + 5.0f * (sectionLead + sectionTitleHeight)
             + swatchHeight + gap
             + trailingPadding;
 }
@@ -97,11 +97,32 @@ inline SectorLightmapBakeSettings NormalizeSectorPreviewObjectProbeSettings(
     return settings;
 }
 
+inline SectorLightmapBakeSettings NormalizeSectorLevelLightmapSettings(
+        SectorLightmapBakeSettings settings)
+{
+    settings.ambientOcclusionRadius = std::clamp(
+            settings.ambientOcclusionRadius,
+            SectorWorldToAuthoringDistance(0.05f),
+            SectorWorldToAuthoringDistance(16.0f));
+    settings.ambientOcclusionStrength = std::clamp(
+            settings.ambientOcclusionStrength, 0.0f, 1.0f);
+    settings.indirectBounceRadius = std::clamp(
+            settings.indirectBounceRadius,
+            SectorWorldToAuthoringDistance(0.05f),
+            SectorWorldToAuthoringDistance(16.0f));
+    settings.indirectBounceStrength = std::clamp(
+            settings.indirectBounceStrength, 0.0f, 1.0f);
+    return NormalizeSectorPreviewObjectProbeSettings(settings);
+}
+
 inline void ResetSectorPreviewSettingsModalLightingDefaults(
         SectorPreviewSettingsModalState& modalState)
 {
     modalState.draftDirectionalLight = DefaultSectorTopologyDirectionalLightSettings();
+    const SectorLightmapBakeQualityPreset qualityPreset =
+            modalState.draftLightmapSettings.qualityPreset;
     modalState.draftLightmapSettings = SectorLightmapBakeSettings{};
+    modalState.draftLightmapSettings.qualityPreset = qualityPreset;
     modalState.draftHdrBloom = engine::HdrBloomSettings{};
     modalState.lightDirectionXInput = engine::UIFloatInputState{};
     modalState.lightDirectionYInput = engine::UIFloatInputState{};
@@ -110,6 +131,10 @@ inline void ResetSectorPreviewSettingsModalLightingDefaults(
     modalState.objectProbeSpacingInput = engine::UIFloatInputState{};
     modalState.objectProbeLowerHeightInput = engine::UIFloatInputState{};
     modalState.objectProbeUpperHeightInput = engine::UIFloatInputState{};
+    modalState.ambientOcclusionRadiusInput = engine::UIFloatInputState{};
+    modalState.ambientOcclusionStrengthInput = engine::UIFloatInputState{};
+    modalState.indirectBounceRadiusInput = engine::UIFloatInputState{};
+    modalState.indirectBounceStrengthInput = engine::UIFloatInputState{};
     modalState.bloomThresholdInput = {};
     modalState.bloomSoftKneeInput = {};
     modalState.bloomIntensityInput = {};
@@ -184,6 +209,43 @@ inline bool ApplySectorPreviewObjectProbeSettings(
             normalizedDraft.objectProbeLowerHeightWorld;
     map.lightmapSettings.objectProbeUpperHeightWorld =
             normalizedDraft.objectProbeUpperHeightWorld;
+    return true;
+}
+
+inline bool SameSectorLevelLightmapSettings(
+        const SectorLightmapBakeSettings& a,
+        const SectorLightmapBakeSettings& b)
+{
+    const SectorLightmapBakeSettings current = NormalizeSectorLevelLightmapSettings(a);
+    const SectorLightmapBakeSettings draft = NormalizeSectorLevelLightmapSettings(b);
+    return current.ambientOcclusionRadius == draft.ambientOcclusionRadius
+            && current.ambientOcclusionStrength == draft.ambientOcclusionStrength
+            && current.indirectBounceRadius == draft.indirectBounceRadius
+            && current.indirectBounceStrength == draft.indirectBounceStrength
+            && current.objectProbeSpacingWorld == draft.objectProbeSpacingWorld
+            && current.objectProbeLowerHeightWorld == draft.objectProbeLowerHeightWorld
+            && current.objectProbeUpperHeightWorld == draft.objectProbeUpperHeightWorld;
+}
+
+inline bool ApplySectorLevelLightmapSettings(
+        SectorTopologyMap& map,
+        const SectorLightmapBakeSettings& draftSettings)
+{
+    if (SameSectorLevelLightmapSettings(
+                map.lightmapSettings, draftSettings)) return false;
+
+    const SectorLightmapBakeSettings draft =
+            NormalizeSectorLevelLightmapSettings(draftSettings);
+
+    map.lightmapSettings.ambientOcclusionRadius = draft.ambientOcclusionRadius;
+    map.lightmapSettings.ambientOcclusionStrength = draft.ambientOcclusionStrength;
+    map.lightmapSettings.indirectBounceRadius = draft.indirectBounceRadius;
+    map.lightmapSettings.indirectBounceStrength = draft.indirectBounceStrength;
+    map.lightmapSettings.objectProbeSpacingWorld = draft.objectProbeSpacingWorld;
+    map.lightmapSettings.objectProbeLowerHeightWorld =
+            draft.objectProbeLowerHeightWorld;
+    map.lightmapSettings.objectProbeUpperHeightWorld =
+            draft.objectProbeUpperHeightWorld;
     return true;
 }
 

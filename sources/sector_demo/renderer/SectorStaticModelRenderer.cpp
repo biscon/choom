@@ -188,6 +188,7 @@ uniform int staticSpecularLightTypes[MAX_STATIC_SPECULAR_LIGHTS];
 uniform vec3 staticSpecularLightDirections[MAX_STATIC_SPECULAR_LIGHTS];
 uniform float staticSpecularLightInnerConeCos[MAX_STATIC_SPECULAR_LIGHTS];
 uniform float staticSpecularLightOuterConeCos[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightStartFeathers[MAX_STATIC_SPECULAR_LIGHTS];
 out vec4 finalColor;
 
 const vec2 kPoissonDisk[12] = vec2[12](
@@ -499,6 +500,17 @@ void main()
                             : step(
                                     staticSpecularLightInnerConeCos[i],
                                     coneDot);
+                } else if (staticSpecularLightTypes[i] == 2) {
+                    vec3 rectDirection = SafeNormalize(
+                            staticSpecularLightDirections[i],
+                            vec3(0.0, -1.0, 0.0));
+                    float frontDistance = dot(
+                            fragWorldPosition - staticSpecularLightPositions[i],
+                            rectDirection);
+                    float startFeather = staticSpecularLightStartFeathers[i];
+                    coneAtten = startFeather > 0.000001
+                            ? smoothstep(0.0, startFeather, frontDistance)
+                            : step(0.0, frontDistance);
                 }
                 float ndotl = max(dot(worldNormal, lightDirection), 0.0);
                 if (ndotl > 0.0 && coneAtten > 0.0) {

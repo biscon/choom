@@ -151,6 +151,7 @@ struct LightmapWorldRectLight {
     float range = 0.0f;
     float width = 0.0f;
     float height = 0.0f;
+    float startFeather = 0.0f;
     bool castsShadow = true;
 };
 
@@ -1822,6 +1823,10 @@ DirectLightEvaluation EvaluateDirectLightSample(
     const Vector3 emitterToHit = Vector3Scale(fromEmitter, 1.0f / distance);
     const float emitterCosine = Vector3DotProduct(light.basis.forward, emitterToHit);
     if (emitterCosine <= 0.0f) return {};
+    const float startAttenuation = SectorRectLightStartFeatherAttenuation(
+            Vector3DotProduct(fromEmitter, light.basis.forward),
+            light.startFeather);
+    if (startAttenuation <= 0.0f) return {};
     const Vector3 directionToLight = Vector3Scale(emitterToHit, -1.0f);
     const float lambert = std::max(Vector3DotProduct(hit.normal, directionToLight), 0.0f);
     if (lambert <= 0.0f) return {};
@@ -1832,7 +1837,8 @@ DirectLightEvaluation EvaluateDirectLightSample(
         return {};
     }
     const float t = std::clamp(1.0f - distance / light.range, 0.0f, 1.0f);
-    const float scale = light.intensity * t * t * lambert * emitterCosine;
+    const float scale = light.intensity * t * t * lambert * emitterCosine
+            * startAttenuation;
     return MakeDirectLightEvaluation(
             Vector3Scale(light.linearColor, scale), directionToLight);
 }
@@ -2618,6 +2624,10 @@ LightmapWorldRectLight MakeWorldSpaceLight(const SectorTopologyStaticRectLight& 
     light.range = SectorAuthoringToWorldDistance(authoringLight.range);
     light.width = SectorAuthoringToWorldDistance(authoringLight.width);
     light.height = SectorAuthoringToWorldDistance(authoringLight.height);
+    light.startFeather = std::clamp(
+            SectorAuthoringToWorldDistance(authoringLight.startFeather),
+            0.0f,
+            light.range);
     light.castsShadow = authoringLight.castsShadow;
     return light;
 }
@@ -5830,6 +5840,10 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
             FnvAppendFloat(hash, worldLight.range);
             FnvAppendFloat(hash, worldLight.width);
             FnvAppendFloat(hash, worldLight.height);
+            if (worldLight.startFeather > BakeEpsilon) {
+                FnvAppendString(hash, "start-feather");
+                FnvAppendFloat(hash, worldLight.startFeather);
+            }
             if (!light->castsShadow) FnvAppendString(hash, "no-shadow");
         }
     }

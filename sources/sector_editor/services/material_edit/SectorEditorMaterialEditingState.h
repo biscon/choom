@@ -5,10 +5,6 @@
 
 namespace game {
 
-struct MaterialEditingState {
-    TopologyMaterialPayload copiedMaterial;
-};
-
 struct MaterialEditingUiState {
     engine::UIFloatInputState surface3DUvScaleUInput;
     engine::UIFloatInputState surface3DUvScaleVInput;

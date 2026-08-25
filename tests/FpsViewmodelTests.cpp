@@ -904,6 +904,7 @@ void SettingsResolutionAndPersistence()
     settings.graphics.maxShadowLightUpdatesPerFrame = 7;
     settings.graphics.dynamicLightFadeInSeconds = 0.35f;
     settings.graphics.depthPrepass = false;
+    settings.graphics.showFpsCounter = true;
     settings.graphics.performanceOverlay = true;
     settings.graphics.vsync = false;
     settings.graphics.horizontalFovDegrees = 96;
@@ -940,6 +941,7 @@ void SettingsResolutionAndPersistence()
     assert(loaded.graphics.maxShadowLightUpdatesPerFrame == 7);
     assert(Near(loaded.graphics.dynamicLightFadeInSeconds, 0.35f));
     assert(!loaded.graphics.depthPrepass);
+    assert(loaded.graphics.showFpsCounter);
     assert(loaded.graphics.performanceOverlay);
     assert(!loaded.graphics.vsync);
     assert(loaded.graphics.horizontalFovDegrees == 96);
@@ -1101,6 +1103,8 @@ void SettingsResolutionAndPersistence()
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"depthPrepass":"yes"}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"showFpsCounter":"yes"}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"vsync":"yes"}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"horizontalFovDegrees":69}})",loaded,&error));
@@ -1122,6 +1126,7 @@ void SettingsResolutionAndPersistence()
             loaded.graphics.dynamicLightFadeInSeconds,
             game::DefaultFpsDynamicLightFadeInSeconds));
     assert(!loaded.graphics.depthPrepass);
+    assert(!loaded.graphics.showFpsCounter);
     assert(loaded.footsteps.defaultSet == "Tile_Mono");
     assert(Near(loaded.footsteps.volume, 0.65f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.35f));

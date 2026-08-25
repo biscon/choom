@@ -630,6 +630,7 @@ void SelectSectorEditorTopologyLight(SectorEditorSelectionServiceContext& contex
     context.ui.lightInnerConeInput = engine::UIFloatInputState{};
     context.ui.lightOuterConeInput = engine::UIFloatInputState{};
     context.ui.lightSourceRadiusInput = engine::UIFloatInputState{};
+    context.ui.lightStartFeatherInput = engine::UIFloatInputState{};
     context.ui.lightRedInput = engine::UIIntInputState{};
     context.ui.lightGreenInput = engine::UIIntInputState{};
     context.ui.lightBlueInput = engine::UIIntInputState{};
@@ -678,6 +679,7 @@ void SelectSectorEditorTopologyStaticSpotLight(SectorEditorSelectionServiceConte
     context.ui.lightInnerConeInput = engine::UIFloatInputState{};
     context.ui.lightOuterConeInput = engine::UIFloatInputState{};
     context.ui.lightSourceRadiusInput = engine::UIFloatInputState{};
+    context.ui.lightStartFeatherInput = engine::UIFloatInputState{};
     context.ui.lightRedInput = engine::UIIntInputState{};
     context.ui.lightGreenInput = engine::UIIntInputState{};
     context.ui.lightBlueInput = engine::UIIntInputState{};
@@ -724,6 +726,7 @@ void SelectSectorEditorTopologyDynamicLight(SectorEditorSelectionServiceContext&
     context.ui.lightIntensityInput = engine::UIFloatInputState{};
     context.ui.lightRadiusInput = engine::UIFloatInputState{};
     context.ui.lightSourceRadiusInput = engine::UIFloatInputState{};
+    context.ui.lightStartFeatherInput = engine::UIFloatInputState{};
     context.ui.lightInnerConeInput = engine::UIFloatInputState{};
     context.ui.lightOuterConeInput = engine::UIFloatInputState{};
     context.ui.lightRedInput = engine::UIIntInputState{};
@@ -772,6 +775,7 @@ void SelectSectorEditorTopologyDynamicSpotLight(SectorEditorSelectionServiceCont
     context.ui.lightIntensityInput = engine::UIFloatInputState{};
     context.ui.lightRadiusInput = engine::UIFloatInputState{};
     context.ui.lightSourceRadiusInput = engine::UIFloatInputState{};
+    context.ui.lightStartFeatherInput = engine::UIFloatInputState{};
     context.ui.lightInnerConeInput = engine::UIFloatInputState{};
     context.ui.lightOuterConeInput = engine::UIFloatInputState{};
     context.ui.lightFlickerSpeedInput = engine::UIFloatInputState{};

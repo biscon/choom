@@ -1661,7 +1661,7 @@ bool DrawRectLightInspector(
                 &SectorEditorLightEditingService::SetDynamicRectLightShadowSoftness);
     }
 
-    enum Field { PX, PY, PZ, TX, TY, TZ, Roll, Width, Height, Range, Intensity };
+    enum Field { PX, PY, PZ, TX, TY, TZ, Roll, Width, Height, Range, StartFeather, Intensity };
     auto row = [&](const char* id, const char* label, float value,
             engine::UIFloatInputState& state, float minimum, float maximum, Field field) {
         const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
@@ -1690,6 +1690,10 @@ bool DrawRectLightInspector(
             } else if (field == Range) {
                 if constexpr (Dynamic) changed = editing.SetDynamicRectLightRange(light, result.value);
                 else changed = editing.SetStaticRectLightRange(light, result.value);
+            } else if (field == StartFeather) {
+                if constexpr (!Dynamic) {
+                    changed = editing.SetStaticRectLightStartFeather(light, result.value);
+                }
             } else {
                 if constexpr (Dynamic) changed = editing.SetDynamicRectLightIntensity(light, result.value);
                 else changed = editing.SetStaticRectLightIntensity(light, result.value);
@@ -1729,6 +1733,10 @@ bool DrawRectLightInspector(
             SectorWorldToAuthoringDistance(0.05f), SectorWorldToAuthoringDistance(64.0f), Height);
     row(TextFormat("%s_range", prefix), "Range:", light.range, uiState.lightRadiusInput,
             SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), Range);
+    if constexpr (!Dynamic) {
+        row("static_rect_start_feather", "Start feather:", light.startFeather,
+                uiState.lightStartFeatherInput, 0.0f, light.range, StartFeather);
+    }
     row(TextFormat("%s_intensity", prefix), "Intensity:", light.intensity, uiState.lightIntensityInput, 0, 8, Intensity);
 
     auto colorRow = [&](const char* suffix, const char* label, unsigned char& channel,

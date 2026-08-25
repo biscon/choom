@@ -301,6 +301,7 @@ struct FpsGraphicsSettings {
     int maxShadowLightUpdatesPerFrame = DefaultFpsShadowLightUpdatesPerFrame;
     float dynamicLightFadeInSeconds = DefaultFpsDynamicLightFadeInSeconds;
     bool depthPrepass = false;
+    bool showFpsCounter = false;
     bool performanceOverlay = false;
     bool vsync = true;
     int horizontalFovDegrees = DefaultFpsHorizontalFovDegrees;

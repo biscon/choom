@@ -130,22 +130,25 @@ public:
     void Draw(
             float renderScale,
             bool fxaa,
-            const game::SectorAtmosphereDiagnostics& atmosphere) const
+            const game::SectorAtmosphereDiagnostics& atmosphere,
+            int topOffset = 0) const
     {
         static constexpr const char* Names[PassCount] = {
                 "shadows", "world", "atmosphere", "viewmodel", "bloom",
                 "presentation", "final"};
-        DrawRectangle(8, 42, 760, 104 + static_cast<int>(PassCount) * 20,
+        DrawRectangle(8, topOffset + 42, 760,
+                104 + static_cast<int>(PassCount) * 20,
                 Color{0, 0, 0, 190});
         DrawText(TextFormat("Render %.0f%%  FXAA %s  CPU / GPU ms",
                          renderScale * 100.0f, fxaa ? "on" : "off"),
-                16, 48, 16, LIME);
+                16, topOffset + 48, 16, LIME);
         for (std::size_t pass = 0; pass < PassCount; ++pass) {
             DrawText(TextFormat("%-13s %6.2f / %6.2f", Names[pass],
                              cpuMilliseconds[pass], gpuMilliseconds[pass]),
-                    16, 70 + static_cast<int>(pass) * 20, 16, RAYWHITE);
+                    16, topOffset + 70 + static_cast<int>(pass) * 20,
+                    16, RAYWHITE);
         }
-        const int detailY = 70 + static_cast<int>(PassCount) * 20;
+        const int detailY = topOffset + 70 + static_cast<int>(PassCount) * 20;
         DrawText(TextFormat(
                          "atmo GPU dist/fog/shaft/haze/dust %.2f/%.2f/%.2f/%.2f/%.2f",
                          atmosphere.distanceFogGpuMilliseconds,
@@ -1000,12 +1003,21 @@ int main(int argc, char** argv)
             }
             Rectangle uiSrc = GetFullscreenSrcRect(uiTarget.texture);
             DrawTexturePro(uiTarget.texture, uiSrc, dst, {0,0}, 0.0f, WHITE);
-            DrawFPS(10, 10);
+            const float editorUiTopInset = application.EditorUiTopInset();
+            const int editorMenuScreenBottom = editorUiTopInset > 0.0f
+                    ? static_cast<int>(std::ceil(
+                            dst.y + editorUiTopInset * dst.height
+                                    / static_cast<float>(INTERNAL_HEIGHT)))
+                    : 0;
+            if (application.ApplicationSettings().graphics.showFpsCounter) {
+                DrawFPS(10, editorMenuScreenBottom + 10);
+            }
             if (application.ApplicationSettings().graphics.performanceOverlay) {
                 performanceProfiler.Draw(
                         currentWorldRenderScale,
                         useWorldFxaa,
-                        application.AtmosphereDiagnostics());
+                        application.AtmosphereDiagnostics(),
+                        editorMenuScreenBottom);
             }
             if (application.IsMenuOpen()) {
                 Rectangle menuSrc = GetFullscreenSrcRect(menuTarget.texture);

@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
+#include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_demo/SectorTopologyMap.h"
 
@@ -61,6 +62,7 @@ struct SectorEditorLightEditingServiceContext {
         engine::UIFloatInputState& lightInnerConeInput;
         engine::UIFloatInputState& lightOuterConeInput;
         engine::UIFloatInputState& lightSourceRadiusInput;
+        engine::UIFloatInputState& lightStartFeatherInput;
         engine::UIFloatInputState& lightFlickerSpeedInput;
         engine::UIFloatInputState& lightFlickerAmountInput;
         engine::UIIntInputState& lightShadowPriorityInput;
@@ -127,6 +129,9 @@ public:
     SectorEditorLightMutationResult AddDynamicRectLight(int sectorId, Vector2 mapPoint);
     SectorEditorLightMutationResult ConvertSelectedLight();
     SectorEditorLightMutationResult DeleteSelectedLightConfirmed();
+    bool CopySelectedConfig(SectorEditorConfigClipboardState& clipboard) const;
+    SectorEditorLightMutationResult PasteSelectedConfig(
+            const SectorEditorConfigClipboardState& clipboard);
 
     bool BeginLightDrag(TopologySelectionKind kind, int topologyLightId, SpotLightHandle spotHandle);
     SectorEditorLightMutationResult ApplyLightDragToSnappedPosition(Vector3 snappedPosition);
@@ -218,6 +223,7 @@ public:
     bool SetStaticRectLightWidth(SectorTopologyStaticRectLight& light, float value);
     bool SetStaticRectLightHeight(SectorTopologyStaticRectLight& light, float value);
     bool SetStaticRectLightRange(SectorTopologyStaticRectLight& light, float value);
+    bool SetStaticRectLightStartFeather(SectorTopologyStaticRectLight& light, float value);
     bool SetStaticRectLightIntensity(SectorTopologyStaticRectLight& light, float value);
     bool SetStaticRectLightCastsShadow(SectorTopologyStaticRectLight& light, bool value);
     bool SetStaticRectLightColor(SectorTopologyStaticRectLight& light, Color value);

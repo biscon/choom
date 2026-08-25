@@ -78,9 +78,12 @@ views and maps to world Z for generated 3D geometry.
   unchanged.
 - `Escape`: clear selection, then return to Select tool.
 - `New`: confirm and reset to a blank topology level.
-- `Load`: select a level under `assets/levels`; unsaved edits require
+- `Load` (`Ctrl+O`): select a level under `assets/levels`; unsaved edits require
   confirmation before loading.
-- `Save`: save the current topology document, or save as a named level.
+- `Save` (`Ctrl+S`): save directly to the current level path. An unnamed level
+  opens `Save As...` instead.
+- `Save As...`: open the level naming dialog and confirm before overwriting a
+  different existing level.
 - `Reload`: confirm and reload the current saved level.
 - `Material Editor`: add, remove, rename, and edit global materials and their
   albedo/filter/PBR scalar properties.
@@ -91,7 +94,14 @@ views and maps to world Z for generated 3D geometry.
 - Door tool: place a portal-attached procedural door on a valid two-sided
   linedef.
 - `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
-- `3D Mode`: rebuild the 3D preview from the current in-memory topology map.
+- `3D Mode` (`Ctrl+D`, under `View`): rebuild the 3D preview from the current
+  in-memory topology map, or return to 2D from preview mode.
+- `Copy config` / `Paste config` (`Ctrl+C` / `Ctrl+V`): copy and paste the
+  selected compatible editor configuration. Disabled commands do not fire.
+
+The application-wide Graphics Settings screen includes an `FPS counter`
+checkbox for raylib's green FPS display. It defaults off and is separate from
+the F9 performance overlay and from level settings.
 
 ## Topology Model
 
@@ -419,6 +429,13 @@ Static light fields:
 - radius
 - sourceRadius
 
+Static rectangular lights additionally expose `width`, `height`, `range`, and
+optional `startFeather`. Width and height define the sampled area emitter and
+therefore its soft-shadow source size. `startFeather` is a separate authored
+distance that fades direct light in from the front of the emitter plane; it
+does not emit light behind the rectangle. A missing or zero value preserves the
+hard start used by older maps.
+
 Select mode picks lights before linedefs/sidedefs/sectors. The Move tool drags
 lights in X/Z and keeps their Y value unchanged. The inspector edits position,
 color, intensity, radius, and sourceRadius. Deleting a selected light removes it
@@ -449,8 +466,15 @@ material ID and UV scale/offset only. Floor materials paste only to floors,
 ceiling materials paste only to ceilings, and wall/lower/upper materials paste
 only to the matching concrete sidedef wall part. Paste mutates only the selected
 target surface; it does not edit the opposite sidedef, sector defaults, ambient
-lighting, or geometry. Keyboard shortcuts are not implemented for this workflow
-yet, so use the inspector or 3D panel buttons.
+lighting, or geometry. `Ctrl+C` and `Ctrl+V` invoke the same enabled copy/paste
+commands as the inspector and 3D panel buttons.
+
+Selected 3D Props and Dynamic Props also support `Copy config` / `Paste config`.
+Each copied prop config pastes only to the same prop type. Paste copies the
+model, orientation, height offset, scale, collision, and shadow settings; a
+Dynamic Prop additionally copies its animation and interaction settings. The
+destination object ID, script instance ID, and world position remain unchanged.
+Static-model bake fingerprints are transient and are not copied.
 
 The Material Editor has a scrolling material list and an albedo preview. Each
 definition exposes editable ID, albedo PNG selection, filtering, metalness,

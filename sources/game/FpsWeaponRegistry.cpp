@@ -1247,6 +1247,13 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 }
                 parsed.graphics.performanceOverlay = performanceOverlay->get<bool>();
             }
+            const auto showFpsCounter = graphics->find("showFpsCounter");
+            if (showFpsCounter != graphics->end()) {
+                if (!showFpsCounter->is_boolean()) {
+                    Fail("application settings.graphics.showFpsCounter must be a boolean");
+                }
+                parsed.graphics.showFpsCounter = showFpsCounter->get<bool>();
+            }
             const auto vsync = graphics->find("vsync");
             if (vsync != graphics->end()) {
                 if (!vsync->is_boolean()) {
@@ -1742,6 +1749,7 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"dynamicLightFadeInSeconds",
                     graphics.dynamicLightFadeInSeconds},
             {"depthPrepass", graphics.depthPrepass},
+            {"showFpsCounter", graphics.showFpsCounter},
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},
             {"horizontalFovDegrees", graphics.horizontalFovDegrees}};

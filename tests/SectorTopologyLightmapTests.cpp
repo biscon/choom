@@ -1548,6 +1548,15 @@ void TestSourceHashChanges()
     changedStaticRect.staticRectLights[0].rollDegrees += 10.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticRect) != staticRectRollHash,
           "hash changes when static rect roll changes");
+    changedStaticRect = base;
+    changedStaticRect.staticRectLights.push_back(rect);
+    const std::string staticRectDefaultFeatherHash =
+            game::ComputeSectorLightmapSourceHash(changedStaticRect);
+    changedStaticRect.staticRectLights[0].startFeather =
+            game::SectorWorldToAuthoringDistance(0.5f);
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticRect)
+                  != staticRectDefaultFeatherHash,
+          "hash changes when static rect start feather changes");
 
     game::SectorTopologyMap changedDynamicRect = base;
     game::SectorTopologyDynamicRectLight dynamicRect;

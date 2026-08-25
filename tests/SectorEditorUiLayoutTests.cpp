@@ -1,4 +1,5 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/preview/SectorEditorLightProxyPlacement.h"
@@ -36,6 +37,23 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.x + a.width > b.x
             && a.y < b.y + b.height
             && a.y + a.height > b.y;
+}
+
+void TestMainMenuShortcutMatching()
+{
+    const engine::UIMenuShortcut save{KEY_S, true, false, false};
+    Check(engine::MatchesUIMenuShortcut(
+                  save, KEY_S, true, false, false),
+          "menu shortcut matches its exact Ctrl key chord");
+    Check(!engine::MatchesUIMenuShortcut(
+                  save, KEY_S, true, true, false),
+          "menu shortcut rejects an extra Shift modifier");
+    Check(!engine::MatchesUIMenuShortcut(
+                  save, KEY_S, false, false, false),
+          "menu shortcut requires its Ctrl modifier");
+    Check(!engine::MatchesUIMenuShortcut(
+                  save, KEY_O, true, false, false),
+          "menu shortcut rejects a different key");
 }
 
 void TestLightmapBakeSetupModalStateLifecycle()
@@ -422,8 +440,8 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
     const float rowH = 40.0f;
     const float gap = 12.0f;
     const float lightingLastControlBottom =
-            16.0f * (rowH + gap)
-            + 4.0f * (8.0f + 38.0f)
+            20.0f * (rowH + gap)
+            + 5.0f * (8.0f + 38.0f)
             + 36.0f + gap;
     const float fogLastControlBottom =
             10.0f * (rowH + gap)
@@ -434,11 +452,84 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
     Check(Near(
                   game::MeasureSectorPreviewSettingsLightingContentHeight(rowH, gap),
                   lightingLastControlBottom + 12.0f),
-          "lighting scroll reaches HDR bloom radius with bottom padding");
+          "lighting scroll reaches indirect bounce strength with bottom padding");
     Check(Near(
                   game::MeasureSectorPreviewSettingsFogContentHeight(rowH, gap),
                   fogLastControlBottom + 12.0f),
           "fog scroll reaches the complete color swatch with bottom padding");
+}
+
+void TestMainMenuWorkspaceAndToolsLayouts()
+{
+    const game::SectorEditorWorkspaceLayout layout =
+            game::BuildSectorEditorWorkspaceLayout();
+    Check(Near(layout.mainMenu.height, game::EditorMainMenuHeight),
+          "main menu uses the reserved editor band height");
+    Check(!Overlaps(layout.mainMenu, layout.leftPanel)
+                  && !Overlaps(layout.mainMenu, layout.rightPanel)
+                  && !Overlaps(layout.mainMenu, layout.canvas),
+          "main menu band does not overlap 2D editor workspace regions");
+    Check(layout.leftPanel.y == game::EditorMainMenuHeight
+                  && layout.rightPanel.y == game::EditorMainMenuHeight
+                  && layout.canvas.y > game::EditorMainMenuHeight,
+          "2D editor workspace starts below the main menu");
+    Check(Near(layout.bottomPanel.y + layout.bottomPanel.height,
+                  game::EditorHeight),
+          "bottom status panel remains anchored to the viewport bottom");
+
+    const float rowH = 46.0f;
+    const float gap = 10.0f;
+    const float collapsed = game::MeasureSectorEditorToolsContentHeight(
+            rowH, gap, false);
+    const float expanded = game::MeasureSectorEditorToolsContentHeight(
+            rowH, gap, true);
+    Check(Near(expanded - collapsed, rowH + gap),
+          "tools content height includes the conditional Trigger mode row");
+    Check(Near(collapsed, 26.0f + 5.0f * (rowH + gap)
+                  + 22.0f + 26.0f + 16.0f * (rowH + gap)
+                  + 22.0f + 2.0f * (rowH + gap)
+                  + 22.0f + (rowH + gap) + 12.0f),
+          "tools content height reaches the final Grid control with padding");
+}
+
+void TestLevelSettingsAppliesCompleteLightmapDraft()
+{
+    game::SectorTopologyMap map;
+    map.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::High;
+    const std::string originalHash = game::ComputeSectorLightmapSourceHash(map);
+
+    game::SectorLightmapBakeSettings draft = map.lightmapSettings;
+    draft.qualityPreset = game::SectorLightmapBakeQualityPreset::Draft;
+    draft.ambientOcclusionRadius = game::SectorWorldToAuthoringDistance(2.0f);
+    draft.ambientOcclusionStrength = 0.25f;
+    draft.indirectBounceRadius = game::SectorWorldToAuthoringDistance(6.0f);
+    draft.indirectBounceStrength = 0.45f;
+    draft.objectProbeSpacingWorld = 5.0f;
+    draft.objectProbeLowerHeightWorld = 0.8f;
+    draft.objectProbeUpperHeightWorld = 1.8f;
+
+    Check(game::ApplySectorLevelLightmapSettings(map, draft),
+          "Level Settings applies changed AO, bounce, and probe fields");
+    Check(map.lightmapSettings.qualityPreset
+                  == game::SectorLightmapBakeQualityPreset::High,
+          "Level Settings preserves the bake quality preset");
+    Check(Near(map.lightmapSettings.ambientOcclusionStrength, 0.25f)
+                  && Near(map.lightmapSettings.indirectBounceStrength, 0.45f)
+                  && Near(map.lightmapSettings.objectProbeSpacingWorld, 5.0f),
+          "Level Settings writes every displayed lightmap field");
+    Check(game::ComputeSectorLightmapSourceHash(map) != originalHash,
+          "Level Settings lightmap changes invalidate the lightmap source hash");
+
+    game::SectorPreviewSettingsModalState modal;
+    modal.draftLightmapSettings = map.lightmapSettings;
+    game::ResetSectorPreviewSettingsModalLightingDefaults(modal);
+    Check(modal.draftLightmapSettings.qualityPreset
+                  == game::SectorLightmapBakeQualityPreset::High,
+          "Lighting defaults preserve the hidden bake quality preset");
+    Check(Near(modal.draftLightmapSettings.ambientOcclusionStrength, 0.55f)
+                  && Near(modal.draftLightmapSettings.indirectBounceStrength, 0.20f),
+          "Lighting defaults reset the moved lightmap controls");
 }
 
 void TestAuthoringFaceInspectorHeightIncludesAllSections()
@@ -781,6 +872,7 @@ void TestLightProxyPlacementMath()
 
 int main()
 {
+    TestMainMenuShortcutMatching();
     TestLightmapBakeSetupModalStateLifecycle();
     TestModelFilenameExtraction();
     TestAudioAssetPickerScrollSession();
@@ -799,6 +891,8 @@ int main()
     TestDoorTextureSettingsModalLayoutDoesNotOverlap();
     TestPreviewSettingsModalCopiesObjectProbeSettings();
     TestPreviewSettingsScrollableContentHeightsReachLastControls();
+    TestMainMenuWorkspaceAndToolsLayouts();
+    TestLevelSettingsAppliesCompleteLightmapDraft();
     TestAuthoringFaceInspectorHeightIncludesAllSections();
     TestPreviewSettingsModalResetPreservesSessionView();
     TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash();

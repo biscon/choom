@@ -765,6 +765,13 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
             AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
                      "range must be finite and positive");
         }
+        if (!std::isfinite(light.startFeather) || light.startFeather < 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "start feather must be finite and non-negative");
+        } else if (std::isfinite(light.range) && light.startFeather > light.range) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "start feather must not exceed range");
+        }
     }
 
     for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {

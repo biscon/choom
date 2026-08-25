@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorHelpers.h"
 
 #include <raylib.h>
 
@@ -10,6 +11,52 @@
 #include <string_view>
 
 namespace game {
+
+struct SectorEditorWorkspaceLayout {
+    Rectangle mainMenu = {};
+    Rectangle leftPanel = {};
+    Rectangle rightPanel = {};
+    Rectangle bottomPanel = {};
+    Rectangle canvas = {};
+};
+
+inline SectorEditorWorkspaceLayout BuildSectorEditorWorkspaceLayout()
+{
+    return SectorEditorWorkspaceLayout{
+            Rectangle{0.0f, 0.0f, EditorWidth, EditorMainMenuHeight},
+            Rectangle{0.0f, EditorMainMenuHeight, LeftPanelWidth,
+                    EditorHeight - BottomPanelHeight - EditorMainMenuHeight},
+            Rectangle{EditorWidth - RightPanelWidth, EditorMainMenuHeight,
+                    RightPanelWidth,
+                    EditorHeight - BottomPanelHeight - EditorMainMenuHeight},
+            Rectangle{0.0f, EditorHeight - BottomPanelHeight,
+                    EditorWidth, BottomPanelHeight},
+            Rectangle{LeftPanelWidth + PanelGap,
+                    EditorMainMenuHeight + PanelGap,
+                    EditorWidth - LeftPanelWidth - RightPanelWidth
+                            - PanelGap * 2.0f,
+                    EditorHeight - BottomPanelHeight - EditorMainMenuHeight
+                            - PanelGap * 2.0f}};
+}
+
+inline float MeasureSectorEditorToolsContentHeight(
+        float rowHeight,
+        float gap,
+        bool triggerModeRowVisible)
+{
+    constexpr float sectionLabelHeight = 26.0f;
+    constexpr float separatorHeight = 22.0f;
+    constexpr float trailingPadding = 12.0f;
+    const auto rowsHeight = [rowHeight, gap](int count) {
+        return static_cast<float>(count) * (rowHeight + gap);
+    };
+    return sectionLabelHeight + rowsHeight(5)
+            + separatorHeight + sectionLabelHeight
+            + rowsHeight(16 + (triggerModeRowVisible ? 1 : 0))
+            + separatorHeight + rowsHeight(2)
+            + separatorHeight + rowsHeight(1)
+            + trailingPadding;
+}
 
 inline constexpr float SectorEditorInspectorTextureActionHeight = 36.0f;
 inline constexpr float SectorEditorInspectorTextureValueHeight = 22.0f;

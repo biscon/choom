@@ -4994,6 +4994,7 @@ void TestRectLightRoundTrip()
     staticLight.width = 40.0f;
     staticLight.height = 12.0f;
     staticLight.range = 96.0f;
+    staticLight.startFeather = 18.0f;
     staticLight.intensity = 2.5f;
     staticLight.castsShadow = false;
     map.staticRectLights.push_back(staticLight);
@@ -5010,8 +5011,9 @@ void TestRectLightRoundTrip()
 
     const Json saved = Json::parse(SaveText(map));
     Check(saved["staticRectLights"].size() == 1
-                  && Near(saved["staticRectLights"][0]["rollDegrees"].get<float>(), 32.0f),
-          "static rect light serializes dimensions and roll");
+                  && Near(saved["staticRectLights"][0]["rollDegrees"].get<float>(), 32.0f)
+                  && Near(saved["staticRectLights"][0]["startFeather"].get<float>(), 18.0f),
+          "static rect light serializes dimensions, roll, and start feather");
     Check(saved["dynamicRectLights"][0]["castsShadow"] == true,
           "dynamic rect light serializes shadow request");
     SectorTopologyMap loaded;
@@ -5019,12 +5021,30 @@ void TestRectLightRoundTrip()
     Check(LoadText(saved.dump(), loaded, error), "rect lights deserialize");
     Check(loaded.staticRectLights.size() == 1
                   && Near(loaded.staticRectLights[0].width, 40.0f)
+                  && Near(loaded.staticRectLights[0].startFeather, 18.0f)
                   && !loaded.staticRectLights[0].castsShadow,
           "static rect light round-trips");
     Check(loaded.dynamicRectLights.size() == 1
                   && Near(loaded.dynamicRectLights[0].height, 8.0f)
                   && loaded.dynamicRectLights[0].flicker,
           "dynamic rect light round-trips");
+
+    Json legacy = saved;
+    legacy["staticRectLights"][0].erase("startFeather");
+    Check(LoadText(legacy.dump(), loaded, error)
+                  && Near(loaded.staticRectLights[0].startFeather, 0.0f),
+          "missing static rect start feather preserves the legacy default");
+    const Json legacySaved = Json::parse(SaveText(loaded));
+    Check(!legacySaved["staticRectLights"][0].contains("startFeather"),
+          "default static rect start feather is omitted on save");
+
+    Json invalid = saved;
+    invalid["staticRectLights"][0]["startFeather"] = -1.0f;
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "negative static rect start feather is rejected");
+    invalid["staticRectLights"][0]["startFeather"] = 97.0f;
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "static rect start feather beyond range is rejected");
 }
 
 } // namespace
