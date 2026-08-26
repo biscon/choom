@@ -155,6 +155,18 @@ void TestSectorItemUseTargetFallbackAndPendingGate()
             true);
     Check(pending.kind == game::SectorUseTargetKind::None,
           "an item with a yielding pickup hook cannot start a second take");
+    world.Get<game::SectorItem>(itemEntity).takePending = false;
+    game::BeginFrozenItemDrop(
+            world.Get<game::SectorItem>(itemEntity).presentation, 1.0f);
+    const game::SectorUseTarget falling = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(falling.kind == game::SectorUseTargetKind::None,
+          "a dropped item cannot be taken before its presentation settles");
 }
 
 void TestHeldObjectUseRayTargetOrderingAndOcclusion()
@@ -328,10 +340,11 @@ void TestItemRuntimeSpawnAndFocusedRemoval()
     const engine::Entity entity = state.placedObjectEntities.front().entity;
     Check(world.Has<game::SectorItem>(entity)
                   && world.Has<game::SectorObjectTransform>(entity)
+                  && world.Has<game::SectorObjectVisualOffset>(entity)
                   && world.Has<game::SectorObjectLighting>(entity)
                   && !world.Has<engine::AnimatedModelInstance>(entity)
                   && !world.Has<game::SectorStaticModelCollider>(entity),
-          "world items spawn lit but without animation or collision components");
+          "world items spawn lit with neutral visual state but without animation or collision components");
     const game::SectorItem& item = world.Get<game::SectorItem>(entity);
     Check(item.model == engine::ModelHandle{7, 2}
                   && item.quantity == 8
@@ -7127,6 +7140,26 @@ void TestDynamicModelShadowCasterCollectionAndRevision()
                                   collection.casters.front().transform),
                           Vector3Transform(Vector3{}, expectedItem)),
           "Dynamic-shadow items join the caster set in their nonanimated authored pose");
+    world.Add(itemEntity, game::SectorObjectVisualOffset{
+            Vector3{0.0f, 0.6f, 0.0f}});
+    world.Get<game::SectorItem>(itemEntity).presentation.scaleMultiplier = 0.5f;
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const Matrix expectedPresentedItem =
+            game::BuildSectorStaticModelAuthoredTransform(
+                    Vector3Add(
+                            itemTransform.position,
+                            Vector3{0.0f, 0.6f, 0.0f}),
+                    itemTransform.rotationXRadians,
+                    itemTransform.yawRadians,
+                    itemTransform.rotationZRadians,
+                    item.scale * 0.5f);
+    Check(collection.casters.size() == 1
+                  && Near(
+                          Vector3Transform(
+                                  Vector3{},
+                                  collection.casters.front().transform),
+                          Vector3Transform(Vector3{}, expectedPresentedItem)),
+          "Dynamic-shadow items use their presentation offset and scale");
     world.Get<game::SectorItem>(itemEntity).shadowMode =
             game::SectorDynamicModelShadowMode::Contact;
     game::UpdateSectorDynamicModelShadowCasters(collection, &world);

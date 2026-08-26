@@ -41,6 +41,12 @@ ItemDropCandidate BuildItemDropCandidate(
         Vector3 desiredOriginXZ,
         BoundingBox localBounds,
         float yawRadians = 0.0f);
+float ItemDropLiftToCenterAtHeight(
+        const ItemDropCandidate& candidate,
+        float centerHeightWorld);
+ItemDropCandidate BuildLiftedItemDropSweep(
+        const ItemDropCandidate& candidate,
+        float liftWorld);
 BoundingBox TransformItemDropBounds(
         BoundingBox localBounds,
         Matrix transform);

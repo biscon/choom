@@ -170,6 +170,31 @@ ItemDropCandidate BuildItemDropCandidate(
     return candidate;
 }
 
+float ItemDropLiftToCenterAtHeight(
+        const ItemDropCandidate& candidate,
+        float centerHeightWorld)
+{
+    if (!candidate.valid || !std::isfinite(centerHeightWorld)) return 0.0f;
+    const float centerY = (candidate.worldBounds.min.y
+            + candidate.worldBounds.max.y) * 0.5f;
+    return std::max(0.0f, centerHeightWorld - centerY);
+}
+
+ItemDropCandidate BuildLiftedItemDropSweep(
+        const ItemDropCandidate& candidate,
+        float liftWorld)
+{
+    ItemDropCandidate swept = candidate;
+    if (!candidate.valid || !std::isfinite(liftWorld)) {
+        swept.valid = false;
+        return swept;
+    }
+    swept.worldBounds.max.y += std::max(0.0f, liftWorld);
+    swept.valid = Finite(swept.worldBounds.min)
+            && Finite(swept.worldBounds.max);
+    return swept;
+}
+
 bool ItemDropBoundsOverlap(BoundingBox first, BoundingBox second)
 {
     return first.max.x > second.min.x && first.min.x < second.max.x

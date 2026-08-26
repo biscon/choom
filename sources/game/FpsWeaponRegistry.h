@@ -310,6 +310,8 @@ struct FpsGraphicsSettings {
 struct PlayerInventoryApplicationSettings {
     float maxCarryWeightKg = 30.0f;
     int maxSlots = 24;
+    float pickupVacuumDurationSeconds = 0.65f;
+    float pickupVacuumTargetHeightWorld = 0.75f;
 };
 
 struct FpsApplicationSettings {

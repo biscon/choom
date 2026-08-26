@@ -303,7 +303,8 @@ SectorUseTarget FindSectorUseTarget(
             [&](engine::Entity entity,
                     SectorItem& item,
                     SectorObjectTransform& transform) {
-                if (item.takePending || item.title.empty()
+                if (item.takePending || !IsItemSettled(item.presentation)
+                        || item.title.empty()
                         || !std::isfinite(item.takeDistance)
                         || item.takeDistance <= 0.0f) {
                     return;

@@ -6,6 +6,7 @@
 #include "game/npc/NpcDefinitions.h"
 #include "game/items/ItemAssets.h"
 #include "game/items/ItemDefinitions.h"
+#include "game/items/ItemPresentation.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -112,6 +113,7 @@ struct SectorItem {
             SectorDynamicModelShadowMode::Contact;
     SectorItemOrigin origin = SectorItemOrigin::Authored;
     bool takePending = false;
+    ItemPresentationState presentation;
 };
 
 } // namespace game

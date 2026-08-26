@@ -3,6 +3,7 @@
 #include "game/items/ItemIconLayout.h"
 #include "game/items/ItemInventory.h"
 #include "game/items/ItemInventoryUI.h"
+#include "game/items/ItemPresentation.h"
 #include "sector_editor/items/SectorEditorItemEditorService.h"
 #include "sector_editor/items/SectorItemReferenceScanner.h"
 
@@ -140,21 +141,41 @@ void ApplicationSettingsInventoryFields()
             R"({"version":1})", settings, &error));
     assert(std::abs(settings.playerInventory.maxCarryWeightKg - 30.0f) < 0.001f);
     assert(settings.playerInventory.maxSlots == 24);
+    assert(std::abs(
+            settings.playerInventory.pickupVacuumDurationSeconds - 0.65f)
+            < 0.001f);
+    assert(std::abs(
+            settings.playerInventory.pickupVacuumTargetHeightWorld - 0.75f)
+            < 0.001f);
     assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"playerInventory":{"maxCarryWeightKg":42.5,"maxSlots":64}})",
+            R"({"version":1,"playerInventory":{"maxCarryWeightKg":42.5,"maxSlots":64,"pickupVacuumDurationSeconds":0.8,"pickupVacuumTargetHeightWorld":0.6}})",
             settings, &error));
     assert(std::abs(settings.playerInventory.maxCarryWeightKg - 42.5f) < 0.001f);
     assert(settings.playerInventory.maxSlots == 64);
+    assert(std::abs(
+            settings.playerInventory.pickupVacuumDurationSeconds - 0.8f)
+            < 0.001f);
+    assert(std::abs(
+            settings.playerInventory.pickupVacuumTargetHeightWorld - 0.6f)
+            < 0.001f);
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerInventory":{"maxCarryWeightKg":0}})",
             settings, &error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerInventory":{"maxSlots":1025}})",
             settings, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerInventory":{"pickupVacuumDurationSeconds":0}})",
+            settings, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerInventory":{"pickupVacuumTargetHeightWorld":-0.1}})",
+            settings, &error));
 
     settings = game::FpsApplicationSettings{};
     settings.playerInventory.maxCarryWeightKg = 35.5f;
     settings.playerInventory.maxSlots = 48;
+    settings.playerInventory.pickupVacuumDurationSeconds = 0.9f;
+    settings.playerInventory.pickupVacuumTargetHeightWorld = 0.55f;
     const std::filesystem::path path = std::filesystem::temp_directory_path()
             / "item_application_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
@@ -162,8 +183,72 @@ void ApplicationSettingsInventoryFields()
     assert(game::LoadFpsApplicationSettings(path.string(), loaded, &error));
     assert(std::abs(loaded.playerInventory.maxCarryWeightKg - 35.5f) < 0.001f);
     assert(loaded.playerInventory.maxSlots == 48);
+    assert(std::abs(
+            loaded.playerInventory.pickupVacuumDurationSeconds - 0.9f)
+            < 0.001f);
+    assert(std::abs(
+            loaded.playerInventory.pickupVacuumTargetHeightWorld - 0.55f)
+            < 0.001f);
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
+}
+
+void ItemPresentationMotion()
+{
+    game::ItemPresentationState pickup;
+    game::BeginItemPickupVacuum(pickup, Vector3{4.0f, 0.0f, 0.0f});
+    const game::ItemPresentationFrame halfway =
+            game::AdvanceItemPresentation(
+                    pickup,
+                    Vector3{4.0f, 0.0f, 0.0f},
+                    Vector3{0.0f, 0.0f, 0.0f},
+                    1.0f,
+                    0.75f,
+                    25.0f,
+                    false,
+                    0.5f);
+    assert(std::abs(halfway.visualOffset.x + 1.0f) < 0.001f);
+    assert(std::abs(halfway.visualOffset.y - 0.1875f) < 0.001f);
+    assert(std::abs(halfway.scaleMultiplier - 1.0f) < 0.001f);
+    assert(!halfway.removalReady);
+    const game::ItemPresentationFrame finished =
+            game::AdvanceItemPresentation(
+                    pickup,
+                    Vector3{4.0f, 0.0f, 0.0f},
+                    Vector3{2.0f, 1.0f, 3.0f},
+                    1.0f,
+                    0.75f,
+                    25.0f,
+                    false,
+                    0.5f);
+    assert(std::abs(finished.visualOffset.x + 2.0f) < 0.001f);
+    assert(std::abs(finished.visualOffset.y - 1.75f) < 0.001f);
+    assert(std::abs(finished.visualOffset.z - 3.0f) < 0.001f);
+    assert(finished.scaleMultiplier <= 0.001f);
+    assert(finished.removalReady);
+
+    game::ItemPresentationState drop;
+    game::BeginFrozenItemDrop(drop, 1.5f);
+    const game::ItemPresentationFrame frozen =
+            game::AdvanceItemPresentation(
+                    drop, {}, {}, 1.0f, 0.75f, 10.0f, true, 1.0f);
+    assert(std::abs(frozen.visualOffset.y - 1.5f) < 0.001f);
+    assert(drop.phase == game::ItemPresentationPhase::DropFrozen);
+    const game::ItemPresentationFrame released =
+            game::AdvanceItemPresentation(
+                    drop, {}, {}, 1.0f, 0.75f, 10.0f, false, 0.1f);
+    assert(std::abs(released.visualOffset.y - 1.5f) < 0.001f);
+    assert(drop.phase == game::ItemPresentationPhase::DropFalling);
+    const game::ItemPresentationFrame reopened =
+            game::AdvanceItemPresentation(
+                    drop, {}, {}, 1.0f, 0.75f, 10.0f, true, 0.2f);
+    assert(std::abs(reopened.visualOffset.y - 1.3f) < 0.001f);
+    assert(drop.phase == game::ItemPresentationPhase::DropFalling);
+    const game::ItemPresentationFrame landed =
+            game::AdvanceItemPresentation(
+                    drop, {}, {}, 1.0f, 0.75f, 10.0f, true, 1.0f);
+    assert(std::abs(landed.visualOffset.y) < 0.001f);
+    assert(game::IsItemSettled(drop));
 }
 
 void IconLayoutAndCameraFit()
@@ -599,6 +684,7 @@ int main()
 {
     RegistryRoundTripAndValidation();
     ApplicationSettingsInventoryFields();
+    ItemPresentationMotion();
     IconLayoutAndCameraFit();
     ReferenceScanningAndEditorService();
     InventoryTransactionsAndCampaignReconciliation();

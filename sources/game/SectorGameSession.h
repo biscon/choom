@@ -18,6 +18,7 @@
 
 #include <string>
 #include <array>
+#include <vector>
 
 namespace game {
 
@@ -165,6 +166,10 @@ private:
             SectorSceneRuntime& scene,
             std::uint64_t runtimeId,
             std::size_t& affectedIndex);
+    void UpdateItemPresentations(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            float dt);
     bool BuildCollisionAndPlayer(
             SectorSceneRuntime& scene,
             bool initializePlayer,
@@ -218,6 +223,7 @@ private:
     ItemInventoryUIState inventoryUi;
     ItemInventoryUIAction pendingInventoryAction;
     HeldObjectUseState heldObjectUse;
+    std::vector<engine::Entity> completedItemPresentations;
     Rectangle logicalViewport = {0.0f, 0.0f, 1920.0f, 1080.0f};
 };
 

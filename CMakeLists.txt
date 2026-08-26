@@ -588,6 +588,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemAssets.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp
+            sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -708,6 +709,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemIconLayout.cpp
             sources/game/items/ItemInventory.cpp
             sources/game/items/ItemInventoryUILayout.cpp
+            sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp

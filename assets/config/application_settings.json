@@ -22,7 +22,9 @@
   },
   "playerInventory": {
     "maxCarryWeightKg": 30.0,
-    "maxSlots": 24
+    "maxSlots": 24,
+    "pickupVacuumDurationSeconds": 4.65,
+    "pickupVacuumTargetHeightWorld": 0.75
   },
   "hdrBloom": {
     "enabled": true,

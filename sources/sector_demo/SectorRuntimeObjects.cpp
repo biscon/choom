@@ -703,6 +703,7 @@ bool SpawnItemEntity(
             placedObject.yawRadians,
             placedObject.item.rotationXRadians,
             placedObject.item.rotationZRadians});
+    world.Add(entity, SectorObjectVisualOffset{});
     world.Add(entity, object);
     world.Add(entity, SampleSectorObjectLighting(
             state.objectLightProbes,

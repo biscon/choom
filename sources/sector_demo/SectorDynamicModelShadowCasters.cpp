@@ -184,7 +184,7 @@ void UpdateSectorDynamicModelShadowCasters(
                 SectorObjectTransform,
                 SectorObject,
                 SectorItem>(
-                [&collection](
+                [&collection, runtimeObjectWorld](
                         engine::Entity entity,
                         SectorObjectTransform& transform,
                         SectorObject& object,
@@ -205,11 +205,18 @@ void UpdateSectorDynamicModelShadowCasters(
                     }
                     const Matrix authoredTransform =
                             BuildSectorStaticModelAuthoredTransform(
-                                    transform.position,
+                                    runtimeObjectWorld->Has<SectorObjectVisualOffset>(entity)
+                                            ? Vector3Add(
+                                                    transform.position,
+                                                    runtimeObjectWorld
+                                                            ->Get<SectorObjectVisualOffset>(entity)
+                                                            .position)
+                                            : transform.position,
                                     transform.rotationXRadians,
                                     transform.yawRadians,
                                     transform.rotationZRadians,
-                                    item.scale);
+                                    item.scale
+                                            * item.presentation.scaleMultiplier);
                     collection.casters.push_back(
                             SectorDynamicModelShadowCaster{
                                     entity,

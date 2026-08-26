@@ -1020,6 +1020,15 @@ void TestItemDropClearanceQueries()
           "drop candidate places its lower bound on the sector floor");
     Check(game::ItemDropFitsTopology(world, clear),
           "drop candidate fits clear topology");
+    const float eyeLift = game::ItemDropLiftToCenterAtHeight(clear, 1.2f);
+    const game::ItemDropCandidate swept =
+            game::BuildLiftedItemDropSweep(clear, eyeLift);
+    Check(Near(eyeLift, 0.7f)
+                  && Near(swept.worldBounds.min.y, clear.worldBounds.min.y)
+                  && Near(swept.worldBounds.max.y, 1.7f),
+          "drop presentation centers at eye height and builds a floor-to-eye sweep");
+    Check(game::ItemDropFitsTopology(world, swept),
+          "drop eye-to-floor sweep fits clear topology");
 
     const game::ItemDropCandidate wall = game::BuildItemDropCandidate(
             world,
@@ -1037,6 +1046,10 @@ void TestItemDropClearanceQueries()
             game::kItemDropFallbackLocalBounds);
     Check(lowCeiling.valid && !game::ItemDropFitsTopology(lowWorld, lowCeiling),
           "drop candidate exceeding the ceiling is refused");
+    const game::ItemDropCandidate lowSweep =
+            game::BuildLiftedItemDropSweep(lowCeiling, 1.0f);
+    Check(lowSweep.valid && !game::ItemDropFitsTopology(lowWorld, lowSweep),
+          "drop eye-to-floor sweep respects sector ceiling clearance");
 
     game::SectorStaticModelCollider prop;
     prop.center = Vector2{4.0f, 4.0f};

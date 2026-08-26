@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorFpsController.h"
 #include "game/items/ItemDropPlacement.h"
+#include "game/items/ItemPresentation.h"
 #include "engine/components/AnimatedModel.h"
 #include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
@@ -492,6 +493,8 @@ bool SectorGameSession::DropInventoryEntry(
             EffectiveSectorFpsControllerConfig(
                     controller.fpsControllerState,
                     controller.fpsControllerConfig);
+    const Vector3 eyePosition = SectorFpsControllerEyePosition(
+            controller.fpsControllerState, playerConfig);
     const float dropYawRadians = BuildItemDropRandomYawRadians(
             runtimeId, static_cast<std::uint64_t>(objectId));
     const auto slotOrigins = BuildItemDropSlotOrigins(
@@ -500,6 +503,7 @@ bool SectorGameSession::DropInventoryEntry(
             playerConfig.playerRadius,
             localBounds);
     ItemDropCandidate candidate;
+    float candidateLiftWorld = 0.0f;
     for (const Vector3 slotOrigin : slotOrigins) {
         const ItemDropCandidate slotCandidate = BuildItemDropCandidate(
                 collision.sectorCollisionWorld,
@@ -507,38 +511,45 @@ bool SectorGameSession::DropInventoryEntry(
                 slotOrigin,
                 localBounds,
                 dropYawRadians);
-        if (!slotCandidate.valid
+        const float slotLiftWorld = ItemDropLiftToCenterAtHeight(
+                slotCandidate, eyePosition.y);
+        const ItemDropCandidate sweptCandidate = BuildLiftedItemDropSweep(
+                slotCandidate, slotLiftWorld);
+        if (!slotCandidate.valid || !sweptCandidate.valid
                 || !ItemDropFitsTopology(
-                        collision.sectorCollisionWorld, slotCandidate)) {
+                        collision.sectorCollisionWorld, slotCandidate)
+                || !ItemDropFitsTopology(
+                        collision.sectorCollisionWorld, sweptCandidate)) {
             continue;
         }
         bool blocked = false;
         for (const SectorDynamicDoorCollider& door : objects.dynamicDoorColliders) {
-            if (ItemDropBoundsOverlap(slotCandidate.worldBounds, door)) {
+            if (ItemDropBoundsOverlap(sweptCandidate.worldBounds, door)) {
                 blocked = true;
                 break;
             }
         }
         if (blocked
                 || ItemDropBoundsOverlapAnyPropCollider(
-                        slotCandidate.worldBounds, objects.staticModelColliders)
+                        sweptCandidate.worldBounds, objects.staticModelColliders)
                 || ItemDropBoundsOverlapAnyPropCollider(
-                        slotCandidate.worldBounds, objects.dynamicModelColliders)
+                        sweptCandidate.worldBounds, objects.dynamicModelColliders)
                 || ItemDropBoundsOverlapPlayer(
-                        slotCandidate.worldBounds,
+                        sweptCandidate.worldBounds,
                         controller.fpsControllerState.feetPosition,
                         playerConfig.playerRadius,
                         playerConfig.playerHeight)) {
             continue;
         }
         context.world.ForEach<SectorObjectTransform, SectorItem>(
-                [&context, &slotCandidate, &blocked](
+                [&context, &sweptCandidate, &blocked](
                         engine::Entity,
                         SectorObjectTransform& transform,
                         SectorItem& item) {
                     if (blocked) return;
+                    if (IsItemPickupVacuuming(item.presentation)) return;
                     blocked = ItemDropBoundsOverlap(
-                            slotCandidate.worldBounds,
+                            sweptCandidate.worldBounds,
                             ItemVisualBounds(
                                     context.assets,
                                     item.model,
@@ -548,6 +559,7 @@ bool SectorGameSession::DropInventoryEntry(
                 });
         if (!blocked) {
             candidate = slotCandidate;
+            candidateLiftWorld = slotLiftWorld;
             break;
         }
     }
@@ -568,6 +580,15 @@ bool SectorGameSession::DropInventoryEntry(
     if (!scene.SpawnItemRuntimeObject(
                 context, topologyMap, drop, &spawned)) {
         return false;
+    }
+    if (context.world.IsAlive(spawned)
+            && context.world.Has<SectorItem>(spawned)
+            && context.world.Has<SectorObjectVisualOffset>(spawned)) {
+        SectorItem& spawnedItem = context.world.Get<SectorItem>(spawned);
+        BeginFrozenItemDrop(
+                spawnedItem.presentation, candidateLiftWorld);
+        context.world.Get<SectorObjectVisualOffset>(spawned).position =
+                Vector3{0.0f, candidateLiftWorld, 0.0f};
     }
     if (!RemoveInventoryEntryQuantity(
                 itemCampaign->inventory,
@@ -622,6 +643,64 @@ void SectorGameSession::ProcessInventoryAction(
             inventoryUi, itemCampaign->inventory, affectedIndex);
 }
 
+void SectorGameSession::UpdateItemPresentations(
+        engine::EngineContext& context,
+        SectorSceneRuntime& scene,
+        float dt)
+{
+    if (applicationSettings == nullptr) return;
+    completedItemPresentations.clear();
+    const SectorFpsControllerConfig playerConfig =
+            EffectiveSectorFpsControllerConfig(
+                    controller.fpsControllerState,
+                    controller.fpsControllerConfig);
+    context.world.ForEach<
+            SectorObjectTransform,
+            SectorObjectVisualOffset,
+            SectorItem>(
+            [this, dt, &playerConfig](
+                    engine::Entity entity,
+                    SectorObjectTransform& transform,
+                    SectorObjectVisualOffset& visualOffset,
+                    SectorItem& item) {
+                const ItemPresentationFrame frame = AdvanceItemPresentation(
+                        item.presentation,
+                        transform.position,
+                        controller.fpsControllerState.feetPosition,
+                        applicationSettings->playerInventory
+                                .pickupVacuumDurationSeconds,
+                        applicationSettings->playerInventory
+                                .pickupVacuumTargetHeightWorld,
+                        playerConfig.gravity,
+                        inventoryUi.open,
+                        dt);
+                visualOffset.position = frame.visualOffset;
+                item.presentation.scaleMultiplier = frame.scaleMultiplier;
+                if (!frame.removalReady) return;
+                if (completedItemPresentations.size()
+                        == completedItemPresentations.capacity()) {
+                    std::fprintf(
+                            stderr,
+                            "[SectorGameSession WARNING] item presentation completion capacity exceeded during update\n");
+                }
+                completedItemPresentations.push_back(entity);
+            });
+
+    bool queuedAny = false;
+    for (engine::Entity entity : completedItemPresentations) {
+        if (!QueueRemoveSectorRuntimeObjectByEntity(
+                    context.world, scene.RuntimeObjects(), entity)) {
+            TraceLog(
+                    LOG_ERROR,
+                    "Completed item pickup entity %u could not be queued for removal",
+                    entity.index);
+            continue;
+        }
+        queuedAny = true;
+    }
+    if (queuedAny) context.world.FlushDestroyedEntities();
+}
+
 bool SectorGameSession::CommitItemTake(
         engine::EngineContext& context,
         SectorSceneRuntime& scene,
@@ -632,7 +711,9 @@ bool SectorGameSession::CommitItemTake(
     if (itemRegistry == nullptr || itemCampaign == nullptr
             || applicationSettings == nullptr
             || !context.world.IsAlive(entity)
-            || !context.world.Has<SectorItem>(entity)) {
+            || !context.world.Has<SectorItem>(entity)
+            || !context.world.Has<SectorObjectTransform>(entity)
+            || !context.world.Has<SectorObjectVisualOffset>(entity)) {
         return false;
     }
     SectorItem& item = context.world.Get<SectorItem>(entity);
@@ -696,15 +777,15 @@ bool SectorGameSession::CommitItemTake(
                         return object.id == placedObjectId;
                     }),
             topologyMap.runtimeObjects.end());
-    if (!QueueRemoveSectorRuntimeObjectByEntity(
-                context.world, scene.RuntimeObjects(), entity)) {
-        TraceLog(
-                LOG_ERROR,
-                "Item pickup committed but runtime entity %u could not be queued for removal",
-                entity.index);
-        return false;
-    }
-    context.world.FlushDestroyedEntities();
+    const SectorObjectTransform& transform =
+            context.world.Get<SectorObjectTransform>(entity);
+    const SectorObjectVisualOffset& visualOffset =
+            context.world.Get<SectorObjectVisualOffset>(entity);
+    BeginItemPickupVacuum(
+            item.presentation,
+            Vector3Add(transform.position, visualOffset.position));
+    item.takePending = true;
+    item.shadowMode = SectorDynamicModelShadowMode::None;
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
@@ -880,6 +961,8 @@ bool SectorGameSession::StartNew(
     topologyMap = std::move(loaded);
     scene.RuntimeObjects().placedObjectEntities.reserve(
             topologyMap.runtimeObjects.capacity());
+    completedItemPresentations.clear();
+    completedItemPresentations.reserve(topologyMap.runtimeObjects.capacity());
     entryMarker = resolvedEntryMarkerId.empty()
             ? nullptr
             : FindSectorCompiledLevelMarker(topologyMap, resolvedEntryMarkerId);
@@ -991,6 +1074,7 @@ void SectorGameSession::Shutdown(
     inventoryUi = {};
     pendingInventoryAction = {};
     heldObjectUse = {};
+    completedItemPresentations.clear();
     logicalViewport = Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f};
     weaponRegistry = nullptr;
     itemRegistry = nullptr;
@@ -1342,6 +1426,7 @@ void SectorGameSession::Update(
     engine::ScriptSystemUpdate(context, scripts, dt);
     UpdatePendingItemTake(context, scene);
     UpdatePendingHeldObjectUse();
+    UpdateItemPresentations(context, scene, dt);
     UpdateSectorScriptDoorPermission(context, scriptHost);
     if (scriptHost.dynamicLightsDirty) {
         scene.Renderer().RefreshDynamicLightSources(topologyMap);
@@ -1677,6 +1762,8 @@ bool SectorGameSession::RebuildFromMap(
     topologyMap = std::move(reconciledMap);
     scene.RuntimeObjects().placedObjectEntities.reserve(
             topologyMap.runtimeObjects.capacity());
+    completedItemPresentations.clear();
+    completedItemPresentations.reserve(topologyMap.runtimeObjects.capacity());
     ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);

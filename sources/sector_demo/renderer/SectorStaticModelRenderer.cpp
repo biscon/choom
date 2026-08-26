@@ -1711,6 +1711,7 @@ void SectorStaticModelRenderer::Draw(
              &drawn,
              &portalCulled,
              &skipped,
+             &runtimeObjectWorld,
              staticCaptureOnly,
              useHighlight](
                     engine::Entity entity,
@@ -1734,13 +1735,23 @@ void SectorStaticModelRenderer::Draw(
                     ++skipped;
                     return;
                 }
+                Vector3 renderPosition = transform.position;
+                if (runtimeObjectWorld.Has<SectorObjectVisualOffset>(entity)) {
+                    renderPosition = Vector3Add(
+                            renderPosition,
+                            runtimeObjectWorld
+                                    .Get<SectorObjectVisualOffset>(entity)
+                                    .position);
+                }
+                const float renderScale = item.scale
+                        * item.presentation.scaleMultiplier;
                 const Matrix authoredTransform =
                         BuildSectorStaticModelAuthoredTransform(
-                                transform.position,
+                                renderPosition,
                                 transform.rotationXRadians,
                                 transform.yawRadians,
                                 transform.rotationZRadians,
-                                item.scale);
+                                renderScale);
                 const Matrix modelTransform = MatrixMultiply(
                         asset->model.transform, authoredTransform);
                 const SectorReceiverBounds receiverBounds = asset->hasLocalBounds
@@ -1748,11 +1759,11 @@ void SectorStaticModelRenderer::Draw(
                                 asset->localBounds,
                                 authoredTransform,
                                 object.currentSectorId,
-                                transform.position)
+                                renderPosition)
                         : SectorReceiverBounds{
                                 object.currentSectorId,
-                                transform.position,
-                                transform.position};
+                                renderPosition,
+                                renderPosition};
                 const bool drewMesh = DrawWorldDynamicModel(
                         *asset,
                         asset->model,

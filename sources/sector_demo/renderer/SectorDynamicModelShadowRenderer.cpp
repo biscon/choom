@@ -331,7 +331,7 @@ void SectorDynamicModelShadowRenderer::DrawContactShadows(
                         object,
                         item.model,
                         item.shadowMode,
-                        item.scale);
+                        item.scale * item.presentation.scaleMultiplier);
             });
 }
 

@@ -1232,6 +1232,34 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     Fail("application settings.playerInventory.maxSlots must be between 1 and 1024");
                 }
             }
+            const auto pickupVacuumDurationSeconds = playerInventory->find(
+                    "pickupVacuumDurationSeconds");
+            if (pickupVacuumDurationSeconds != playerInventory->end()) {
+                if (!pickupVacuumDurationSeconds->is_number()) {
+                    Fail("application settings.playerInventory.pickupVacuumDurationSeconds must be a number");
+                }
+                const double value = pickupVacuumDurationSeconds->get<double>();
+                if (!std::isfinite(value) || value <= 0.0
+                        || value > std::numeric_limits<float>::max()) {
+                    Fail("application settings.playerInventory.pickupVacuumDurationSeconds must be finite and positive");
+                }
+                parsed.playerInventory.pickupVacuumDurationSeconds =
+                        static_cast<float>(value);
+            }
+            const auto pickupVacuumTargetHeightWorld = playerInventory->find(
+                    "pickupVacuumTargetHeightWorld");
+            if (pickupVacuumTargetHeightWorld != playerInventory->end()) {
+                if (!pickupVacuumTargetHeightWorld->is_number()) {
+                    Fail("application settings.playerInventory.pickupVacuumTargetHeightWorld must be a number");
+                }
+                const double value = pickupVacuumTargetHeightWorld->get<double>();
+                if (!std::isfinite(value) || value < 0.0
+                        || value > std::numeric_limits<float>::max()) {
+                    Fail("application settings.playerInventory.pickupVacuumTargetHeightWorld must be finite and non-negative");
+                }
+                parsed.playerInventory.pickupVacuumTargetHeightWorld =
+                        static_cast<float>(value);
+            }
         }
         const auto graphics = root.find("graphics");
         if (graphics != root.end()) {
@@ -1745,6 +1773,18 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings playerInventory.maxSlots must be between 1 and 1024");
         return false;
     }
+    if (!std::isfinite(
+                settings.playerInventory.pickupVacuumDurationSeconds)
+            || settings.playerInventory.pickupVacuumDurationSeconds <= 0.0f) {
+        SetError(error, "application settings playerInventory.pickupVacuumDurationSeconds must be finite and positive");
+        return false;
+    }
+    if (!std::isfinite(
+                settings.playerInventory.pickupVacuumTargetHeightWorld)
+            || settings.playerInventory.pickupVacuumTargetHeightWorld < 0.0f) {
+        SetError(error, "application settings playerInventory.pickupVacuumTargetHeightWorld must be finite and non-negative");
+        return false;
+    }
     const std::string staminaError = PlayerStaminaSettingsError(
             settings.playerStamina);
     if (!staminaError.empty()) {
@@ -1796,7 +1836,11 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"horizontalFovDegrees", graphics.horizontalFovDegrees}};
     root["playerInventory"] = {
             {"maxCarryWeightKg", settings.playerInventory.maxCarryWeightKg},
-            {"maxSlots", settings.playerInventory.maxSlots}};
+            {"maxSlots", settings.playerInventory.maxSlots},
+            {"pickupVacuumDurationSeconds",
+                    settings.playerInventory.pickupVacuumDurationSeconds},
+            {"pickupVacuumTargetHeightWorld",
+                    settings.playerInventory.pickupVacuumTargetHeightWorld}};
     const engine::HdrBloomSettings hdrBloom =
             engine::NormalizeHdrBloomSettings(settings.hdrBloom);
     root["hdrBloom"] = {
