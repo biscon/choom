@@ -11,6 +11,17 @@ struct SectorFreeflyControllerState {
     int mouseLookWarmupFrames = 0;
 };
 
+inline bool AdvanceSectorFreeflyMouseLookCapture(
+        SectorFreeflyControllerState& state)
+{
+    if (!state.mouseLookEnabled) return false;
+    if (state.mouseLookWarmupFrames > 0) {
+        --state.mouseLookWarmupFrames;
+        return false;
+    }
+    return true;
+}
+
 void ResetSectorFreeflyController(
         SectorFreeflyControllerState& state,
         const SectorViewPose& pose);

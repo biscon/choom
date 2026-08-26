@@ -69,15 +69,11 @@ void UpdateSectorFreeflyController(
             }
     );
 
-    if (state.mouseLookEnabled) {
-        if (state.mouseLookWarmupFrames > 0) {
-            --state.mouseLookWarmupFrames;
-        } else {
-            const Vector2 mouseDelta = input.MouseDelta();
-            state.pose.yawRadians += mouseDelta.x * MouseSensitivity;
-            state.pose.pitchRadians -= mouseDelta.y * MouseSensitivity;
-            state.pose.pitchRadians = Clamp(state.pose.pitchRadians, -PitchLimit, PitchLimit);
-        }
+    if (AdvanceSectorFreeflyMouseLookCapture(state)) {
+        const Vector2 mouseDelta = input.MouseDelta();
+        state.pose.yawRadians += mouseDelta.x * MouseSensitivity;
+        state.pose.pitchRadians -= mouseDelta.y * MouseSensitivity;
+        state.pose.pitchRadians = Clamp(state.pose.pitchRadians, -PitchLimit, PitchLimit);
     }
 
     if (state.mouseLookEnabled) {

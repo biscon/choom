@@ -10,7 +10,7 @@ namespace {
 
 constexpr float DefaultPickupDurationSeconds = 0.65f;
 constexpr float DefaultDropGravityWorldPerSecondSquared = 25.0f;
-constexpr float PickupShrinkStart = 0.65f;
+constexpr float PickupShrinkStart = 0.80f;
 
 float SmoothStep(float value)
 {
@@ -89,7 +89,7 @@ ItemPresentationFrame AdvanceItemPresentation(
         state.elapsedSeconds += dt;
         const float t = std::clamp(
                 state.elapsedSeconds / duration, 0.0f, 1.0f);
-        const float eased = t * t;
+        const float eased = SmoothStep(t);
         state.pickupTargetYWorld = std::max(
                 state.pickupTargetYWorld,
                 playerFeetPosition.y + std::max(
@@ -98,8 +98,10 @@ ItemPresentationFrame AdvanceItemPresentation(
                 playerFeetPosition.x,
                 state.pickupTargetYWorld,
                 playerFeetPosition.z};
-        const float shrink = SmoothStep(
-                (t - PickupShrinkStart) / (1.0f - PickupShrinkStart));
+        const float shrink = std::clamp(
+                (t - PickupShrinkStart) / (1.0f - PickupShrinkStart),
+                0.0f,
+                1.0f);
         frame.scaleMultiplier = 1.0f - shrink;
         const Vector3 renderedCenter = Vector3Lerp(
                 state.pickupStartCenterWorld, targetCenter, eased);

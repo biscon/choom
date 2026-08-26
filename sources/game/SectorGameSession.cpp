@@ -1234,8 +1234,12 @@ void SectorGameSession::Update(
         input.strafeRight = context.input.IsKeyDown(KEY_D);
         input.run = context.input.IsKeyDown(KEY_LEFT_SHIFT)
                 || context.input.IsKeyDown(KEY_RIGHT_SHIFT);
-        input.mouseLookEnabled = true;
-        input.mouseDelta = context.input.MouseDelta();
+        input.mouseLookEnabled =
+                AdvanceSectorFreeflyMouseLookCapture(
+                        controller.freeflyController);
+        if (input.mouseLookEnabled) {
+            input.mouseDelta = context.input.MouseDelta();
+        }
     }
     if (!gameplayInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,

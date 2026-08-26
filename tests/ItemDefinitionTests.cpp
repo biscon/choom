@@ -210,7 +210,7 @@ void ItemPresentationMotion()
                     25.0f,
                     false,
                     0.5f);
-    assert(std::abs(halfway.visualOffset.x + 1.0f) < 0.001f);
+    assert(std::abs(halfway.visualOffset.x + 2.0f) < 0.001f);
     assert(std::abs(halfway.visualOffset.y) < 0.001f);
     assert(std::abs(halfway.scaleMultiplier - 1.0f) < 0.001f);
     assert(!halfway.removalReady);
@@ -244,7 +244,7 @@ void ItemPresentationMotion()
                     0.75f,
                     25.0f,
                     false,
-                    0.825f);
+                    0.9f);
     const float apparentCenterY = shrinking.visualOffset.y
             + shrinking.scaleMultiplier;
     assert(std::abs(shrinking.scaleMultiplier - 0.5f) < 0.001f);
@@ -265,7 +265,37 @@ void ItemPresentationMotion()
                     25.0f,
                     false,
                     0.5f);
-    assert(std::abs(risingHalfway.visualOffset.y - 0.1375f) < 0.001f);
+    assert(std::abs(risingHalfway.visualOffset.y - 0.275f) < 0.001f);
+
+    game::ItemPresentationState timing;
+    game::BeginItemPickupVacuum(
+            timing,
+            Vector3{},
+            Vector3{});
+    const game::ItemPresentationFrame atShrinkStart =
+            game::AdvanceItemPresentation(
+                    timing,
+                    Vector3{},
+                    Vector3{10.0f, 0.0f, 0.0f},
+                    1.0f,
+                    0.0f,
+                    25.0f,
+                    false,
+                    0.8f);
+    assert(std::abs(atShrinkStart.visualOffset.x - 8.96f) < 0.001f);
+    assert(std::abs(atShrinkStart.scaleMultiplier - 1.0f) < 0.001f);
+    const game::ItemPresentationFrame atShrinkMidpoint =
+            game::AdvanceItemPresentation(
+                    timing,
+                    Vector3{},
+                    Vector3{10.0f, 0.0f, 0.0f},
+                    1.0f,
+                    0.0f,
+                    25.0f,
+                    false,
+                    0.1f);
+    assert(std::abs(atShrinkMidpoint.visualOffset.x - 9.72f) < 0.001f);
+    assert(std::abs(atShrinkMidpoint.scaleMultiplier - 0.5f) < 0.001f);
 
     game::ItemPresentationState movingPlayer;
     game::BeginItemPickupVacuum(
