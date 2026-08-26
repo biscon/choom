@@ -2740,6 +2740,37 @@
         34.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 164,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_6",
+        "instanceId": "item_164",
+        "quantity": 100,
+        "takeDistance": 2.0
+      },
+      "position": [
+        -96.0,
+        0.0,
+        40.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 165,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_7",
+        "instanceId": "item_165",
+        "quantity": 10
+      },
+      "position": [
+        -91.0,
+        0.0,
+        43.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [

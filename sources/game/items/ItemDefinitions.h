@@ -15,6 +15,7 @@ inline constexpr const char* kItemRegistryAssetPath = "assets/config/items.json"
 inline constexpr size_t kMaximumItemIdBytes = 63;
 inline constexpr size_t kMaximumItemTitleCodepoints = 96;
 inline constexpr size_t kMaximumItemDescriptionCodepoints = 2048;
+inline constexpr int kMaximumItemStackSize = 1000000;
 
 enum class ItemType {
     Object,
@@ -30,6 +31,7 @@ struct ItemDefinition {
     std::string modelPath;
     ItemType type = ItemType::Object;
     float weightKg = 0.0f;
+    int maxStackSize = 1;
     std::string weaponId;
     int healAmount = 0;
     bool healOverTime = false;

@@ -142,8 +142,44 @@ void NormalizeItemInventorySelection(
         state.selectedRuntimeId = 0;
         return;
     }
-    state.selectedRuntimeId = inventory.entries[std::min(
-            preferredIndex, inventory.entries.size() - 1)].runtimeId;
+    const ItemInventoryEntry* nearestAfter = nullptr;
+    const ItemInventoryEntry* nearestBefore = nullptr;
+    for (const ItemInventoryEntry& entry : inventory.entries) {
+        if (entry.slotIndex < 0) continue;
+        if (static_cast<std::size_t>(entry.slotIndex) >= preferredIndex) {
+            if (nearestAfter == nullptr
+                    || entry.slotIndex < nearestAfter->slotIndex) {
+                nearestAfter = &entry;
+            }
+        } else if (nearestBefore == nullptr
+                || entry.slotIndex > nearestBefore->slotIndex) {
+            nearestBefore = &entry;
+        }
+    }
+    const ItemInventoryEntry* selected = nearestAfter != nullptr
+            ? nearestAfter : nearestBefore;
+    if (selected == nullptr) selected = &inventory.entries.front();
+    state.selectedRuntimeId = selected->runtimeId;
+}
+
+void ClearItemInventoryInteraction(ItemInventoryUIState& state)
+{
+    state.dragCandidateRuntimeId = 0;
+    state.draggedRuntimeId = 0;
+    state.dragPressPosition = {};
+    state.splitDrag = false;
+    state.splitModalOpen = false;
+    state.splitSourceRuntimeId = 0;
+    state.splitTargetSlotIndex = -1;
+    state.splitQuantity = 1;
+    state.splitQuantityInput = {};
+}
+
+bool CancelItemInventorySplit(ItemInventoryUIState& state)
+{
+    if (!state.splitModalOpen) return false;
+    ClearItemInventoryInteraction(state);
+    return true;
 }
 
 ItemHeldUseInputDecision EvaluateItemHeldUseInput(

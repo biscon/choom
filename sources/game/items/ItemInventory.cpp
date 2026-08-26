@@ -17,9 +17,33 @@ void WarnCapacity(const char* collection, std::uint64_t& counter)
             collection);
 }
 
-bool AddOverflows(std::uint64_t left, std::uint64_t right)
+bool EntriesCanStack(
+        const ItemInventoryEntry& left,
+        const ItemInventoryEntry& right)
 {
-    return right > std::numeric_limits<std::uint64_t>::max() - left;
+    return left.definitionId == right.definitionId
+            && left.onUseScript == right.onUseScript;
+}
+
+bool EntryMatchesPickup(
+        const ItemInventoryEntry& entry,
+        const ItemDefinition& definition,
+        std::string_view onUseScript)
+{
+    return entry.definitionId == definition.id
+            && std::string_view{entry.onUseScript} == onUseScript;
+}
+
+int FindLowestFreeSlot(
+        const PlayerInventoryState& inventory,
+        int maximumSlots)
+{
+    for (int slotIndex = 0; slotIndex < maximumSlots; ++slotIndex) {
+        if (FindItemInventoryEntryAtSlot(inventory, slotIndex) == nullptr) {
+            return slotIndex;
+        }
+    }
+    return -1;
 }
 
 } // namespace
@@ -53,12 +77,14 @@ bool RemoveInventoryEntryQuantity(
     }
     const std::size_t index = static_cast<std::size_t>(
             found - inventory.entries.begin());
+    const std::size_t affectedSlot = found->slotIndex >= 0
+            ? static_cast<std::size_t>(found->slotIndex) : index;
     if (found->quantity == quantity) {
         inventory.entries.erase(found);
-        if (removedIndex != nullptr) *removedIndex = index;
+        if (removedIndex != nullptr) *removedIndex = affectedSlot;
     } else {
         found->quantity -= quantity;
-        if (removedIndex != nullptr) *removedIndex = inventory.entries.size();
+        if (removedIndex != nullptr) *removedIndex = affectedSlot;
     }
     return true;
 }
@@ -211,10 +237,12 @@ ItemPickupPlan PreflightItemPickup(
         const ItemRegistry& registry,
         const PlayerInventoryApplicationSettings& settings,
         std::string_view definitionId,
-        std::uint64_t quantity)
+        std::uint64_t quantity,
+        std::string_view onUseScript)
 {
     ItemPickupPlan plan;
     plan.quantity = quantity;
+    plan.maximumSlots = settings.maxSlots;
     plan.definition = FindItemDefinition(registry, definitionId);
     if (plan.definition == nullptr) return plan;
     if (quantity == 0 || quantity > 1000000u) {
@@ -237,22 +265,45 @@ ItemPickupPlan PreflightItemPickup(
         plan.result = ItemPickupCapacityResult::WeightLimit;
         return plan;
     }
-    if (plan.definition->type == ItemType::Ammo) {
-        for (std::size_t index = 0; index < inventory.entries.size(); ++index) {
-            const ItemInventoryEntry& entry = inventory.entries[index];
-            if (entry.definitionId == plan.definition->id) {
-                if (AddOverflows(entry.quantity, quantity)) {
-                    plan.result = ItemPickupCapacityResult::NumericOverflow;
-                    return plan;
-                }
-                plan.ammoEntryIndex = static_cast<int>(index);
-                break;
+    const std::string_view retainedUse = plan.definition->type == ItemType::Object
+            ? onUseScript : std::string_view{};
+    plan.retainedOnUseScript = retainedUse;
+    for (std::size_t index = 0; index < inventory.entries.size(); ++index) {
+        const int slotIndex = inventory.entries[index].slotIndex;
+        if (slotIndex < 0 || slotIndex >= settings.maxSlots) {
+            plan.result = ItemPickupCapacityResult::SlotLimit;
+            return plan;
+        }
+        for (std::size_t other = 0; other < index; ++other) {
+            if (inventory.entries[other].slotIndex == slotIndex) {
+                plan.result = ItemPickupCapacityResult::SlotLimit;
+                return plan;
             }
         }
-        plan.addedSlots = plan.ammoEntryIndex >= 0 ? 0u : 1u;
-    } else {
-        plan.addedSlots = static_cast<std::size_t>(quantity);
     }
+    std::uint64_t remaining = quantity;
+    for (const ItemInventoryEntry& entry : inventory.entries) {
+        if (!EntryMatchesPickup(entry, *plan.definition, retainedUse)) continue;
+        const std::uint64_t maximum = static_cast<std::uint64_t>(
+                plan.definition->maxStackSize);
+        if (entry.quantity > maximum) {
+            plan.result = ItemPickupCapacityResult::NumericOverflow;
+            return plan;
+        }
+        const std::uint64_t available = entry.quantity < maximum
+                ? maximum - entry.quantity : 0u;
+        remaining -= std::min(remaining, available);
+        if (remaining == 0) break;
+    }
+    const std::uint64_t maximum = static_cast<std::uint64_t>(
+            plan.definition->maxStackSize);
+    const std::uint64_t requiredSlots = remaining == 0
+            ? 0u : 1u + (remaining - 1u) / maximum;
+    if (requiredSlots > std::numeric_limits<std::size_t>::max()) {
+        plan.result = ItemPickupCapacityResult::NumericOverflow;
+        return plan;
+    }
+    plan.addedSlots = static_cast<std::size_t>(requiredSlots);
     if (plan.addedSlots > static_cast<std::size_t>(settings.maxSlots)
             || inventory.entries.size()
                     > static_cast<std::size_t>(settings.maxSlots)
@@ -262,7 +313,7 @@ ItemPickupPlan PreflightItemPickup(
     }
     if (plan.addedSlots != 0
             && (inventory.nextRuntimeId == 0
-                    || static_cast<std::uint64_t>(plan.addedSlots - 1)
+                    || static_cast<std::uint64_t>(plan.addedSlots)
                             > std::numeric_limits<std::uint64_t>::max()
                                     - inventory.nextRuntimeId)) {
         plan.result = ItemPickupCapacityResult::NumericOverflow;
@@ -274,39 +325,178 @@ ItemPickupPlan PreflightItemPickup(
 
 bool CommitItemPickup(
         PlayerInventoryState& inventory,
-        const ItemPickupPlan& plan,
-        std::string_view onUseScript)
+        const ItemPickupPlan& plan)
 {
     if (plan.result != ItemPickupCapacityResult::Fits
             || plan.definition == nullptr || plan.quantity == 0) {
         return false;
-    }
-    if (plan.ammoEntryIndex >= 0) {
-        ItemInventoryEntry& entry = inventory.entries[
-                static_cast<std::size_t>(plan.ammoEntryIndex)];
-        if (AddOverflows(entry.quantity, plan.quantity)) return false;
-        entry.quantity += plan.quantity;
-        return true;
     }
     if (inventory.entries.size() + plan.addedSlots
             > inventory.entries.capacity()) {
         WarnCapacity("entry", inventory.capacityWarnings);
         inventory.entries.reserve(inventory.entries.size() + plan.addedSlots);
     }
-    const bool retainUse = plan.definition->type == ItemType::Object;
-    const std::uint64_t entryQuantity = plan.definition->type == ItemType::Ammo
-            ? plan.quantity : 1u;
-    const std::size_t count = plan.definition->type == ItemType::Ammo
-            ? 1u : plan.addedSlots;
-    for (std::size_t index = 0; index < count; ++index) {
+    const std::string retainedUse{plan.retainedOnUseScript};
+    const std::uint64_t maximum = static_cast<std::uint64_t>(
+            plan.definition->maxStackSize);
+    std::uint64_t remaining = plan.quantity;
+    for (int slotIndex = 0;
+            slotIndex < plan.maximumSlots && remaining != 0;
+            ++slotIndex) {
+        ItemInventoryEntry* entry = FindItemInventoryEntryAtSlot(
+                inventory, slotIndex);
+        if (entry == nullptr
+                || !EntryMatchesPickup(
+                        *entry, *plan.definition, retainedUse)) {
+            continue;
+        }
+        const std::uint64_t available = entry->quantity < maximum
+                ? maximum - entry->quantity : 0u;
+        const std::uint64_t transfer = std::min(remaining, available);
+        entry->quantity += transfer;
+        remaining -= transfer;
+    }
+    while (remaining != 0) {
+        const int slotIndex = FindLowestFreeSlot(
+                inventory, plan.maximumSlots);
+        if (slotIndex < 0 || inventory.nextRuntimeId == 0
+                || inventory.nextRuntimeId
+                        == std::numeric_limits<std::uint64_t>::max()) {
+            return false;
+        }
         ItemInventoryEntry entry;
         entry.runtimeId = inventory.nextRuntimeId++;
         entry.definitionId = plan.definition->id;
-        entry.quantity = entryQuantity;
-        if (retainUse) entry.onUseScript = std::string{onUseScript};
+        entry.quantity = std::min(remaining, maximum);
+        entry.onUseScript = retainedUse;
+        entry.slotIndex = slotIndex;
         inventory.entries.push_back(std::move(entry));
+        remaining -= std::min(remaining, maximum);
     }
     return true;
+}
+
+const ItemInventoryEntry* FindItemInventoryEntryAtSlot(
+        const PlayerInventoryState& inventory,
+        int slotIndex)
+{
+    const auto found = std::find_if(
+            inventory.entries.begin(), inventory.entries.end(),
+            [slotIndex](const ItemInventoryEntry& entry) {
+                return entry.slotIndex == slotIndex;
+            });
+    return found == inventory.entries.end() ? nullptr : &*found;
+}
+
+ItemInventoryEntry* FindItemInventoryEntryAtSlot(
+        PlayerInventoryState& inventory,
+        int slotIndex)
+{
+    return const_cast<ItemInventoryEntry*>(FindItemInventoryEntryAtSlot(
+            static_cast<const PlayerInventoryState&>(inventory), slotIndex));
+}
+
+ItemInventoryTransactionResult TransferItemInventoryEntry(
+        PlayerInventoryState& inventory,
+        const ItemRegistry& registry,
+        std::uint64_t sourceRuntimeId,
+        int targetSlotIndex,
+        int maximumSlots)
+{
+    ItemInventoryTransactionResult result;
+    if (sourceRuntimeId == 0 || targetSlotIndex < 0
+            || targetSlotIndex >= maximumSlots) {
+        return result;
+    }
+    const auto sourceIt = std::find_if(
+            inventory.entries.begin(), inventory.entries.end(),
+            [sourceRuntimeId](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == sourceRuntimeId;
+            });
+    if (sourceIt == inventory.entries.end()
+            || sourceIt->slotIndex == targetSlotIndex
+            || sourceIt->quantity == 0) {
+        return result;
+    }
+    ItemInventoryEntry* target = FindItemInventoryEntryAtSlot(
+            inventory, targetSlotIndex);
+    if (target == nullptr) {
+        sourceIt->slotIndex = targetSlotIndex;
+        return ItemInventoryTransactionResult{
+                ItemInventoryTransactionType::Moved, sourceRuntimeId};
+    }
+    if (!EntriesCanStack(*sourceIt, *target)) {
+        std::swap(sourceIt->slotIndex, target->slotIndex);
+        return ItemInventoryTransactionResult{
+                ItemInventoryTransactionType::Swapped, sourceRuntimeId};
+    }
+    const ItemDefinition* definition = FindItemDefinition(
+            registry, sourceIt->definitionId);
+    if (definition == nullptr || definition->maxStackSize < 1) return result;
+    const std::uint64_t maximum = static_cast<std::uint64_t>(
+            definition->maxStackSize);
+    if (sourceIt->quantity > maximum || target->quantity > maximum) {
+        return result;
+    }
+    const std::uint64_t available = target->quantity < maximum
+            ? maximum - target->quantity : 0u;
+    const std::uint64_t transfer = std::min(sourceIt->quantity, available);
+    if (transfer == 0) return result;
+    const std::uint64_t targetRuntimeId = target->runtimeId;
+    target->quantity += transfer;
+    sourceIt->quantity -= transfer;
+    if (sourceIt->quantity != 0) {
+        return ItemInventoryTransactionResult{
+                ItemInventoryTransactionType::PartiallyMerged,
+                sourceRuntimeId};
+    }
+    inventory.entries.erase(sourceIt);
+    return ItemInventoryTransactionResult{
+            ItemInventoryTransactionType::Merged, targetRuntimeId};
+}
+
+ItemInventoryTransactionResult SplitItemInventoryEntry(
+        PlayerInventoryState& inventory,
+        std::uint64_t sourceRuntimeId,
+        std::uint64_t quantity,
+        int targetSlotIndex,
+        int maximumSlots)
+{
+    ItemInventoryTransactionResult result;
+    if (sourceRuntimeId == 0 || quantity == 0
+            || quantity > static_cast<std::uint64_t>(kMaximumItemStackSize)
+            || targetSlotIndex < 0
+            || targetSlotIndex >= maximumSlots
+            || FindItemInventoryEntryAtSlot(inventory, targetSlotIndex) != nullptr
+            || inventory.nextRuntimeId == 0
+            || inventory.nextRuntimeId
+                    == std::numeric_limits<std::uint64_t>::max()) {
+        return result;
+    }
+    const auto sourceIt = std::find_if(
+            inventory.entries.begin(), inventory.entries.end(),
+            [sourceRuntimeId](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == sourceRuntimeId;
+            });
+    if (sourceIt == inventory.entries.end() || quantity >= sourceIt->quantity) {
+        return result;
+    }
+    const std::size_t sourceIndex = static_cast<std::size_t>(
+            sourceIt - inventory.entries.begin());
+    if (inventory.entries.size() == inventory.entries.capacity()) {
+        WarnCapacity("entry", inventory.capacityWarnings);
+        inventory.entries.reserve(inventory.entries.size() + 1u);
+    }
+    ItemInventoryEntry& source = inventory.entries[sourceIndex];
+    source.quantity -= quantity;
+    ItemInventoryEntry split = source;
+    split.runtimeId = inventory.nextRuntimeId++;
+    split.quantity = quantity;
+    split.slotIndex = targetSlotIndex;
+    const std::uint64_t splitRuntimeId = split.runtimeId;
+    inventory.entries.push_back(std::move(split));
+    return ItemInventoryTransactionResult{
+            ItemInventoryTransactionType::Split, splitRuntimeId};
 }
 
 ItemLevelCampaignState& FindOrCreateItemLevelCampaignState(

@@ -309,6 +309,7 @@ void SectorEditorItemEditorService::SyncBuffers()
     Copy(state_.descriptionBuffer, definition.description);
     Copy(state_.modelPathBuffer, definition.modelPath);
     state_.weightInput = {};
+    state_.maxStackSizeInput = {};
     state_.healAmountInput = {};
     state_.healDurationInput = {};
 }

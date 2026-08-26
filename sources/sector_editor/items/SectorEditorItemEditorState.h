@@ -27,6 +27,7 @@ struct SectorEditorItemEditorState {
     std::array<char, 8193> descriptionBuffer{};
     std::array<char, 1024> modelPathBuffer{};
     engine::UIFloatInputState weightInput;
+    engine::UIIntInputState maxStackSizeInput;
     engine::UIIntInputState healAmountInput;
     engine::UIFloatInputState healDurationInput;
     bool deleteConfirmationOpen = false;

@@ -13,7 +13,9 @@ enum class ItemInventoryUIActionType {
     None,
     UseHealth,
     UseObject,
-    Drop
+    Drop,
+    Transfer,
+    Split
 };
 
 enum class ItemHeldUsePhase {
@@ -45,6 +47,8 @@ struct ItemHeldUseInputDecision {
 struct ItemInventoryUIAction {
     ItemInventoryUIActionType type = ItemInventoryUIActionType::None;
     std::uint64_t runtimeId = 0;
+    std::uint64_t quantity = 0;
+    int targetSlotIndex = -1;
 };
 
 struct ItemInventoryUIState {
@@ -52,6 +56,15 @@ struct ItemInventoryUIState {
     std::uint64_t selectedRuntimeId = 0;
     int firstVisibleRow = 0;
     float detailScroll = 0.0f;
+    std::uint64_t dragCandidateRuntimeId = 0;
+    std::uint64_t draggedRuntimeId = 0;
+    Vector2 dragPressPosition = {};
+    bool splitDrag = false;
+    bool splitModalOpen = false;
+    std::uint64_t splitSourceRuntimeId = 0;
+    int splitTargetSlotIndex = -1;
+    int splitQuantity = 1;
+    engine::UIIntInputState splitQuantityInput;
 };
 
 struct ItemInventoryUILayout {
@@ -87,6 +100,8 @@ void NormalizeItemInventorySelection(
         ItemInventoryUIState& state,
         const PlayerInventoryState& inventory,
         std::size_t preferredIndex = 0);
+void ClearItemInventoryInteraction(ItemInventoryUIState& state);
+bool CancelItemInventorySplit(ItemInventoryUIState& state);
 ItemHeldUseInputDecision EvaluateItemHeldUseInput(
         ItemHeldUsePhase phase,
         ItemHeldUseInput input);

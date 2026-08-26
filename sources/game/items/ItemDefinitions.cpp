@@ -219,6 +219,11 @@ bool ValidateItemDefinition(
         error = "Item weightKg must be finite and non-negative";
         return false;
     }
+    if (definition.maxStackSize < 1
+            || definition.maxStackSize > kMaximumItemStackSize) {
+        error = "Item maxStackSize must be an integer from 1 to 1000000";
+        return false;
+    }
     if (definition.type == ItemType::Weapon || definition.type == ItemType::Ammo) {
         if (definition.weaponId.empty()
                 || FindFpsWeaponDefinition(weapons, definition.weaponId) == nullptr) {
@@ -338,6 +343,16 @@ bool ParseItemRegistryJson(
                 error = context + ".type must be object, weapon, ammo, or health";
                 return false;
             }
+            const auto maxStackSize = object.find("maxStackSize");
+            if (maxStackSize == object.end()) {
+                definition.maxStackSize = definition.type == ItemType::Ammo
+                        ? kMaximumItemStackSize : 1;
+            } else if (!maxStackSize->is_number_integer()) {
+                error = context + ".maxStackSize must be an integer";
+                return false;
+            } else {
+                definition.maxStackSize = maxStackSize->get<int>();
+            }
             if (definition.type == ItemType::Weapon
                     || definition.type == ItemType::Ammo) {
                 if (!ReadRequiredString(object, "weaponId", context,
@@ -406,7 +421,8 @@ bool SerializeItemRegistryJson(
                 {"description", definition->description},
                 {"modelPath", definition->modelPath},
                 {"type", ItemTypeName(definition->type)},
-                {"weightKg", definition->weightKg}};
+                {"weightKg", definition->weightKg},
+                {"maxStackSize", definition->maxStackSize}};
         if (definition->type == ItemType::Weapon
                 || definition->type == ItemType::Ammo) {
             value["weaponId"] = definition->weaponId;

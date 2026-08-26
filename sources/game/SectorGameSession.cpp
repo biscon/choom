@@ -210,6 +210,7 @@ void SectorGameSession::SetInventoryOpen(bool open)
 {
     if (inventoryUi.open == open) return;
     inventoryUi.open = open;
+    if (!open) ClearItemInventoryInteraction(inventoryUi);
     if (open) {
         if (itemCampaign != nullptr) {
             NormalizeItemInventorySelection(
@@ -372,6 +373,7 @@ void SectorGameSession::UpdatePendingHeldObjectUse()
 bool SectorGameSession::HandleEscape()
 {
     if (inventoryUi.open) {
+        if (CancelItemInventorySplit(inventoryUi)) return true;
         SetInventoryOpen(false);
         return true;
     }
@@ -456,14 +458,17 @@ bool SectorGameSession::DropInventoryEntry(
                 return entry.runtimeId == runtimeId;
             });
     if (entryIt == itemCampaign->inventory.entries.end()) return false;
-    affectedIndex = static_cast<std::size_t>(
-            entryIt - itemCampaign->inventory.entries.begin());
+    affectedIndex = entryIt->slotIndex >= 0
+            ? static_cast<std::size_t>(entryIt->slotIndex) : 0u;
     const ItemDefinition* definition = FindItemDefinition(
             *itemRegistry, entryIt->definitionId);
     if (definition == nullptr) return false;
-    const std::uint64_t dropQuantity = definition->type == ItemType::Ammo
-            ? entryIt->quantity : 1u;
-    if (dropQuantity == 0 || dropQuantity > 1000000u) return false;
+    const std::uint64_t dropQuantity = entryIt->quantity;
+    if (dropQuantity == 0
+            || dropQuantity
+                    > static_cast<std::uint64_t>(kMaximumItemStackSize)) {
+        return false;
+    }
 
     ItemLevelCampaignState& level = FindOrCreateItemLevelCampaignState(
             *itemCampaign, levelName, topologyMap.runtimeObjects.size());
@@ -625,8 +630,7 @@ void SectorGameSession::ProcessInventoryAction(
                 });
         affectedIndex = found == itemCampaign->inventory.entries.end()
                 ? 0u
-                : static_cast<std::size_t>(
-                        found - itemCampaign->inventory.entries.begin());
+                : static_cast<std::size_t>(std::max(0, found->slotIndex));
         UseHealthInventoryEntry(
                 *itemCampaign, *itemRegistry, playerHealth, action.runtimeId);
     } else if (action.type == ItemInventoryUIActionType::UseObject) {
@@ -638,6 +642,34 @@ void SectorGameSession::ProcessInventoryAction(
             ShowDropRefusal();
             return;
         }
+    } else if (action.type == ItemInventoryUIActionType::Transfer) {
+        const ItemInventoryTransactionResult transaction =
+                TransferItemInventoryEntry(
+                        itemCampaign->inventory,
+                        *itemRegistry,
+                        action.runtimeId,
+                        action.targetSlotIndex,
+                        applicationSettings != nullptr
+                                ? applicationSettings->playerInventory.maxSlots
+                                : 0);
+        if (transaction.type != ItemInventoryTransactionType::Rejected) {
+            inventoryUi.selectedRuntimeId = transaction.selectedRuntimeId;
+        }
+        return;
+    } else if (action.type == ItemInventoryUIActionType::Split) {
+        const ItemInventoryTransactionResult transaction =
+                SplitItemInventoryEntry(
+                        itemCampaign->inventory,
+                        action.runtimeId,
+                        action.quantity,
+                        action.targetSlotIndex,
+                        applicationSettings != nullptr
+                                ? applicationSettings->playerInventory.maxSlots
+                                : 0);
+        if (transaction.type == ItemInventoryTransactionType::Split) {
+            inventoryUi.selectedRuntimeId = transaction.selectedRuntimeId;
+        }
+        return;
     }
     NormalizeItemInventorySelection(
             inventoryUi, itemCampaign->inventory, affectedIndex);
@@ -726,7 +758,8 @@ bool SectorGameSession::CommitItemTake(
             *itemRegistry,
             applicationSettings->playerInventory,
             item.definitionId,
-            item.quantity);
+            item.quantity,
+            item.onUseScript);
     if (plan.result != ItemPickupCapacityResult::Fits) {
         item.takePending = false;
         if (plan.result == ItemPickupCapacityResult::WeightLimit
@@ -759,8 +792,7 @@ bool SectorGameSession::CommitItemTake(
         item.takePending = false;
         return false;
     }
-    if (!CommitItemPickup(
-                itemCampaign->inventory, plan, item.onUseScript)) {
+    if (!CommitItemPickup(itemCampaign->inventory, plan)) {
         item.takePending = false;
         return false;
     }
@@ -829,7 +861,8 @@ bool SectorGameSession::RequestItemTake(
             *itemRegistry,
             applicationSettings->playerInventory,
             item.definitionId,
-            item.quantity);
+            item.quantity,
+            item.onUseScript);
     if (plan.result != ItemPickupCapacityResult::Fits) {
         if (plan.result == ItemPickupCapacityResult::WeightLimit
                 || plan.result == ItemPickupCapacityResult::SlotLimit

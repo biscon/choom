@@ -77,7 +77,9 @@ void RegistryRoundTripAndValidation()
     assert(registry.items.size() == 4);
     assert(registry.items.front().id == "a_weapon");
     assert(registry.items[1].id == "b_health");
-    assert(game::FindItemDefinition(registry, "m_ammo") != nullptr);
+    assert(game::FindItemDefinition(registry, "m_ammo")->maxStackSize
+            == game::kMaximumItemStackSize);
+    assert(game::FindItemDefinition(registry, "z_object")->maxStackSize == 1);
     std::string serialized;
     assert(game::SerializeItemRegistryJson(
             registry, weapons, serialized, error));
@@ -124,6 +126,12 @@ void RegistryRoundTripAndValidation()
     expectFailure(invalid);
     invalid = root;
     invalid["items"][3]["healDurationSeconds"] = 0.0;
+    expectFailure(invalid);
+    invalid = root;
+    invalid["items"][0]["maxStackSize"] = 0;
+    expectFailure(invalid);
+    invalid = root;
+    invalid["items"][0]["maxStackSize"] = game::kMaximumItemStackSize + 1;
     expectFailure(invalid);
 
     game::ItemDefinition missingModel = MakeObject("missing_model");
@@ -472,6 +480,7 @@ void ReferenceScanningAndEditorService()
     assert(saveEditor.Open());
     saveEditor.AddItem();
     saveEditor.SetModelPath("assets/models/box.glb");
+    saveEditor.SelectedItem()->maxStackSize = 12;
     assert(saveEditor.SaveAndClose());
     assert(registry.items.size() == 2);
     assert(registry.revision == 2);
@@ -480,6 +489,7 @@ void ReferenceScanningAndEditorService()
             std::istreambuf_iterator<char>(savedInput),
             std::istreambuf_iterator<char>()};
     assert(saved.find("new_item") != std::string::npos);
+    assert(saved.find("\"maxStackSize\": 12") != std::string::npos);
 
     std::unordered_map<std::string, size_t> counts;
     std::string error;
@@ -500,6 +510,9 @@ game::ItemDefinition MakeInventoryDefinition(
     definition.weightKg = weightKg;
     if (type == game::ItemType::Weapon || type == game::ItemType::Ammo) {
         definition.weaponId = "pistol";
+    }
+    if (type == game::ItemType::Ammo) {
+        definition.maxStackSize = game::kMaximumItemStackSize;
     }
     if (type == game::ItemType::Health) definition.healAmount = 10;
     return definition;
@@ -524,21 +537,21 @@ void InventoryTransactionsAndCampaignReconciliation()
     game::ItemPickupPlan plan = game::PreflightItemPickup(
             campaign.inventory, registry, settings, "ammo", 10);
     assert(plan.result == game::ItemPickupCapacityResult::Fits);
-    assert(game::CommitItemPickup(campaign.inventory, plan, {}));
+    assert(game::CommitItemPickup(campaign.inventory, plan));
     assert(campaign.inventory.entries.size() == 1);
     assert(campaign.inventory.entries.front().quantity == 10);
     plan = game::PreflightItemPickup(
             campaign.inventory, registry, settings, "ammo", 5);
     assert(plan.result == game::ItemPickupCapacityResult::Fits);
     assert(plan.addedSlots == 0);
-    assert(game::CommitItemPickup(campaign.inventory, plan, {}));
+    assert(game::CommitItemPickup(campaign.inventory, plan));
     assert(campaign.inventory.entries.front().quantity == 15);
 
     plan = game::PreflightItemPickup(
-            campaign.inventory, registry, settings, "object", 2);
+            campaign.inventory, registry, settings,
+            "object", 2, "useCarriedObject");
     assert(plan.result == game::ItemPickupCapacityResult::Fits);
-    assert(game::CommitItemPickup(
-            campaign.inventory, plan, "useCarriedObject"));
+    assert(game::CommitItemPickup(campaign.inventory, plan));
     assert(campaign.inventory.entries.size() == 3);
     assert(campaign.inventory.entries[1].quantity == 1);
     assert(campaign.inventory.entries[2].quantity == 1);
@@ -547,7 +560,7 @@ void InventoryTransactionsAndCampaignReconciliation()
     plan = game::PreflightItemPickup(
             campaign.inventory, registry, settings, "weapon", 2);
     assert(plan.result == game::ItemPickupCapacityResult::Fits);
-    assert(game::CommitItemPickup(campaign.inventory, plan, {}));
+    assert(game::CommitItemPickup(campaign.inventory, plan));
     assert(campaign.inventory.entries.size() == 5);
     assert(campaign.inventory.entries[3].runtimeId
             != campaign.inventory.entries[4].runtimeId);
@@ -593,7 +606,8 @@ void InventoryTransactionsAndCampaignReconciliation()
             1,
             "ammo",
             std::numeric_limits<std::uint64_t>::max(),
-            {}});
+            {},
+            0});
     registry.items.front().weightKg = 0.0f;
     plan = game::PreflightItemPickup(
             overflowInventory, registry, settings, "ammo", 1);
@@ -642,6 +656,124 @@ void InventoryTransactionsAndCampaignReconciliation()
     assert(level.droppedItems.empty());
 }
 
+void InventoryStackTransactions()
+{
+    game::ItemRegistry registry;
+    game::ItemDefinition ammo = MakeInventoryDefinition(
+            "ammo_stack", game::ItemType::Ammo, 0.0f);
+    ammo.maxStackSize = 6;
+    game::ItemDefinition object = MakeInventoryDefinition(
+            "object_stack", game::ItemType::Object, 0.0f);
+    object.maxStackSize = 4;
+    registry.items = {ammo, object};
+
+    game::PlayerInventoryApplicationSettings settings;
+    settings.maxCarryWeightKg = 100.0f;
+    settings.maxSlots = 3;
+    game::PlayerInventoryState pickupInventory;
+    pickupInventory.entries.reserve(3);
+    game::ItemPickupPlan plan = game::PreflightItemPickup(
+            pickupInventory, registry, settings, ammo.id, 9);
+    assert(plan.result == game::ItemPickupCapacityResult::Fits);
+    assert(plan.addedSlots == 2);
+    assert(game::CommitItemPickup(pickupInventory, plan));
+    assert(pickupInventory.entries.size() == 2);
+    assert(game::FindItemInventoryEntryAtSlot(
+                  pickupInventory, 0)->quantity == 6);
+    assert(game::FindItemInventoryEntryAtSlot(
+                  pickupInventory, 1)->quantity == 3);
+
+    plan = game::PreflightItemPickup(
+            pickupInventory, registry, settings, ammo.id, 4);
+    assert(plan.result == game::ItemPickupCapacityResult::Fits);
+    assert(plan.addedSlots == 1);
+    assert(game::CommitItemPickup(pickupInventory, plan));
+    assert(game::FindItemInventoryEntryAtSlot(
+                  pickupInventory, 1)->quantity == 6);
+    assert(game::FindItemInventoryEntryAtSlot(
+                  pickupInventory, 2)->quantity == 1);
+    const std::size_t entryCount = pickupInventory.entries.size();
+    plan = game::PreflightItemPickup(
+            pickupInventory, registry, settings, ammo.id, 6);
+    assert(plan.result == game::ItemPickupCapacityResult::SlotLimit);
+    assert(pickupInventory.entries.size() == entryCount);
+
+    game::PlayerInventoryState scriptedInventory;
+    scriptedInventory.entries.reserve(4);
+    settings.maxSlots = 4;
+    plan = game::PreflightItemPickup(
+            scriptedInventory, registry, settings,
+            object.id, 2, "useA");
+    assert(game::CommitItemPickup(scriptedInventory, plan));
+    plan = game::PreflightItemPickup(
+            scriptedInventory, registry, settings,
+            object.id, 2, "useB");
+    assert(plan.addedSlots == 1);
+    assert(game::CommitItemPickup(scriptedInventory, plan));
+    plan = game::PreflightItemPickup(
+            scriptedInventory, registry, settings,
+            object.id, 2, "useA");
+    assert(plan.addedSlots == 0);
+    assert(game::CommitItemPickup(scriptedInventory, plan));
+    assert(scriptedInventory.entries.size() == 2);
+    assert(game::FindItemInventoryEntryAtSlot(
+                  scriptedInventory, 0)->quantity == 4);
+    assert(game::FindItemInventoryEntryAtSlot(
+                  scriptedInventory, 1)->quantity == 2);
+
+    game::PlayerInventoryState inventory;
+    inventory.entries.reserve(6);
+    inventory.entries = {
+            game::ItemInventoryEntry{1, ammo.id, 4, {}, 0},
+            game::ItemInventoryEntry{2, ammo.id, 5, {}, 2},
+            game::ItemInventoryEntry{3, object.id, 2, "useA", 3},
+            game::ItemInventoryEntry{4, object.id, 1, "useB", 4}};
+    inventory.nextRuntimeId = 5;
+
+    game::ItemInventoryTransactionResult transaction =
+            game::TransferItemInventoryEntry(
+                    inventory, registry, 2, 0, 6);
+    assert(transaction.type
+            == game::ItemInventoryTransactionType::PartiallyMerged);
+    assert(transaction.selectedRuntimeId == 2);
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 0)->quantity == 6);
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 2)->quantity == 3);
+    assert(game::TransferItemInventoryEntry(
+                  inventory, registry, 2, 0, 6).type
+            == game::ItemInventoryTransactionType::Rejected);
+
+    transaction = game::TransferItemInventoryEntry(
+            inventory, registry, 2, 5, 6);
+    assert(transaction.type == game::ItemInventoryTransactionType::Moved);
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 5)->runtimeId == 2);
+    transaction = game::TransferItemInventoryEntry(
+            inventory, registry, 2, 3, 6);
+    assert(transaction.type == game::ItemInventoryTransactionType::Swapped);
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 3)->runtimeId == 2);
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 5)->runtimeId == 3);
+
+    transaction = game::SplitItemInventoryEntry(inventory, 3, 1, 1, 6);
+    assert(transaction.type == game::ItemInventoryTransactionType::Split);
+    assert(transaction.selectedRuntimeId == 5);
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 1)->runtimeId == 5);
+    assert(game::FindItemInventoryEntryAtSlot(
+                  inventory, 1)->onUseScript == "useA");
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 5)->quantity == 1);
+    assert(game::SplitItemInventoryEntry(inventory, 3, 1, 0, 6).type
+            == game::ItemInventoryTransactionType::Rejected);
+
+    transaction = game::TransferItemInventoryEntry(
+            inventory, registry, 5, 4, 6);
+    assert(transaction.type == game::ItemInventoryTransactionType::Swapped);
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 4)->runtimeId == 5);
+    transaction = game::TransferItemInventoryEntry(
+            inventory, registry, 5, 5, 6);
+    assert(transaction.type == game::ItemInventoryTransactionType::Merged);
+    assert(transaction.selectedRuntimeId == 3);
+    assert(game::FindItemInventoryEntryAtSlot(inventory, 5)->quantity == 2);
+    assert(inventory.entries.size() == 4);
+}
+
 void HealthUseAndInventoryLayout()
 {
     game::ItemRegistry registry;
@@ -659,9 +791,9 @@ void HealthUseAndInventoryLayout()
     game::ItemCampaignState campaign;
     game::InitializeItemCampaignState(campaign, settings);
     campaign.inventory.entries = {
-            game::ItemInventoryEntry{1, instant.id, 1, {}},
-            game::ItemInventoryEntry{2, timed.id, 1, {}},
-            game::ItemInventoryEntry{3, timed.id, 1, {}}};
+            game::ItemInventoryEntry{1, instant.id, 1, {}, 0},
+            game::ItemInventoryEntry{2, timed.id, 1, {}, 1},
+            game::ItemInventoryEntry{3, timed.id, 1, {}, 2}};
     game::Health health = game::MakeHealth(100);
     health.current = 50;
     assert(game::UseHealthInventoryEntry(campaign, registry, health, 1)
@@ -679,14 +811,14 @@ void HealthUseAndInventoryLayout()
     assert(health.current == 80 && campaign.healingEffects.empty());
 
     campaign.inventory.entries.push_back(
-            game::ItemInventoryEntry{4, instant.id, 1, {}});
+            game::ItemInventoryEntry{4, instant.id, 1, {}, 0});
     health.current = health.maximum;
     assert(game::UseHealthInventoryEntry(campaign, registry, health, 4)
             == game::ItemHealthUseResult::DisabledAtFullHealth);
     assert(campaign.inventory.entries.size() == 1);
 
     campaign.inventory.entries.push_back(
-            game::ItemInventoryEntry{5, timed.id, 1, {}});
+            game::ItemInventoryEntry{5, timed.id, 1, {}, 1});
     health.current = 98;
     assert(game::UseHealthInventoryEntry(campaign, registry, health, 5)
             == game::ItemHealthUseResult::StartedTimedEffect);
@@ -721,8 +853,8 @@ void HealthUseAndInventoryLayout()
     game::ItemInventoryUIState uiState;
     game::PlayerInventoryState inventory;
     inventory.entries = {
-            game::ItemInventoryEntry{11, instant.id, 1, {}},
-            game::ItemInventoryEntry{12, timed.id, 1, {}}};
+            game::ItemInventoryEntry{11, instant.id, 1, {}, 0},
+            game::ItemInventoryEntry{12, timed.id, 1, {}, 4}};
     game::NormalizeItemInventorySelection(uiState, inventory, 0);
     assert(uiState.selectedRuntimeId == 11);
     inventory.entries.erase(inventory.entries.begin());
@@ -786,6 +918,7 @@ int main()
     IconLayoutAndCameraFit();
     ReferenceScanningAndEditorService();
     InventoryTransactionsAndCampaignReconciliation();
+    InventoryStackTransactions();
     HealthUseAndInventoryLayout();
     std::cout << "Item definition tests passed\n";
 }

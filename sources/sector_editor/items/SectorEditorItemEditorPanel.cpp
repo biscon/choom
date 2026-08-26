@@ -119,7 +119,7 @@ SectorEditorItemEditorPanelResult DrawSectorEditorItemEditorPanel(
                 layout.formBounds.width, config);
         const float contentHeight = definition->type == ItemType::Health
                         && definition->healOverTime
-                ? 760.0f : 710.0f;
+                ? 810.0f : 760.0f;
         engine::UIScrollAreaResult formScroll = engine::BeginScrollArea(
                 ui, config, input, "sector_editor_item_form_scroll",
                 layout.formBounds,
@@ -214,6 +214,17 @@ SectorEditorItemEditorPanelResult DrawSectorEditorItemEditorPanel(
                     Rectangle{fieldX, y, fieldWidth, RowHeight}, smallFont,
                     definition->weightKg, state.weightInput,
                     0.0f, 1000000.0f, 3).changed) {
+            state.validationMessage.clear();
+        }
+        y += RowHeight + RowGap;
+
+        label("Max stack size");
+        if (engine::IntInput(
+                    ui, config, input, assets,
+                    "sector_editor_item_max_stack_size",
+                    Rectangle{fieldX, y, fieldWidth, RowHeight}, smallFont,
+                    definition->maxStackSize, state.maxStackSizeInput,
+                    1, kMaximumItemStackSize, 1).changed) {
             state.validationMessage.clear();
         }
         y += RowHeight + RowGap;

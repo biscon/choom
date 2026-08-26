@@ -17,6 +17,7 @@ struct ItemInventoryEntry {
     std::string definitionId;
     std::uint64_t quantity = 1;
     std::string onUseScript;
+    int slotIndex = -1;
 };
 
 struct PlayerInventoryState {
@@ -75,9 +76,25 @@ struct ItemPickupPlan {
     ItemPickupCapacityResult result = ItemPickupCapacityResult::MissingDefinition;
     const ItemDefinition* definition = nullptr;
     std::uint64_t quantity = 0;
-    int ammoEntryIndex = -1;
+    std::string_view retainedOnUseScript;
+    int maximumSlots = 0;
     std::size_t addedSlots = 0;
     double resultingWeightKg = 0.0;
+};
+
+enum class ItemInventoryTransactionType {
+    Rejected,
+    Moved,
+    Swapped,
+    Merged,
+    PartiallyMerged,
+    Split
+};
+
+struct ItemInventoryTransactionResult {
+    ItemInventoryTransactionType type =
+            ItemInventoryTransactionType::Rejected;
+    std::uint64_t selectedRuntimeId = 0;
 };
 
 void InitializeItemCampaignState(
@@ -94,12 +111,33 @@ ItemPickupPlan PreflightItemPickup(
         const ItemRegistry& registry,
         const PlayerInventoryApplicationSettings& settings,
         std::string_view definitionId,
-        std::uint64_t quantity);
+        std::uint64_t quantity,
+        std::string_view onUseScript = {});
 
 bool CommitItemPickup(
         PlayerInventoryState& inventory,
-        const ItemPickupPlan& plan,
-        std::string_view onUseScript);
+        const ItemPickupPlan& plan);
+
+const ItemInventoryEntry* FindItemInventoryEntryAtSlot(
+        const PlayerInventoryState& inventory,
+        int slotIndex);
+ItemInventoryEntry* FindItemInventoryEntryAtSlot(
+        PlayerInventoryState& inventory,
+        int slotIndex);
+
+ItemInventoryTransactionResult TransferItemInventoryEntry(
+        PlayerInventoryState& inventory,
+        const ItemRegistry& registry,
+        std::uint64_t sourceRuntimeId,
+        int targetSlotIndex,
+        int maximumSlots);
+
+ItemInventoryTransactionResult SplitItemInventoryEntry(
+        PlayerInventoryState& inventory,
+        std::uint64_t sourceRuntimeId,
+        std::uint64_t quantity,
+        int targetSlotIndex,
+        int maximumSlots);
 
 ItemHealthUseResult UseHealthInventoryEntry(
         ItemCampaignState& campaign,
