@@ -464,6 +464,14 @@ bool SectorGameSession::DropInventoryEntry(
             ? entryIt->quantity : 1u;
     if (dropQuantity == 0 || dropQuantity > 1000000u) return false;
 
+    ItemLevelCampaignState& level = FindOrCreateItemLevelCampaignState(
+            *itemCampaign, levelName, topologyMap.runtimeObjects.size());
+    int objectId = std::max(1, level.nextDroppedObjectId);
+    while (FindSectorPlacedRuntimeObject(topologyMap, objectId) != nullptr) {
+        if (objectId == std::numeric_limits<int>::max()) return false;
+        ++objectId;
+    }
+
     BoundingBox localBounds = kItemDropFallbackLocalBounds;
     if (const ItemModelAssetEntry* modelEntry = FindItemModelAsset(
                 *itemModelAssets, definition->id)) {
@@ -479,69 +487,77 @@ bool SectorGameSession::DropInventoryEntry(
     if (!(forwardLength > 0.0001f)) return false;
     forward.x /= forwardLength;
     forward.z /= forwardLength;
-    const Vector3 desired{
-            controller.fpsControllerState.feetPosition.x + forward.x * 0.9f,
-            0.0f,
-            controller.fpsControllerState.feetPosition.z + forward.z * 0.9f};
-    const ItemDropCandidate candidate = BuildItemDropCandidate(
-            collision.sectorCollisionWorld,
-            controller.fpsControllerState.currentSectorId,
-            desired,
-            localBounds);
-    if (!candidate.valid
-            || !ItemDropFitsTopology(collision.sectorCollisionWorld, candidate)) {
-        return false;
-    }
     const SectorRuntimeObjectState& objects = scene.RuntimeObjects();
-    for (const SectorDynamicDoorCollider& door : objects.dynamicDoorColliders) {
-        if (ItemDropBoundsOverlap(candidate.worldBounds, door)) return false;
-    }
-    if (ItemDropBoundsOverlapAnyPropCollider(
-                candidate.worldBounds, objects.staticModelColliders)
-            || ItemDropBoundsOverlapAnyPropCollider(
-                    candidate.worldBounds, objects.dynamicModelColliders)) {
-        return false;
-    }
-    bool blocked = false;
-    context.world.ForEach<SectorObjectTransform, SectorItem>(
-            [&context, &candidate, &blocked](
-                    engine::Entity,
-                    SectorObjectTransform& transform,
-                    SectorItem& item) {
-                if (blocked) return;
-                blocked = ItemDropBoundsOverlap(
-                        candidate.worldBounds,
-                        ItemVisualBounds(
-                                context.assets,
-                                item.model,
-                                transform,
-                                item.scale,
-                                false));
-            });
-    if (blocked) return false;
     const SectorFpsControllerConfig playerConfig =
             EffectiveSectorFpsControllerConfig(
                     controller.fpsControllerState,
                     controller.fpsControllerConfig);
-    if (ItemDropBoundsOverlapPlayer(
-                candidate.worldBounds,
-                controller.fpsControllerState.feetPosition,
-                playerConfig.playerRadius,
-                playerConfig.playerHeight)) {
-        return false;
+    const float dropYawRadians = BuildItemDropRandomYawRadians(
+            runtimeId, static_cast<std::uint64_t>(objectId));
+    const auto slotOrigins = BuildItemDropSlotOrigins(
+            controller.fpsControllerState.feetPosition,
+            forward,
+            playerConfig.playerRadius,
+            localBounds);
+    ItemDropCandidate candidate;
+    for (const Vector3 slotOrigin : slotOrigins) {
+        const ItemDropCandidate slotCandidate = BuildItemDropCandidate(
+                collision.sectorCollisionWorld,
+                controller.fpsControllerState.currentSectorId,
+                slotOrigin,
+                localBounds,
+                dropYawRadians);
+        if (!slotCandidate.valid
+                || !ItemDropFitsTopology(
+                        collision.sectorCollisionWorld, slotCandidate)) {
+            continue;
+        }
+        bool blocked = false;
+        for (const SectorDynamicDoorCollider& door : objects.dynamicDoorColliders) {
+            if (ItemDropBoundsOverlap(slotCandidate.worldBounds, door)) {
+                blocked = true;
+                break;
+            }
+        }
+        if (blocked
+                || ItemDropBoundsOverlapAnyPropCollider(
+                        slotCandidate.worldBounds, objects.staticModelColliders)
+                || ItemDropBoundsOverlapAnyPropCollider(
+                        slotCandidate.worldBounds, objects.dynamicModelColliders)
+                || ItemDropBoundsOverlapPlayer(
+                        slotCandidate.worldBounds,
+                        controller.fpsControllerState.feetPosition,
+                        playerConfig.playerRadius,
+                        playerConfig.playerHeight)) {
+            continue;
+        }
+        context.world.ForEach<SectorObjectTransform, SectorItem>(
+                [&context, &slotCandidate, &blocked](
+                        engine::Entity,
+                        SectorObjectTransform& transform,
+                        SectorItem& item) {
+                    if (blocked) return;
+                    blocked = ItemDropBoundsOverlap(
+                            slotCandidate.worldBounds,
+                            ItemVisualBounds(
+                                    context.assets,
+                                    item.model,
+                                    transform,
+                                    item.scale,
+                                    false));
+                });
+        if (!blocked) {
+            candidate = slotCandidate;
+            break;
+        }
     }
+    if (!candidate.valid) return false;
 
-    ItemLevelCampaignState& level = FindOrCreateItemLevelCampaignState(
-            *itemCampaign, levelName, topologyMap.runtimeObjects.size());
-    int objectId = std::max(1, level.nextDroppedObjectId);
-    while (FindSectorPlacedRuntimeObject(topologyMap, objectId) != nullptr) {
-        if (objectId == std::numeric_limits<int>::max()) return false;
-        ++objectId;
-    }
     SectorPlacedRuntimeObject drop;
     drop.id = objectId;
     drop.kind = "item";
     drop.position = SectorWorldToAuthoringPosition(candidate.originWorld);
+    drop.yawRadians = candidate.yawRadians;
     drop.item.definitionId = definition->id;
     drop.item.instanceId = AllocateSectorItemInstanceId(topologyMap, objectId);
     drop.item.quantity = static_cast<int>(dropQuantity);

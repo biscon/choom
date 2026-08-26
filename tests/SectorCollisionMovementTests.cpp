@@ -1079,6 +1079,47 @@ void TestItemDropClearanceQueries()
                   0.25f,
                   1.6f),
           "drop bounds allow a separated player");
+
+    const auto slots = game::BuildItemDropSlotOrigins(
+            Vector3{4.0f, 0.0f, 4.0f},
+            Vector3{1.0f, 0.0f, 0.0f},
+            0.25f,
+            game::kItemDropFallbackLocalBounds);
+    bool allSlotsInFront = true;
+    bool allSlotsDistinct = true;
+    for (std::size_t first = 0; first < slots.size(); ++first) {
+        allSlotsInFront = allSlotsInFront && slots[first].x > 4.0f;
+        for (std::size_t second = first + 1; second < slots.size(); ++second) {
+            const float dx = slots[first].x - slots[second].x;
+            const float dz = slots[first].z - slots[second].z;
+            allSlotsDistinct = allSlotsDistinct
+                    && dx * dx + dz * dz > 0.01f;
+        }
+    }
+    Check(allSlotsInFront && allSlotsDistinct,
+          "drop placement builds six distinct fan slots in front of the player");
+
+    const float firstYaw = game::BuildItemDropRandomYawRadians(12, 31);
+    const float secondYaw = game::BuildItemDropRandomYawRadians(12, 32);
+    Check(firstYaw >= 0.0f && firstYaw < 2.0f * PI
+                  && secondYaw >= 0.0f && secondYaw < 2.0f * PI
+                  && !Near(firstYaw, secondYaw),
+          "drop placement produces varied normalized yaw values");
+
+    const BoundingBox rectangularBounds{
+            Vector3{-1.0f, 0.0f, -0.25f},
+            Vector3{1.0f, 0.5f, 0.25f}};
+    const game::ItemDropCandidate rotated = game::BuildItemDropCandidate(
+            world,
+            10,
+            Vector3{4.0f, 0.0f, 4.0f},
+            rectangularBounds,
+            PI * 0.5f);
+    Check(rotated.valid
+                  && Near(rotated.yawRadians, PI * 0.5f)
+                  && Near(rotated.worldBounds.max.x - rotated.worldBounds.min.x, 0.5f)
+                  && Near(rotated.worldBounds.max.z - rotated.worldBounds.min.z, 2.0f),
+          "drop clearance rotates rectangular item bounds with the chosen yaw");
 }
 
 } // namespace

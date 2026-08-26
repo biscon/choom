@@ -6,6 +6,9 @@
 
 #include <raylib.h>
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace game {
@@ -13,19 +16,31 @@ namespace game {
 inline constexpr BoundingBox kItemDropFallbackLocalBounds{
         Vector3{-0.5f, 0.0f, -0.5f},
         Vector3{0.5f, 1.0f, 0.5f}};
+inline constexpr std::size_t kItemDropPlacementSlotCount = 6;
 
 struct ItemDropCandidate {
     bool valid = false;
     int sectorId = 0;
+    float yawRadians = 0.0f;
     Vector3 originWorld = {};
     BoundingBox worldBounds = {};
 };
+
+std::array<Vector3, kItemDropPlacementSlotCount> BuildItemDropSlotOrigins(
+        Vector3 feetPosition,
+        Vector3 forwardXZ,
+        float playerRadius,
+        BoundingBox localBounds);
+float BuildItemDropRandomYawRadians(
+        std::uint64_t itemRuntimeId,
+        std::uint64_t droppedObjectId);
 
 ItemDropCandidate BuildItemDropCandidate(
         const SectorCollisionWorld& collisionWorld,
         int currentSectorId,
         Vector3 desiredOriginXZ,
-        BoundingBox localBounds);
+        BoundingBox localBounds,
+        float yawRadians = 0.0f);
 BoundingBox TransformItemDropBounds(
         BoundingBox localBounds,
         Matrix transform);

@@ -34,6 +34,76 @@ BoundingBox ColliderBounds(
 
 } // namespace
 
+std::array<Vector3, kItemDropPlacementSlotCount> BuildItemDropSlotOrigins(
+        Vector3 feetPosition,
+        Vector3 forwardXZ,
+        float playerRadius,
+        BoundingBox localBounds)
+{
+    std::array<Vector3, kItemDropPlacementSlotCount> origins{};
+    if (!Finite(feetPosition) || !Finite(forwardXZ)
+            || !Finite(localBounds.min) || !Finite(localBounds.max)
+            || !std::isfinite(playerRadius) || playerRadius <= 0.0f) {
+        return origins;
+    }
+    forwardXZ.y = 0.0f;
+    const float forwardLength = std::sqrt(
+            forwardXZ.x * forwardXZ.x + forwardXZ.z * forwardXZ.z);
+    if (!(forwardLength > 0.0001f)) return origins;
+    forwardXZ.x /= forwardLength;
+    forwardXZ.z /= forwardLength;
+    const Vector3 right{-forwardXZ.z, 0.0f, forwardXZ.x};
+
+    float footprintRadiusSquared = 0.0f;
+    for (float x : {localBounds.min.x, localBounds.max.x}) {
+        for (float z : {localBounds.min.z, localBounds.max.z}) {
+            footprintRadiusSquared = std::max(
+                    footprintRadiusSquared, x * x + z * z);
+        }
+    }
+    const float footprintRadius = std::sqrt(footprintRadiusSquared);
+    constexpr float Clearance = 0.12f;
+    const float nearDistance = std::max(
+            0.9f, playerRadius + footprintRadius + Clearance);
+    const float spacing = std::max(
+            0.65f, footprintRadius * 2.0f + Clearance);
+    const std::array<Vector2, kItemDropPlacementSlotCount> fanOffsets{{
+            Vector2{0.0f, nearDistance},
+            Vector2{-spacing, nearDistance + spacing * 0.4f},
+            Vector2{spacing, nearDistance + spacing * 0.4f},
+            Vector2{0.0f, nearDistance + spacing},
+            Vector2{-spacing, nearDistance + spacing * 1.4f},
+            Vector2{spacing, nearDistance + spacing * 1.4f}}};
+    for (std::size_t index = 0; index < origins.size(); ++index) {
+        origins[index] = Vector3{
+                feetPosition.x
+                        + right.x * fanOffsets[index].x
+                        + forwardXZ.x * fanOffsets[index].y,
+                0.0f,
+                feetPosition.z
+                        + right.z * fanOffsets[index].x
+                        + forwardXZ.z * fanOffsets[index].y};
+    }
+    return origins;
+}
+
+float BuildItemDropRandomYawRadians(
+        std::uint64_t itemRuntimeId,
+        std::uint64_t droppedObjectId)
+{
+    std::uint64_t value = itemRuntimeId
+            ^ (droppedObjectId + 0x9e3779b97f4a7c15ull
+                    + (itemRuntimeId << 6u) + (itemRuntimeId >> 2u));
+    value ^= value >> 30u;
+    value *= 0xbf58476d1ce4e5b9ull;
+    value ^= value >> 27u;
+    value *= 0x94d049bb133111ebull;
+    value ^= value >> 31u;
+    const float unit = static_cast<float>((value >> 40u) & 0x00ffffffu)
+            / static_cast<float>(0x01000000u);
+    return unit * 2.0f * PI;
+}
+
 BoundingBox TransformItemDropBounds(
         BoundingBox localBounds,
         Matrix transform)
@@ -62,11 +132,13 @@ ItemDropCandidate BuildItemDropCandidate(
         const SectorCollisionWorld& collisionWorld,
         int currentSectorId,
         Vector3 desiredOriginXZ,
-        BoundingBox localBounds)
+        BoundingBox localBounds,
+        float yawRadians)
 {
     ItemDropCandidate candidate;
     if (!Finite(desiredOriginXZ) || !Finite(localBounds.min)
             || !Finite(localBounds.max)
+            || !std::isfinite(yawRadians)
             || localBounds.max.x <= localBounds.min.x
             || localBounds.max.y <= localBounds.min.y
             || localBounds.max.z <= localBounds.min.z) {
@@ -84,11 +156,15 @@ ItemDropCandidate BuildItemDropCandidate(
             heights.floorZ - localBounds.min.y,
             desiredOriginXZ.z};
     candidate.worldBounds = TransformItemDropBounds(
-            localBounds, MatrixTranslate(
-                    candidate.originWorld.x,
-                    candidate.originWorld.y,
-                    candidate.originWorld.z));
+            localBounds,
+            MatrixMultiply(
+                    MatrixRotateY(yawRadians),
+                    MatrixTranslate(
+                            candidate.originWorld.x,
+                            candidate.originWorld.y,
+                            candidate.originWorld.z)));
     candidate.sectorId = sectorId;
+    candidate.yawRadians = yawRadians;
     candidate.valid = Finite(candidate.worldBounds.min)
             && Finite(candidate.worldBounds.max);
     return candidate;
