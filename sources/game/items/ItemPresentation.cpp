@@ -22,11 +22,15 @@ float SmoothStep(float value)
 
 void BeginItemPickupVacuum(
         ItemPresentationState& state,
-        Vector3 renderedPosition)
+        Vector3 renderedOrigin,
+        Vector3 visualCenterWorld)
 {
     state = ItemPresentationState{};
     state.phase = ItemPresentationPhase::PickupVacuum;
-    state.pickupStartWorld = renderedPosition;
+    state.pickupStartCenterWorld = visualCenterWorld;
+    state.pickupCenterFromOriginWorld = Vector3Subtract(
+            visualCenterWorld, renderedOrigin);
+    state.pickupTargetYWorld = visualCenterWorld.y;
 }
 
 void BeginFrozenItemDrop(
@@ -86,17 +90,26 @@ ItemPresentationFrame AdvanceItemPresentation(
         const float t = std::clamp(
                 state.elapsedSeconds / duration, 0.0f, 1.0f);
         const float eased = t * t;
-        const Vector3 target{
-                playerFeetPosition.x,
+        state.pickupTargetYWorld = std::max(
+                state.pickupTargetYWorld,
                 playerFeetPosition.y + std::max(
-                        0.0f, pickupTargetHeightWorld),
+                        0.0f, pickupTargetHeightWorld));
+        const Vector3 targetCenter{
+                playerFeetPosition.x,
+                state.pickupTargetYWorld,
                 playerFeetPosition.z};
-        const Vector3 rendered = Vector3Lerp(
-                state.pickupStartWorld, target, eased);
-        frame.visualOffset = Vector3Subtract(rendered, physicalPosition);
         const float shrink = SmoothStep(
                 (t - PickupShrinkStart) / (1.0f - PickupShrinkStart));
         frame.scaleMultiplier = 1.0f - shrink;
+        const Vector3 renderedCenter = Vector3Lerp(
+                state.pickupStartCenterWorld, targetCenter, eased);
+        const Vector3 renderedOrigin = Vector3Subtract(
+                renderedCenter,
+                Vector3Scale(
+                        state.pickupCenterFromOriginWorld,
+                        frame.scaleMultiplier));
+        frame.visualOffset = Vector3Subtract(
+                renderedOrigin, physicalPosition);
         state.scaleMultiplier = frame.scaleMultiplier;
         frame.removalReady = t >= 1.0f;
         return frame;

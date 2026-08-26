@@ -13,7 +13,9 @@ enum class ItemPresentationPhase {
 
 struct ItemPresentationState {
     ItemPresentationPhase phase = ItemPresentationPhase::Settled;
-    Vector3 pickupStartWorld = {};
+    Vector3 pickupStartCenterWorld = {};
+    Vector3 pickupCenterFromOriginWorld = {};
+    float pickupTargetYWorld = 0.0f;
     float elapsedSeconds = 0.0f;
     float dropLiftWorld = 0.0f;
     float scaleMultiplier = 1.0f;
@@ -27,7 +29,8 @@ struct ItemPresentationFrame {
 
 void BeginItemPickupVacuum(
         ItemPresentationState& state,
-        Vector3 renderedPosition);
+        Vector3 renderedOrigin,
+        Vector3 visualCenterWorld);
 
 void BeginFrozenItemDrop(
         ItemPresentationState& state,

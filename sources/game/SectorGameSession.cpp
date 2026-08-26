@@ -781,9 +781,28 @@ bool SectorGameSession::CommitItemTake(
             context.world.Get<SectorObjectTransform>(entity);
     const SectorObjectVisualOffset& visualOffset =
             context.world.Get<SectorObjectVisualOffset>(entity);
+    const Vector3 renderedOrigin = Vector3Add(
+            transform.position, visualOffset.position);
+    Vector3 visualCenterWorld = renderedOrigin;
+    const engine::ModelAsset* modelAsset =
+            context.assets.GetModelAsset(item.model);
+    if (modelAsset != nullptr && modelAsset->hasLocalBounds) {
+        SectorObjectTransform renderedTransform = transform;
+        renderedTransform.position = renderedOrigin;
+        const BoundingBox renderedBounds = ItemVisualBounds(
+                context.assets,
+                item.model,
+                renderedTransform,
+                item.scale,
+                false);
+        visualCenterWorld = Vector3Scale(
+                Vector3Add(renderedBounds.min, renderedBounds.max),
+                0.5f);
+    }
     BeginItemPickupVacuum(
             item.presentation,
-            Vector3Add(transform.position, visualOffset.position));
+            renderedOrigin,
+            visualCenterWorld);
     item.takePending = true;
     item.shadowMode = SectorDynamicModelShadowMode::None;
     useTarget = {};

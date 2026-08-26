@@ -196,7 +196,10 @@ void ApplicationSettingsInventoryFields()
 void ItemPresentationMotion()
 {
     game::ItemPresentationState pickup;
-    game::BeginItemPickupVacuum(pickup, Vector3{4.0f, 0.0f, 0.0f});
+    game::BeginItemPickupVacuum(
+            pickup,
+            Vector3{4.0f, 0.0f, 0.0f},
+            Vector3{4.0f, 1.0f, 0.0f});
     const game::ItemPresentationFrame halfway =
             game::AdvanceItemPresentation(
                     pickup,
@@ -208,7 +211,7 @@ void ItemPresentationMotion()
                     false,
                     0.5f);
     assert(std::abs(halfway.visualOffset.x + 1.0f) < 0.001f);
-    assert(std::abs(halfway.visualOffset.y - 0.1875f) < 0.001f);
+    assert(std::abs(halfway.visualOffset.y) < 0.001f);
     assert(std::abs(halfway.scaleMultiplier - 1.0f) < 0.001f);
     assert(!halfway.removalReady);
     const game::ItemPresentationFrame finished =
@@ -226,6 +229,71 @@ void ItemPresentationMotion()
     assert(std::abs(finished.visualOffset.z - 3.0f) < 0.001f);
     assert(finished.scaleMultiplier <= 0.001f);
     assert(finished.removalReady);
+
+    game::ItemPresentationState centeredShrink;
+    game::BeginItemPickupVacuum(
+            centeredShrink,
+            Vector3{},
+            Vector3{0.0f, 1.0f, 0.0f});
+    const game::ItemPresentationFrame shrinking =
+            game::AdvanceItemPresentation(
+                    centeredShrink,
+                    Vector3{},
+                    Vector3{},
+                    1.0f,
+                    0.75f,
+                    25.0f,
+                    false,
+                    0.825f);
+    const float apparentCenterY = shrinking.visualOffset.y
+            + shrinking.scaleMultiplier;
+    assert(std::abs(shrinking.scaleMultiplier - 0.5f) < 0.001f);
+    assert(std::abs(apparentCenterY - 1.0f) < 0.001f);
+
+    game::ItemPresentationState rising;
+    game::BeginItemPickupVacuum(
+            rising,
+            Vector3{0.0f, 0.2f, 0.0f},
+            Vector3{0.0f, 0.2f, 0.0f});
+    const game::ItemPresentationFrame risingHalfway =
+            game::AdvanceItemPresentation(
+                    rising,
+                    Vector3{0.0f, 0.2f, 0.0f},
+                    Vector3{},
+                    1.0f,
+                    0.75f,
+                    25.0f,
+                    false,
+                    0.5f);
+    assert(std::abs(risingHalfway.visualOffset.y - 0.1375f) < 0.001f);
+
+    game::ItemPresentationState movingPlayer;
+    game::BeginItemPickupVacuum(
+            movingPlayer,
+            Vector3{0.0f, 1.0f, 0.0f},
+            Vector3{0.0f, 1.0f, 0.0f});
+    const game::ItemPresentationFrame raisedTarget =
+            game::AdvanceItemPresentation(
+                    movingPlayer,
+                    Vector3{0.0f, 1.0f, 0.0f},
+                    Vector3{0.0f, 1.0f, 0.0f},
+                    1.0f,
+                    0.75f,
+                    25.0f,
+                    false,
+                    0.25f);
+    const game::ItemPresentationFrame loweredPlayer =
+            game::AdvanceItemPresentation(
+                    movingPlayer,
+                    Vector3{0.0f, 1.0f, 0.0f},
+                    Vector3{},
+                    1.0f,
+                    0.75f,
+                    25.0f,
+                    false,
+                    0.25f);
+    assert(loweredPlayer.visualOffset.y
+            >= raisedTarget.visualOffset.y - 0.001f);
 
     game::ItemPresentationState drop;
     game::BeginFrozenItemDrop(drop, 1.5f);
