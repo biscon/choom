@@ -129,6 +129,12 @@ private:
         bool active = false;
     };
 
+    struct HeldObjectUseState {
+        ItemHeldUsePhase phase = ItemHeldUsePhase::Inactive;
+        std::uint64_t runtimeId = 0;
+        engine::ScriptTaskHandle task{};
+    };
+
     bool RequestItemTake(
             engine::EngineContext& context,
             SectorSceneRuntime& scene,
@@ -144,7 +150,13 @@ private:
             SectorSceneRuntime& scene);
     void ShowCarryRefusal();
     void ShowDropRefusal();
+    void RefreshMouseLookCapture();
     void SetInventoryOpen(bool open);
+    void ClearHeldObjectUse();
+    bool BeginHeldObjectUse(std::uint64_t runtimeId);
+    void InvokeHeldObjectUse(engine::EngineContext& context);
+    void UpdatePendingHeldObjectUse();
+    bool ConsumeHeldObjectEntry(std::uint64_t runtimeId);
     void ProcessInventoryAction(
             engine::EngineContext& context,
             SectorSceneRuntime& scene);
@@ -205,6 +217,8 @@ private:
     PendingItemTake pendingItemTake;
     ItemInventoryUIState inventoryUi;
     ItemInventoryUIAction pendingInventoryAction;
+    HeldObjectUseState heldObjectUse;
+    Rectangle logicalViewport = {0.0f, 0.0f, 1920.0f, 1080.0f};
 };
 
 } // namespace game

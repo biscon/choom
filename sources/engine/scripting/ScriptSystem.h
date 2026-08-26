@@ -2,6 +2,7 @@
 
 #include "engine/scripting/ScriptData.h"
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,12 @@ ScriptCallOutcome ScriptSystemCallForegroundHook(
 ScriptCallOutcome ScriptSystemCallObservedForegroundHook(
         ScriptRuntime& runtime,
         const std::string& functionName);
+
+ScriptCallOutcome ScriptSystemCallObservedForegroundHook(
+        ScriptRuntime& runtime,
+        const std::string& functionName,
+        const ScriptValue* arguments,
+        std::size_t argumentCount);
 
 bool ScriptSystemTakeObservedCallOutcome(
         ScriptRuntime& runtime,

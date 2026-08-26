@@ -146,4 +146,29 @@ void NormalizeItemInventorySelection(
             preferredIndex, inventory.entries.size() - 1)].runtimeId;
 }
 
+ItemHeldUseInputDecision EvaluateItemHeldUseInput(
+        ItemHeldUsePhase phase,
+        ItemHeldUseInput input)
+{
+    if (phase == ItemHeldUsePhase::Inactive) return {};
+    if (phase == ItemHeldUsePhase::Pending) {
+        return ItemHeldUseInputDecision{ItemHeldUseEffect::None, true};
+    }
+    switch (input) {
+        case ItemHeldUseInput::ToggleInventory:
+            return ItemHeldUseInputDecision{
+                    ItemHeldUseEffect::ReopenInventory, true};
+        case ItemHeldUseInput::Escape:
+        case ItemHeldUseInput::RightClick:
+            return ItemHeldUseInputDecision{
+                    ItemHeldUseEffect::CancelToGameplay, true};
+        case ItemHeldUseInput::InvalidLeftClick:
+            return ItemHeldUseInputDecision{ItemHeldUseEffect::None, true};
+        case ItemHeldUseInput::ValidLeftClick:
+            return ItemHeldUseInputDecision{
+                    ItemHeldUseEffect::InvokeTarget, true};
+    }
+    return {};
+}
+
 } // namespace game

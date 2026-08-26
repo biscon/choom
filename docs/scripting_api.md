@@ -288,6 +288,35 @@ function canTakePistolAmmo()
 end
 ```
 
+## Carried Object use callbacks
+
+An Object placement may provide `onUseScript`. After that item is picked up,
+its inventory Use action enters cursor-targeting mode. Left-clicking a visible,
+ready static or dynamic prop calls the named global function with that prop's
+stable string instance ID. Doors, NPCs, world items, and arbitrary world
+surfaces are not Object-use targets.
+
+The callback may yield. Its first return value must be boolean `true` to consume
+exactly one carried Object entry. Boolean `false`, no boolean return value, a
+missing function, or an error keeps the Object. While a yielding call is
+pending, gameplay controls remain locked and the call cannot be cancelled or
+started a second time. When the callback finishes, normal gameplay controls are
+restored.
+
+```lua
+function useAccessCard(targetInstanceId)
+    delay(100)
+    if targetInstanceId == "security_console" then
+        setPersistentBool("security_unlocked", true)
+        return true
+    end
+    return false
+end
+```
+
+This callback is separate from a dynamic prop's own no-argument
+`onUseScript`, which continues to run from the centered E-key Use interaction.
+
 ## Dynamic props and animation
 
 A dynamic prop becomes usable when its `onUseScript` inspector field names a

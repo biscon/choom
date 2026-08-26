@@ -55,6 +55,13 @@ enum class ItemHealthUseResult {
     InvalidDefinition
 };
 
+enum class ItemObjectUseResult {
+    Consumed,
+    Denied,
+    MissingEntry,
+    InvalidDefinition
+};
+
 enum class ItemPickupCapacityResult {
     Fits,
     MissingDefinition,
@@ -99,6 +106,13 @@ ItemHealthUseResult UseHealthInventoryEntry(
         const ItemRegistry& registry,
         Health& health,
         std::uint64_t runtimeId);
+
+ItemObjectUseResult CompleteObjectInventoryUse(
+        ItemCampaignState& campaign,
+        const ItemRegistry& registry,
+        std::uint64_t runtimeId,
+        bool permitted,
+        std::size_t* removedIndex = nullptr);
 
 void UpdateItemHealingEffects(
         ItemCampaignState& campaign,

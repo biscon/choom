@@ -788,6 +788,30 @@ prop namespace. Static props missing an ID in older maps receive a deterministic
 runtime-object mutation path, so it dirties the document, invalidates the 2D
 topology render cache, and refreshes preview objects.
 
+## Items and inventory
+
+Item definitions are application-global entries edited through **Editors >
+Item Editor**. The Item tool places level-owned runtime objects that reference a
+definition and expose quantity, pickup distance, transforms, shadow mode, an
+optional pickup hook, and—for Object definitions—an optional carried-use hook.
+Item placement edits use the normal runtime-object document-edited path, so the
+2D topology cache is invalidated while the global registry remains separate
+from the level document.
+
+In a game session, E takes a centered item when its complete quantity fits the
+campaign inventory and its optional pickup callback permits it. I opens the
+inventory. Health items can heal immediately or over time, items can be dropped
+only at a clear floor position, and Objects with a carried-use hook can be held
+under the cursor and left-clicked on a ready static or dynamic prop. The target
+receives the existing pulse highlight and the hook receives its stable string
+instance ID. Escape or right-click cancels targeting; I cancels and reopens the
+inventory. A yielding hook keeps controls locked until completion.
+
+Items and drops remain non-collidable and do not participate in static
+lightmaps, baked occlusion, or the lightmap source hash. Sector-editor Gameplay
+preview renders authored items but intentionally does not provide pickup,
+inventory, healing, dropping, or carried Object use.
+
 All glTF model emission uses the authored emissive texture/factor and
 `KHR_materials_emissive_strength`, followed by a lightweight HDR appearance
 curve. Grazing angles are attenuated to 70 percent at the silhouette and strong

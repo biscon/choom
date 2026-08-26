@@ -110,6 +110,36 @@ ItemHealthUseResult UseHealthInventoryEntry(
     return ItemHealthUseResult::StartedTimedEffect;
 }
 
+ItemObjectUseResult CompleteObjectInventoryUse(
+        ItemCampaignState& campaign,
+        const ItemRegistry& registry,
+        std::uint64_t runtimeId,
+        bool permitted,
+        std::size_t* removedIndex)
+{
+    const auto found = std::find_if(
+            campaign.inventory.entries.begin(),
+            campaign.inventory.entries.end(),
+            [runtimeId](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == runtimeId;
+            });
+    if (found == campaign.inventory.entries.end()) {
+        return ItemObjectUseResult::MissingEntry;
+    }
+    const ItemDefinition* definition = FindItemDefinition(
+            registry, found->definitionId);
+    if (definition == nullptr || definition->type != ItemType::Object
+            || found->quantity == 0 || found->onUseScript.empty()) {
+        return ItemObjectUseResult::InvalidDefinition;
+    }
+    if (!permitted) return ItemObjectUseResult::Denied;
+    if (!RemoveInventoryEntryQuantity(
+                campaign.inventory, runtimeId, 1, removedIndex)) {
+        return ItemObjectUseResult::InvalidDefinition;
+    }
+    return ItemObjectUseResult::Consumed;
+}
+
 void UpdateItemHealingEffects(
         ItemCampaignState& campaign,
         Health& health,

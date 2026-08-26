@@ -40,7 +40,7 @@ Before executing a slice:
 | 1 | Global item definitions, settings, assets, and Item Editor | Completed | 2026-08-25 |
 | 2 | Authored item placements, world rendering, pickup, and session inventory | Completed | 2026-08-25 |
 | 3 | Runtime icon atlas, inventory UI, health use, and safe dropping | Completed | 2026-08-26 |
-| 4 | Object-on-prop use mode, scripting completion, and integration hardening | Not Started | — |
+| 4 | Object-on-prop use mode, scripting completion, and integration hardening | Completed | 2026-08-26 |
 
 ## Goal And Acceptance Criteria
 
@@ -988,3 +988,53 @@ entry.
   tracking receive load-time reservations; the collision query reuses
   preallocated traversal storage and performs no steady-call allocation.
 - Remaining follow-up within this plan: Slice 4.
+
+### 2026-08-26 — Slice 4 — Completed
+
+- Summary: Added pointer/count arguments for observed foreground Lua hooks;
+  completed carried Object Use with inventory routing, held cursor icon,
+  targeting/pending control states, stable prop-ID delivery, exact conditional
+  consumption, and shutdown-safe resolution; added cursor-ray static/dynamic
+  prop bounds selection with topology and nearer-prop occlusion; and extended
+  pulse highlighting to static props.
+- Decisions/deviations folded back into plan: The held atlas icon renders at an
+  integral 64x64 logical pixels. Selection has no arbitrary range cutoff and
+  resolves the nearest ready prop bound under the logical-viewport cursor. A
+  nearer prop without a usable stable ID blocks targets behind it. Foreground
+  busy/already-running results retain targeting for retry; all terminal
+  outcomes restore normal controls.
+- New compacted findings: The ray must use the UI's logical viewport dimensions
+  because raylib mouse coordinates are presentation-scaled before input
+  polling. The static-model renderer's interaction uniform is shared, so every
+  static entity now uploads its own value and static capture explicitly forces
+  zero.
+- Files/modules materially affected: Script-system observed calls; game-session
+  inventory/input/lifecycle flow; item inventory/UI helpers; sector use
+  targeting and static-model rendering; scripting/editor documentation; and
+  focused scripting, inventory, targeting, and renderer-policy tests.
+- Automated verification: `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 31 tests
+  in 64.72 seconds. Coverage includes every ScriptValue argument type,
+  immediate/yielded target-ID delivery, Object consumption/retention,
+  cancel/pending input transitions, nearest/tied/occluded prop targeting,
+  stable static IDs, NPC/item/door exclusion, and static highlight routing.
+- Manual verification: Not performed (user-owned).
+- Cache invalidation behavior: Slice 4 adds no authoring mutation. Existing Item
+  placement mutations continue through the runtime-object editing service's
+  normal document-edited/2D-cache invalidation path, while registry display
+  changes retain their revision-based cache invalidation.
+- Lightmap source-hash behavior: Unchanged. Item definitions, placements,
+  models, drops, icons, scripts, held state, and highlights remain excluded
+  from `ComputeSectorLightmapSourceHash()`; static capture forces interaction
+  highlight to zero.
+- Collision/sector lookup/physics behavior: Items still add no collider. Held
+  use performs read-only transformed prop-bounds and topology-ray queries only;
+  static collision, sector lookup, door collision, player physics, and camera
+  composition are unchanged.
+- Allocation/load-phase behavior: Held target selection walks existing ECS
+  pools directly without per-frame collections or asset requests. Hook
+  arguments use a fixed stack array and pointer/count view; only the explicit
+  click copies the target string. Existing script task/outcome reservations and
+  item asset preparation remain unchanged.
+- Remaining follow-up within this plan: None. Manual acceptance remains
+  user-owned.

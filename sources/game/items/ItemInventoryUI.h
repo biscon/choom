@@ -12,7 +12,34 @@ namespace game {
 enum class ItemInventoryUIActionType {
     None,
     UseHealth,
+    UseObject,
     Drop
+};
+
+enum class ItemHeldUsePhase {
+    Inactive,
+    Targeting,
+    Pending
+};
+
+enum class ItemHeldUseInput {
+    ToggleInventory,
+    Escape,
+    RightClick,
+    InvalidLeftClick,
+    ValidLeftClick
+};
+
+enum class ItemHeldUseEffect {
+    None,
+    CancelToGameplay,
+    ReopenInventory,
+    InvokeTarget
+};
+
+struct ItemHeldUseInputDecision {
+    ItemHeldUseEffect effect = ItemHeldUseEffect::None;
+    bool consumeEvent = false;
 };
 
 struct ItemInventoryUIAction {
@@ -60,6 +87,9 @@ void NormalizeItemInventorySelection(
         ItemInventoryUIState& state,
         const PlayerInventoryState& inventory,
         std::size_t preferredIndex = 0);
+ItemHeldUseInputDecision EvaluateItemHeldUseInput(
+        ItemHeldUsePhase phase,
+        ItemHeldUseInput input);
 
 ItemInventoryUIAction DrawItemInventoryUI(
         engine::UIContext& ui,
@@ -74,5 +104,12 @@ ItemInventoryUIAction DrawItemInventoryUI(
         const PlayerInventoryApplicationSettings& settings,
         const Health& health,
         ItemInventoryUIState& state);
+
+void DrawHeldItemCursor(
+        engine::AssetManager& assets,
+        const ItemModelAssetState& itemAssets,
+        const PlayerInventoryState& inventory,
+        std::uint64_t runtimeId,
+        Vector2 cursorPosition);
 
 } // namespace game

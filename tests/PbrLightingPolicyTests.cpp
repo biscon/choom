@@ -407,6 +407,16 @@ void TestRemovedShaderPathsStayRemoved()
                     && itemPass < itemHighlightReset
                     && itemHighlightReset < staticPropPass,
           "item selection highlight is cleared before the static-prop draw pass");
+    const std::size_t staticHighlight = source.find(
+            "!staticCaptureOnly && entity == useHighlight.entity",
+            staticPropPass);
+    const std::size_t dynamicPropPass = source.find(
+            "SectorDynamicModel,",
+            staticPropPass);
+    Check(staticHighlight != std::string::npos
+                    && dynamicPropPass != std::string::npos
+                    && staticHighlight < dynamicPropPass,
+          "static props receive per-entity interaction highlighting outside static capture");
 }
 
 std::string ReadSource(const char* path)

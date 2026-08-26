@@ -1780,8 +1780,8 @@ void SectorStaticModelRenderer::Draw(
                 else ++skipped;
             });
 
-    // The item pass sets a shared shader uniform per entity. Static props use
-    // their own draw path, so clear it explicitly before entering that pass.
+    // The item pass sets a shared shader uniform per entity. Static props set
+    // it explicitly below, so clear it before entering that pass.
     UploadInteractionHighlightStrength(0.0f);
 
     runtimeObjectWorld.ForEach<
@@ -1798,14 +1798,19 @@ void SectorStaticModelRenderer::Draw(
              environmentActive,
              surfaceLightmapBakeCurrent,
              useBakedAmbientOcclusion,
+             staticCaptureOnly,
+             useHighlight,
              &considered,
              &drawn,
              &portalCulled,
              &skipped](
-                    engine::Entity,
+                    engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorStaticModel& staticModel) {
+                UploadInteractionHighlightStrength(
+                        !staticCaptureOnly && entity == useHighlight.entity
+                                ? useHighlight.strength : 0.0f);
                 ++considered;
                 if (!ShouldDrawRuntimeSectorForVisibility(
                             object.currentSectorId,

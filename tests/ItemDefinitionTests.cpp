@@ -378,6 +378,33 @@ void InventoryTransactionsAndCampaignReconciliation()
     assert(campaign.inventory.entries.size() == entryCount);
     assert(campaign.inventory.entries.front().quantity == ammoQuantity);
 
+    const std::uint64_t usedObjectId = campaign.inventory.entries[1].runtimeId;
+    const std::uint64_t retainedObjectId = campaign.inventory.entries[2].runtimeId;
+    assert(game::CompleteObjectInventoryUse(
+                  campaign, registry, usedObjectId, false)
+            == game::ItemObjectUseResult::Denied);
+    assert(campaign.inventory.entries.size() == entryCount);
+    std::size_t removedObjectIndex = 99;
+    assert(game::CompleteObjectInventoryUse(
+                  campaign,
+                  registry,
+                  usedObjectId,
+                  true,
+                  &removedObjectIndex)
+            == game::ItemObjectUseResult::Consumed);
+    assert(removedObjectIndex == 1
+            && campaign.inventory.entries.size() == entryCount - 1
+            && campaign.inventory.entries[1].runtimeId == retainedObjectId);
+    assert(game::CompleteObjectInventoryUse(
+                  campaign, registry, usedObjectId, true)
+            == game::ItemObjectUseResult::MissingEntry);
+    assert(game::CompleteObjectInventoryUse(
+                  campaign,
+                  registry,
+                  campaign.inventory.entries.back().runtimeId,
+                  true)
+            == game::ItemObjectUseResult::InvalidDefinition);
+
     game::PlayerInventoryState overflowInventory;
     overflowInventory.entries.push_back(game::ItemInventoryEntry{
             1,
@@ -525,6 +552,45 @@ void HealthUseAndInventoryLayout()
             == game::ItemIconPreparationState::Ready);
     assert(game::ClassifyItemIconPreparation(8, 0, 0, true)
             == game::ItemIconPreparationState::Failed);
+
+    const auto targetingInventory = game::EvaluateItemHeldUseInput(
+            game::ItemHeldUsePhase::Targeting,
+            game::ItemHeldUseInput::ToggleInventory);
+    assert(targetingInventory.consumeEvent
+            && targetingInventory.effect
+                    == game::ItemHeldUseEffect::ReopenInventory);
+    const auto targetingEscape = game::EvaluateItemHeldUseInput(
+            game::ItemHeldUsePhase::Targeting,
+            game::ItemHeldUseInput::Escape);
+    const auto targetingRight = game::EvaluateItemHeldUseInput(
+            game::ItemHeldUsePhase::Targeting,
+            game::ItemHeldUseInput::RightClick);
+    assert(targetingEscape.consumeEvent && targetingRight.consumeEvent
+            && targetingEscape.effect
+                    == game::ItemHeldUseEffect::CancelToGameplay
+            && targetingRight.effect
+                    == game::ItemHeldUseEffect::CancelToGameplay);
+    const auto invalidClick = game::EvaluateItemHeldUseInput(
+            game::ItemHeldUsePhase::Targeting,
+            game::ItemHeldUseInput::InvalidLeftClick);
+    const auto validClick = game::EvaluateItemHeldUseInput(
+            game::ItemHeldUsePhase::Targeting,
+            game::ItemHeldUseInput::ValidLeftClick);
+    assert(invalidClick.consumeEvent
+            && invalidClick.effect == game::ItemHeldUseEffect::None);
+    assert(validClick.consumeEvent
+            && validClick.effect == game::ItemHeldUseEffect::InvokeTarget);
+    for (game::ItemHeldUseInput heldInput : {
+                 game::ItemHeldUseInput::ToggleInventory,
+                 game::ItemHeldUseInput::Escape,
+                 game::ItemHeldUseInput::RightClick,
+                 game::ItemHeldUseInput::InvalidLeftClick,
+                 game::ItemHeldUseInput::ValidLeftClick}) {
+        const auto pending = game::EvaluateItemHeldUseInput(
+                game::ItemHeldUsePhase::Pending, heldInput);
+        assert(pending.consumeEvent
+                && pending.effect == game::ItemHeldUseEffect::None);
+    }
 }
 
 } // namespace

@@ -235,6 +235,15 @@ ItemInventoryUIAction DrawItemInventoryUI(
                         "Use", engine::UITextJustify::Center,
                         config.mutedTextColor);
             }
+        } else if (definition->type == ItemType::Object
+                && !selected->onUseScript.empty()
+                && engine::Button(
+                        ui, config, input, assets,
+                        "inventory_use_object", layout.useButton,
+                        smallFont, "Use")) {
+            action = ItemInventoryUIAction{
+                    ItemInventoryUIActionType::UseObject,
+                    selected->runtimeId};
         }
         if (engine::Button(
                     ui, config, input, assets,
@@ -247,6 +256,39 @@ ItemInventoryUIAction DrawItemInventoryUI(
     }
     engine::EndUI(ui, config, input, assets);
     return action;
+}
+
+void DrawHeldItemCursor(
+        engine::AssetManager& assets,
+        const ItemModelAssetState& itemAssets,
+        const PlayerInventoryState& inventory,
+        std::uint64_t runtimeId,
+        Vector2 cursorPosition)
+{
+    const auto found = std::find_if(
+            inventory.entries.begin(), inventory.entries.end(),
+            [runtimeId](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == runtimeId;
+            });
+    if (found == inventory.entries.end()) return;
+    constexpr float Size = 64.0f;
+    const Rectangle destination = IntegralRect(Rectangle{
+            cursorPosition.x - Size * 0.5f,
+            cursorPosition.y - Size * 0.5f,
+            Size,
+            Size});
+    DrawRectangleRec(destination, Color{20, 24, 32, 235});
+    const Texture2D* atlas = assets.GetTexture(itemAssets.iconAtlas);
+    const ItemIconRegion* region = FindItemIconRegion(
+            itemAssets.iconLayout, found->definitionId);
+    if (atlas != nullptr && region != nullptr) {
+        DrawTexturePro(
+                *atlas, region->source, destination,
+                Vector2{}, 0.0f, WHITE);
+    } else {
+        DrawRectangleRec(destination, Color{46, 24, 50, 235});
+    }
+    DrawRectangleLinesEx(destination, 2.0f, Color{220, 70, 210, 255});
 }
 
 } // namespace game

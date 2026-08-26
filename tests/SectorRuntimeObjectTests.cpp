@@ -157,6 +157,128 @@ void TestSectorItemUseTargetFallbackAndPendingGate()
           "an item with a yielding pickup hook cannot start a second take");
 }
 
+void TestHeldObjectUseRayTargetOrderingAndOcclusion()
+{
+    const Ray ray{Vector3{}, Vector3{1.0f, 0.0f, 0.0f}};
+    const engine::Entity farther{8, 1};
+    const engine::Entity nearer{4, 1};
+    game::SectorObjectUseTargetAccumulator accumulator;
+    game::ConsiderSectorObjectUseBounds(
+            accumulator,
+            ray,
+            farther,
+            game::SectorUseTargetKind::DynamicProp,
+            BoundingBox{Vector3{4.0f, -1.0f, -1.0f},
+                    Vector3{5.0f, 1.0f, 1.0f}},
+            true);
+    game::ConsiderSectorObjectUseBounds(
+            accumulator,
+            ray,
+            nearer,
+            game::SectorUseTargetKind::StaticProp,
+            BoundingBox{Vector3{2.0f, -1.0f, -1.0f},
+                    Vector3{3.0f, 1.0f, 1.0f}},
+            true);
+    const game::SectorUseTarget selected =
+            game::FinishSectorObjectUseTarget(accumulator);
+    Check(selected.kind == game::SectorUseTargetKind::StaticProp
+                  && selected.entity == nearer
+                  && std::fabs(selected.distance - 2.0f) <= 0.00001f,
+          "held Object targeting selects the nearest cursor-ray prop bound");
+    Check(game::FinishSectorObjectUseTarget(accumulator, 1.0f).kind
+                    == game::SectorUseTargetKind::None,
+          "nearer topology occludes held Object prop targets");
+    Check(game::FinishSectorObjectUseTarget(accumulator, 1.96f).entity
+                    == nearer,
+          "held Object topology occlusion preserves the contact tolerance");
+
+    game::SectorObjectUseTargetAccumulator blocked;
+    game::ConsiderSectorObjectUseBounds(
+            blocked,
+            ray,
+            farther,
+            game::SectorUseTargetKind::DynamicProp,
+            BoundingBox{Vector3{4.0f, -1.0f, -1.0f},
+                    Vector3{5.0f, 1.0f, 1.0f}},
+            true);
+    game::ConsiderSectorObjectUseBounds(
+            blocked,
+            ray,
+            nearer,
+            game::SectorUseTargetKind::StaticProp,
+            BoundingBox{Vector3{2.0f, -1.0f, -1.0f},
+                    Vector3{3.0f, 1.0f, 1.0f}},
+            false);
+    Check(game::FinishSectorObjectUseTarget(blocked).kind
+                    == game::SectorUseTargetKind::None,
+          "a nearer prop without a stable ID blocks targets behind it");
+
+    game::SectorObjectUseTargetAccumulator excluded;
+    game::ConsiderSectorObjectUseBounds(
+            excluded,
+            ray,
+            nearer,
+            game::SectorUseTargetKind::Item,
+            BoundingBox{Vector3{1.0f, -1.0f, -1.0f},
+                    Vector3{2.0f, 1.0f, 1.0f}},
+            true);
+    game::ConsiderSectorObjectUseBounds(
+            excluded,
+            ray,
+            farther,
+            game::SectorUseTargetKind::Door,
+            BoundingBox{Vector3{2.0f, -1.0f, -1.0f},
+                    Vector3{3.0f, 1.0f, 1.0f}},
+            true);
+    Check(game::FinishSectorObjectUseTarget(excluded).kind
+                    == game::SectorUseTargetKind::None,
+          "held Object bounds reject items, doors, and non-prop target kinds");
+
+    game::SectorObjectUseTargetAccumulator tie;
+    game::ConsiderSectorObjectUseBounds(
+            tie,
+            ray,
+            farther,
+            game::SectorUseTargetKind::DynamicProp,
+            BoundingBox{Vector3{2.0f, -1.0f, -1.0f},
+                    Vector3{3.0f, 1.0f, 1.0f}},
+            true);
+    game::ConsiderSectorObjectUseBounds(
+            tie,
+            ray,
+            nearer,
+            game::SectorUseTargetKind::StaticProp,
+            BoundingBox{Vector3{2.0f, -1.0f, -1.0f},
+                    Vector3{3.0f, 1.0f, 1.0f}},
+            true);
+    Check(game::FinishSectorObjectUseTarget(tie).entity == nearer,
+          "equal-distance held Object targets use stable entity ordering");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity staticProp = world.CreateEntity();
+    game::SectorStaticModel staticModel;
+    staticModel.instanceId = "crate_4";
+    world.Add(staticProp, staticModel);
+    game::SectorUseTarget staticTarget;
+    staticTarget.entity = staticProp;
+    staticTarget.kind = game::SectorUseTargetKind::StaticProp;
+    Check(game::SectorObjectUseTargetInstanceId(world, staticTarget)
+                    == "crate_4",
+          "held Object targeting exposes static prop stable IDs");
+
+    const engine::Entity npc = world.CreateEntity();
+    game::SectorDynamicModel npcModel;
+    npcModel.instanceId = "should_not_be_targeted";
+    world.Add(npc, npcModel);
+    world.Add(npc, game::NpcRuntimeInstance{});
+    game::SectorUseTarget npcTarget;
+    npcTarget.entity = npc;
+    npcTarget.kind = game::SectorUseTargetKind::DynamicProp;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "NPC dynamic models are excluded from held Object targets");
+}
+
 void TestItemRuntimeSpawnAndFocusedRemoval()
 {
     engine::World world;
@@ -8898,6 +9020,7 @@ int main()
     RunSectorScriptBindingTests();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
     TestSectorItemUseTargetFallbackAndPendingGate();
+    TestHeldObjectUseRayTargetOrderingAndOcclusion();
     TestItemRuntimeSpawnAndFocusedRemoval();
     TestSectorUseHighlightPulsesAndReleases();
     TestNpcVocalPriorityDelayAndShufflePolicy();

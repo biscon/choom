@@ -195,6 +195,16 @@ void SectorGameSession::ShowDropRefusal()
     itemMessageElapsedSeconds = 0.0f;
 }
 
+void SectorGameSession::RefreshMouseLookCapture()
+{
+    if (!running || paused) return;
+    SetSectorFreeflyMouseLookEnabled(
+            controller.freeflyController,
+            !consoleInputCaptured
+                    && !inventoryUi.open
+                    && heldObjectUse.phase == ItemHeldUsePhase::Inactive);
+}
+
 void SectorGameSession::SetInventoryOpen(bool open)
 {
     if (inventoryUi.open == open) return;
@@ -208,18 +218,168 @@ void SectorGameSession::SetInventoryOpen(bool open)
         ResetSectorUseHighlight(useHighlightState);
         usePromptTitle = {};
     }
-    if (running && !paused) {
-        SetSectorFreeflyMouseLookEnabled(
-                controller.freeflyController,
-                !open && !consoleInputCaptured);
+    RefreshMouseLookCapture();
+}
+
+void SectorGameSession::ClearHeldObjectUse()
+{
+    heldObjectUse = {};
+    useTarget = {};
+    ResetSectorUseHighlight(useHighlightState);
+    usePromptTitle = {};
+    RefreshMouseLookCapture();
+}
+
+bool SectorGameSession::BeginHeldObjectUse(std::uint64_t runtimeId)
+{
+    if (itemCampaign == nullptr || itemRegistry == nullptr || runtimeId == 0
+            || heldObjectUse.phase != ItemHeldUsePhase::Inactive) {
+        return false;
     }
+    const auto found = std::find_if(
+            itemCampaign->inventory.entries.begin(),
+            itemCampaign->inventory.entries.end(),
+            [runtimeId](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == runtimeId;
+            });
+    if (found == itemCampaign->inventory.entries.end()
+            || found->onUseScript.empty()) {
+        return false;
+    }
+    const ItemDefinition* definition = FindItemDefinition(
+            *itemRegistry, found->definitionId);
+    if (definition == nullptr || definition->type != ItemType::Object) {
+        return false;
+    }
+    heldObjectUse.phase = ItemHeldUsePhase::Targeting;
+    heldObjectUse.runtimeId = runtimeId;
+    heldObjectUse.task = {};
+    SetInventoryOpen(false);
+    useTarget = {};
+    ResetSectorUseHighlight(useHighlightState);
+    usePromptTitle = {};
+    RefreshMouseLookCapture();
+    return true;
+}
+
+bool SectorGameSession::ConsumeHeldObjectEntry(std::uint64_t runtimeId)
+{
+    if (itemCampaign == nullptr || itemRegistry == nullptr) return false;
+    std::size_t affectedIndex = 0;
+    if (CompleteObjectInventoryUse(
+                *itemCampaign,
+                *itemRegistry,
+                runtimeId,
+                true,
+                &affectedIndex) != ItemObjectUseResult::Consumed) {
+        return false;
+    }
+    NormalizeItemInventorySelection(
+            inventoryUi, itemCampaign->inventory, affectedIndex);
+    return true;
+}
+
+void SectorGameSession::InvokeHeldObjectUse(engine::EngineContext& context)
+{
+    if (heldObjectUse.phase != ItemHeldUsePhase::Targeting
+            || itemCampaign == nullptr || itemRegistry == nullptr) {
+        return;
+    }
+    const auto found = std::find_if(
+            itemCampaign->inventory.entries.begin(),
+            itemCampaign->inventory.entries.end(),
+            [this](const ItemInventoryEntry& entry) {
+                return entry.runtimeId == heldObjectUse.runtimeId;
+            });
+    const std::string_view targetInstanceId =
+            SectorObjectUseTargetInstanceId(context.world, useTarget);
+    if (found == itemCampaign->inventory.entries.end()
+            || found->onUseScript.empty() || targetInstanceId.empty()) {
+        ClearHeldObjectUse();
+        return;
+    }
+    const ItemDefinition* definition = FindItemDefinition(
+            *itemRegistry, found->definitionId);
+    if (definition == nullptr || definition->type != ItemType::Object) {
+        ClearHeldObjectUse();
+        return;
+    }
+    const std::string scriptName = found->onUseScript;
+    const std::uint64_t runtimeId = found->runtimeId;
+    const std::array<engine::ScriptValue, 1> arguments{
+            engine::ScriptValue{std::string{targetInstanceId}}};
+    const engine::ScriptCallOutcome outcome =
+            engine::ScriptSystemCallObservedForegroundHook(
+                    scripts,
+                    scriptName,
+                    arguments.data(),
+                    arguments.size());
+    if (outcome.result == engine::ScriptCallResult::Completed) {
+        if (FirstScriptValueIsTrue(outcome.immediateValues)) {
+            ConsumeHeldObjectEntry(runtimeId);
+        }
+        ClearHeldObjectUse();
+        return;
+    }
+    if (outcome.result == engine::ScriptCallResult::Started) {
+        heldObjectUse.phase = ItemHeldUsePhase::Pending;
+        heldObjectUse.task = outcome.task;
+        useTarget = {};
+        ResetSectorUseHighlight(useHighlightState);
+        RefreshMouseLookCapture();
+        return;
+    }
+    if (outcome.result == engine::ScriptCallResult::ForegroundBusy
+            || outcome.result == engine::ScriptCallResult::AlreadyRunning) {
+        return;
+    }
+    if (outcome.result == engine::ScriptCallResult::Missing) {
+        TraceLog(
+                LOG_WARNING,
+                "[Lua WARNING] carried Object has no callable use function '%s'",
+                scriptName.c_str());
+    } else if (outcome.result == engine::ScriptCallResult::Error) {
+        TraceLog(
+                LOG_ERROR,
+                "[Lua ERROR] carried Object use function '%s' failed: %s",
+                scriptName.c_str(), outcome.error.c_str());
+    }
+    ClearHeldObjectUse();
+}
+
+void SectorGameSession::UpdatePendingHeldObjectUse()
+{
+    if (heldObjectUse.phase != ItemHeldUsePhase::Pending) return;
+    engine::ScriptObservedCallOutcome outcome;
+    if (!engine::ScriptSystemTakeObservedCallOutcome(
+                scripts, heldObjectUse.task, outcome)) {
+        return;
+    }
+    const std::uint64_t runtimeId = heldObjectUse.runtimeId;
+    if (outcome.state == engine::ScriptTaskState::Completed
+            && FirstScriptValueIsTrue(outcome.values)) {
+        ConsumeHeldObjectEntry(runtimeId);
+    } else if (outcome.state == engine::ScriptTaskState::Failed) {
+        TraceLog(
+                LOG_ERROR,
+                "[Lua ERROR] carried Object use callback failed: %s",
+                outcome.error.c_str());
+    }
+    ClearHeldObjectUse();
 }
 
 bool SectorGameSession::HandleEscape()
 {
-    if (!inventoryUi.open) return false;
-    SetInventoryOpen(false);
-    return true;
+    if (inventoryUi.open) {
+        SetInventoryOpen(false);
+        return true;
+    }
+    const ItemHeldUseInputDecision decision = EvaluateItemHeldUseInput(
+            heldObjectUse.phase, ItemHeldUseInput::Escape);
+    if (decision.effect == ItemHeldUseEffect::CancelToGameplay) {
+        ClearHeldObjectUse();
+    }
+    return decision.consumeEvent;
 }
 
 void SectorGameSession::RenderInventoryUI(
@@ -231,7 +391,18 @@ void SectorGameSession::RenderInventoryUI(
         engine::FontHandle smallFont,
         engine::FontHandle usePromptFont)
 {
-    if (!IsActive() || !inventoryUi.open || itemRegistry == nullptr
+    if (!IsActive()) return;
+    logicalViewport = config.overlayBounds;
+    if (heldObjectUse.phase != ItemHeldUsePhase::Inactive
+            && itemModelAssets != nullptr && itemCampaign != nullptr) {
+        DrawHeldItemCursor(
+                assets,
+                *itemModelAssets,
+                itemCampaign->inventory,
+                heldObjectUse.runtimeId,
+                input.MousePosition());
+    }
+    if (!inventoryUi.open || itemRegistry == nullptr
             || itemModelAssets == nullptr || itemCampaign == nullptr
             || applicationSettings == nullptr) {
         return;
@@ -451,6 +622,9 @@ void SectorGameSession::ProcessInventoryAction(
                         found - itemCampaign->inventory.entries.begin());
         UseHealthInventoryEntry(
                 *itemCampaign, *itemRegistry, playerHealth, action.runtimeId);
+    } else if (action.type == ItemInventoryUIActionType::UseObject) {
+        BeginHeldObjectUse(action.runtimeId);
+        return;
     } else if (action.type == ItemInventoryUIActionType::Drop) {
         if (!DropInventoryEntry(
                     context, scene, action.runtimeId, affectedIndex)) {
@@ -735,6 +909,8 @@ bool SectorGameSession::StartNew(
     pendingItemTake = {};
     inventoryUi = {};
     pendingInventoryAction = {};
+    heldObjectUse = {};
+    logicalViewport = Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f};
     navigationDebug = SectorGameNavigationDebugState{};
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
@@ -827,6 +1003,8 @@ void SectorGameSession::Shutdown(
     pendingItemTake = {};
     inventoryUi = {};
     pendingInventoryAction = {};
+    heldObjectUse = {};
+    logicalViewport = Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f};
     weaponRegistry = nullptr;
     itemRegistry = nullptr;
     itemModelAssets = nullptr;
@@ -843,6 +1021,11 @@ void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
     pendingItemTake = {};
+    heldObjectUse = {};
+    inventoryUi.open = false;
+    useTarget = {};
+    ResetSectorUseHighlight(useHighlightState);
+    usePromptTitle = {};
 }
 
 void SectorGameSession::Pause()
@@ -863,9 +1046,7 @@ void SectorGameSession::Resume(SectorSceneRuntime& scene)
         return;
     }
     paused = false;
-    SetSectorFreeflyMouseLookEnabled(
-            controller.freeflyController,
-            !consoleInputCaptured && !inventoryUi.open);
+    RefreshMouseLookCapture();
     ApplyPlayerPose(scene);
 }
 
@@ -873,11 +1054,7 @@ void SectorGameSession::SetConsoleInputCaptured(bool captured)
 {
     if (!running || consoleInputCaptured == captured) return;
     consoleInputCaptured = captured;
-    if (!paused) {
-        SetSectorFreeflyMouseLookEnabled(
-                controller.freeflyController,
-                !consoleInputCaptured && !inventoryUi.open);
-    }
+    RefreshMouseLookCapture();
 }
 
 void SectorGameSession::Update(
@@ -898,12 +1075,23 @@ void SectorGameSession::Update(
                 true,
                 [this](engine::InputEvent& event) {
                     if (event.key.key != KEY_I) return;
-                    SetInventoryOpen(!inventoryUi.open);
-                    engine::ConsumeEvent(event);
+                    const ItemHeldUseInputDecision decision =
+                            EvaluateItemHeldUseInput(
+                                    heldObjectUse.phase,
+                                    ItemHeldUseInput::ToggleInventory);
+                    if (decision.effect == ItemHeldUseEffect::ReopenInventory) {
+                        ClearHeldObjectUse();
+                        SetInventoryOpen(true);
+                    } else if (heldObjectUse.phase
+                            == ItemHeldUsePhase::Inactive) {
+                        SetInventoryOpen(!inventoryUi.open);
+                    }
+                    if (decision.consumeEvent
+                            || heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
+                        engine::ConsumeEvent(event);
+                    }
                 });
     }
-    const bool gameplayInputCaptured =
-            consoleInputCaptured || inventoryUi.open;
     if (itemMessage[0] != '\0') {
         itemMessageElapsedSeconds += std::max(0.0f, dt);
         if (itemMessageElapsedSeconds >= 2.25f) {
@@ -939,6 +1127,9 @@ void SectorGameSession::Update(
             controller.fpsControllerState.currentSectorId,
             &playerObstacle);
     ProcessInventoryAction(context, scene);
+    const bool gameplayInputCaptured = consoleInputCaptured
+            || inventoryUi.open
+            || heldObjectUse.phase != ItemHeldUsePhase::Inactive;
     if (itemCampaign != nullptr) {
         UpdateItemHealingEffects(*itemCampaign, playerHealth, dt);
     }
@@ -1025,7 +1216,35 @@ void SectorGameSession::Update(
                     controller.fpsControllerState.feetPosition.z},
             dt);
     usePromptTitle = {};
-    if (!inventoryUi.open) {
+    if (heldObjectUse.phase == ItemHeldUsePhase::Targeting) {
+        const Vector2 mouse = context.input.MousePosition();
+        const bool mouseInside = mouse.x >= logicalViewport.x
+                && mouse.y >= logicalViewport.y
+                && mouse.x < logicalViewport.x + logicalViewport.width
+                && mouse.y < logicalViewport.y + logicalViewport.height;
+        if (mouseInside && logicalViewport.width >= 1.0f
+                && logicalViewport.height >= 1.0f) {
+            const Ray ray = GetScreenToWorldRayEx(
+                    Vector2{
+                            mouse.x - logicalViewport.x,
+                            mouse.y - logicalViewport.y},
+                    scene.Renderer().RenderCamera(),
+                    std::max(1, static_cast<int>(
+                            std::lround(logicalViewport.width))),
+                    std::max(1, static_cast<int>(
+                            std::lround(logicalViewport.height))));
+            useTarget = FindSectorObjectUseTarget(
+                    context.world,
+                    context.assets,
+                    ray,
+                    collision.sectorCollisionWorldValid
+                            ? &collision.sectorCollisionWorld : nullptr);
+        } else {
+            useTarget = {};
+        }
+        UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
+    } else if (heldObjectUse.phase == ItemHeldUsePhase::Inactive
+            && !inventoryUi.open) {
         const SectorViewPose interactionPose = SectorFpsControllerPose(
                 controller.fpsControllerState,
                 controller.fpsControllerConfig);
@@ -1051,6 +1270,40 @@ void SectorGameSession::Update(
     } else {
         useTarget = {};
         ResetSectorUseHighlight(useHighlightState);
+    }
+    if (heldObjectUse.phase != ItemHeldUsePhase::Inactive) {
+        context.input.ForEachEvent(
+                engine::InputEventType::MouseButtonPressed,
+                true,
+                [this, &context](engine::InputEvent& event) {
+                    ItemHeldUseInput heldInput;
+                    if (event.mouseButton.button == MOUSE_BUTTON_RIGHT) {
+                        heldInput = ItemHeldUseInput::RightClick;
+                    } else if (event.mouseButton.button == MOUSE_BUTTON_LEFT) {
+                        const bool valid =
+                                (useTarget.kind == SectorUseTargetKind::StaticProp
+                                        || useTarget.kind
+                                                == SectorUseTargetKind::DynamicProp)
+                                && !SectorObjectUseTargetInstanceId(
+                                            context.world, useTarget).empty();
+                        heldInput = valid
+                                ? ItemHeldUseInput::ValidLeftClick
+                                : ItemHeldUseInput::InvalidLeftClick;
+                    } else {
+                        return;
+                    }
+                    const ItemHeldUseInputDecision decision =
+                            EvaluateItemHeldUseInput(
+                                    heldObjectUse.phase, heldInput);
+                    if (decision.effect
+                            == ItemHeldUseEffect::CancelToGameplay) {
+                        ClearHeldObjectUse();
+                    } else if (decision.effect
+                            == ItemHeldUseEffect::InvokeTarget) {
+                        InvokeHeldObjectUse(context);
+                    }
+                    if (decision.consumeEvent) engine::ConsumeEvent(event);
+                });
     }
     if (!gameplayInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
@@ -1101,6 +1354,7 @@ void SectorGameSession::Update(
             });
     engine::ScriptSystemUpdate(context, scripts, dt);
     UpdatePendingItemTake(context, scene);
+    UpdatePendingHeldObjectUse();
     UpdateSectorScriptDoorPermission(context, scriptHost);
     if (scriptHost.dynamicLightsDirty) {
         scene.Renderer().RefreshDynamicLightSources(topologyMap);
@@ -1347,7 +1601,8 @@ void SectorGameSession::RenderHud(
                     assets.GetFont(usePromptFont),
                     itemMessage.data(),
                     itemMessageElapsedSeconds);
-        } else if (!inventoryUi.open) {
+        } else if (!inventoryUi.open
+                && heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
             DrawSectorUsePrompt(
                     playableViewport,
                     assets.GetFont(usePromptFont),
@@ -1398,6 +1653,8 @@ bool SectorGameSession::RebuildFromMap(
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
     pendingItemTake = {};
+    heldObjectUse = {};
+    inventoryUi.open = false;
     const SectorFpsControllerState savedPlayer = controller.fpsControllerState;
     SectorTopologyMap reconciledMap = map;
     if (itemCampaign != nullptr) {
