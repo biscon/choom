@@ -477,6 +477,28 @@ void ValidateFiring(
     validateParticles(value.impact.surfaceDebris, "surfaceDebris");
 }
 
+void ValidateReload(
+        const FpsWeaponReloadDefinition& value,
+        const std::string& context)
+{
+    if (value.magazineSize < 1 || value.magazineSize > 1000000) {
+        Fail(context + ".magazineSize must be between 1 and 1000000");
+    }
+    if (!std::isfinite(value.durationSeconds)
+            || value.durationSeconds <= 0.0f
+            || value.durationSeconds > 60.0f) {
+        Fail(context + ".durationSeconds must be greater than zero and at most 60");
+    }
+    if (!value.dryFireSoundPath.empty()
+            && !ValidAudioPath(value.dryFireSoundPath)) {
+        Fail(context + ".dryFireSound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+    }
+    if (!value.reloadSoundPath.empty()
+            && !ValidAudioPath(value.reloadSoundPath)) {
+        Fail(context + ".reloadSound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+    }
+}
+
 FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& context)
 {
     if (!object.is_object()) Fail(context + " must be an object");
@@ -604,6 +626,28 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
                 impactContext + ".surfaceDebris");
     }
     ValidateFiring(result, context);
+    return result;
+}
+
+FpsWeaponReloadDefinition ReadReload(
+        const Json& object,
+        const std::string& context)
+{
+    if (!object.is_object()) Fail(context + " must be an object");
+    FpsWeaponReloadDefinition result;
+    result.magazineSize = Integer(object, "magazineSize", context);
+    result.durationSeconds = Number(object, "durationSeconds", context);
+    const auto readSound = [&](const char* field, std::string& destination) {
+        const auto value = object.find(field);
+        if (value == object.end()) return;
+        if (!value->is_string()) {
+            Fail(context + "." + field + " must be a string");
+        }
+        destination = value->get<std::string>();
+    };
+    readSound("dryFireSound", result.dryFireSoundPath);
+    readSound("reloadSound", result.reloadSoundPath);
+    ValidateReload(result, context);
     return result;
 }
 
@@ -833,6 +877,15 @@ Json WeaponValue(const FpsWeaponDefinition& value)
             {"brightnessAdjustment", value.viewmodel.attachment.lighting.brightnessAdjustment},
             {"materialOverride", MaterialOverrideValue(
                     value.viewmodel.attachment.lighting.materialOverride)}};
+    Json reload{
+            {"magazineSize", value.reload.magazineSize},
+            {"durationSeconds", value.reload.durationSeconds}};
+    if (!value.reload.dryFireSoundPath.empty()) {
+        reload["dryFireSound"] = value.reload.dryFireSoundPath;
+    }
+    if (!value.reload.reloadSoundPath.empty()) {
+        reload["reloadSound"] = value.reload.reloadSoundPath;
+    }
     Json weapon{
             {"id", value.id},
             {"crosshair", {
@@ -844,6 +897,7 @@ Json WeaponValue(const FpsWeaponDefinition& value)
                     {"innerThicknessPixels", value.crosshair.innerThicknessPixels},
                     {"outlineThicknessPixels", value.crosshair.outlineThicknessPixels}}},
             {"firing", FiringValue(value.firing)},
+            {"reload", std::move(reload)},
             {"viewmodel", std::move(viewmodel)}};
     if (value.weaponSlot != 0) {
         weapon["slot"] = value.weaponSlot;
@@ -858,7 +912,7 @@ Json RegistryValue(const FpsWeaponRegistry& registry)
         weapons.push_back(WeaponValue(weapon));
     }
     return Json{
-            {"version", registry.version},
+            {"version", 3},
             {"weapons", std::move(weapons)}};
 }
 
@@ -929,10 +983,10 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
         if (!root.is_object()) Fail("weapon registry root must be an object");
         FpsWeaponRegistry parsed;
         const int sourceVersion = Integer(root, "version", "weapon registry");
-        if (sourceVersion != 1 && sourceVersion != 2) {
-            Fail("weapon registry version must be 1 or 2");
+        if (sourceVersion != 1 && sourceVersion != 2 && sourceVersion != 3) {
+            Fail("weapon registry version must be 1, 2, or 3");
         }
-        parsed.version = 2;
+        parsed.version = 3;
         const std::string legacyInitialWeaponId = sourceVersion == 1
                 ? String(root, "initialWeaponId", "weapon registry")
                 : std::string{};
@@ -947,7 +1001,7 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
             FpsWeaponDefinition definition;
             definition.id = String(object, "id", context);
             if (!ids.insert(definition.id).second) Fail("duplicate weapon id '" + definition.id + "'");
-            if (sourceVersion == 2) {
+            if (sourceVersion >= 2) {
                 const std::optional<int> weaponSlot = OptionalInteger(
                         object, "slot", context);
                 if (weaponSlot
@@ -971,6 +1025,10 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
             definition.firing = ReadFiring(
                     Require(object, "firing", context),
                     context + ".firing");
+            const auto reload = object.find("reload");
+            if (reload != object.end()) {
+                definition.reload = ReadReload(*reload, context + ".reload");
+            }
             const Json& viewmodel = Require(object, "viewmodel", context);
             if (!viewmodel.is_object()) Fail(context + ".viewmodel must be an object");
             const std::string vm = context + ".viewmodel";
@@ -1032,6 +1090,7 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
             if (definition.viewmodel.firstFrame < 0 || definition.viewmodel.lastFrame <= definition.viewmodel.firstFrame) {
                 Fail(vm + " requires lastFrame > firstFrame >= 0");
             }
+            ValidateReload(definition.reload, context + ".reload");
             parsed.weapons.push_back(std::move(definition));
         }
         if (sourceVersion == 1) {
@@ -1201,6 +1260,65 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail("application settings.consoleEnabled must be a boolean");
             }
             parsed.consoleEnabled = consoleEnabled->get<bool>();
+        }
+        const auto playerInventory = root.find("playerInventory");
+        if (playerInventory != root.end()) {
+            if (!playerInventory->is_object()) {
+                Fail("application settings.playerInventory must be an object");
+            }
+            const auto maxCarryWeightKg = playerInventory->find(
+                    "maxCarryWeightKg");
+            if (maxCarryWeightKg != playerInventory->end()) {
+                if (!maxCarryWeightKg->is_number()) {
+                    Fail("application settings.playerInventory.maxCarryWeightKg must be a number");
+                }
+                const double value = maxCarryWeightKg->get<double>();
+                if (!std::isfinite(value) || value <= 0.0
+                        || value > std::numeric_limits<float>::max()) {
+                    Fail("application settings.playerInventory.maxCarryWeightKg must be finite and positive");
+                }
+                parsed.playerInventory.maxCarryWeightKg =
+                        static_cast<float>(value);
+            }
+            const auto maxSlots = playerInventory->find("maxSlots");
+            if (maxSlots != playerInventory->end()) {
+                if (!maxSlots->is_number_integer()) {
+                    Fail("application settings.playerInventory.maxSlots must be an integer");
+                }
+                parsed.playerInventory.maxSlots = maxSlots->get<int>();
+                if (parsed.playerInventory.maxSlots < 1
+                        || parsed.playerInventory.maxSlots > 1024) {
+                    Fail("application settings.playerInventory.maxSlots must be between 1 and 1024");
+                }
+            }
+            const auto pickupVacuumDurationSeconds = playerInventory->find(
+                    "pickupVacuumDurationSeconds");
+            if (pickupVacuumDurationSeconds != playerInventory->end()) {
+                if (!pickupVacuumDurationSeconds->is_number()) {
+                    Fail("application settings.playerInventory.pickupVacuumDurationSeconds must be a number");
+                }
+                const double value = pickupVacuumDurationSeconds->get<double>();
+                if (!std::isfinite(value) || value <= 0.0
+                        || value > std::numeric_limits<float>::max()) {
+                    Fail("application settings.playerInventory.pickupVacuumDurationSeconds must be finite and positive");
+                }
+                parsed.playerInventory.pickupVacuumDurationSeconds =
+                        static_cast<float>(value);
+            }
+            const auto pickupVacuumTargetHeightWorld = playerInventory->find(
+                    "pickupVacuumTargetHeightWorld");
+            if (pickupVacuumTargetHeightWorld != playerInventory->end()) {
+                if (!pickupVacuumTargetHeightWorld->is_number()) {
+                    Fail("application settings.playerInventory.pickupVacuumTargetHeightWorld must be a number");
+                }
+                const double value = pickupVacuumTargetHeightWorld->get<double>();
+                if (!std::isfinite(value) || value < 0.0
+                        || value > std::numeric_limits<float>::max()) {
+                    Fail("application settings.playerInventory.pickupVacuumTargetHeightWorld must be finite and non-negative");
+                }
+                parsed.playerInventory.pickupVacuumTargetHeightWorld =
+                        static_cast<float>(value);
+            }
         }
         const auto graphics = root.find("graphics");
         if (graphics != root.end()) {
@@ -1704,6 +1822,28 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings landing footstep volume multiplier must be non-negative");
         return false;
     }
+    if (!std::isfinite(settings.playerInventory.maxCarryWeightKg)
+            || settings.playerInventory.maxCarryWeightKg <= 0.0f) {
+        SetError(error, "application settings playerInventory.maxCarryWeightKg must be finite and positive");
+        return false;
+    }
+    if (settings.playerInventory.maxSlots < 1
+            || settings.playerInventory.maxSlots > 1024) {
+        SetError(error, "application settings playerInventory.maxSlots must be between 1 and 1024");
+        return false;
+    }
+    if (!std::isfinite(
+                settings.playerInventory.pickupVacuumDurationSeconds)
+            || settings.playerInventory.pickupVacuumDurationSeconds <= 0.0f) {
+        SetError(error, "application settings playerInventory.pickupVacuumDurationSeconds must be finite and positive");
+        return false;
+    }
+    if (!std::isfinite(
+                settings.playerInventory.pickupVacuumTargetHeightWorld)
+            || settings.playerInventory.pickupVacuumTargetHeightWorld < 0.0f) {
+        SetError(error, "application settings playerInventory.pickupVacuumTargetHeightWorld must be finite and non-negative");
+        return false;
+    }
     const std::string staminaError = PlayerStaminaSettingsError(
             settings.playerStamina);
     if (!staminaError.empty()) {
@@ -1753,6 +1893,13 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},
             {"horizontalFovDegrees", graphics.horizontalFovDegrees}};
+    root["playerInventory"] = {
+            {"maxCarryWeightKg", settings.playerInventory.maxCarryWeightKg},
+            {"maxSlots", settings.playerInventory.maxSlots},
+            {"pickupVacuumDurationSeconds",
+                    settings.playerInventory.pickupVacuumDurationSeconds},
+            {"pickupVacuumTargetHeightWorld",
+                    settings.playerInventory.pickupVacuumTargetHeightWorld}};
     const engine::HdrBloomSettings hdrBloom =
             engine::NormalizeHdrBloomSettings(settings.hdrBloom);
     root["hdrBloom"] = {

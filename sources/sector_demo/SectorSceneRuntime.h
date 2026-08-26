@@ -22,6 +22,13 @@ namespace game {
 
 class SectorSceneRuntime {
 public:
+    void SetItemRuntimeAssets(
+            const ItemRegistry* registry,
+            const ItemModelAssetState* assets)
+    {
+        itemRegistry = registry;
+        itemModelAssets = assets;
+    }
     bool Rebuild(
             engine::EngineContext& context,
             const SectorTopologyMap& map,
@@ -35,6 +42,11 @@ public:
     void RefreshMapRuntimeObjects(
             engine::EngineContext& context,
             const SectorTopologyMap& map);
+    bool SpawnItemRuntimeObject(
+            engine::EngineContext& context,
+            const SectorTopologyMap& map,
+            const SectorPlacedRuntimeObject& object,
+            engine::Entity* outEntity = nullptr);
     bool RebuildNavigationForMap(
             engine::EngineContext& context,
             const SectorTopologyMap& map);
@@ -162,6 +174,8 @@ private:
     std::unordered_map<int, std::string> footstepSetBySectorId;
     FootstepPlaybackState footstepPlayback;
     float footstepVolume = 1.0f;
+    const ItemRegistry* itemRegistry = nullptr;
+    const ItemModelAssetState* itemModelAssets = nullptr;
 
     struct RoomtonePlayback {
         std::string soundId;

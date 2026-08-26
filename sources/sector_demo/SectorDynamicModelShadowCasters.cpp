@@ -66,6 +66,21 @@ uint64_t CasterFingerprint(
     return hash;
 }
 
+uint64_t StaticPoseCasterFingerprint(
+        engine::Entity entity,
+        int placedObjectId,
+        engine::ModelHandle model,
+        const Matrix& transform)
+{
+    uint64_t hash = 1469598103934665603ull;
+    hash = HashBytes(hash, &entity.index, sizeof(entity.index));
+    hash = HashBytes(hash, &entity.generation, sizeof(entity.generation));
+    hash = HashBytes(hash, &placedObjectId, sizeof(placedObjectId));
+    hash = HashBytes(hash, &model.index, sizeof(model.index));
+    hash = HashBytes(hash, &model.generation, sizeof(model.generation));
+    return HashMatrix(hash, transform);
+}
+
 uint64_t CollectionFingerprint(
         const std::vector<SectorDynamicModelShadowCaster>& casters)
 {
@@ -162,7 +177,58 @@ void UpdateSectorDynamicModelShadowCasters(
                                     dynamicModel.placedObjectId,
                                     instance.model,
                                     authoredTransform,
-                                    contentFingerprint});
+                                    contentFingerprint,
+                                    true});
+                });
+        runtimeObjectWorld->ForEach<
+                SectorObjectTransform,
+                SectorObject,
+                SectorItem>(
+                [&collection, runtimeObjectWorld](
+                        engine::Entity entity,
+                        SectorObjectTransform& transform,
+                        SectorObject& object,
+                        SectorItem& item) {
+                    if (!object.visible
+                            || item.shadowMode
+                                    != SectorDynamicModelShadowMode::Dynamic
+                            || engine::IsNull(item.model)) {
+                        return;
+                    }
+                    if (collection.casters.size()
+                                    == collection.casters.capacity()
+                            && !collection.capacityWarningPrinted) {
+                        std::fprintf(
+                                stderr,
+                                "[SectorMeshRenderer WARNING] Dynamic prop/NPC/item shadow caster capacity exceeded; frame-time allocation may occur\n");
+                        collection.capacityWarningPrinted = true;
+                    }
+                    const Matrix authoredTransform =
+                            BuildSectorStaticModelAuthoredTransform(
+                                    runtimeObjectWorld->Has<SectorObjectVisualOffset>(entity)
+                                            ? Vector3Add(
+                                                    transform.position,
+                                                    runtimeObjectWorld
+                                                            ->Get<SectorObjectVisualOffset>(entity)
+                                                            .position)
+                                            : transform.position,
+                                    transform.rotationXRadians,
+                                    transform.yawRadians,
+                                    transform.rotationZRadians,
+                                    item.scale
+                                            * item.presentation.scaleMultiplier);
+                    collection.casters.push_back(
+                            SectorDynamicModelShadowCaster{
+                                    entity,
+                                    item.placedObjectId,
+                                    item.model,
+                                    authoredTransform,
+                                    StaticPoseCasterFingerprint(
+                                            entity,
+                                            item.placedObjectId,
+                                            item.model,
+                                            authoredTransform),
+                                    false});
                 });
     }
     RefreshRevision(collection);

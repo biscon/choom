@@ -45,13 +45,14 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(27);
+    world.ReserveComponentTypes(28);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
     world.ReserveComponent<SectorObjectVisualOffset>(objectCapacity);
     world.ReserveComponent<SectorStaticModel>(objectCapacity);
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
+    world.ReserveComponent<SectorItem>(objectCapacity);
     world.ReserveComponent<NpcRuntimeInstance>(objectCapacity);
     world.ReserveComponent<NpcAnimationState>(objectCapacity);
     world.ReserveComponent<Health>(objectCapacity);
@@ -145,6 +146,10 @@ void RefreshPlacedRuntimeObjectDiagnostics(
     size_t modelPendingCount = 0;
     size_t modelFailedCount = 0;
     size_t modelUnassignedCount = 0;
+    size_t itemRequestedCount = 0;
+    size_t itemReadyCount = 0;
+    size_t itemPendingCount = 0;
+    size_t itemFailedCount = 0;
 
     world.ForEach<SectorObject, SectorBillboardSprite>(
             [&assets,
@@ -225,6 +230,23 @@ void RefreshPlacedRuntimeObjectDiagnostics(
                 }
             });
 
+    world.ForEach<SectorObject, SectorItem>(
+            [&assets,
+             &itemRequestedCount,
+             &itemReadyCount,
+             &itemPendingCount,
+             &itemFailedCount](
+                    engine::Entity, SectorObject&, SectorItem& item) {
+                if (engine::IsNull(item.model)) {
+                    ++itemFailedCount;
+                } else {
+                    ++itemRequestedCount;
+                    if (assets.IsReady(item.model)) ++itemReadyCount;
+                    else if (assets.HasFailed(item.model)) ++itemFailedCount;
+                    else ++itemPendingCount;
+                }
+            });
+
     state.spriteAnimationRequestedCount = requestedCount;
     state.spriteAnimationReadyCount = readyCount;
     state.spriteAnimationPendingCount = pendingCount;
@@ -234,6 +256,10 @@ void RefreshPlacedRuntimeObjectDiagnostics(
     state.staticModelPendingCount = modelPendingCount;
     state.staticModelFailedCount = modelFailedCount;
     state.staticModelUnassignedCount = modelUnassignedCount;
+    state.itemModelRequestedCount = itemRequestedCount;
+    state.itemModelReadyCount = itemReadyCount;
+    state.itemModelPendingCount = itemPendingCount;
+    state.itemModelFailedCount = itemFailedCount;
     state.directionalClipResolvedCount = clipResolvedCount;
     state.directionalClipMissingCount = clipMissingCount;
     state.directionalClipFallbackCount = clipFallbackCount;
@@ -259,6 +285,13 @@ void RefreshPlacedRuntimeObjectDiagnostics(
                 modelFailedCount,
                 modelUnassignedCount);
     }
+    if (itemRequestedCount + itemFailedCount > 0) {
+        state.placedObjectStatus += TextFormat(
+                " | items %zu ready, %zu pending, %zu failed",
+                itemReadyCount,
+                itemPendingCount,
+                itemFailedCount);
+    }
     if (state.doorObjectCount > 0) {
         state.placedObjectStatus += TextFormat(
                 " | doors %zu valid, %zu invalid anchors, %zu fallback, %zu frame failures",
@@ -282,6 +315,10 @@ void RefreshPlacedRuntimeObjectDiagnostics(
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu door frame model asset(s) failed",
                 state.doorFrameFailureCount);
+    } else if (itemFailedCount > 0) {
+        state.placedObjectWarning = TextFormat(
+                "Runtime object warnings: %zu item model asset(s) failed",
+                itemFailedCount);
     } else if (modelFailedCount > 0) {
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu static model asset(s) failed",
@@ -629,6 +666,82 @@ bool RefreshSectorDoorModelFailureDiagnostics(
     return changed;
 }
 
+bool SpawnItemEntity(
+        engine::World& world,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& placedObject,
+        const ItemRegistry& itemRegistry,
+        const ItemModelAssetState& itemAssets,
+        engine::Entity& outEntity)
+{
+    outEntity = engine::NullEntity();
+    if (placedObject.kind != "item" || placedObject.id <= 0) return false;
+    const ItemDefinition* definition = FindItemDefinition(
+            itemRegistry, placedObject.item.definitionId);
+    if (definition == nullptr) return false;
+    engine::ModelHandle model = engine::NullModelHandle();
+    if (const ItemModelAssetEntry* entry = FindItemModelAsset(
+                itemAssets, definition->id)) {
+        model = entry->model;
+    }
+    Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
+            placedObject.position);
+    worldPosition.y += placedObject.item.heightOffsetWorld;
+    SectorObject object;
+    if (state.objectSectorLookupWorldValid) {
+        const int foundSectorId =
+                state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                        Vector2{worldPosition.x, worldPosition.z}, -1);
+        object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+    }
+    const Vector3 sectorAmbient = StaticModelSectorAmbient(
+            map, object.currentSectorId);
+    const engine::Entity entity = world.CreateEntity();
+    world.Add(entity, SectorObjectTransform{
+            worldPosition,
+            placedObject.yawRadians,
+            placedObject.item.rotationXRadians,
+            placedObject.item.rotationZRadians});
+    world.Add(entity, SectorObjectVisualOffset{});
+    world.Add(entity, object);
+    world.Add(entity, SampleSectorObjectLighting(
+            state.objectLightProbes,
+            worldPosition,
+            object.currentSectorId,
+            &map));
+    SectorItem runtimeItem;
+    runtimeItem.model = model;
+    runtimeItem.placedObjectId = placedObject.id;
+    runtimeItem.definitionId = definition->id;
+    runtimeItem.title = definition->title;
+    runtimeItem.instanceId = placedObject.item.instanceId;
+    runtimeItem.quantity = static_cast<std::uint64_t>(
+            placedObject.item.quantity);
+    runtimeItem.takeDistance = placedObject.item.takeDistance;
+    runtimeItem.onTakeScript = placedObject.item.onTakeScript;
+    runtimeItem.onUseScript = definition->type == ItemType::Object
+            ? placedObject.item.onUseScript : std::string{};
+    runtimeItem.containingSectorAmbient = sectorAmbient;
+    runtimeItem.scale = placedObject.item.scale;
+    runtimeItem.environmentExposure = StaticModelEnvironmentExposure(
+            map, object.currentSectorId, sectorAmbient);
+    runtimeItem.shadowMode = placedObject.item.shadowMode;
+    runtimeItem.origin = placedObject.item.sessionDrop
+            ? SectorItemOrigin::SessionDrop
+            : SectorItemOrigin::Authored;
+    if (definition->type != ItemType::Object
+            && !placedObject.item.onUseScript.empty()) {
+        std::fprintf(
+                stderr,
+                "[SectorRuntimeObjects WARNING] item '%s' ignores onUseScript because its definition is not Object\n",
+                runtimeItem.instanceId.c_str());
+    }
+    world.Add(entity, std::move(runtimeItem));
+    outEntity = entity;
+    return true;
+}
+
 
 } // namespace
 
@@ -752,18 +865,59 @@ void ResetSectorRuntimeObjectsForMap(
         engine::World& world,
         engine::AssetManager& assets,
         SectorRuntimeObjectState& state,
-        const SectorTopologyMap& map)
+        const SectorTopologyMap& map,
+        const ItemRegistry* itemRegistry,
+        const ItemModelAssetState* itemAssets)
 {
     ClearSectorRuntimeObjects(world, assets, state);
     RefreshSectorRuntimeObjectMapData(state, map);
-    SpawnPlacedRuntimeObjects(world, assets, state, map);
+    SpawnPlacedRuntimeObjects(
+            world, assets, state, map, itemRegistry, itemAssets);
+}
+
+bool SpawnSectorItemRuntimeObject(
+        engine::World& world,
+        engine::AssetManager&,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& placedObject,
+        const ItemRegistry& itemRegistry,
+        const ItemModelAssetState& itemAssets,
+        engine::Entity* outEntity)
+{
+    EnsureSectorRuntimeObjectWorldReserved(world, state);
+    engine::Entity entity = engine::NullEntity();
+    if (!SpawnItemEntity(
+                world,
+                state,
+                map,
+                placedObject,
+                itemRegistry,
+                itemAssets,
+                entity)) {
+        return false;
+    }
+    if (state.placedObjectEntities.size()
+            == state.placedObjectEntities.capacity()) {
+        std::fprintf(
+                stderr,
+                "[SectorRuntimeObjects WARNING] placed object tracking capacity exceeded during item drop\n");
+    }
+    state.placedObjectEntities.push_back(
+            SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+    ++state.placedObjectCount;
+    ++state.spawnedObjectCount;
+    if (outEntity != nullptr) *outEntity = entity;
+    return true;
 }
 
 void SpawnPlacedRuntimeObjects(
         engine::World& world,
         engine::AssetManager& assets,
         SectorRuntimeObjectState& state,
-        const SectorTopologyMap& map)
+        const SectorTopologyMap& map,
+        const ItemRegistry* itemRegistry,
+        const ItemModelAssetState* itemAssets)
 {
     EnsureSectorRuntimeObjectWorldReserved(world, state);
     // Explicit object refreshes may follow authored door edits without a map-data
@@ -1209,6 +1363,32 @@ void SpawnPlacedRuntimeObjects(
             continue;
         }
 
+        if (placedObject.kind == "item") {
+            engine::Entity entity = engine::NullEntity();
+            if (itemRegistry == nullptr || itemAssets == nullptr
+                    || !SpawnItemEntity(
+                            world,
+                            state,
+                            map,
+                            placedObject,
+                            *itemRegistry,
+                            *itemAssets,
+                            entity)) {
+                const std::string warning = TextFormat(
+                        "item object %d references missing definition '%s'",
+                        placedObject.id,
+                        placedObject.item.definitionId.c_str());
+                std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                recordWarning(warning);
+                ++skippedCount;
+                continue;
+            }
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
         if (placedObject.kind == "dynamic_model") {
             engine::ModelHandle model = engine::NullModelHandle();
             if (!placedObject.dynamicModel.modelPath.empty()) {
@@ -1453,9 +1633,32 @@ void UpdateSectorRuntimeObjects(
     // avoid rescanning every object during the steady frame.
     (void)map;
     if (state.spriteAnimationPendingCount > 0
-            || state.staticModelPendingCount > 0) {
+            || state.staticModelPendingCount > 0
+            || state.itemModelPendingCount > 0) {
         RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
     }
+}
+
+bool QueueRemoveSectorRuntimeObjectByEntity(
+        engine::World& world,
+        SectorRuntimeObjectState& state,
+        engine::Entity entity)
+{
+    const auto found = std::find_if(
+            state.placedObjectEntities.begin(),
+            state.placedObjectEntities.end(),
+            [entity](const SectorPlacedRuntimeObjectEntity& entry) {
+                return entry.entity == entity;
+            });
+    if (found == state.placedObjectEntities.end()
+            || !world.IsAlive(entity)) {
+        return false;
+    }
+    world.DestroyLater(entity);
+    state.placedObjectEntities.erase(found);
+    if (state.placedObjectCount > 0) --state.placedObjectCount;
+    if (state.spawnedObjectCount > 0) --state.spawnedObjectCount;
+    return true;
 }
 
 

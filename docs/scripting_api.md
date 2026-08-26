@@ -266,6 +266,57 @@ A callback may yield and must eventually return boolean `true` to allow the
 requested open/close; `false`, no return value, a missing function, or an error
 denies it. A blank callback preserves the default engine behavior.
 
+## World item pickup callbacks
+
+An authored item's optional `onTakeScript` field names a global Lua function
+called with no arguments when the player presses E on that item. The engine
+checks that the complete placement quantity fits before starting the callback.
+The callback may yield and must eventually return boolean `true` to permit the
+pickup. Boolean `false`, no boolean return value, a missing function, or a
+script error leaves the item in the world. A blank callback permits pickup
+immediately.
+
+Capacity and item identity are checked again after a yielding callback. Pickup
+remains atomic: the complete quantity is added or no inventory/world state is
+changed. Foreground callbacks are serialized, and the same item cannot start a
+second pickup while its callback is pending.
+
+```lua
+function canTakePistolAmmo()
+    delay(100)
+    return alarmDisabled
+end
+```
+
+## Carried Object use callbacks
+
+An Object placement may provide `onUseScript`. After that item is picked up,
+its inventory Use action enters cursor-targeting mode. Left-clicking a visible,
+ready static or dynamic prop calls the named global function with that prop's
+stable string instance ID. Doors, NPCs, world items, and arbitrary world
+surfaces are not Object-use targets.
+
+The callback may yield. Its first return value must be boolean `true` to consume
+exactly one carried Object entry. Boolean `false`, no boolean return value, a
+missing function, or an error keeps the Object. While a yielding call is
+pending, gameplay controls remain locked and the call cannot be cancelled or
+started a second time. When the callback finishes, normal gameplay controls are
+restored.
+
+```lua
+function useAccessCard(targetInstanceId)
+    delay(100)
+    if targetInstanceId == "security_console" then
+        setPersistentBool("security_unlocked", true)
+        return true
+    end
+    return false
+end
+```
+
+This callback is separate from a dynamic prop's own no-argument
+`onUseScript`, which continues to run from the centered E-key Use interaction.
+
 ## Dynamic props and animation
 
 A dynamic prop becomes usable when its `onUseScript` inspector field names a
@@ -357,6 +408,29 @@ Color channels are integer values from 0 through 255.
 setDynamicLightEnabled("light_spot_12", false)
 setDynamicLightIntensity("warning_light", 3.5)
 setDynamicLightColor("warning_light", 255, 40, 20)
+```
+
+## Actor health
+
+Health values are integers from `0` through the actor's current maximum.
+Out-of-range values raise a Lua argument error.
+
+### `setPlayerHealth(health) -> true | false, reason`
+
+Sets the player's current health. A value of `0` depletes the player's health.
+
+```lua
+setPlayerHealth(75)
+```
+
+### `setNpcHealth(instanceId, health) -> true | false, reason`
+
+Sets the current health of the placed NPC with the exact, case-sensitive
+instance ID. Setting health to `0` kills the NPC and stops its navigation.
+Dead NPCs cannot be revived by setting a positive value.
+
+```lua
+local ok, reason = setNpcHealth("guard_1", 25)
 ```
 
 ## NPC movement

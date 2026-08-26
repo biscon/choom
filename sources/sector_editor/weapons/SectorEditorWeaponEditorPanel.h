@@ -22,6 +22,7 @@ struct SectorEditorWeaponEditorLayout {
     Rectangle deleteButton = {};
     Rectangle validationMessage = {};
     Rectangle previewFireButton = {};
+    Rectangle previewReloadButton = {};
     Rectangle holsterToggleButton = {};
     Rectangle saveButton = {};
     Rectangle cancelButton = {};
@@ -85,12 +86,17 @@ inline SectorEditorWeaponEditorLayout BuildSectorEditorWeaponEditorLayoutForView
         layout.previewFireButton = Rectangle{
                 layout.panel.x + 20.0f,
                 layout.panel.y + layout.panel.height - 58.0f,
-                150.0f,
+                120.0f,
                 42.0f};
-        layout.holsterToggleButton = Rectangle{
+        layout.previewReloadButton = Rectangle{
                 layout.previewFireButton.x + layout.previewFireButton.width + 8.0f,
                 layout.previewFireButton.y,
-                190.0f,
+                140.0f,
+                42.0f};
+        layout.holsterToggleButton = Rectangle{
+                layout.previewReloadButton.x + layout.previewReloadButton.width + 8.0f,
+                layout.previewFireButton.y,
+                150.0f,
                 42.0f};
     }
     layout.saveButton = Rectangle{
@@ -110,6 +116,7 @@ struct SectorEditorWeaponEditorPanelResult {
     bool saved = false;
     bool cancelled = false;
     bool previewFireRequested = false;
+    bool previewReloadRequested = false;
     bool holsterToggleRequested = false;
 };
 

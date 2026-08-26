@@ -393,6 +393,7 @@ private:
             float emissiveScale = 1.0f,
             float opacity = 1.0f,
             float interactionHighlightStrength = 0.0f);
+    void UploadInteractionHighlightStrength(float strength);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,
             int lightmapModelIndex) const;

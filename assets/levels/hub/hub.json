@@ -2134,6 +2134,7 @@
       "dynamicModel": {
         "instanceId": "light_switch_01",
         "useTitle": "light switch",
+        "useDistance": 2.0,
         "onUseScript": "toggleOfficeLights",
         "modelPath": "assets/models/dynamic/switch_outlet.glb",
         "heightOffsetWorld": 0.20000000298023224,
@@ -2644,6 +2645,173 @@
         -34.0
       ],
       "yawDegrees": -35.0
+    },
+    {
+      "id": 158,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_2",
+        "instanceId": "boomstick_01",
+        "takeDistance": 2.0,
+        "rotationZDegrees": 90.0,
+        "heightOffsetWorld": 0.7149999737739563
+      },
+      "position": [
+        -74.0,
+        -16.0,
+        -80.0
+      ],
+      "yawDegrees": 45.0
+    },
+    {
+      "id": 159,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_3",
+        "instanceId": "item_159",
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
+      },
+      "position": [
+        -77.0,
+        0.0,
+        28.0
+      ],
+      "yawDegrees": 50.0
+    },
+    {
+      "id": 160,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_4",
+        "instanceId": "item_160",
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
+      },
+      "position": [
+        -81.0,
+        0.0,
+        27.0
+      ],
+      "yawDegrees": -10.0
+    },
+    {
+      "id": 161,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_5",
+        "instanceId": "item_161",
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
+      },
+      "position": [
+        -86.0,
+        0.0,
+        27.0
+      ],
+      "yawDegrees": 15.0
+    },
+    {
+      "id": 162,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_6",
+        "instanceId": "item_162",
+        "quantity": 12,
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
+      },
+      "position": [
+        -68.0,
+        0.0,
+        27.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 163,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_7",
+        "instanceId": "item_163",
+        "quantity": 2,
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
+      },
+      "position": [
+        -63.0,
+        0.0,
+        27.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 166,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item",
+        "instanceId": "item_166",
+        "takeDistance": 2.0,
+        "rotationZDegrees": -90.0,
+        "heightOffsetWorld": 0.9869999885559082
+      },
+      "position": [
+        -40.0,
+        0.0,
+        39.0
+      ],
+      "yawDegrees": 20.0
+    },
+    {
+      "id": 167,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_7",
+        "instanceId": "item_167",
+        "quantity": 5,
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 0.8999999761581421
+      },
+      "position": [
+        -59.0,
+        -16.0,
+        -57.0
+      ],
+      "yawDegrees": 35.0
+    },
+    {
+      "id": 168,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_6",
+        "instanceId": "item_168",
+        "quantity": 12,
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 0.9700000286102295,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -113.0,
+        -16.0,
+        -81.0
+      ],
+      "yawDegrees": 100.0
+    },
+    {
+      "id": 169,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_5",
+        "instanceId": "item_169",
+        "heightOffsetWorld": 0.675000011920929,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -117.0,
+        -16.0,
+        -67.0
+      ],
+      "yawDegrees": 94.99999237060547
     }
   ],
   "staticLights": [
@@ -23531,9 +23699,9 @@
       {
         "editorId": 1,
         "id": "default",
-        "x": -1664,
+        "x": 80,
         "y": 0.0,
-        "z": -640,
+        "z": -80,
         "orientationDegrees": 90.0
       },
       {

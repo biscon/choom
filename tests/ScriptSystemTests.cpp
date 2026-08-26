@@ -5,6 +5,7 @@
 
 #include "lua.hpp"
 
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -243,6 +244,69 @@ end
     assert(!std::get<bool>(immediate.immediateValues[0]));
     assert(!engine::ScriptSystemTakeObservedCallOutcome(
             runtime, immediate.task, completion));
+    engine::ScriptSystemShutdownForMap(context, runtime);
+}
+
+void ObservedForegroundCallsDeliverArguments()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    TestFiles files("observed_arguments");
+    files.Write(files.scriptPath, R"(
+function immediateArguments(a, b, c, d, e)
+    return a == nil, b, c, d, e
+end
+function delayedTarget(targetInstanceId)
+    delay(0)
+    return targetInstanceId, true
+end
+)");
+    assert(CreateRuntime(context, runtime, persistent, files));
+    const std::array<engine::ScriptValue, 5> arguments{
+            engine::ScriptValue{std::monostate{}},
+            engine::ScriptValue{true},
+            engine::ScriptValue{int64_t{42}},
+            engine::ScriptValue{3.5},
+            engine::ScriptValue{std::string{"crate_17"}}};
+    const engine::ScriptCallOutcome immediate =
+            engine::ScriptSystemCallObservedForegroundHook(
+                    runtime,
+                    "immediateArguments",
+                    arguments.data(),
+                    arguments.size());
+    assert(immediate.result == engine::ScriptCallResult::Completed);
+    assert(immediate.immediateValues.size() == 5);
+    assert(std::get<bool>(immediate.immediateValues[0]));
+    assert(std::get<bool>(immediate.immediateValues[1]));
+    assert(std::get<int64_t>(immediate.immediateValues[2]) == 42);
+    assert(std::fabs(std::get<double>(immediate.immediateValues[3]) - 3.5)
+            < 0.000001);
+    assert(std::get<std::string>(immediate.immediateValues[4]) == "crate_17");
+
+    const std::array<engine::ScriptValue, 1> targetArgument{
+            engine::ScriptValue{std::string{"console_3"}}};
+    const engine::ScriptCallOutcome delayed =
+            engine::ScriptSystemCallObservedForegroundHook(
+                    runtime,
+                    "delayedTarget",
+                    targetArgument.data(),
+                    targetArgument.size());
+    assert(delayed.result == engine::ScriptCallResult::Started);
+    engine::ScriptSystemUpdate(context, runtime, 0.0f);
+    engine::ScriptObservedCallOutcome completion;
+    assert(engine::ScriptSystemTakeObservedCallOutcome(
+            runtime, delayed.task, completion));
+    assert(completion.state == engine::ScriptTaskState::Completed);
+    assert(completion.values.size() == 2);
+    assert(std::get<std::string>(completion.values[0]) == "console_3");
+    assert(std::get<bool>(completion.values[1]));
+
+    const engine::ScriptCallOutcome invalid =
+            engine::ScriptSystemCallObservedForegroundHook(
+                    runtime, "immediateArguments", nullptr, 1);
+    assert(invalid.result == engine::ScriptCallResult::Error);
+    assert(!invalid.error.empty());
     engine::ScriptSystemShutdownForMap(context, runtime);
 }
 
@@ -624,6 +688,7 @@ int main()
     YieldedInitPersistenceAndShutdownWork();
     BackgroundStartsAreDeferredAndForegroundIsSerialized();
     ObservedForegroundCallsRetainYieldedReturnValues();
+    ObservedForegroundCallsDeliverArguments();
     CoreLifecycleLuaBindingsControlQueuedAndActiveTasks();
     AsyncOperationsDeliverValuesAndCancelOnce();
     RunawayManagedTaskIsStoppedWithoutFreezingTheRuntime();

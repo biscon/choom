@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "weapons": [
     {
       "id": "pistol",
@@ -142,6 +142,12 @@
           }
         },
         "shootSound": "weapons/pistol/shot_01.ogg"
+      },
+      "reload": {
+        "magazineSize": 18,
+        "durationSeconds": 0.63,
+        "dryFireSound": "weapons/pistol/dry_fire_01.ogg",
+        "reloadSound": "weapons/pistol/reload_02.ogg"
       },
       "viewmodel": {
         "modelPath": "assets/models/weapons/pistol_arms.glb",
@@ -352,6 +358,12 @@
           "spreadHalfAngleDegrees": 6.0
         },
         "shootSound": "weapons/shotgun/shotgun_shot_02.ogg"
+      },
+      "reload": {
+        "magazineSize": 2,
+        "durationSeconds": 2.33,
+        "dryFireSound": "weapons/shotgun/shotgun_dry_fire_01.ogg",
+        "reloadSound": "weapons/shotgun/shotgun_reload_01.ogg"
       },
       "viewmodel": {
         "modelPath": "assets/models/weapons/rifle_arms.glb",

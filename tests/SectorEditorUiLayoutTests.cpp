@@ -7,6 +7,7 @@
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
+#include "sector_editor/items/SectorEditorItemEditorPanel.h"
 #include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
 #include "sector_demo/SectorLightmap.h"
 
@@ -54,6 +55,18 @@ void TestMainMenuShortcutMatching()
     Check(!engine::MatchesUIMenuShortcut(
                   save, KEY_O, true, false, false),
           "menu shortcut rejects a different key");
+}
+
+void TestKeyboardPanModifierPolicy()
+{
+    Check(game::ShouldApplySectorEditorKeyboardPan(false, false, false),
+          "2D keyboard navigation remains enabled without Ctrl");
+    Check(!game::ShouldApplySectorEditorKeyboardPan(false, true, false),
+          "left Ctrl suppresses 2D keyboard navigation");
+    Check(!game::ShouldApplySectorEditorKeyboardPan(false, false, true),
+          "right Ctrl suppresses 2D keyboard navigation");
+    Check(!game::ShouldApplySectorEditorKeyboardPan(true, false, false),
+          "keyboard capture continues to suppress 2D keyboard navigation");
 }
 
 void TestLightmapBakeSetupModalStateLifecycle()
@@ -483,10 +496,14 @@ void TestMainMenuWorkspaceAndToolsLayouts()
             rowH, gap, false);
     const float expanded = game::MeasureSectorEditorToolsContentHeight(
             rowH, gap, true);
+    const float itemExpanded = game::MeasureSectorEditorToolsContentHeight(
+            rowH, gap, false, true);
     Check(Near(expanded - collapsed, rowH + gap),
           "tools content height includes the conditional Trigger mode row");
+    Check(Near(itemExpanded - collapsed, rowH + gap),
+          "tools content height includes the conditional Item definition row");
     Check(Near(collapsed, 26.0f + 5.0f * (rowH + gap)
-                  + 22.0f + 26.0f + 16.0f * (rowH + gap)
+                  + 22.0f + 26.0f + 17.0f * (rowH + gap)
                   + 22.0f + 2.0f * (rowH + gap)
                   + 22.0f + (rowH + gap) + 12.0f),
           "tools content height reaches the final Grid control with padding");
@@ -688,18 +705,40 @@ void TestWeaponEditorLayouts()
               "weapon editor validation message fits inside the panel");
         if (preview3D) {
             Check(Contains(layout.panel, layout.previewFireButton)
+                          && Contains(layout.panel, layout.previewReloadButton)
                           && Contains(layout.panel, layout.holsterToggleButton),
                   "weapon preview actions fit inside the panel");
             Check(!Overlaps(layout.formBounds, layout.previewFireButton)
+                          && !Overlaps(layout.formBounds, layout.previewReloadButton)
                           && !Overlaps(layout.formBounds, layout.holsterToggleButton),
                   "weapon preview actions stay outside the form scroll area");
-            Check(!Overlaps(layout.previewFireButton, layout.holsterToggleButton)
+            Check(!Overlaps(layout.previewFireButton, layout.previewReloadButton)
+                          && !Overlaps(layout.previewReloadButton, layout.holsterToggleButton)
                           && !Overlaps(layout.holsterToggleButton, layout.saveButton)
                           && !Overlaps(layout.validationMessage, layout.previewFireButton)
+                          && !Overlaps(layout.validationMessage, layout.previewReloadButton)
                           && !Overlaps(layout.validationMessage, layout.holsterToggleButton),
                   "weapon editor footer controls and validation message do not overlap");
         }
     }
+}
+
+void TestItemEditorLayouts()
+{
+    const game::SectorEditorItemEditorLayout layout =
+            game::BuildSectorEditorItemEditorLayoutForViewport(1920.0f, 1080.0f);
+    Check(layout.panel.width > 0.0f && layout.panel.height > 0.0f,
+          "item editor panel has positive dimensions");
+    Check(layout.listBounds.x + layout.listBounds.width
+                    < layout.formBounds.x,
+          "item editor keeps list and detail panes separate");
+    Check(layout.saveButton.x + layout.saveButton.width
+                    < layout.cancelButton.x + layout.cancelButton.width,
+          "item editor footer actions are ordered");
+    const game::SectorEditorItemEditorLayout compact =
+            game::BuildSectorEditorItemEditorLayoutForViewport(1000.0f, 720.0f);
+    Check(compact.panel.x >= 16.0f && compact.panel.y >= 16.0f,
+          "item editor respects compact viewport margins");
 }
 
 void TestNpcEditorModalSplitPaneLayout()
@@ -873,6 +912,7 @@ void TestLightProxyPlacementMath()
 int main()
 {
     TestMainMenuShortcutMatching();
+    TestKeyboardPanModifierPolicy();
     TestLightmapBakeSetupModalStateLifecycle();
     TestModelFilenameExtraction();
     TestAudioAssetPickerScrollSession();
@@ -902,6 +942,7 @@ int main()
     TestNpcEditorModalSplitPaneLayout();
     TestSoundEditorSplitPaneLayout();
     TestWeaponEditorLayouts();
+    TestItemEditorLayouts();
     TestPreviewSettingsModalFogDraftApplyAndReset();
     TestPreviewNavigationTabLayout();
     TestLightProxyPlacementMath();

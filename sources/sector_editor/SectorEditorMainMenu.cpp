@@ -24,6 +24,7 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         engine::FontHandle smallFont,
         const SectorEditorState& editorState,
         engine::UIMainMenuState& menuState,
+        bool gameSessionExists,
         bool canCopyConfig,
         bool canPasteConfig,
         bool visible,
@@ -40,11 +41,16 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Save As...", CommandId(SectorEditorMainMenuCommand::SaveLevelAs)},
             {"Reload", CommandId(SectorEditorMainMenuCommand::ReloadLevel)}
     }};
-    const std::array<engine::UIMenuItem, 4> editorItems{{
+    const std::array<engine::UIMenuItem, 5> editorItems{{
             {"Material Editor", CommandId(SectorEditorMainMenuCommand::OpenMaterialEditor)},
             {"Sound Editor", CommandId(SectorEditorMainMenuCommand::OpenSoundEditor)},
             {"NPC Editor", CommandId(SectorEditorMainMenuCommand::OpenNpcEditor)},
-            {"Weapons Editor", CommandId(SectorEditorMainMenuCommand::OpenWeaponEditor)}
+            {"Weapons Editor", CommandId(SectorEditorMainMenuCommand::OpenWeaponEditor)},
+            {"Item Editor", CommandId(SectorEditorMainMenuCommand::OpenItemEditor)}
+    }};
+    const std::array<engine::UIMenuItem, 1> gameItems{{
+            {"Clear", CommandId(SectorEditorMainMenuCommand::ClearGameSession),
+                    engine::UIMenuItemKind::Action, gameSessionExists}
     }};
     const std::array<engine::UIMenuItem, 2> editItems{{
             {"Copy config", CommandId(SectorEditorMainMenuCommand::CopyConfig),
@@ -68,8 +74,9 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
     const std::array<engine::UIMenuItem, 1> settingsItems{{
             {"Level", CommandId(SectorEditorMainMenuCommand::OpenLevelSettings)}
     }};
-    const std::array<engine::UIMenuRoot, 5> roots{{
+    const std::array<engine::UIMenuRoot, 6> roots{{
             {"Level", levelItems.data(), levelItems.size()},
+            {"Game", gameItems.data(), gameItems.size()},
             {"Edit", editItems.data(), editItems.size()},
             {"Editors", editorItems.data(), editorItems.size()},
             {"View", viewItems.data(), viewItems.size()},

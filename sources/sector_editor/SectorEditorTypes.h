@@ -33,6 +33,7 @@ enum class SectorEditorTool {
     RuntimeObject,
     StaticModel,
     DynamicModel,
+    Item,
     Npc,
     Door,
     AuthoringFogVolume,

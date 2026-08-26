@@ -63,7 +63,9 @@ bool SectorSceneRuntime::Rebuild(
             context.world,
             context.assets,
             runtimeObjects,
-            map);
+            map,
+            itemRegistry,
+            itemModelAssets);
     InitializeNpcAudioRuntime(
             context.world,
             context.assets,
@@ -127,7 +129,9 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
             context.world,
             context.assets,
             runtimeObjects,
-            map);
+            map,
+            itemRegistry,
+            itemModelAssets);
     InitializeNpcAudioRuntime(
             context.world,
             context.assets,
@@ -142,6 +146,24 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
     impactParticles.Clear();
     BindRuntimeObjectAudio(context.world);
+}
+
+bool SectorSceneRuntime::SpawnItemRuntimeObject(
+        engine::EngineContext& context,
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& object,
+        engine::Entity* outEntity)
+{
+    if (itemRegistry == nullptr || itemModelAssets == nullptr) return false;
+    return SpawnSectorItemRuntimeObject(
+            context.world,
+            context.assets,
+            runtimeObjects,
+            map,
+            object,
+            *itemRegistry,
+            *itemModelAssets,
+            outEntity);
 }
 
 void SectorSceneRuntime::Update(

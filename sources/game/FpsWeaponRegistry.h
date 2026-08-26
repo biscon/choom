@@ -159,6 +159,15 @@ struct FpsWeaponFiringDefinition {
     FpsWeaponImpactDefinition impact;
 };
 
+struct FpsWeaponReloadDefinition {
+    int magazineSize = 1;
+    float durationSeconds = 1.0f;
+    std::string dryFireSoundPath;
+    engine::SoundHandle dryFireSound = engine::NullSoundHandle();
+    std::string reloadSoundPath;
+    engine::SoundHandle reloadSound = engine::NullSoundHandle();
+};
+
 struct FpsWeaponViewmodelDefinition {
     std::string modelPath;
     std::string idleAnimation;
@@ -178,11 +187,12 @@ struct FpsWeaponDefinition {
     int weaponSlot = 0;
     FpsWeaponCrosshairDefinition crosshair;
     FpsWeaponFiringDefinition firing;
+    FpsWeaponReloadDefinition reload;
     FpsWeaponViewmodelDefinition viewmodel;
 };
 
 struct FpsWeaponRegistry {
-    int version = 2;
+    int version = 3;
     std::vector<FpsWeaponDefinition> weapons;
 };
 
@@ -307,6 +317,13 @@ struct FpsGraphicsSettings {
     int horizontalFovDegrees = DefaultFpsHorizontalFovDegrees;
 };
 
+struct PlayerInventoryApplicationSettings {
+    float maxCarryWeightKg = 30.0f;
+    int maxSlots = 24;
+    float pickupVacuumDurationSeconds = 0.65f;
+    float pickupVacuumTargetHeightWorld = 0.75f;
+};
+
 struct FpsApplicationSettings {
     int version = 1;
     std::string firstLevel = "hub";
@@ -314,6 +331,7 @@ struct FpsApplicationSettings {
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
     PlayerStaminaApplicationSettings playerStamina;
+    PlayerInventoryApplicationSettings playerInventory;
     FpsGraphicsSettings graphics;
     engine::HdrBloomSettings hdrBloom;
     std::vector<FpsApplicationSettingsEntry> weapons;

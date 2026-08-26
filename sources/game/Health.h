@@ -24,6 +24,14 @@ inline int ApplyDamage(Health& health, int damage)
     return applied;
 }
 
+inline int ApplyHealing(Health& health, int amount)
+{
+    if (amount <= 0 || health.current >= health.maximum) return 0;
+    const int applied = std::min(health.maximum - health.current, amount);
+    health.current += applied;
+    return applied;
+}
+
 inline bool IsDepleted(const Health& health)
 {
     return health.current <= 0;

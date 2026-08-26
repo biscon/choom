@@ -509,9 +509,17 @@ ScriptCallOutcome StartManagedFunction(
         const std::string& functionName,
         ScriptLaunchLane lane,
         bool lifecycleInitTask,
-        bool observeCompletion = false)
+        bool observeCompletion = false,
+        const ScriptValue* arguments = nullptr,
+        std::size_t argumentCount = 0)
 {
     ScriptCallOutcome outcome;
+    if ((argumentCount != 0 && arguments == nullptr)
+            || argumentCount > static_cast<std::size_t>(
+                    std::numeric_limits<int>::max())) {
+        outcome.error = "invalid script hook argument view";
+        return outcome;
+    }
     if (runtime.vm == nullptr
             || (runtime.phase != ScriptRuntimePhase::Loading
                     && runtime.phase != ScriptRuntimePhase::Active)) {
@@ -557,8 +565,21 @@ ScriptCallOutcome StartManagedFunction(
     runtime.taskByName.emplace(functionName, handle);
 
     lua_State* thread = task->thread;
+    if (!lua_checkstack(thread, static_cast<int>(argumentCount))) {
+        outcome.error = "could not reserve Lua stack space for hook arguments";
+        FreeTask(runtime, handle);
+        return outcome;
+    }
+    for (std::size_t index = 0; index < argumentCount; ++index) {
+        if (!PushScriptValue(thread, arguments[index])) {
+            outcome.error = "hook argument uses an unsupported ScriptValue";
+            FreeTask(runtime, handle);
+            return outcome;
+        }
+    }
     int resultCount = 0;
-    const int status = ResumeManagedTask(thread, 0, resultCount);
+    const int status = ResumeManagedTask(
+            thread, static_cast<int>(argumentCount), resultCount);
     outcome.task = handle;
     ProcessResumeResult(
             runtime,
@@ -1420,12 +1441,24 @@ ScriptCallOutcome ScriptSystemCallObservedForegroundHook(
         ScriptRuntime& runtime,
         const std::string& functionName)
 {
+    return ScriptSystemCallObservedForegroundHook(
+            runtime, functionName, nullptr, 0);
+}
+
+ScriptCallOutcome ScriptSystemCallObservedForegroundHook(
+        ScriptRuntime& runtime,
+        const std::string& functionName,
+        const ScriptValue* arguments,
+        std::size_t argumentCount)
+{
     return StartManagedFunction(
             runtime,
             functionName,
             ScriptLaunchLane::Foreground,
             false,
-            true);
+            true,
+            arguments,
+            argumentCount);
 }
 
 bool ScriptSystemTakeObservedCallOutcome(

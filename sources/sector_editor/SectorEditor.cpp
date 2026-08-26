@@ -7,6 +7,7 @@
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
+#include "sector_editor/items/SectorEditorItemEditorPanel.h"
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorPanel.h"
 #include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
@@ -304,11 +305,13 @@ bool SectorEditor::Init(engine::EngineContext& context)
         return false;
     }
     RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
+    itemRegistryPath = ASSETS_PATH "config/items.json";
     applicationSettingsPath = ASSETS_PATH "config/application_settings.json";
     RequestPlayerAudioAssets(
             context.assets,
             applicationSettings.playerSounds,
             playerAudio);
+    sceneRuntime.SetItemRuntimeAssets(&itemRegistry, &itemModelAssets);
     ResetToBlankMap(context);
     fogVolumeEditingService.emplace(
             SectorEditorAuthoringFogVolumeEditingServiceContext{
@@ -378,6 +381,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     BuildNpcEditorService().Shutdown(assets);
     audioPicker.Close(weaponEditorState.audioPicker);
     BuildWeaponEditorService().Shutdown();
+    BuildItemEditorService().Shutdown();
     BuildMaterialRegistryEditorService().Shutdown(assets);
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
@@ -403,6 +407,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     npcEditorSessionState = SectorEditorNpcEditorSessionState{};
     weaponEditorState = SectorEditorWeaponEditorState{};
     weaponEditorSessionState = SectorEditorWeaponEditorSessionState{};
+    itemEditorState = SectorEditorItemEditorState{};
+    itemEditorSessionState = SectorEditorItemEditorSessionState{};
     materialRegistryEditorState = SectorEditorMaterialRegistryEditorState{};
     soundEditorState = SectorEditorSoundEditorState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
@@ -428,6 +434,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     playerAudio = PlayerAudioRuntime{};
     canvasRect = {};
     statusText.clear();
+    gameSessionExists = false;
+    clearGameSessionRequested = false;
     engineContext = nullptr;
     initialized = false;
 }
@@ -472,7 +480,10 @@ void SectorEditor::UpdateFpsViewmodel(
                 sceneRuntime.Renderer(),
                 editor.PreviewRegistry(),
                 editor.PreviewApplicationSettings(),
-                dt);
+                dt,
+                nullptr,
+                nullptr,
+                engineContext != nullptr ? &engineContext->audio : nullptr);
         return;
     }
     fpsPlayer.Update(
@@ -480,7 +491,10 @@ void SectorEditor::UpdateFpsViewmodel(
             sceneRuntime.Renderer(),
             weaponRegistry,
             applicationSettings,
-            dt);
+            dt,
+            nullptr,
+            nullptr,
+            engineContext != nullptr ? &engineContext->audio : nullptr);
 }
 bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
 {
@@ -497,6 +511,7 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || state.decalTintModal.open
             || state.previewSettingsModal.open
             || npcEditorState.open
+            || itemEditorState.open
             || weaponEditorState.open
             || materialRegistryEditorState.open
             || uiState.mainMenu.openRootIndex >= 0
@@ -637,6 +652,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 || state.footstepPicker.open
                 || runtimeObjectEditingState.spritePicker.open
                 || runtimeObjectEditingState.staticModelPicker.open
+                || itemEditorState.open
                 || weaponEditorState.open
                 || uiState.mainMenu.openRootIndex >= 0
                 || HasDocumentModalOpen();
@@ -721,6 +737,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
             || state.footstepPicker.open
             || soundEditorState.open
             || npcEditorState.open
+            || itemEditorState.open
             || weaponEditorState.open
             || uiState.mainMenu.openRootIndex >= 0
             || runtimeObjectEditingState.spritePicker.open
@@ -791,6 +808,7 @@ void SectorEditor::RenderUI(
             smallFont,
             state,
             uiState.mainMenu,
+            gameSessionExists,
             configTarget.kind != SectorEditorConfigKind::None,
             configTarget.kind != SectorEditorConfigKind::None
                     && configTarget.kind == configClipboardState.kind,
@@ -807,6 +825,12 @@ void SectorEditor::RenderUI(
         }
         if (state.lightmapBakeSetupModal.open) {
             DrawLightmapBakeSetupModal(ui, config, input, assets, font);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
+        if (itemEditorState.open) {
+            DrawItemEditor(ui, config, input, assets, font, smallFont);
             uiState.keyboardCaptured = true;
             engine::EndUI(ui, config, input, assets);
             return;
@@ -910,6 +934,12 @@ void SectorEditor::RenderUI(
     }
     if (state.lightmapBakeSetupModal.open) {
         DrawLightmapBakeSetupModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (itemEditorState.open) {
+        DrawItemEditor(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -1029,6 +1059,7 @@ void SectorEditor::RenderUI(
             || state.footstepPicker.open
             || soundEditorState.open
             || npcEditorState.open
+            || itemEditorState.open
             || weaponEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
@@ -1339,6 +1370,7 @@ bool SectorEditor::IsMainMenuInteractionEnabled() const
             && !materialRegistryEditorState.open
             && !soundEditorState.open
             && !npcEditorState.open
+            && !itemEditorState.open
             && !weaponEditorState.open
             && !state.texturePicker.open
             && !state.soundPicker.open
@@ -1369,6 +1401,16 @@ void SectorEditor::HandleMainMenuCommand(
         case SectorEditorMainMenuCommand::ReloadLevel:
             OpenReloadConfirmation(assets);
             break;
+        case SectorEditorMainMenuCommand::ClearGameSession:
+            if (!gameSessionExists) {
+                statusText = "No game session is running.";
+                break;
+            }
+            OpenConfirmation(
+                    "Clear Game Session",
+                    "Discard the current game session and all unsaved game progress?",
+                    [this]() { clearGameSessionRequested = true; });
+            break;
         case SectorEditorMainMenuCommand::CopyConfig:
             CopySelectedConfig(assets);
             break;
@@ -1394,6 +1436,9 @@ void SectorEditor::HandleMainMenuCommand(
         case SectorEditorMainMenuCommand::OpenWeaponEditor:
             OpenWeaponEditor(state.mode == SectorEditorMode::Preview3D);
             break;
+        case SectorEditorMainMenuCommand::OpenItemEditor:
+            BuildItemEditorService().Open();
+            break;
         case SectorEditorMainMenuCommand::ToggleShowGrid:
             state.showGrid = !state.showGrid;
             break;
@@ -1409,6 +1454,13 @@ void SectorEditor::HandleMainMenuCommand(
         case SectorEditorMainMenuCommand::None:
             break;
     }
+}
+
+bool SectorEditor::ConsumeClearGameSessionRequest()
+{
+    const bool requested = clearGameSessionRequested;
+    clearGameSessionRequested = false;
+    return requested;
 }
 
 bool SectorEditor::IsMouseOverCanvas(const engine::Input& input) const
@@ -1688,7 +1740,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
         return;
     }
 
-    if (!uiState.keyboardCaptured) {
+    if (ShouldApplySectorEditorKeyboardPan(
+                uiState.keyboardCaptured,
+                input.IsKeyDown(KEY_LEFT_CONTROL),
+                input.IsKeyDown(KEY_RIGHT_CONTROL))) {
         Vector2 pan{};
         if (input.IsKeyDown(KEY_A)) {
             pan.x -= 1.0f;
@@ -1857,6 +1912,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (state.currentTool == SectorEditorTool::DynamicModel) {
                     AddDynamicModelAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::Item) {
+                    AddItemAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -2424,6 +2485,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             || state.soundPicker.open
             || state.decalTintModal.open
             || state.previewSettingsModal.open
+            || itemEditorState.open
             || weaponEditorState.open;
     fpsPlayer.HandleWeaponSlotInput(
             input,
@@ -3571,7 +3633,8 @@ SectorEditor::BuildRuntimeObjectEditingService(
             statusText,
             engineContext,
             IsSectorEditorAuthoringDerivationCurrent(
-                    MakeLiveConstDerivationAccess(documentState.derivation))}};
+                    MakeLiveConstDerivationAccess(documentState.derivation)),
+            &itemRegistry}};
 }
 
 SectorEditorSoundService SectorEditor::BuildSoundService(
@@ -3626,6 +3689,17 @@ void SectorEditor::AddDynamicModelAt(Vector2 mapPoint)
     SectorEditorRuntimeObjectEditingService editing =
             BuildRuntimeObjectEditingService(&selection);
     editing.AddDynamicModel(mapPoint);
+}
+
+void SectorEditor::AddItemAt(Vector2 mapPoint)
+{
+    EnsureTopologyRenderCache();
+    const std::string definitionId =
+            runtimeObjectEditingState.itemPlacement.lastDefinitionId;
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddItem(mapPoint, definitionId);
 }
 
 void SectorEditor::AddNpcAt(Vector2 mapPoint)
@@ -4239,7 +4313,8 @@ void SectorEditor::RenderPreview3DHud(
                 playableViewport,
                 weaponEditorState.open
                         ? weaponEditorState.draftRegistry
-                        : weaponRegistry);
+                        : weaponRegistry,
+                assets.GetFont(usePromptFont));
         DrawSectorUsePrompt(
                 playableViewport,
                 assets.GetFont(usePromptFont),
@@ -4543,7 +4618,8 @@ void SectorEditor::EnsureTopologyRenderCache()
     if (!IsSectorEditorTopologyRenderCacheCurrent(
                 state.topologyRenderCache,
                 state.topologyRenderRevision,
-                runtimeObjects.swingDoorCatalogRevision)) {
+                runtimeObjects.swingDoorCatalogRevision,
+                itemRegistry.revision)) {
         const SectorEditorConstDerivationDocumentAccess derivation =
                 MakeLiveConstDerivationAccess(documentState.derivation);
         state.topologyRenderCache = BuildSectorEditorTopologyRenderCache(
@@ -4554,7 +4630,9 @@ void SectorEditor::EnsureTopologyRenderCache()
                 runtimeObjects.swingDoorCatalogLoaded
                         ? &runtimeObjects.swingDoorCatalog
                         : nullptr,
-                runtimeObjects.swingDoorCatalogRevision);
+                runtimeObjects.swingDoorCatalogRevision,
+                &itemRegistry,
+                itemRegistry.revision);
         state.topologyRenderWarning = state.topologyRenderCache.warning;
     }
 }
@@ -5328,6 +5406,29 @@ void SectorEditor::DrawToolsPanel(
         state.currentTool = SectorEditorTool::Select;
         statusText = LegacyTopologyMutationUnavailableMessage();
     }
+    auto& itemPlacement = runtimeObjectEditingState.itemPlacement;
+    if (itemPlacement.registryRevision != itemRegistry.revision) {
+        itemPlacement.registryRevision = itemRegistry.revision;
+        itemPlacement.definitionIds.clear();
+        itemPlacement.labelStorage.clear();
+        itemPlacement.labels.clear();
+        itemPlacement.definitionIds.reserve(itemRegistry.items.size());
+        itemPlacement.labelStorage.reserve(itemRegistry.items.size());
+        for (const ItemDefinition& definition : itemRegistry.items) {
+            itemPlacement.definitionIds.push_back(definition.id);
+            itemPlacement.labelStorage.push_back(
+                    definition.title + " (" + definition.id + ")");
+        }
+        itemPlacement.labels.reserve(itemPlacement.labelStorage.size());
+        for (const std::string& label : itemPlacement.labelStorage) {
+            itemPlacement.labels.push_back(label.c_str());
+        }
+        if (FindItemDefinition(
+                    itemRegistry, itemPlacement.lastDefinitionId) == nullptr) {
+            itemPlacement.lastDefinitionId = itemRegistry.items.empty()
+                    ? std::string{} : itemRegistry.items.front().id;
+        }
+    }
 
     const engine::UIPanelResult panel = engine::BeginPanel(
             ui,
@@ -5344,7 +5445,8 @@ void SectorEditor::DrawToolsPanel(
     const float toolsContentH = MeasureSectorEditorToolsContentHeight(
             rowH,
             gap,
-            state.currentTool == SectorEditorTool::Trigger);
+            state.currentTool == SectorEditorTool::Trigger,
+            state.currentTool == SectorEditorTool::Item);
     const float scrollContentW = ScrollAreaContentWidthForVerticalScrollbar(
             panel.contentRect.width,
             config,
@@ -5487,6 +5589,10 @@ void SectorEditor::DrawToolsPanel(
             statusText = "3D Prop: click inside a derived sector to place a static model";
         } else if (tool == SectorEditorTool::DynamicModel) {
             statusText = "Dynamic Prop: click inside a derived sector to place an animated model";
+        } else if (tool == SectorEditorTool::Item) {
+            statusText = itemRegistry.items.empty()
+                    ? "Item: create an item definition in the Item Editor first"
+                    : "Item: click inside a derived sector to place an item";
         } else if (tool == SectorEditorTool::Npc) {
             SectorRuntimeObjectState& runtimeObjects = sceneRuntime.RuntimeObjects();
             RefreshSectorEditorNpcPlacementOptions(
@@ -5547,6 +5653,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::RuntimeObject,
             SectorEditorTool::StaticModel,
             SectorEditorTool::DynamicModel,
+            SectorEditorTool::Item,
             SectorEditorTool::Npc,
             SectorEditorTool::Door,
             SectorEditorTool::Trigger,
@@ -5583,6 +5690,44 @@ void SectorEditor::DrawToolsPanel(
                 statusText = rectangle ? "Trigger Rectangle: click first corner"
                                        : "Trigger Polygon: click first point";
             }
+        }
+        if (tool == SectorEditorTool::Item
+                && state.currentTool == SectorEditorTool::Item) {
+            int selectedIndex = -1;
+            for (std::size_t index = 0;
+                    index < itemPlacement.definitionIds.size(); ++index) {
+                if (itemPlacement.definitionIds[index]
+                        == itemPlacement.lastDefinitionId) {
+                    selectedIndex = static_cast<int>(index);
+                    break;
+                }
+            }
+            if (!itemPlacement.labels.empty()) {
+                const int previous = selectedIndex;
+                engine::Option(
+                        ui, config, input, assets,
+                        "sector_editor_item_placement_definition",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        itemPlacement.labels.data(),
+                        itemPlacement.labels.size(),
+                        selectedIndex);
+                if (selectedIndex != previous && selectedIndex >= 0) {
+                    itemPlacement.lastDefinitionId =
+                            itemPlacement.definitionIds[
+                                    static_cast<std::size_t>(selectedIndex)];
+                }
+            } else {
+                engine::Text(
+                        config,
+                        assets,
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font,
+                        "No item definitions",
+                        engine::UITextJustify::Left,
+                        config.invalidColor);
+            }
+            y += rowH + gap;
         }
     }
 
@@ -6175,8 +6320,15 @@ void SectorEditor::DrawWeaponEditor(
                 ? "Preview weapon fired"
                 : "Preview weapon is not ready to fire";
     }
+    if (result.previewReloadRequested) {
+        statusText = fpsPlayer.TriggerPreviewReload()
+                ? "Preview weapon reloading"
+                : "Preview weapon is not ready to reload";
+    }
     if (result.holsterToggleRequested) {
-        if (ToggleFpsViewmodelHolster(fpsPlayer.State(), true, false)) {
+        if (!IsFpsWeaponReloading(fpsPlayer.State())
+                && ToggleFpsViewmodelHolster(
+                        fpsPlayer.State(), true, false)) {
             statusText = fpsPlayer.State().equipState
                             == FpsViewmodelEquipState::Holstering
                     ? "Preview weapon holstering"
@@ -6221,6 +6373,34 @@ void SectorEditor::DrawWeaponEditor(
                     originalEquipState,
                     originalEquipProgress);
         }
+    }
+}
+
+void SectorEditor::DrawItemEditor(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    SectorEditorItemEditorService editor = BuildItemEditorService();
+    SectorEditorStaticModelPickerService modelPicker{
+            runtimeObjectEditingState.staticModelPicker,
+            statusText};
+    const SectorEditorItemEditorPanelResult result =
+            DrawSectorEditorItemEditorPanel(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    smallFont,
+                    editor,
+                    modelPicker);
+    if (result.saved) {
+        RebuildItemModelAssets(assets, itemRegistry, itemModelAssets);
+        InvalidateTopologyRenderCache();
     }
 }
 
@@ -7551,10 +7731,24 @@ SectorEditorWeaponEditorService SectorEditor::BuildWeaponEditorService()
             weaponEditorState,
             weaponEditorSessionState,
             weaponRegistry,
+            itemRegistry,
             applicationSettings,
             statusText,
             weaponRegistryPath,
             applicationSettingsPath};
+}
+
+SectorEditorItemEditorService SectorEditor::BuildItemEditorService()
+{
+    return SectorEditorItemEditorService{
+            itemEditorState,
+            itemEditorSessionState,
+            itemRegistry,
+            weaponRegistry,
+            gameSessionExists,
+            statusText,
+            itemRegistryPath,
+            std::filesystem::path(ASSETS_PATH) / "levels"};
 }
 
 SectorEditorMaterialRegistryEditorService SectorEditor::BuildMaterialRegistryEditorService()

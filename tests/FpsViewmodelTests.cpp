@@ -104,7 +104,11 @@ void RegistrySuccess()
     game::FpsWeaponRegistry registry; std::string error;
     assert(game::ParseFpsWeaponRegistry(ValidRegistry, registry, &error));
     const auto* pistol = game::FindFpsWeaponDefinition(registry, "pistol");
-    assert(pistol && registry.version == 2 && pistol->weaponSlot == 1);
+    assert(pistol && registry.version == 3 && pistol->weaponSlot == 1);
+    assert(pistol->reload.magazineSize == 1);
+    assert(Near(pistol->reload.durationSeconds, 1.0f));
+    assert(pistol->reload.dryFireSoundPath.empty());
+    assert(pistol->reload.reloadSoundPath.empty());
     assert(pistol->crosshair.enabled);
     assert(pistol->crosshair.innerColor.r == 235
             && pistol->crosshair.innerColor.g == 235
@@ -320,8 +324,18 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     assert(game::ParseFpsWeaponRegistry(ValidRegistry, registry, &error));
 
     game::FpsWeaponDefinition rifle = registry.weapons.front();
+    registry.weapons.front().reload.magazineSize = 18;
+    registry.weapons.front().reload.durationSeconds = 0.63f;
+    registry.weapons.front().reload.dryFireSoundPath =
+            "weapons/pistol/dry_fire_01.ogg";
+    registry.weapons.front().reload.reloadSoundPath =
+            "weapons/pistol/reload_02.ogg";
     rifle.id = "rifle";
     rifle.weaponSlot = 2;
+    rifle.reload.magazineSize = 2;
+    rifle.reload.durationSeconds = 2.33f;
+    rifle.reload.dryFireSoundPath = "weapons/rifle/dry_fire.ogg";
+    rifle.reload.reloadSoundPath = "weapons/rifle/reload.ogg";
     rifle.firing.shotIntervalSeconds = 0.09f;
     rifle.firing.pellets = {true, 12, 7.5f};
     rifle.viewmodel.attachment.gripCorrection.translation.x = 0.11f;
@@ -344,6 +358,14 @@ void RegistryRoundTripAndSharedArmsConfiguration()
             pistol->firing.shotIntervalSeconds,
             loadedRifle->firing.shotIntervalSeconds));
     assert(pistol->weaponSlot == 1 && loadedRifle->weaponSlot == 2);
+    assert(pistol->reload.magazineSize == 18
+            && Near(pistol->reload.durationSeconds, 0.63f)
+            && pistol->reload.dryFireSoundPath
+                    == "weapons/pistol/dry_fire_01.ogg"
+            && pistol->reload.reloadSoundPath
+                    == "weapons/pistol/reload_02.ogg");
+    assert(loadedRifle->reload.magazineSize == 2
+            && Near(loadedRifle->reload.durationSeconds, 2.33f));
     assert(!pistol->firing.pellets.enabled);
     assert(loadedRifle->firing.pellets.enabled
             && loadedRifle->firing.pellets.count == 12
@@ -351,6 +373,8 @@ void RegistryRoundTripAndSharedArmsConfiguration()
                     loadedRifle->firing.pellets.spreadHalfAngleDegrees,
                     7.5f));
     assert(serialized.find("\"pellets\"") != std::string::npos);
+    assert(serialized.find("\"version\": 3") != std::string::npos);
+    assert(serialized.find("\"reload\"") != std::string::npos);
     assert(serialized.find("initialWeaponId") == std::string::npos);
 
     game::FpsApplicationSettings settings;
@@ -375,6 +399,19 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
     assert(error.find("pellets contains an invalid count")
             != std::string::npos);
+
+    roundTrip.weapons.back().firing.pellets.count = 8;
+    roundTrip.weapons.back().reload.magazineSize = 0;
+    assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
+    assert(error.find("magazineSize") != std::string::npos);
+    roundTrip.weapons.back().reload.magazineSize = 2;
+    roundTrip.weapons.back().reload.durationSeconds = 0.0f;
+    assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
+    assert(error.find("durationSeconds") != std::string::npos);
+    roundTrip.weapons.back().reload.durationSeconds = 2.33f;
+    roundTrip.weapons.back().reload.reloadSoundPath = "../outside.wav";
+    assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
+    assert(error.find("reloadSound") != std::string::npos);
 }
 
 void PelletDirectionGeneration()
@@ -686,7 +723,7 @@ void WeaponSlotSchemaAndKeys()
     game::FpsWeaponRegistry registry;
     std::string error;
     assert(game::ParseFpsWeaponRegistry(ValidRegistry, registry, &error));
-    assert(registry.version == 2);
+    assert(registry.version == 3);
     assert(game::FindFpsWeaponDefinitionForSlot(registry, 1)
             == &registry.weapons.front());
     assert(game::FindFpsWeaponDefinitionForSlot(registry, 0) == nullptr);
@@ -700,7 +737,7 @@ void WeaponSlotSchemaAndKeys()
 
     game::FpsWeaponRegistry unassigned;
     assert(game::ParseFpsWeaponRegistry(serialized, unassigned, &error));
-    assert(unassigned.version == 2);
+    assert(unassigned.version == 3);
     assert(unassigned.weapons.front().weaponSlot == 0);
     assert(game::FindFpsWeaponDefinitionForSlot(unassigned, 1) == nullptr);
 
@@ -1729,6 +1766,9 @@ void CrosshairVisibilityAndLayout()
     assert(game::ToggleFpsViewmodelHolster(runtime, true, false));
     assert(runtime.equipState == game::FpsViewmodelEquipState::Holstering);
     assert(!visible(true));
+    runtime.reload.phase = game::FpsWeaponReloadPhase::Holstering;
+    assert(visible(true));
+    runtime.reload.phase = game::FpsWeaponReloadPhase::Inactive;
     game::AdvanceFpsViewmodelEquipTransition(runtime, 100.0f);
     assert(runtime.equipState == game::FpsViewmodelEquipState::Holstered);
     assert(!visible(true));
@@ -1801,6 +1841,24 @@ void CrosshairVisibilityAndLayout()
     assert(Near(twice.segments[0].inner.width, 12.0f));
     assert(Near(twice.segments[0].inner.height, 4.0f));
 
+    const game::FpsReloadIndicatorLayout reloadLayout =
+            game::BuildFpsReloadIndicatorLayout(full, 1.0f, 22);
+    assert(Near(reloadLayout.center.x, full.center.x)
+            && Near(reloadLayout.center.y, full.center.y));
+    assert(reloadLayout.innerRadius > 10.0f);
+    assert(reloadLayout.outerRadius > reloadLayout.innerRadius);
+    assert(reloadLayout.textPosition.y
+            > reloadLayout.center.y + reloadLayout.outerRadius);
+
+    runtime.reload.phase = game::FpsWeaponReloadPhase::Waiting;
+    runtime.reload.totalDurationSeconds = 2.0f;
+    runtime.reload.totalElapsedSeconds = 0.5f;
+    assert(Near(game::FpsWeaponReloadProgress(runtime), 0.25f));
+    runtime.reload.phase = game::FpsWeaponReloadPhase::Completing;
+    assert(Near(game::FpsWeaponReloadProgress(runtime), 1.0f));
+    runtime.reload.phase = game::FpsWeaponReloadPhase::Inactive;
+    assert(Near(game::FpsWeaponReloadProgress(runtime), 0.0f));
+
     const game::FpsVitalsLayout vitals = game::BuildFpsVitalsLayout(
             Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
             1.0f,
@@ -1810,6 +1868,11 @@ void CrosshairVisibilityAndLayout()
     assert(Near(vitals.stamina.border.y + vitals.stamina.border.height,
             1080.0f - 22.0f));
     assert(vitals.health.textPosition.y >= 0.0f);
+    const Vector2 ammoPosition = game::BuildFpsAmmoCounterPosition(
+            vitals, 1.0f, 22, true);
+    assert(ammoPosition.x == vitals.health.border.x);
+    assert(ammoPosition.y < vitals.health.textPosition.y
+            && ammoPosition.y < vitals.stamina.textPosition.y);
     const game::FpsVitalsLayout healthOnly = game::BuildFpsVitalsLayout(
             Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
             1.0f,
@@ -1986,6 +2049,17 @@ void FiringRuntimeAndTransforms()
     assert(!game::CanFireFpsWeapon(viewmodel, true, true, true, &reason));
     assert(reason == game::FpsFireRejectReason::UiCaptured);
     assert(game::CanFireFpsWeapon(viewmodel, true, true, false, &reason));
+    viewmodel.firing.ammunitionEnabled = true;
+    viewmodel.firing.loadedRounds = 0;
+    assert(!game::CanFireFpsWeapon(viewmodel, true, true, false, &reason));
+    assert(reason == game::FpsFireRejectReason::EmptyMagazine);
+    viewmodel.firing.loadedRounds = 1;
+    assert(game::CanFireFpsWeapon(viewmodel, true, true, false, &reason));
+    viewmodel.reload.phase = game::FpsWeaponReloadPhase::Waiting;
+    assert(!game::CanFireFpsWeapon(viewmodel, true, true, false, &reason));
+    assert(reason == game::FpsFireRejectReason::Reloading);
+    viewmodel.reload.phase = game::FpsWeaponReloadPhase::Inactive;
+    viewmodel.firing.ammunitionEnabled = false;
     for (game::FpsViewmodelEquipState state : {
                  game::FpsViewmodelEquipState::Holstered,
                  game::FpsViewmodelEquipState::Holstering,

@@ -713,8 +713,10 @@ int main(int argc, char** argv)
                     && IsShaderValid(fxaaShader)});
 
     while (!WindowShouldClose()
-            && !assets.IsScopeFinished(assets.GlobalScope())) {
+            && (!assets.IsScopeFinished(assets.GlobalScope())
+                    || !application.IsGlobalPreparationFinished())) {
         assets.UpdateMainThread(2.0f);
+        application.UpdateMainThreadPreparation(context);
         BeginDrawing();
         ClearBackground(BLACK);
         DrawText("Loading global assets...", 40, 40, 32, RAYWHITE);
@@ -756,6 +758,7 @@ int main(int argc, char** argv)
                 ? frameDipTrace.TimestampSeconds()
                 : 0.0;
         assets.UpdateMainThread(2.0f);
+        application.UpdateMainThreadPreparation(context);
 
         const float dt = GetFrameTime();
         int screenW = GetScreenWidth();

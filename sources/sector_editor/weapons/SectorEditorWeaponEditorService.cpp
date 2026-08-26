@@ -22,6 +22,7 @@ SectorEditorWeaponEditorService::SectorEditorWeaponEditorService(
         SectorEditorWeaponEditorState& state,
         SectorEditorWeaponEditorSessionState& session,
         FpsWeaponRegistry& registry,
+        const ItemRegistry& itemRegistry,
         FpsApplicationSettings& applicationSettings,
         std::string& statusText,
         std::filesystem::path registryPath,
@@ -29,6 +30,7 @@ SectorEditorWeaponEditorService::SectorEditorWeaponEditorService(
     : state_(state)
     , session_(session)
     , registry_(registry)
+    , itemRegistry_(itemRegistry)
     , applicationSettings_(applicationSettings)
     , statusText_(statusText)
     , registryPath_(std::move(registryPath))
@@ -92,6 +94,11 @@ bool SectorEditorWeaponEditorService::SaveAndClose(engine::AssetManager& assets)
     if (!ValidateFpsWeaponRegistry(state_.draftRegistry, &error)) {
         state_.validationMessage = error;
         statusText_ = error;
+        return false;
+    }
+    if (!ValidateItemRegistry(itemRegistry_, state_.draftRegistry, error)) {
+        state_.validationMessage = "Weapon edit would orphan an item: " + error;
+        statusText_ = state_.validationMessage;
         return false;
     }
     if (!SaveFpsWeaponRegistry(
@@ -216,6 +223,19 @@ void SectorEditorWeaponEditorService::RequestDeleteSelected()
         state_.validationMessage = "A weapon registry must contain at least one weapon";
         return;
     }
+    const auto referenced = std::find_if(
+            itemRegistry_.items.begin(), itemRegistry_.items.end(),
+            [selected](const ItemDefinition& item) {
+                return (item.type == ItemType::Weapon
+                                || item.type == ItemType::Ammo)
+                        && item.weaponId == selected->id;
+            });
+    if (referenced != itemRegistry_.items.end()) {
+        state_.validationMessage = "Cannot delete weapon '" + selected->id
+                + "': it is referenced by item '" + referenced->id + "'";
+        statusText_ = state_.validationMessage;
+        return;
+    }
     state_.deleteConfirmationOpen = true;
     state_.deleteConfirmationId = selected->id;
 }
@@ -282,7 +302,24 @@ void SectorEditorWeaponEditorService::ApplyIdBuffer()
 {
     FpsWeaponDefinition* selected = SelectedWeapon();
     if (selected == nullptr) return;
-    selected->id = state_.idBuffer;
+    const std::string requested = state_.idBuffer;
+    if (requested != selected->id) {
+        const auto referenced = std::find_if(
+                itemRegistry_.items.begin(), itemRegistry_.items.end(),
+                [selected](const ItemDefinition& item) {
+                    return (item.type == ItemType::Weapon
+                                    || item.type == ItemType::Ammo)
+                            && item.weaponId == selected->id;
+                });
+        if (referenced != itemRegistry_.items.end()) {
+            state_.validationMessage = "Cannot rename weapon '" + selected->id
+                    + "': it is referenced by item '" + referenced->id + "'";
+            statusText_ = state_.validationMessage;
+            CopyBuffer(state_.idBuffer, sizeof(state_.idBuffer), selected->id);
+            return;
+        }
+    }
+    selected->id = requested;
     session_.selectedWeaponId = selected->id;
     RebuildListLabels();
     RequestPreviewReload();
@@ -318,6 +355,18 @@ void SectorEditorWeaponEditorService::ApplyShootSoundBuffer(
         engine::AssetManager& assets)
 {
     SetShootSoundPath(state_.shootSoundBuffer, assets);
+}
+
+void SectorEditorWeaponEditorService::ApplyDryFireSoundBuffer(
+        engine::AssetManager& assets)
+{
+    SetDryFireSoundPath(state_.dryFireSoundBuffer, assets);
+}
+
+void SectorEditorWeaponEditorService::ApplyReloadSoundBuffer(
+        engine::AssetManager& assets)
+{
+    SetReloadSoundPath(state_.reloadSoundBuffer, assets);
 }
 
 void SectorEditorWeaponEditorService::SetArmsModelPath(const std::string& path)
@@ -357,6 +406,50 @@ void SectorEditorWeaponEditorService::SetShootSoundPath(
         selected->firing.shootSound = one.weapons.front().firing.shootSound;
     }
     CopyBuffer(state_.shootSoundBuffer, sizeof(state_.shootSoundBuffer), path);
+    state_.validationMessage.clear();
+}
+
+void SectorEditorWeaponEditorService::SetDryFireSoundPath(
+        const std::string& path,
+        engine::AssetManager& assets)
+{
+    FpsWeaponDefinition* selected = SelectedWeapon();
+    if (selected == nullptr) return;
+    selected->reload.dryFireSoundPath = path;
+    selected->reload.dryFireSound = engine::NullSoundHandle();
+    if (!path.empty()) {
+        FpsWeaponRegistry one;
+        one.weapons.push_back(*selected);
+        RequestFpsWeaponAudioAssets(assets, one);
+        selected->reload.dryFireSound =
+                one.weapons.front().reload.dryFireSound;
+    }
+    CopyBuffer(
+            state_.dryFireSoundBuffer,
+            sizeof(state_.dryFireSoundBuffer),
+            path);
+    state_.validationMessage.clear();
+}
+
+void SectorEditorWeaponEditorService::SetReloadSoundPath(
+        const std::string& path,
+        engine::AssetManager& assets)
+{
+    FpsWeaponDefinition* selected = SelectedWeapon();
+    if (selected == nullptr) return;
+    selected->reload.reloadSoundPath = path;
+    selected->reload.reloadSound = engine::NullSoundHandle();
+    if (!path.empty()) {
+        FpsWeaponRegistry one;
+        one.weapons.push_back(*selected);
+        RequestFpsWeaponAudioAssets(assets, one);
+        selected->reload.reloadSound =
+                one.weapons.front().reload.reloadSound;
+    }
+    CopyBuffer(
+            state_.reloadSoundBuffer,
+            sizeof(state_.reloadSoundBuffer),
+            path);
     state_.validationMessage.clear();
 }
 
@@ -406,6 +499,14 @@ void SectorEditorWeaponEditorService::SyncBuffersFromSelection()
             state_.shootSoundBuffer,
             sizeof(state_.shootSoundBuffer),
             weapon.firing.shootSoundPath);
+    CopyBuffer(
+            state_.dryFireSoundBuffer,
+            sizeof(state_.dryFireSoundBuffer),
+            weapon.reload.dryFireSoundPath);
+    CopyBuffer(
+            state_.reloadSoundBuffer,
+            sizeof(state_.reloadSoundBuffer),
+            weapon.reload.reloadSoundPath);
     state_.floatInputs = {};
     state_.intInputs = {};
 }

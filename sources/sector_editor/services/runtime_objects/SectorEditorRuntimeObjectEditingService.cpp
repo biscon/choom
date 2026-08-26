@@ -389,6 +389,56 @@ bool SectorEditorRuntimeObjectEditingService::AddDynamicModel(Vector2 mapPoint)
     return true;
 }
 
+bool SectorEditorRuntimeObjectEditingService::AddItem(
+        Vector2 mapPoint,
+        const std::string& definitionId)
+{
+    if (!context_.authoringDerivationCurrent
+            || !context_.topologyRenderCache.valid) {
+        context_.statusText =
+                "Item placement failed: derived sector cache is unavailable";
+        return false;
+    }
+    if (context_.itemRegistry == nullptr
+            || FindItemDefinition(*context_.itemRegistry, definitionId) == nullptr) {
+        context_.statusText = definitionId.empty()
+                ? "Item placement failed: create an item definition first"
+                : "Item placement failed: selected definition is unavailable";
+        return false;
+    }
+    const int sectorId = FindCachedSectorAt(mapPoint);
+    const SectorTopologySector* sector = FindSectorTopologySector(
+            context_.map, sectorId);
+    if (sector == nullptr) {
+        context_.statusText =
+                "Item placement failed: click inside a derived sector";
+        return false;
+    }
+    const int objectId = AllocateSectorPlacedRuntimeObjectId(context_.map);
+    if (!IsValidSectorTopologyId(objectId)) {
+        context_.statusText =
+                "Item placement failed: no runtime object IDs available";
+        return false;
+    }
+    SectorPlacedRuntimeObject object;
+    object.id = objectId;
+    object.kind = "item";
+    object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
+    object.item.definitionId = definitionId;
+    object.item.instanceId = AllocateSectorItemInstanceId(
+            context_.map, objectId);
+    if (object.item.instanceId.empty()) {
+        context_.statusText = "Item placement failed: no instance IDs available";
+        return false;
+    }
+    context_.map.runtimeObjects.push_back(std::move(object));
+    context_.editingState.itemPlacement.lastDefinitionId = definitionId;
+    SelectObject(objectId);
+    MarkEdited(TextFormat("Added item %d", objectId));
+    RefreshPreviewObjects();
+    return true;
+}
+
 bool SectorEditorRuntimeObjectEditingService::AddNpc(
         Vector2 mapPoint,
         const std::string& definitionId)
@@ -477,6 +527,7 @@ bool SectorEditorRuntimeObjectEditingService::MutateSelected(
     }
     if ((object->kind == "static_model"
                 || object->kind == "dynamic_model"
+                || object->kind == "item"
                 || object->kind == "npc")
             && context_.topologyRenderCache.valid
             && (std::fabs(object->position.x - previousPosition.x) > GeometryEpsilon
@@ -552,6 +603,67 @@ bool SectorEditorRuntimeObjectEditingService::AssignSelectedDynamicModel(
                 }
                 object.dynamicModel.modelPath = modelPath;
                 object.dynamicModel.animation.clear();
+                return true;
+            });
+}
+
+bool SectorEditorRuntimeObjectEditingService::AssignSelectedItemDefinition(
+        const std::string& definitionId)
+{
+    const ItemDefinition* definition = context_.itemRegistry != nullptr
+            ? FindItemDefinition(*context_.itemRegistry, definitionId)
+            : nullptr;
+    if (definition == nullptr) {
+        context_.statusText = "Item definition is unavailable";
+        return false;
+    }
+    context_.editingState.itemPlacement.lastDefinitionId = definitionId;
+    return MutateSelected(
+            "Updated item definition",
+            [definitionId, clearUse = definition->type != ItemType::Object](
+                    SectorPlacedRuntimeObject& object) {
+                if (object.kind != "item"
+                        || object.item.definitionId == definitionId) {
+                    return false;
+                }
+                object.item.definitionId = definitionId;
+                if (clearUse) object.item.onUseScript.clear();
+                return true;
+            });
+}
+
+bool SectorEditorRuntimeObjectEditingService::SetSelectedItemInstanceId(
+        const std::string& instanceId,
+        std::string& outError)
+{
+    const SectorPlacedRuntimeObject* selected = SelectedObject();
+    if (selected == nullptr || selected->kind != "item") {
+        outError = "No item is selected";
+        return false;
+    }
+    if (!IsValidSectorScriptInstanceId(instanceId)) {
+        outError =
+                "Instance ID must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    const auto duplicate = std::find_if(
+            context_.map.runtimeObjects.begin(),
+            context_.map.runtimeObjects.end(),
+            [&instanceId, selected](const SectorPlacedRuntimeObject& object) {
+                return object.id != selected->id && object.kind == "item"
+                        && object.item.instanceId == instanceId;
+            });
+    if (duplicate != context_.map.runtimeObjects.end()) {
+        outError = "Instance ID must be unique among items in this map";
+        return false;
+    }
+    outError.clear();
+    if (selected->item.instanceId == instanceId) return true;
+    return MutateSelected(
+            "Updated item instance ID",
+            [&instanceId](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "item") return false;
+                object.item.instanceId = instanceId;
                 return true;
             });
 }

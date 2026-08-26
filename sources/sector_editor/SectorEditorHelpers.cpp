@@ -658,6 +658,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::RuntimeObject: return "Billboard";
         case SectorEditorTool::StaticModel: return "3D Prop";
         case SectorEditorTool::DynamicModel: return "Dynamic Prop";
+        case SectorEditorTool::Item: return "Item";
         case SectorEditorTool::Npc: return "NPC";
         case SectorEditorTool::Door: return "Door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";

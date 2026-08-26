@@ -6,6 +6,9 @@
 #include "engine/scripting/ScriptData.h"
 #include "game/ApplicationFlow.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/items/ItemAssets.h"
+#include "game/items/ItemDefinitions.h"
+#include "game/items/ItemInventory.h"
 #include "game/GameMainMenu.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorGameSession.h"
@@ -25,7 +28,12 @@ enum class ApplicationContentKind {
 
 class GameApplication {
 public:
-    GameApplication() : editor(applicationSettings, materialRegistry) {}
+    GameApplication()
+        : editor(
+                applicationSettings,
+                materialRegistry,
+                itemRegistry,
+                itemModelAssets) {}
 
     bool Init(
             engine::EngineContext& context,
@@ -42,6 +50,8 @@ public:
             engine::FontHandle font,
             engine::FontHandle smallFont);
     void Update(engine::EngineContext& context, float dt);
+    void UpdateMainThreadPreparation(engine::EngineContext& context);
+    bool IsGlobalPreparationFinished() const;
     void UpdateDebugConsole(engine::EngineContext& context, float dt);
     void ProcessDeferredDebugActions(engine::EngineContext& context);
     void RenderDebugConsole(
@@ -91,6 +101,7 @@ private:
             MainMenuAction action);
     void StartNewGame(engine::EngineContext& context);
     void ResumeGame(engine::EngineContext& context);
+    void ClearGameSession(engine::EngineContext& context);
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
     bool DebugConsoleAvailable() const;
@@ -99,6 +110,9 @@ private:
     ApplicationFlowState flow;
     FpsApplicationSettings applicationSettings;
     SectorMaterialRegistry materialRegistry;
+    ItemRegistry itemRegistry;
+    ItemModelAssetState itemModelAssets;
+    ItemCampaignState itemCampaign;
     SectorEditor editor;
     SectorGameSession gameSession;
     SectorSceneRuntime gameScene;
@@ -115,6 +129,7 @@ private:
     bool editorAttachedToGame = false;
     engine::FontHandle usePromptFont = engine::NullFontHandle();
     bool initialized = false;
+    bool itemIconDiagnosticReported = false;
 };
 
 } // namespace game

@@ -33,7 +33,17 @@ enum class FpsFireRejectReason {
     UiCaptured,
     NoActiveWeapon,
     WeaponNotReady,
+    Reloading,
+    EmptyMagazine,
     Cooldown
+};
+
+enum class FpsWeaponReloadPhase {
+    Inactive,
+    Holstering,
+    Waiting,
+    Unholstering,
+    Completing
 };
 
 struct FpsShotResult {
@@ -120,6 +130,8 @@ struct FpsMuzzleLightRuntimeState {
 
 struct FpsWeaponFiringRuntimeState {
     FpsWeaponFiringDefinition definition;
+    bool ammunitionEnabled = false;
+    int loadedRounds = 0;
     float cooldownRemainingSeconds = 0.0f;
     uint32_t randomState = 0x6d2b79f5u;
     uint64_t shotSequence = 0;
@@ -135,6 +147,15 @@ struct FpsWeaponFiringRuntimeState {
     Matrix muzzleWorldTransform = {};
     bool viewmodelRootTransformValid = false;
     bool muzzleWorldTransformValid = false;
+};
+
+struct FpsWeaponReloadRuntimeState {
+    FpsWeaponReloadPhase phase = FpsWeaponReloadPhase::Inactive;
+    float waitElapsedSeconds = 0.0f;
+    float totalElapsedSeconds = 0.0f;
+    float totalDurationSeconds = 0.0f;
+    int loadedRoundsBefore = 0;
+    int reservedRounds = 0;
 };
 
 struct FpsViewmodelHolsterPose {
@@ -191,6 +212,8 @@ struct FpsViewmodelRuntimeState {
     float environmentExposure = 0.15f;
     FpsViewmodelAttachmentRuntimeState attachment;
     FpsWeaponFiringRuntimeState firing;
+    FpsWeaponReloadDefinition reloadDefinition;
+    FpsWeaponReloadRuntimeState reload;
     std::string error;
 };
 
@@ -208,6 +231,8 @@ bool QueueFpsWeaponSlotSwitch(
         int& pendingWeaponSlot);
 void BeginFpsWeaponSlotTargetUnholster(FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelReadyForUse(const FpsViewmodelRuntimeState& state);
+bool IsFpsWeaponReloading(const FpsViewmodelRuntimeState& state);
+float FpsWeaponReloadProgress(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelPresentationVisible(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelRenderable(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelAttachmentRenderable(const FpsViewmodelRuntimeState& state);

@@ -558,6 +558,11 @@ void UpdateCachedSectorEditorRuntimeObjectDraw(
                 || object.kind == "npc";
         cached.isDoor = object.kind == "door";
         cached.isNpc = object.kind == "npc";
+        cached.isItem = object.kind == "item";
+        if (cached.isItem) {
+            cached.definitionId = object.item.definitionId;
+            cached.itemLabel = object.item.definitionId;
+        }
         cached.doorFootprintValid = false;
         return;
     }
@@ -628,11 +633,14 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorAuthoringDerivationResult& authoringDerivation,
         uint64_t revision,
         const SectorSwingDoorCatalog* swingDoorCatalog,
-        uint64_t swingDoorCatalogRevision)
+        uint64_t swingDoorCatalogRevision,
+        const ItemRegistry* itemRegistry,
+        uint64_t itemRegistryRevision)
 {
     SectorEditorTopologyRenderCache cache;
     cache.revision = revision;
     cache.swingDoorCatalogRevision = swingDoorCatalogRevision;
+    cache.itemRegistryRevision = itemRegistryRevision;
 
     cache.authoringVertices.reserve(authoringGraph.vertices.size());
     for (const SectorAuthoringVertex& vertex : authoringGraph.vertices) {
@@ -978,6 +986,16 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
                 || object.kind == "npc";
         cached.isDoor = object.kind == "door";
         cached.isNpc = object.kind == "npc";
+        cached.isItem = object.kind == "item";
+        if (cached.isItem) {
+            const ItemDefinition* definition = itemRegistry != nullptr
+                    ? FindItemDefinition(*itemRegistry, object.item.definitionId)
+                    : nullptr;
+            cached.definitionId = object.item.definitionId;
+            cached.definitionKnown = definition != nullptr;
+            cached.itemLabel = definition != nullptr
+                    ? definition->title : object.item.definitionId;
+        }
         if (cached.isDoor) {
             PopulateCachedDoorDraw(map, object, swingDoorCatalog, cached);
         }
@@ -1015,7 +1033,7 @@ void AppendCachedRuntimeObjectPickCandidates(
 
         const float activeTolerance = object.isNpc
                 ? tolerancePixels + 18.0f
-                : tolerancePixels;
+                : object.isItem ? tolerancePixels + 5.0f : tolerancePixels;
         if (distance2 <= activeTolerance * activeTolerance) {
             outCandidates.push_back(SectorEditorPickCandidate{
                     SectorEditorPickTarget{SectorEditorPickKind::RuntimeObject, object.objectId},
@@ -1623,6 +1641,7 @@ void DrawCachedRuntimeObjects(
     const Color outline = Color{20, 24, 32, 255};
     const Color objectFill = Color{238, 204, 96, 235};
     const Color npcFill = Color{245, 90, 190, 255};
+    const Color itemFill = Color{102, 214, 255, 255};
     const Color doorFill = Color{72, 220, 128, 64};
     const Color doorLine = Color{72, 220, 128, 235};
     const Color selectedFill = Color{122, 220, 244, 255};
@@ -1632,7 +1651,9 @@ void DrawCachedRuntimeObjects(
         const bool selected = object.objectId == context.selectedRuntimeObjectId;
         const Color fill = !object.definitionKnown || !object.doorModelMetadataValid
                 ? missingFill
-                : selected ? selectedFill : object.isNpc ? npcFill : objectFill;
+                : selected ? selectedFill
+                : object.isNpc ? npcFill
+                : object.isItem ? itemFill : objectFill;
 
         const float radius = selected ? 8.0f : 6.0f;
         if (object.isDoor && object.doorFootprintValid) {
@@ -1748,12 +1769,32 @@ void DrawCachedRuntimeObjects(
             drawLimb(hip, footB);
             DrawEditorMarkerDisc(head, selected ? 6.0f : 5.5f, outline);
             DrawEditorMarkerDisc(head, selected ? 3.5f : 3.0f, fill);
+        } else if (object.isItem) {
+            const float half = selected ? 8.0f : 7.0f;
+            const Vector2 top{center.x, center.y - half - 3.0f};
+            const Vector2 right{center.x + half + 3.0f, center.y};
+            const Vector2 bottom{center.x, center.y + half + 3.0f};
+            const Vector2 left{center.x - half - 3.0f, center.y};
+            DrawTriangle(top, left, right, outline);
+            DrawTriangle(bottom, right, left, outline);
+            DrawTriangle(
+                    Vector2{center.x, center.y - half},
+                    Vector2{center.x - half, center.y},
+                    Vector2{center.x + half, center.y},
+                    fill);
+            DrawTriangle(
+                    Vector2{center.x, center.y + half},
+                    Vector2{center.x + half, center.y},
+                    Vector2{center.x - half, center.y},
+                    fill);
+            DrawText("I", static_cast<int>(center.x - 2.0f),
+                    static_cast<int>(center.y - 5.0f), 10, outline);
         } else {
             DrawEditorMarkerDisc(center, radius + 3.0f, outline);
             DrawEditorMarkerDisc(center, radius, fill);
         }
 
-        if (!object.isDoor && !object.isNpc) {
+        if (!object.isDoor && !object.isNpc && !object.isItem) {
             const Vector2 direction{
                     std::cos(object.yawRadians),
                     std::sin(object.yawRadians)

@@ -905,6 +905,80 @@ SectorCollisionRayHit SectorCollisionWorld::Raycast(
     return result;
 }
 
+bool SectorCollisionWorld::AllowsPrismPlacement(
+        Vector2 center,
+        float radius,
+        float bottom,
+        float top,
+        int preferredSectorId,
+        int* resolvedSectorId) const
+{
+    if (resolvedSectorId != nullptr) *resolvedSectorId = 0;
+    if (!IsFinite(center) || !std::isfinite(radius)
+            || !std::isfinite(bottom) || !std::isfinite(top)
+            || radius <= 0.0f || top <= bottom
+            || footprintTraversalSectorIds.empty()) {
+        return false;
+    }
+    const int startSectorId = FindSectorContainingPointPreferCurrent(
+            center, preferredSectorId);
+    const SectorCollisionSector* start = FindSector(startSectorId);
+    if (start == nullptr) return false;
+    if (resolvedSectorId != nullptr) *resolvedSectorId = startSectorId;
+    size_t traversalCount = 1;
+    footprintTraversalSectorIds[0] = startSectorId;
+    for (size_t traversalIndex = 0;
+            traversalIndex < traversalCount;
+            ++traversalIndex) {
+        const SectorCollisionSector* sector = FindSector(
+                footprintTraversalSectorIds[traversalIndex]);
+        if (sector == nullptr
+                || bottom < sector->heights.floorZ - CollisionPointEpsilon
+                || (sector->ceilingSolid
+                        && top > sector->heights.ceilingZ
+                                + CollisionPointEpsilon)) {
+            return false;
+        }
+        for (const SectorCollisionEdge& edge : sector->edges) {
+            if (!CircleOverlapsSegment(center, radius, edge.a, edge.b)) {
+                continue;
+            }
+            if (edge.kind == SectorCollisionEdgeKind::BlockingWall
+                    || edge.blocksPlayer) {
+                return false;
+            }
+            const SectorCollisionSector* neighbor = FindSector(
+                    edge.neighborSectorId);
+            if (neighbor == nullptr) return false;
+            const float openingBottom = std::max(
+                    sector->heights.floorZ, neighbor->heights.floorZ);
+            float openingTop = std::numeric_limits<float>::infinity();
+            if (sector->ceilingSolid) {
+                openingTop = std::min(openingTop, sector->heights.ceilingZ);
+            }
+            if (neighbor->ceilingSolid) {
+                openingTop = std::min(openingTop, neighbor->heights.ceilingZ);
+            }
+            if (bottom < openingBottom - CollisionPointEpsilon
+                    || top > openingTop + CollisionPointEpsilon) {
+                return false;
+            }
+            if (std::find(
+                        footprintTraversalSectorIds.begin(),
+                        footprintTraversalSectorIds.begin() + traversalCount,
+                        neighbor->sectorId)
+                    == footprintTraversalSectorIds.begin() + traversalCount) {
+                if (traversalCount >= footprintTraversalSectorIds.size()) {
+                    return false;
+                }
+                footprintTraversalSectorIds[traversalCount++] =
+                        neighbor->sectorId;
+            }
+        }
+    }
+    return true;
+}
+
 bool SectorCollisionWorld::SectorContainsPoint(
         const SectorCollisionSector& sector,
         Vector2 xz) const

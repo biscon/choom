@@ -18,6 +18,8 @@ class SectorCollisionWorld;
 
 enum class SectorUseTargetKind {
     None,
+    Item,
+    StaticProp,
     DynamicProp,
     Door
 };
@@ -43,6 +45,11 @@ struct SectorUseHighlightState {
     bool releasing = false;
 };
 
+struct SectorObjectUseTargetAccumulator {
+    SectorUseTarget nearest;
+    bool nearestSelectable = false;
+};
+
 SectorUseTarget FindSectorUseTarget(
         engine::World& world,
         const engine::AssetManager* assets,
@@ -50,6 +57,25 @@ SectorUseTarget FindSectorUseTarget(
         Vector3 forward,
         const SectorCollisionWorld* collisionWorld,
         bool includeDynamicProps = true);
+
+void ConsiderSectorObjectUseBounds(
+        SectorObjectUseTargetAccumulator& accumulator,
+        Ray ray,
+        engine::Entity entity,
+        SectorUseTargetKind kind,
+        BoundingBox bounds,
+        bool selectable);
+SectorUseTarget FinishSectorObjectUseTarget(
+        const SectorObjectUseTargetAccumulator& accumulator,
+        float topologyHitDistance = -1.0f);
+SectorUseTarget FindSectorObjectUseTarget(
+        engine::World& world,
+        const engine::AssetManager& assets,
+        Ray ray,
+        const SectorCollisionWorld* collisionWorld);
+std::string_view SectorObjectUseTargetInstanceId(
+        engine::World& world,
+        const SectorUseTarget& target);
 
 std::string_view SectorUseTargetTitle(
         engine::World& world,
@@ -65,6 +91,13 @@ void UpdateSectorUseHighlight(
 void DrawSectorUsePrompt(
         Rectangle viewport,
         const engine::FontAsset* font,
-        std::string_view title);
+        std::string_view title,
+        std::string_view action = "Use");
+
+void DrawSectorUseMessage(
+        Rectangle viewport,
+        const engine::FontAsset* font,
+        std::string_view message,
+        float elapsedSeconds);
 
 } // namespace game

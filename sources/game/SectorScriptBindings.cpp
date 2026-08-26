@@ -3,8 +3,10 @@
 #include "engine/EngineContext.h"
 #include "engine/scripting/ScriptSystem.h"
 #include "engine/systems/AnimatedModelSystem.h"
+#include "game/Health.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcRuntime.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -111,6 +113,20 @@ engine::Entity FindPropEntity(
     world.ForEach<SectorDynamicModel>(
             [&](engine::Entity entity, SectorDynamicModel& prop) {
                 if (engine::IsNull(found) && prop.instanceId == instanceId) {
+                    found = entity;
+                }
+            });
+    return found;
+}
+
+engine::Entity FindNpcEntity(
+        engine::World& world,
+        std::string_view instanceId)
+{
+    engine::Entity found = engine::NullEntity();
+    world.ForEach<NpcRuntimeInstance>(
+            [&](engine::Entity entity, NpcRuntimeInstance& npc) {
+                if (engine::IsNull(found) && npc.instanceId == instanceId) {
                     found = entity;
                 }
             });
@@ -1051,6 +1067,69 @@ int LuaSetPropEmissiveScale(lua_State* state)
     return 1;
 }
 
+int ReadHealthValue(lua_State* state, int argument, const Health& health)
+{
+    const lua_Integer rawValue = luaL_checkinteger(state, argument);
+    if (rawValue < 0 || rawValue > health.maximum) {
+        luaL_argerror(
+                state,
+                argument,
+                "health must be between 0 and the actor's current maximum");
+    }
+    return static_cast<int>(rawValue);
+}
+
+int LuaSetPlayerHealth(lua_State* state)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.playerHealth == nullptr) {
+        return PushBindingError(state, "player health is unavailable");
+    }
+    const int value = ReadHealthValue(state, 1, *host.playerHealth);
+    host.playerHealth->current = value;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaSetNpcHealth(lua_State* state)
+{
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    SectorScriptHost& host = HostFromLua(state);
+    size_t idLength = 0;
+    const char* rawId = luaL_checklstring(state, 1, &idLength);
+    const engine::Entity entity = FindNpcEntity(
+            context.world, std::string_view{rawId, idLength});
+    if (engine::IsNull(entity)) {
+        return PushBindingError(state, "NPC was not found");
+    }
+    if (!context.world.Has<Health>(entity)
+            || !context.world.Has<NpcCombatState>(entity)) {
+        return PushBindingError(state, "NPC health is unavailable");
+    }
+    Health& health = context.world.Get<Health>(entity);
+    NpcCombatState& combat = context.world.Get<NpcCombatState>(entity);
+    const int value = ReadHealthValue(state, 2, health);
+    if ((combat.dead || IsDepleted(health)) && value > 0) {
+        return PushBindingError(state, "dead NPCs cannot be revived");
+    }
+    health.current = value;
+    if (value == 0 && !combat.dead) {
+        combat.dead = true;
+        combat.knockbackVelocity = {};
+        combat.staggerRemainingSeconds = 0.0f;
+        combat.hurtAnimationRequested = false;
+        combat.hurtAnimationPlaying = false;
+        combat.deathAnimationRequested = true;
+        combat.deathAnimationComplete = false;
+        if (host.navigation != nullptr && host.npcNavigation != nullptr) {
+            DeactivateNpcNavigation(
+                    context.world, *host.navigation, *host.npcNavigation, entity);
+        }
+    }
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
 int LuaChangeMap(lua_State* state)
 {
     size_t mapLength = 0;
@@ -1220,11 +1299,13 @@ void InitializeSectorScriptHost(
         engine::ScriptRuntime& scripts,
         SectorNavigationWorld* navigation,
         NpcNavigationRuntime* npcNavigation,
-        SectorScriptAudioApi audio)
+        SectorScriptAudioApi audio,
+        Health* playerHealth)
 {
     host.runtimeObjects = &runtimeObjects;
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
+    host.playerHealth = playerHealth;
     host.map = &map;
     host.audio = audio;
     host.scripts = &scripts;
@@ -1253,6 +1334,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.runtimeObjects = nullptr;
     host.navigation = nullptr;
     host.npcNavigation = nullptr;
+    host.playerHealth = nullptr;
     host.map = nullptr;
     host.audio = {};
     host.scripts = nullptr;
@@ -1276,6 +1358,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "stopPropAnimation", LuaStopPropAnimation);
     Register(state, "setPropAnimationProgress", LuaSetPropAnimationProgress);
     Register(state, "setPropEmissiveScale", LuaSetPropEmissiveScale);
+    Register(state, "setPlayerHealth", LuaSetPlayerHealth);
+    Register(state, "setNpcHealth", LuaSetNpcHealth);
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
     Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);

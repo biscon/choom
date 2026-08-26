@@ -1,4 +1,5 @@
 #include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorFreeflyController.h"
 #include "game/PlayerStamina.h"
 
 #include <raymath.h>
@@ -838,6 +839,49 @@ void TestMouseLookRawDeltaAndPitchClamp()
             "pitch clamps to about positive 89 degrees");
 }
 
+void TestMouseLookCaptureWarmup()
+{
+    game::SectorFreeflyControllerState capture;
+    capture.mouseLookEnabled = true;
+    capture.mouseLookWarmupFrames = 2;
+    game::SectorFpsControllerState view;
+    game::SectorFpsControllerInput input;
+    input.mouseDelta = Vector2{1000.0f, -1000.0f};
+
+    input.mouseLookEnabled =
+            game::AdvanceSectorFreeflyMouseLookCapture(capture);
+    game::UpdateSectorFpsMouseLook(
+            view, game::SectorFpsControllerConfig{}, input);
+    Check(Near(view.yawRadians, 0.0f) && Near(view.pitchRadians, 0.0f),
+          "first mouse recapture frame discards its delta");
+    input.mouseLookEnabled =
+            game::AdvanceSectorFreeflyMouseLookCapture(capture);
+    game::UpdateSectorFpsMouseLook(
+            view, game::SectorFpsControllerConfig{}, input);
+    Check(Near(view.yawRadians, 0.0f) && Near(view.pitchRadians, 0.0f),
+          "second mouse recapture frame discards its delta");
+
+    input.mouseDelta = Vector2{10.0f, -5.0f};
+    input.mouseLookEnabled =
+            game::AdvanceSectorFreeflyMouseLookCapture(capture);
+    game::UpdateSectorFpsMouseLook(
+            view, game::SectorFpsControllerConfig{}, input);
+    Check(input.mouseLookEnabled
+                  && Near(view.yawRadians, 0.03f)
+                  && Near(view.pitchRadians, 0.015f),
+          "mouse look resumes normally after recapture warmup");
+
+    capture.mouseLookEnabled = false;
+    capture.mouseLookWarmupFrames = 2;
+    Check(!game::AdvanceSectorFreeflyMouseLookCapture(capture)
+                  && capture.mouseLookWarmupFrames == 2,
+          "disabled mouse look does not consume recapture warmup");
+    capture.mouseLookEnabled = true;
+    Check(!game::AdvanceSectorFreeflyMouseLookCapture(capture)
+                  && capture.mouseLookWarmupFrames == 1,
+          "a later recapture starts a fresh warmup");
+}
+
 void TestConfigNormalization()
 {
     game::SectorFpsControllerConfig config;
@@ -1179,6 +1223,7 @@ int main()
     TestCrouchGroundingReversalAndResetRules();
     TestCrouchedMovementSpeedAndVerticalFit();
     TestMouseLookRawDeltaAndPitchClamp();
+    TestMouseLookCaptureWarmup();
     TestConfigNormalization();
     TestJumpStart();
     TestJumpInputUsesEdgePress();

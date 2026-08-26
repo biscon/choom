@@ -8,6 +8,7 @@
 #include "game/Health.h"
 #include "game/FpsViewmodelEffectsRenderer.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/items/ItemInventory.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -36,7 +37,8 @@ public:
             SectorMeshRenderer& renderer,
             const FpsWeaponRegistry& registry,
             const FpsApplicationSettings& settings,
-            const char* scopeName);
+            const char* scopeName,
+            bool activateInitialWeapon = true);
     bool SelectWeapon(
             engine::AssetManager& assets,
             SectorMeshRenderer& renderer,
@@ -52,7 +54,9 @@ public:
             const FpsWeaponRegistry& registry,
             const FpsApplicationSettings& settings,
             float dt,
-            const FpsPlayerRuntimeTuning* tuning = nullptr);
+            const FpsPlayerRuntimeTuning* tuning = nullptr,
+            PlayerWeaponCampaignState* weaponCampaign = nullptr,
+            engine::AudioSystem* audio = nullptr);
     bool HandleInput(
             engine::Input& input,
             const FpsWeaponRegistry& registry,
@@ -62,12 +66,16 @@ public:
             const SectorMeshRenderer& renderer,
             bool gameplayActive,
             bool mouseLookActive,
-            bool uiCaptured);
+            bool uiCaptured,
+            const ItemRegistry* itemRegistry = nullptr,
+            ItemCampaignState* itemCampaign = nullptr);
     bool HandleWeaponSlotInput(
             engine::Input& input,
             const FpsWeaponRegistry& registry,
             bool gameplayActive,
-            bool uiCaptured);
+            bool uiCaptured,
+            const ItemRegistry* itemRegistry = nullptr,
+            const PlayerInventoryState* inventory = nullptr);
     bool HandleFireInput(
             engine::Input& input,
             engine::AssetManager& assets,
@@ -76,11 +84,30 @@ public:
             const SectorMeshRenderer& renderer,
             bool gameplayActive,
             bool mouseLookActive,
-            bool uiCaptured);
+            bool uiCaptured,
+            PlayerWeaponCampaignState* weaponCampaign = nullptr);
+    bool HandleReloadInput(
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::AudioSystem& audio,
+            bool gameplayActive,
+            bool uiCaptured,
+            const ItemRegistry& itemRegistry,
+            ItemCampaignState& itemCampaign);
     bool TriggerPreviewShot(
             engine::AssetManager& assets,
             engine::AudioSystem& audio,
             const SectorMeshRenderer& renderer);
+    bool TriggerPreviewReload();
+    bool EquipWeapon(
+            engine::AssetManager& assets,
+            SectorMeshRenderer& renderer,
+            const FpsWeaponRegistry& registry,
+            const FpsApplicationSettings& settings,
+            std::string_view weaponId,
+            PlayerWeaponCampaignState* weaponCampaign = nullptr);
+    bool QueueUnequip(PlayerWeaponCampaignState* weaponCampaign = nullptr);
+    bool ConsumeReloadOutOfAmmoRequest();
     void UpdateTransformsAndLight(
             SectorMeshRenderer& renderer,
             const SectorCollisionWorld* collisionWorld);
@@ -101,11 +128,15 @@ public:
             const FpsWeaponRegistry& registry,
             const engine::FontAsset* font = nullptr,
             const Health* health = nullptr,
-            const PlayerStamina* stamina = nullptr) const;
+            const PlayerStamina* stamina = nullptr,
+            std::uint64_t reserveRounds = 0,
+            bool showAmmo = false) const;
 
     FpsViewmodelRuntimeState& State() { return state; }
     const FpsViewmodelRuntimeState& State() const { return state; }
-    bool IsWeaponSwitchInProgress() const { return pendingWeaponSlot != 0; }
+    bool IsWeaponSwitchInProgress() const {
+        return pendingWeaponSlot != 0 || pendingUnequip;
+    }
 
 private:
     struct WeaponAssetEntry {
@@ -135,6 +166,10 @@ private:
             bool allowAssetRequest,
             engine::AssetManager* assets = nullptr);
     void ResetActiveWeapon(SectorMeshRenderer& renderer);
+    void AdvanceReload(
+            engine::AssetManager& assets,
+            engine::AudioSystem* audio,
+            float dt);
     bool LoadWeapon(
             engine::AssetManager& assets,
             SectorMeshRenderer& renderer,
@@ -148,6 +183,8 @@ private:
     std::vector<WeaponAssetEntry> weaponAssets;
     size_t activeWeaponAssetIndex = InvalidWeaponAssetIndex;
     int pendingWeaponSlot = 0;
+    bool pendingUnequip = false;
+    bool reloadOutOfAmmoRequested = false;
     FpsMuzzleFlashRenderResources muzzleFlashRenderResources;
     std::string cameraRecoilWeaponId;
 };

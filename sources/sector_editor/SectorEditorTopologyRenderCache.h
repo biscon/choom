@@ -5,6 +5,7 @@
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorSwingDoorCatalog.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
+#include "game/items/ItemDefinitions.h"
 
 #include <raylib.h>
 
@@ -19,11 +20,13 @@ void UpdateCachedSectorEditorRuntimeObjectDraw(
 inline bool IsSectorEditorTopologyRenderCacheCurrent(
         const SectorEditorTopologyRenderCache& cache,
         uint64_t topologyRevision,
-        uint64_t swingDoorCatalogRevision)
+        uint64_t swingDoorCatalogRevision,
+        uint64_t itemRegistryRevision = 0)
 {
     return cache.valid
             && cache.revision == topologyRevision
-            && cache.swingDoorCatalogRevision == swingDoorCatalogRevision;
+            && cache.swingDoorCatalogRevision == swingDoorCatalogRevision
+            && cache.itemRegistryRevision == itemRegistryRevision;
 }
 
 struct SectorEditorTopologyDrawContext {
@@ -59,7 +62,9 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorAuthoringDerivationResult& authoringDerivation,
         uint64_t revision,
         const SectorSwingDoorCatalog* swingDoorCatalog = nullptr,
-        uint64_t swingDoorCatalogRevision = 0);
+        uint64_t swingDoorCatalogRevision = 0,
+        const ItemRegistry* itemRegistry = nullptr,
+        uint64_t itemRegistryRevision = 0);
 
 void AppendCachedRuntimeObjectPickCandidates(
         const SectorEditorTopologyRenderCache& cache,

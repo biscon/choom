@@ -5,6 +5,9 @@
 #include "game/Health.h"
 #include "game/SectorLevelLoader.h"
 #include "game/FpsPlayerRuntime.h"
+#include "game/items/ItemAssets.h"
+#include "game/items/ItemInventory.h"
+#include "game/items/ItemInventoryUI.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
@@ -15,6 +18,7 @@
 
 #include <string>
 #include <array>
+#include <vector>
 
 namespace game {
 
@@ -26,6 +30,9 @@ public:
             const SectorLevelEntryRequest& entry,
             const SectorMaterialRegistry& materialRegistry,
             const FpsWeaponRegistry& weaponRegistry,
+            const ItemRegistry& itemRegistry,
+            const ItemModelAssetState& itemModelAssets,
+            ItemCampaignState& itemCampaign,
             const FpsApplicationSettings& applicationSettings,
             PlayerAudioRuntime& playerAudioRuntime,
             engine::PersistentScriptStore& persistentScripts,
@@ -55,6 +62,16 @@ public:
             engine::AssetManager& assets,
             engine::FontHandle smallFont,
             const SectorSceneRuntime& scene) const;
+    void RenderInventoryUI(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont,
+            engine::FontHandle usePromptFont);
+    bool HandleEscape();
+    bool IsInventoryOpen() const { return inventoryUi.open; }
 
     bool RebuildFromMap(
             engine::EngineContext& context,
@@ -105,6 +122,55 @@ public:
     const PlayerStamina& PlayerStaminaState() const { return playerStamina; }
 
 private:
+    struct PendingItemTake {
+        engine::ScriptTaskHandle task{};
+        engine::Entity entity = engine::NullEntity();
+        int placedObjectId = 0;
+        std::string instanceId;
+        bool active = false;
+    };
+
+    struct HeldObjectUseState {
+        ItemHeldUsePhase phase = ItemHeldUsePhase::Inactive;
+        std::uint64_t runtimeId = 0;
+        engine::ScriptTaskHandle task{};
+    };
+
+    bool RequestItemTake(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            engine::Entity entity);
+    bool CommitItemTake(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            engine::Entity entity,
+            int placedObjectId,
+            const std::string& instanceId);
+    void UpdatePendingItemTake(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene);
+    void ShowCarryRefusal();
+    void ShowDropRefusal();
+    void ShowOutOfAmmo();
+    void RefreshMouseLookCapture();
+    void SetInventoryOpen(bool open);
+    void ClearHeldObjectUse();
+    bool BeginHeldObjectUse(std::uint64_t runtimeId);
+    void InvokeHeldObjectUse(engine::EngineContext& context);
+    void UpdatePendingHeldObjectUse();
+    bool ConsumeHeldObjectEntry(std::uint64_t runtimeId);
+    void ProcessInventoryAction(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene);
+    bool DropInventoryEntry(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            std::uint64_t runtimeId,
+            std::size_t& affectedIndex);
+    void UpdateItemPresentations(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            float dt);
     bool BuildCollisionAndPlayer(
             SectorSceneRuntime& scene,
             bool initializePlayer,
@@ -134,6 +200,9 @@ private:
     GameLevelLoadingState loading;
     FpsPlayerRuntime fpsPlayer;
     const FpsWeaponRegistry* weaponRegistry = nullptr;
+    const ItemRegistry* itemRegistry = nullptr;
+    const ItemModelAssetState* itemModelAssets = nullptr;
+    ItemCampaignState* itemCampaign = nullptr;
     const SectorMaterialRegistry* materialRegistry = nullptr;
     const FpsApplicationSettings* applicationSettings = nullptr;
     PlayerAudioRuntime* playerAudio = nullptr;
@@ -149,6 +218,14 @@ private:
     SectorUseTarget useTarget;
     SectorUseHighlightState useHighlightState;
     std::array<char, 128> usePromptTitle{};
+    std::array<char, 128> itemMessage{};
+    float itemMessageElapsedSeconds = 0.0f;
+    PendingItemTake pendingItemTake;
+    ItemInventoryUIState inventoryUi;
+    ItemInventoryUIAction pendingInventoryAction;
+    HeldObjectUseState heldObjectUse;
+    std::vector<engine::Entity> completedItemPresentations;
+    Rectangle logicalViewport = {0.0f, 0.0f, 1920.0f, 1080.0f};
 };
 
 } // namespace game

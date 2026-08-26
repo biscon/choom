@@ -590,6 +590,29 @@ std::string AllocateSectorDynamicModelInstanceId(
     return AllocateSectorPropInstanceId(map, placedObjectId);
 }
 
+std::string AllocateSectorItemInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId)
+{
+    const std::string base = "item_" + std::to_string(placedObjectId);
+    const auto available = [&map](const std::string& candidate) {
+        return std::none_of(
+                map.runtimeObjects.begin(),
+                map.runtimeObjects.end(),
+                [&candidate](const SectorPlacedRuntimeObject& object) {
+                    return object.kind == "item"
+                            && object.item.instanceId == candidate;
+                });
+    };
+    if (available(base)) return base;
+    for (int suffix = 2; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = base + "_" + std::to_string(suffix);
+        if (candidate.size() > 63) break;
+        if (available(candidate)) return candidate;
+    }
+    return {};
+}
+
 std::string AllocateSectorPropInstanceId(
         const SectorTopologyMap& map,
         int placedObjectId)

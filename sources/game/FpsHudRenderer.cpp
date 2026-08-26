@@ -46,7 +46,8 @@ bool ShouldDrawFpsCrosshair(
 {
     if (!context.preview3DActive
             || context.viewmodel.activeWeaponId.empty()
-            || !IsFpsViewmodelReadyForUse(context.viewmodel)) {
+            || (!IsFpsViewmodelReadyForUse(context.viewmodel)
+                && !IsFpsWeaponReloading(context.viewmodel))) {
         return false;
     }
     const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
@@ -162,6 +163,49 @@ FpsVitalsLayout BuildFpsVitalsLayout(
     return result;
 }
 
+FpsReloadIndicatorLayout BuildFpsReloadIndicatorLayout(
+        const FpsCrosshairLayout& crosshair,
+        float uiScale,
+        int fontPixelSize)
+{
+    float extent = 0.0f;
+    for (const FpsCrosshairSegmentLayout& segment : crosshair.segments) {
+        extent = std::max(extent, std::abs(segment.outline.x - crosshair.center.x));
+        extent = std::max(extent, std::abs(
+                segment.outline.x + segment.outline.width - crosshair.center.x));
+        extent = std::max(extent, std::abs(segment.outline.y - crosshair.center.y));
+        extent = std::max(extent, std::abs(
+                segment.outline.y + segment.outline.height - crosshair.center.y));
+    }
+    const float margin = static_cast<float>(ScaledPixels(8.0f, uiScale));
+    const float thickness = static_cast<float>(ScaledPixels(3.0f, uiScale));
+    FpsReloadIndicatorLayout result;
+    result.center = crosshair.center;
+    result.innerRadius = extent + margin;
+    result.outerRadius = result.innerRadius + thickness;
+    result.textPosition = Vector2{
+            crosshair.center.x,
+            crosshair.center.y + result.outerRadius
+                    + static_cast<float>(ScaledPixels(8.0f, uiScale))};
+    (void)fontPixelSize;
+    return result;
+}
+
+Vector2 BuildFpsAmmoCounterPosition(
+        const FpsVitalsLayout& vitals,
+        float uiScale,
+        int fontPixelSize,
+        bool includeStamina)
+{
+    const float topTextY = includeStamina
+            ? std::min(vitals.health.textPosition.y, vitals.stamina.textPosition.y)
+            : vitals.health.textPosition.y;
+    return Vector2{
+            vitals.health.border.x,
+            topTextY - static_cast<float>(fontPixelSize)
+                    - static_cast<float>(ScaledPixels(8.0f, uiScale))};
+}
+
 void DrawFpsHud(const FpsHudContext& context)
 {
     if (context.playableViewport.width <= 0.0f
@@ -169,21 +213,71 @@ void DrawFpsHud(const FpsHudContext& context)
         return;
     }
     const float uiScale = FpsHudScale(context.playableViewport);
-    if (ShouldDrawFpsCrosshair(context)) {
-        const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
-                context.weaponRegistry,
-                context.viewmodel.activeWeaponId);
-        if (weapon != nullptr) {
-            const FpsCrosshairLayout layout = BuildFpsCrosshairLayout(
-                    weapon->crosshair,
-                    context.playableViewport,
-                    uiScale);
-            for (const FpsCrosshairSegmentLayout& segment : layout.segments) {
-                DrawRectangleRec(segment.outline, weapon->crosshair.outlineColor);
-            }
-            for (const FpsCrosshairSegmentLayout& segment : layout.segments) {
-                DrawRectangleRec(segment.inner, weapon->crosshair.innerColor);
-            }
+    const FpsWeaponDefinition* activeWeapon = FindFpsWeaponDefinition(
+            context.weaponRegistry,
+            context.viewmodel.activeWeaponId);
+    FpsCrosshairLayout crosshairLayout;
+    const bool crosshairLayoutValid = activeWeapon != nullptr;
+    if (crosshairLayoutValid) {
+        crosshairLayout = BuildFpsCrosshairLayout(
+                activeWeapon->crosshair,
+                context.playableViewport,
+                uiScale);
+    }
+    if (ShouldDrawFpsCrosshair(context) && activeWeapon != nullptr) {
+        for (const FpsCrosshairSegmentLayout& segment : crosshairLayout.segments) {
+            DrawRectangleRec(segment.outline, activeWeapon->crosshair.outlineColor);
+        }
+        for (const FpsCrosshairSegmentLayout& segment : crosshairLayout.segments) {
+            DrawRectangleRec(segment.inner, activeWeapon->crosshair.innerColor);
+        }
+    }
+
+    if (activeWeapon != nullptr && crosshairLayoutValid
+            && IsFpsWeaponReloading(context.viewmodel)) {
+        const int fontPixelSize = context.font != nullptr
+                ? context.font->pixelSize : 20;
+        const FpsReloadIndicatorLayout reloadLayout =
+                BuildFpsReloadIndicatorLayout(
+                        crosshairLayout, uiScale, fontPixelSize);
+        Color background = activeWeapon->crosshair.outlineColor;
+        background.a = static_cast<unsigned char>(std::min(
+                140, static_cast<int>(background.a)));
+        DrawRing(
+                reloadLayout.center,
+                reloadLayout.innerRadius,
+                reloadLayout.outerRadius,
+                -90.0f,
+                270.0f,
+                64,
+                background);
+        DrawRing(
+                reloadLayout.center,
+                reloadLayout.innerRadius,
+                reloadLayout.outerRadius,
+                -90.0f,
+                -90.0f + 360.0f * FpsWeaponReloadProgress(context.viewmodel),
+                64,
+                activeWeapon->crosshair.innerColor);
+        if (context.font != nullptr) {
+            constexpr const char* ReloadingText = "RELOADING";
+            const float pulse = 0.5f + 0.5f * std::sin(
+                    context.viewmodel.reload.totalElapsedSeconds * 10.0f);
+            const Vector2 size = MeasureTextEx(
+                    context.font->font,
+                    ReloadingText,
+                    static_cast<float>(context.font->pixelSize),
+                    1.0f);
+            DrawTextEx(
+                    context.font->font,
+                    ReloadingText,
+                    Vector2{
+                            reloadLayout.textPosition.x - size.x * 0.5f,
+                            reloadLayout.textPosition.y},
+                    static_cast<float>(context.font->pixelSize),
+                    1.0f,
+                    Color{235, 235, 225,
+                            static_cast<unsigned char>(150.0f + pulse * 105.0f)});
         }
     }
 
@@ -195,6 +289,26 @@ void DrawFpsHud(const FpsHudContext& context)
             uiScale,
             fontAsset->pixelSize,
             context.stamina != nullptr);
+    if (context.showAmmo && activeWeapon != nullptr) {
+        char ammoText[64] = {};
+        std::snprintf(
+                ammoText,
+                sizeof(ammoText),
+                "%d / %llu",
+                std::max(0, context.loadedRounds),
+                static_cast<unsigned long long>(context.reserveRounds));
+        DrawTextEx(
+                fontAsset->font,
+                ammoText,
+                BuildFpsAmmoCounterPosition(
+                        vitals,
+                        uiScale,
+                        fontAsset->pixelSize,
+                        context.stamina != nullptr),
+                static_cast<float>(fontAsset->pixelSize),
+                1.0f,
+                Color{210, 210, 202, 190});
+    }
     const Rectangle healthBorder = vitals.health.border;
     DrawRectangleRec(healthBorder, Color{8, 10, 12, 210});
     const Rectangle healthInterior = Inset(healthBorder, 2);

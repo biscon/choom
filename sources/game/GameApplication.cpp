@@ -61,6 +61,19 @@ bool GameApplication::Init(
                 : weaponError;
         return false;
     }
+    std::string itemError;
+    if (!LoadItemRegistry(
+                ASSETS_PATH "config/items.json",
+                weaponRegistry,
+                itemRegistry,
+                itemError)) {
+        menuStatus = itemError.empty()
+                ? "Item registry initialization failed"
+                : itemError;
+        return false;
+    }
+    RebuildItemModelAssets(context.assets, itemRegistry, itemModelAssets);
+    gameScene.SetItemRuntimeAssets(&itemRegistry, &itemModelAssets);
     RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
     RequestPlayerAudioAssets(
             context.assets,
@@ -86,6 +99,31 @@ bool GameApplication::Init(
     return true;
 }
 
+void GameApplication::UpdateMainThreadPreparation(
+        engine::EngineContext& context)
+{
+    if (!initialized) return;
+    UpdateItemIconPreparation(context.assets, itemRegistry, itemModelAssets);
+    if (itemModelAssets.iconPreparation
+            == ItemIconPreparationState::WaitingForModels) {
+        itemIconDiagnosticReported = false;
+    }
+    if (itemModelAssets.iconPreparation == ItemIconPreparationState::Failed
+            && !itemIconDiagnosticReported) {
+        itemIconDiagnosticReported = true;
+        const std::string diagnostic = itemModelAssets.iconDiagnostic.empty()
+                ? "Item icon preparation failed"
+                : itemModelAssets.iconDiagnostic;
+        TraceLog(LOG_WARNING, "%s", diagnostic.c_str());
+        if (menuStatus.empty()) menuStatus = diagnostic;
+    }
+}
+
+bool GameApplication::IsGlobalPreparationFinished() const
+{
+    return IsItemIconPreparationTerminal(itemModelAssets);
+}
+
 void GameApplication::Shutdown(engine::EngineContext& context)
 {
     context.audio.StopAll(context.assets);
@@ -95,6 +133,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
         gameScene.Shutdown(context);
     }
     editor.Shutdown(context);
+    ShutdownItemModelAssets(context.assets, itemModelAssets);
     if (debugConsole.initialized) {
         engine::FlushPendingDebugConsoleLogs(debugConsole);
         engine::SetDebugConsoleLogCaptureEnabled(false);
@@ -105,6 +144,8 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     playerAudio = PlayerAudioRuntime{};
     persistentScripts = engine::PersistentScriptStore{};
     weaponRegistry = FpsWeaponRegistry{};
+    itemRegistry = ItemRegistry{};
+    itemCampaign = ItemCampaignState{};
     materialRegistry = SectorMaterialRegistry{};
     menuStatus.clear();
     pendingMenuAction.reset();
@@ -113,6 +154,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     graphicsSettingsDraft = FpsApplicationSettings{};
     graphicsSettingsOpen = false;
     editorAttachedToGame = false;
+    itemIconDiagnosticReported = false;
     initialized = false;
 }
 
@@ -204,6 +246,7 @@ void GameApplication::RenderInteractiveUI(
 {
     if (gameSession.IsLoadOverlayVisible()) return;
     if (flow.screen == ApplicationScreen::Editor) {
+        editor.SetGameSessionExists(gameSession.IsRunning());
         editor.RenderUI(
                 contentUi,
                 config,
@@ -213,6 +256,14 @@ void GameApplication::RenderInteractiveUI(
                 smallFont);
     }
     if (flow.screen == ApplicationScreen::Game) {
+        gameSession.RenderInventoryUI(
+                contentUi,
+                config,
+                input,
+                assets,
+                font,
+                smallFont,
+                usePromptFont);
         gameSession.RenderNavigationDebugPanel(
                 config, assets, smallFont, gameScene);
     }
@@ -321,8 +372,12 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
                 true,
-                [&menuRequested](engine::InputEvent& event) {
+                [this, &menuRequested](engine::InputEvent& event) {
                     if (event.key.key != KEY_ESCAPE) {
+                        return;
+                    }
+                    if (gameSession.HandleEscape()) {
+                        engine::ConsumeEvent(event);
                         return;
                     }
                     menuRequested = true;
@@ -345,6 +400,10 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         return;
     }
 
+    editor.SetGameSessionExists(gameSession.IsRunning());
+    if (editor.ConsumeClearGameSessionRequest()) {
+        ClearGameSession(context);
+    }
     editor.Update(context, dt);
     if (editor.IsPreview3DActive()) {
         return;
@@ -641,12 +700,19 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
     editor.SuspendRuntime(context);
     std::string error;
     persistentScripts = engine::PersistentScriptStore{};
+    InitializeItemCampaignState(
+            itemCampaign,
+            applicationSettings.playerInventory,
+            &weaponRegistry);
     if (!gameSession.StartNew(
                 context,
                 gameScene,
                 SectorLevelEntryRequest{applicationSettings.firstLevel, std::nullopt},
                 materialRegistry,
                 weaponRegistry,
+                itemRegistry,
+                itemModelAssets,
+                itemCampaign,
                 applicationSettings,
                 playerAudio,
                 persistentScripts,
@@ -686,6 +752,22 @@ void GameApplication::ResumeGame(engine::EngineContext& context)
     flow.screen = ApplicationScreen::Game;
     flow.menuReturnScreen = ApplicationScreen::Game;
     menuStatus.clear();
+}
+
+void GameApplication::ClearGameSession(engine::EngineContext& context)
+{
+    if (!gameSession.IsRunning()) return;
+
+    context.audio.StopAll(context.assets);
+    gameSession.Shutdown(context, gameScene);
+    itemCampaign = ItemCampaignState{};
+    persistentScripts = engine::PersistentScriptStore{};
+    editorAttachedToGame = false;
+    editor.SetGameSessionExists(false);
+    debugConsole.open = false;
+    menuStatus.clear();
+    MarkApplicationGameStopped(flow);
+    ShowApplicationEditor(flow);
 }
 
 void GameApplication::OpenEditor(engine::EngineContext& context)

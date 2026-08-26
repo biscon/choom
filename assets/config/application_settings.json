@@ -15,10 +15,16 @@
     "maxShadowLightUpdatesPerFrame": 2,
     "dynamicLightFadeInSeconds": 0.25,
     "depthPrepass": false,
-    "showFpsCounter": false,
+    "showFpsCounter": true,
     "performanceOverlay": false,
     "vsync": true,
     "horizontalFovDegrees": 95
+  },
+  "playerInventory": {
+    "maxCarryWeightKg": 30.0,
+    "maxSlots": 24,
+    "pickupVacuumDurationSeconds": 0.45,
+    "pickupVacuumTargetHeightWorld": 0.75
   },
   "hdrBloom": {
     "enabled": true,

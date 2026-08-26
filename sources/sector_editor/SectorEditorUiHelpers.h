@@ -42,7 +42,8 @@ inline SectorEditorWorkspaceLayout BuildSectorEditorWorkspaceLayout()
 inline float MeasureSectorEditorToolsContentHeight(
         float rowHeight,
         float gap,
-        bool triggerModeRowVisible)
+        bool triggerModeRowVisible,
+        bool itemDefinitionRowVisible = false)
 {
     constexpr float sectionLabelHeight = 26.0f;
     constexpr float separatorHeight = 22.0f;
@@ -52,7 +53,8 @@ inline float MeasureSectorEditorToolsContentHeight(
     };
     return sectionLabelHeight + rowsHeight(5)
             + separatorHeight + sectionLabelHeight
-            + rowsHeight(16 + (triggerModeRowVisible ? 1 : 0))
+            + rowsHeight(17 + (triggerModeRowVisible ? 1 : 0)
+                    + (itemDefinitionRowVisible ? 1 : 0))
             + separatorHeight + rowsHeight(2)
             + separatorHeight + rowsHeight(1)
             + trailingPadding;

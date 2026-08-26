@@ -15,6 +15,7 @@ enum class ModelPickerTarget {
     StaticModel,
     DynamicModel,
     NpcDefinition,
+    ItemDefinition,
     WeaponArms,
     WeaponAttachment
 };
@@ -33,6 +34,13 @@ struct StaticModelPickerState {
 };
 
 struct RuntimeObjectEditingState {
+    struct ItemPlacementState {
+        std::string lastDefinitionId;
+        std::uint64_t registryRevision = 0;
+        std::vector<std::string> definitionIds;
+        std::vector<std::string> labelStorage;
+        std::vector<const char*> labels;
+    } itemPlacement;
     RuntimeObjectDragState drag;
     SectorEditorNpcPlacementState npcPlacement;
     SectorSpriteMetadataCatalog spriteMetadataCatalog;
@@ -57,6 +65,13 @@ struct RuntimeObjectEditingUiState {
     char dynamicModelOnUseScriptBuffer[128] = {};
     std::string dynamicModelUseError;
     int dynamicModelUseObjectId = -1;
+    char itemInstanceIdBuffer[64] = {};
+    char itemOnTakeScriptBuffer[128] = {};
+    char itemOnUseScriptBuffer[128] = {};
+    int itemBufferedObjectId = -1;
+    std::string itemError;
+    engine::UIIntInputState itemQuantityInput;
+    engine::UIFloatInputState itemTakeDistanceInput;
     char doorInstanceIdBuffer[64] = {};
     char doorUseTitleBuffer[128] = {};
     char doorCanOpenScriptBuffer[128] = {};

@@ -121,6 +121,13 @@ public:
             Vector3 origin,
             Vector3 direction,
             float maximumDistance) const;
+    bool AllowsPrismPlacement(
+            Vector2 center,
+            float radius,
+            float bottom,
+            float top,
+            int preferredSectorId,
+            int* resolvedSectorId = nullptr) const;
 
 private:
     bool SectorContainsPoint(const SectorCollisionSector& sector, Vector2 xz) const;

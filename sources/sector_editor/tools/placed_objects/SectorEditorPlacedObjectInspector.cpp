@@ -5,6 +5,7 @@
 #include "sector_editor/tools/placed_objects/SectorEditorStaticModelInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorDynamicModelInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorNpcInspector.h"
+#include "sector_editor/tools/placed_objects/SectorEditorItemInspector.h"
 
 #include <raylib.h>
 
@@ -35,6 +36,9 @@ float MeasureSectorEditorPlacedObjectInspectorContentHeight(
   if (object->kind == "npc") {
     return MeasureSectorEditorNpcInspectorContentHeight(context, *object);
   }
+  if (object->kind == "item") {
+    return MeasureSectorEditorItemInspectorContentHeight(context, *object);
+  }
   return 72.0f;
 }
 
@@ -64,15 +68,17 @@ void DrawSectorEditorPlacedObjectInspector(
   const bool isStaticModel = selectedObject->kind == "static_model";
   const bool isDynamicModel = selectedObject->kind == "dynamic_model";
   const bool isNpc = selectedObject->kind == "npc";
+  const bool isItem = selectedObject->kind == "item";
   engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font,
                isBillboard ? "Type: Billboard"
                : isStaticModel ? "Type: 3D Prop"
                : isDynamicModel ? "Type: Dynamic Prop"
                : isNpc ? "Type: NPC"
+               : isItem ? "Type: Item"
                : isDoor    ? "Type: Door"
                            : "Type: Unsupported object",
                engine::UITextJustify::Left,
-               isBillboard || isStaticModel || isDynamicModel || isNpc || isDoor ? config.mutedTextColor
+               isBillboard || isStaticModel || isDynamicModel || isNpc || isItem || isDoor ? config.mutedTextColor
                                      : config.invalidColor);
   y += 34.0f;
 
@@ -94,6 +100,10 @@ void DrawSectorEditorPlacedObjectInspector(
   }
   if (isNpc) {
     DrawSectorEditorNpcInspector(context, y);
+    return;
+  }
+  if (isItem) {
+    DrawSectorEditorItemInspector(context, y);
     return;
   }
 

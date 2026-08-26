@@ -90,6 +90,25 @@ void DebugConsoleAvailabilityFollowsLiveGameOnly()
     assert(!game::IsApplicationDebugConsoleAvailable(state, true, true));
 }
 
+void ClearedGameStateKeepsEditorOpen()
+{
+    game::ApplicationFlowState state;
+    game::MarkApplicationGameStarted(state);
+    game::ShowApplicationEditor(state);
+
+    game::MarkApplicationGameStopped(state);
+    game::ShowApplicationEditor(state);
+
+    assert(!state.gameRunning);
+    assert(state.screen == game::ApplicationScreen::Editor);
+    assert(state.menuReturnScreen == game::ApplicationScreen::Editor);
+
+    const game::MainMenuItems items = game::BuildMainMenuItems(state.gameRunning);
+    assert(Contains(items, game::MainMenuAction::StartNewGame));
+    assert(!Contains(items, game::MainMenuAction::Resume));
+    assert(!Contains(items, game::MainMenuAction::SaveGame));
+}
+
 void LevelLoadingProgressAndFadeAreDeterministic()
 {
     game::GameLevelLoadingState loading;
@@ -140,6 +159,7 @@ int main()
     MenuItemsFollowSessionState();
     FlowPreservesReturnTargets();
     DebugConsoleAvailabilityFollowsLiveGameOnly();
+    ClearedGameStateKeepsEditorOpen();
     LevelLoadingProgressAndFadeAreDeterministic();
     NpcNavigationMustBeUsableBeforeActivation();
     return 0;

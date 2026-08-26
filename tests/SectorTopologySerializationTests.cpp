@@ -2198,6 +2198,110 @@ void TestDynamicModelRoundTripAndDefaultOmission()
           "migrated dynamic prop shadow mode saves with the new value");
 }
 
+void TestItemRoundTripDefaultsValidationAndLightmapExclusion()
+{
+    SectorTopologyMap map = MakeSquare();
+    SectorPlacedRuntimeObject object;
+    object.id = 52;
+    object.kind = "item";
+    object.position = Vector3{12.0f, 16.0f, 20.0f};
+    object.yawRadians = 0.5f;
+    object.item.definitionId = "pistol_ammo";
+    object.item.instanceId = "ammo_crate";
+    object.item.quantity = 12;
+    object.item.takeDistance = 2.25f;
+    object.item.onTakeScript = "canTakeAmmo";
+    object.item.onUseScript = "futureObjectUse";
+    object.item.rotationXRadians = 0.25f;
+    object.item.rotationZRadians = -0.5f;
+    object.item.heightOffsetWorld = 0.75f;
+    object.item.scale = 1.5f;
+    object.item.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    object.item.sessionDrop = true;
+    map.runtimeObjects.push_back(object);
+
+    const Json saved = Json::parse(SaveText(map));
+    const Json& payload = saved["runtimeObjects"][0]["item"];
+    Check(saved["runtimeObjects"][0]["kind"] == "item"
+                  && payload["definitionId"] == "pistol_ammo"
+                  && payload["instanceId"] == "ammo_crate"
+                  && payload["quantity"] == 12
+                  && Near(payload["takeDistance"].get<float>(), 2.25f)
+                  && payload["onTakeScript"] == "canTakeAmmo"
+                  && payload["onUseScript"] == "futureObjectUse"
+                  && Near(payload["rotationXDegrees"].get<float>(),
+                          0.25f * RAD2DEG)
+                  && Near(payload["rotationZDegrees"].get<float>(),
+                          -0.5f * RAD2DEG)
+                  && Near(payload["heightOffsetWorld"].get<float>(), 0.75f)
+                  && Near(payload["scale"].get<float>(), 1.5f)
+                  && payload["shadowMode"] == "dynamic"
+                  && !payload.contains("sessionDrop"),
+          "item placement serializes all authored fields but not campaign provenance");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error),
+          "item placement with a structurally valid missing definition loads");
+    const SectorPlacedRuntimeObject* roundTripped =
+            game::FindSectorPlacedRuntimeObject(loaded, 52);
+    Check(roundTripped != nullptr
+                  && roundTripped->kind == "item"
+                  && roundTripped->item.definitionId == "pistol_ammo"
+                  && roundTripped->item.instanceId == "ammo_crate"
+                  && roundTripped->item.quantity == 12
+                  && Near(roundTripped->item.takeDistance, 2.25f)
+                  && roundTripped->item.onTakeScript == "canTakeAmmo"
+                  && roundTripped->item.onUseScript == "futureObjectUse"
+                  && Near(roundTripped->item.rotationXRadians, 0.25f)
+                  && Near(roundTripped->item.rotationZRadians, -0.5f)
+                  && !roundTripped->item.sessionDrop,
+          "item placement fields round-trip and runtime provenance resets");
+
+    map.runtimeObjects[0].item = game::SectorPlacedItem{};
+    map.runtimeObjects[0].item.definitionId = "object_item";
+    map.runtimeObjects[0].item.instanceId = "item_52";
+    const Json defaults = Json::parse(SaveText(map))["runtimeObjects"][0]["item"];
+    Check(defaults["definitionId"] == "object_item"
+                  && defaults["instanceId"] == "item_52"
+                  && !defaults.contains("quantity")
+                  && !defaults.contains("takeDistance")
+                  && !defaults.contains("onTakeScript")
+                  && !defaults.contains("onUseScript")
+                  && !defaults.contains("rotationXDegrees")
+                  && !defaults.contains("rotationZDegrees")
+                  && !defaults.contains("heightOffsetWorld")
+                  && !defaults.contains("scale")
+                  && !defaults.contains("shadowMode"),
+          "item placement default fields are omitted");
+
+    auto expectItemFailure = [&](const char* field, Json value) {
+        Json invalid = saved;
+        invalid["runtimeObjects"][0]["item"][field] = std::move(value);
+        Check(!LoadText(invalid.dump(), loaded, error),
+              "invalid item placement field is rejected");
+    };
+    expectItemFailure("quantity", 0);
+    expectItemFailure("quantity", 1000001);
+    expectItemFailure("takeDistance", 0.0f);
+    expectItemFailure("onTakeScript", "bad script");
+    expectItemFailure("onUseScript", "bad script");
+    expectItemFailure("scale", -1.0f);
+    expectItemFailure("shadowMode", "cinematic");
+    expectItemFailure("definitionId", "bad/id");
+    expectItemFailure("instanceId", "bad instance");
+
+    Json duplicate = saved;
+    Json second = duplicate["runtimeObjects"][0];
+    second["id"] = 53;
+    duplicate["runtimeObjects"].push_back(second);
+    Check(!LoadText(duplicate.dump(), loaded, error),
+          "item instance IDs must be unique within a map");
+
+    Check(game::AllocateSectorItemInstanceId(map, 52) == "item_52_2",
+          "item instance ID allocation avoids existing IDs");
+}
+
 void TestNpcRoundTripDefaultsAndValidation()
 {
     SectorTopologyMap map = MakeSquare();
@@ -5062,6 +5166,7 @@ int main()
     TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
     TestDynamicModelRoundTripAndDefaultOmission();
+    TestItemRoundTripDefaultsValidationAndLightmapExclusion();
     TestNpcRoundTripDefaultsAndValidation();
     TestRuntimeObjectEditAndDeleteHelpers();
     TestLightmapMetadataRoundTrip();

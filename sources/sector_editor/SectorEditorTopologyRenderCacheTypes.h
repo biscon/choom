@@ -70,6 +70,8 @@ struct CachedRuntimeObjectDraw {
     bool definitionKnown = false;
     bool isDoor = false;
     bool isNpc = false;
+    bool isItem = false;
+    std::string itemLabel;
     bool doorFootprintValid = false;
     Vector2 doorCorners[4] = {};
     Vector2 doorEndpointA = {};
@@ -143,6 +145,7 @@ struct SectorEditorTopologyRenderCache {
     bool valid = false;
     uint64_t revision = 0;
     uint64_t swingDoorCatalogRevision = 0;
+    uint64_t itemRegistryRevision = 0;
     std::string warning;
     std::vector<CachedTopologySectorDraw> sectors;
     std::vector<CachedTopologyLineDraw> lineDefs;

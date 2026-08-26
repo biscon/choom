@@ -4,6 +4,9 @@
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
 #include "game/npc/NpcDefinitions.h"
+#include "game/items/ItemAssets.h"
+#include "game/items/ItemDefinitions.h"
+#include "game/items/ItemPresentation.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -88,6 +91,31 @@ struct SectorDynamicModel {
     float emissiveScale = 1.0f;
 };
 
+enum class SectorItemOrigin {
+    Authored,
+    SessionDrop
+};
+
+struct SectorItem {
+    engine::ModelHandle model = engine::NullModelHandle();
+    int placedObjectId = 0;
+    std::string definitionId;
+    std::string title;
+    std::string instanceId;
+    std::uint64_t quantity = 1;
+    float takeDistance = 1.5f;
+    std::string onTakeScript;
+    std::string onUseScript;
+    Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
+    float scale = 1.0f;
+    float environmentExposure = 0.15f;
+    SectorDynamicModelShadowMode shadowMode =
+            SectorDynamicModelShadowMode::Contact;
+    SectorItemOrigin origin = SectorItemOrigin::Authored;
+    bool takePending = false;
+    ItemPresentationState presentation;
+};
+
 } // namespace game
 
 #include "sector_demo/SectorDoorRuntime.h"
@@ -136,6 +164,10 @@ struct SectorRuntimeObjectState {
     size_t staticModelPendingCount = 0;
     size_t staticModelFailedCount = 0;
     size_t staticModelUnassignedCount = 0;
+    size_t itemModelRequestedCount = 0;
+    size_t itemModelReadyCount = 0;
+    size_t itemModelPendingCount = 0;
+    size_t itemModelFailedCount = 0;
     size_t directionalClipResolvedCount = 0;
     size_t directionalClipMissingCount = 0;
     size_t directionalClipFallbackCount = 0;
@@ -187,13 +219,32 @@ void ResetSectorRuntimeObjectsForMap(
         engine::World& world,
         engine::AssetManager& assets,
         SectorRuntimeObjectState& state,
-        const SectorTopologyMap& map);
+        const SectorTopologyMap& map,
+        const ItemRegistry* itemRegistry = nullptr,
+        const ItemModelAssetState* itemAssets = nullptr);
 
 void SpawnPlacedRuntimeObjects(
         engine::World& world,
         engine::AssetManager& assets,
         SectorRuntimeObjectState& state,
-        const SectorTopologyMap& map);
+        const SectorTopologyMap& map,
+        const ItemRegistry* itemRegistry = nullptr,
+        const ItemModelAssetState* itemAssets = nullptr);
+
+bool SpawnSectorItemRuntimeObject(
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& placedObject,
+        const ItemRegistry& itemRegistry,
+        const ItemModelAssetState& itemAssets,
+        engine::Entity* outEntity = nullptr);
+
+bool QueueRemoveSectorRuntimeObjectByEntity(
+        engine::World& world,
+        SectorRuntimeObjectState& state,
+        engine::Entity entity);
 
 void UpdateSectorRuntimeObjects(
         engine::World& world,

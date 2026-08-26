@@ -1,4 +1,5 @@
 #include "sector_demo/SectorCollisionWorld.h"
+#include "game/items/ItemDropPlacement.h"
 
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -1007,6 +1008,133 @@ void TestSectorFallbackAndBoundary()
           "movement cannot leave all sectors through solid boundary");
 }
 
+void TestItemDropClearanceQueries()
+{
+    const game::SectorCollisionWorld world = BuildWorld(MakeSquare());
+    const game::ItemDropCandidate clear = game::BuildItemDropCandidate(
+            world,
+            10,
+            Vector3{4.0f, 0.0f, 4.0f},
+            game::kItemDropFallbackLocalBounds);
+    Check(clear.valid && Near(clear.worldBounds.min.y, 0.0f),
+          "drop candidate places its lower bound on the sector floor");
+    Check(game::ItemDropFitsTopology(world, clear),
+          "drop candidate fits clear topology");
+    const float eyeLift = game::ItemDropLiftToCenterAtHeight(clear, 1.2f);
+    const game::ItemDropCandidate swept =
+            game::BuildLiftedItemDropSweep(clear, eyeLift);
+    Check(Near(eyeLift, 0.7f)
+                  && Near(swept.worldBounds.min.y, clear.worldBounds.min.y)
+                  && Near(swept.worldBounds.max.y, 1.7f),
+          "drop presentation centers at eye height and builds a floor-to-eye sweep");
+    Check(game::ItemDropFitsTopology(world, swept),
+          "drop eye-to-floor sweep fits clear topology");
+
+    const game::ItemDropCandidate wall = game::BuildItemDropCandidate(
+            world,
+            10,
+            Vector3{0.4f, 0.0f, 4.0f},
+            game::kItemDropFallbackLocalBounds);
+    Check(wall.valid && !game::ItemDropFitsTopology(world, wall),
+          "drop candidate overlapping a wall is refused");
+
+    const game::SectorCollisionWorld lowWorld = BuildWorld(MakeSquare(0.0f, 4.0f));
+    const game::ItemDropCandidate lowCeiling = game::BuildItemDropCandidate(
+            lowWorld,
+            10,
+            Vector3{4.0f, 0.0f, 4.0f},
+            game::kItemDropFallbackLocalBounds);
+    Check(lowCeiling.valid && !game::ItemDropFitsTopology(lowWorld, lowCeiling),
+          "drop candidate exceeding the ceiling is refused");
+    const game::ItemDropCandidate lowSweep =
+            game::BuildLiftedItemDropSweep(lowCeiling, 1.0f);
+    Check(lowSweep.valid && !game::ItemDropFitsTopology(lowWorld, lowSweep),
+          "drop eye-to-floor sweep respects sector ceiling clearance");
+
+    game::SectorStaticModelCollider prop;
+    prop.center = Vector2{4.0f, 4.0f};
+    prop.axisX = Vector2{1.0f, 0.0f};
+    prop.axisZ = Vector2{0.0f, 1.0f};
+    prop.halfExtents = Vector2{0.25f, 0.25f};
+    prop.bottom = 0.0f;
+    prop.top = 1.0f;
+    prop.resolved = true;
+    Check(game::ItemDropBoundsOverlap(clear.worldBounds, prop),
+          "drop bounds detect static or dynamic prop overlap");
+
+    std::vector<game::SectorStaticModelCollider> propColliders;
+    Check(!game::ItemDropBoundsOverlapAnyPropCollider(
+                  clear.worldBounds, propColliders),
+          "drop clearance ignores props without collision components");
+    propColliders.push_back(prop);
+    Check(game::ItemDropBoundsOverlapAnyPropCollider(
+                  clear.worldBounds, propColliders),
+          "drop clearance rejects resolved collision-enabled props");
+
+    game::SectorDynamicDoorCollider door;
+    door.center = Vector2{4.0f, 4.0f};
+    door.tangent = Vector2{1.0f, 0.0f};
+    door.normal = Vector2{0.0f, 1.0f};
+    door.halfExtents = Vector2{0.5f, 0.1f};
+    door.bottom = 0.0f;
+    door.top = 2.0f;
+    Check(game::ItemDropBoundsOverlap(clear.worldBounds, door),
+          "drop bounds detect door overlap");
+    Check(game::ItemDropBoundsOverlapPlayer(
+                  clear.worldBounds,
+                  Vector3{4.0f, 0.0f, 4.0f},
+                  0.25f,
+                  1.6f),
+          "drop bounds detect player overlap");
+    Check(!game::ItemDropBoundsOverlapPlayer(
+                  clear.worldBounds,
+                  Vector3{2.0f, 0.0f, 2.0f},
+                  0.25f,
+                  1.6f),
+          "drop bounds allow a separated player");
+
+    const auto slots = game::BuildItemDropSlotOrigins(
+            Vector3{4.0f, 0.0f, 4.0f},
+            Vector3{1.0f, 0.0f, 0.0f},
+            0.25f,
+            game::kItemDropFallbackLocalBounds);
+    bool allSlotsInFront = true;
+    bool allSlotsDistinct = true;
+    for (std::size_t first = 0; first < slots.size(); ++first) {
+        allSlotsInFront = allSlotsInFront && slots[first].x > 4.0f;
+        for (std::size_t second = first + 1; second < slots.size(); ++second) {
+            const float dx = slots[first].x - slots[second].x;
+            const float dz = slots[first].z - slots[second].z;
+            allSlotsDistinct = allSlotsDistinct
+                    && dx * dx + dz * dz > 0.01f;
+        }
+    }
+    Check(allSlotsInFront && allSlotsDistinct,
+          "drop placement builds six distinct fan slots in front of the player");
+
+    const float firstYaw = game::BuildItemDropRandomYawRadians(12, 31);
+    const float secondYaw = game::BuildItemDropRandomYawRadians(12, 32);
+    Check(firstYaw >= 0.0f && firstYaw < 2.0f * PI
+                  && secondYaw >= 0.0f && secondYaw < 2.0f * PI
+                  && !Near(firstYaw, secondYaw),
+          "drop placement produces varied normalized yaw values");
+
+    const BoundingBox rectangularBounds{
+            Vector3{-1.0f, 0.0f, -0.25f},
+            Vector3{1.0f, 0.5f, 0.25f}};
+    const game::ItemDropCandidate rotated = game::BuildItemDropCandidate(
+            world,
+            10,
+            Vector3{4.0f, 0.0f, 4.0f},
+            rectangularBounds,
+            PI * 0.5f);
+    Check(rotated.valid
+                  && Near(rotated.yawRadians, PI * 0.5f)
+                  && Near(rotated.worldBounds.max.x - rotated.worldBounds.min.x, 0.5f)
+                  && Near(rotated.worldBounds.max.z - rotated.worldBounds.min.z, 2.0f),
+          "drop clearance rotates rectangular item bounds with the chosen yaw");
+}
+
 } // namespace
 
 int main()
@@ -1029,6 +1157,7 @@ int main()
     TestFeetHeightControlsReverseStepBlocking();
     TestGroundedDropConstraint();
     TestSectorFallbackAndBoundary();
+    TestItemDropClearanceQueries();
     if (failures == 0) {
         std::puts("Sector collision movement tests passed");
     }

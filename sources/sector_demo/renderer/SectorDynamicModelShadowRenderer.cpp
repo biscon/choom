@@ -86,6 +86,113 @@ WorldBounds TransformBounds(BoundingBox bounds, Matrix transform)
     return result;
 }
 
+void DrawContactShadowForModel(
+        const SectorDynamicModelShadowDrawContext& context,
+        Material& contactMaterial,
+        int contactOpacityLoc,
+        Mesh& contactMesh,
+        SectorObjectTransform& transform,
+        SectorObject& object,
+        engine::ModelHandle modelHandle,
+        SectorDynamicModelShadowMode shadowMode,
+        float scale)
+{
+    if (!object.visible
+            || shadowMode != SectorDynamicModelShadowMode::Contact
+            || !ShouldDrawRuntimeSectorForVisibility(
+                    object.currentSectorId,
+                    *context.visibility)) {
+        return;
+    }
+    const engine::ModelAsset* asset =
+            context.assets->GetModelAsset(modelHandle);
+    if (asset == nullptr) return;
+    SectorCollisionHeights heights;
+    if (!context.collisionWorld->GetSectorFloorCeiling(
+                object.currentSectorId,
+                &heights)) {
+        return;
+    }
+    const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
+            transform.position,
+            transform.rotationXRadians,
+            transform.yawRadians,
+            transform.rotationZRadians,
+            scale);
+    const WorldBounds bounds = TransformBounds(
+            asset->localBounds,
+            authoredTransform);
+    const Vector3 localCenter = Vector3Scale(
+            Vector3Add(asset->localBounds.min, asset->localBounds.max),
+            0.5f);
+    const Vector3 footprintCenter = Vector3Transform(
+            localCenter,
+            authoredTransform);
+    const Vector3 footprintAxisX = NormalizeOr(
+            RotateSectorStaticModelDirection(
+                    Vector3{1.0f, 0.0f, 0.0f},
+                    0.0f,
+                    transform.yawRadians,
+                    0.0f),
+            Vector3{1.0f, 0.0f, 0.0f});
+    const Vector3 footprintAxisZ = NormalizeOr(
+            RotateSectorStaticModelDirection(
+                    Vector3{0.0f, 0.0f, 1.0f},
+                    0.0f,
+                    transform.yawRadians,
+                    0.0f),
+            Vector3{0.0f, 0.0f, 1.0f});
+    float authoredHalfX = 0.0f;
+    float authoredHalfZ = 0.0f;
+    for (float x : {asset->localBounds.min.x, asset->localBounds.max.x}) {
+        for (float y : {asset->localBounds.min.y, asset->localBounds.max.y}) {
+            for (float z : {asset->localBounds.min.z, asset->localBounds.max.z}) {
+                const Vector3 corner = Vector3Transform(
+                        Vector3{x, y, z},
+                        authoredTransform);
+                const Vector3 offset = Vector3Subtract(corner, footprintCenter);
+                authoredHalfX = std::max(
+                        authoredHalfX,
+                        std::fabs(Vector3DotProduct(offset, footprintAxisX)));
+                authoredHalfZ = std::max(
+                        authoredHalfZ,
+                        std::fabs(Vector3DotProduct(offset, footprintAxisZ)));
+            }
+        }
+    }
+    const float gap = std::max(0.0f, bounds.min.y - heights.floorZ);
+    if (gap >= ContactFadeDistance) return;
+    const float fade = gap <= ContactFullOpacityGap
+            ? 1.0f
+            : 1.0f - (gap - ContactFullOpacityGap)
+                    / (ContactFadeDistance - ContactFullOpacityGap);
+    const float growth = 1.0f + 0.15f * std::clamp(
+            gap / ContactFadeDistance,
+            0.0f,
+            1.0f);
+    const float halfX = std::max(
+            authoredHalfX,
+            MinimumContactHalfExtent) * growth;
+    const float halfZ = std::max(
+            authoredHalfZ,
+            MinimumContactHalfExtent) * growth;
+    const float opacity = ContactShadowOpacity * fade;
+    SetShaderValue(
+            contactMaterial.shader,
+            contactOpacityLoc,
+            &opacity,
+            SHADER_UNIFORM_FLOAT);
+    const Matrix model = MatrixMultiply(
+            MatrixScale(halfX, 1.0f, halfZ),
+            MatrixMultiply(
+                    MatrixRotateY(transform.yawRadians),
+                    MatrixTranslate(
+                            footprintCenter.x,
+                            heights.floorZ + 0.006f,
+                            footprintCenter.z)));
+    DrawMesh(contactMesh, contactMaterial, model);
+}
+
 } // namespace
 
 bool SectorDynamicModelShadowRenderer::Load()
@@ -199,113 +306,32 @@ void SectorDynamicModelShadowRenderer::DrawContactShadows(
                     SectorObject& object,
                     SectorDynamicModel& dynamicModel,
                     engine::AnimatedModelInstance& instance) {
-                if (!object.visible
-                        || dynamicModel.shadowMode
-                                != SectorDynamicModelShadowMode::Contact
-                        || !ShouldDrawRuntimeSectorForVisibility(
-                                object.currentSectorId,
-                                *context.visibility)) {
-                    return;
-                }
-                const engine::ModelAsset* asset =
-                        context.assets->GetModelAsset(instance.model);
-                if (asset == nullptr) return;
-                SectorCollisionHeights heights;
-                if (!context.collisionWorld->GetSectorFloorCeiling(
-                            object.currentSectorId,
-                            &heights)) {
-                    return;
-                }
-                const Matrix authoredTransform =
-                        BuildSectorStaticModelAuthoredTransform(
-                                transform.position,
-                                transform.rotationXRadians,
-                                transform.yawRadians,
-                                transform.rotationZRadians,
-                                dynamicModel.scale);
-                const WorldBounds bounds = TransformBounds(
-                        asset->localBounds,
-                        authoredTransform);
-                const Vector3 localCenter = Vector3Scale(
-                        Vector3Add(
-                                asset->localBounds.min,
-                                asset->localBounds.max),
-                        0.5f);
-                const Vector3 footprintCenter = Vector3Transform(
-                        localCenter,
-                        authoredTransform);
-                const Vector3 footprintAxisX = NormalizeOr(
-                        RotateSectorStaticModelDirection(
-                                Vector3{1.0f, 0.0f, 0.0f},
-                                0.0f,
-                                transform.yawRadians,
-                                0.0f),
-                        Vector3{1.0f, 0.0f, 0.0f});
-                const Vector3 footprintAxisZ = NormalizeOr(
-                        RotateSectorStaticModelDirection(
-                                Vector3{0.0f, 0.0f, 1.0f},
-                                0.0f,
-                                transform.yawRadians,
-                                0.0f),
-                        Vector3{0.0f, 0.0f, 1.0f});
-                float authoredHalfX = 0.0f;
-                float authoredHalfZ = 0.0f;
-                for (float x : {asset->localBounds.min.x, asset->localBounds.max.x}) {
-                    for (float y : {asset->localBounds.min.y, asset->localBounds.max.y}) {
-                        for (float z : {asset->localBounds.min.z, asset->localBounds.max.z}) {
-                            const Vector3 corner = Vector3Transform(
-                                    Vector3{x, y, z},
-                                    authoredTransform);
-                            const Vector3 offset = Vector3Subtract(
-                                    corner,
-                                    footprintCenter);
-                            authoredHalfX = std::max(
-                                    authoredHalfX,
-                                    std::fabs(Vector3DotProduct(
-                                            offset,
-                                            footprintAxisX)));
-                            authoredHalfZ = std::max(
-                                    authoredHalfZ,
-                                    std::fabs(Vector3DotProduct(
-                                            offset,
-                                            footprintAxisZ)));
-                        }
-                    }
-                }
-                const float gap = std::max(
-                        0.0f,
-                        bounds.min.y - heights.floorZ);
-                if (gap >= ContactFadeDistance) return;
-                const float fade = gap <= ContactFullOpacityGap
-                        ? 1.0f
-                        : 1.0f - (gap - ContactFullOpacityGap)
-                                / (ContactFadeDistance
-                                        - ContactFullOpacityGap);
-                const float growth = 1.0f + 0.15f * std::clamp(
-                        gap / ContactFadeDistance,
-                        0.0f,
-                        1.0f);
-                const float halfX = std::max(
-                        authoredHalfX,
-                        MinimumContactHalfExtent) * growth;
-                const float halfZ = std::max(
-                        authoredHalfZ,
-                        MinimumContactHalfExtent) * growth;
-                const float opacity = ContactShadowOpacity * fade;
-                SetShaderValue(
-                        contactMaterial.shader,
+                DrawContactShadowForModel(
+                        context,
+                        contactMaterial,
                         contactOpacityLoc,
-                        &opacity,
-                        SHADER_UNIFORM_FLOAT);
-                const Matrix model = MatrixMultiply(
-                        MatrixScale(halfX, 1.0f, halfZ),
-                        MatrixMultiply(
-                                MatrixRotateY(transform.yawRadians),
-                                MatrixTranslate(
-                                        footprintCenter.x,
-                                        heights.floorZ + 0.006f,
-                                        footprintCenter.z)));
-                DrawMesh(contactMesh, contactMaterial, model);
+                        contactMesh,
+                        transform,
+                        object,
+                        instance.model,
+                        dynamicModel.shadowMode,
+                        dynamicModel.scale);
+            });
+    context.world->ForEach<SectorObjectTransform, SectorObject, SectorItem>(
+            [&](engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorItem& item) {
+                DrawContactShadowForModel(
+                        context,
+                        contactMaterial,
+                        contactOpacityLoc,
+                        contactMesh,
+                        transform,
+                        object,
+                        item.model,
+                        item.shadowMode,
+                        item.scale * item.presentation.scaleMultiplier);
             });
 }
 

@@ -355,6 +355,12 @@ if(BUILD_TESTING)
 
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
+            sources/game/items/ItemAssets.cpp
+            sources/game/items/ItemDefinitions.cpp
+            sources/game/items/ItemIconLayout.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
@@ -423,6 +429,10 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_serialization_tests
             tests/SectorTopologySerializationTests.cpp
+            sources/game/items/ItemDefinitions.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/game/SectorLevelLoader.cpp
@@ -551,6 +561,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_collision_movement_tests
             tests/SectorCollisionMovementTests.cpp
+            sources/game/items/ItemDropPlacement.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -574,6 +585,13 @@ if(BUILD_TESTING)
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/game/items/ItemAssets.cpp
+            sources/game/items/ItemDefinitions.cpp
+            sources/game/items/ItemIconLayout.cpp
+            sources/game/items/ItemPresentation.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
             sources/game/navigation/SectorNavigationBuildInput.cpp
             sources/game/navigation/SectorNavigationCompression.cpp
             sources/game/navigation/SectorNavigationTypes.cpp
@@ -665,6 +683,7 @@ if(BUILD_TESTING)
 
     add_executable(weapon_editor_service_tests
             tests/WeaponEditorServiceTests.cpp
+            sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/FpsWeaponAudio.cpp
             sources/game/PlayerStamina.cpp
@@ -683,6 +702,26 @@ if(BUILD_TESTING)
             ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(weapon_editor_service_tests PRIVATE raylib)
     add_test(NAME weapon_editor_service COMMAND weapon_editor_service_tests)
+
+    add_executable(item_definition_tests
+            tests/ItemDefinitionTests.cpp
+            sources/game/items/ItemDefinitions.cpp
+            sources/game/items/ItemIconLayout.cpp
+            sources/game/items/ItemInventory.cpp
+            sources/game/items/ItemInventoryUILayout.cpp
+            sources/game/items/ItemPresentation.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_editor/items/SectorEditorItemEditorService.cpp
+            sources/sector_editor/items/SectorItemReferenceScanner.cpp
+    )
+    target_include_directories(item_definition_tests PRIVATE sources)
+    target_compile_definitions(item_definition_tests PRIVATE
+            ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(item_definition_tests PRIVATE raylib)
+    add_test(NAME item_definition COMMAND item_definition_tests)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
