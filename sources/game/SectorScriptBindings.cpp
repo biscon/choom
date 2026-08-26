@@ -1571,6 +1571,26 @@ void UpdateSectorScriptOperations(
             host.npcMoves.end());
 }
 
+void InterruptSectorScriptNpcMoveForAi(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        const char* instanceId)
+{
+    if (instanceId == nullptr || host.scripts == nullptr) return;
+    for (SectorScriptNpcMove& move : host.npcMoves) {
+        if (!move.active || move.instanceId != instanceId) continue;
+        ++host.npcMoveDiagnostics.cancellations;
+        RecordNpcMoveOutcome(
+                host, move.instanceId, "player detected; AI took control");
+        engine::ScriptSystemCancelOperation(
+                context,
+                *host.scripts,
+                move.operation,
+                "player detected; AI took control");
+        move.active = false;
+    }
+}
+
 bool SetSectorScriptTriggerEnabled(
         SectorScriptHost& host,
         const std::string& triggerId,

@@ -148,6 +148,7 @@ struct FpsWeaponPelletDefinition {
 struct FpsWeaponFiringDefinition {
     float shotIntervalSeconds = 0.18f;
     float maximumRangeWorld = 100.0f;
+    float noiseRadiusWorld = 40.0f;
     FpsWeaponPelletDefinition pellets;
     std::string shootSoundPath;
     engine::SoundHandle shootSound = engine::NullSoundHandle();
@@ -269,6 +270,8 @@ struct FootstepApplicationSettings {
     std::string defaultSet = "Tile_Mono";
     float volume = 0.65f;
     float landingImpactVolumeMultiplier = 1.35f;
+    float noiseRadiusWorld = 6.0f;
+    float landingNoiseRadiusWorld = 12.0f;
 };
 
 struct PlayerSoundEventSettings {

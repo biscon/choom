@@ -102,6 +102,7 @@ private:
     void StartNewGame(engine::EngineContext& context);
     void ResumeGame(engine::EngineContext& context);
     void ClearGameSession(engine::EngineContext& context);
+    void EndGameToMainMenu(engine::EngineContext& context);
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
     bool DebugConsoleAvailable() const;
@@ -126,6 +127,7 @@ private:
     std::optional<FpsApplicationSettings> pendingGraphicsSettings;
     FpsApplicationSettings graphicsSettingsDraft;
     bool graphicsSettingsOpen = false;
+    bool pendingGameOverMainMenu = false;
     bool editorAttachedToGame = false;
     engine::FontHandle usePromptFont = engine::NullFontHandle();
     bool initialized = false;

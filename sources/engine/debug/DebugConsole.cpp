@@ -177,6 +177,15 @@ void HandleReload(
         const std::vector<std::string>& tokens,
         std::string_view currentMapId);
 
+void HandleGodMode(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId);
+void HandleFreezeAi(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId);
+
 struct CommandDefinition {
     const char* name;
     const char* usage;
@@ -190,6 +199,10 @@ constexpr CommandDefinition Commands[] = {
                 HandleCopyLast},
         {"help", "/help [command]", "list commands or describe one command",
                 HandleHelp},
+        {"god", "/god [on|off]", "toggle player invulnerability",
+                HandleGodMode},
+        {"freezeai", "/freezeai [on|off]", "toggle NPC AI simulation",
+                HandleFreezeAi},
         {"quit", "/quit", "quit through normal application shutdown",
                 HandleQuit},
         {"reload", "/reload", "restart the current map from disk",
@@ -307,7 +320,7 @@ void HandleReload(
         return;
     }
     if (console.pendingAction.type != DeferredDebugActionType::None) {
-        AddError(console, "another reload or quit action is already pending");
+        AddError(console, "another console action is already pending");
         return;
     }
     console.pendingAction = DeferredDebugAction{
@@ -328,11 +341,72 @@ void HandleQuit(
         return;
     }
     if (console.pendingAction.type != DeferredDebugActionType::None) {
-        AddError(console, "another reload or quit action is already pending");
+        AddError(console, "another console action is already pending");
         return;
     }
     console.pendingAction.type = DeferredDebugActionType::QuitApplication;
     DebugConsoleAddLine(console, "quit queued", DebugConsoleSeverity::Success);
+}
+
+bool QueueBooleanAction(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId,
+        DeferredDebugActionType type,
+        const char* usage,
+        const char* label)
+{
+    if (tokens.size() > 2) {
+        AddError(console, std::string{"usage: "} + usage);
+        return false;
+    }
+    if (currentMapId.empty()) {
+        AddError(console, std::string{label} + " unavailable: no active game map");
+        return false;
+    }
+    DeferredDebugBooleanMode mode = DeferredDebugBooleanMode::Toggle;
+    if (tokens.size() == 2) {
+        std::string value = tokens[1];
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (value == "on") mode = DeferredDebugBooleanMode::Enable;
+        else if (value == "off") mode = DeferredDebugBooleanMode::Disable;
+        else {
+            AddError(console, std::string{"usage: "} + usage);
+            return false;
+        }
+    }
+    if (console.pendingAction.type != DeferredDebugActionType::None) {
+        AddError(console, "another console action is already pending");
+        return false;
+    }
+    console.pendingAction.type = type;
+    console.pendingAction.mapId = std::string{currentMapId};
+    console.pendingAction.booleanMode = mode;
+    return true;
+}
+
+void HandleGodMode(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId)
+{
+    QueueBooleanAction(
+            console, tokens, currentMapId,
+            DeferredDebugActionType::SetGodMode,
+            "/god [on|off]", "god mode");
+}
+
+void HandleFreezeAi(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId)
+{
+    QueueBooleanAction(
+            console, tokens, currentMapId,
+            DeferredDebugActionType::SetFreezeAi,
+            "/freezeai [on|off]", "AI freeze");
 }
 
 void ExecuteCommand(

@@ -352,6 +352,7 @@ void ValidateFiring(
 {
     const float values[] = {
             value.shotIntervalSeconds, value.maximumRangeWorld,
+            value.noiseRadiusWorld,
             value.pellets.spreadHalfAngleDegrees,
             value.recoil.translationImpulse.x, value.recoil.translationImpulse.y,
             value.recoil.translationImpulse.z,
@@ -399,6 +400,9 @@ void ValidateFiring(
     }
     if (value.shotIntervalSeconds <= 0.0f || value.maximumRangeWorld <= 0.0f) {
         Fail(context + " shot interval and maximum range must be greater than zero");
+    }
+    if (value.noiseRadiusWorld < 0.0f || value.noiseRadiusWorld > 10000.0f) {
+        Fail(context + ".noiseRadiusWorld must be between 0 and 10000");
     }
     if (value.pellets.count < 1
             || value.pellets.count > MaxFpsWeaponPellets
@@ -505,6 +509,13 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     FpsWeaponFiringDefinition result;
     result.shotIntervalSeconds = Number(object, "shotIntervalSeconds", context);
     result.maximumRangeWorld = Number(object, "maximumRangeWorld", context);
+    if (const auto noiseRadius = object.find("noiseRadiusWorld");
+            noiseRadius != object.end()) {
+        if (!noiseRadius->is_number()) {
+            Fail(context + ".noiseRadiusWorld must be a number");
+        }
+        result.noiseRadiusWorld = noiseRadius->get<float>();
+    }
     const auto pellets = object.find("pellets");
     if (pellets != object.end()) {
         const std::string pelletsContext = context + ".pellets";
@@ -777,6 +788,7 @@ Json FiringValue(const FpsWeaponFiringDefinition& value)
     Json firing{
             {"shotIntervalSeconds", value.shotIntervalSeconds},
             {"maximumRangeWorld", value.maximumRangeWorld},
+            {"noiseRadiusWorld", value.noiseRadiusWorld},
             {"recoil", {
                     {"translationImpulse", Vec(value.recoil.translationImpulse)},
                     {"rotationImpulseDegrees", Vec(value.recoil.rotationImpulseDegrees)},
@@ -1516,6 +1528,24 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 parsed.footsteps.landingImpactVolumeMultiplier =
                         static_cast<float>(value);
             }
+            const auto readNoiseRadius = [&](const char* name, float& output) {
+                const auto member = footsteps->find(name);
+                if (member == footsteps->end()) return;
+                if (!member->is_number()) {
+                    Fail(std::string("application settings.footsteps.") + name
+                            + " must be a number");
+                }
+                const double value = member->get<double>();
+                if (!std::isfinite(value) || value < 0.0 || value > 10000.0) {
+                    Fail(std::string("application settings.footsteps.") + name
+                            + " must be between 0 and 10000");
+                }
+                output = static_cast<float>(value);
+            };
+            readNoiseRadius("noiseRadiusWorld", parsed.footsteps.noiseRadiusWorld);
+            readNoiseRadius(
+                    "landingNoiseRadiusWorld",
+                    parsed.footsteps.landingNoiseRadiusWorld);
         }
         const auto playerSounds = root.find("playerSounds");
         if (playerSounds != root.end()) {
@@ -1822,6 +1852,15 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings landing footstep volume multiplier must be non-negative");
         return false;
     }
+    if (!std::isfinite(settings.footsteps.noiseRadiusWorld)
+            || settings.footsteps.noiseRadiusWorld < 0.0f
+            || settings.footsteps.noiseRadiusWorld > 10000.0f
+            || !std::isfinite(settings.footsteps.landingNoiseRadiusWorld)
+            || settings.footsteps.landingNoiseRadiusWorld < 0.0f
+            || settings.footsteps.landingNoiseRadiusWorld > 10000.0f) {
+        SetError(error, "application settings footstep noise radii must be between 0 and 10000");
+        return false;
+    }
     if (!std::isfinite(settings.playerInventory.maxCarryWeightKg)
             || settings.playerInventory.maxCarryWeightKg <= 0.0f) {
         SetError(error, "application settings playerInventory.maxCarryWeightKg must be finite and positive");
@@ -1876,7 +1915,10 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"defaultSet", settings.footsteps.defaultSet},
                     {"volume", settings.footsteps.volume},
                     {"landingImpactVolumeMultiplier",
-                            settings.footsteps.landingImpactVolumeMultiplier}}}};
+                            settings.footsteps.landingImpactVolumeMultiplier},
+                    {"noiseRadiusWorld", settings.footsteps.noiseRadiusWorld},
+                    {"landingNoiseRadiusWorld",
+                            settings.footsteps.landingNoiseRadiusWorld}}}};
     const FpsGraphicsSettings graphics =
             NormalizeFpsGraphicsSettings(settings.graphics);
     root["graphics"] = {
@@ -2610,6 +2652,9 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
 {
     value.shotIntervalSeconds = std::clamp(value.shotIntervalSeconds, 0.03f, 5.0f);
     value.maximumRangeWorld = std::clamp(value.maximumRangeWorld, 1.0f, 10000.0f);
+    value.noiseRadiusWorld = std::isfinite(value.noiseRadiusWorld)
+            ? std::clamp(value.noiseRadiusWorld, 0.0f, 10000.0f)
+            : FpsWeaponFiringDefinition{}.noiseRadiusWorld;
     value.pellets.count = std::clamp(
             value.pellets.count, 1, MaxFpsWeaponPellets);
     value.pellets.spreadHalfAngleDegrees = std::isfinite(

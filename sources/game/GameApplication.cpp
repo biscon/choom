@@ -195,6 +195,38 @@ void GameApplication::ProcessDeferredDebugActions(
         RequestApplicationQuit(flow);
         return;
     }
+    if (action.type == engine::DeferredDebugActionType::SetGodMode
+            || action.type == engine::DeferredDebugActionType::SetFreezeAi) {
+        if (!gameSession.IsRunning()
+                || action.mapId != gameSession.LevelName()) {
+            engine::DebugConsoleAddLine(
+                    debugConsole,
+                    "debug toggle cancelled: the active game map changed",
+                    engine::DebugConsoleSeverity::Error);
+            return;
+        }
+        const bool current = action.type
+                        == engine::DeferredDebugActionType::SetGodMode
+                ? gameSession.GodMode() : gameSession.AiFrozen();
+        const bool enabled = action.booleanMode
+                        == engine::DeferredDebugBooleanMode::Toggle
+                ? !current
+                : action.booleanMode
+                        == engine::DeferredDebugBooleanMode::Enable;
+        if (action.type == engine::DeferredDebugActionType::SetGodMode) {
+            gameSession.SetGodMode(enabled);
+        } else {
+            gameSession.SetAiFrozen(enabled);
+        }
+        engine::DebugConsoleAddLine(
+                debugConsole,
+                std::string{action.type
+                                == engine::DeferredDebugActionType::SetGodMode
+                            ? "god mode " : "AI freeze "}
+                        + (enabled ? "on" : "off"),
+                engine::DebugConsoleSeverity::Success);
+        return;
+    }
     if (!gameSession.IsRunning() || action.mapId != gameSession.LevelName()) {
         engine::DebugConsoleAddLine(
                 debugConsole,
@@ -266,6 +298,10 @@ void GameApplication::RenderInteractiveUI(
                 usePromptFont);
         gameSession.RenderNavigationDebugPanel(
                 config, assets, smallFont, gameScene);
+        if (gameSession.IsGameOver()) {
+            pendingGameOverMainMenu = DrawGameOverOverlay(
+                    menuUi, config, input, assets, font, smallFont);
+        }
     }
     if (flow.screen == ApplicationScreen::MainMenu) {
         if (graphicsSettingsOpen) {
@@ -292,6 +328,11 @@ void GameApplication::RenderInteractiveUI(
 void GameApplication::Update(engine::EngineContext& context, float dt)
 {
     if (!initialized) {
+        return;
+    }
+    if (pendingGameOverMainMenu) {
+        pendingGameOverMainMenu = false;
+        EndGameToMainMenu(context);
         return;
     }
     if (pendingMenuAction.has_value()) {
@@ -368,6 +409,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
     }
 
     if (flow.screen == ApplicationScreen::Game) {
+        if (gameSession.IsGameOver()) return;
         bool menuRequested = false;
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
@@ -768,6 +810,20 @@ void GameApplication::ClearGameSession(engine::EngineContext& context)
     menuStatus.clear();
     MarkApplicationGameStopped(flow);
     ShowApplicationEditor(flow);
+}
+
+void GameApplication::EndGameToMainMenu(engine::EngineContext& context)
+{
+    if (!gameSession.IsRunning()) return;
+    context.audio.StopAll(context.assets);
+    gameSession.Shutdown(context, gameScene);
+    itemCampaign = ItemCampaignState{};
+    persistentScripts = engine::PersistentScriptStore{};
+    editorAttachedToGame = false;
+    editor.SetGameSessionExists(false);
+    debugConsole.open = false;
+    menuStatus.clear();
+    MarkApplicationGameStopped(flow);
 }
 
 void GameApplication::OpenEditor(engine::EngineContext& context)

@@ -1,5 +1,7 @@
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 
+#include "game/npc/ai/NpcAiTypes.h"
+
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
@@ -155,6 +157,9 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                     editor.SetSelectedActionSound(
                             state.audioPicker.action, selected);
                     break;
+                case SectorEditorNpcAudioPickerTarget::Attack:
+                    editor.SetSelectedAttackSound(selected);
+                    break;
                 case SectorEditorNpcAudioPickerTarget::AmbientAdd:
                     editor.AddSelectedAmbientSound(selected);
                     break;
@@ -267,8 +272,8 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
     } else {
         editor.RefreshAnimationOptions(assets);
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
-        const float actionSectionHeight = 6.0f * (RowHeight + RowGap) + 84.0f;
-        const float contentHeight = 15.0f * (RowHeight + RowGap)
+        const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
+        const float contentHeight = 20.0f * (RowHeight + RowGap)
                 + static_cast<float>(
                         selected->definition.ambientVocalizations.soundPaths.size())
                         * (RowHeight + RowGap)
@@ -324,6 +329,105 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                     Rectangle{fieldX, y, 260.0f, RowHeight},
                     font, "Hostile", hostile)) {
             editor.SetSelectedHostile(hostile);
+        }
+        y += RowHeight + RowGap;
+
+        drawLabel("AI Type");
+        std::vector<std::string> aiOptionStorage{"None"};
+        std::vector<std::string> aiOptionIds{""};
+        for (const NpcAiTypeDescriptor& type : NpcAiTypeRegistry()) {
+            if (!IsNpcAiTypeCompatible(type, selected->definition.hostile)) continue;
+            aiOptionStorage.emplace_back(type.displayName);
+            aiOptionIds.emplace_back(type.id);
+        }
+        int selectedAi = 0;
+        for (size_t index = 1; index < aiOptionIds.size(); ++index) {
+            if (aiOptionIds[index] == selected->definition.aiType) {
+                selectedAi = static_cast<int>(index);
+                break;
+            }
+        }
+        if (!selected->definition.aiType.empty() && selectedAi == 0) {
+            aiOptionStorage.push_back(
+                    "<Incompatible: " + selected->definition.aiType + ">");
+            aiOptionIds.push_back(selected->definition.aiType);
+            selectedAi = static_cast<int>(aiOptionIds.size()) - 1;
+        }
+        const int previousAi = selectedAi;
+        if (engine::Option(
+                    ui, config, input, assets,
+                    "sector_editor_npc_ai_type",
+                    Rectangle{fieldX, y, fieldW, RowHeight},
+                    font, aiOptionStorage, selectedAi)
+                && selectedAi != previousAi
+                && selectedAi >= 0
+                && selectedAi < static_cast<int>(aiOptionIds.size())) {
+            editor.SetSelectedAiType(
+                    aiOptionIds[static_cast<size_t>(selectedAi)]);
+        }
+        y += RowHeight + RowGap;
+
+        drawLabel("Vision range world");
+        float visionRange = selected->definition.perception.visionRangeWorld;
+        auto perceptionFloat = engine::FloatInput(
+                ui, config, input, assets, "sector_editor_npc_vision_range",
+                Rectangle{fieldX, y, 190.0f, RowHeight}, font, visionRange,
+                state.visionRangeWorldInput, 0.0f, 10000.0f, 2);
+        if (perceptionFloat.changed) {
+            editor.SetSelectedPerception(
+                    visionRange,
+                    selected->definition.perception.visionAngleDegrees,
+                    selected->definition.perception.hearingRangeWorld,
+                    selected->definition.perception.investigationDurationMilliseconds);
+        }
+        y += RowHeight + RowGap;
+
+        drawLabel("Vision angle degrees");
+        float visionAngle = selected->definition.perception.visionAngleDegrees;
+        perceptionFloat = engine::FloatInput(
+                ui, config, input, assets, "sector_editor_npc_vision_angle",
+                Rectangle{fieldX, y, 190.0f, RowHeight}, font, visionAngle,
+                state.visionAngleDegreesInput, 0.01f, 359.99f, 2);
+        if (perceptionFloat.changed) {
+            editor.SetSelectedPerception(
+                    selected->definition.perception.visionRangeWorld,
+                    visionAngle,
+                    selected->definition.perception.hearingRangeWorld,
+                    selected->definition.perception.investigationDurationMilliseconds);
+        }
+        y += RowHeight + RowGap;
+
+        drawLabel("Hearing range world");
+        float hearingRange = selected->definition.perception.hearingRangeWorld;
+        perceptionFloat = engine::FloatInput(
+                ui, config, input, assets, "sector_editor_npc_hearing_range",
+                Rectangle{fieldX, y, 190.0f, RowHeight}, font, hearingRange,
+                state.hearingRangeWorldInput, 0.0f, 10000.0f, 2);
+        if (perceptionFloat.changed) {
+            editor.SetSelectedPerception(
+                    selected->definition.perception.visionRangeWorld,
+                    selected->definition.perception.visionAngleDegrees,
+                    hearingRange,
+                    selected->definition.perception.investigationDurationMilliseconds);
+        }
+        y += RowHeight + RowGap;
+
+        drawLabel("Investigation ms");
+        int investigationMs = selected->definition.perception
+                .investigationDurationMilliseconds;
+        const engine::UINumericInputResult investigationResult = engine::IntInput(
+                ui, config, input, assets,
+                "sector_editor_npc_investigation_ms",
+                Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                investigationMs,
+                state.investigationDurationMillisecondsInput,
+                0, 600000, 100);
+        if (investigationResult.changed) {
+            editor.SetSelectedPerception(
+                    selected->definition.perception.visionRangeWorld,
+                    selected->definition.perception.visionAngleDegrees,
+                    selected->definition.perception.hearingRangeWorld,
+                    investigationMs);
         }
         y += RowHeight + RowGap;
 
@@ -687,7 +791,8 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
             y += RowHeight + RowGap;
 
             if (metadata.hasSound) {
-                drawLabel("Sound");
+                drawLabel(metadata.action == NpcAction::Attack
+                        ? "Player impact sound" : "Sound");
                 engine::Text(
                         ui, config, assets,
                         Rectangle{
@@ -758,6 +863,128 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                         2);
                 if (movementResult.changed) {
                     editor.SetSelectedMovementSpeed(metadata.action, movementSpeed);
+                }
+                y += RowHeight + RowGap;
+            }
+
+            if (metadata.action == NpcAction::Attack) {
+                drawLabel("Attack sound");
+                engine::Text(
+                        ui, config, assets,
+                        Rectangle{
+                                fieldX,
+                                y,
+                                std::max(0.0f, fieldW - 206.0f),
+                                RowHeight},
+                        smallFont,
+                        action.attackSoundPath.empty()
+                                ? "<none>"
+                                : action.attackSoundPath.c_str(),
+                        engine::UITextJustify::Left,
+                        action.attackSoundPath.empty()
+                                ? config.mutedTextColor
+                                : config.textColor);
+                if (engine::Button(
+                            ui, config, input, assets,
+                            "sector_editor_npc_pick_attack_sound",
+                            Rectangle{
+                                    fieldX + fieldW - 196.0f,
+                                    y,
+                                    92.0f,
+                                    RowHeight},
+                            font, "Pick")) {
+                    state.audioPicker.target =
+                            SectorEditorNpcAudioPickerTarget::Attack;
+                    audioPicker.Open(
+                            state.audioPicker.assetPicker,
+                            "Pick Attack Sound",
+                            action.attackSoundPath);
+                }
+                if (engine::Button(
+                            ui, config, input, assets,
+                            "sector_editor_npc_clear_attack_sound",
+                            Rectangle{
+                                    fieldX + fieldW - 96.0f,
+                                    y,
+                                    96.0f,
+                                    RowHeight},
+                            font, "Clear")) {
+                    editor.SetSelectedAttackSound({});
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Hit phase (0-1)");
+                float value = action.hitPhase;
+                auto floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_hit_phase",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackHitPhaseInput, 0.0f, 1.0f, 3);
+                if (floatResult.changed) {
+                    editor.SetSelectedAttack(
+                            value, action.rangeWorld, action.damage,
+                            action.knockbackImpulseWorldPerSecond,
+                            action.stunMilliseconds);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Range world");
+                value = action.rangeWorld;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_range",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackRangeWorldInput, 0.001f, 10000.0f, 3);
+                if (floatResult.changed) {
+                    editor.SetSelectedAttack(
+                            action.hitPhase, value, action.damage,
+                            action.knockbackImpulseWorldPerSecond,
+                            action.stunMilliseconds);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Damage");
+                int integerValue = action.damage;
+                auto intResult = engine::IntInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_damage",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        integerValue, state.attackDamageInput, 0, 1000000, 1);
+                if (intResult.changed) {
+                    editor.SetSelectedAttack(
+                            action.hitPhase, action.rangeWorld, integerValue,
+                            action.knockbackImpulseWorldPerSecond,
+                            action.stunMilliseconds);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Knockback impulse");
+                value = action.knockbackImpulseWorldPerSecond;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_knockback",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackKnockbackInput, 0.0f, 100.0f, 3);
+                if (floatResult.changed) {
+                    editor.SetSelectedAttack(
+                            action.hitPhase, action.rangeWorld, action.damage,
+                            value, action.stunMilliseconds);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Stun ms");
+                integerValue = action.stunMilliseconds;
+                intResult = engine::IntInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_stun",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        integerValue, state.attackStunMillisecondsInput,
+                        0, 60000, 10);
+                if (intResult.changed) {
+                    editor.SetSelectedAttack(
+                            action.hitPhase, action.rangeWorld, action.damage,
+                            action.knockbackImpulseWorldPerSecond,
+                            integerValue);
                 }
                 y += RowHeight + RowGap;
             }

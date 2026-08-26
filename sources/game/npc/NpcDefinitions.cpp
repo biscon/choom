@@ -1,5 +1,7 @@
 #include "game/npc/NpcDefinitions.h"
 
+#include "game/npc/ai/NpcAiTypes.h"
+
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -21,6 +23,9 @@ constexpr float MinAnimationSpeed = 0.01f;
 constexpr float MaxAnimationSpeed = 10.0f;
 constexpr float MinMovementSpeed = 0.1f;
 constexpr float MaxMovementSpeed = 200.0f;
+constexpr float MaxWorldDistance = 10000.0f;
+constexpr float MaxKnockbackImpulse = 100.0f;
+constexpr int MaxStunMilliseconds = 60000;
 
 [[noreturn]] void Fail(const std::string& message)
 {
@@ -156,6 +161,7 @@ const std::array<NpcActionMetadata, kNpcActionCount>& NpcActionMetadataTable()
             {NpcAction::Idle, "idle", "Idle", false, 0.0f, false},
             {NpcAction::Walk, "walk", "Walk", true, 1.5f, false},
             {NpcAction::Run, "run", "Run", true, 3.0f, false},
+            {NpcAction::Attack, "attack", "Attack", false, 0.0f, true},
             {NpcAction::Hurt, "hurt", "Hurt", false, 0.0f, true},
             {NpcAction::Death, "death", "Death", false, 0.0f, true}
     }};
@@ -263,6 +269,45 @@ bool ValidateNpcDefinition(
         outError = "NPC model must be a normalized .glb or .gltf path under assets/models/characters";
         return false;
     }
+    if (!definition.aiType.empty()
+            && !IsValidNpcDefinitionId(definition.aiType)) {
+        outError = "NPC AI type must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    if (!definition.aiType.empty()) {
+        const NpcAiTypeDescriptor* aiType = FindNpcAiType(definition.aiType);
+        if (aiType == nullptr) {
+            outError = "NPC AI type is not registered: " + definition.aiType;
+            return false;
+        }
+        if (!IsNpcAiTypeCompatible(*aiType, definition.hostile)) {
+            outError = "NPC AI type is incompatible with the Hostile setting";
+            return false;
+        }
+        if (definition.aiType == kSeekAndDestroyNpcAiType) {
+            const NpcActionDefinition& attack = GetNpcAction(
+                    definition, NpcAction::Attack);
+            if (attack.animation.empty() || attack.damage <= 0) {
+                outError = "Seek & Destroy NPCs require an Attack animation and positive damage";
+                return false;
+            }
+        }
+    }
+    const NpcPerceptionDefinition& perception = definition.perception;
+    if (!std::isfinite(perception.visionRangeWorld)
+            || perception.visionRangeWorld < 0.0f
+            || perception.visionRangeWorld > MaxWorldDistance
+            || !std::isfinite(perception.visionAngleDegrees)
+            || perception.visionAngleDegrees <= 0.0f
+            || perception.visionAngleDegrees >= 360.0f
+            || !std::isfinite(perception.hearingRangeWorld)
+            || perception.hearingRangeWorld < 0.0f
+            || perception.hearingRangeWorld > MaxWorldDistance
+            || perception.investigationDurationMilliseconds < 0
+            || perception.investigationDurationMilliseconds > 600000) {
+        outError = "NPC perception ranges must be finite and non-negative, vision angle must be between 0 and 360 degrees, and investigation duration must be between 0 and 600000 ms";
+        return false;
+    }
     if (definition.baseHealth < kMinimumNpcBaseHealth
             || definition.baseHealth > kMaximumNpcBaseHealth) {
         outError = "NPC base health must be between 1 and 1000000";
@@ -318,6 +363,13 @@ bool ValidateNpcDefinition(
                     + " sound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio";
             return false;
         }
+        if (!action.attackSoundPath.empty()
+                && (metadata.action != NpcAction::Attack
+                    || !IsValidNpcAudioPath(action.attackSoundPath))) {
+            outError = std::string{"NPC "} + metadata.displayName
+                    + " attack sound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio";
+            return false;
+        }
         if (!std::isfinite(action.animationSpeed)
                 || action.animationSpeed < MinAnimationSpeed
                 || action.animationSpeed > MaxAnimationSpeed) {
@@ -331,6 +383,21 @@ bool ValidateNpcDefinition(
                         || action.movementSpeed > MaxMovementSpeed)) {
             outError = std::string{"NPC "} + metadata.displayName
                     + " movement speed must be between 0.1 and 200 world units per second";
+            return false;
+        }
+        if (metadata.action == NpcAction::Attack
+                && (!std::isfinite(action.hitPhase)
+                    || action.hitPhase < 0.0f || action.hitPhase > 1.0f
+                    || !std::isfinite(action.rangeWorld)
+                    || action.rangeWorld <= 0.0f
+                    || action.rangeWorld > MaxWorldDistance
+                    || action.damage < 0 || action.damage > 1000000
+                    || !std::isfinite(action.knockbackImpulseWorldPerSecond)
+                    || action.knockbackImpulseWorldPerSecond < 0.0f
+                    || action.knockbackImpulseWorldPerSecond > MaxKnockbackImpulse
+                    || action.stunMilliseconds < 0
+                    || action.stunMilliseconds > MaxStunMilliseconds)) {
+            outError = "NPC Attack hit phase, range, damage, knockback, or stun is outside its supported range";
             return false;
         }
     }
@@ -348,7 +415,7 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "canOpenDoors",
+                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
                  "animationBlendSeconds", "ambientVocalizations", "actions"},
@@ -364,6 +431,7 @@ bool ParseNpcDefinitionJson(
         parsed.id = RequireString(root, "id", "NPC definition");
         parsed.name = OptionalString(root, "name", {}, "NPC definition");
         parsed.hostile = OptionalBool(root, "hostile", false, "NPC definition");
+        parsed.aiType = OptionalString(root, "aiType", {}, "NPC definition");
         parsed.canOpenDoors = OptionalBool(
                 root, "canOpenDoors", true, "NPC definition");
         parsed.baseHealth = OptionalInt(
@@ -386,6 +454,29 @@ bool ParseNpcDefinitionJson(
                 "animationBlendSeconds",
                 kDefaultNpcAnimationBlendSeconds,
                 "NPC definition");
+
+        const auto perception = root.find("perception");
+        if (perception != root.end()) {
+            const std::string context = "NPC definition.perception";
+            if (!perception->is_object()) Fail(context + " must be an object");
+            RejectUnknownFields(
+                    *perception,
+                    {"visionRangeWorld", "visionAngleDegrees", "hearingRangeWorld",
+                     "investigationDurationMilliseconds"},
+                    context);
+            parsed.perception.visionRangeWorld = OptionalFloat(
+                    *perception, "visionRangeWorld",
+                    kDefaultNpcVisionRangeWorld, context);
+            parsed.perception.visionAngleDegrees = OptionalFloat(
+                    *perception, "visionAngleDegrees",
+                    kDefaultNpcVisionAngleDegrees, context);
+            parsed.perception.hearingRangeWorld = OptionalFloat(
+                    *perception, "hearingRangeWorld",
+                    kDefaultNpcHearingRangeWorld, context);
+            parsed.perception.investigationDurationMilliseconds = OptionalInt(
+                    *perception, "investigationDurationMilliseconds",
+                    kDefaultNpcInvestigationDurationMilliseconds, context);
+        }
 
         const auto ambient = root.find("ambientVocalizations");
         if (ambient != root.end()) {
@@ -437,6 +528,14 @@ bool ParseNpcDefinitionJson(
                     "animation", "animationSpeed"};
             if (metadata.hasMovementSpeed) actionFields.insert("movementSpeed");
             if (metadata.hasSound) actionFields.insert("sound");
+            if (metadata.action == NpcAction::Attack) {
+                actionFields.insert("attackSound");
+                actionFields.insert("hitPhase");
+                actionFields.insert("rangeWorld");
+                actionFields.insert("damage");
+                actionFields.insert("knockbackImpulseWorldPerSecond");
+                actionFields.insert("stunMilliseconds");
+            }
             RejectUnknownFields(
                     *it,
                     actionFields,
@@ -451,6 +550,22 @@ bool ParseNpcDefinitionJson(
             if (metadata.hasMovementSpeed) {
                 action.movementSpeed = OptionalFloat(
                         *it, "movementSpeed", action.movementSpeed, context);
+            }
+            if (metadata.action == NpcAction::Attack) {
+                action.attackSoundPath = OptionalString(
+                        *it, "attackSound", {}, context);
+                action.hitPhase = OptionalFloat(
+                        *it, "hitPhase", kDefaultNpcAttackHitPhase, context);
+                action.rangeWorld = OptionalFloat(
+                        *it, "rangeWorld", kDefaultNpcAttackRangeWorld, context);
+                action.damage = OptionalInt(
+                        *it, "damage", kDefaultNpcAttackDamage, context);
+                action.knockbackImpulseWorldPerSecond = OptionalFloat(
+                        *it, "knockbackImpulseWorldPerSecond",
+                        kDefaultNpcAttackKnockbackImpulseWorldPerSecond, context);
+                action.stunMilliseconds = OptionalInt(
+                        *it, "stunMilliseconds",
+                        kDefaultNpcAttackStunMilliseconds, context);
             }
         }
 
@@ -477,6 +592,7 @@ bool SerializeNpcDefinitionJson(
         root["id"] = definition.id;
         if (!definition.name.empty()) root["name"] = definition.name;
         if (definition.hostile) root["hostile"] = true;
+        if (!definition.aiType.empty()) root["aiType"] = definition.aiType;
         if (!definition.canOpenDoors) root["canOpenDoors"] = false;
         if (definition.baseHealth != kDefaultNpcBaseHealth) {
             root["baseHealth"] = definition.baseHealth;
@@ -495,6 +611,29 @@ bool SerializeNpcDefinitionJson(
         root["modelPath"] = definition.modelPath;
         if (definition.animationBlendSeconds != kDefaultNpcAnimationBlendSeconds) {
             root["animationBlendSeconds"] = definition.animationBlendSeconds;
+        }
+        const NpcPerceptionDefinition& perception = definition.perception;
+        if (perception.visionRangeWorld != kDefaultNpcVisionRangeWorld
+                || perception.visionAngleDegrees != kDefaultNpcVisionAngleDegrees
+                || perception.hearingRangeWorld != kDefaultNpcHearingRangeWorld
+                || perception.investigationDurationMilliseconds
+                        != kDefaultNpcInvestigationDurationMilliseconds) {
+            Json perceptionJson = Json::object();
+            if (perception.visionRangeWorld != kDefaultNpcVisionRangeWorld) {
+                perceptionJson["visionRangeWorld"] = perception.visionRangeWorld;
+            }
+            if (perception.visionAngleDegrees != kDefaultNpcVisionAngleDegrees) {
+                perceptionJson["visionAngleDegrees"] = perception.visionAngleDegrees;
+            }
+            if (perception.hearingRangeWorld != kDefaultNpcHearingRangeWorld) {
+                perceptionJson["hearingRangeWorld"] = perception.hearingRangeWorld;
+            }
+            if (perception.investigationDurationMilliseconds
+                    != kDefaultNpcInvestigationDurationMilliseconds) {
+                perceptionJson["investigationDurationMilliseconds"] =
+                        perception.investigationDurationMilliseconds;
+            }
+            root["perception"] = std::move(perceptionJson);
         }
 
         const NpcAmbientVocalizationDefinition& ambient =
@@ -533,6 +672,28 @@ bool SerializeNpcDefinitionJson(
             }
             if (metadata.hasMovementSpeed) {
                 actionJson["movementSpeed"] = action.movementSpeed;
+            }
+            if (metadata.action == NpcAction::Attack) {
+                if (!action.attackSoundPath.empty()) {
+                    actionJson["attackSound"] = action.attackSoundPath;
+                }
+                if (action.hitPhase != kDefaultNpcAttackHitPhase) {
+                    actionJson["hitPhase"] = action.hitPhase;
+                }
+                if (action.rangeWorld != kDefaultNpcAttackRangeWorld) {
+                    actionJson["rangeWorld"] = action.rangeWorld;
+                }
+                if (action.damage != kDefaultNpcAttackDamage) {
+                    actionJson["damage"] = action.damage;
+                }
+                if (action.knockbackImpulseWorldPerSecond
+                        != kDefaultNpcAttackKnockbackImpulseWorldPerSecond) {
+                    actionJson["knockbackImpulseWorldPerSecond"] =
+                            action.knockbackImpulseWorldPerSecond;
+                }
+                if (action.stunMilliseconds != kDefaultNpcAttackStunMilliseconds) {
+                    actionJson["stunMilliseconds"] = action.stunMilliseconds;
+                }
             }
             actions[metadata.jsonKey] = std::move(actionJson);
         }

@@ -512,7 +512,8 @@ NpcAnimationApplyResult ApplyNpcSemanticAnimation(
             state.blendSeconds,
             false);
     animator.speed = state.animationSpeeds[requestedIndex];
-    animator.loop = requested != NpcAction::Hurt
+    animator.loop = requested != NpcAction::Attack
+            && requested != NpcAction::Hurt
             && requested != NpcAction::Death;
     animator.targetLoop = animator.loop;
     state.appliedAction = requested;
@@ -808,7 +809,8 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& runtime,
         const std::vector<SectorDynamicDoorCollider>& doorColliders,
-        float rawDt)
+        float rawDt,
+        bool freezeAi)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     world.ForEach<SectorDoorOpenControl>(
@@ -826,6 +828,7 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
             continue;
         }
         const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
+        if (freezeAi && record.authority == NpcMoveAuthority::Ai) continue;
         const SectorObjectTransform& transform =
                 world.Get<SectorObjectTransform>(record.entity);
         if (record.doorPhase == NpcDoorTraversalPhase::None
@@ -1023,7 +1026,8 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap& map,
         float rawDt,
-        const SectorDoorPlayerObstacle* playerObstacle)
+        const SectorDoorPlayerObstacle* playerObstacle,
+        bool freezeAi)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     bool movedAnyNpc = false;
@@ -1074,7 +1078,9 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const bool staggered = world.Has<NpcCombatState>(record.entity)
                 && world.Get<NpcCombatState>(record.entity)
                         .staggerRemainingSeconds > 0.0f;
-        if (!staggered && IsActive(record.phase)
+        const bool frozenAi = freezeAi
+                && record.authority == NpcMoveAuthority::Ai;
+        if (!staggered && !frozenAi && IsActive(record.phase)
                 && navigation.IsPathRecordValid(record.pathHandle)
                 && !record.tileReplanPending
                 && record.nextCorner < record.cornerCount
@@ -1218,7 +1224,9 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const bool staggered = world.Has<NpcCombatState>(record.entity)
                 && world.Get<NpcCombatState>(record.entity)
                         .staggerRemainingSeconds > 0.0f;
-        if (!staggered && IsActive(record.phase)
+        const bool frozenAi = freezeAi
+                && record.authority == NpcMoveAuthority::Ai;
+        if (!staggered && !frozenAi && IsActive(record.phase)
                 && !record.tileReplanPending && dt > 0.0f) {
             const float movementSpeed = record.gait == NpcMoveGait::Run
                     ? npc.runSpeed : npc.walkSpeed;
@@ -1502,7 +1510,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
             record.desiredVelocity = {};
             record.actualVelocity = {};
             npc.action = NpcAction::Idle;
-        } else if (!IsActive(record.phase)) {
+        } else if (!IsActive(record.phase) && !npc.actionLockedByAi) {
             npc.action = NpcAction::Idle;
         }
 

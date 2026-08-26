@@ -45,6 +45,7 @@ struct AnimatedModelAnimator {
     bool reverse = false;
     bool finished = false;
     bool poseDirty = true;
+    bool paused = false;
 
     uint32_t targetAnimationIndex = InvalidModelAnimationIndex;
     float targetFrame = 0.0f;

@@ -28,7 +28,8 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& runtime,
         const std::vector<SectorDynamicDoorCollider>& doorColliders,
-        float dt);
+        float dt,
+        bool freezeAi = false);
 
 void SynchronizeSectorNavigationDoorLinksSystem(
         engine::World& world,
@@ -122,6 +123,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap& map,
         float dt,
-        const SectorDoorPlayerObstacle* playerObstacle = nullptr);
+        const SectorDoorPlayerObstacle* playerObstacle = nullptr,
+        bool freezeAi = false);
 
 } // namespace game

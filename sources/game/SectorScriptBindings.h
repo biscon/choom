@@ -114,6 +114,11 @@ void UpdateSectorScriptOperations(
         engine::EngineContext& context,
         SectorScriptHost& host);
 
+void InterruptSectorScriptNpcMoveForAi(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        const char* instanceId);
+
 void UpdateSectorScriptTriggers(
         SectorScriptHost& host,
         Vector2 playerPositionXZ,

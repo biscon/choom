@@ -27,6 +27,7 @@ struct SectorEditorNpcDefinitionDraft {
 enum class SectorEditorNpcAudioPickerTarget {
     None,
     Action,
+    Attack,
     AmbientAdd,
     AmbientReplace
 };
@@ -56,6 +57,15 @@ struct SectorEditorNpcEditorState {
     engine::UIFloatInputState animationBlendSecondsInput;
     engine::UIFloatInputState ambientMinimumDelaySecondsInput;
     engine::UIFloatInputState ambientMaximumDelaySecondsInput;
+    engine::UIFloatInputState visionRangeWorldInput;
+    engine::UIFloatInputState visionAngleDegreesInput;
+    engine::UIFloatInputState hearingRangeWorldInput;
+    engine::UIIntInputState investigationDurationMillisecondsInput;
+    engine::UIFloatInputState attackHitPhaseInput;
+    engine::UIFloatInputState attackRangeWorldInput;
+    engine::UIIntInputState attackDamageInput;
+    engine::UIFloatInputState attackKnockbackInput;
+    engine::UIIntInputState attackStunMillisecondsInput;
     std::array<engine::UIFloatInputState, kNpcActionCount>
             animationSpeedInputs;
     std::array<engine::UIFloatInputState, kNpcActionCount>

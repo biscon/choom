@@ -362,6 +362,7 @@ if(BUILD_TESTING)
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/ai/NpcAiTypes.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
             sources/sector_editor/SectorEditorDirtyState.cpp
@@ -434,6 +435,7 @@ if(BUILD_TESTING)
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/ai/NpcAiTypes.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/game/SectorLevelLoader.cpp
             sources/sector_demo/SectorMaterialRefactor.cpp
@@ -599,8 +601,10 @@ if(BUILD_TESTING)
             sources/game/SoundSetAudio.cpp
             sources/game/npc/NpcAudioSystem.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/ai/NpcAiTypes.cpp
             sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcCombatSystem.cpp
+            sources/game/npc/ai/NpcAiSystem.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/npc/NpcNavigationSystem.cpp
             sources/game/npc/NpcRuntime.cpp
@@ -666,6 +670,7 @@ if(BUILD_TESTING)
     add_executable(npc_definition_tests
             tests/NpcDefinitionTests.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/ai/NpcAiTypes.cpp
             sources/sector_editor/npcs/SectorEditorNpcEditorService.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/engine/assets/AssetManager.cpp

@@ -610,7 +610,9 @@ starts. Press `H` to equip it. In gameplay and 3D Gameplay control mode, the
 top-row keys `1` through `6` switch to assigned weapons by holstering the old
 weapon completely before automatically unholstering the new weapon.
 Firing definitions can optionally enable hitscan pellets and configure their
-count and spread half-angle. A pellet weapon performs one normal firing event
+count and spread half-angle. `Noise radius` is the world-space radius published
+to NPC hearing for each accepted shot; `0` makes the shot silent to AI. A pellet
+weapon performs one normal firing event
 for cooldown, sound, recoil, muzzle flash, and muzzle light, while each pellet
 independently resolves its first collision, damage, knockback, stagger, and
 impact effects. Weapons without pellets enabled retain one centered hitscan
@@ -919,8 +921,36 @@ functional generic billboards by the editor. The old F5 temporary
 non-serialized spawn path has been removed; placed billboards are the runtime
 object authoring path. Placed NPCs can use the shared bounded navigation,
 collision-constrained locomotion, door traversal, and Crowd avoidance service.
-General NPC AI/state machines, unrestricted actor physics, attached lights,
-and transparent alpha-blended sprites are still deferred.
+Unrestricted actor physics, attached lights, and transparent alpha-blended
+sprites are still deferred.
+
+NPC definitions are global JSON assets under `assets/npcs` and are edited from
+the NPC Editor. Hostile/friendly remains faction and collision data. The AI Type
+dropdown filters registered AI descriptors by that alignment and also permits
+`None`. Per-definition perception fields author vision range, the full
+horizontal vision-cone angle, hearing range, and investigation duration.
+
+The semantic action list includes `Attack`. Like other actions it assigns a
+model animation and playback speed; it additionally authors normalized hit
+phase, world-space range, damage, optional knockback impulse, optional stun in
+milliseconds, and an optional spatialized attack sound. The sound plays when
+the NPC begins the committed attack animation, whether or not the later hit
+connects. The separately authored player-impact sound remains centered and
+plays only when the hit connects. A stun value of `0` disables stun and a
+knockback value of `0` disables knockback. During a stun the game player cannot
+sprint and moves at half walk speed, but may still jump.
+
+Seek & Destroy is the first hostile AI type. In the real game it uses generic
+vision/hearing and last-known-position investigation, runs toward a detected
+player, and commits to melee animations until their hit/finish points. AI never
+runs in either editor 3D preview control mode. Footstep and landing noise radii
+are application settings JSON values rather than editor controls. Runtime
+testing exposes `/god [on|off]` and `/freezeai [on|off]`; omitting the argument
+toggles the current campaign-session value.
+
+When player health reaches zero, game simulation stops behind a Game Over
+overlay. Its Main Menu button shuts down the level, clears the unsaved campaign
+and persistent script state, and returns the menu to `Start New Game`.
 
 ## Baked Lightmaps
 

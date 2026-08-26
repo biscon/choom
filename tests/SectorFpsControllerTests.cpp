@@ -555,6 +555,16 @@ void TestRunAndWalkSpeeds()
     UpdateSectorFpsController(running, config, runInput, 1.0f);
     Check(Near(running.feetPosition.x, 12.0f), "run speed is used with run input");
 
+    game::SectorFpsControllerInput slowedInput;
+    slowedInput.moveForward = true;
+    slowedInput.run = true;
+    slowedInput.movementSpeedScale = 0.5f;
+    slowedInput.externalHorizontalMovementDelta = {0.0f, 1.25f};
+    const Vector2 slowedDelta = game::ComputeSectorFpsHorizontalMovementDelta(
+            game::SectorFpsControllerState{}, config, slowedInput, 1.0f);
+    Check(Near(slowedDelta, Vector2{6.0f, 1.25f}),
+          "movement speed scaling leaves external collision movement unscaled");
+
     game::SectorFpsControllerInput strafeInput;
     strafeInput.strafeRight = true;
     strafeInput.run = true;

@@ -122,6 +122,7 @@ void RegistrySuccess()
     assert(Near(pistol->crosshair.outlineThicknessPixels, 1.0f));
     assert(Near(pistol->firing.shotIntervalSeconds, 0.18f));
     assert(Near(pistol->firing.maximumRangeWorld, 100.0f));
+    assert(Near(pistol->firing.noiseRadiusWorld, 40.0f));
     assert(!pistol->firing.pellets.enabled
             && pistol->firing.pellets.count == 8
             && Near(
@@ -337,6 +338,7 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     rifle.reload.dryFireSoundPath = "weapons/rifle/dry_fire.ogg";
     rifle.reload.reloadSoundPath = "weapons/rifle/reload.ogg";
     rifle.firing.shotIntervalSeconds = 0.09f;
+    rifle.firing.noiseRadiusWorld = 65.0f;
     rifle.firing.pellets = {true, 12, 7.5f};
     rifle.viewmodel.attachment.gripCorrection.translation.x = 0.11f;
     registry.weapons.push_back(rifle);
@@ -357,6 +359,7 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     assert(!Near(
             pistol->firing.shotIntervalSeconds,
             loadedRifle->firing.shotIntervalSeconds));
+    assert(Near(loadedRifle->firing.noiseRadiusWorld, 65.0f));
     assert(pistol->weaponSlot == 1 && loadedRifle->weaponSlot == 2);
     assert(pistol->reload.magazineSize == 18
             && Near(pistol->reload.durationSeconds, 0.63f)
@@ -808,6 +811,8 @@ void SettingsResolutionAndPersistence()
     assert(Near(settings.hdrBloom.threshold,1.25f)
             && Near(settings.hdrBloom.intensity,0.35f));
     assert(Near(settings.footsteps.landingImpactVolumeMultiplier, 1.5f));
+    assert(Near(settings.footsteps.noiseRadiusWorld, 6.0f));
+    assert(Near(settings.footsteps.landingNoiseRadiusWorld, 12.0f));
     assert(settings.playerSounds.events.size() == 3);
     assert(settings.playerSounds.events[0].id == "jump");
     assert(settings.playerSounds.events[0].set == "Jump");
@@ -999,6 +1004,8 @@ void SettingsResolutionAndPersistence()
     assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
     assert(Near(loaded.footsteps.volume, 0.7f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
+    assert(Near(loaded.footsteps.noiseRadiusWorld, 6.0f));
+    assert(Near(loaded.footsteps.landingNoiseRadiusWorld, 12.0f));
     assert(loaded.playerSounds.events.size() == 3);
     assert(loaded.playerSounds.events[2].set == "future/WallImpact");
     assert(Near(loaded.playerSounds.events[2].volume, 0.6f));
@@ -1167,6 +1174,8 @@ void SettingsResolutionAndPersistence()
     assert(loaded.footsteps.defaultSet == "Tile_Mono");
     assert(Near(loaded.footsteps.volume, 0.65f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.35f));
+    assert(Near(loaded.footsteps.noiseRadiusWorld, 6.0f));
+    assert(Near(loaded.footsteps.landingNoiseRadiusWorld, 12.0f));
     assert(loaded.playerSounds.events.size() == 2);
     assert(loaded.playerSounds.events[0].id == "jump");
     assert(loaded.playerSounds.events[0].set == "Jump");

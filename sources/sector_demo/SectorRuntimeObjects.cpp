@@ -45,7 +45,7 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(28);
+    world.ReserveComponentTypes(29);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -54,6 +54,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
     world.ReserveComponent<SectorItem>(objectCapacity);
     world.ReserveComponent<NpcRuntimeInstance>(objectCapacity);
+    world.ReserveComponent<NpcAiState>(objectCapacity);
     world.ReserveComponent<NpcAnimationState>(objectCapacity);
     world.ReserveComponent<Health>(objectCapacity);
     world.ReserveComponent<NpcCombatState>(objectCapacity);
@@ -1320,7 +1321,29 @@ void SpawnPlacedRuntimeObjects(
                     definition->hostile,
                     definition->canOpenDoors,
                     GetNpcAction(*definition, NpcAction::Walk).movementSpeed,
-                    GetNpcAction(*definition, NpcAction::Run).movementSpeed});
+                    GetNpcAction(*definition, NpcAction::Run).movementSpeed,
+                    false});
+            if (!definition->aiType.empty()) {
+                NpcAiState ai;
+                ai.aiType = definition->aiType;
+                ai.perception = definition->perception;
+                ai.attack = GetNpcAction(*definition, NpcAction::Attack);
+                if (!ai.attack.attackSoundPath.empty()) {
+                    const std::string soundPath = ResolveSectorAudioAssetPath(
+                            ai.attack.attackSoundPath);
+                    ai.attackSound = assets.RequestSound(
+                            state.runtimeObjectAssetScope,
+                            soundPath.c_str());
+                }
+                if (!ai.attack.soundPath.empty()) {
+                    const std::string soundPath = ResolveSectorAudioAssetPath(
+                            ai.attack.soundPath);
+                    ai.attackImpactSound = assets.RequestSound(
+                            state.runtimeObjectAssetScope,
+                            soundPath.c_str());
+                }
+                world.Add(entity, std::move(ai));
+            }
             world.Add(entity, MakeHealth(definition->baseHealth));
             NpcCombatState npcCombat;
             npcCombat.despawnOnDeath = definition->despawnOnDeath;

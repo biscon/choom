@@ -113,6 +113,52 @@ std::optional<MainMenuAction> DrawGameMainMenu(
     return selected;
 }
 
+bool DrawGameOverOverlay(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 205});
+    constexpr float panelWidth = 520.0f;
+    constexpr float panelHeight = 270.0f;
+    constexpr float padding = 44.0f;
+    const Rectangle panel{
+            config.overlayBounds.x
+                    + (config.overlayBounds.width - panelWidth) * 0.5f,
+            config.overlayBounds.y
+                    + (config.overlayBounds.height - panelHeight) * 0.5f,
+            panelWidth,
+            panelHeight};
+    DrawRectangleRounded(
+            panel, config.cornerRadius, config.cornerSegments,
+            config.panelColor);
+    DrawRectangleRoundedLinesEx(
+            panel, config.cornerRadius, config.cornerSegments,
+            config.borderThickness, config.borderColor);
+    engine::BeginUI(ui, input);
+    engine::Text(
+            config, assets,
+            {panel.x + padding, panel.y + 30.0f,
+                    panel.width - padding * 2.0f, 64.0f},
+            font, "Game Over", engine::UITextJustify::Center);
+    engine::Text(
+            config, assets,
+            {panel.x + padding, panel.y + 98.0f,
+                    panel.width - padding * 2.0f, 40.0f},
+            smallFont, "You died.", engine::UITextJustify::Center);
+    const bool selected = engine::Button(
+            ui, config, input, assets,
+            "game_over_main_menu",
+            {panel.x + padding, panel.y + 170.0f,
+                    panel.width - padding * 2.0f, 56.0f},
+            font, "Main Menu");
+    engine::EndUI(ui, config, input, assets);
+    return selected;
+}
+
 GameGraphicsSettingsAction DrawGameGraphicsSettings(
         engine::UIContext& ui,
         const engine::UIConfig& config,

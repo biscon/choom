@@ -16,6 +16,7 @@
     "run": {
       "movementSpeed": 3.0
     },
+    "attack": {},
     "hurt": {},
     "death": {}
   }

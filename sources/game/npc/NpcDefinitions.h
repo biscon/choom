@@ -26,11 +26,21 @@ inline constexpr float kMaximumNpcCorpseFadeDurationSeconds = 60.0f;
 inline constexpr float kDefaultNpcAmbientMinimumDelaySeconds = 5.0f;
 inline constexpr float kDefaultNpcAmbientMaximumDelaySeconds = 12.0f;
 inline constexpr float kMaximumNpcAmbientDelaySeconds = 600.0f;
+inline constexpr float kDefaultNpcVisionRangeWorld = 15.0f;
+inline constexpr float kDefaultNpcVisionAngleDegrees = 120.0f;
+inline constexpr float kDefaultNpcHearingRangeWorld = 12.0f;
+inline constexpr int kDefaultNpcInvestigationDurationMilliseconds = 4000;
+inline constexpr float kDefaultNpcAttackHitPhase = 0.55f;
+inline constexpr float kDefaultNpcAttackRangeWorld = 1.0f;
+inline constexpr int kDefaultNpcAttackDamage = 15;
+inline constexpr float kDefaultNpcAttackKnockbackImpulseWorldPerSecond = 0.0f;
+inline constexpr int kDefaultNpcAttackStunMilliseconds = 0;
 
 enum class NpcAction {
     Idle,
     Walk,
     Run,
+    Attack,
     Hurt,
     Death,
     Count
@@ -51,8 +61,23 @@ struct NpcActionMetadata {
 struct NpcActionDefinition {
     std::string animation;
     std::string soundPath;
+    std::string attackSoundPath;
     float animationSpeed = 1.0f;
     float movementSpeed = 0.0f;
+    float hitPhase = kDefaultNpcAttackHitPhase;
+    float rangeWorld = kDefaultNpcAttackRangeWorld;
+    int damage = kDefaultNpcAttackDamage;
+    float knockbackImpulseWorldPerSecond =
+            kDefaultNpcAttackKnockbackImpulseWorldPerSecond;
+    int stunMilliseconds = kDefaultNpcAttackStunMilliseconds;
+};
+
+struct NpcPerceptionDefinition {
+    float visionRangeWorld = kDefaultNpcVisionRangeWorld;
+    float visionAngleDegrees = kDefaultNpcVisionAngleDegrees;
+    float hearingRangeWorld = kDefaultNpcHearingRangeWorld;
+    int investigationDurationMilliseconds =
+            kDefaultNpcInvestigationDurationMilliseconds;
 };
 
 struct NpcAmbientVocalizationDefinition {
@@ -65,6 +90,7 @@ struct NpcDefinition {
     std::string id;
     std::string name;
     bool hostile = false;
+    std::string aiType;
     bool canOpenDoors = true;
     int baseHealth = kDefaultNpcBaseHealth;
     bool despawnOnDeath = false;
@@ -72,6 +98,7 @@ struct NpcDefinition {
     float corpseFadeDurationSeconds = kDefaultNpcCorpseFadeDurationSeconds;
     std::string modelPath;
     float animationBlendSeconds = kDefaultNpcAnimationBlendSeconds;
+    NpcPerceptionDefinition perception;
     NpcAmbientVocalizationDefinition ambientVocalizations;
     std::array<NpcActionDefinition, kNpcActionCount> actions;
 };

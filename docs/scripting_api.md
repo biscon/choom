@@ -464,6 +464,12 @@ moveNpc(instanceId, levelMarkerId [, gait]) -> true | false, reason
 They resume only after collision-constrained locomotion physically arrives or
 reports a terminal failure.
 
+If a hostile NPC acquires the player through vision, hearing, or player damage,
+generic AI takes movement authority immediately. A blocking `moveNpc` call or
+an `await` on `startMoveNpc` then resumes with `false, "player detected; AI took
+control"`. The script move is not resumed after the NPC later forgets the
+player; a future engine patrol feature may provide resumable patrol behavior.
+
 Loops must check the returned boolean and exit, yield, or back off after a
 failure. A missing or removed NPC makes later requests fail immediately. As a
 last-resort safeguard, each managed script start/resume has a budget of

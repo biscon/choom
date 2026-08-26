@@ -105,6 +105,24 @@ void SubmissionQueuesDeferredActionsAndHistory()
     assert(action.mapId == "hub");
     assert(engine::DebugConsoleTakeDeferredAction(console).type
             == engine::DeferredDebugActionType::None);
+
+    engine::Input toggleInput;
+    toggleInput.Initialize();
+    const std::string toggleCommand = "/god off";
+    for (char ch : toggleCommand) {
+        engine::InputEvent event{};
+        event.type = engine::InputEventType::TextInput;
+        event.text = engine::TextInputEvent{static_cast<uint32_t>(ch)};
+        toggleInput.Events().push_back(event);
+    }
+    toggleInput.Events().push_back(enter);
+    engine::DebugConsoleUpdate(
+            console, toggleInput, nullptr, "hub", true, 0.016f);
+    const engine::DeferredDebugAction toggle =
+            engine::DebugConsoleTakeDeferredAction(console);
+    assert(toggle.type == engine::DeferredDebugActionType::SetGodMode);
+    assert(toggle.mapId == "hub");
+    assert(toggle.booleanMode == engine::DeferredDebugBooleanMode::Disable);
 }
 
 void TraceLogsFlushThroughTheThreadSafeInbox()

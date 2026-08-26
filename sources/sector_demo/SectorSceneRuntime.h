@@ -6,6 +6,7 @@
 #include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcCombatSystem.h"
+#include "game/npc/ai/NpcAiSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
@@ -56,7 +57,8 @@ public:
             float dt,
             const Vector3* playerPosition,
             int playerSectorId,
-            const SectorDoorPlayerObstacle* playerObstacle = nullptr);
+            const SectorDoorPlayerObstacle* playerObstacle = nullptr,
+            const NpcAiGameplayContext* npcGameplay = nullptr);
     void UpdateLoadPreparation(
             engine::EngineContext& context,
             const SectorTopologyMap& map);
@@ -74,6 +76,10 @@ public:
             uint64_t shotSequence,
             const FpsWeaponFiringDefinition& firing,
             FpsShotResult& outShot);
+    void EmitPlayerSound(Vector3 positionWorld, float radiusWorld)
+    {
+        EmitNpcPlayerSound(npcAi, positionWorld, radiusWorld);
+    }
 
     void RenderShadowMaps(engine::EngineContext& context);
     void RenderScene(
@@ -165,6 +171,7 @@ private:
     SectorNavigationWorld navigation;
     NpcNavigationRuntime npcNavigation;
     NpcCombatRuntime npcCombat;
+    NpcAiRuntime npcAi;
     NpcAudioRuntime npcAudio;
     SectorImpactParticleSystem impactParticles;
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();

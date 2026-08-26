@@ -1,4 +1,5 @@
 #include "game/npc/NpcDefinitions.h"
+#include "game/npc/ai/NpcAiTypes.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorService.h"
 
 #include "util/json.hpp"
@@ -59,6 +60,7 @@ game::NpcDefinition MakeDefinition(
     game::GetNpcAction(definition, game::NpcAction::Walk).animation = "Walk";
     game::GetNpcAction(definition, game::NpcAction::Run).animation = "Walk";
     game::GetNpcAction(definition, game::NpcAction::Run).animationSpeed = 1.6f;
+    game::GetNpcAction(definition, game::NpcAction::Attack).animation = "Attack";
     game::GetNpcAction(definition, game::NpcAction::Hurt).animation = "Hit";
     game::GetNpcAction(definition, game::NpcAction::Death).animation = "Death";
     return definition;
@@ -72,6 +74,20 @@ void TestRoundTripDefaultsAndSharedClips()
     original.despawnOnDeath = true;
     original.corpseDespawnDelaySeconds = 2.5f;
     original.corpseFadeDurationSeconds = 0.9f;
+    original.aiType = game::kSeekAndDestroyNpcAiType;
+    original.perception.visionRangeWorld = 18.0f;
+    original.perception.visionAngleDegrees = 100.0f;
+    original.perception.hearingRangeWorld = 9.0f;
+    original.perception.investigationDurationMilliseconds = 2750;
+    game::NpcActionDefinition& attack = game::GetNpcAction(
+            original, game::NpcAction::Attack);
+    attack.hitPhase = 0.6f;
+    attack.rangeWorld = 1.25f;
+    attack.damage = 23;
+    attack.knockbackImpulseWorldPerSecond = 2.5f;
+    attack.stunMilliseconds = 500;
+    attack.soundPath = "npc/zombie/impact.wav";
+    attack.attackSoundPath = "npc/zombie/attack.wav";
     original.ambientVocalizations.soundPaths = {
             "npc/zombie/moan_01.ogg",
             "npc/zombie/moan_02.wav"};
@@ -92,6 +108,14 @@ void TestRoundTripDefaultsAndSharedClips()
                   && Near(document["animationBlendSeconds"].get<float>(), 0.35f)
                   && document["actions"]["walk"]["animation"] == "Walk"
                   && document["actions"]["run"]["animation"] == "Walk"
+                  && document["actions"]["attack"]["animation"] == "Attack"
+                  && document["actions"]["attack"]["damage"] == 23
+                  && document["actions"]["attack"]["attackSound"]
+                          == "npc/zombie/attack.wav"
+                  && document["actions"]["attack"]["sound"]
+                          == "npc/zombie/impact.wav"
+                  && document["aiType"] == "seek_and_destroy"
+                  && Near(document["perception"]["visionRangeWorld"].get<float>(), 18.0f)
                   && document["actions"]["hurt"]["animation"] == "Hit"
                   && document["actions"]["hurt"]["sound"]
                           == "npc/zombie/hurt.wav"
@@ -115,6 +139,9 @@ void TestRoundTripDefaultsAndSharedClips()
     Check(parsed.id == original.id
                   && parsed.name == original.name
                   && parsed.hostile
+                  && parsed.aiType == game::kSeekAndDestroyNpcAiType
+                  && Near(parsed.perception.visionRangeWorld, 18.0f)
+                  && parsed.perception.investigationDurationMilliseconds == 2750
                   && parsed.canOpenDoors
                   && parsed.baseHealth == 175
                   && parsed.despawnOnDeath
@@ -135,6 +162,14 @@ void TestRoundTripDefaultsAndSharedClips()
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation == "Walk"
                   && game::GetNpcAction(parsed, game::NpcAction::Run).animation == "Walk"
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Run).animationSpeed, 1.6f)
+                  && game::GetNpcAction(parsed, game::NpcAction::Attack).damage == 23
+                  && game::GetNpcAction(
+                          parsed, game::NpcAction::Attack).soundPath
+                          == "npc/zombie/impact.wav"
+                  && game::GetNpcAction(
+                          parsed, game::NpcAction::Attack).attackSoundPath
+                          == "npc/zombie/attack.wav"
+                  && Near(game::GetNpcAction(parsed, game::NpcAction::Attack).hitPhase, 0.6f)
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Walk).movementSpeed, 1.5f)
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Run).movementSpeed, 3.0f),
           "NPC fields and action defaults round-trip");
@@ -159,6 +194,7 @@ void TestRoundTripDefaultsAndSharedClips()
 
     Json incomplete = document;
     incomplete["actions"] = Json::object();
+    incomplete.erase("aiType");
     Check(game::ParseNpcDefinitionJson(incomplete.dump(), parsed, error)
                   && game::GetNpcAction(parsed, game::NpcAction::Idle).animation.empty()
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation.empty(),
@@ -237,6 +273,27 @@ void TestValidation()
     Check(!game::ParseNpcDefinitionJson(
                   invalidActionSound.dump(), definition, error),
           "non-vocal action sound field is rejected by the JSON parser");
+}
+
+void TestSeekAndDestroyPluginBoundary()
+{
+    const game::NpcAiTypeDescriptor* type = game::FindNpcAiType(
+            game::kSeekAndDestroyNpcAiType);
+    Check(type != nullptr && type->update != nullptr
+                    && type->alignment == game::NpcAiAlignment::Hostile,
+          "Seek & Destroy is registered as a hostile AI plugin");
+    Check(type != nullptr && type->update(game::NpcAiPluginInput{
+                    4.0f, 1.0f, false, true})
+                    == game::NpcAiIntent::ChasePlayer,
+          "Seek & Destroy chases outside melee range");
+    Check(type != nullptr && type->update(game::NpcAiPluginInput{
+                    0.8f, 1.0f, false, true})
+                    == game::NpcAiIntent::AttackPlayer,
+          "Seek & Destroy attacks inside melee range");
+    Check(type != nullptr && type->update(game::NpcAiPluginInput{
+                    3.0f, 1.0f, true, true})
+                    == game::NpcAiIntent::AttackPlayer,
+          "Seek & Destroy preserves attack commitment outside melee range");
 }
 
 void TestDiscoveryErrorsAreRetained()
@@ -330,6 +387,9 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
           "NPC editor service updates health and corpse behavior through its draft API");
     service.SetSelectedActionSound(
             game::NpcAction::Hurt, "npc/zombie/hurt.wav");
+    service.SetSelectedActionSound(
+            game::NpcAction::Attack, "npc/zombie/impact.wav");
+    service.SetSelectedAttackSound("npc/zombie/attack.wav");
     service.SetSelectedAmbientDelayRange(6.0f, 11.0f);
     Check(service.AddSelectedAmbientSound("npc/zombie/moan_01.wav")
                   && !service.AddSelectedAmbientSound(
@@ -340,6 +400,14 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                           service.SelectedDraft()->definition,
                           game::NpcAction::Hurt).soundPath
                           == "npc/zombie/hurt.wav"
+                  && game::GetNpcAction(
+                          service.SelectedDraft()->definition,
+                          game::NpcAction::Attack).soundPath
+                          == "npc/zombie/impact.wav"
+                  && game::GetNpcAction(
+                          service.SelectedDraft()->definition,
+                          game::NpcAction::Attack).attackSoundPath
+                          == "npc/zombie/attack.wav"
                   && Near(service.SelectedDraft()->definition
                                   .ambientVocalizations.minimumDelaySeconds,
                           6.0f)
@@ -352,7 +420,7 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                   && service.RemoveSelectedAmbientSound(0)
                   && service.SelectedDraft()->definition
                           .ambientVocalizations.soundPaths.empty(),
-          "NPC editor service updates action and ambient vocal audio drafts");
+          "NPC editor service updates attack, vocal, and ambient audio drafts");
     service.SelectedDraft()->definition.id = "RENAMED_beta";
     session.selectedNpcId = "RENAMED_beta";
     Check(service.SaveAndClose(nullptr)
@@ -404,6 +472,7 @@ int main()
 {
     TestRoundTripDefaultsAndSharedClips();
     TestValidation();
+    TestSeekAndDestroyPluginBoundary();
     TestDiscoveryErrorsAreRetained();
     TestDraftSaveCancelRenameDeleteAndSessionView();
     TestCatalogErrorsBlockEditorSave();

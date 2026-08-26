@@ -594,10 +594,14 @@ Vector2 ComputeSectorFpsHorizontalMovementDelta(
         const float crouchedSpeed = normalized.walkSpeed * 0.5f;
         const float crouchBlend = SectorFpsCrouchBlend(state);
         const float speed = standingSpeed + (crouchedSpeed - standingSpeed) * crouchBlend;
-        movement = Vector3Scale(movement, speed * dt);
-        return Vector2{movement.x, movement.z};
+        const float speedScale = std::isfinite(input.movementSpeedScale)
+                ? std::max(0.0f, input.movementSpeedScale) : 1.0f;
+        movement = Vector3Scale(movement, speed * speedScale * dt);
+        return Vector2Add(
+                Vector2{movement.x, movement.z},
+                input.externalHorizontalMovementDelta);
     }
-    return Vector2{};
+    return input.externalHorizontalMovementDelta;
 }
 
 void UpdateSectorFpsController(

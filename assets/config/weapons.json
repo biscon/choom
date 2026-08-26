@@ -25,6 +25,7 @@
       "firing": {
         "shotIntervalSeconds": 0.18000000715255737,
         "maximumRangeWorld": 100.0,
+        "noiseRadiusWorld": 40.0,
         "recoil": {
           "translationImpulse": [
             0.0,
@@ -236,6 +237,7 @@
       "firing": {
         "shotIntervalSeconds": 1.0,
         "maximumRangeWorld": 25.0,
+        "noiseRadiusWorld": 40.0,
         "recoil": {
           "translationImpulse": [
             0.0,

@@ -120,6 +120,11 @@ public:
     }
     const Health& PlayerHealth() const { return playerHealth; }
     const PlayerStamina& PlayerStaminaState() const { return playerStamina; }
+    void SetGodMode(bool enabled);
+    void SetAiFrozen(bool frozen) { aiFrozen = frozen; }
+    bool GodMode() const { return godMode; }
+    bool AiFrozen() const { return aiFrozen; }
+    bool IsGameOver() const { return gameOver; }
 
 private:
     struct PendingItemTake {
@@ -211,6 +216,11 @@ private:
     SectorScriptHost scriptHost;
     SectorGameNavigationDebugState navigationDebug;
     Health playerHealth = MakeHealth(100);
+    Vector2 playerKnockbackVelocity{};
+    float playerStunRemainingSeconds = 0.0f;
+    bool godMode = false;
+    bool aiFrozen = false;
+    bool gameOver = false;
     PlayerStamina playerStamina;
     PlayerWindedCameraState windedCamera;
     PlayerBreathingAudioRuntime breathingAudio;

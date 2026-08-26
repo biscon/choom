@@ -994,6 +994,11 @@ bool SectorGameSession::StartNew(
 {
     failureError.clear();
     playerHealth = MakeHealth(100);
+    playerKnockbackVelocity = {};
+    playerStunRemainingSeconds = 0.0f;
+    godMode = false;
+    aiFrozen = false;
+    gameOver = false;
     playerStamina = MakePlayerStamina(settings.playerStamina);
     ClearPlayerWindedCamera(windedCamera);
     breathingAudio = PlayerBreathingAudioRuntime{};
@@ -1156,6 +1161,11 @@ void SectorGameSession::Shutdown(
     collision = SectorEditorPreviewCollisionState{};
     navigationDebug = SectorGameNavigationDebugState{};
     playerStamina = PlayerStamina{};
+    playerKnockbackVelocity = {};
+    playerStunRemainingSeconds = 0.0f;
+    godMode = false;
+    aiFrozen = false;
+    gameOver = false;
     ClearPlayerWindedCamera(windedCamera);
     StopGameLevelLoading(loading);
     levelName.clear();
@@ -1227,6 +1237,15 @@ void SectorGameSession::SetConsoleInputCaptured(bool captured)
     RefreshMouseLookCapture();
 }
 
+void SectorGameSession::SetGodMode(bool enabled)
+{
+    godMode = enabled;
+    if (enabled) {
+        playerKnockbackVelocity = {};
+        playerStunRemainingSeconds = 0.0f;
+    }
+}
+
 void SectorGameSession::Update(
         engine::EngineContext& context,
         SectorSceneRuntime& scene,
@@ -1239,6 +1258,9 @@ void SectorGameSession::Update(
     if (!running || paused) {
         return;
     }
+    if (gameOver) return;
+    playerStunRemainingSeconds = std::max(
+            0.0f, playerStunRemainingSeconds - std::max(0.0f, dt));
     if (!consoleInputCaptured) {
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
@@ -1289,13 +1311,44 @@ void SectorGameSession::Update(
             controller.fpsControllerState.feetPosition,
             obstacleConfig.playerRadius,
             obstacleConfig.playerHeight};
+    struct ScriptTakeoverContext {
+        engine::EngineContext* engine = nullptr;
+        SectorScriptHost* host = nullptr;
+    } takeoverContext{&context, &scriptHost};
+    NpcAiGameplayContext npcGameplay;
+    npcGameplay.playerFeetPosition = playerPosition;
+    npcGameplay.playerEyePosition = SectorFpsControllerEyePosition(
+            controller.fpsControllerState,
+            controller.fpsControllerConfig);
+    npcGameplay.playerHealth = &playerHealth;
+    npcGameplay.playerKnockbackVelocity = &playerKnockbackVelocity;
+    npcGameplay.playerStunRemainingSeconds = &playerStunRemainingSeconds;
+    npcGameplay.scriptUserData = &takeoverContext;
+    npcGameplay.interruptScriptMovement = [](
+            void* userData, engine::Entity, const char* instanceId) {
+        auto* takeover = static_cast<ScriptTakeoverContext*>(userData);
+        if (takeover == nullptr || takeover->engine == nullptr
+                || takeover->host == nullptr) return;
+        InterruptSectorScriptNpcMoveForAi(
+                *takeover->engine, *takeover->host, instanceId);
+    };
+    npcGameplay.godMode = godMode;
+    npcGameplay.frozen = aiFrozen;
     scene.Update(
             context,
             topologyMap,
             dt,
             &playerPosition,
             controller.fpsControllerState.currentSectorId,
-            &playerObstacle);
+            &playerObstacle,
+            &npcGameplay);
+    if (IsDepleted(playerHealth)) {
+        gameOver = true;
+        SetInventoryOpen(false);
+        ClearHeldObjectUse();
+        LeaveSectorFreeflyController();
+        return;
+    }
     ProcessInventoryAction(context, scene);
     const bool gameplayInputCaptured = consoleInputCaptured
             || inventoryUi.open
@@ -1337,6 +1390,10 @@ void SectorGameSession::Update(
             });
 
     if (applicationSettings != nullptr && itemCampaign != nullptr) {
+        if (playerStunRemainingSeconds > 0.0f) {
+            input.run = false;
+            input.movementSpeedScale = 0.5f;
+        }
         if (input.run && !CanPlayerStaminaSprint(playerStamina)) {
             input.run = false;
         }
@@ -1349,6 +1406,8 @@ void SectorGameSession::Update(
     }
 
     const float previousVisualEyeY = scene.Renderer().RendererPose().position.y;
+    input.externalHorizontalMovementDelta = Vector2Scale(
+            playerKnockbackVelocity, std::max(0.0f, dt));
     UpdateSectorEditorGameplayPreview(
             objects.dynamicDoorColliders,
             objects.staticModelColliders,
@@ -1359,6 +1418,12 @@ void SectorGameSession::Update(
             previousVisualEyeY,
             dt,
             &scene.NpcNavigation().collisionCylinders);
+    playerKnockbackVelocity = Vector2Scale(
+            playerKnockbackVelocity,
+            std::exp(-8.0f * std::max(0.0f, dt)));
+    if (Vector2Length(playerKnockbackVelocity) < 0.01f) {
+        playerKnockbackVelocity = {};
+    }
     if (applicationSettings != nullptr) {
         UpdatePlayerStamina(
                 playerStamina,
@@ -1540,6 +1605,9 @@ void SectorGameSession::Update(
                 context,
                 controller.fpsControllerState.currentSectorId,
                 applicationSettings->footsteps.volume);
+        scene.EmitPlayerSound(
+                controller.fpsControllerState.feetPosition,
+                applicationSettings->footsteps.noiseRadiusWorld);
     }
     if (playerAudio != nullptr) {
         if (controller.frameEvents.jumped) {
@@ -1567,6 +1635,9 @@ void SectorGameSession::Update(
                                         .landingImpactVolumeMultiplier,
                         0.0f,
                         1.0f));
+        scene.EmitPlayerSound(
+                controller.fpsControllerState.feetPosition,
+                applicationSettings->footsteps.landingNoiseRadiusWorld);
     }
     bool acceptedShot = false;
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
@@ -1613,6 +1684,9 @@ void SectorGameSession::Update(
                     fpsPlayer.State().firing.definition,
                     resolvedShot);
             fpsPlayer.RecordShotResolution(resolvedShot);
+            scene.EmitPlayerSound(
+                    request.rayOrigin,
+                    fpsPlayer.State().firing.definition.noiseRadiusWorld);
             ApplyPlayerPose(scene);
         }
         fpsPlayer.UpdateTransformsAndLight(

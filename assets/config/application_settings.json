@@ -5,7 +5,9 @@
   "footsteps": {
     "defaultSet": "Tile_Mono",
     "volume": 0.6499999761581421,
-    "landingImpactVolumeMultiplier": 1.350000023841858
+    "landingImpactVolumeMultiplier": 1.350000023841858,
+    "noiseRadiusWorld": 6.0,
+    "landingNoiseRadiusWorld": 12.0
   },
   "graphics": {
     "renderScale": 1.5,

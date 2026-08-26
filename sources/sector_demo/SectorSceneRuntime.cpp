@@ -78,6 +78,7 @@ bool SectorSceneRuntime::Rebuild(
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    InitializeNpcAiRuntime(npcAi);
     impactParticles.Clear();
     BeginLevelAudio(
             context,
@@ -102,6 +103,7 @@ bool SectorSceneRuntime::RebuildNavigationForMap(
     navigation.RequestRebuild();
     InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    InitializeNpcAiRuntime(npcAi);
     impactParticles.Clear();
     return true;
 }
@@ -111,6 +113,7 @@ void SectorSceneRuntime::Shutdown(engine::EngineContext& context)
     ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
     ClearNpcCombatRuntime(npcCombat);
+    ClearNpcAiRuntime(npcAi);
     impactParticles.Clear();
     navigation.Shutdown();
     StopLevelAudio(context);
@@ -144,6 +147,7 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    InitializeNpcAiRuntime(npcAi);
     impactParticles.Clear();
     BindRuntimeObjectAudio(context.world);
 }
@@ -172,7 +176,8 @@ void SectorSceneRuntime::Update(
         float dt,
         const Vector3* playerPosition,
         int playerSectorId,
-        const SectorDoorPlayerObstacle* playerObstacle)
+        const SectorDoorPlayerObstacle* playerObstacle,
+        const NpcAiGameplayContext* npcGameplay)
 {
     UpdateLevelAudio(context, map, dt, playerSectorId);
     PrepareNpcDoorTraversalAndHoldsSystem(
@@ -180,7 +185,8 @@ void SectorSceneRuntime::Update(
             navigation,
             npcNavigation,
             runtimeObjects.dynamicDoorColliders,
-            dt);
+            dt,
+            npcGameplay != nullptr && npcGameplay->frozen);
     CollectNpcDoorObstacles(
             context.world,
             npcNavigation,
@@ -239,6 +245,21 @@ void SectorSceneRuntime::Update(
             context.world,
             navigation,
             runtimeObjects.dynamicDoorColliders);
+    if (npcGameplay != nullptr
+            && runtimeObjects.objectSectorLookupWorldValid) {
+        UpdateNpcAiSystem(
+                context.world,
+                context.assets,
+                context.audio,
+                navigation,
+                npcNavigation,
+                runtimeObjects.objectSectorLookupWorld,
+                runtimeObjects.dynamicDoorColliders,
+                runtimeObjects.staticModelColliders,
+                npcAi,
+                *npcGameplay,
+                dt);
+    }
     if (runtimeObjects.objectSectorLookupWorldValid) {
         UpdateNpcNavigationAndLocomotionSystem(
                 context.world,
@@ -252,7 +273,8 @@ void SectorSceneRuntime::Update(
                 runtimeObjects.objectLightProbes,
                 map,
                 dt,
-                playerObstacle);
+                playerObstacle,
+                npcGameplay != nullptr && npcGameplay->frozen);
         PlayPendingNpcFootsteps(context);
     }
     UpdateNpcAudioSystem(
@@ -299,7 +321,8 @@ bool SectorSceneRuntime::ResolvePlayerWeaponShot(
             shotSequence,
             firing,
             volley,
-            &npcAudio);
+            &npcAudio,
+            &npcAi);
     outShot = volley.shots[0];
     for (int pelletIndex = 0;
             pelletIndex < volley.pelletCount;

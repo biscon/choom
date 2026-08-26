@@ -35,8 +35,15 @@ bool SameAction(
 {
     return left.animation == right.animation
             && left.soundPath == right.soundPath
+            && left.attackSoundPath == right.attackSoundPath
             && left.animationSpeed == right.animationSpeed
-            && left.movementSpeed == right.movementSpeed;
+            && left.movementSpeed == right.movementSpeed
+            && left.hitPhase == right.hitPhase
+            && left.rangeWorld == right.rangeWorld
+            && left.damage == right.damage
+            && left.knockbackImpulseWorldPerSecond
+                    == right.knockbackImpulseWorldPerSecond
+            && left.stunMilliseconds == right.stunMilliseconds;
 }
 
 bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
@@ -44,6 +51,7 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
     if (left.id != right.id
             || left.name != right.name
             || left.hostile != right.hostile
+            || left.aiType != right.aiType
             || left.canOpenDoors != right.canOpenDoors
             || left.baseHealth != right.baseHealth
             || left.despawnOnDeath != right.despawnOnDeath
@@ -53,6 +61,14 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
                     != right.corpseFadeDurationSeconds
             || left.modelPath != right.modelPath
             || left.animationBlendSeconds != right.animationBlendSeconds
+            || left.perception.visionRangeWorld
+                    != right.perception.visionRangeWorld
+            || left.perception.visionAngleDegrees
+                    != right.perception.visionAngleDegrees
+            || left.perception.hearingRangeWorld
+                    != right.perception.hearingRangeWorld
+            || left.perception.investigationDurationMilliseconds
+                    != right.perception.investigationDurationMilliseconds
             || left.ambientVocalizations.soundPaths
                     != right.ambientVocalizations.soundPaths
             || left.ambientVocalizations.minimumDelaySeconds
@@ -345,6 +361,30 @@ void SectorEditorNpcEditorService::SetSelectedHostile(bool hostile)
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedAiType(const std::string& aiType)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.aiType = aiType;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedPerception(
+        float visionRangeWorld,
+        float visionAngleDegrees,
+        float hearingRangeWorld,
+        int investigationDurationMilliseconds)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.perception = NpcPerceptionDefinition{
+            visionRangeWorld,
+            visionAngleDegrees,
+            hearingRangeWorld,
+            investigationDurationMilliseconds};
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedCanOpenDoors(bool canOpenDoors)
 {
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
@@ -432,6 +472,16 @@ void SectorEditorNpcEditorService::SetSelectedActionSound(
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedAttackSound(
+        const std::string& soundPath)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    GetNpcAction(
+            draft->definition, NpcAction::Attack).attackSoundPath = soundPath;
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedAnimationSpeed(
         NpcAction action,
         float speed)
@@ -449,6 +499,25 @@ void SectorEditorNpcEditorService::SetSelectedMovementSpeed(
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
     if (draft == nullptr) return;
     GetNpcAction(draft->definition, action).movementSpeed = speed;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedAttack(
+        float hitPhase,
+        float rangeWorld,
+        int damage,
+        float knockbackImpulseWorldPerSecond,
+        int stunMilliseconds)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    NpcActionDefinition& attack = GetNpcAction(
+            draft->definition, NpcAction::Attack);
+    attack.hitPhase = hitPhase;
+    attack.rangeWorld = rangeWorld;
+    attack.damage = damage;
+    attack.knockbackImpulseWorldPerSecond = knockbackImpulseWorldPerSecond;
+    attack.stunMilliseconds = stunMilliseconds;
     state_.validationMessage.clear();
 }
 
@@ -614,6 +683,15 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.animationBlendSecondsInput = {};
     state_.ambientMinimumDelaySecondsInput = {};
     state_.ambientMaximumDelaySecondsInput = {};
+    state_.visionRangeWorldInput = {};
+    state_.visionAngleDegreesInput = {};
+    state_.hearingRangeWorldInput = {};
+    state_.investigationDurationMillisecondsInput = {};
+    state_.attackHitPhaseInput = {};
+    state_.attackRangeWorldInput = {};
+    state_.attackDamageInput = {};
+    state_.attackKnockbackInput = {};
+    state_.attackStunMillisecondsInput = {};
     state_.baseHealthInput = {};
     state_.corpseDespawnDelayMillisecondsInput = {};
     state_.corpseFadeDurationMillisecondsInput = {};
