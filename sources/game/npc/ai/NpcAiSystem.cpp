@@ -29,6 +29,7 @@ constexpr float SearchTurnRadiansPerSecond = 1.4f;
 constexpr float LineOfSightEpsilon = 0.03f;
 constexpr float AttackSoundMinimumDistanceWorld = 1.0f;
 constexpr float AttackSoundMaximumDistanceWorld = 25.0f;
+constexpr float CommittedMeleeHitGraceWorld = 0.25f;
 
 NpcNavigationRecord* FindNavigationRecord(
         NpcNavigationRuntime& runtime,
@@ -206,6 +207,23 @@ float AttackAnimationPhase(
     return std::clamp(frame / static_cast<float>(frameCount - 1), 0.0f, 1.0f);
 }
 
+bool AttackAnimationFinished(
+        engine::World& world,
+        engine::Entity entity)
+{
+    if (!world.Has<NpcAnimationState>(entity)
+            || !world.Has<engine::AnimatedModelAnimator>(entity)) {
+        return true;
+    }
+    const NpcAnimationState& animation = world.Get<NpcAnimationState>(entity);
+    const uint32_t attackIndex = animation.animationIndices[
+            static_cast<size_t>(NpcAction::Attack)];
+    if (attackIndex == engine::InvalidModelAnimationIndex) return true;
+    return engine::IsAnimatedModelAnimationFinished(
+            world.Get<engine::AnimatedModelAnimator>(entity),
+            attackIndex);
+}
+
 bool StartAttack(
         engine::World& world,
         engine::AssetManager& assets,
@@ -246,8 +264,8 @@ bool StartAttack(
             animator, state.animationIndices[index],
             state.blendSeconds, true);
     animator.speed = state.animationSpeeds[index];
-    animator.loop = false;
-    animator.targetLoop = false;
+    engine::SetAnimatedModelAnimationLoop(
+            animator, state.animationIndices[index], false);
     state.appliedAction = NpcAction::Attack;
     state.hasPendingAction = false;
     if (!engine::IsNull(ai.attackSound)) {
@@ -317,6 +335,60 @@ void AlertNpcToPlayerPosition(
     ai.directAlertPending = true;
 }
 
+int ApplyNpcAiPlayerDamage(
+        const NpcAiGameplayContext& gameplay,
+        int damage)
+{
+    if (gameplay.godMode || gameplay.playerHealth == nullptr) return 0;
+    const int appliedDamage = ApplyDamage(*gameplay.playerHealth, damage);
+    if (appliedDamage > 0 && gameplay.playerDamaged != nullptr) {
+        gameplay.playerDamaged(
+                gameplay.playerDamageUserData,
+                appliedDamage);
+    }
+    return appliedDamage;
+}
+
+int ApplyNpcAiPlayerAttackEffects(
+        const NpcAiGameplayContext& gameplay,
+        const NpcActionDefinition& attack,
+        Vector2 directionFromAttackerToPlayer)
+{
+    const int appliedDamage = ApplyNpcAiPlayerDamage(
+            gameplay, attack.damage);
+    if (appliedDamage <= 0) return 0;
+    if (gameplay.playerStunRemainingSeconds != nullptr) {
+        *gameplay.playerStunRemainingSeconds = std::max(
+                *gameplay.playerStunRemainingSeconds,
+                attack.stunMilliseconds / 1000.0f);
+    }
+    const float directionLength = Vector2Length(
+            directionFromAttackerToPlayer);
+    if (gameplay.playerKnockbackVelocity != nullptr
+            && attack.knockbackImpulseWorldPerSecond > 0.0f
+            && directionLength > 0.0001f) {
+        *gameplay.playerKnockbackVelocity = Vector2Add(
+                *gameplay.playerKnockbackVelocity,
+                Vector2Scale(
+                        directionFromAttackerToPlayer,
+                        attack.knockbackImpulseWorldPerSecond
+                                / directionLength));
+    }
+    return appliedDamage;
+}
+
+bool IsNpcAiCommittedMeleeHitInRange(
+        float playerDistanceWorld,
+        float attackRangeWorld)
+{
+    return std::isfinite(playerDistanceWorld)
+            && std::isfinite(attackRangeWorld)
+            && playerDistanceWorld >= 0.0f
+            && attackRangeWorld >= 0.0f
+            && playerDistanceWorld
+                    <= attackRangeWorld + CommittedMeleeHitGraceWorld;
+}
+
 void UpdateNpcAiSystem(
         engine::World& world,
         engine::AssetManager& assets,
@@ -366,12 +438,14 @@ void UpdateNpcAiSystem(
                     && combat.staggerRemainingSeconds <= 0.0f;
         }
         if (combat.dead || IsDepleted(health)) {
+            ai.previousIntent = NpcAiIntent::Idle;
             FinishAttack(npc, ai);
             return;
         }
         if (combat.staggerRemainingSeconds > 0.0f
                 || combat.hurtAnimationRequested
                 || combat.hurtAnimationPlaying) {
+            ai.previousIntent = NpcAiIntent::Idle;
             if (ai.attackCommitted) FinishAttack(npc, ai);
             return;
         }
@@ -429,6 +503,7 @@ void UpdateNpcAiSystem(
         }
 
         if (ai.awareness == NpcAwarenessState::InvestigatingTravel) {
+            ai.previousIntent = NpcAiIntent::Idle;
             npc.actionLockedByAi = false;
             RequestAiMove(
                     world, navigation, collisionWorld, npcNavigation, npc,
@@ -445,6 +520,7 @@ void UpdateNpcAiSystem(
             return;
         }
         if (ai.awareness == NpcAwarenessState::InvestigatingSearch) {
+            ai.previousIntent = NpcAiIntent::Idle;
             CancelAiMove(world, navigation, npcNavigation, npc);
             npc.actionLockedByAi = false;
             npc.action = NpcAction::Idle;
@@ -457,12 +533,16 @@ void UpdateNpcAiSystem(
             return;
         }
         if (ai.awareness != NpcAwarenessState::Detected) {
+            ai.previousIntent = NpcAiIntent::Idle;
             FinishAttack(npc, ai);
             return;
         }
 
         const NpcAiTypeDescriptor* plugin = FindNpcAiType(ai.aiType);
-        if (plugin == nullptr || plugin->update == nullptr) return;
+        if (plugin == nullptr || plugin->update == nullptr) {
+            ai.previousIntent = NpcAiIntent::Idle;
+            return;
+        }
         const Vector3 pursuitPosition = seesPlayer
                 ? gameplay.playerFeetPosition : ai.lastKnownPlayerPosition;
         const Vector2 toPlayer{
@@ -471,7 +551,8 @@ void UpdateNpcAiSystem(
         const float playerDistance = Vector2Length(toPlayer);
         const NpcAiIntent intent = plugin->update(NpcAiPluginInput{
                 playerDistance, ai.attack.rangeWorld,
-                ai.attackCommitted, playerAlive});
+                ai.attackCommitted, playerAlive, ai.previousIntent});
+        ai.previousIntent = intent;
         if (intent == NpcAiIntent::Idle) {
             CancelAiMove(world, navigation, npcNavigation, npc);
             FinishAttack(npc, ai);
@@ -503,7 +584,8 @@ void UpdateNpcAiSystem(
                     gameplay.playerFeetPosition.x - transform.position.x,
                     gameplay.playerFeetPosition.z - transform.position.z};
             const float actualPlayerDistance = Vector2Length(actualToPlayer);
-            const bool connected = actualPlayerDistance <= ai.attack.rangeWorld
+            const bool connected = IsNpcAiCommittedMeleeHitInRange(
+                            actualPlayerDistance, ai.attack.rangeWorld)
                     && HasLineOfSight(
                             collisionWorld, doorColliders, staticColliders,
                             {transform.position.x,
@@ -512,30 +594,20 @@ void UpdateNpcAiSystem(
                             gameplay.playerEyePosition);
             if (connected) {
                 if (!engine::IsNull(ai.attackImpactSound)) {
-                    audio.PlaySound(assets, ai.attackImpactSound);
+                    engine::PositionalSoundSettings positional;
+                    positional.position = transform.position;
+                    positional.minimumDistanceWorld =
+                            AttackSoundMinimumDistanceWorld;
+                    positional.maximumDistanceWorld =
+                            AttackSoundMaximumDistanceWorld;
+                    audio.PlaySoundAt(
+                            assets, ai.attackImpactSound, positional);
                 }
-                if (!gameplay.godMode && gameplay.playerHealth != nullptr) {
-                    ApplyDamage(*gameplay.playerHealth, ai.attack.damage);
-                    if (gameplay.playerStunRemainingSeconds != nullptr) {
-                        *gameplay.playerStunRemainingSeconds = std::max(
-                                *gameplay.playerStunRemainingSeconds,
-                                ai.attack.stunMilliseconds / 1000.0f);
-                    }
-                    if (gameplay.playerKnockbackVelocity != nullptr
-                            && ai.attack.knockbackImpulseWorldPerSecond > 0.0f
-                            && actualPlayerDistance > 0.0001f) {
-                        *gameplay.playerKnockbackVelocity = Vector2Add(
-                                *gameplay.playerKnockbackVelocity,
-                                Vector2Scale(
-                                        Vector2Scale(
-                                                actualToPlayer,
-                                                1.0f / actualPlayerDistance),
-                                        ai.attack.knockbackImpulseWorldPerSecond));
-                    }
-                }
+                ApplyNpcAiPlayerAttackEffects(
+                        gameplay, ai.attack, actualToPlayer);
             }
         }
-        if (animator == nullptr || animator->finished) {
+        if (animator == nullptr || AttackAnimationFinished(world, entity)) {
             FinishAttack(npc, ai);
         }
     });

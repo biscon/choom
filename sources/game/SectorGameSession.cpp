@@ -1315,6 +1315,11 @@ void SectorGameSession::Update(
         engine::EngineContext* engine = nullptr;
         SectorScriptHost* host = nullptr;
     } takeoverContext{&context, &scriptHost};
+    struct PlayerDamageAudioContext {
+        engine::AssetManager* assets = nullptr;
+        engine::AudioSystem* audio = nullptr;
+        PlayerAudioRuntime* playerAudio = nullptr;
+    } damageAudioContext{&context.assets, &context.audio, playerAudio};
     NpcAiGameplayContext npcGameplay;
     npcGameplay.playerFeetPosition = playerPosition;
     npcGameplay.playerEyePosition = SectorFpsControllerEyePosition(
@@ -1331,6 +1336,21 @@ void SectorGameSession::Update(
                 || takeover->host == nullptr) return;
         InterruptSectorScriptNpcMoveForAi(
                 *takeover->engine, *takeover->host, instanceId);
+    };
+    npcGameplay.playerDamageUserData = &damageAudioContext;
+    npcGameplay.playerDamaged = [](void* userData, int appliedDamage) {
+        auto* damageAudio = static_cast<PlayerDamageAudioContext*>(userData);
+        if (appliedDamage <= 0 || damageAudio == nullptr
+                || damageAudio->assets == nullptr
+                || damageAudio->audio == nullptr
+                || damageAudio->playerAudio == nullptr) {
+            return;
+        }
+        PlayPlayerSound(
+                *damageAudio->assets,
+                *damageAudio->audio,
+                *damageAudio->playerAudio,
+                "pain");
     };
     npcGameplay.godMode = godMode;
     npcGameplay.frozen = aiFrozen;

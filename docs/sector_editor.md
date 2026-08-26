@@ -935,16 +935,23 @@ model animation and playback speed; it additionally authors normalized hit
 phase, world-space range, damage, optional knockback impulse, optional stun in
 milliseconds, and an optional spatialized attack sound. The sound plays when
 the NPC begins the committed attack animation, whether or not the later hit
-connects. The separately authored player-impact sound remains centered and
-plays only when the hit connects. A stun value of `0` disables stun and a
-knockback value of `0` disables knockback. During a stun the game player cannot
-sprint and moves at half walk speed, but may still jump.
+connects. The separately authored player-impact sound plays only when the hit
+connects and is spatialized from the attacker so concurrent hits remain
+directionally distinct. A stun value of `0` disables stun and a knockback value
+of `0` disables knockback.
+During a stun the game player cannot sprint and moves at half walk speed, but
+may still jump.
 
 Seek & Destroy is the first hostile AI type. In the real game it uses generic
 vision/hearing and last-known-position investigation, runs toward a detected
-player, and commits to melee animations until their hit/finish points. AI never
-runs in either editor 3D preview control mode. Footstep and landing noise radii
-are application settings JSON values rather than editor controls. Runtime
+player, and commits to melee animations until their hit/finish points. The
+authored range remains the baseline center-to-center range; runtime uses a
+`0.10` world-unit engagement tolerance, a `0.25` world-unit disengagement band,
+and a bounded `0.25` world-unit committed-hit margin so navigation does not
+jitter at the melee boundary and nearby attackers resolve independently. A
+player who moves beyond that margin or behind cover still avoids the hit. AI
+never runs in either editor 3D preview control mode. Footstep and landing noise
+radii are application settings JSON values rather than editor controls. Runtime
 testing exposes `/god [on|off]` and `/freezeai [on|off]`; omitting the argument
 toggles the current campaign-session value.
 

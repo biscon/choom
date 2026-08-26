@@ -287,11 +287,13 @@ void ResolveNpcAnimations(
                     state.blendSeconds,
                     true);
             animator.speed = state.animationSpeeds[deathIndex];
-            animator.loop = false;
-            animator.targetLoop = false;
+            engine::SetAnimatedModelAnimationLoop(
+                    animator, state.animationIndices[deathIndex], false);
             state.appliedAction = NpcAction::Death;
         }
-        if (state.appliedAction == NpcAction::Death && animator.finished) {
+        if (state.appliedAction == NpcAction::Death
+                && engine::IsAnimatedModelAnimationFinished(
+                        animator, state.animationIndices[deathIndex])) {
             combat->deathAnimationComplete = true;
         }
         return;
@@ -308,8 +310,8 @@ void ResolveNpcAnimations(
                     state.blendSeconds,
                     true);
             animator.speed = state.animationSpeeds[hurtIndex];
-            animator.loop = false;
-            animator.targetLoop = false;
+            engine::SetAnimatedModelAnimationLoop(
+                    animator, state.animationIndices[hurtIndex], false);
             state.appliedAction = NpcAction::Hurt;
             combat->hurtAnimationPlaying = true;
         } else {
@@ -324,7 +326,10 @@ void ResolveNpcAnimations(
         return;
     }
     if (combat != nullptr && combat->hurtAnimationPlaying) {
-        if (!animator.finished) return;
+        const uint32_t hurtIndex = state.animationIndices[
+                ActionIndex(NpcAction::Hurt)];
+        if (!engine::IsAnimatedModelAnimationFinished(
+                    animator, hurtIndex)) return;
         combat->hurtAnimationPlaying = false;
     }
     ApplyNpcSemanticAnimation(state, animator, npc.action);
@@ -512,10 +517,11 @@ NpcAnimationApplyResult ApplyNpcSemanticAnimation(
             state.blendSeconds,
             false);
     animator.speed = state.animationSpeeds[requestedIndex];
-    animator.loop = requested != NpcAction::Attack
+    const bool loop = requested != NpcAction::Attack
             && requested != NpcAction::Hurt
             && requested != NpcAction::Death;
-    animator.targetLoop = animator.loop;
+    engine::SetAnimatedModelAnimationLoop(
+            animator, animationIndex, loop);
     state.appliedAction = requested;
     return NpcAnimationApplyResult::Applied;
 }
@@ -652,6 +658,14 @@ NpcMoveRequestResult RequestNpcMove(
             || !world.Has<SectorObject>(record->entity)) {
         return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC instance was not found");
     }
+    if (authority == NpcMoveAuthority::Script
+            && world.Has<NpcAiState>(record->entity)
+            && world.Get<NpcAiState>(record->entity).awareness
+                    != NpcAwarenessState::Unaware) {
+        return FailRequest(
+                SectorNavigationQueryStatus::InvalidAgent,
+                "player detected; AI took control");
+    }
     if (IsActive(record->phase)) {
         if (record->authority == NpcMoveAuthority::Script) {
             return FailRequest(
@@ -660,12 +674,11 @@ NpcMoveRequestResult RequestNpcMove(
                             ? "NPC already has an active scripted move"
                             : "NPC movement is controlled by a script");
         }
-        if (authority != NpcMoveAuthority::Script
-                || record->authority != NpcMoveAuthority::Ai) {
-            return FailRequest(
-                    SectorNavigationQueryStatus::InvalidAgent,
-                    "NPC already has an active move");
-        }
+        return FailRequest(
+                SectorNavigationQueryStatus::InvalidAgent,
+                record->authority == NpcMoveAuthority::Ai
+                        ? "NPC movement is controlled by AI"
+                        : "NPC already has an active move");
     }
     if (navigation.State() != SectorNavigationState::Ready) {
         return FailRequest(SectorNavigationQueryStatus::NavigationUnavailable, "navigation is not ready");

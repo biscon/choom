@@ -26,6 +26,19 @@ void SetAnimatedModelAnimation(
         float blendDurationSeconds = 0.0f,
         bool restart = true);
 
+// Configures the selected clip without mutating the other side of an active
+// blend. Returns false when the clip is neither active nor the blend target.
+bool SetAnimatedModelAnimationLoop(
+        AnimatedModelAnimator& animator,
+        uint32_t animationIndex,
+        bool loop);
+
+// Queries completion for one selected clip. During a blend this distinguishes
+// the target's completion from the outgoing source animator's finished flag.
+bool IsAnimatedModelAnimationFinished(
+        const AnimatedModelAnimator& animator,
+        uint32_t animationIndex);
+
 bool SetAnimatedModelAnimationByName(
         AnimatedModelAnimator& animator,
         const ModelAsset& asset,

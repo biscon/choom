@@ -44,6 +44,10 @@
       "land": {
         "set": "Land",
         "volume": 1.0
+      },
+      "pain": {
+        "set": "human_pain",
+        "volume": 1.0
       }
     }
   },

@@ -4,11 +4,18 @@ namespace game {
 
 namespace {
 
+constexpr float MeleeEngageToleranceWorld = 0.10f;
+constexpr float MeleeDisengageToleranceWorld = 0.25f;
+
 NpcAiIntent UpdateSeekAndDestroy(const NpcAiPluginInput& input)
 {
     if (!input.playerAlive) return NpcAiIntent::Idle;
+    const float tolerance = input.previousIntent == NpcAiIntent::AttackPlayer
+            ? MeleeDisengageToleranceWorld
+            : MeleeEngageToleranceWorld;
     if (input.attackCommitted
-            || input.playerDistanceWorld <= input.attackRangeWorld) {
+            || input.playerDistanceWorld
+                    <= input.attackRangeWorld + tolerance) {
         return NpcAiIntent::AttackPlayer;
     }
     return NpcAiIntent::ChasePlayer;

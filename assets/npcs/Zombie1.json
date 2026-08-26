@@ -4,14 +4,11 @@
   "name": "Zombie",
   "hostile": true,
   "aiType": "seek_and_destroy",
-  "perception": {
-    "visionRangeWorld": 15.0,
-    "visionAngleDegrees": 120.0,
-    "hearingRangeWorld": 12.0,
-    "investigationDurationMilliseconds": 4000
-  },
   "modelPath": "assets/models/characters/Zombie1.glb",
   "animationBlendSeconds": 0.25,
+  "perception": {
+    "hearingRangeWorld": 20.0
+  },
   "ambientVocalizations": {
     "sounds": [
       "npc/zombie/Zombie_Growl_01.wav",
@@ -35,10 +32,10 @@
     },
     "attack": {
       "animation": "Attack",
-      "animationSpeed": 1.0,
-      "hitPhase": 0.55,
-      "rangeWorld": 1.0,
-      "damage": 15,
+      "sound": "npc/zombie/Zombie_Impact_01.ogg",
+      "attackSound": "npc/zombie/Zombie_Attack_01.ogg",
+      "hitPhase": 0.4000000059604645,
+      "rangeWorld": 1.2000000476837158,
       "knockbackImpulseWorldPerSecond": 2.5,
       "stunMilliseconds": 500
     },

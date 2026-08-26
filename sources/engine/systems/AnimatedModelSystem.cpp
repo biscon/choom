@@ -111,6 +111,33 @@ void SetAnimatedModelAnimation(
     animator.poseDirty = true;
 }
 
+bool SetAnimatedModelAnimationLoop(
+        AnimatedModelAnimator& animator,
+        uint32_t animationIndex,
+        bool loop)
+{
+    if (animator.targetAnimationIndex == animationIndex) {
+        animator.targetLoop = loop;
+        return true;
+    }
+    if (animator.animationIndex == animationIndex) {
+        animator.loop = loop;
+        return true;
+    }
+    return false;
+}
+
+bool IsAnimatedModelAnimationFinished(
+        const AnimatedModelAnimator& animator,
+        uint32_t animationIndex)
+{
+    if (animator.targetAnimationIndex == animationIndex) {
+        return animator.targetFinished;
+    }
+    return animator.animationIndex == animationIndex
+            && animator.finished;
+}
+
 bool SetAnimatedModelClip(
         AnimatedModelAnimator& animator,
         const ModelAsset& asset,

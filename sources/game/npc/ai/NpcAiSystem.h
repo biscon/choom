@@ -40,6 +40,9 @@ using NpcAiScriptTakeoverFn = void (*)(
         void* userData,
         engine::Entity entity,
         const char* instanceId);
+using NpcAiPlayerDamagedFn = void (*)(
+        void* userData,
+        int appliedDamage);
 
 struct NpcAiGameplayContext {
     Vector3 playerFeetPosition{};
@@ -49,6 +52,8 @@ struct NpcAiGameplayContext {
     float* playerStunRemainingSeconds = nullptr;
     void* scriptUserData = nullptr;
     NpcAiScriptTakeoverFn interruptScriptMovement = nullptr;
+    void* playerDamageUserData = nullptr;
+    NpcAiPlayerDamagedFn playerDamaged = nullptr;
     bool godMode = false;
     bool frozen = false;
 };
@@ -64,6 +69,16 @@ void AlertNpcToPlayerPosition(
         engine::World& world,
         engine::Entity entity,
         Vector3 playerPositionWorld);
+int ApplyNpcAiPlayerDamage(
+        const NpcAiGameplayContext& gameplay,
+        int damage);
+int ApplyNpcAiPlayerAttackEffects(
+        const NpcAiGameplayContext& gameplay,
+        const NpcActionDefinition& attack,
+        Vector2 directionFromAttackerToPlayer);
+bool IsNpcAiCommittedMeleeHitInRange(
+        float playerDistanceWorld,
+        float attackRangeWorld);
 
 void UpdateNpcAiSystem(
         engine::World& world,

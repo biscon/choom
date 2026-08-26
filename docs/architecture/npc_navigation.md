@@ -69,6 +69,11 @@ NPC's authored hearing range to reach. Footsteps, landings, and shots publish
 events; weapon damage also supplies the exact shot origin as a direct generic
 stimulus.
 
+Detected or investigating AI owns navigation authority. Script movement cannot
+replace an active AI path, and a patrol coroutine that wakes after detection
+receives the normal AI-takeover failure from its next move request. Unaware NPCs
+continue to accept ordinary script movement.
+
 Loss of sight does not immediately forget the player. Generic investigation
 runs to the last-known position, performs a deterministic turning search for
 the authored duration, then returns to unaware. Hearing begins at investigation
@@ -78,15 +83,29 @@ blocking or awaited Lua operation resumes with `false` and the AI-takeover
 reason.
 
 The first registered type is `seek_and_destroy`. When detected it returns a
-run-to-player intent outside melee range and an attack intent inside range. An
-attack is committed for its full non-looping animation. The authored normalized
-hit phase performs a fresh range and LOS test, applies damage plus optional
-knockback/stun on connection, and plays the optional centered player-impact
-sound. The separate optional spatialized attack sound plays when the committed
-attack animation begins, independent of the later hit result. Leaving range or
-gaining cover makes that committed swing miss without cancelling it. Positive
-weapon stagger interrupts a swing; zero-stagger damage does not. The animation
-itself supplies attack cadence.
+run-to-player intent outside melee range and an attack intent inside range. Its
+plugin input includes the previous intent so the type can own its state-change
+hysteresis without moving that policy into generic perception. Seek & Destroy
+enters melee within `0.10` world units beyond the authored range and remains
+engaged until `0.25` world units beyond it. This cancels chase before crowd and
+physical stopping tolerances can oscillate at a single exact boundary.
+
+An attack is committed for its full non-looping animation. The authored
+normalized hit phase performs a fresh LOS test and accepts a bounded `0.25`
+world-unit committed-swing range margin. Moving farther away or gaining cover
+still makes the swing miss. A connection applies damage plus optional
+knockback/stun through one per-attacker operation, dispatches one player-damage
+event, and plays the optional player-impact sound spatialized from the attacker.
+Player-damage events select from the globally loaded pain sound set, including
+when multiple NPC hits land in one frame; their knockback impulses accumulate.
+The separate optional spatialized attack sound plays when the committed attack
+animation begins, independent of the later hit result. Positive weapon stagger
+interrupts a swing; zero-stagger damage does not. The animation itself supplies
+attack cadence. During a blended transition, loop and completion state belong
+to the selected target clip: an outgoing Run/Walk clip keeps its own looping
+state and cannot finish the Attack, Hurt, or Death action. This also guarantees
+that attack-start audio is emitted once per genuine committed swing rather than
+being retriggered by a blend restart.
 
 AI freeze stops generic perception/investigation timers, AI path movement,
 decisions, and active AI locomotion/attack animation. Sound events still age,

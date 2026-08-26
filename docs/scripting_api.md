@@ -418,6 +418,7 @@ Out-of-range values raise a Lua argument error.
 ### `setPlayerHealth(health) -> true | false, reason`
 
 Sets the player's current health. A value of `0` depletes the player's health.
+Direct assignment is not a damage event and does not play player pain audio.
 
 ```lua
 setPlayerHealth(75)
@@ -467,8 +468,11 @@ reports a terminal failure.
 If a hostile NPC acquires the player through vision, hearing, or player damage,
 generic AI takes movement authority immediately. A blocking `moveNpc` call or
 an `await` on `startMoveNpc` then resumes with `false, "player detected; AI took
-control"`. The script move is not resumed after the NPC later forgets the
-player; a future engine patrol feature may provide resumable patrol behavior.
+control"`. New script move requests are rejected with the same result while
+the NPC remains detected or investigating. This also prevents a patrol
+coroutine that was delayed during detection from reclaiming the NPC when it
+wakes. The script move is not resumed after the NPC later forgets the player;
+a future engine patrol feature may provide resumable patrol behavior.
 
 Loops must check the returned boolean and exit, yield, or back off after a
 failure. A missing or removed NPC makes later requests fail immediately. As a

@@ -6,6 +6,7 @@
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcCombatSystem.h"
 #include "game/npc/NpcRuntime.h"
+#include "game/npc/ai/NpcAiSystem.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorAudioOcclusion.h"
@@ -5528,6 +5529,76 @@ void TestNpcFootstepCadenceUsesResolvedTravel()
           "NPC run cadence emits after enough resolved travel");
 }
 
+void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
+{
+    struct DamageNotifications {
+        int count = 0;
+        int totalDamage = 0;
+    } notifications;
+    game::Health health = game::MakeHealth(100);
+    Vector2 knockbackVelocity{};
+    float stunRemainingSeconds = 0.0f;
+    game::NpcAiGameplayContext gameplay;
+    gameplay.playerHealth = &health;
+    gameplay.playerKnockbackVelocity = &knockbackVelocity;
+    gameplay.playerStunRemainingSeconds = &stunRemainingSeconds;
+    gameplay.playerDamageUserData = &notifications;
+    gameplay.playerDamaged = [](void* userData, int appliedDamage) {
+        auto* received = static_cast<DamageNotifications*>(userData);
+        ++received->count;
+        received->totalDamage += appliedDamage;
+    };
+
+    game::NpcActionDefinition attack;
+    attack.damage = 15;
+    attack.knockbackImpulseWorldPerSecond = 2.5f;
+    attack.stunMilliseconds = 500;
+    const bool firstInRange = game::IsNpcAiCommittedMeleeHitInRange(
+            1.44f, 1.2f);
+    const bool secondInRange = game::IsNpcAiCommittedMeleeHitInRange(
+            1.45f, 1.2f);
+    const int first = firstInRange
+            ? game::ApplyNpcAiPlayerAttackEffects(
+                    gameplay, attack, Vector2{1.0f, 0.0f})
+            : 0;
+    const int second = secondInRange
+            ? game::ApplyNpcAiPlayerAttackEffects(
+                    gameplay, attack, Vector2{0.0f, 2.0f})
+            : 0;
+    Check(first == 15 && second == 15
+                  && health.current == 70
+                  && notifications.count == 2
+                  && notifications.totalDamage == 30
+                  && Near(knockbackVelocity, Vector2{2.5f, 2.5f})
+                  && Near(stunRemainingSeconds, 0.5f),
+          "two committed NPC hits independently apply damage, pain, stun, and knockback");
+    Check(!game::IsNpcAiCommittedMeleeHitInRange(1.451f, 1.2f)
+                  && !game::IsNpcAiCommittedMeleeHitInRange(NAN, 1.2f),
+          "committed melee hit grace remains bounded and rejects invalid distances");
+
+    gameplay.godMode = true;
+    Check(game::ApplyNpcAiPlayerAttackEffects(
+                  gameplay, attack, Vector2{1.0f, 0.0f}) == 0
+                  && health.current == 70
+                  && notifications.count == 2
+                  && Near(knockbackVelocity, Vector2{2.5f, 2.5f})
+                  && Near(stunRemainingSeconds, 0.5f),
+          "god mode blocks all player attack effects and pain events");
+    gameplay.godMode = false;
+    Check(game::ApplyNpcAiPlayerDamage(gameplay, 0) == 0
+                  && notifications.count == 2,
+          "zero NPC damage does not dispatch a pain event");
+
+    health.current = 10;
+    Check(game::ApplyNpcAiPlayerDamage(gameplay, 50) == 10
+                  && game::IsDepleted(health)
+                  && notifications.count == 3
+                  && notifications.totalDamage == 40
+                  && game::ApplyNpcAiPlayerDamage(gameplay, 50) == 0
+                  && notifications.count == 3,
+          "lethal damage dispatches once and an already-dead player stays silent");
+}
+
 void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
 {
     game::SectorTopologyMap map = MakeNavigationSquareMap();
@@ -5707,25 +5778,54 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
     const game::NpcMoveStatus scriptStatus = game::GetNpcMoveStatus(
             npcNavigation, "walker");
     Check(aiRequest.accepted
-                  && scriptTakeover.accepted
-                  && scriptTakeover.requestId != aiRequest.requestId
+                  && !scriptTakeover.accepted
                   && !blockedAi.accepted
-                  && scriptStatus.authority == game::NpcMoveAuthority::Script
-                  && scriptStatus.requestId == scriptTakeover.requestId,
-          "script authority replaces AI intent and blocks AI retargeting");
-    Check(!game::CancelNpcMove(
+                  && scriptStatus.authority == game::NpcMoveAuthority::Ai
+                  && scriptStatus.requestId == aiRequest.requestId,
+          "script authority cannot overwrite active AI movement");
+    Check(game::CancelNpcMove(
                   world,
                   navigation,
                   npcNavigation,
                   "walker",
-                  aiRequest.requestId)
+                  aiRequest.requestId),
+          "request-specific cancellation still stops the retained AI move");
+
+    game::NpcAiState detectedAi;
+    detectedAi.awareness = game::NpcAwarenessState::Detected;
+    world.Add(walker, detectedAi);
+    const game::NpcMoveRequestResult delayedPatrolResume = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "walker",
+            {4.0f, 6.0f},
+            game::NpcMoveGait::Run,
+            game::NpcMoveAuthority::Script);
+    Check(!delayedPatrolResume.accepted
+                  && delayedPatrolResume.message
+                          == "player detected; AI took control",
+          "detected NPC rejects a patrol move resumed after a script delay");
+    world.Get<game::NpcAiState>(walker).awareness =
+            game::NpcAwarenessState::Unaware;
+    const game::NpcMoveRequestResult unawarePatrol = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "walker",
+            {4.0f, 6.0f},
+            game::NpcMoveGait::Walk,
+            game::NpcMoveAuthority::Script);
+    Check(unawarePatrol.accepted
                   && game::CancelNpcMove(
                           world,
                           navigation,
                           npcNavigation,
                           "walker",
-                          scriptTakeover.requestId),
-          "request-specific cancellation cannot stop a replacement move");
+                          unawarePatrol.requestId),
+          "unaware NPC still accepts and cancels ordinary scripted movement");
 
     world.DestroyLater(walker);
     world.FlushDestroyedEntities();
@@ -6242,8 +6342,8 @@ void TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions()
 {
     game::NpcAnimationState state;
     state.resolved = true;
-    state.animationIndices = {0, 1, 2};
-    state.animationSpeeds = {0.8f, 1.25f, 1.6f};
+    state.animationIndices = {0, 1, 2, 3, 4, 5};
+    state.animationSpeeds = {0.8f, 1.25f, 1.6f, 1.1f, 0.9f, 0.7f};
     state.blendSeconds = 0.35f;
     state.appliedAction = game::NpcAction::Idle;
     engine::AnimatedModelAnimator animator;
@@ -6286,6 +6386,27 @@ void TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions()
                     == game::NpcAnimationApplyResult::Missing
                   && state.appliedAction == game::NpcAction::Run,
           "missing semantic animation leaves the current animation valid and reports gracefully");
+
+    state.animationIndices[static_cast<size_t>(game::NpcAction::Walk)] = 1;
+    animator.animationIndex = 2;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    animator.loop = true;
+    animator.finished = false;
+    state.appliedAction = game::NpcAction::Run;
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Attack)
+                    == game::NpcAnimationApplyResult::Applied
+                  && animator.animationIndex == 2
+                  && animator.targetAnimationIndex == 3
+                  && animator.loop
+                  && !animator.targetLoop,
+          "Run-to-Attack keeps the outgoing source looping and marks only the target non-looping");
+    animator.finished = true;
+    Check(!engine::IsAnimatedModelAnimationFinished(animator, 3),
+          "a finished Run blend source does not report the target Attack as complete");
+    animator.targetFinished = true;
+    Check(engine::IsAnimatedModelAnimationFinished(animator, 3),
+          "a blending Attack completes only when its target cursor finishes");
 }
 
 void TestNpcNavigationSmoothsSectorGeometryStairsVisually()
@@ -6566,11 +6687,28 @@ void TestAnimatedModelSelectionAndBlendApi()
                   && Near(animator.frame, 12.0f)
                   && Near(animator.transitionDurationSeconds, 0.4f),
           "positive-duration animation selection preserves a source clip for blending");
+    Check(engine::SetAnimatedModelAnimationLoop(animator, 1, false)
+                  && animator.loop
+                  && !animator.targetLoop,
+          "target loop configuration does not mutate the outgoing blend source");
+    animator.finished = true;
+    Check(!engine::IsAnimatedModelAnimationFinished(animator, 1),
+          "target completion ignores a finished outgoing blend source");
+    animator.targetFinished = true;
+    Check(engine::IsAnimatedModelAnimationFinished(animator, 1),
+          "target completion reads the blend target's finished state");
     engine::SetAnimatedModelAnimation(animator, 2, 0.0f);
     Check(animator.animationIndex == 2
                   && animator.targetAnimationIndex == engine::InvalidModelAnimationIndex
                   && Near(animator.frame, 0.0f),
           "zero-duration animation selection switches immediately and restarts");
+    animator.loop = false;
+    animator.finished = true;
+    Check(engine::IsAnimatedModelAnimationFinished(animator, 2)
+                  && engine::SetAnimatedModelAnimationLoop(animator, 2, true)
+                  && animator.loop
+                  && !engine::SetAnimatedModelAnimationLoop(animator, 99, true),
+          "active animation loop and completion helpers reject unrelated clips");
 }
 
 void TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose()
@@ -9150,6 +9288,7 @@ int main()
     TestDynamicModelColliderCollectionIsSeparatedForNavigation();
     TestSpawnNpcResolvesDefinitionAndIdlePlayback();
     TestNpcFootstepCadenceUsesResolvedTravel();
+    TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
     TestNpcNavigationReplansAroundDynamicTileCacheObstacle();
     TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate();

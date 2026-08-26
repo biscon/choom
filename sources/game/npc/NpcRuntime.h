@@ -2,6 +2,7 @@
 
 #include "game/npc/NpcDefinitions.h"
 #include "game/npc/NpcCollision.h"
+#include "game/npc/ai/NpcAiTypes.h"
 #include "game/Health.h"
 #include "engine/ecs/Entity.h"
 #include "engine/assets/AssetHandles.h"
@@ -45,6 +46,7 @@ struct NpcAiState {
     float retargetRemainingSeconds = 0.0f;
     float searchTurnDirection = 1.0f;
     uint64_t lastHeardSoundSequence = 0;
+    NpcAiIntent previousIntent = NpcAiIntent::Idle;
     bool attackCommitted = false;
     bool attackHitResolved = false;
     bool scriptTakeoverPending = false;

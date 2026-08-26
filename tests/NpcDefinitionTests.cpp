@@ -287,13 +287,29 @@ void TestSeekAndDestroyPluginBoundary()
                     == game::NpcAiIntent::ChasePlayer,
           "Seek & Destroy chases outside melee range");
     Check(type != nullptr && type->update(game::NpcAiPluginInput{
-                    0.8f, 1.0f, false, true})
+                    1.05f, 1.0f, false, true,
+                    game::NpcAiIntent::ChasePlayer})
                     == game::NpcAiIntent::AttackPlayer,
-          "Seek & Destroy attacks inside melee range");
+          "Seek & Destroy engages inside the melee navigation tolerance");
+    Check(type != nullptr && type->update(game::NpcAiPluginInput{
+                    1.20f, 1.0f, false, true,
+                    game::NpcAiIntent::AttackPlayer})
+                    == game::NpcAiIntent::AttackPlayer,
+          "Seek & Destroy remains engaged inside the wider melee hysteresis band");
+    Check(type != nullptr && type->update(game::NpcAiPluginInput{
+                    1.26f, 1.0f, false, true,
+                    game::NpcAiIntent::AttackPlayer})
+                    == game::NpcAiIntent::ChasePlayer,
+          "Seek & Destroy resumes chasing outside the melee hysteresis band");
     Check(type != nullptr && type->update(game::NpcAiPluginInput{
                     3.0f, 1.0f, true, true})
                     == game::NpcAiIntent::AttackPlayer,
           "Seek & Destroy preserves attack commitment outside melee range");
+    Check(type != nullptr && type->update(game::NpcAiPluginInput{
+                    0.5f, 1.0f, true, false,
+                    game::NpcAiIntent::AttackPlayer})
+                    == game::NpcAiIntent::Idle,
+          "Seek & Destroy resets to idle when the player is dead");
 }
 
 void TestDiscoveryErrorsAreRetained()

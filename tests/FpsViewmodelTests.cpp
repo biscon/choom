@@ -1176,10 +1176,13 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.35f));
     assert(Near(loaded.footsteps.noiseRadiusWorld, 6.0f));
     assert(Near(loaded.footsteps.landingNoiseRadiusWorld, 12.0f));
-    assert(loaded.playerSounds.events.size() == 2);
+    assert(loaded.playerSounds.events.size() == 3);
     assert(loaded.playerSounds.events[0].id == "jump");
     assert(loaded.playerSounds.events[0].set == "Jump");
     assert(loaded.playerSounds.events[1].id == "land");
+    assert(loaded.playerSounds.events[2].id == "pain");
+    assert(loaded.playerSounds.events[2].set == "human_pain");
+    assert(Near(loaded.playerSounds.events[2].volume, 1.0f));
     assert(Near(loaded.playerStamina.maximum, 100.0f));
     assert(Near(loaded.playerStamina.sprintDrainPerSecond, 20.0f));
     assert(Near(loaded.playerStamina.jumpCost, 20.0f));

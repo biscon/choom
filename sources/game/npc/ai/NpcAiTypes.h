@@ -21,6 +21,7 @@ struct NpcAiPluginInput {
     float attackRangeWorld = 0.0f;
     bool attackCommitted = false;
     bool playerAlive = true;
+    NpcAiIntent previousIntent = NpcAiIntent::Idle;
 };
 
 using NpcAiUpdateFn = NpcAiIntent (*)(const NpcAiPluginInput& input);

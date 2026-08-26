@@ -283,7 +283,8 @@ struct PlayerSoundEventSettings {
 struct PlayerSoundApplicationSettings {
     std::vector<PlayerSoundEventSettings> events{
             PlayerSoundEventSettings{"jump", "Jump", 1.0f},
-            PlayerSoundEventSettings{"land", "Land", 1.0f}};
+            PlayerSoundEventSettings{"land", "Land", 1.0f},
+            PlayerSoundEventSettings{"pain", "human_pain", 1.0f}};
 };
 
 enum class FpsShadowQuality {
