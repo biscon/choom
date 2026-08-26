@@ -32,6 +32,13 @@ struct FpsVitalsLayout {
     FpsStatusBarLayout stamina;
 };
 
+struct FpsReloadIndicatorLayout {
+    Vector2 center = {};
+    float innerRadius = 0.0f;
+    float outerRadius = 0.0f;
+    Vector2 textPosition = {};
+};
+
 struct FpsHudContext {
     bool preview3DActive = false;
     Rectangle playableViewport = {};
@@ -40,6 +47,9 @@ struct FpsHudContext {
     const engine::FontAsset* font = nullptr;
     const Health* health = nullptr;
     const PlayerStamina* stamina = nullptr;
+    int loadedRounds = 0;
+    std::uint64_t reserveRounds = 0;
+    bool showAmmo = false;
 };
 
 bool ShouldDrawFpsCrosshair(
@@ -51,6 +61,15 @@ FpsCrosshairLayout BuildFpsCrosshairLayout(
         float uiScale);
 FpsVitalsLayout BuildFpsVitalsLayout(
         Rectangle playableViewport,
+        float uiScale,
+        int fontPixelSize,
+        bool includeStamina);
+FpsReloadIndicatorLayout BuildFpsReloadIndicatorLayout(
+        const FpsCrosshairLayout& crosshair,
+        float uiScale,
+        int fontPixelSize);
+Vector2 BuildFpsAmmoCounterPosition(
+        const FpsVitalsLayout& vitals,
         float uiScale,
         int fontPixelSize,
         bool includeStamina);

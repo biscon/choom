@@ -11,6 +11,12 @@
 
 namespace game {
 
+enum class SectorEditorWeaponAudioTarget {
+    Shoot,
+    DryFire,
+    Reload
+};
+
 struct SectorEditorWeaponEditorSessionState {
     std::string selectedWeaponId;
     engine::UIScrollState listScroll;
@@ -36,6 +42,8 @@ struct SectorEditorWeaponEditorState {
     char attachmentModelPathBuffer[512] = {};
     char attachmentBoneBuffer[64] = {};
     char shootSoundBuffer[512] = {};
+    char dryFireSoundBuffer[512] = {};
+    char reloadSoundBuffer[512] = {};
 
     std::array<engine::UIFloatInputState, 128> floatInputs;
     std::array<engine::UIIntInputState, 64> intInputs;
@@ -50,6 +58,8 @@ struct SectorEditorWeaponEditorState {
     std::string validationMessage;
     std::string warningMessage;
     SectorEditorAudioAssetPickerState audioPicker;
+    SectorEditorWeaponAudioTarget audioPickerTarget =
+            SectorEditorWeaponAudioTarget::Shoot;
 };
 
 } // namespace game

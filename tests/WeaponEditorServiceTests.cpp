@@ -19,6 +19,10 @@ game::FpsWeaponRegistry MakeRegistry()
     pistol.viewmodel.idleAnimation = "Idle";
     pistol.viewmodel.attachment.modelPath = "assets/models/weapons/pistol.glb";
     pistol.viewmodel.attachment.boneName = "RightHand";
+    pistol.reload.magazineSize = 18;
+    pistol.reload.durationSeconds = 0.63f;
+    pistol.reload.dryFireSoundPath = "weapons/pistol/dry_fire_01.ogg";
+    pistol.reload.reloadSoundPath = "weapons/pistol/reload_02.ogg";
     registry.weapons.push_back(std::move(pistol));
     return registry;
 }
@@ -57,6 +61,12 @@ void AddDuplicateDeleteAndCancel()
     assert(service.SelectedWeapon()->viewmodel.modelPath
             == "assets/models/weapons/shared_arms.glb");
     assert(service.SelectedWeapon()->weaponSlot == 0);
+    assert(service.SelectedWeapon()->reload.magazineSize == 18);
+    assert(service.SelectedWeapon()->reload.durationSeconds == 0.63f);
+    assert(service.SelectedWeapon()->reload.dryFireSoundPath
+            == "weapons/pistol/dry_fire_01.ogg");
+    assert(service.SelectedWeapon()->reload.reloadSoundPath
+            == "weapons/pistol/reload_02.ogg");
     assert(!service.SetSelectedWeaponSlot(1));
     assert(service.SelectedWeapon()->weaponSlot == 0);
     assert(state.warningMessage.find("pistol") != std::string::npos);
@@ -144,9 +154,19 @@ void ReferencedWeaponsCannotBeOrphaned()
     assert(service.SelectedWeaponId() == "pistol");
     assert(std::string(state.idBuffer) == "pistol");
 
-    service.SelectedWeapon()->id = "direct_rename";
     engine::AssetManager assets;
     assert(assets.Initialize());
+    service.SetDryFireSoundPath("weapons/pistol/dry_fire_01.ogg", assets);
+    service.SetReloadSoundPath("weapons/pistol/reload_02.ogg", assets);
+    assert(service.SelectedWeapon()->reload.dryFireSoundPath
+            == "weapons/pistol/dry_fire_01.ogg");
+    assert(service.SelectedWeapon()->reload.reloadSoundPath
+            == "weapons/pistol/reload_02.ogg");
+    assert(std::string(state.dryFireSoundBuffer)
+            == "weapons/pistol/dry_fire_01.ogg");
+    assert(std::string(state.reloadSoundBuffer)
+            == "weapons/pistol/reload_02.ogg");
+    service.SelectedWeapon()->id = "direct_rename";
     assert(!service.SaveAndClose(assets));
     assert(state.validationMessage.find("orphan") != std::string::npos);
     assets.Shutdown();

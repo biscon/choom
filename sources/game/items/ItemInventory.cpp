@@ -50,7 +50,8 @@ int FindLowestFreeSlot(
 
 void InitializeItemCampaignState(
         ItemCampaignState& state,
-        const PlayerInventoryApplicationSettings& settings)
+        const PlayerInventoryApplicationSettings& settings,
+        const FpsWeaponRegistry* weapons)
 {
     state = ItemCampaignState{};
     state.inventory.entries.reserve(static_cast<std::size_t>(
@@ -58,6 +59,109 @@ void InitializeItemCampaignState(
     state.healingEffects.reserve(static_cast<std::size_t>(
             std::max(1, settings.maxSlots)));
     state.levels.reserve(16);
+    if (weapons != nullptr) {
+        state.weapons.magazines.reserve(weapons->weapons.size());
+        for (const FpsWeaponDefinition& weapon : weapons->weapons) {
+            state.weapons.activeWeaponId.reserve(std::max(
+                    state.weapons.activeWeaponId.capacity(),
+                    weapon.id.size()));
+            state.weapons.magazines.push_back(
+                    PlayerWeaponMagazineState{weapon.id, 0});
+        }
+    }
+}
+
+const PlayerWeaponMagazineState* FindPlayerWeaponMagazine(
+        const PlayerWeaponCampaignState& state,
+        std::string_view weaponId)
+{
+    const auto found = std::find_if(
+            state.magazines.begin(),
+            state.magazines.end(),
+            [weaponId](const PlayerWeaponMagazineState& magazine) {
+                return magazine.weaponId == weaponId;
+            });
+    return found == state.magazines.end() ? nullptr : &*found;
+}
+
+PlayerWeaponMagazineState* FindPlayerWeaponMagazine(
+        PlayerWeaponCampaignState& state,
+        std::string_view weaponId)
+{
+    return const_cast<PlayerWeaponMagazineState*>(FindPlayerWeaponMagazine(
+            static_cast<const PlayerWeaponCampaignState&>(state), weaponId));
+}
+
+bool InventoryOwnsWeapon(
+        const PlayerInventoryState& inventory,
+        const ItemRegistry& registry,
+        std::string_view weaponId)
+{
+    for (const ItemInventoryEntry& entry : inventory.entries) {
+        if (entry.quantity == 0) continue;
+        const ItemDefinition* definition = FindItemDefinition(
+                registry, entry.definitionId);
+        if (definition != nullptr
+                && definition->type == ItemType::Weapon
+                && definition->weaponId == weaponId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::uint64_t CountInventoryAmmoForWeapon(
+        const PlayerInventoryState& inventory,
+        const ItemRegistry& registry,
+        std::string_view weaponId)
+{
+    std::uint64_t result = 0;
+    for (const ItemInventoryEntry& entry : inventory.entries) {
+        const ItemDefinition* definition = FindItemDefinition(
+                registry, entry.definitionId);
+        if (definition == nullptr
+                || definition->type != ItemType::Ammo
+                || definition->weaponId != weaponId) {
+            continue;
+        }
+        if (entry.quantity > std::numeric_limits<std::uint64_t>::max() - result) {
+            return std::numeric_limits<std::uint64_t>::max();
+        }
+        result += entry.quantity;
+    }
+    return result;
+}
+
+std::uint64_t ConsumeInventoryAmmoForWeapon(
+        PlayerInventoryState& inventory,
+        const ItemRegistry& registry,
+        std::string_view weaponId,
+        std::uint64_t maximumQuantity)
+{
+    std::uint64_t consumed = 0;
+    while (consumed < maximumQuantity) {
+        auto best = inventory.entries.end();
+        for (auto it = inventory.entries.begin(); it != inventory.entries.end(); ++it) {
+            const ItemDefinition* definition = FindItemDefinition(
+                    registry, it->definitionId);
+            if (it->quantity == 0 || definition == nullptr
+                    || definition->type != ItemType::Ammo
+                    || definition->weaponId != weaponId) {
+                continue;
+            }
+            if (best == inventory.entries.end()
+                    || it->slotIndex < best->slotIndex) {
+                best = it;
+            }
+        }
+        if (best == inventory.entries.end()) break;
+        const std::uint64_t transfer = std::min(
+                maximumQuantity - consumed, best->quantity);
+        best->quantity -= transfer;
+        consumed += transfer;
+        if (best->quantity == 0) inventory.entries.erase(best);
+    }
+    return consumed;
 }
 
 bool RemoveInventoryEntryQuantity(

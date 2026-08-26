@@ -159,6 +159,15 @@ struct FpsWeaponFiringDefinition {
     FpsWeaponImpactDefinition impact;
 };
 
+struct FpsWeaponReloadDefinition {
+    int magazineSize = 1;
+    float durationSeconds = 1.0f;
+    std::string dryFireSoundPath;
+    engine::SoundHandle dryFireSound = engine::NullSoundHandle();
+    std::string reloadSoundPath;
+    engine::SoundHandle reloadSound = engine::NullSoundHandle();
+};
+
 struct FpsWeaponViewmodelDefinition {
     std::string modelPath;
     std::string idleAnimation;
@@ -178,11 +187,12 @@ struct FpsWeaponDefinition {
     int weaponSlot = 0;
     FpsWeaponCrosshairDefinition crosshair;
     FpsWeaponFiringDefinition firing;
+    FpsWeaponReloadDefinition reload;
     FpsWeaponViewmodelDefinition viewmodel;
 };
 
 struct FpsWeaponRegistry {
-    int version = 2;
+    int version = 3;
     std::vector<FpsWeaponDefinition> weapons;
 };
 

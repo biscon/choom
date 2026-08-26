@@ -11,6 +11,7 @@
 #include <rlgl.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace game {
 namespace {
@@ -59,7 +60,8 @@ void FpsPlayerRuntime::Begin(
         SectorMeshRenderer& renderer,
         const FpsWeaponRegistry& registry,
         const FpsApplicationSettings& settings,
-        const char* scopeName)
+        const char* scopeName,
+        bool activateInitialWeapon)
 {
     End(assets, renderer);
     if (!LoadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources)) {
@@ -106,7 +108,7 @@ void FpsPlayerRuntime::Begin(
     const FpsWeaponDefinition* initial = FindFpsWeaponDefinitionForSlot(
             registry,
             MinFpsWeaponSlot);
-    if (initial != nullptr) {
+    if (activateInitialWeapon && initial != nullptr) {
         ActivateWeapon(
                 renderer,
                 registry,
@@ -273,6 +275,7 @@ bool FpsPlayerRuntime::ActivateWeapon(
     state.firing.definition = ResolveFpsWeaponFiringDefinition(
             definition->firing,
             FindFpsWeaponFiringOverride(settings, definition->id));
+    state.reloadDefinition = definition->reload;
     state.modelInstance = std::move(assetEntry.modelInstance);
     state.modelInstance.model = assetEntry.model;
     state.attachment.model = assetEntry.attachmentModel;
@@ -308,6 +311,7 @@ bool FpsPlayerRuntime::SelectWeapon(
         const char* scopeName)
 {
     pendingWeaponSlot = 0;
+    pendingUnequip = false;
     return LoadWeapon(
             assets,
             renderer,
@@ -315,6 +319,43 @@ bool FpsPlayerRuntime::SelectWeapon(
             settings,
             weaponId,
             scopeName);
+}
+
+bool FpsPlayerRuntime::EquipWeapon(
+        engine::AssetManager& assets,
+        SectorMeshRenderer& renderer,
+        const FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings,
+        std::string_view weaponId,
+        PlayerWeaponCampaignState* weaponCampaign)
+{
+    if (!SelectWeapon(
+                assets, renderer, registry, settings, weaponId,
+                "fps_viewmodel")) {
+        return false;
+    }
+    BeginFpsWeaponSlotTargetUnholster(state);
+    if (weaponCampaign != nullptr) {
+        weaponCampaign->activeWeaponId = std::string{weaponId};
+    }
+    return true;
+}
+
+bool FpsPlayerRuntime::QueueUnequip(
+        PlayerWeaponCampaignState* weaponCampaign)
+{
+    pendingWeaponSlot = 0;
+    state.reload = {};
+    if (state.activeWeaponId.empty()) {
+        if (weaponCampaign != nullptr) weaponCampaign->activeWeaponId.clear();
+        return false;
+    }
+    pendingUnequip = true;
+    if (state.equipState != FpsViewmodelEquipState::Holstered
+            && state.equipProgress > 0.0f) {
+        state.equipState = FpsViewmodelEquipState::Holstering;
+    }
+    return true;
 }
 
 void FpsPlayerRuntime::End(
@@ -329,8 +370,77 @@ void FpsPlayerRuntime::End(
     weaponAssets.clear();
     activeWeaponAssetIndex = InvalidWeaponAssetIndex;
     pendingWeaponSlot = 0;
+    pendingUnequip = false;
+    reloadOutOfAmmoRequested = false;
     ResetFpsViewmodelRuntime(state);
     UnloadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources);
+}
+
+void FpsPlayerRuntime::AdvanceReload(
+        engine::AssetManager& assets,
+        engine::AudioSystem* audio,
+        float dt)
+{
+    if (state.reload.phase == FpsWeaponReloadPhase::Completing) {
+        state.reload = {};
+        return;
+    }
+    float remaining = std::isfinite(dt) ? std::max(0.0f, dt) : 0.0f;
+    const FpsViewmodelHolsterTransition transition =
+            ClampFpsViewmodelHolsterTransition(state.holsterTransition);
+    while (remaining > 0.0f && IsFpsWeaponReloading(state)) {
+        if (state.reload.phase == FpsWeaponReloadPhase::Holstering) {
+            state.equipState = FpsViewmodelEquipState::Holstering;
+            const float phaseRemaining = state.equipProgress
+                    * transition.holsterDurationSeconds;
+            const float step = std::min(remaining, phaseRemaining);
+            AdvanceFpsViewmodelEquipTransition(state, step);
+            state.reload.totalElapsedSeconds += step;
+            remaining -= step;
+            if (state.equipState != FpsViewmodelEquipState::Holstered) break;
+            state.reload.phase = FpsWeaponReloadPhase::Waiting;
+            state.reload.waitElapsedSeconds = 0.0f;
+            if (audio != nullptr) {
+                audio->PlaySound(
+                        assets,
+                        state.reloadDefinition.reloadSound,
+                        engine::SoundPlaybackSettings{});
+            }
+            continue;
+        }
+        if (state.reload.phase == FpsWeaponReloadPhase::Waiting) {
+            const float phaseRemaining = std::max(
+                    0.0f,
+                    state.reloadDefinition.durationSeconds
+                            - state.reload.waitElapsedSeconds);
+            const float step = std::min(remaining, phaseRemaining);
+            state.reload.waitElapsedSeconds += step;
+            state.reload.totalElapsedSeconds += step;
+            remaining -= step;
+            if (state.reload.waitElapsedSeconds
+                    < state.reloadDefinition.durationSeconds) {
+                break;
+            }
+            state.reload.phase = FpsWeaponReloadPhase::Unholstering;
+            state.equipState = FpsViewmodelEquipState::Unholstering;
+            continue;
+        }
+        if (state.reload.phase == FpsWeaponReloadPhase::Unholstering) {
+            state.equipState = FpsViewmodelEquipState::Unholstering;
+            const float phaseRemaining = (1.0f - state.equipProgress)
+                    * transition.unholsterDurationSeconds;
+            const float step = std::min(remaining, phaseRemaining);
+            AdvanceFpsViewmodelEquipTransition(state, step);
+            state.reload.totalElapsedSeconds += step;
+            remaining -= step;
+            if (state.equipState != FpsViewmodelEquipState::Equipped) break;
+            state.reload.totalElapsedSeconds =
+                    state.reload.totalDurationSeconds;
+            state.reload.phase = FpsWeaponReloadPhase::Completing;
+            break;
+        }
+        break;
+    }
 }
 
 void FpsPlayerRuntime::Update(
@@ -339,10 +449,13 @@ void FpsPlayerRuntime::Update(
         const FpsWeaponRegistry& registry,
         const FpsApplicationSettings& settings,
         float dt,
-        const FpsPlayerRuntimeTuning* tuning)
+        const FpsPlayerRuntimeTuning* tuning,
+        PlayerWeaponCampaignState* weaponCampaign,
+        engine::AudioSystem* audio)
 {
     PrepareInactiveWeaponInstances(assets);
-    const auto commitPendingSwitch = [this, &renderer, &registry, &settings]() {
+    const auto commitPendingSwitch = [this, &renderer, &registry, &settings,
+                                      weaponCampaign]() {
         if (pendingWeaponSlot == 0) return false;
         const int targetSlot = pendingWeaponSlot;
         pendingWeaponSlot = 0;
@@ -359,8 +472,27 @@ void FpsPlayerRuntime::Update(
             return false;
         }
         BeginFpsWeaponSlotTargetUnholster(state);
+        if (weaponCampaign != nullptr) {
+            weaponCampaign->activeWeaponId = target->id;
+        }
         return true;
     };
+    const auto commitPendingUnequip = [this, &renderer, weaponCampaign]() {
+        if (!pendingUnequip) return false;
+        pendingUnequip = false;
+        ResetActiveWeapon(renderer);
+        if (weaponCampaign != nullptr) {
+            weaponCampaign->activeWeaponId.clear();
+        }
+        return true;
+    };
+    if (pendingUnequip
+            && (state.activeWeaponId.empty()
+                || state.equipState == FpsViewmodelEquipState::Holstered
+                || state.equipProgress <= 0.0f)) {
+        commitPendingUnequip();
+        return;
+    }
     if (pendingWeaponSlot != 0
             && (state.activeWeaponId.empty()
                 || state.equipState == FpsViewmodelEquipState::Holstered
@@ -383,6 +515,7 @@ void FpsPlayerRuntime::Update(
         ResetFpsCameraRecoil(state.firing.cameraRecoil);
         cameraRecoilWeaponId = state.activeWeaponId;
     }
+    state.reloadDefinition = definition->reload;
     state.holsterTransition = ResolveFpsViewmodelHolsterTransition(
             definition->viewmodel.holsterTransition,
             FindFpsViewmodelHolsterTransitionOverride(
@@ -391,7 +524,16 @@ void FpsPlayerRuntime::Update(
     if (tuning != nullptr && tuning->holsterTransition != nullptr) {
         state.holsterTransition = *tuning->holsterTransition;
     }
-    AdvanceFpsViewmodelEquipTransition(state, dt);
+    if (IsFpsWeaponReloading(state)) {
+        AdvanceReload(assets, audio, dt);
+    } else {
+        AdvanceFpsViewmodelEquipTransition(state, dt);
+    }
+    if (pendingUnequip
+            && state.equipState == FpsViewmodelEquipState::Holstered) {
+        commitPendingUnequip();
+        return;
+    }
     if (pendingWeaponSlot != 0
             && state.equipState == FpsViewmodelEquipState::Holstered) {
         commitPendingSwitch();
@@ -402,6 +544,23 @@ void FpsPlayerRuntime::Update(
             FindFpsWeaponFiringOverride(settings, definition->id));
     if (tuning != nullptr && tuning->firing != nullptr) {
         state.firing.definition = *tuning->firing;
+    }
+    state.reloadDefinition = definition->reload;
+    if (weaponCampaign != nullptr) {
+        PlayerWeaponMagazineState* magazine = FindPlayerWeaponMagazine(
+                *weaponCampaign, state.activeWeaponId);
+        state.firing.ammunitionEnabled = true;
+        if (magazine != nullptr) {
+            magazine->loadedRounds = std::clamp(
+                    magazine->loadedRounds,
+                    0,
+                    std::max(1, definition->reload.magazineSize));
+            state.firing.loadedRounds = magazine->loadedRounds;
+        } else {
+            state.firing.loadedRounds = 0;
+        }
+    } else {
+        state.firing.ammunitionEnabled = false;
     }
     AdvanceFpsWeaponFiringRuntime(state.firing, dt);
     if (state.loadState == FpsViewmodelLoadState::Failed) {
@@ -566,13 +725,27 @@ bool FpsPlayerRuntime::HandleInput(
         const SectorMeshRenderer& renderer,
         bool gameplayActive,
         bool mouseLookActive,
-        bool uiCaptured)
+        bool uiCaptured,
+        const ItemRegistry* itemRegistry,
+        ItemCampaignState* itemCampaign)
 {
     HandleWeaponSlotInput(
             input,
             registry,
             gameplayActive,
-            uiCaptured);
+            uiCaptured,
+            itemRegistry,
+            itemCampaign != nullptr ? &itemCampaign->inventory : nullptr);
+    if (itemRegistry != nullptr && itemCampaign != nullptr) {
+        HandleReloadInput(
+                input,
+                assets,
+                audio,
+                gameplayActive,
+                uiCaptured,
+                *itemRegistry,
+                *itemCampaign);
+    }
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
@@ -580,7 +753,7 @@ bool FpsPlayerRuntime::HandleInput(
                 if (event.key.key != KEY_H) {
                     return;
                 }
-                if (IsWeaponSwitchInProgress()) {
+                if (IsWeaponSwitchInProgress() || IsFpsWeaponReloading(state)) {
                     if (gameplayActive && !uiCaptured) {
                         engine::ConsumeEvent(event);
                     }
@@ -601,32 +774,42 @@ bool FpsPlayerRuntime::HandleInput(
             renderer,
             gameplayActive,
             mouseLookActive,
-            uiCaptured);
+            uiCaptured,
+            itemCampaign != nullptr ? &itemCampaign->weapons : nullptr);
 }
 
 bool FpsPlayerRuntime::HandleWeaponSlotInput(
         engine::Input& input,
         const FpsWeaponRegistry& registry,
         bool gameplayActive,
-        bool uiCaptured)
+        bool uiCaptured,
+        const ItemRegistry* itemRegistry,
+        const PlayerInventoryState* inventory)
 {
     bool switchRequested = false;
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [this, &registry, gameplayActive, uiCaptured,
+                    itemRegistry, inventory,
                     &switchRequested](engine::InputEvent& event) {
                 const int weaponSlot = FpsWeaponSlotFromKey(event.key.key);
                 if (weaponSlot == 0 || !gameplayActive || uiCaptured) {
                     return;
                 }
                 engine::ConsumeEvent(event);
-                if (pendingWeaponSlot != 0) {
+                if (pendingWeaponSlot != 0 || pendingUnequip
+                        || IsFpsWeaponReloading(state)) {
                     return;
                 }
                 const FpsWeaponDefinition* target =
                         FindFpsWeaponDefinitionForSlot(registry, weaponSlot);
                 if (target == nullptr || target->id == state.activeWeaponId) {
+                    return;
+                }
+                if (itemRegistry != nullptr && inventory != nullptr
+                        && !InventoryOwnsWeapon(
+                                *inventory, *itemRegistry, target->id)) {
                     return;
                 }
                 switchRequested = QueueFpsWeaponSlotSwitch(
@@ -637,6 +820,86 @@ bool FpsPlayerRuntime::HandleWeaponSlotInput(
     return switchRequested;
 }
 
+bool FpsPlayerRuntime::HandleReloadInput(
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        bool gameplayActive,
+        bool uiCaptured,
+        const ItemRegistry& itemRegistry,
+        ItemCampaignState& itemCampaign)
+{
+    (void)assets;
+    (void)audio;
+    bool started = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this, gameplayActive, uiCaptured, &itemRegistry, &itemCampaign,
+                    &started](engine::InputEvent& event) {
+                if (event.key.key != KEY_R || !gameplayActive || uiCaptured) {
+                    return;
+                }
+                engine::ConsumeEvent(event);
+                if (IsWeaponSwitchInProgress()
+                        || IsFpsWeaponReloading(state)
+                        || !IsFpsViewmodelReadyForUse(state)
+                        || state.activeWeaponId.empty()) {
+                    return;
+                }
+                PlayerWeaponMagazineState* magazine = FindPlayerWeaponMagazine(
+                        itemCampaign.weapons, state.activeWeaponId);
+                if (magazine == nullptr) return;
+                const int magazineSize = std::max(
+                        1, state.reloadDefinition.magazineSize);
+                magazine->loadedRounds = std::clamp(
+                        magazine->loadedRounds, 0, magazineSize);
+                const int deficit = magazineSize - magazine->loadedRounds;
+                if (deficit <= 0) return;
+                const std::uint64_t available = CountInventoryAmmoForWeapon(
+                        itemCampaign.inventory,
+                        itemRegistry,
+                        state.activeWeaponId);
+                if (available == 0) {
+                    reloadOutOfAmmoRequested = true;
+                    return;
+                }
+                const std::uint64_t requested = std::min<std::uint64_t>(
+                        static_cast<std::uint64_t>(deficit), available);
+                const std::uint64_t consumed = ConsumeInventoryAmmoForWeapon(
+                        itemCampaign.inventory,
+                        itemRegistry,
+                        state.activeWeaponId,
+                        requested);
+                if (consumed == 0) {
+                    reloadOutOfAmmoRequested = true;
+                    return;
+                }
+                state.reload.loadedRoundsBefore = magazine->loadedRounds;
+                state.reload.reservedRounds = static_cast<int>(consumed);
+                magazine->loadedRounds += state.reload.reservedRounds;
+                state.firing.loadedRounds = magazine->loadedRounds;
+                state.firing.ammunitionEnabled = true;
+                state.reload.phase = FpsWeaponReloadPhase::Holstering;
+                state.reload.waitElapsedSeconds = 0.0f;
+                state.reload.totalElapsedSeconds = 0.0f;
+                state.reload.totalDurationSeconds =
+                        state.holsterTransition.holsterDurationSeconds
+                        + state.reloadDefinition.durationSeconds
+                        + state.holsterTransition.unholsterDurationSeconds;
+                state.equipState = FpsViewmodelEquipState::Holstering;
+                started = true;
+            });
+    return started;
+}
+
+bool FpsPlayerRuntime::ConsumeReloadOutOfAmmoRequest()
+{
+    const bool requested = reloadOutOfAmmoRequested;
+    reloadOutOfAmmoRequested = false;
+    return requested;
+}
+
 bool FpsPlayerRuntime::HandleFireInput(
         engine::Input& input,
         engine::AssetManager& assets,
@@ -645,14 +908,16 @@ bool FpsPlayerRuntime::HandleFireInput(
         const SectorMeshRenderer& renderer,
         bool gameplayActive,
         bool mouseLookActive,
-        bool uiCaptured)
+        bool uiCaptured,
+        PlayerWeaponCampaignState* weaponCampaign)
 {
     bool acceptedShot = false;
     input.ForEachEvent(
             engine::InputEventType::MouseButtonPressed,
             true,
             [this, &assets, &audio, collisionWorld, &renderer, gameplayActive,
-                    mouseLookActive, uiCaptured, &acceptedShot](engine::InputEvent& event) {
+                    mouseLookActive, uiCaptured, weaponCampaign,
+                    &acceptedShot](engine::InputEvent& event) {
                 if (event.mouseButton.button != MOUSE_BUTTON_LEFT) {
                     return;
                 }
@@ -664,6 +929,14 @@ bool FpsPlayerRuntime::HandleFireInput(
                             uiCaptured,
                             &reason)) {
                     state.firing.lastRejectReason = reason;
+                    if (reason == FpsFireRejectReason::EmptyMagazine) {
+                        state.firing.cooldownRemainingSeconds =
+                                state.firing.definition.shotIntervalSeconds;
+                        audio.PlaySound(
+                                assets,
+                                state.reloadDefinition.dryFireSound,
+                                engine::SoundPlaybackSettings{});
+                    }
                     if (gameplayActive && mouseLookActive && !uiCaptured) {
                         engine::ConsumeEvent(event);
                     }
@@ -726,6 +999,19 @@ bool FpsPlayerRuntime::HandleFireInput(
                             camera);
                 }
                 ApplyFpsWeaponShotEffects(state.firing, shot, emission);
+                if (state.firing.ammunitionEnabled) {
+                    state.firing.loadedRounds = std::max(
+                            0, state.firing.loadedRounds - 1);
+                    if (weaponCampaign != nullptr) {
+                        PlayerWeaponMagazineState* magazine =
+                                FindPlayerWeaponMagazine(
+                                        *weaponCampaign,
+                                        state.activeWeaponId);
+                        if (magazine != nullptr) {
+                            magazine->loadedRounds = state.firing.loadedRounds;
+                        }
+                    }
+                }
                 acceptedShot = true;
                 audio.PlaySound(
                         assets,
@@ -787,6 +1073,26 @@ bool FpsPlayerRuntime::TriggerPreviewShot(
                             state.firing.shotSequence,
                             state.firing.randomState),
                     0.0f});
+    return true;
+}
+
+bool FpsPlayerRuntime::TriggerPreviewReload()
+{
+    if (IsWeaponSwitchInProgress()
+            || IsFpsWeaponReloading(state)
+            || !IsFpsViewmodelReadyForUse(state)) {
+        return false;
+    }
+    state.reload.loadedRoundsBefore = state.firing.loadedRounds;
+    state.reload.reservedRounds = 0;
+    state.reload.phase = FpsWeaponReloadPhase::Holstering;
+    state.reload.waitElapsedSeconds = 0.0f;
+    state.reload.totalElapsedSeconds = 0.0f;
+    state.reload.totalDurationSeconds =
+            state.holsterTransition.holsterDurationSeconds
+            + state.reloadDefinition.durationSeconds
+            + state.holsterTransition.unholsterDurationSeconds;
+    state.equipState = FpsViewmodelEquipState::Holstering;
     return true;
 }
 
@@ -919,8 +1225,13 @@ void FpsPlayerRuntime::RenderHud(
         const FpsWeaponRegistry& registry,
         const engine::FontAsset* font,
         const Health* health,
-        const PlayerStamina* stamina) const
+        const PlayerStamina* stamina,
+        std::uint64_t reserveRounds,
+        bool showAmmo) const
 {
+    const int displayedLoaded = IsFpsWeaponReloading(state)
+            ? state.reload.loadedRoundsBefore
+            : state.firing.loadedRounds;
     DrawFpsHud(FpsHudContext{
             true,
             playableViewport,
@@ -928,7 +1239,10 @@ void FpsPlayerRuntime::RenderHud(
             state,
             font,
             health,
-            stamina});
+            stamina,
+            displayedLoaded,
+            reserveRounds,
+            showAmmo});
 }
 
 } // namespace game

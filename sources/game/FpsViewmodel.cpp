@@ -129,6 +129,26 @@ bool IsFpsViewmodelReadyForUse(const FpsViewmodelRuntimeState& state)
             && state.equipProgress >= 1.0f;
 }
 
+bool IsFpsWeaponReloading(const FpsViewmodelRuntimeState& state)
+{
+    return state.reload.phase != FpsWeaponReloadPhase::Inactive;
+}
+
+float FpsWeaponReloadProgress(const FpsViewmodelRuntimeState& state)
+{
+    if (!IsFpsWeaponReloading(state)) return 0.0f;
+    if (state.reload.phase == FpsWeaponReloadPhase::Completing) return 1.0f;
+    if (!std::isfinite(state.reload.totalDurationSeconds)
+            || state.reload.totalDurationSeconds <= 0.0f) {
+        return 0.0f;
+    }
+    return std::clamp(
+            state.reload.totalElapsedSeconds
+                    / state.reload.totalDurationSeconds,
+            0.0f,
+            1.0f);
+}
+
 bool IsFpsViewmodelPresentationVisible(const FpsViewmodelRuntimeState& state)
 {
     return state.equipState != FpsViewmodelEquipState::Holstered;
@@ -733,8 +753,13 @@ bool CanFireFpsWeapon(
     else if (!mouseInputActive) reason = FpsFireRejectReason::MouseInputInactive;
     else if (uiCaptured) reason = FpsFireRejectReason::UiCaptured;
     else if (state.activeWeaponId.empty()) reason = FpsFireRejectReason::NoActiveWeapon;
+    else if (IsFpsWeaponReloading(state)) reason = FpsFireRejectReason::Reloading;
     else if (!IsFpsViewmodelReadyForUse(state)) reason = FpsFireRejectReason::WeaponNotReady;
     else if (state.firing.cooldownRemainingSeconds > 0.0f) reason = FpsFireRejectReason::Cooldown;
+    else if (state.firing.ammunitionEnabled
+            && state.firing.loadedRounds <= 0) {
+        reason = FpsFireRejectReason::EmptyMagazine;
+    }
     if (outReason != nullptr) *outReason = reason;
     return reason == FpsFireRejectReason::None;
 }

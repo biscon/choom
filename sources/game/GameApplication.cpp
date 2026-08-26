@@ -701,7 +701,9 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
     std::string error;
     persistentScripts = engine::PersistentScriptStore{};
     InitializeItemCampaignState(
-            itemCampaign, applicationSettings.playerInventory);
+            itemCampaign,
+            applicationSettings.playerInventory,
+            &weaponRegistry);
     if (!gameSession.StartNew(
                 context,
                 gameScene,

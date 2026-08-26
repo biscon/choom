@@ -44,9 +44,13 @@ public:
     void ApplyAttachmentModelPathBuffer();
     void ApplyAttachmentBoneBuffer();
     void ApplyShootSoundBuffer(engine::AssetManager& assets);
+    void ApplyDryFireSoundBuffer(engine::AssetManager& assets);
+    void ApplyReloadSoundBuffer(engine::AssetManager& assets);
     void SetArmsModelPath(const std::string& path);
     void SetAttachmentModelPath(const std::string& path);
     void SetShootSoundPath(const std::string& path, engine::AssetManager& assets);
+    void SetDryFireSoundPath(const std::string& path, engine::AssetManager& assets);
+    void SetReloadSoundPath(const std::string& path, engine::AssetManager& assets);
 
     bool ConsumePreviewReloadRequest();
     const FpsWeaponRegistry& PreviewRegistry() const { return state_.draftRegistry; }

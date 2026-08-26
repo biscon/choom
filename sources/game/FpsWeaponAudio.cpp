@@ -13,18 +13,34 @@ void RequestFpsWeaponAudioAssets(
 {
     for (FpsWeaponDefinition& weapon : registry.weapons) {
         weapon.firing.shootSound = engine::NullSoundHandle();
-        if (weapon.firing.shootSoundPath.empty()) continue;
-        const std::string path = ResolveSectorAudioAssetPath(
-                weapon.firing.shootSoundPath);
-        weapon.firing.shootSound = assets.RequestSound(
-                assets.GlobalScope(),
-                path.c_str());
-        if (engine::IsNull(weapon.firing.shootSound)) {
+        weapon.reload.dryFireSound = engine::NullSoundHandle();
+        weapon.reload.reloadSound = engine::NullSoundHandle();
+        const auto request = [&assets](
+                const std::string& configuredPath,
+                engine::SoundHandle& handle,
+                const char* description) {
+            if (configuredPath.empty()) return;
+            const std::string path = ResolveSectorAudioAssetPath(configuredPath);
+            handle = assets.RequestSound(assets.GlobalScope(), path.c_str());
+            if (!engine::IsNull(handle)) return;
             TraceLog(
                     LOG_WARNING,
-                    "Could not request weapon shoot sound: %s",
+                    "Could not request weapon %s sound: %s",
+                    description,
                     path.c_str());
-        }
+        };
+        request(
+                weapon.firing.shootSoundPath,
+                weapon.firing.shootSound,
+                "shoot");
+        request(
+                weapon.reload.dryFireSoundPath,
+                weapon.reload.dryFireSound,
+                "dry-fire");
+        request(
+                weapon.reload.reloadSoundPath,
+                weapon.reload.reloadSound,
+                "reload");
     }
 }
 

@@ -26,6 +26,17 @@ struct PlayerInventoryState {
     std::uint64_t capacityWarnings = 0;
 };
 
+struct PlayerWeaponMagazineState {
+    std::string weaponId;
+    int loadedRounds = 0;
+};
+
+struct PlayerWeaponCampaignState {
+    std::string activeWeaponId;
+    std::vector<PlayerWeaponMagazineState> magazines;
+    std::uint64_t capacityWarnings = 0;
+};
+
 struct ItemHealingEffect {
     int totalAmount = 0;
     float durationSeconds = 0.0f;
@@ -43,6 +54,7 @@ struct ItemLevelCampaignState {
 
 struct ItemCampaignState {
     PlayerInventoryState inventory;
+    PlayerWeaponCampaignState weapons;
     std::vector<ItemHealingEffect> healingEffects;
     std::vector<ItemLevelCampaignState> levels;
     std::uint64_t capacityWarnings = 0;
@@ -99,7 +111,31 @@ struct ItemInventoryTransactionResult {
 
 void InitializeItemCampaignState(
         ItemCampaignState& state,
-        const PlayerInventoryApplicationSettings& settings);
+        const PlayerInventoryApplicationSettings& settings,
+        const FpsWeaponRegistry* weapons = nullptr);
+
+const PlayerWeaponMagazineState* FindPlayerWeaponMagazine(
+        const PlayerWeaponCampaignState& state,
+        std::string_view weaponId);
+PlayerWeaponMagazineState* FindPlayerWeaponMagazine(
+        PlayerWeaponCampaignState& state,
+        std::string_view weaponId);
+
+bool InventoryOwnsWeapon(
+        const PlayerInventoryState& inventory,
+        const ItemRegistry& registry,
+        std::string_view weaponId);
+
+std::uint64_t CountInventoryAmmoForWeapon(
+        const PlayerInventoryState& inventory,
+        const ItemRegistry& registry,
+        std::string_view weaponId);
+
+std::uint64_t ConsumeInventoryAmmoForWeapon(
+        PlayerInventoryState& inventory,
+        const ItemRegistry& registry,
+        std::string_view weaponId,
+        std::uint64_t maximumQuantity);
 
 double ComputeInventoryWeightKg(
         const PlayerInventoryState& inventory,

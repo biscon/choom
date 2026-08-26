@@ -480,7 +480,10 @@ void SectorEditor::UpdateFpsViewmodel(
                 sceneRuntime.Renderer(),
                 editor.PreviewRegistry(),
                 editor.PreviewApplicationSettings(),
-                dt);
+                dt,
+                nullptr,
+                nullptr,
+                engineContext != nullptr ? &engineContext->audio : nullptr);
         return;
     }
     fpsPlayer.Update(
@@ -488,7 +491,10 @@ void SectorEditor::UpdateFpsViewmodel(
             sceneRuntime.Renderer(),
             weaponRegistry,
             applicationSettings,
-            dt);
+            dt,
+            nullptr,
+            nullptr,
+            engineContext != nullptr ? &engineContext->audio : nullptr);
 }
 bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
 {
@@ -4307,7 +4313,8 @@ void SectorEditor::RenderPreview3DHud(
                 playableViewport,
                 weaponEditorState.open
                         ? weaponEditorState.draftRegistry
-                        : weaponRegistry);
+                        : weaponRegistry,
+                assets.GetFont(usePromptFont));
         DrawSectorUsePrompt(
                 playableViewport,
                 assets.GetFont(usePromptFont),
@@ -6313,8 +6320,15 @@ void SectorEditor::DrawWeaponEditor(
                 ? "Preview weapon fired"
                 : "Preview weapon is not ready to fire";
     }
+    if (result.previewReloadRequested) {
+        statusText = fpsPlayer.TriggerPreviewReload()
+                ? "Preview weapon reloading"
+                : "Preview weapon is not ready to reload";
+    }
     if (result.holsterToggleRequested) {
-        if (ToggleFpsViewmodelHolster(fpsPlayer.State(), true, false)) {
+        if (!IsFpsWeaponReloading(fpsPlayer.State())
+                && ToggleFpsViewmodelHolster(
+                        fpsPlayer.State(), true, false)) {
             statusText = fpsPlayer.State().equipState
                             == FpsViewmodelEquipState::Holstering
                     ? "Preview weapon holstering"

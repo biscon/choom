@@ -196,6 +196,16 @@ void SectorGameSession::ShowDropRefusal()
     itemMessageElapsedSeconds = 0.0f;
 }
 
+void SectorGameSession::ShowOutOfAmmo()
+{
+    std::snprintf(
+            itemMessage.data(),
+            itemMessage.size(),
+            "%s",
+            "Out of ammo.");
+    itemMessageElapsedSeconds = 0.0f;
+}
+
 void SectorGameSession::RefreshMouseLookCapture()
 {
     if (!running || paused) return;
@@ -605,6 +615,14 @@ bool SectorGameSession::DropInventoryEntry(
         context.world.FlushDestroyedEntities();
         return false;
     }
+    if (definition->type == ItemType::Weapon
+            && itemCampaign->weapons.activeWeaponId == definition->weaponId
+            && !InventoryOwnsWeapon(
+                    itemCampaign->inventory,
+                    *itemRegistry,
+                    definition->weaponId)) {
+        fpsPlayer.QueueUnequip(&itemCampaign->weapons);
+    }
     level.droppedItems.push_back(drop);
     topologyMap.runtimeObjects.push_back(drop);
     level.nextDroppedObjectId = objectId == std::numeric_limits<int>::max()
@@ -795,6 +813,18 @@ bool SectorGameSession::CommitItemTake(
     if (!CommitItemPickup(itemCampaign->inventory, plan)) {
         item.takePending = false;
         return false;
+    }
+    if (plan.definition->type == ItemType::Weapon
+            && itemCampaign->weapons.activeWeaponId.empty()
+            && weaponRegistry != nullptr
+            && applicationSettings != nullptr) {
+        fpsPlayer.EquipWeapon(
+                context.assets,
+                scene.Renderer(),
+                *weaponRegistry,
+                *applicationSettings,
+                plan.definition->weaponId,
+                &itemCampaign->weapons);
     }
     if (item.origin == SectorItemOrigin::SessionDrop) {
         RemoveSessionDroppedItem(level, placedObjectId);
@@ -1065,7 +1095,24 @@ bool SectorGameSession::StartNew(
             scene.Renderer(),
             registry,
             settings,
-            "fps_game_viewmodel");
+            "fps_game_viewmodel",
+            false);
+    if (!campaign.weapons.activeWeaponId.empty()) {
+        if (InventoryOwnsWeapon(
+                    campaign.inventory,
+                    items,
+                    campaign.weapons.activeWeaponId)) {
+            fpsPlayer.EquipWeapon(
+                    context.assets,
+                    scene.Renderer(),
+                    registry,
+                    settings,
+                    campaign.weapons.activeWeaponId,
+                    &campaign.weapons);
+        } else {
+            campaign.weapons.activeWeaponId.clear();
+        }
+    }
     running = true;
     paused = false;
     consoleInputCaptured = false;
@@ -1528,7 +1575,10 @@ void SectorGameSession::Update(
                 scene.Renderer(),
                 *weaponRegistry,
                 *applicationSettings,
-                dt);
+                dt,
+                nullptr,
+                itemCampaign != nullptr ? &itemCampaign->weapons : nullptr,
+                &context.audio);
     }
     ApplyPlayerPose(scene);
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
@@ -1543,7 +1593,12 @@ void SectorGameSession::Update(
                 scene.Renderer(),
                 true,
                 !gameplayInputCaptured,
-                gameplayInputCaptured);
+                gameplayInputCaptured,
+                itemRegistry,
+                itemCampaign);
+        if (fpsPlayer.ConsumeReloadOutOfAmmoRequest()) {
+            ShowOutOfAmmo();
+        }
         if (acceptedShot) {
             const FpsShotResult request = fpsPlayer.State().firing.lastShot;
             FpsShotResult resolvedShot;
@@ -1607,7 +1662,10 @@ void SectorGameSession::UpdateLoading(
                 scene.Renderer(),
                 *weaponRegistry,
                 *applicationSettings,
-                0.0f);
+                0.0f,
+                nullptr,
+                itemCampaign != nullptr ? &itemCampaign->weapons : nullptr,
+                &context.audio);
     }
     ApplyPlayerPose(scene);
 
@@ -1717,12 +1775,23 @@ void SectorGameSession::RenderHud(
         Rectangle playableViewport) const
 {
     if (IsActive() && weaponRegistry != nullptr) {
+        const bool showAmmo = itemCampaign != nullptr
+                && itemRegistry != nullptr
+                && !fpsPlayer.State().activeWeaponId.empty();
+        const std::uint64_t reserveRounds = showAmmo
+                ? CountInventoryAmmoForWeapon(
+                        itemCampaign->inventory,
+                        *itemRegistry,
+                        fpsPlayer.State().activeWeaponId)
+                : 0;
         fpsPlayer.RenderHud(
                 playableViewport,
                 *weaponRegistry,
                 assets.GetFont(font),
                 &playerHealth,
-                &playerStamina);
+                &playerStamina,
+                reserveRounds,
+                showAmmo);
         if (itemMessage[0] != '\0') {
             DrawSectorUseMessage(
                     playableViewport,

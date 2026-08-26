@@ -151,6 +151,7 @@ private:
             SectorSceneRuntime& scene);
     void ShowCarryRefusal();
     void ShowDropRefusal();
+    void ShowOutOfAmmo();
     void RefreshMouseLookCapture();
     void SetInventoryOpen(bool open);
     void ClearHeldObjectUse();

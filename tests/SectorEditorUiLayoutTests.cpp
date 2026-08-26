@@ -705,14 +705,18 @@ void TestWeaponEditorLayouts()
               "weapon editor validation message fits inside the panel");
         if (preview3D) {
             Check(Contains(layout.panel, layout.previewFireButton)
+                          && Contains(layout.panel, layout.previewReloadButton)
                           && Contains(layout.panel, layout.holsterToggleButton),
                   "weapon preview actions fit inside the panel");
             Check(!Overlaps(layout.formBounds, layout.previewFireButton)
+                          && !Overlaps(layout.formBounds, layout.previewReloadButton)
                           && !Overlaps(layout.formBounds, layout.holsterToggleButton),
                   "weapon preview actions stay outside the form scroll area");
-            Check(!Overlaps(layout.previewFireButton, layout.holsterToggleButton)
+            Check(!Overlaps(layout.previewFireButton, layout.previewReloadButton)
+                          && !Overlaps(layout.previewReloadButton, layout.holsterToggleButton)
                           && !Overlaps(layout.holsterToggleButton, layout.saveButton)
                           && !Overlaps(layout.validationMessage, layout.previewFireButton)
+                          && !Overlaps(layout.validationMessage, layout.previewReloadButton)
                           && !Overlaps(layout.validationMessage, layout.holsterToggleButton),
                   "weapon editor footer controls and validation message do not overlap");
         }

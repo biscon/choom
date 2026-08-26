@@ -104,8 +104,18 @@ SectorEditorWeaponEditorPanelResult DrawSectorEditorWeaponEditorPanel(
         const SectorEditorAudioAssetPickerResult pickerResult =
                 audioPicker.DrawModal(ui, config, input, font, state.audioPicker);
         if (pickerResult == SectorEditorAudioAssetPickerResult::Selected) {
-            editor.SetShootSoundPath(
-                    audioPicker.SelectedPath(state.audioPicker), assets);
+            const std::string path = audioPicker.SelectedPath(state.audioPicker);
+            switch (state.audioPickerTarget) {
+                case SectorEditorWeaponAudioTarget::Shoot:
+                    editor.SetShootSoundPath(path, assets);
+                    break;
+                case SectorEditorWeaponAudioTarget::DryFire:
+                    editor.SetDryFireSoundPath(path, assets);
+                    break;
+                case SectorEditorWeaponAudioTarget::Reload:
+                    editor.SetReloadSoundPath(path, assets);
+                    break;
+            }
             audioPicker.Close(state.audioPicker);
         } else if (pickerResult == SectorEditorAudioAssetPickerResult::Cancelled) {
             audioPicker.Close(state.audioPicker);
@@ -513,11 +523,58 @@ SectorEditorWeaponEditorPanelResult DrawSectorEditorWeaponEditorPanel(
         if (engine::Button(ui, config, input, assets,
                     "sector_editor_weapon_pick_sound",
                     Rectangle{fieldX + std::max(80.0f, fieldWidth - pickWidth - 6.0f) + 6.0f,
-                            y, pickWidth, RowHeight}, smallFont, "Pick")) {
+                    y, pickWidth, RowHeight}, smallFont, "Pick")) {
+            state.audioPickerTarget = SectorEditorWeaponAudioTarget::Shoot;
             audioPicker.Open(
                     state.audioPicker,
                     "Choose Weapon Fire Sound",
                     weapon->firing.shootSoundPath,
+                    SectorSoundType::Sound);
+        }
+        y += RowHeight + RowGap;
+
+        section("Reload");
+        drawInt("sector_editor_weapon_magazine_size", "Magazine size",
+                weapon->reload.magazineSize, 1, 1000000, 1);
+        drawFloat("sector_editor_weapon_reload_duration", "Hidden reload seconds",
+                weapon->reload.durationSeconds, 0.001f, 60.0f, 3);
+        label("Dry-fire sound");
+        const engine::UITextInputResult drySoundResult = engine::TextInput(
+                ui, config, input, assets, "sector_editor_weapon_dry_sound",
+                Rectangle{fieldX, y, std::max(80.0f, fieldWidth - pickWidth - 6.0f), RowHeight},
+                smallFont, state.dryFireSoundBuffer,
+                sizeof(state.dryFireSoundBuffer),
+                0, sizeof(state.dryFireSoundBuffer) - 1);
+        if (drySoundResult.submitted) editor.ApplyDryFireSoundBuffer(assets);
+        if (engine::Button(ui, config, input, assets,
+                    "sector_editor_weapon_pick_dry_sound",
+                    Rectangle{fieldX + std::max(80.0f, fieldWidth - pickWidth - 6.0f) + 6.0f,
+                            y, pickWidth, RowHeight}, smallFont, "Pick")) {
+            state.audioPickerTarget = SectorEditorWeaponAudioTarget::DryFire;
+            audioPicker.Open(
+                    state.audioPicker,
+                    "Choose Weapon Dry-fire Sound",
+                    weapon->reload.dryFireSoundPath,
+                    SectorSoundType::Sound);
+        }
+        y += RowHeight + RowGap;
+        label("Reload sound");
+        const engine::UITextInputResult reloadSoundResult = engine::TextInput(
+                ui, config, input, assets, "sector_editor_weapon_reload_sound",
+                Rectangle{fieldX, y, std::max(80.0f, fieldWidth - pickWidth - 6.0f), RowHeight},
+                smallFont, state.reloadSoundBuffer,
+                sizeof(state.reloadSoundBuffer),
+                0, sizeof(state.reloadSoundBuffer) - 1);
+        if (reloadSoundResult.submitted) editor.ApplyReloadSoundBuffer(assets);
+        if (engine::Button(ui, config, input, assets,
+                    "sector_editor_weapon_pick_reload_sound",
+                    Rectangle{fieldX + std::max(80.0f, fieldWidth - pickWidth - 6.0f) + 6.0f,
+                            y, pickWidth, RowHeight}, smallFont, "Pick")) {
+            state.audioPickerTarget = SectorEditorWeaponAudioTarget::Reload;
+            audioPicker.Open(
+                    state.audioPicker,
+                    "Choose Weapon Reload Sound",
+                    weapon->reload.reloadSoundPath,
                     SectorSoundType::Sound);
         }
         y += RowHeight + RowGap;
@@ -652,6 +709,13 @@ SectorEditorWeaponEditorPanelResult DrawSectorEditorWeaponEditorPanel(
                     layout.previewFireButton,
                     smallFont, "Preview Fire")) {
             result.previewFireRequested = true;
+        }
+        if (engine::Button(
+                    ui, config, input, assets,
+                    "sector_editor_weapon_preview_reload",
+                    layout.previewReloadButton,
+                    smallFont, "Preview Reload")) {
+            result.previewReloadRequested = true;
         }
         if (engine::Button(
                     ui, config, input, assets,

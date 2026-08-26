@@ -656,6 +656,72 @@ void InventoryTransactionsAndCampaignReconciliation()
     assert(level.droppedItems.empty());
 }
 
+void WeaponOwnershipAndAmmunitionTransactions()
+{
+    const game::FpsWeaponRegistry weapons = MakeWeapons();
+    game::ItemRegistry registry;
+    registry.items.push_back(MakeInventoryDefinition(
+            "pistol_weapon", game::ItemType::Weapon, 1.0f));
+    registry.items.push_back(MakeInventoryDefinition(
+            "pistol_ammo_a", game::ItemType::Ammo, 0.02f));
+    registry.items.push_back(MakeInventoryDefinition(
+            "pistol_ammo_b", game::ItemType::Ammo, 0.02f));
+    game::ItemDefinition shotgunAmmo = MakeInventoryDefinition(
+            "shotgun_ammo", game::ItemType::Ammo, 0.05f);
+    shotgunAmmo.weaponId = "shotgun";
+    registry.items.push_back(std::move(shotgunAmmo));
+
+    game::PlayerInventoryApplicationSettings settings;
+    settings.maxSlots = 12;
+    game::ItemCampaignState campaign;
+    game::InitializeItemCampaignState(campaign, settings, &weapons);
+    assert(campaign.weapons.activeWeaponId.empty());
+    game::PlayerWeaponMagazineState* magazine =
+            game::FindPlayerWeaponMagazine(campaign.weapons, "pistol");
+    assert(magazine != nullptr && magazine->loadedRounds == 0);
+    assert(game::FindPlayerWeaponMagazine(campaign.weapons, "shotgun")
+            == nullptr);
+    assert(!game::InventoryOwnsWeapon(
+            campaign.inventory, registry, "pistol"));
+
+    campaign.inventory.entries = {
+            game::ItemInventoryEntry{1, "pistol_ammo_a", 5, {}, 5},
+            game::ItemInventoryEntry{2, "shotgun_ammo", 7, {}, 1},
+            game::ItemInventoryEntry{3, "pistol_weapon", 1, {}, 8},
+            game::ItemInventoryEntry{4, "pistol_ammo_b", 4, {}, 2}};
+    assert(game::InventoryOwnsWeapon(
+            campaign.inventory, registry, "pistol"));
+    assert(!game::InventoryOwnsWeapon(
+            campaign.inventory, registry, "shotgun"));
+    assert(game::CountInventoryAmmoForWeapon(
+            campaign.inventory, registry, "pistol") == 9);
+    assert(game::CountInventoryAmmoForWeapon(
+            campaign.inventory, registry, "shotgun") == 7);
+
+    magazine->loadedRounds = 3;
+    campaign.weapons.activeWeaponId = "pistol";
+    assert(game::ConsumeInventoryAmmoForWeapon(
+            campaign.inventory, registry, "pistol", 6) == 6);
+    assert(game::CountInventoryAmmoForWeapon(
+            campaign.inventory, registry, "pistol") == 3);
+    assert(game::FindItemInventoryEntryAtSlot(
+                  campaign.inventory, 2) == nullptr);
+    const game::ItemInventoryEntry* highSlotAmmo =
+            game::FindItemInventoryEntryAtSlot(campaign.inventory, 5);
+    assert(highSlotAmmo != nullptr && highSlotAmmo->quantity == 3);
+    assert(magazine->loadedRounds == 3
+            && campaign.weapons.activeWeaponId == "pistol");
+
+    assert(game::ConsumeInventoryAmmoForWeapon(
+            campaign.inventory, registry, "pistol", 18) == 3);
+    assert(game::CountInventoryAmmoForWeapon(
+            campaign.inventory, registry, "pistol") == 0);
+    assert(game::ConsumeInventoryAmmoForWeapon(
+            campaign.inventory, registry, "pistol", 1) == 0);
+    assert(game::CountInventoryAmmoForWeapon(
+            campaign.inventory, registry, "shotgun") == 7);
+}
+
 void InventoryStackTransactions()
 {
     game::ItemRegistry registry;
@@ -918,6 +984,7 @@ int main()
     IconLayoutAndCameraFit();
     ReferenceScanningAndEditorService();
     InventoryTransactionsAndCampaignReconciliation();
+    WeaponOwnershipAndAmmunitionTransactions();
     InventoryStackTransactions();
     HealthUseAndInventoryLayout();
     std::cout << "Item definition tests passed\n";

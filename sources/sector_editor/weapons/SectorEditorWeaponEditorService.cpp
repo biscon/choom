@@ -357,6 +357,18 @@ void SectorEditorWeaponEditorService::ApplyShootSoundBuffer(
     SetShootSoundPath(state_.shootSoundBuffer, assets);
 }
 
+void SectorEditorWeaponEditorService::ApplyDryFireSoundBuffer(
+        engine::AssetManager& assets)
+{
+    SetDryFireSoundPath(state_.dryFireSoundBuffer, assets);
+}
+
+void SectorEditorWeaponEditorService::ApplyReloadSoundBuffer(
+        engine::AssetManager& assets)
+{
+    SetReloadSoundPath(state_.reloadSoundBuffer, assets);
+}
+
 void SectorEditorWeaponEditorService::SetArmsModelPath(const std::string& path)
 {
     FpsWeaponDefinition* selected = SelectedWeapon();
@@ -394,6 +406,50 @@ void SectorEditorWeaponEditorService::SetShootSoundPath(
         selected->firing.shootSound = one.weapons.front().firing.shootSound;
     }
     CopyBuffer(state_.shootSoundBuffer, sizeof(state_.shootSoundBuffer), path);
+    state_.validationMessage.clear();
+}
+
+void SectorEditorWeaponEditorService::SetDryFireSoundPath(
+        const std::string& path,
+        engine::AssetManager& assets)
+{
+    FpsWeaponDefinition* selected = SelectedWeapon();
+    if (selected == nullptr) return;
+    selected->reload.dryFireSoundPath = path;
+    selected->reload.dryFireSound = engine::NullSoundHandle();
+    if (!path.empty()) {
+        FpsWeaponRegistry one;
+        one.weapons.push_back(*selected);
+        RequestFpsWeaponAudioAssets(assets, one);
+        selected->reload.dryFireSound =
+                one.weapons.front().reload.dryFireSound;
+    }
+    CopyBuffer(
+            state_.dryFireSoundBuffer,
+            sizeof(state_.dryFireSoundBuffer),
+            path);
+    state_.validationMessage.clear();
+}
+
+void SectorEditorWeaponEditorService::SetReloadSoundPath(
+        const std::string& path,
+        engine::AssetManager& assets)
+{
+    FpsWeaponDefinition* selected = SelectedWeapon();
+    if (selected == nullptr) return;
+    selected->reload.reloadSoundPath = path;
+    selected->reload.reloadSound = engine::NullSoundHandle();
+    if (!path.empty()) {
+        FpsWeaponRegistry one;
+        one.weapons.push_back(*selected);
+        RequestFpsWeaponAudioAssets(assets, one);
+        selected->reload.reloadSound =
+                one.weapons.front().reload.reloadSound;
+    }
+    CopyBuffer(
+            state_.reloadSoundBuffer,
+            sizeof(state_.reloadSoundBuffer),
+            path);
     state_.validationMessage.clear();
 }
 
@@ -443,6 +499,14 @@ void SectorEditorWeaponEditorService::SyncBuffersFromSelection()
             state_.shootSoundBuffer,
             sizeof(state_.shootSoundBuffer),
             weapon.firing.shootSoundPath);
+    CopyBuffer(
+            state_.dryFireSoundBuffer,
+            sizeof(state_.dryFireSoundBuffer),
+            weapon.reload.dryFireSoundPath);
+    CopyBuffer(
+            state_.reloadSoundBuffer,
+            sizeof(state_.reloadSoundBuffer),
+            weapon.reload.reloadSoundPath);
     state_.floatInputs = {};
     state_.intInputs = {};
 }
