@@ -2652,14 +2652,16 @@
       "item": {
         "definitionId": "new_item_2",
         "instanceId": "boomstick_01",
-        "heightOffsetWorld": 1.0
+        "takeDistance": 2.0,
+        "rotationZDegrees": 90.0,
+        "heightOffsetWorld": 0.7149999737739563
       },
       "position": [
-        -93.0,
+        -74.0,
         -16.0,
-        -74.0
+        -80.0
       ],
-      "yawDegrees": 0.0
+      "yawDegrees": 45.0
     },
     {
       "id": 159,
@@ -2716,12 +2718,13 @@
         "definitionId": "new_item_6",
         "instanceId": "item_162",
         "quantity": 12,
-        "takeDistance": 2.0
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
       },
       "position": [
-        -85.0,
+        -68.0,
         0.0,
-        34.0
+        27.0
       ],
       "yawDegrees": 0.0
     },
@@ -2731,46 +2734,84 @@
       "item": {
         "definitionId": "new_item_7",
         "instanceId": "item_163",
-        "quantity": 4,
-        "takeDistance": 2.0
+        "quantity": 2,
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
       },
       "position": [
-        -80.0,
+        -63.0,
         0.0,
-        34.0
+        27.0
       ],
       "yawDegrees": 0.0
     },
     {
-      "id": 164,
+      "id": 166,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_6",
-        "instanceId": "item_164",
-        "quantity": 100,
-        "takeDistance": 2.0
+        "definitionId": "new_item",
+        "instanceId": "item_166",
+        "takeDistance": 2.0,
+        "rotationZDegrees": -90.0,
+        "heightOffsetWorld": 0.9869999885559082
       },
       "position": [
-        -96.0,
+        -40.0,
         0.0,
-        40.0
+        39.0
       ],
-      "yawDegrees": 0.0
+      "yawDegrees": 20.0
     },
     {
-      "id": 165,
+      "id": 167,
       "kind": "item",
       "item": {
         "definitionId": "new_item_7",
-        "instanceId": "item_165",
-        "quantity": 10
+        "instanceId": "item_167",
+        "quantity": 5,
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 0.8999999761581421
       },
       "position": [
-        -91.0,
-        0.0,
-        43.0
+        -59.0,
+        -16.0,
+        -57.0
       ],
-      "yawDegrees": 0.0
+      "yawDegrees": 35.0
+    },
+    {
+      "id": 168,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_6",
+        "instanceId": "item_168",
+        "quantity": 12,
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 0.9700000286102295,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -113.0,
+        -16.0,
+        -81.0
+      ],
+      "yawDegrees": 100.0
+    },
+    {
+      "id": 169,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_5",
+        "instanceId": "item_169",
+        "heightOffsetWorld": 0.675000011920929,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -117.0,
+        -16.0,
+        -67.0
+      ],
+      "yawDegrees": 94.99999237060547
     }
   ],
   "staticLights": [
