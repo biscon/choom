@@ -1049,6 +1049,15 @@ void TestItemDropClearanceQueries()
     Check(game::ItemDropBoundsOverlap(clear.worldBounds, prop),
           "drop bounds detect static or dynamic prop overlap");
 
+    std::vector<game::SectorStaticModelCollider> propColliders;
+    Check(!game::ItemDropBoundsOverlapAnyPropCollider(
+                  clear.worldBounds, propColliders),
+          "drop clearance ignores props without collision components");
+    propColliders.push_back(prop);
+    Check(game::ItemDropBoundsOverlapAnyPropCollider(
+                  clear.worldBounds, propColliders),
+          "drop clearance rejects resolved collision-enabled props");
+
     game::SectorDynamicDoorCollider door;
     door.center = Vector2{4.0f, 4.0f};
     door.tangent = Vector2{1.0f, 0.0f};

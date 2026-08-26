@@ -33,6 +33,14 @@ inline constexpr float ScreenLightPickPixels = 12.0f;
 inline constexpr float PreviewHighlightLift = 0.006f;
 inline constexpr float GameplayFloorSnapEpsilon = 0.001f;
 
+inline bool ShouldApplySectorEditorKeyboardPan(
+        bool keyboardCaptured,
+        bool leftControlDown,
+        bool rightControlDown)
+{
+    return !keyboardCaptured && !leftControlDown && !rightControlDown;
+}
+
 bool SameBoundaryCutPoint(const SectorTopologyBoundaryCutPoint& a, const SectorTopologyBoundaryCutPoint& b);
 const SectorMaterialDefinition* FindSectorTopologyTexture(const SectorTopologyMap& map, const std::string& id);
 std::vector<std::string> SortedSectorTopologyTextureIds(const SectorTopologyMap& map);

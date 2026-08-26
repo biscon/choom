@@ -1734,7 +1734,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
         return;
     }
 
-    if (!uiState.keyboardCaptured) {
+    if (ShouldApplySectorEditorKeyboardPan(
+                uiState.keyboardCaptured,
+                input.IsKeyDown(KEY_LEFT_CONTROL),
+                input.IsKeyDown(KEY_RIGHT_CONTROL))) {
         Vector2 pan{};
         if (input.IsKeyDown(KEY_A)) {
             pan.x -= 1.0f;

@@ -6,6 +6,8 @@
 
 #include <raylib.h>
 
+#include <vector>
+
 namespace game {
 
 inline constexpr BoundingBox kItemDropFallbackLocalBounds{
@@ -34,6 +36,9 @@ bool ItemDropBoundsOverlap(
 bool ItemDropBoundsOverlap(
         BoundingBox candidate,
         const SectorDynamicDoorCollider& obstacle);
+bool ItemDropBoundsOverlapAnyPropCollider(
+        BoundingBox candidate,
+        const std::vector<SectorStaticModelCollider>& obstacles);
 bool ItemDropBoundsOverlapPlayer(
         BoundingBox candidate,
         Vector3 feetPosition,

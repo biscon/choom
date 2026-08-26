@@ -57,6 +57,18 @@ void TestMainMenuShortcutMatching()
           "menu shortcut rejects a different key");
 }
 
+void TestKeyboardPanModifierPolicy()
+{
+    Check(game::ShouldApplySectorEditorKeyboardPan(false, false, false),
+          "2D keyboard navigation remains enabled without Ctrl");
+    Check(!game::ShouldApplySectorEditorKeyboardPan(false, true, false),
+          "left Ctrl suppresses 2D keyboard navigation");
+    Check(!game::ShouldApplySectorEditorKeyboardPan(false, false, true),
+          "right Ctrl suppresses 2D keyboard navigation");
+    Check(!game::ShouldApplySectorEditorKeyboardPan(true, false, false),
+          "keyboard capture continues to suppress 2D keyboard navigation");
+}
+
 void TestLightmapBakeSetupModalStateLifecycle()
 {
     game::SectorLightmapBakeSetupModalState state;
@@ -896,6 +908,7 @@ void TestLightProxyPlacementMath()
 int main()
 {
     TestMainMenuShortcutMatching();
+    TestKeyboardPanModifierPolicy();
     TestLightmapBakeSetupModalStateLifecycle();
     TestModelFilenameExtraction();
     TestAudioAssetPickerScrollSession();

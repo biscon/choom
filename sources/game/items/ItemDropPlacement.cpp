@@ -124,6 +124,16 @@ bool ItemDropBoundsOverlap(
                     obstacle.halfExtents, obstacle.bottom, obstacle.top));
 }
 
+bool ItemDropBoundsOverlapAnyPropCollider(
+        BoundingBox candidate,
+        const std::vector<SectorStaticModelCollider>& obstacles)
+{
+    for (const SectorStaticModelCollider& obstacle : obstacles) {
+        if (ItemDropBoundsOverlap(candidate, obstacle)) return true;
+    }
+    return false;
+}
+
 bool ItemDropBoundsOverlapPlayer(
         BoundingBox candidate,
         Vector3 feetPosition,

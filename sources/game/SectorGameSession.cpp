@@ -496,43 +496,13 @@ bool SectorGameSession::DropInventoryEntry(
     for (const SectorDynamicDoorCollider& door : objects.dynamicDoorColliders) {
         if (ItemDropBoundsOverlap(candidate.worldBounds, door)) return false;
     }
+    if (ItemDropBoundsOverlapAnyPropCollider(
+                candidate.worldBounds, objects.staticModelColliders)
+            || ItemDropBoundsOverlapAnyPropCollider(
+                    candidate.worldBounds, objects.dynamicModelColliders)) {
+        return false;
+    }
     bool blocked = false;
-    context.world.ForEach<SectorObjectTransform, SectorStaticModel>(
-            [&context, &candidate, &blocked](
-                    engine::Entity,
-                    SectorObjectTransform& transform,
-                    SectorStaticModel& model) {
-                if (blocked) return;
-                blocked = ItemDropBoundsOverlap(
-                        candidate.worldBounds,
-                        ItemVisualBounds(
-                                context.assets,
-                                model.model,
-                                transform,
-                                model.scale,
-                                false));
-            });
-    if (blocked) return false;
-    context.world.ForEach<
-            SectorObjectTransform,
-            SectorDynamicModel,
-            engine::AnimatedModelInstance>(
-            [&context, &candidate, &blocked](
-                    engine::Entity,
-                    SectorObjectTransform& transform,
-                    SectorDynamicModel& model,
-                    engine::AnimatedModelInstance& animated) {
-                if (blocked) return;
-                blocked = ItemDropBoundsOverlap(
-                        candidate.worldBounds,
-                        ItemVisualBounds(
-                                context.assets,
-                                animated.model,
-                                transform,
-                                model.scale,
-                                true));
-            });
-    if (blocked) return false;
     context.world.ForEach<SectorObjectTransform, SectorItem>(
             [&context, &candidate, &blocked](
                     engine::Entity,
