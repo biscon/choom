@@ -105,6 +105,7 @@ public:
 
     void Update(engine::EngineContext& context, float dt);
     void SetGameSessionExists(bool exists) { gameSessionExists = exists; }
+    bool ConsumeClearGameSessionRequest();
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::EngineContext& context);
@@ -617,6 +618,7 @@ private:
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
     bool gameSessionExists = false;
+    bool clearGameSessionRequested = false;
 };
 
 } // namespace game

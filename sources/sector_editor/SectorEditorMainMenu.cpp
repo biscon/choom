@@ -24,6 +24,7 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         engine::FontHandle smallFont,
         const SectorEditorState& editorState,
         engine::UIMainMenuState& menuState,
+        bool gameSessionExists,
         bool canCopyConfig,
         bool canPasteConfig,
         bool visible,
@@ -47,6 +48,10 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Weapons Editor", CommandId(SectorEditorMainMenuCommand::OpenWeaponEditor)},
             {"Item Editor", CommandId(SectorEditorMainMenuCommand::OpenItemEditor)}
     }};
+    const std::array<engine::UIMenuItem, 1> gameItems{{
+            {"Clear", CommandId(SectorEditorMainMenuCommand::ClearGameSession),
+                    engine::UIMenuItemKind::Action, gameSessionExists}
+    }};
     const std::array<engine::UIMenuItem, 2> editItems{{
             {"Copy config", CommandId(SectorEditorMainMenuCommand::CopyConfig),
                     engine::UIMenuItemKind::Action, canCopyConfig, false, "CTRL-C",
@@ -69,8 +74,9 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
     const std::array<engine::UIMenuItem, 1> settingsItems{{
             {"Level", CommandId(SectorEditorMainMenuCommand::OpenLevelSettings)}
     }};
-    const std::array<engine::UIMenuRoot, 5> roots{{
+    const std::array<engine::UIMenuRoot, 6> roots{{
             {"Level", levelItems.data(), levelItems.size()},
+            {"Game", gameItems.data(), gameItems.size()},
             {"Edit", editItems.data(), editItems.size()},
             {"Editors", editorItems.data(), editorItems.size()},
             {"View", viewItems.data(), viewItems.size()},

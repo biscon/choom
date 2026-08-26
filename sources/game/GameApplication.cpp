@@ -401,6 +401,9 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
     }
 
     editor.SetGameSessionExists(gameSession.IsRunning());
+    if (editor.ConsumeClearGameSessionRequest()) {
+        ClearGameSession(context);
+    }
     editor.Update(context, dt);
     if (editor.IsPreview3DActive()) {
         return;
@@ -747,6 +750,22 @@ void GameApplication::ResumeGame(engine::EngineContext& context)
     flow.screen = ApplicationScreen::Game;
     flow.menuReturnScreen = ApplicationScreen::Game;
     menuStatus.clear();
+}
+
+void GameApplication::ClearGameSession(engine::EngineContext& context)
+{
+    if (!gameSession.IsRunning()) return;
+
+    context.audio.StopAll(context.assets);
+    gameSession.Shutdown(context, gameScene);
+    itemCampaign = ItemCampaignState{};
+    persistentScripts = engine::PersistentScriptStore{};
+    editorAttachedToGame = false;
+    editor.SetGameSessionExists(false);
+    debugConsole.open = false;
+    menuStatus.clear();
+    MarkApplicationGameStopped(flow);
+    ShowApplicationEditor(flow);
 }
 
 void GameApplication::OpenEditor(engine::EngineContext& context)

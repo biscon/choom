@@ -435,6 +435,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     canvasRect = {};
     statusText.clear();
     gameSessionExists = false;
+    clearGameSessionRequested = false;
     engineContext = nullptr;
     initialized = false;
 }
@@ -801,6 +802,7 @@ void SectorEditor::RenderUI(
             smallFont,
             state,
             uiState.mainMenu,
+            gameSessionExists,
             configTarget.kind != SectorEditorConfigKind::None,
             configTarget.kind != SectorEditorConfigKind::None
                     && configTarget.kind == configClipboardState.kind,
@@ -1393,6 +1395,16 @@ void SectorEditor::HandleMainMenuCommand(
         case SectorEditorMainMenuCommand::ReloadLevel:
             OpenReloadConfirmation(assets);
             break;
+        case SectorEditorMainMenuCommand::ClearGameSession:
+            if (!gameSessionExists) {
+                statusText = "No game session is running.";
+                break;
+            }
+            OpenConfirmation(
+                    "Clear Game Session",
+                    "Discard the current game session and all unsaved game progress?",
+                    [this]() { clearGameSessionRequested = true; });
+            break;
         case SectorEditorMainMenuCommand::CopyConfig:
             CopySelectedConfig(assets);
             break;
@@ -1436,6 +1448,13 @@ void SectorEditor::HandleMainMenuCommand(
         case SectorEditorMainMenuCommand::None:
             break;
     }
+}
+
+bool SectorEditor::ConsumeClearGameSessionRequest()
+{
+    const bool requested = clearGameSessionRequested;
+    clearGameSessionRequested = false;
+    return requested;
 }
 
 bool SectorEditor::IsMouseOverCanvas(const engine::Input& input) const

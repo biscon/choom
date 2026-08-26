@@ -101,6 +101,7 @@ private:
             MainMenuAction action);
     void StartNewGame(engine::EngineContext& context);
     void ResumeGame(engine::EngineContext& context);
+    void ClearGameSession(engine::EngineContext& context);
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
     bool DebugConsoleAvailable() const;
