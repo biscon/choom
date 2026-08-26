@@ -20,6 +20,7 @@ namespace game {
 
 struct SectorRuntimeObjectState;
 class SectorNavigationWorld;
+struct Health;
 struct NpcNavigationRuntime;
 struct SectorTopologyMap;
 
@@ -81,6 +82,7 @@ struct SectorScriptHost {
     SectorRuntimeObjectState* runtimeObjects = nullptr;
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;
+    Health* playerHealth = nullptr;
     SectorTopologyMap* map = nullptr;
     SectorScriptAudioApi audio;
     engine::ScriptRuntime* scripts = nullptr;
@@ -101,7 +103,8 @@ void InitializeSectorScriptHost(
         engine::ScriptRuntime& scripts,
         SectorNavigationWorld* navigation = nullptr,
         NpcNavigationRuntime* npcNavigation = nullptr,
-        SectorScriptAudioApi audio = {});
+        SectorScriptAudioApi audio = {},
+        Health* playerHealth = nullptr);
 
 void ResetSectorScriptHost(SectorScriptHost& host);
 

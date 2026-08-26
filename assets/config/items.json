@@ -18,6 +18,53 @@
       "type": "weapon",
       "weightKg": 3.25,
       "weaponId": "shotgun"
+    },
+    {
+      "id": "new_item_3",
+      "title": "Bandage",
+      "description": "Heals you for a small amount.",
+      "modelPath": "assets/models/items/health_pack_small.gltf",
+      "type": "health",
+      "weightKg": 0.5,
+      "healAmount": 25,
+      "healOverTime": true,
+      "healDurationSeconds": 5.0
+    },
+    {
+      "id": "new_item_4",
+      "title": "Health Pack",
+      "description": "For when it hurts.",
+      "modelPath": "assets/models/items/health_pack_mid.gltf",
+      "type": "health",
+      "weightKg": 1.5,
+      "healAmount": 50
+    },
+    {
+      "id": "new_item_5",
+      "title": "Large Health Pack",
+      "description": "For when it really hurts.",
+      "modelPath": "assets/models/items/health_pack_big.gltf",
+      "type": "health",
+      "weightKg": 3.0,
+      "healAmount": 100
+    },
+    {
+      "id": "new_item_6",
+      "title": "9mm Ammo",
+      "description": "Standard 9mm handgun ammunition.\nSi vis pacem, para bellum.",
+      "modelPath": "assets/models/items/9mm_ammo_box.glb",
+      "type": "ammo",
+      "weightKg": 0.012000000104308128,
+      "weaponId": "pistol"
+    },
+    {
+      "id": "new_item_7",
+      "title": "Buckshot",
+      "description": "Each cartridge contains 8 pellets of hot lead, making sure that somebody is gonna have a bad day.",
+      "modelPath": "assets/models/items/shotgun_ammo_box.glb",
+      "type": "ammo",
+      "weightKg": 0.04600000008940697,
+      "weaponId": "shotgun"
     }
   ]
 }

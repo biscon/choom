@@ -2134,6 +2134,7 @@
       "dynamicModel": {
         "instanceId": "light_switch_01",
         "useTitle": "light switch",
+        "useDistance": 2.0,
         "onUseScript": "toggleOfficeLights",
         "modelPath": "assets/models/dynamic/switch_outlet.glb",
         "heightOffsetWorld": 0.20000000298023224,
@@ -2657,6 +2658,86 @@
         -93.0,
         -16.0,
         -74.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 159,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_3",
+        "instanceId": "item_159",
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
+      },
+      "position": [
+        -77.0,
+        0.0,
+        28.0
+      ],
+      "yawDegrees": 50.0
+    },
+    {
+      "id": 160,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_4",
+        "instanceId": "item_160",
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
+      },
+      "position": [
+        -81.0,
+        0.0,
+        27.0
+      ],
+      "yawDegrees": -10.0
+    },
+    {
+      "id": 161,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_5",
+        "instanceId": "item_161",
+        "takeDistance": 2.0,
+        "heightOffsetWorld": 1.0950000286102295
+      },
+      "position": [
+        -86.0,
+        0.0,
+        27.0
+      ],
+      "yawDegrees": 15.0
+    },
+    {
+      "id": 162,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_6",
+        "instanceId": "item_162",
+        "quantity": 12,
+        "takeDistance": 2.0
+      },
+      "position": [
+        -85.0,
+        0.0,
+        34.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 163,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_7",
+        "instanceId": "item_163",
+        "quantity": 4,
+        "takeDistance": 2.0
+      },
+      "position": [
+        -80.0,
+        0.0,
+        34.0
       ],
       "yawDegrees": 0.0
     }
@@ -23546,9 +23627,9 @@
       {
         "editorId": 1,
         "id": "default",
-        "x": -1664,
+        "x": 80,
         "y": 0.0,
-        "z": -640,
+        "z": -80,
         "orientationDegrees": 90.0
       },
       {

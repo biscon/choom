@@ -184,6 +184,7 @@ struct NpcScriptFixture {
     game::SectorTopologyMap map = MakeNpcNavigationMap();
     game::SectorNavigationWorld navigation;
     game::NpcNavigationRuntime npcNavigation;
+    game::Health playerHealth = game::MakeHealth(100);
     game::SectorScriptHost host;
     ScriptFiles files;
     engine::Entity npc = engine::NullEntity();
@@ -208,7 +209,9 @@ struct NpcScriptFixture {
                 map,
                 runtime,
                 &navigation,
-                &npcNavigation);
+                &npcNavigation,
+                {},
+                &playerHealth);
     }
 
     ~NpcScriptFixture()
@@ -243,6 +246,61 @@ struct NpcScriptFixture {
         engine::ScriptSystemUpdate(context, runtime, dt);
     }
 };
+
+void HealthBindingsSetPlayerAndNpcCurrentHealth()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+function init()
+    assert(setPlayerHealth(63))
+    assert(setNpcHealth("script_guard", 12))
+    local missing, reason = setNpcHealth("missing_guard", 10)
+    setPersistentBool("missing_rejected", not missing)
+    setPersistentString("missing_reason", reason)
+end
+)");
+    assert(Create(
+            fixture.context,
+            fixture.runtime,
+            fixture.persistent,
+            fixture.host,
+            fixture.files));
+    assert(fixture.playerHealth.current == 63);
+    assert(fixture.context.world.Get<game::Health>(fixture.npc).current == 12);
+    assert(!fixture.context.world.Get<game::NpcCombatState>(fixture.npc).dead);
+    assert(fixture.persistent.bools.at("missing_rejected"));
+    assert(fixture.persistent.strings.at("missing_reason").find("not found")
+            != std::string::npos);
+}
+
+void SettingNpcHealthToZeroUsesNpcDeathState()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+function init()
+    assert(setNpcHealth("script_guard", 0))
+    local revived, reason = setNpcHealth("script_guard", 1)
+    setPersistentBool("revive_rejected", not revived)
+    setPersistentString("revive_reason", reason)
+end
+)");
+    assert(Create(
+            fixture.context,
+            fixture.runtime,
+            fixture.persistent,
+            fixture.host,
+            fixture.files));
+    assert(game::IsDepleted(
+            fixture.context.world.Get<game::Health>(fixture.npc)));
+    const game::NpcCombatState& combat =
+            fixture.context.world.Get<game::NpcCombatState>(fixture.npc);
+    assert(combat.dead);
+    assert(combat.deathAnimationRequested);
+    assert(!fixture.npcNavigation.records.front().occupied);
+    assert(fixture.persistent.bools.at("revive_rejected"));
+    assert(fixture.persistent.strings.at("revive_reason").find("cannot be revived")
+            != std::string::npos);
+}
 
 void BlockingNpcMoveCompletesAfterPhysicalArrival()
 {
@@ -1062,6 +1120,8 @@ void RunSectorScriptBindingTests()
     DoorCompletionAndCancellationShareTheBackend();
     StableDoorAndDynamicLightBindingsMutateRuntimeTargets();
     DoorPermissionCallbacksCanYieldAndMustReturnTrue();
+    HealthBindingsSetPlayerAndNpcCurrentHealth();
+    SettingNpcHealthToZeroUsesNpcDeathState();
     BlockingNpcMoveCompletesAfterPhysicalArrival();
     BackgroundNpcPatrolYieldsWhenNavigationIsPrepared();
     KillingMovingNpcStopsRunawayPatrolWithoutFreezing();

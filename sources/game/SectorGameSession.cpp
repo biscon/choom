@@ -955,7 +955,8 @@ bool SectorGameSession::StartNew(
             scripts,
             &scene.Navigation(),
             &scene.NpcNavigation(),
-            MakeSectorScriptAudioApi(scene));
+            MakeSectorScriptAudioApi(scene),
+            &playerHealth);
     pendingLoadingSave = loadingSave;
     BeginGameLevelLoading(loading);
     error.clear();
@@ -1712,7 +1713,8 @@ bool SectorGameSession::RebuildFromMap(
             scripts,
             &scene.Navigation(),
             &scene.NpcNavigation(),
-            MakeSectorScriptAudioApi(scene));
+            MakeSectorScriptAudioApi(scene),
+            &playerHealth);
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};

@@ -410,6 +410,29 @@ setDynamicLightIntensity("warning_light", 3.5)
 setDynamicLightColor("warning_light", 255, 40, 20)
 ```
 
+## Actor health
+
+Health values are integers from `0` through the actor's current maximum.
+Out-of-range values raise a Lua argument error.
+
+### `setPlayerHealth(health) -> true | false, reason`
+
+Sets the player's current health. A value of `0` depletes the player's health.
+
+```lua
+setPlayerHealth(75)
+```
+
+### `setNpcHealth(instanceId, health) -> true | false, reason`
+
+Sets the current health of the placed NPC with the exact, case-sensitive
+instance ID. Setting health to `0` kills the NPC and stops its navigation.
+Dead NPCs cannot be revived by setting a positive value.
+
+```lua
+local ok, reason = setNpcHealth("guard_1", 25)
+```
+
 ## NPC movement
 
 `instanceId` is a placed NPC's unique instance ID. `gait` is optional and is

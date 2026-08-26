@@ -2,10 +2,6 @@
   "version": 1,
   "firstLevel": "hub",
   "consoleEnabled": true,
-  "playerInventory": {
-    "maxCarryWeightKg": 30.0,
-    "maxSlots": 24
-  },
   "footsteps": {
     "defaultSet": "Tile_Mono",
     "volume": 0.6499999761581421,
@@ -19,10 +15,14 @@
     "maxShadowLightUpdatesPerFrame": 2,
     "dynamicLightFadeInSeconds": 0.25,
     "depthPrepass": false,
-    "showFpsCounter": false,
+    "showFpsCounter": true,
     "performanceOverlay": false,
     "vsync": true,
     "horizontalFovDegrees": 95
+  },
+  "playerInventory": {
+    "maxCarryWeightKg": 30.0,
+    "maxSlots": 24
   },
   "hdrBloom": {
     "enabled": true,
