@@ -259,6 +259,7 @@ void TestRenderTargetMetadata()
 void TestHdrEffectPolicy()
 {
     using engine::EvaluateHdrBloomPrefilter;
+    using engine::HdrPostProcessOverlayRoute;
     engine::HdrBloomSettings settings;
     engine::HdrBloomSettings invalidSettings;
     invalidSettings.threshold=std::numeric_limits<float>::quiet_NaN();
@@ -282,6 +283,19 @@ void TestHdrEffectPolicy()
                   && engine::SanitizeLinearHdrChannelForRgba16f(
                              std::numeric_limits<float>::quiet_NaN())==0.0f,
           "half storage sanitizer has deterministic non-finite policy");
+
+    Check(engine::ResolveHdrPostProcessOverlayRoute(false, true, false)
+                    == HdrPostProcessOverlayRoute::Skip,
+          "inactive world overlays do not trigger an HDR scratch commit");
+    Check(engine::ResolveHdrPostProcessOverlayRoute(true, false, false)
+                    == HdrPostProcessOverlayRoute::DrawSceneTarget,
+          "world overlays draw directly when scene color is authoritative");
+    Check(engine::ResolveHdrPostProcessOverlayRoute(true, true, false)
+                    == HdrPostProcessOverlayRoute::CommitScratchThenDrawSceneTarget,
+          "scratch presentation commits before depth-tested world overlays");
+    Check(engine::ResolveHdrPostProcessOverlayRoute(true, true, true)
+                    == HdrPostProcessOverlayRoute::Skip,
+          "explicit HDR diagnostic presentation is not overwritten by world overlays");
 
     settings.threshold=0.0f; settings.softKnee=0.5f;
     Vector3 value=EvaluateHdrBloomPrefilter(Vector3{0.25f,0.0f,0.0f},settings);

@@ -1060,6 +1060,14 @@ void SectorSceneRuntime::ApplyHdrBloom(
     renderer.ApplyHdrBloom(sceneTarget, settings, presentFromScratch);
 }
 
+bool SectorSceneRuntime::PreparePostBloomWorldOverlays(
+        engine::RenderTarget& sceneTarget,
+        bool overlayRequested)
+{
+    return renderer.PreparePostBloomWorldOverlays(
+            sceneTarget, overlayRequested);
+}
+
 bool SectorSceneRuntime::CompositeViewmodel(
         engine::RenderTarget& sceneTarget,
         const engine::RenderTarget& viewmodelTarget)

@@ -57,6 +57,15 @@ public:
             engine::FontHandle usePromptFont,
             Rectangle playableViewport) const;
     void RenderNavigationDebugWorld(const SectorSceneRuntime& scene) const;
+    void RenderAiDebugWorld(
+            const engine::World& world,
+            const SectorSceneRuntime& scene) const;
+    void RenderAiDebugHud(
+            const engine::World& world,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            Rectangle playableViewport,
+            const SectorSceneRuntime& scene) const;
     void RenderNavigationDebugPanel(
             const engine::UIConfig& config,
             engine::AssetManager& assets,
@@ -122,8 +131,13 @@ public:
     const PlayerStamina& PlayerStaminaState() const { return playerStamina; }
     void SetGodMode(bool enabled);
     void SetAiFrozen(bool frozen) { aiFrozen = frozen; }
+    void SetAiDebugVisible(bool visible) { aiDebugVisible = visible; }
     bool GodMode() const { return godMode; }
     bool AiFrozen() const { return aiFrozen; }
+    bool AiDebugVisible() const { return aiDebugVisible; }
+    bool HasWorldDebugOverlays() const {
+        return IsActive() && (navigationDebug.visible || aiDebugVisible);
+    }
     bool IsGameOver() const { return gameOver; }
 
 private:
@@ -220,6 +234,7 @@ private:
     float playerStunRemainingSeconds = 0.0f;
     bool godMode = false;
     bool aiFrozen = false;
+    bool aiDebugVisible = false;
     bool gameOver = false;
     PlayerStamina playerStamina;
     PlayerWindedCameraState windedCamera;

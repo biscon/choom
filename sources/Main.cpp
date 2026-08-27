@@ -941,9 +941,11 @@ int main(int argc, char** argv)
             application.Apply3DHdrBloom(worldTargetResource);
             performanceProfiler.End(RenderProfilePass::Bloom);
 
-            BeginTextureMode(worldTarget);
-            application.Render3DOverlays();
-            EndTextureMode();
+            if (application.Prepare3DOverlayPass(worldTargetResource)) {
+                BeginTextureMode(worldTarget);
+                application.Render3DOverlays(context.world);
+                EndTextureMode();
+            }
 
             const engine::RenderTarget* hdrDebugSource =
                     application.HdrDebugPresentationSource();
@@ -1002,7 +1004,8 @@ int main(int argc, char** argv)
                 DrawTexturePro(editorTarget.texture, editorSrc, dst, {0,0}, 0.0f, WHITE);
             }
             if (render3D) {
-                application.Render3DHud(assets, smallFont, dst);
+                application.Render3DHud(
+                        context.world, assets, smallFont, dst);
             }
             Rectangle uiSrc = GetFullscreenSrcRect(uiTarget.texture);
             DrawTexturePro(uiTarget.texture, uiSrc, dst, {0,0}, 0.0f, WHITE);

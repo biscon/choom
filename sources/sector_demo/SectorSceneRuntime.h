@@ -95,6 +95,9 @@ public:
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
             bool presentFromScratch = false);
+    bool PreparePostBloomWorldOverlays(
+            engine::RenderTarget& sceneTarget,
+            bool overlayRequested);
     bool CompositeViewmodel(
             engine::RenderTarget& sceneTarget,
             const engine::RenderTarget& viewmodelTarget);
@@ -111,6 +114,7 @@ public:
     const SectorNavigationWorld& Navigation() const { return navigation; }
     NpcNavigationRuntime& NpcNavigation() { return npcNavigation; }
     const NpcNavigationRuntime& NpcNavigation() const { return npcNavigation; }
+    const NpcAiRuntime& NpcAi() const { return npcAi; }
     NpcMoveRequestResult RequestNpcMove(
             engine::EngineContext& context,
             std::string_view instanceId,

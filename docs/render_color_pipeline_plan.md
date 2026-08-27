@@ -587,9 +587,12 @@ Status: implemented; hardware acceptance measurements remain pending.
   subsequent full-scene commit. Additive dust likewise renders directly into
   the active HDR scene instead of copying the scene through RGBA32F scratch.
 - Bloom prefilters the active HDR scene directly and writes its finite-guarded
-  composite to the alternate HDR target. Gameplay presentation consumes that
-  target without copying it back; editor preview retains the commit because
-  its post-bloom depth-tested authoring overlays still target world color.
+  composite to the alternate HDR target. Gameplay presentation normally
+  consumes that target without copying it back. Active AI or F8 navigation
+  world diagnostics conditionally commit it to the original depth-bearing
+  world target before drawing; the debug-only cost is absent when those
+  overlays are off. Editor preview retains the commit because its post-bloom
+  depth-tested authoring overlays still target world color.
 - Fog volumes, haze, and shafts use full-resolution scissored analytical draws
   with the world depth texture kept read-only. Their authored enable flags are
   the only runtime switches; no application volumetric-quality tier remains.

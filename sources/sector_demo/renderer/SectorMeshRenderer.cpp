@@ -2626,6 +2626,24 @@ bool SectorMeshRenderer::ApplyHdrBloom(
     return CommitHdrScratch(sceneTarget);
 }
 
+bool SectorMeshRenderer::PreparePostBloomWorldOverlays(
+        engine::RenderTarget& sceneTarget,
+        bool overlayRequested)
+{
+    const engine::HdrPostProcessOverlayRoute route =
+            engine::ResolveHdrPostProcessOverlayRoute(
+                    overlayRequested,
+                    hdrPresentationSource == &hdrSceneScratch,
+                    bloomRenderer.DebugSource() != nullptr);
+    if (route == engine::HdrPostProcessOverlayRoute::Skip) return false;
+    if (route
+            == engine::HdrPostProcessOverlayRoute::CommitScratchThenDrawSceneTarget) {
+        if (!CommitHdrScratch(sceneTarget)) return false;
+        hdrPresentationSource = nullptr;
+    }
+    return true;
+}
+
 SectorViewPose SectorMeshRenderer::Pose() const
 {
     return RendererPose();

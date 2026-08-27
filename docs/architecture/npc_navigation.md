@@ -113,6 +113,22 @@ and script movement, combat knockback, hurt/death handling, and ambient audio
 continue. God mode suppresses player damage, stun, and knockback while enemies
 continue detecting, attacking, and playing authored attack audio.
 
+`/debugai [on|off]` controls a read-only game-session diagnostic overlay. Its
+world pass draws cyan hearing rings, a faint green maximum vision ring with a
+bright exact vision cone, red melee range, magenta remaining path corners,
+yellow last-known-player markers, and fading amber player-sound radii. Its HUD
+pass projects fixed-size identity, awareness/intent/action, health, navigation,
+distance, attack, and investigation text above each AI NPC. Labels intentionally
+remain visible through walls for debugging, while world geometry remains
+depth-tested. Dead NPCs retain an inactive label but no perception geometry.
+The overlay is separate from F8 navigation diagnostics and is never called by
+editor previews. Gameplay normally presents bloom's alternate HDR target
+without copying it back. While either AI or F8 navigation world diagnostics
+are visible, the renderer conditionally commits that result to the original
+depth-bearing world target before drawing the lines. This debug-only copy keeps
+the diagnostics depth-tested and in the presented image; it is skipped when
+both overlays are off.
+
 Passable portals between different floor heights receive deterministic
 walkable-area variants during the derived navigation build. Straight-path
 queries request area crossings, so authored stair treads retain an ordered
@@ -150,6 +166,12 @@ changed-tile processing, not steady drawing. Source, build, tile, and debug
 revisions have separate meanings. Navigation rebuild/debug actions do not
 invalidate the 2D topology render cache, mark the authoring document dirty, or
 change the lightmap source hash.
+
+The AI debug overlay builds no persistent cache. When disabled, game rendering
+returns at the session-owned boolean guard before ECS traversal, text
+formatting, projection, path inspection, or draw calls. Enabling it reads the
+existing bounded sound-event buffer and fixed navigation corner arrays without
+changing navigation revisions or allocating per frame.
 
 ## Settings and diagnostics
 

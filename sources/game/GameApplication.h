@@ -76,7 +76,8 @@ public:
     void Render3DShadowMaps(engine::EngineContext& context);
     void Render3DScene(engine::EngineContext& context);
     void Render3DViewmodel(engine::AssetManager& assets);
-    void Render3DOverlays();
+    bool Prepare3DOverlayPass(engine::RenderTarget& sceneTarget);
+    void Render3DOverlays(const engine::World& world);
     void Apply3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             bool collectGpuDiagnostics = false);
@@ -87,6 +88,7 @@ public:
     const engine::RenderTarget* HdrDebugPresentationSource() const;
     const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const;
     void Render3DHud(
+            const engine::World& world,
             engine::AssetManager& assets,
             engine::FontHandle font,
             Rectangle playableViewport) const;

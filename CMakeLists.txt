@@ -602,6 +602,7 @@ if(BUILD_TESTING)
             sources/game/npc/NpcAudioSystem.cpp
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/ai/NpcAiTypes.cpp
+            sources/game/npc/ai/NpcAiDebugData.cpp
             sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcCombatSystem.cpp
             sources/game/npc/ai/NpcAiSystem.cpp

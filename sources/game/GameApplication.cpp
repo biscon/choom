@@ -196,7 +196,8 @@ void GameApplication::ProcessDeferredDebugActions(
         return;
     }
     if (action.type == engine::DeferredDebugActionType::SetGodMode
-            || action.type == engine::DeferredDebugActionType::SetFreezeAi) {
+            || action.type == engine::DeferredDebugActionType::SetFreezeAi
+            || action.type == engine::DeferredDebugActionType::SetDebugAi) {
         if (!gameSession.IsRunning()
                 || action.mapId != gameSession.LevelName()) {
             engine::DebugConsoleAddLine(
@@ -207,7 +208,11 @@ void GameApplication::ProcessDeferredDebugActions(
         }
         const bool current = action.type
                         == engine::DeferredDebugActionType::SetGodMode
-                ? gameSession.GodMode() : gameSession.AiFrozen();
+                ? gameSession.GodMode()
+                : action.type
+                        == engine::DeferredDebugActionType::SetFreezeAi
+                ? gameSession.AiFrozen()
+                : gameSession.AiDebugVisible();
         const bool enabled = action.booleanMode
                         == engine::DeferredDebugBooleanMode::Toggle
                 ? !current
@@ -215,14 +220,20 @@ void GameApplication::ProcessDeferredDebugActions(
                         == engine::DeferredDebugBooleanMode::Enable;
         if (action.type == engine::DeferredDebugActionType::SetGodMode) {
             gameSession.SetGodMode(enabled);
-        } else {
+        } else if (action.type
+                == engine::DeferredDebugActionType::SetFreezeAi) {
             gameSession.SetAiFrozen(enabled);
+        } else {
+            gameSession.SetAiDebugVisible(enabled);
         }
         engine::DebugConsoleAddLine(
                 debugConsole,
                 std::string{action.type
                                 == engine::DeferredDebugActionType::SetGodMode
-                            ? "god mode " : "AI freeze "}
+                            ? "god mode "
+                            : action.type
+                                    == engine::DeferredDebugActionType::SetFreezeAi
+                            ? "AI freeze " : "AI diagnostics "}
                         + (enabled ? "on" : "off"),
                 engine::DebugConsoleSeverity::Success);
         return;
@@ -553,10 +564,22 @@ void GameApplication::Render3DViewmodel(engine::AssetManager& assets)
     }
 }
 
-void GameApplication::Render3DOverlays()
+bool GameApplication::Prepare3DOverlayPass(
+        engine::RenderTarget& sceneTarget)
+{
+    if (flow.screen == ApplicationScreen::Game) {
+        return gameScene.PreparePostBloomWorldOverlays(
+                sceneTarget,
+                gameSession.HasWorldDebugOverlays());
+    }
+    return BackgroundScreen() == ApplicationScreen::Editor;
+}
+
+void GameApplication::Render3DOverlays(const engine::World& world)
 {
     if (flow.screen == ApplicationScreen::Game) {
         gameSession.RenderNavigationDebugWorld(gameScene);
+        gameSession.RenderAiDebugWorld(world, gameScene);
     } else if (BackgroundScreen() == ApplicationScreen::Editor) {
         editor.RenderPreview3DOverlays();
     }
@@ -615,6 +638,7 @@ const engine::RenderTarget* GameApplication::HdrDebugPresentationSource() const
 }
 
 void GameApplication::Render3DHud(
+        const engine::World& world,
         engine::AssetManager& assets,
         engine::FontHandle font,
         Rectangle playableViewport) const
@@ -622,6 +646,10 @@ void GameApplication::Render3DHud(
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameSession.RenderHud(
                 assets, font, usePromptFont, playableViewport);
+        if (flow.screen == ApplicationScreen::Game) {
+            gameSession.RenderAiDebugHud(
+                    world, assets, font, playableViewport, gameScene);
+        }
     } else {
         editor.RenderPreview3DHud(
                 assets, usePromptFont, playableViewport);

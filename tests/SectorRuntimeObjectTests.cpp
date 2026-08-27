@@ -7,6 +7,7 @@
 #include "game/npc/NpcCombatSystem.h"
 #include "game/npc/NpcRuntime.h"
 #include "game/npc/ai/NpcAiSystem.h"
+#include "game/npc/ai/NpcAiDebugData.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorAudioOcclusion.h"
@@ -5529,6 +5530,100 @@ void TestNpcFootstepCadenceUsesResolvedTravel()
           "NPC run cadence emits after enough resolved travel");
 }
 
+void TestNpcAiDebugGeometryAndLabelsExposeRuntimeState()
+{
+    const game::NpcAiDebugVisionGeometry cone =
+            game::BuildNpcAiDebugVisionGeometry(
+                    Vector3{1.0f, 0.04f, 2.0f},
+                    0.0f,
+                    10.0f,
+                    90.0f);
+    const float diagonal = std::sqrt(50.0f);
+    Check(Near(cone.leftBoundary,
+                       Vector3{1.0f - diagonal, 0.04f,
+                               2.0f + diagonal},
+                       0.0001f)
+                  && Near(cone.rightBoundary,
+                       Vector3{1.0f + diagonal, 0.04f,
+                               2.0f + diagonal},
+                       0.0001f),
+          "AI debug vision geometry follows NPC yaw and half-angle boundaries");
+
+    game::NpcNavigationRecord navigation;
+    navigation.authority = game::NpcMoveAuthority::Ai;
+    navigation.phase = game::NpcMovePhase::FollowingPath;
+    navigation.gait = game::NpcMoveGait::Run;
+    navigation.requestId = 42;
+    navigation.cornerCount = 3;
+    navigation.nextCorner = 1;
+    navigation.visualPosition = Vector3{2.0f, 0.0f, 3.0f};
+    Check(game::NpcAiDebugRemainingCornerCount(navigation) == 2,
+          "AI debug path count includes only remaining corners");
+    navigation.nextCorner = 5;
+    Check(game::NpcAiDebugRemainingCornerCount(navigation) == 0,
+          "AI debug path count safely rejects stale corner indexes");
+    navigation.nextCorner = 1;
+
+    game::NpcRuntimeInstance npc;
+    npc.instanceId = "zombie_debug";
+    npc.action = game::NpcAction::Attack;
+    game::NpcAiState ai;
+    ai.aiType = game::kSeekAndDestroyNpcAiType;
+    ai.awareness = game::NpcAwarenessState::Detected;
+    ai.previousIntent = game::NpcAiIntent::AttackPlayer;
+    ai.attackCommitted = true;
+    ai.attackHitResolved = false;
+    ai.attack.rangeWorld = 1.25f;
+    game::Health health = game::MakeHealth(120);
+    health.current = 75;
+    game::NpcAiDebugLabelData label = game::BuildNpcAiDebugLabelData(
+            npc,
+            ai,
+            health,
+            navigation,
+            Vector3{5.0f, 0.0f, 3.0f},
+            true,
+            false);
+    Check(std::strstr(label.lines[0].data(), "zombie_debug") != nullptr
+                  && std::strstr(label.lines[0].data(), "FROZEN") != nullptr
+                  && std::strstr(label.lines[1].data(), "Detected") != nullptr
+                  && std::strstr(label.lines[1].data(), "HP 75/120") != nullptr
+                  && std::strstr(label.lines[2].data(), "2 corners") != nullptr
+                  && std::strstr(label.lines[3].data(), "hit pending") != nullptr,
+          "AI debug labels report identity, awareness, health, path, freeze, and attack state");
+
+    ai.attackCommitted = false;
+    ai.awareness = game::NpcAwarenessState::InvestigatingSearch;
+    ai.lastKnownPlayerPosition = Vector3{7.0f, 0.0f, 9.0f};
+    ai.searchRemainingSeconds = 2.5f;
+    label = game::BuildNpcAiDebugLabelData(
+            npc,
+            ai,
+            health,
+            navigation,
+            Vector3{},
+            false,
+            false);
+    Check(std::strstr(label.lines[1].data(), "Investigate search") != nullptr
+                  && std::strstr(label.lines[3].data(), "last known 7.00, 9.00")
+                          != nullptr
+                  && std::strstr(label.lines[3].data(), "2.50s") != nullptr,
+          "AI debug labels expose investigation target and remaining search time");
+
+    label = game::BuildNpcAiDebugLabelData(
+            npc,
+            ai,
+            health,
+            navigation,
+            Vector3{},
+            true,
+            true);
+    Check(std::strstr(label.lines[0].data(), "FROZEN") == nullptr
+                  && std::strstr(label.lines[1].data(), "Dead") != nullptr
+                  && std::strstr(label.lines[3].data(), "AI inactive") != nullptr,
+          "AI debug labels distinguish dead NPCs from frozen live AI");
+}
+
 void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
 {
     struct DamageNotifications {
@@ -9288,6 +9383,7 @@ int main()
     TestDynamicModelColliderCollectionIsSeparatedForNavigation();
     TestSpawnNpcResolvesDefinitionAndIdlePlayback();
     TestNpcFootstepCadenceUsesResolvedTravel();
+    TestNpcAiDebugGeometryAndLabelsExposeRuntimeState();
     TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
     TestNpcNavigationReplansAroundDynamicTileCacheObstacle();

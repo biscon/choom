@@ -554,6 +554,12 @@ This prevents confusion when a Lua line is entered from a menu or during a defer
 
 ## 13. Slash-command architecture
 
+The current game also uses the deferred boolean-command path for
+`/god [on|off]`, `/freezeai [on|off]`, and `/debugai [on|off]`. Bare forms
+toggle the active campaign-session value; explicit forms are idempotent. These
+commands require an active game map and retain its ID in the deferred action so
+a map change cancels a stale request safely.
+
 ### 13.1 Command registry
 
 Avoid a monolithic command `if` chain. Register commands in a table:
@@ -1041,4 +1047,3 @@ The implementation is complete only while all of these remain true:
 - Lua `print` and engine logs appear once, not through two competing insertion paths.
 - Rendering occurs as the final logical-resolution UI overlay.
 - Console shutdown unloads its font before Raylib/window teardown.
-

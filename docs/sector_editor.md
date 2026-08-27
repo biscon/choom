@@ -952,8 +952,13 @@ jitter at the melee boundary and nearby attackers resolve independently. A
 player who moves beyond that margin or behind cover still avoids the hit. AI
 never runs in either editor 3D preview control mode. Footstep and landing noise
 radii are application settings JSON values rather than editor controls. Runtime
-testing exposes `/god [on|off]` and `/freezeai [on|off]`; omitting the argument
-toggles the current campaign-session value.
+testing exposes `/god [on|off]`, `/freezeai [on|off]`, and
+`/debugai [on|off]`; omitting the argument toggles the current campaign-session
+value. `/debugai` is game-mode only and draws fixed-size projected state labels
+above AI NPCs plus depth-tested vision, hearing, melee-range,
+last-known-player, active-sound-event, and path diagnostics. It is independent
+from the F8 navigation diagnostics and remains enabled across `/reload` until
+the campaign session ends or the command disables it.
 
 When player health reaches zero, game simulation stops behind a Game Over
 overlay. Its Main Menu button shuts down the level, clears the unsaved campaign

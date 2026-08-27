@@ -11,6 +11,27 @@
 
 namespace {
 
+void SubmitConsoleCommand(
+        engine::DebugConsoleData& console,
+        std::string_view command,
+        std::string_view mapId = "hub")
+{
+    engine::Input input;
+    input.Initialize();
+    for (char ch : command) {
+        engine::InputEvent event{};
+        event.type = engine::InputEventType::TextInput;
+        event.text = engine::TextInputEvent{static_cast<uint32_t>(ch)};
+        input.Events().push_back(event);
+    }
+    engine::InputEvent enter{};
+    enter.type = engine::InputEventType::KeyPressed;
+    enter.key = engine::KeyEvent{KEY_ENTER};
+    input.Events().push_back(enter);
+    engine::DebugConsoleUpdate(
+            console, input, nullptr, mapId, true, 0.016f);
+}
+
 void EditorAndUtf8AreCodepointSafe()
 {
     engine::DebugConsoleData console;
@@ -125,6 +146,42 @@ void SubmissionQueuesDeferredActionsAndHistory()
     assert(toggle.booleanMode == engine::DeferredDebugBooleanMode::Disable);
 }
 
+void DebugAiCommandSupportsToggleModesAndHelp()
+{
+    engine::DebugConsoleData console;
+    engine::DebugConsoleInitialize(console, engine::NullFontHandle());
+    console.open = true;
+
+    SubmitConsoleCommand(console, "/debugai");
+    engine::DeferredDebugAction action =
+            engine::DebugConsoleTakeDeferredAction(console);
+    assert(action.type == engine::DeferredDebugActionType::SetDebugAi);
+    assert(action.mapId == "hub");
+    assert(action.booleanMode == engine::DeferredDebugBooleanMode::Toggle);
+
+    SubmitConsoleCommand(console, "/debugai on");
+    action = engine::DebugConsoleTakeDeferredAction(console);
+    assert(action.type == engine::DeferredDebugActionType::SetDebugAi);
+    assert(action.booleanMode == engine::DeferredDebugBooleanMode::Enable);
+
+    SubmitConsoleCommand(console, "/debugai off");
+    action = engine::DebugConsoleTakeDeferredAction(console);
+    assert(action.type == engine::DeferredDebugActionType::SetDebugAi);
+    assert(action.booleanMode == engine::DeferredDebugBooleanMode::Disable);
+
+    SubmitConsoleCommand(console, "/debugai maybe");
+    assert(engine::DebugConsoleTakeDeferredAction(console).type
+            == engine::DeferredDebugActionType::None);
+    assert(!console.lines.empty());
+    assert(console.lines.back().text.find("usage: /debugai [on|off]")
+            != std::string::npos);
+
+    SubmitConsoleCommand(console, "/help debugai");
+    assert(!console.lines.empty());
+    assert(console.lines.back().text.find("/debugai [on|off]")
+            != std::string::npos);
+}
+
 void TraceLogsFlushThroughTheThreadSafeInbox()
 {
     engine::DebugConsoleData console;
@@ -155,6 +212,7 @@ int main()
     OutputIsLogicalBoundedAndSanitized();
     CommandTokenizerHandlesQuotesAndErrors();
     SubmissionQueuesDeferredActionsAndHistory();
+    DebugAiCommandSupportsToggleModesAndHelp();
     TraceLogsFlushThroughTheThreadSafeInbox();
     return 0;
 }

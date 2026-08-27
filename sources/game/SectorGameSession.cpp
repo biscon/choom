@@ -3,6 +3,7 @@
 #include "sector_demo/SectorFpsController.h"
 #include "game/items/ItemDropPlacement.h"
 #include "game/items/ItemPresentation.h"
+#include "game/npc/ai/NpcAiDebugDraw.h"
 #include "engine/components/AnimatedModel.h"
 #include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
@@ -998,6 +999,7 @@ bool SectorGameSession::StartNew(
     playerStunRemainingSeconds = 0.0f;
     godMode = false;
     aiFrozen = false;
+    aiDebugVisible = false;
     gameOver = false;
     playerStamina = MakePlayerStamina(settings.playerStamina);
     ClearPlayerWindedCamera(windedCamera);
@@ -1165,6 +1167,7 @@ void SectorGameSession::Shutdown(
     playerStunRemainingSeconds = 0.0f;
     godMode = false;
     aiFrozen = false;
+    aiDebugVisible = false;
     gameOver = false;
     ClearPlayerWindedCamera(windedCamera);
     StopGameLevelLoading(loading);
@@ -1913,6 +1916,38 @@ void SectorGameSession::RenderNavigationDebugWorld(
             scene.Navigation(),
             scene.NpcNavigation(),
             scene.Renderer());
+}
+
+void SectorGameSession::RenderAiDebugWorld(
+        const engine::World& world,
+        const SectorSceneRuntime& scene) const
+{
+    if (!IsActive() || !aiDebugVisible) return;
+    DrawNpcAiDebugWorld(
+            world,
+            scene.NpcNavigation(),
+            scene.NpcAi(),
+            scene.Renderer());
+}
+
+void SectorGameSession::RenderAiDebugHud(
+        const engine::World& world,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        Rectangle playableViewport,
+        const SectorSceneRuntime& scene) const
+{
+    if (!IsActive() || !aiDebugVisible) return;
+    DrawNpcAiDebugLabels(
+            world,
+            scene.NpcNavigation(),
+            scene.Renderer(),
+            scene.Navigation().Settings().agentHeight,
+            controller.fpsControllerState.feetPosition,
+            aiFrozen,
+            assets,
+            font,
+            playableViewport);
 }
 
 void SectorGameSession::RenderNavigationDebugPanel(

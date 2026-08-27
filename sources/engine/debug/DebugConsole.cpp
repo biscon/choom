@@ -185,6 +185,10 @@ void HandleFreezeAi(
         DebugConsoleData& console,
         const std::vector<std::string>& tokens,
         std::string_view currentMapId);
+void HandleDebugAi(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId);
 
 struct CommandDefinition {
     const char* name;
@@ -197,6 +201,8 @@ constexpr CommandDefinition Commands[] = {
         {"clear", "/clear", "clear retained console output", HandleClear},
         {"copylast", "/copylast [lineCount]", "copy retained logical output",
                 HandleCopyLast},
+        {"debugai", "/debugai [on|off]", "toggle NPC AI diagnostics",
+                HandleDebugAi},
         {"help", "/help [command]", "list commands or describe one command",
                 HandleHelp},
         {"god", "/god [on|off]", "toggle player invulnerability",
@@ -407,6 +413,17 @@ void HandleFreezeAi(
             console, tokens, currentMapId,
             DeferredDebugActionType::SetFreezeAi,
             "/freezeai [on|off]", "AI freeze");
+}
+
+void HandleDebugAi(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId)
+{
+    QueueBooleanAction(
+            console, tokens, currentMapId,
+            DeferredDebugActionType::SetDebugAi,
+            "/debugai [on|off]", "AI diagnostics");
 }
 
 void ExecuteCommand(

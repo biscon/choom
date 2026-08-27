@@ -120,6 +120,9 @@ public:
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
             bool presentFromScratch = false);
+    bool PreparePostBloomWorldOverlays(
+            engine::RenderTarget& sceneTarget,
+            bool overlayRequested);
     bool CompositeViewmodel(
             engine::RenderTarget& sceneTarget,
             const engine::RenderTarget& viewmodelTarget);
