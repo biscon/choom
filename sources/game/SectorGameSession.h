@@ -9,6 +9,7 @@
 #include "game/items/ItemInventory.h"
 #include "game/items/ItemInventoryUI.h"
 #include "game/PlayerAudio.h"
+#include "game/PlayerHitCamera.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
 #include "engine/scripting/ScriptSystem.h"
@@ -238,6 +239,7 @@ private:
     bool gameOver = false;
     PlayerStamina playerStamina;
     PlayerWindedCameraState windedCamera;
+    PlayerHitCameraState hitCamera;
     PlayerBreathingAudioRuntime breathingAudio;
     std::string failureError;
     SectorUseTarget useTarget;

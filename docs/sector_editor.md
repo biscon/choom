@@ -939,6 +939,17 @@ connects. The separately authored player-impact sound plays only when the hit
 connects and is spatialized from the attacker so concurrent hits remain
 directionally distinct. A stun value of `0` disables stun and a knockback value
 of `0` disables knockback.
+The Attack action also has an optional `cameraImpact` object. Existing NPCs use
+the default enabled response: a directional `2.5` degree pitch and `3.5` degree
+roll impulse, recovering through a `4 Hz`, `0.75` damping-ratio spring and
+clamped to `7.5` degrees pitch and `10` degrees roll. The NPC Editor exposes the
+enabled state, both kick strengths, spring frequency/damping, and accumulated
+pitch/roll limits. Front/back attacks map to pitch, left/right attacks map to
+roll, repeated hits accumulate within the configured limits, and omitted
+fields retain their defaults. This camera layer is visual-only with respect to
+controller state, collision, sector lookup, and physics. Like weapon camera
+recoil, pitch affects the effective center ray while active; roll changes only
+the rendered camera orientation.
 During a stun the game player cannot sprint and moves at half walk speed, but
 may still jump.
 

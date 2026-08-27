@@ -43,7 +43,20 @@ bool SameAction(
             && left.damage == right.damage
             && left.knockbackImpulseWorldPerSecond
                     == right.knockbackImpulseWorldPerSecond
-            && left.stunMilliseconds == right.stunMilliseconds;
+            && left.stunMilliseconds == right.stunMilliseconds
+            && left.cameraImpact.enabled == right.cameraImpact.enabled
+            && left.cameraImpact.pitchKickDegrees
+                    == right.cameraImpact.pitchKickDegrees
+            && left.cameraImpact.rollKickDegrees
+                    == right.cameraImpact.rollKickDegrees
+            && left.cameraImpact.springFrequencyHz
+                    == right.cameraImpact.springFrequencyHz
+            && left.cameraImpact.springDampingRatio
+                    == right.cameraImpact.springDampingRatio
+            && left.cameraImpact.maxPitchDegrees
+                    == right.cameraImpact.maxPitchDegrees
+            && left.cameraImpact.maxRollDegrees
+                    == right.cameraImpact.maxRollDegrees;
 }
 
 bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
@@ -521,6 +534,17 @@ void SectorEditorNpcEditorService::SetSelectedAttack(
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedAttackCameraImpact(
+        const NpcAttackCameraImpactDefinition& cameraImpact)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    GetNpcAction(
+            draft->definition,
+            NpcAction::Attack).cameraImpact = cameraImpact;
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedAmbientDelayRange(
         float minimumSeconds,
         float maximumSeconds)
@@ -692,6 +716,12 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.attackDamageInput = {};
     state_.attackKnockbackInput = {};
     state_.attackStunMillisecondsInput = {};
+    state_.attackCameraPitchKickInput = {};
+    state_.attackCameraRollKickInput = {};
+    state_.attackCameraSpringFrequencyInput = {};
+    state_.attackCameraSpringDampingInput = {};
+    state_.attackCameraMaxPitchInput = {};
+    state_.attackCameraMaxRollInput = {};
     state_.baseHealthInput = {};
     state_.corpseDespawnDelayMillisecondsInput = {};
     state_.corpseFadeDurationMillisecondsInput = {};

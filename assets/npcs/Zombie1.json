@@ -37,7 +37,15 @@
       "hitPhase": 0.4000000059604645,
       "rangeWorld": 1.2000000476837158,
       "knockbackImpulseWorldPerSecond": 2.5,
-      "stunMilliseconds": 500
+      "stunMilliseconds": 500,
+      "cameraImpact": {
+        "pitchKickDegrees": 14.0,
+        "rollKickDegrees": 20.0,
+        "springFrequencyHz": 3.25,
+        "springDampingRatio": 0.3499999940395355,
+        "maxPitchDegrees": 28.0,
+        "maxRollDegrees": 40.0
+      }
     },
     "hurt": {
       "animation": "Reaction Hit",

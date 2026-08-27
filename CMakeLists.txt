@@ -576,6 +576,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_fps_controller_tests
             tests/SectorFpsControllerTests.cpp
+            sources/game/PlayerHitCamera.cpp
             sources/game/PlayerStamina.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorTopologyMap.cpp

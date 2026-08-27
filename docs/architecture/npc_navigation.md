@@ -95,7 +95,8 @@ normalized hit phase performs a fresh LOS test and accepts a bounded `0.25`
 world-unit committed-swing range margin. Moving farther away or gaining cover
 still makes the swing miss. A connection applies damage plus optional
 knockback/stun through one per-attacker operation, dispatches one player-damage
-event, and plays the optional player-impact sound spatialized from the attacker.
+event, applies the attack's optional directional spring camera impact, and
+plays the optional player-impact sound spatialized from the attacker.
 Player-damage events select from the globally loaded pain sound set, including
 when multiple NPC hits land in one frame; their knockback impulses accumulate.
 The separate optional spatialized attack sound plays when the committed attack

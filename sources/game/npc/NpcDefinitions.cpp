@@ -400,6 +400,39 @@ bool ValidateNpcDefinition(
             outError = "NPC Attack hit phase, range, damage, knockback, or stun is outside its supported range";
             return false;
         }
+        if (metadata.action == NpcAction::Attack) {
+            const NpcAttackCameraImpactDefinition& camera =
+                    action.cameraImpact;
+            if (!std::isfinite(camera.pitchKickDegrees)
+                    || camera.pitchKickDegrees < 0.0f
+                    || camera.pitchKickDegrees
+                            > kMaximumNpcAttackCameraImpactKickDegrees
+                    || !std::isfinite(camera.rollKickDegrees)
+                    || camera.rollKickDegrees < 0.0f
+                    || camera.rollKickDegrees
+                            > kMaximumNpcAttackCameraImpactKickDegrees
+                    || !std::isfinite(camera.springFrequencyHz)
+                    || camera.springFrequencyHz
+                            < kMinimumNpcAttackCameraImpactSpringFrequencyHz
+                    || camera.springFrequencyHz
+                            > kMaximumNpcAttackCameraImpactSpringFrequencyHz
+                    || !std::isfinite(camera.springDampingRatio)
+                    || camera.springDampingRatio
+                            < kMinimumNpcAttackCameraImpactSpringDampingRatio
+                    || camera.springDampingRatio
+                            > kMaximumNpcAttackCameraImpactSpringDampingRatio
+                    || !std::isfinite(camera.maxPitchDegrees)
+                    || camera.maxPitchDegrees < 0.0f
+                    || camera.maxPitchDegrees
+                            > kMaximumNpcAttackCameraImpactLimitDegrees
+                    || !std::isfinite(camera.maxRollDegrees)
+                    || camera.maxRollDegrees < 0.0f
+                    || camera.maxRollDegrees
+                            > kMaximumNpcAttackCameraImpactLimitDegrees) {
+                outError = "NPC Attack camera impact is outside its supported range";
+                return false;
+            }
+        }
     }
     outError.clear();
     return true;
@@ -535,6 +568,7 @@ bool ParseNpcDefinitionJson(
                 actionFields.insert("damage");
                 actionFields.insert("knockbackImpulseWorldPerSecond");
                 actionFields.insert("stunMilliseconds");
+                actionFields.insert("cameraImpact");
             }
             RejectUnknownFields(
                     *it,
@@ -566,6 +600,42 @@ bool ParseNpcDefinitionJson(
                 action.stunMilliseconds = OptionalInt(
                         *it, "stunMilliseconds",
                         kDefaultNpcAttackStunMilliseconds, context);
+                const auto cameraImpact = it->find("cameraImpact");
+                if (cameraImpact != it->end()) {
+                    const std::string cameraContext = context + ".cameraImpact";
+                    if (!cameraImpact->is_object()) {
+                        Fail(cameraContext + " must be an object");
+                    }
+                    RejectUnknownFields(
+                            *cameraImpact,
+                            {"enabled", "pitchKickDegrees", "rollKickDegrees",
+                                    "springFrequencyHz", "springDampingRatio",
+                                    "maxPitchDegrees", "maxRollDegrees"},
+                            cameraContext);
+                    NpcAttackCameraImpactDefinition& camera =
+                            action.cameraImpact;
+                    camera.enabled = OptionalBool(
+                            *cameraImpact, "enabled", camera.enabled,
+                            cameraContext);
+                    camera.pitchKickDegrees = OptionalFloat(
+                            *cameraImpact, "pitchKickDegrees",
+                            camera.pitchKickDegrees, cameraContext);
+                    camera.rollKickDegrees = OptionalFloat(
+                            *cameraImpact, "rollKickDegrees",
+                            camera.rollKickDegrees, cameraContext);
+                    camera.springFrequencyHz = OptionalFloat(
+                            *cameraImpact, "springFrequencyHz",
+                            camera.springFrequencyHz, cameraContext);
+                    camera.springDampingRatio = OptionalFloat(
+                            *cameraImpact, "springDampingRatio",
+                            camera.springDampingRatio, cameraContext);
+                    camera.maxPitchDegrees = OptionalFloat(
+                            *cameraImpact, "maxPitchDegrees",
+                            camera.maxPitchDegrees, cameraContext);
+                    camera.maxRollDegrees = OptionalFloat(
+                            *cameraImpact, "maxRollDegrees",
+                            camera.maxRollDegrees, cameraContext);
+                }
             }
         }
 
@@ -693,6 +763,55 @@ bool SerializeNpcDefinitionJson(
                 }
                 if (action.stunMilliseconds != kDefaultNpcAttackStunMilliseconds) {
                     actionJson["stunMilliseconds"] = action.stunMilliseconds;
+                }
+                const NpcAttackCameraImpactDefinition& camera =
+                        action.cameraImpact;
+                if (camera.enabled != kDefaultNpcAttackCameraImpactEnabled
+                        || camera.pitchKickDegrees
+                                != kDefaultNpcAttackCameraImpactPitchKickDegrees
+                        || camera.rollKickDegrees
+                                != kDefaultNpcAttackCameraImpactRollKickDegrees
+                        || camera.springFrequencyHz
+                                != kDefaultNpcAttackCameraImpactSpringFrequencyHz
+                        || camera.springDampingRatio
+                                != kDefaultNpcAttackCameraImpactSpringDampingRatio
+                        || camera.maxPitchDegrees
+                                != kDefaultNpcAttackCameraImpactMaxPitchDegrees
+                        || camera.maxRollDegrees
+                                != kDefaultNpcAttackCameraImpactMaxRollDegrees) {
+                    Json cameraJson = Json::object();
+                    if (camera.enabled
+                            != kDefaultNpcAttackCameraImpactEnabled) {
+                        cameraJson["enabled"] = camera.enabled;
+                    }
+                    if (camera.pitchKickDegrees
+                            != kDefaultNpcAttackCameraImpactPitchKickDegrees) {
+                        cameraJson["pitchKickDegrees"] =
+                                camera.pitchKickDegrees;
+                    }
+                    if (camera.rollKickDegrees
+                            != kDefaultNpcAttackCameraImpactRollKickDegrees) {
+                        cameraJson["rollKickDegrees"] = camera.rollKickDegrees;
+                    }
+                    if (camera.springFrequencyHz
+                            != kDefaultNpcAttackCameraImpactSpringFrequencyHz) {
+                        cameraJson["springFrequencyHz"] =
+                                camera.springFrequencyHz;
+                    }
+                    if (camera.springDampingRatio
+                            != kDefaultNpcAttackCameraImpactSpringDampingRatio) {
+                        cameraJson["springDampingRatio"] =
+                                camera.springDampingRatio;
+                    }
+                    if (camera.maxPitchDegrees
+                            != kDefaultNpcAttackCameraImpactMaxPitchDegrees) {
+                        cameraJson["maxPitchDegrees"] = camera.maxPitchDegrees;
+                    }
+                    if (camera.maxRollDegrees
+                            != kDefaultNpcAttackCameraImpactMaxRollDegrees) {
+                        cameraJson["maxRollDegrees"] = camera.maxRollDegrees;
+                    }
+                    actionJson["cameraImpact"] = std::move(cameraJson);
                 }
             }
             actions[metadata.jsonKey] = std::move(actionJson);

@@ -631,6 +631,13 @@ int ApplyNpcAiPlayerAttackEffects(
     const int appliedDamage = ApplyNpcAiPlayerDamage(
             gameplay, attack.damage);
     if (appliedDamage <= 0) return 0;
+    if (gameplay.playerAttackHit != nullptr) {
+        gameplay.playerAttackHit(
+                gameplay.playerAttackHitUserData,
+                appliedDamage,
+                attack.cameraImpact,
+                directionFromAttackerToPlayer);
+    }
     if (gameplay.playerStunRemainingSeconds != nullptr) {
         *gameplay.playerStunRemainingSeconds = std::max(
                 *gameplay.playerStunRemainingSeconds,

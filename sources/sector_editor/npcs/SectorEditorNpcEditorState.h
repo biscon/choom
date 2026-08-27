@@ -66,6 +66,12 @@ struct SectorEditorNpcEditorState {
     engine::UIIntInputState attackDamageInput;
     engine::UIFloatInputState attackKnockbackInput;
     engine::UIIntInputState attackStunMillisecondsInput;
+    engine::UIFloatInputState attackCameraPitchKickInput;
+    engine::UIFloatInputState attackCameraRollKickInput;
+    engine::UIFloatInputState attackCameraSpringFrequencyInput;
+    engine::UIFloatInputState attackCameraSpringDampingInput;
+    engine::UIFloatInputState attackCameraMaxPitchInput;
+    engine::UIFloatInputState attackCameraMaxRollInput;
     std::array<engine::UIFloatInputState, kNpcActionCount>
             animationSpeedInputs;
     std::array<engine::UIFloatInputState, kNpcActionCount>

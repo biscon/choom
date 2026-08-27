@@ -35,6 +35,19 @@ inline constexpr float kDefaultNpcAttackRangeWorld = 1.0f;
 inline constexpr int kDefaultNpcAttackDamage = 15;
 inline constexpr float kDefaultNpcAttackKnockbackImpulseWorldPerSecond = 0.0f;
 inline constexpr int kDefaultNpcAttackStunMilliseconds = 0;
+inline constexpr bool kDefaultNpcAttackCameraImpactEnabled = true;
+inline constexpr float kDefaultNpcAttackCameraImpactPitchKickDegrees = 2.5f;
+inline constexpr float kDefaultNpcAttackCameraImpactRollKickDegrees = 3.5f;
+inline constexpr float kDefaultNpcAttackCameraImpactSpringFrequencyHz = 4.0f;
+inline constexpr float kDefaultNpcAttackCameraImpactSpringDampingRatio = 0.75f;
+inline constexpr float kDefaultNpcAttackCameraImpactMaxPitchDegrees = 7.5f;
+inline constexpr float kDefaultNpcAttackCameraImpactMaxRollDegrees = 10.0f;
+inline constexpr float kMinimumNpcAttackCameraImpactSpringFrequencyHz = 0.5f;
+inline constexpr float kMaximumNpcAttackCameraImpactSpringFrequencyHz = 40.0f;
+inline constexpr float kMinimumNpcAttackCameraImpactSpringDampingRatio = 0.1f;
+inline constexpr float kMaximumNpcAttackCameraImpactSpringDampingRatio = 3.0f;
+inline constexpr float kMaximumNpcAttackCameraImpactKickDegrees = 45.0f;
+inline constexpr float kMaximumNpcAttackCameraImpactLimitDegrees = 90.0f;
 
 enum class NpcAction {
     Idle,
@@ -58,6 +71,18 @@ struct NpcActionMetadata {
     bool hasSound = false;
 };
 
+struct NpcAttackCameraImpactDefinition {
+    bool enabled = kDefaultNpcAttackCameraImpactEnabled;
+    float pitchKickDegrees = kDefaultNpcAttackCameraImpactPitchKickDegrees;
+    float rollKickDegrees = kDefaultNpcAttackCameraImpactRollKickDegrees;
+    float springFrequencyHz =
+            kDefaultNpcAttackCameraImpactSpringFrequencyHz;
+    float springDampingRatio =
+            kDefaultNpcAttackCameraImpactSpringDampingRatio;
+    float maxPitchDegrees = kDefaultNpcAttackCameraImpactMaxPitchDegrees;
+    float maxRollDegrees = kDefaultNpcAttackCameraImpactMaxRollDegrees;
+};
+
 struct NpcActionDefinition {
     std::string animation;
     std::string soundPath;
@@ -70,6 +95,7 @@ struct NpcActionDefinition {
     float knockbackImpulseWorldPerSecond =
             kDefaultNpcAttackKnockbackImpulseWorldPerSecond;
     int stunMilliseconds = kDefaultNpcAttackStunMilliseconds;
+    NpcAttackCameraImpactDefinition cameraImpact;
 };
 
 struct NpcPerceptionDefinition {

@@ -64,6 +64,11 @@ using NpcAiScriptTakeoverFn = void (*)(
 using NpcAiPlayerDamagedFn = void (*)(
         void* userData,
         int appliedDamage);
+using NpcAiPlayerAttackHitFn = void (*)(
+        void* userData,
+        int appliedDamage,
+        const NpcAttackCameraImpactDefinition& cameraImpact,
+        Vector2 directionFromAttackerToPlayerWorld);
 
 struct NpcAiGameplayContext {
     Vector3 playerFeetPosition{};
@@ -75,6 +80,8 @@ struct NpcAiGameplayContext {
     NpcAiScriptTakeoverFn interruptScriptMovement = nullptr;
     void* playerDamageUserData = nullptr;
     NpcAiPlayerDamagedFn playerDamaged = nullptr;
+    void* playerAttackHitUserData = nullptr;
+    NpcAiPlayerAttackHitFn playerAttackHit = nullptr;
     bool godMode = false;
     bool frozen = false;
     bool playerGrounded = false;

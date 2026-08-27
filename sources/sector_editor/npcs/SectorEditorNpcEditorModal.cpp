@@ -987,6 +987,125 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                             integerValue);
                 }
                 y += RowHeight + RowGap;
+
+                engine::Text(
+                        ui, config, assets,
+                        Rectangle{fieldX, y, fieldW, RowHeight},
+                        smallFont, "Player camera impact",
+                        engine::UITextJustify::Left,
+                        config.accentColor);
+                y += RowHeight + RowGap;
+
+                bool cameraEnabled = action.cameraImpact.enabled;
+                if (engine::Checkbox(
+                            ui, config, input, assets,
+                            "sector_editor_npc_attack_camera_enabled",
+                            Rectangle{fieldX, y, 260.0f, RowHeight},
+                            font, "Enabled", cameraEnabled)) {
+                    NpcAttackCameraImpactDefinition camera =
+                            action.cameraImpact;
+                    camera.enabled = cameraEnabled;
+                    editor.SetSelectedAttackCameraImpact(camera);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Pitch kick degrees");
+                value = action.cameraImpact.pitchKickDegrees;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_camera_pitch",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackCameraPitchKickInput,
+                        0.0f, kMaximumNpcAttackCameraImpactKickDegrees, 3);
+                if (floatResult.changed) {
+                    NpcAttackCameraImpactDefinition camera =
+                            action.cameraImpact;
+                    camera.pitchKickDegrees = value;
+                    editor.SetSelectedAttackCameraImpact(camera);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Roll kick degrees");
+                value = action.cameraImpact.rollKickDegrees;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_camera_roll",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackCameraRollKickInput,
+                        0.0f, kMaximumNpcAttackCameraImpactKickDegrees, 3);
+                if (floatResult.changed) {
+                    NpcAttackCameraImpactDefinition camera =
+                            action.cameraImpact;
+                    camera.rollKickDegrees = value;
+                    editor.SetSelectedAttackCameraImpact(camera);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Spring frequency Hz");
+                value = action.cameraImpact.springFrequencyHz;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_camera_frequency",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackCameraSpringFrequencyInput,
+                        kMinimumNpcAttackCameraImpactSpringFrequencyHz,
+                        kMaximumNpcAttackCameraImpactSpringFrequencyHz, 3);
+                if (floatResult.changed) {
+                    NpcAttackCameraImpactDefinition camera =
+                            action.cameraImpact;
+                    camera.springFrequencyHz = value;
+                    editor.SetSelectedAttackCameraImpact(camera);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Spring damping ratio");
+                value = action.cameraImpact.springDampingRatio;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_camera_damping",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackCameraSpringDampingInput,
+                        kMinimumNpcAttackCameraImpactSpringDampingRatio,
+                        kMaximumNpcAttackCameraImpactSpringDampingRatio, 3);
+                if (floatResult.changed) {
+                    NpcAttackCameraImpactDefinition camera =
+                            action.cameraImpact;
+                    camera.springDampingRatio = value;
+                    editor.SetSelectedAttackCameraImpact(camera);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Maximum pitch degrees");
+                value = action.cameraImpact.maxPitchDegrees;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_camera_max_pitch",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackCameraMaxPitchInput,
+                        0.0f, kMaximumNpcAttackCameraImpactLimitDegrees, 3);
+                if (floatResult.changed) {
+                    NpcAttackCameraImpactDefinition camera =
+                            action.cameraImpact;
+                    camera.maxPitchDegrees = value;
+                    editor.SetSelectedAttackCameraImpact(camera);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Maximum roll degrees");
+                value = action.cameraImpact.maxRollDegrees;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_camera_max_roll",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackCameraMaxRollInput,
+                        0.0f, kMaximumNpcAttackCameraImpactLimitDegrees, 3);
+                if (floatResult.changed) {
+                    NpcAttackCameraImpactDefinition camera =
+                            action.cameraImpact;
+                    camera.maxRollDegrees = value;
+                    editor.SetSelectedAttackCameraImpact(camera);
+                }
+                y += RowHeight + RowGap;
             }
         }
         engine::EndScrollArea(

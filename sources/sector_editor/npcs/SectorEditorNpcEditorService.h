@@ -59,6 +59,8 @@ public:
             int damage,
             float knockbackImpulseWorldPerSecond,
             int stunMilliseconds);
+    void SetSelectedAttackCameraImpact(
+            const NpcAttackCameraImpactDefinition& cameraImpact);
     void SetSelectedAmbientDelayRange(float minimumSeconds, float maximumSeconds);
     bool AddSelectedAmbientSound(const std::string& soundPath);
     bool ReplaceSelectedAmbientSound(size_t index, const std::string& soundPath);

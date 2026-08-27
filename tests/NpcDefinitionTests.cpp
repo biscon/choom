@@ -86,6 +86,13 @@ void TestRoundTripDefaultsAndSharedClips()
     attack.damage = 23;
     attack.knockbackImpulseWorldPerSecond = 2.5f;
     attack.stunMilliseconds = 500;
+    attack.cameraImpact.enabled = false;
+    attack.cameraImpact.pitchKickDegrees = 4.0f;
+    attack.cameraImpact.rollKickDegrees = 5.0f;
+    attack.cameraImpact.springFrequencyHz = 6.0f;
+    attack.cameraImpact.springDampingRatio = 0.9f;
+    attack.cameraImpact.maxPitchDegrees = 8.0f;
+    attack.cameraImpact.maxRollDegrees = 11.0f;
     attack.soundPath = "npc/zombie/impact.wav";
     attack.attackSoundPath = "npc/zombie/attack.wav";
     original.ambientVocalizations.soundPaths = {
@@ -114,6 +121,12 @@ void TestRoundTripDefaultsAndSharedClips()
                           == "npc/zombie/attack.wav"
                   && document["actions"]["attack"]["sound"]
                           == "npc/zombie/impact.wav"
+                  && document["actions"]["attack"]["cameraImpact"]["enabled"]
+                          == false
+                  && Near(document["actions"]["attack"]["cameraImpact"]
+                                  ["pitchKickDegrees"].get<float>(), 4.0f)
+                  && Near(document["actions"]["attack"]["cameraImpact"]
+                                  ["springDampingRatio"].get<float>(), 0.9f)
                   && document["aiType"] == "seek_and_destroy"
                   && Near(document["perception"]["visionRangeWorld"].get<float>(), 18.0f)
                   && document["actions"]["hurt"]["animation"] == "Hit"
@@ -170,6 +183,18 @@ void TestRoundTripDefaultsAndSharedClips()
                           parsed, game::NpcAction::Attack).attackSoundPath
                           == "npc/zombie/attack.wav"
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Attack).hitPhase, 0.6f)
+                  && !game::GetNpcAction(
+                          parsed, game::NpcAction::Attack).cameraImpact.enabled
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Attack).cameraImpact
+                                  .pitchKickDegrees,
+                          4.0f)
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Attack).cameraImpact
+                                  .maxRollDegrees,
+                          11.0f)
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Walk).movementSpeed, 1.5f)
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Run).movementSpeed, 3.0f),
           "NPC fields and action defaults round-trip");
@@ -182,8 +207,38 @@ void TestRoundTripDefaultsAndSharedClips()
                   && !Json::parse(json).contains("despawnOnDeath")
                   && !Json::parse(json).contains("corpseDespawnDelaySeconds")
                   && !Json::parse(json).contains("corpseFadeDurationSeconds")
-                  && !Json::parse(json).contains("ambientVocalizations"),
+                  && !Json::parse(json).contains("ambientVocalizations")
+                  && !Json::parse(json)["actions"]["attack"]
+                          .contains("cameraImpact"),
           "default combat, blend, and door fields are omitted from serialized definitions");
+
+    Json partialCamera = Json::parse(R"({
+        "formatVersion": 1,
+        "id": "partial_camera",
+        "modelPath": "assets/models/characters/Fred.glb",
+        "actions": {"attack": {"cameraImpact": {"rollKickDegrees": 6.0}}}
+    })");
+    Check(game::ParseNpcDefinitionJson(
+                  partialCamera.dump(), parsed, error)
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Attack).cameraImpact
+                                  .pitchKickDegrees,
+                          game::kDefaultNpcAttackCameraImpactPitchKickDegrees)
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Attack).cameraImpact
+                                  .rollKickDegrees,
+                          6.0f),
+          "partial camera impact objects retain defaults for omitted fields");
+    Check(game::SerializeNpcDefinitionJson(parsed, json, error)
+                  && Json::parse(json)["actions"]["attack"]["cameraImpact"]
+                          .size() == 1
+                  && Near(Json::parse(json)["actions"]["attack"]
+                                  ["cameraImpact"]["rollKickDegrees"]
+                                  .get<float>(),
+                          6.0f),
+          "camera impact serialization omits individual default-valued fields");
 
     defaults.canOpenDoors = false;
     Check(game::SerializeNpcDefinitionJson(defaults, json, error)
@@ -263,6 +318,25 @@ void TestValidation()
     Check(!game::ValidateNpcDefinition(definition, error),
           "inverted ambient quiet-time range is rejected");
 
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Attack).cameraImpact.springFrequencyHz = 0.0f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "zero camera impact spring frequency is rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Attack).cameraImpact.rollKickDegrees = 46.0f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "excessive camera impact kick is rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Attack).cameraImpact.maxPitchDegrees = NAN;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "non-finite camera impact values are rejected");
+
     Json invalidActionSound = Json::parse(R"({
         "formatVersion": 1,
         "id": "fred",
@@ -273,6 +347,16 @@ void TestValidation()
     Check(!game::ParseNpcDefinitionJson(
                   invalidActionSound.dump(), definition, error),
           "non-vocal action sound field is rejected by the JSON parser");
+
+    Json unknownCameraField = Json::parse(R"({
+        "formatVersion": 1,
+        "id": "fred",
+        "modelPath": "assets/models/characters/Fred.glb",
+        "actions": {"attack": {"cameraImpact": {"shake": 1}}}
+    })");
+    Check(!game::ParseNpcDefinitionJson(
+                  unknownCameraField.dump(), definition, error),
+          "unknown camera impact fields are rejected by the JSON parser");
 }
 
 void TestSeekAndDestroyPluginBoundary()
@@ -406,6 +490,11 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
     service.SetSelectedActionSound(
             game::NpcAction::Attack, "npc/zombie/impact.wav");
     service.SetSelectedAttackSound("npc/zombie/attack.wav");
+    game::NpcAttackCameraImpactDefinition cameraImpact;
+    cameraImpact.pitchKickDegrees = 6.5f;
+    cameraImpact.rollKickDegrees = 7.5f;
+    cameraImpact.springDampingRatio = 0.6f;
+    service.SetSelectedAttackCameraImpact(cameraImpact);
     service.SetSelectedAmbientDelayRange(6.0f, 11.0f);
     Check(service.AddSelectedAmbientSound("npc/zombie/moan_01.wav")
                   && !service.AddSelectedAmbientSound(
@@ -424,6 +513,16 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                           service.SelectedDraft()->definition,
                           game::NpcAction::Attack).attackSoundPath
                           == "npc/zombie/attack.wav"
+                  && Near(game::GetNpcAction(
+                                  service.SelectedDraft()->definition,
+                                  game::NpcAction::Attack).cameraImpact
+                                  .pitchKickDegrees,
+                          6.5f)
+                  && Near(game::GetNpcAction(
+                                  service.SelectedDraft()->definition,
+                                  game::NpcAction::Attack).cameraImpact
+                                  .springDampingRatio,
+                          0.6f)
                   && Near(service.SelectedDraft()->definition
                                   .ambientVocalizations.minimumDelaySeconds,
                           6.0f)

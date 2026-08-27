@@ -5654,6 +5654,10 @@ void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
     struct DamageNotifications {
         int count = 0;
         int totalDamage = 0;
+        int attackHitCount = 0;
+        int lastAttackDamage = 0;
+        game::NpcAttackCameraImpactDefinition lastCameraImpact;
+        Vector2 lastAttackDirection{};
     } notifications;
     game::Health health = game::MakeHealth(100);
     Vector2 knockbackVelocity{};
@@ -5668,11 +5672,24 @@ void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
         ++received->count;
         received->totalDamage += appliedDamage;
     };
+    gameplay.playerAttackHitUserData = &notifications;
+    gameplay.playerAttackHit = [](
+            void* userData,
+            int appliedDamage,
+            const game::NpcAttackCameraImpactDefinition& cameraImpact,
+            Vector2 directionFromAttackerToPlayerWorld) {
+        auto* received = static_cast<DamageNotifications*>(userData);
+        ++received->attackHitCount;
+        received->lastAttackDamage = appliedDamage;
+        received->lastCameraImpact = cameraImpact;
+        received->lastAttackDirection = directionFromAttackerToPlayerWorld;
+    };
 
     game::NpcActionDefinition attack;
     attack.damage = 15;
     attack.knockbackImpulseWorldPerSecond = 2.5f;
     attack.stunMilliseconds = 500;
+    attack.cameraImpact.pitchKickDegrees = 4.25f;
     const bool firstInRange = game::IsNpcAiCommittedMeleeHitInRange(
             1.44f, 1.2f);
     const bool secondInRange = game::IsNpcAiCommittedMeleeHitInRange(
@@ -5689,6 +5706,10 @@ void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
                   && health.current == 70
                   && notifications.count == 2
                   && notifications.totalDamage == 30
+                  && notifications.attackHitCount == 2
+                  && notifications.lastAttackDamage == 15
+                  && Near(notifications.lastCameraImpact.pitchKickDegrees, 4.25f)
+                  && Near(notifications.lastAttackDirection, Vector2{0.0f, 2.0f})
                   && Near(knockbackVelocity, Vector2{2.5f, 2.5f})
                   && Near(stunRemainingSeconds, 0.5f),
           "two committed NPC hits independently apply damage, pain, stun, and knockback");
@@ -5701,22 +5722,38 @@ void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
                   gameplay, attack, Vector2{1.0f, 0.0f}) == 0
                   && health.current == 70
                   && notifications.count == 2
+                  && notifications.attackHitCount == 2
                   && Near(knockbackVelocity, Vector2{2.5f, 2.5f})
                   && Near(stunRemainingSeconds, 0.5f),
           "god mode blocks all player attack effects and pain events");
     gameplay.godMode = false;
+    attack.damage = 0;
+    Check(game::ApplyNpcAiPlayerAttackEffects(
+                  gameplay, attack, Vector2{1.0f, 0.0f}) == 0
+                  && notifications.count == 2
+                  && notifications.attackHitCount == 2,
+          "zero-damage NPC attacks dispatch neither pain nor camera-hit events");
     Check(game::ApplyNpcAiPlayerDamage(gameplay, 0) == 0
-                  && notifications.count == 2,
-          "zero NPC damage does not dispatch a pain event");
+                  && notifications.count == 2
+                  && notifications.attackHitCount == 2,
+          "zero NPC damage does not dispatch pain or attack-hit events");
 
     health.current = 10;
-    Check(game::ApplyNpcAiPlayerDamage(gameplay, 50) == 10
+    attack.damage = 50;
+    Check(game::ApplyNpcAiPlayerAttackEffects(
+                  gameplay, attack, Vector2{-2.0f, 0.0f}) == 10
                   && game::IsDepleted(health)
                   && notifications.count == 3
                   && notifications.totalDamage == 40
-                  && game::ApplyNpcAiPlayerDamage(gameplay, 50) == 0
-                  && notifications.count == 3,
-          "lethal damage dispatches once and an already-dead player stays silent");
+                  && notifications.attackHitCount == 3
+                  && notifications.lastAttackDamage == 10
+                  && Near(notifications.lastAttackDirection,
+                          Vector2{-2.0f, 0.0f})
+                  && game::ApplyNpcAiPlayerAttackEffects(
+                          gameplay, attack, Vector2{-2.0f, 0.0f}) == 0
+                  && notifications.count == 3
+                  && notifications.attackHitCount == 3,
+          "lethal NPC attacks dispatch once and an already-dead player stays silent");
 }
 
 void TestNpcAiPursuitSlotsRouteAroundSupportingProp()

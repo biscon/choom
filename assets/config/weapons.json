@@ -146,7 +146,7 @@
       },
       "reload": {
         "magazineSize": 18,
-        "durationSeconds": 0.63,
+        "durationSeconds": 0.5,
         "dryFireSound": "weapons/pistol/dry_fire_01.ogg",
         "reloadSound": "weapons/pistol/reload_02.ogg"
       },
@@ -363,7 +363,7 @@
       },
       "reload": {
         "magazineSize": 2,
-        "durationSeconds": 2.33,
+        "durationSeconds": 2.3299999237060547,
         "dryFireSound": "weapons/shotgun/shotgun_dry_fire_01.ogg",
         "reloadSound": "weapons/shotgun/shotgun_reload_01.ogg"
       },

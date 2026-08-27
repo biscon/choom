@@ -1003,6 +1003,7 @@ bool SectorGameSession::StartNew(
     gameOver = false;
     playerStamina = MakePlayerStamina(settings.playerStamina);
     ClearPlayerWindedCamera(windedCamera);
+    ClearPlayerHitCamera(hitCamera);
     breathingAudio = PlayerBreathingAudioRuntime{};
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
@@ -1170,6 +1171,7 @@ void SectorGameSession::Shutdown(
     aiDebugVisible = false;
     gameOver = false;
     ClearPlayerWindedCamera(windedCamera);
+    ClearPlayerHitCamera(hitCamera);
     StopGameLevelLoading(loading);
     levelName.clear();
     levelPath.clear();
@@ -1261,7 +1263,12 @@ void SectorGameSession::Update(
     if (!running || paused) {
         return;
     }
-    if (gameOver) return;
+    if (gameOver) {
+        UpdatePlayerHitCamera(hitCamera, dt);
+        ApplyPlayerPose(scene);
+        return;
+    }
+    UpdatePlayerHitCamera(hitCamera, dt);
     playerStunRemainingSeconds = std::max(
             0.0f, playerStunRemainingSeconds - std::max(0.0f, dt));
     if (!consoleInputCaptured) {
@@ -1322,7 +1329,14 @@ void SectorGameSession::Update(
         engine::AssetManager* assets = nullptr;
         engine::AudioSystem* audio = nullptr;
         PlayerAudioRuntime* playerAudio = nullptr;
-    } damageAudioContext{&context.assets, &context.audio, playerAudio};
+        PlayerHitCameraState* hitCamera = nullptr;
+        const SectorFpsControllerState* controller = nullptr;
+    } damageAudioContext{
+            &context.assets,
+            &context.audio,
+            playerAudio,
+            &hitCamera,
+            &controller.fpsControllerState};
     NpcAiGameplayContext npcGameplay;
     npcGameplay.playerFeetPosition = playerPosition;
     npcGameplay.playerEyePosition = SectorFpsControllerEyePosition(
@@ -1355,6 +1369,24 @@ void SectorGameSession::Update(
                 *damageAudio->playerAudio,
                 "pain");
     };
+    npcGameplay.playerAttackHitUserData = &damageAudioContext;
+    npcGameplay.playerAttackHit = [](
+            void* userData,
+            int appliedDamage,
+            const NpcAttackCameraImpactDefinition& cameraImpact,
+            Vector2 directionFromAttackerToPlayerWorld) {
+        auto* damage = static_cast<PlayerDamageAudioContext*>(userData);
+        if (appliedDamage <= 0 || damage == nullptr
+                || damage->hitCamera == nullptr
+                || damage->controller == nullptr) {
+            return;
+        }
+        ApplyPlayerHitCameraImpulse(
+                *damage->hitCamera,
+                cameraImpact,
+                directionFromAttackerToPlayerWorld,
+                damage->controller->yawRadians);
+    };
     npcGameplay.godMode = godMode;
     npcGameplay.frozen = aiFrozen;
     npcGameplay.playerGrounded = controller.fpsControllerState.grounded;
@@ -1372,6 +1404,7 @@ void SectorGameSession::Update(
         SetInventoryOpen(false);
         ClearHeldObjectUse();
         LeaveSectorFreeflyController();
+        ApplyPlayerPose(scene);
         return;
     }
     ProcessInventoryAction(context, scene);
@@ -2021,6 +2054,7 @@ bool SectorGameSession::RebuildFromMap(
     completedItemPresentations.clear();
     completedItemPresentations.reserve(topologyMap.runtimeObjects.capacity());
     ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
+    ClearPlayerHitCamera(hitCamera);
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
     controller.fpsControllerState = savedPlayer;
@@ -2237,9 +2271,14 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
     windedPose.pitchRadians = ClampSectorFpsPitch(
             windedPose.pitchRadians
                     + windedCamera.pitchOffsetDegrees * DEG2RAD);
+    Vector3 cameraRotation =
+            fpsPlayer.State().firing.cameraRecoil.rotationDegrees;
+    cameraRotation.x += hitCamera.rotationDegrees.x;
+    cameraRotation.y += hitCamera.rotationDegrees.y;
+    cameraRotation.z += hitCamera.rotationDegrees.z;
     scene.Renderer().ApplyRendererPose(ApplySectorFpsViewRotationOffset(
             windedPose,
-            fpsPlayer.State().firing.cameraRecoil.rotationDegrees),
+            cameraRotation),
             false);
     controller.freeflyController.pose = basePose;
 }
