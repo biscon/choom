@@ -90,6 +90,8 @@ views and maps to world Z for generated 3D geometry.
 - `Sound Editor`: add, remove, rename, retype, and replace map-local Sound and
   Music entries. Referenced IDs, types, and removals are locked while their
   underlying audio files may still be replaced.
+- `Patrol Editor`: author stable-ID routes from Level Markers, with per-waypoint
+  delay, gait, and optional look sweep plus Once, Loop, or Ping-pong playback.
 - Billboard tool: place a generic authored billboard marker inside a sector.
 - Door tool: place a portal-attached procedural door on a valid two-sided
   linedef.
@@ -521,6 +523,28 @@ references in a word-wrapped usage box. Replacing the audio file remains
 available because it preserves the stable ID and loading role. Lua may refer to
 IDs dynamically or from external scripts, so script strings are not treated as
 statically discoverable references.
+
+## Patrol Editor
+
+`Editors -> Patrol Editor` uses the standard scrolling-list/details layout.
+Patrols reference stable Level Marker editor IDs; referenced markers and
+NPC-assigned patrols cannot be removed until they are unassigned. Each placed
+NPC inspector can select a patrol or `None`. Assigned NPCs can start at a random
+waypoint or traverse an ordered route in reverse; reverse starts at the final
+waypoint unless random start is enabled. An accepted script move can optionally
+stop that patrol for the rest of the game session.
+
+`Shuffle Waypoints` visits every waypoint once per randomized cycle without
+selecting the same waypoint twice in a row. Shuffled patrols support Once and
+Loop playback; enabling shuffle changes Ping-pong playback to Loop and keeps
+Ping-pong unavailable until shuffle is disabled. Reverse is disabled for NPCs
+assigned to a shuffled patrol because shuffled routes have no direction.
+
+Patrols execute only in game sessions. AI detection and script movement take
+locomotion authority temporarily, after which a resumable patrol continues at
+its interrupted waypoint. NPCs moving toward the same patrol waypoint receive
+deterministic projected ring slots around the marker to avoid converging on one
+exact Crowd destination. A single NPC still uses the exact marker position.
 
 ## Move, Split, And Delete Tools
 
@@ -992,7 +1016,8 @@ radii are exposed under `Settings -> Player -> Audio`. Runtime testing exposes
 `/debugai [on|off]`; omitting the argument toggles the current campaign-session
 value. `/debugai` is game-mode only and draws fixed-size projected state labels
 above AI NPCs plus depth-tested vision, hearing, melee-range,
-last-known-player, active-sound-event, and path diagnostics. It is independent
+last-known-player, active-sound-event, path, active patrol-route, and patrol-slot
+diagnostics. Patrol routes also appear for non-hostile NPCs. It is independent
 from the F8 navigation diagnostics and remains enabled across `/reload` until
 the campaign session ends or the command disables it.
 

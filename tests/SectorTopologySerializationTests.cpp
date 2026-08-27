@@ -4893,6 +4893,108 @@ void TestTriggerRoundTripAndValidation()
           "duplicate trigger string IDs are rejected");
 }
 
+void TestPatrolRoundTripDefaultsAndValidation()
+{
+    game::SectorAuthoringDocument document =
+            MakeAuthoringDocumentFromMap(MakeSquare());
+    document.graph.levelMarkers.push_back(game::SectorAuthoringLevelMarker{
+            31, "guard_a", 16, 32, 0.0f, 45.0f});
+    document.graph.levelMarkers.push_back(game::SectorAuthoringLevelMarker{
+            32, "guard_b", 48, 64, 0.0f, 180.0f});
+    game::SectorAuthoringPatrol patrol;
+    patrol.editorId = 7;
+    patrol.id = "guard_route";
+    patrol.mode = game::SectorPatrolMode::PingPong;
+    patrol.waypoints.push_back(game::SectorAuthoringPatrolWaypoint{31});
+    game::SectorAuthoringPatrolWaypoint second;
+    second.levelMarkerId = 32;
+    second.delayMilliseconds = 1250;
+    second.gait = game::SectorPatrolGait::Run;
+    second.lookAround = true;
+    second.lookArcDegrees = 120.0f;
+    patrol.waypoints.push_back(second);
+    document.graph.patrols.push_back(patrol);
+    game::SectorAuthoringPatrol shuffled;
+    shuffled.editorId = 8;
+    shuffled.id = "search_route";
+    shuffled.waypoints.push_back(game::SectorAuthoringPatrolWaypoint{31});
+    shuffled.waypoints.push_back(game::SectorAuthoringPatrolWaypoint{32});
+    shuffled.shuffleWaypoints = true;
+    document.graph.patrols.push_back(shuffled);
+
+    game::SectorPlacedRuntimeObject npc;
+    npc.id = 91;
+    npc.kind = "npc";
+    npc.npc.definitionId = "guard";
+    npc.npc.patrolEditorId = 7;
+    npc.npc.randomPatrolStart = true;
+    npc.npc.reversePatrol = true;
+    npc.npc.scriptMoveStopsPatrol = true;
+    document.mapData.runtimeObjects.push_back(npc);
+    document.derivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+
+    const Json saved = Json::parse(SaveAuthoringText(document));
+    const Json& savedPatrol = saved["authoringGraph"]["patrols"][0];
+    Check(savedPatrol["editorId"] == 7
+                  && savedPatrol["id"] == "guard_route"
+                  && savedPatrol["mode"] == "pingpong"
+                  && !savedPatrol["waypoints"][0].contains("gait")
+                  && !savedPatrol["waypoints"][0].contains("delayMilliseconds")
+                  && savedPatrol["waypoints"][1]["gait"] == "run"
+                  && savedPatrol["waypoints"][1]["lookArcDegrees"] == 120.0f,
+          "patrols serialize stable IDs, modes, waypoint settings, and omit defaults");
+    Check(saved["authoringGraph"]["patrols"][1]["shuffleWaypoints"] == true
+                  && !savedPatrol.contains("shuffleWaypoints"),
+          "patrol shuffle serializes true and omits its false default");
+    Check(saved["runtimeObjects"][0]["npc"]["patrolEditorId"] == 7
+                  && saved["runtimeObjects"][0]["npc"]["randomPatrolStart"] == true
+                  && saved["runtimeObjects"][0]["npc"]["reversePatrol"] == true
+                  && saved["runtimeObjects"][0]["npc"]["scriptMoveStopsPatrol"] == true,
+          "placed NPC patrol start, direction, and script policies serialize");
+
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(saved.dump(), loaded, error)
+                  && loaded.graph.patrols.size() == 2
+                  && loaded.graph.patrols[0].waypoints.size() == 2
+                  && loaded.graph.patrols[0].mode
+                             == game::SectorPatrolMode::PingPong
+                  && loaded.graph.patrols[1].shuffleWaypoints
+                  && loaded.derivation.topology.patrols.size() == 2
+                  && loaded.derivation.topology.patrols[1].shuffleWaypoints
+                  && loaded.derivation.topology.patrols[0].waypoints[1].gait
+                             == game::SectorPatrolGait::Run
+                  && loaded.mapData.runtimeObjects[0].npc.randomPatrolStart
+                  && loaded.mapData.runtimeObjects[0].npc.reversePatrol,
+          "authoring patrols round-trip into compiled runtime patrols");
+
+    Json legacyDefaults = saved;
+    legacyDefaults["authoringGraph"]["patrols"][1].erase("shuffleWaypoints");
+    legacyDefaults["runtimeObjects"][0]["npc"].erase("randomPatrolStart");
+    legacyDefaults["runtimeObjects"][0]["npc"].erase("reversePatrol");
+    Check(LoadAuthoringText(legacyDefaults.dump(), loaded, error)
+                  && !loaded.graph.patrols[1].shuffleWaypoints
+                  && !loaded.mapData.runtimeObjects[0].npc.randomPatrolStart
+                  && !loaded.mapData.runtimeObjects[0].npc.reversePatrol,
+          "legacy patrol files default new route and NPC options off");
+
+    Json shuffledPingPong = saved;
+    shuffledPingPong["authoringGraph"]["patrols"][0]["shuffleWaypoints"] = true;
+    Check(!LoadAuthoringText(shuffledPingPong.dump(), loaded, error),
+          "shuffled patrols reject ping-pong playback");
+
+    Json missingMarker = saved;
+    missingMarker["authoringGraph"]["patrols"][0]["waypoints"][0]
+            ["levelMarkerEditorId"] = 999;
+    Check(!LoadAuthoringText(missingMarker.dump(), loaded, error),
+          "patrol waypoints referencing missing Level Markers are rejected");
+    Json missingPatrol = saved;
+    missingPatrol["runtimeObjects"][0]["npc"]["patrolEditorId"] = 999;
+    Check(!LoadAuthoringText(missingPatrol.dump(), loaded, error),
+          "NPC assignments referencing missing patrols are rejected");
+}
+
 void TestFileApi()
 {
     const std::filesystem::path path =
@@ -5200,6 +5302,7 @@ int main()
     TestGraphNativeMapLevelRoundTrip();
     TestGraphNativeLegacyImportPathStillWorks();
     TestLevelMarkerRoundTripAndEntryResolution();
+    TestPatrolRoundTripDefaultsAndValidation();
     TestTriggerRoundTripAndValidation();
     TestFootstepSetRoundTripAndDefaults();
     TestAuthoringEditorSettingsRoundTripAndValidation();

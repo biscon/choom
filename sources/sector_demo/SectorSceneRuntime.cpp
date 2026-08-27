@@ -47,6 +47,7 @@ bool SectorSceneRuntime::Rebuild(
 {
     ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
     navigation.Shutdown();
     StopLevelAudio(context);
     if (!renderer.RebuildRendererResources(
@@ -80,6 +81,8 @@ bool SectorSceneRuntime::Rebuild(
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
     InitializeNpcAiRuntime(
             npcAi, 64, navigation.Capacities().agentCapacity);
+    InitializeNpcPatrolRuntime(
+            npcPatrol, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     BeginLevelAudio(
             context,
@@ -96,6 +99,7 @@ bool SectorSceneRuntime::RebuildNavigationForMap(
         const SectorTopologyMap& map)
 {
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
     navigation.Shutdown();
     if (!navigation.Initialize(BuildSectorNavigationSettingsForMap(map))) {
         TraceLog(LOG_WARNING, "Navigation service initialization failed");
@@ -106,6 +110,8 @@ bool SectorSceneRuntime::RebuildNavigationForMap(
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
     InitializeNpcAiRuntime(
             npcAi, 64, navigation.Capacities().agentCapacity);
+    InitializeNpcPatrolRuntime(
+            npcPatrol, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     return true;
 }
@@ -114,6 +120,7 @@ void SectorSceneRuntime::Shutdown(engine::EngineContext& context)
 {
     ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
     ClearNpcCombatRuntime(npcCombat);
     ClearNpcAiRuntime(npcAi);
     impactParticles.Clear();
@@ -129,6 +136,7 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
 {
     ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
     navigation.ResetForRebuild();
     ResetSectorRuntimeObjectsForMap(
             context.world,
@@ -151,6 +159,8 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
     InitializeNpcAiRuntime(
             npcAi, 64, navigation.Capacities().agentCapacity);
+    InitializeNpcPatrolRuntime(
+            npcPatrol, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     BindRuntimeObjectAudio(context.world);
 }
@@ -262,6 +272,15 @@ void SectorSceneRuntime::Update(
                 npcAi,
                 *npcGameplay,
                 dt);
+        UpdateNpcPatrolSystem(
+                context.world,
+                navigation,
+                runtimeObjects.objectSectorLookupWorld,
+                npcNavigation,
+                npcPatrol,
+                map,
+                dt,
+                npcGameplay->frozen);
     }
     if (runtimeObjects.objectSectorLookupWorldValid) {
         UpdateNpcNavigationAndLocomotionSystem(

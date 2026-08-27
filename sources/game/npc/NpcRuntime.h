@@ -126,7 +126,40 @@ enum class NpcMoveAuthority : uint8_t {
     None,
     Programmatic,
     Script,
+    Patrol,
     Ai
+};
+
+enum class NpcPatrolPhase : uint8_t {
+    Moving,
+    Waiting,
+    SuspendedAi,
+    SuspendedScript,
+    Complete,
+    Failed,
+    StoppedByScript
+};
+
+struct NpcPatrolState {
+    int patrolEditorId = 0;
+    size_t waypointIndex = 0;
+    int direction = 1;
+    std::vector<size_t> shuffleOrder;
+    size_t shuffleCursor = 0;
+    uint32_t randomState = 0x6d2b79f5u;
+    NpcPatrolPhase phase = NpcPatrolPhase::Moving;
+    NpcPatrolPhase resumePhase = NpcPatrolPhase::Moving;
+    float waitRemainingSeconds = 0.0f;
+    float lookOffsetRadians = 0.0f;
+    float lookDirection = 1.0f;
+    float retryRemainingSeconds = 0.0f;
+    uint64_t requestId = 0;
+    int slotIndex = -1;
+    Vector2 destinationXZ{};
+    bool scriptMoveStopsPatrol = false;
+    bool scriptOverrideActive = false;
+    bool stoppedByScript = false;
+    bool destinationInitialized = false;
 };
 
 enum class NpcMovePhase : uint8_t {

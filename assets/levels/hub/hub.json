@@ -583,6 +583,7 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie01",
+        "patrolEditorId": 1,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -598,6 +599,7 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie02",
+        "patrolEditorId": 1,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -613,6 +615,7 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie03",
+        "patrolEditorId": 1,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -23815,6 +23818,49 @@
         "y": -27.0,
         "z": 992,
         "orientationDegrees": 0.0
+      }
+    ],
+    "patrols": [
+      {
+        "editorId": 1,
+        "id": "zombie_patrol1",
+        "waypoints": [
+          {
+            "levelMarkerEditorId": 9,
+            "delayMilliseconds": 3000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 10,
+            "delayMilliseconds": 2000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 11,
+            "delayMilliseconds": 4000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 12,
+            "delayMilliseconds": 2000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 13,
+            "delayMilliseconds": 5000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 14,
+            "delayMilliseconds": 2500,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 15,
+            "delayMilliseconds": 3000,
+            "lookAround": true
+          }
+        ]
       }
     ],
     "soundEmitters": [

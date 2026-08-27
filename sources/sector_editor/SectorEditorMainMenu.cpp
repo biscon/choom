@@ -41,9 +41,10 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Save As...", CommandId(SectorEditorMainMenuCommand::SaveLevelAs)},
             {"Reload", CommandId(SectorEditorMainMenuCommand::ReloadLevel)}
     }};
-    const std::array<engine::UIMenuItem, 5> editorItems{{
+    const std::array<engine::UIMenuItem, 6> editorItems{{
             {"Material Editor", CommandId(SectorEditorMainMenuCommand::OpenMaterialEditor)},
             {"Sound Editor", CommandId(SectorEditorMainMenuCommand::OpenSoundEditor)},
+            {"Patrol Editor", CommandId(SectorEditorMainMenuCommand::OpenPatrolEditor)},
             {"NPC Editor", CommandId(SectorEditorMainMenuCommand::OpenNpcEditor)},
             {"Weapons Editor", CommandId(SectorEditorMainMenuCommand::OpenWeaponEditor)},
             {"Item Editor", CommandId(SectorEditorMainMenuCommand::OpenItemEditor)}

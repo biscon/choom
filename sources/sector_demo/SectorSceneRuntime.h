@@ -5,6 +5,7 @@
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcCombatSystem.h"
 #include "game/npc/ai/NpcAiSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -115,6 +116,7 @@ public:
     NpcNavigationRuntime& NpcNavigation() { return npcNavigation; }
     const NpcNavigationRuntime& NpcNavigation() const { return npcNavigation; }
     const NpcAiRuntime& NpcAi() const { return npcAi; }
+    const NpcPatrolRuntime& NpcPatrol() const { return npcPatrol; }
     NpcMoveRequestResult RequestNpcMove(
             engine::EngineContext& context,
             std::string_view instanceId,
@@ -176,6 +178,7 @@ private:
     NpcNavigationRuntime npcNavigation;
     NpcCombatRuntime npcCombat;
     NpcAiRuntime npcAi;
+    NpcPatrolRuntime npcPatrol;
     NpcAudioRuntime npcAudio;
     SectorImpactParticleSystem impactParticles;
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();

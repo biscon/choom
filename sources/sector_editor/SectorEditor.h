@@ -15,6 +15,8 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorState.h"
+#include "sector_editor/patrols/SectorEditorPatrolEditorService.h"
+#include "sector_editor/patrols/SectorEditorPatrolEditorState.h"
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorService.h"
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorState.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorService.h"
@@ -293,6 +295,13 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
+    void DrawPatrolEditor(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawSoundPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -514,6 +523,7 @@ private:
             SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr,
             SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr);
     SectorEditorSoundEditorService BuildSoundEditorService();
+    SectorEditorPatrolEditorService BuildPatrolEditorService();
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorNpcEditorService BuildNpcEditorService();
     SectorEditorWeaponEditorService BuildWeaponEditorService();
@@ -587,6 +597,7 @@ private:
     SectorEditorPlayerSettingsState playerSettingsState;
     SectorEditorMaterialRegistryEditorState materialRegistryEditorState;
     SectorEditorSoundEditorState soundEditorState;
+    SectorEditorPatrolEditorState patrolEditorState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;

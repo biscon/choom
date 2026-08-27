@@ -469,10 +469,14 @@ If a hostile NPC acquires the player through vision, hearing, or player damage,
 generic AI takes movement authority immediately. A blocking `moveNpc` call or
 an `await` on `startMoveNpc` then resumes with `false, "player detected; AI took
 control"`. New script move requests are rejected with the same result while
-the NPC remains detected or investigating. This also prevents a patrol
-coroutine that was delayed during detection from reclaiming the NPC when it
-wakes. The script move is not resumed after the NPC later forgets the player;
-a future engine patrol feature may provide resumable patrol behavior.
+the NPC remains detected or investigating. This also prevents a delayed script
+coroutine from reclaiming the NPC when it wakes. If the NPC has an
+editor-assigned engine patrol, that patrol pauses while AI or script movement
+owns locomotion and resumes from its interrupted waypoint after the NPC forgets
+the player or the script move ends. The per-instance `Script move stops patrol
+for session` setting instead makes the first accepted script move stop that
+patrol until the level is reloaded. A rejected script move does not stop or
+advance the patrol.
 
 Loops must check the returned boolean and exit, yield, or back off after a
 failure. A missing or removed NPC makes later requests fail immediately. As a

@@ -1420,14 +1420,24 @@ void TestSourceHashChanges()
     npcMap.runtimeObjects[0].npc.scale = 0.75f;
     npcMap.runtimeObjects[0].npc.shadowMode =
             game::SectorDynamicModelShadowMode::None;
+    npcMap.runtimeObjects[0].npc.patrolEditorId = 12;
+    npcMap.runtimeObjects[0].npc.randomPatrolStart = true;
+    npcMap.runtimeObjects[0].npc.reversePatrol = true;
+    npcMap.runtimeObjects[0].npc.scriptMoveStopsPatrol = true;
     Check(game::ComputeSectorLightmapSourceHash(npcMap) == hash,
-          "hash excludes NPC definition, identity, transform, scale, and runtime shadow changes");
+          "hash excludes NPC definition, identity, transform, patrol, scale, and runtime shadow changes");
 
     game::SectorTopologyMap markerMap = base;
     markerMap.levelMarkers.push_back(game::SectorCompiledLevelMarker{
             1, "default", Vector3{24.0f, 0.0f, 24.0f}, 1.5f});
     Check(game::ComputeSectorLightmapSourceHash(markerMap) == hash,
           "hash excludes Level Markers because they do not affect baked geometry or lighting");
+    markerMap.patrols.push_back(game::SectorCompiledPatrol{
+            12, "guard_route", game::SectorPatrolMode::Loop,
+            {{1, 500, game::SectorPatrolGait::Walk, true, 90.0f}}});
+    markerMap.patrols[0].shuffleWaypoints = true;
+    Check(game::ComputeSectorLightmapSourceHash(markerMap) == hash,
+          "hash excludes patrol routes because they do not affect baked geometry or lighting");
 
     game::SectorTopologyMap reflectionProbeMap = base;
     reflectionProbeMap.compiledReflectionProbes.push_back(

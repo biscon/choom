@@ -9,6 +9,7 @@
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
 #include "sector_editor/items/SectorEditorItemEditorPanel.h"
 #include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
+#include "sector_editor/patrols/SectorEditorPatrolEditorPanel.h"
 #include "sector_demo/SectorLightmap.h"
 
 #include <cmath>
@@ -785,6 +786,47 @@ void TestSoundEditorSplitPaneLayout()
           "Sound Editor Save and Cancel controls fit without overlap");
 }
 
+void TestPatrolEditorSplitPaneLayout()
+{
+    const game::SectorEditorPatrolEditorLayout layout =
+            game::BuildSectorEditorPatrolEditorLayoutForViewport(
+                    1920.0f, 1080.0f);
+    const Rectangle viewport{0.0f, 0.0f, 1920.0f, 1080.0f};
+    Check(Contains(viewport, layout.modal),
+          "Patrol Editor modal fits inside the editor viewport");
+    Check(Contains(layout.modal, layout.listPane)
+                  && Contains(layout.modal, layout.formBounds)
+                  && !Overlaps(layout.listPane, layout.formBounds),
+          "Patrol Editor list and details panes fit without overlap");
+    Check(!Overlaps(layout.addButton, layout.deleteButton)
+                  && !Overlaps(layout.saveButton, layout.cancelButton),
+          "Patrol Editor action buttons fit without overlap");
+
+    const Rectangle card = game::BuildSectorEditorPatrolWaypointCardDrawRect(
+            Rectangle{100.0f, 200.0f, 900.0f, 600.0f},
+            Vector2{10.0f, 25.0f},
+            30.0f,
+            880.0f,
+            174.0f);
+    Check(Near(card.x, 90.0f) && Near(card.y, 205.0f),
+          "Patrol waypoint card backgrounds use the scroll-area draw transform");
+
+    const game::SectorEditorPatrolWaypointRowLayout row =
+            game::BuildSectorEditorPatrolWaypointRowLayout(
+                    980.0f, 40.0f, 88.0f);
+    Check(!Overlaps(row.markerLabel, row.markerInput)
+                  && !Overlaps(row.delayLabel, row.delayInput)
+                  && !Overlaps(row.delayInput, row.gaitInput)
+                  && !Overlaps(row.gaitInput, row.lookCheckbox)
+                  && !Overlaps(row.lookCheckbox, row.arcLabel)
+                  && !Overlaps(row.arcLabel, row.arcInput),
+          "Patrol waypoint labels and compact inputs do not overlap");
+    Check(row.delayInput.width == 110.0f
+                  && row.gaitInput.width == 110.0f
+                  && row.arcInput.width == 120.0f,
+          "Patrol waypoint numeric and gait fields stay compact");
+}
+
 void TestPreviewSettingsModalFogDraftApplyAndReset()
 {
     game::SectorTopologyMap map;
@@ -941,6 +983,7 @@ int main()
     TestPreviewSettingsFogTabLayout();
     TestNpcEditorModalSplitPaneLayout();
     TestSoundEditorSplitPaneLayout();
+    TestPatrolEditorSplitPaneLayout();
     TestWeaponEditorLayouts();
     TestItemEditorLayouts();
     TestPreviewSettingsModalFogDraftApplyAndReset();

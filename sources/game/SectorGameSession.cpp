@@ -2033,6 +2033,7 @@ void SectorGameSession::RenderAiDebugWorld(
             world,
             scene.NpcNavigation(),
             scene.NpcAi(),
+            topologyMap,
             scene.Renderer());
 }
 

@@ -29,7 +29,8 @@
     },
     "run": {
       "animation": "Running",
-      "movementSpeed": 3.5
+      "animationSpeed": 1.100000023841858,
+      "movementSpeed": 4.0
     },
     "attack": {
       "animation": "Attack",

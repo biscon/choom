@@ -197,10 +197,13 @@ void RequestAiMove(
 {
     const NpcMoveStatus status = GetNpcMoveStatus(runtime, npc.instanceId);
     if (status.found && status.phase == NpcMovePhase::FollowingPath) {
-        if (status.authority != NpcMoveAuthority::Ai) return;
-        const Vector2 delta = Vector2Subtract(
-                status.requestedDestinationXZ, destination);
-        if (Vector2Length(delta) <= ChaseRetargetDistanceWorld) return;
+        if (status.authority != NpcMoveAuthority::Ai
+                && status.authority != NpcMoveAuthority::Patrol) return;
+        if (status.authority == NpcMoveAuthority::Ai) {
+            const Vector2 delta = Vector2Subtract(
+                    status.requestedDestinationXZ, destination);
+            if (Vector2Length(delta) <= ChaseRetargetDistanceWorld) return;
+        }
     }
     RetargetNpcAiMove(
             world, navigation, collisionWorld, runtime,

@@ -85,6 +85,16 @@ NpcMoveRequestResult RequestNpcMove(
         NpcMoveGait gait = NpcMoveGait::Walk,
         NpcMoveAuthority authority = NpcMoveAuthority::Programmatic);
 
+NpcMoveRequestResult RequestNpcMoveForEntity(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity,
+        Vector2 destinationXZ,
+        NpcMoveGait gait,
+        NpcMoveAuthority authority);
+
 // Replaces an AI-owned route only after its new path has been found. A failed
 // retarget leaves the previous route, door holds, and request ID intact.
 NpcMoveRequestResult RetargetNpcAiMove(
@@ -103,9 +113,20 @@ bool CancelNpcMove(
         std::string_view instanceId,
         uint64_t expectedRequestId = 0);
 
+bool CancelNpcMoveForEntity(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity,
+        uint64_t expectedRequestId = 0);
+
 NpcMoveStatus GetNpcMoveStatus(
         const NpcNavigationRuntime& runtime,
         std::string_view instanceId);
+
+NpcMoveStatus GetNpcMoveStatusForEntity(
+        const NpcNavigationRuntime& runtime,
+        engine::Entity entity);
 
 bool UpdateNpcFootstepCadence(
         NpcNavigationRecord& record,

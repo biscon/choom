@@ -1009,6 +1009,30 @@ const SectorCompiledLevelMarker* FindSectorCompiledLevelMarker(
     return nullptr;
 }
 
+const SectorCompiledLevelMarker* FindSectorCompiledLevelMarkerByAuthoringId(
+        const SectorTopologyMap& map,
+        int sourceAuthoringMarkerId)
+{
+    for (const SectorCompiledLevelMarker& marker : map.levelMarkers) {
+        if (marker.sourceAuthoringMarkerId == sourceAuthoringMarkerId) {
+            return &marker;
+        }
+    }
+    return nullptr;
+}
+
+const SectorCompiledPatrol* FindSectorCompiledPatrol(
+        const SectorTopologyMap& map,
+        int sourceAuthoringPatrolId)
+{
+    for (const SectorCompiledPatrol& patrol : map.patrols) {
+        if (patrol.sourceAuthoringPatrolId == sourceAuthoringPatrolId) {
+            return &patrol;
+        }
+    }
+    return nullptr;
+}
+
 SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
         const SectorTopologyMap& map,
         const SectorPlacedDoor& door)

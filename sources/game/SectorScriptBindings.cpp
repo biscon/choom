@@ -6,6 +6,7 @@
 #include "game/Health.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcRuntime.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -324,6 +325,8 @@ BeginNpcMoveResult BeginNpcMove(
         RecordNpcMoveOutcome(host, instanceId, result.error.c_str());
         return result;
     }
+    NotifyNpcPatrolScriptMoveStarted(
+            context.world, *host.npcNavigation, instanceId);
 
     if (host.npcMoves.size() == host.npcMoves.capacity()) {
         ++host.npcMoveDiagnostics.capacityWarnings;

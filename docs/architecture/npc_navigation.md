@@ -133,7 +133,9 @@ continue detecting, attacking, and playing authored attack audio.
 `/debugai [on|off]` controls a read-only game-session diagnostic overlay. Its
 world pass draws cyan hearing rings, a faint green maximum vision ring with a
 bright exact vision cone, red melee range, magenta remaining path corners,
-yellow last-known-player markers, and fading amber player-sound radii. Its HUD
+yellow last-known-player markers, fading amber player-sound radii, and active
+patrol routes with their claimed waypoint destinations. Patrol geometry is
+drawn for assigned non-hostile NPCs as well. Its HUD
 pass projects fixed-size identity, awareness/intent/action, health, navigation,
 distance, attack, and investigation text above each AI NPC. Labels intentionally
 remain visible through walls for debugging, while world geometry remains

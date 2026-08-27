@@ -345,7 +345,8 @@ bool Checkbox(
         FontHandle font,
         const char* text,
         bool& checked,
-        UITextJustify justify = UITextJustify::Left);
+        UITextJustify justify = UITextJustify::Left,
+        bool enabled = true);
 
 bool Slider(
         UIContext& ui,

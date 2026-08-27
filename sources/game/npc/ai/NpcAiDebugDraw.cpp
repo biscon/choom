@@ -8,6 +8,9 @@
 #include "game/npc/NpcRuntime.h"
 #include "game/npc/ai/NpcAiDebugData.h"
 #include "game/npc/ai/NpcAiSystem.h"
+#include "game/npc/NpcPatrolSystem.h"
+#include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorUnits.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
@@ -191,6 +194,7 @@ void DrawNpcAiDebugWorld(
         const engine::World& world,
         const NpcNavigationRuntime& navigation,
         const NpcAiRuntime& aiRuntime,
+        const SectorTopologyMap& map,
         const SectorMeshRenderer& renderer)
 {
     if (!renderer.IsRendererReady()) return;
@@ -336,6 +340,47 @@ void DrawNpcAiDebugWorld(
                 DrawSphere(corner, 0.05f, pathColor);
                 previous = corner;
             }
+        }
+    }
+
+    const Color patrolRouteColor = LinearOverlayColor(Color{72, 220, 255, 235});
+    const Color patrolSlotColor = LinearOverlayColor(Color{255, 225, 80, 245});
+    for (const NpcNavigationRecord& record : navigation.records) {
+        if (!record.occupied || !world.IsAlive(record.entity)
+                || !world.Has<NpcPatrolState>(record.entity)
+                || !world.Has<SectorObjectTransform>(record.entity)) continue;
+        const NpcPatrolState& state = world.Get<NpcPatrolState>(record.entity);
+        if (state.phase == NpcPatrolPhase::Complete
+                || state.phase == NpcPatrolPhase::StoppedByScript) continue;
+        const SectorCompiledPatrol* patrol =
+                FindSectorCompiledPatrol(map, state.patrolEditorId);
+        if (patrol == nullptr) continue;
+        Vector3 previous{};
+        bool havePrevious = false;
+        for (const SectorCompiledPatrolWaypoint& waypoint : patrol->waypoints) {
+            const SectorCompiledLevelMarker* marker =
+                    FindSectorCompiledLevelMarkerByAuthoringId(
+                            map, waypoint.sourceAuthoringMarkerId);
+            if (marker == nullptr) continue;
+            Vector3 point = SectorAuthoringToWorldPosition(marker->position);
+            point.y += PathOffsetWorld;
+            DrawSphere(point, 0.06f, patrolRouteColor);
+            if (havePrevious) DrawLine3D(previous, point, patrolRouteColor);
+            previous = point;
+            havePrevious = true;
+        }
+        if (state.destinationInitialized) {
+            const SectorObjectTransform& transform =
+                    world.Get<SectorObjectTransform>(record.entity);
+            Vector3 destination{
+                    state.destinationXZ.x,
+                    transform.position.y + SlotOffsetWorld,
+                    state.destinationXZ.y};
+            DrawGroundRing(destination, SlotMarkerRadiusWorld,
+                    patrolSlotColor, false);
+            Vector3 owner = transform.position;
+            owner.y += SlotOffsetWorld;
+            DrawLine3D(owner, destination, patrolSlotColor);
         }
     }
     EndMode3D();

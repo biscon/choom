@@ -201,6 +201,18 @@ bool SectorEditorLevelMarkerEditingService::DeleteSelected()
         return false;
     }
     const int id = selected->id;
+    for (const SectorAuthoringPatrol& patrol : context_.authoringGraph.patrols) {
+        const bool referenced = std::any_of(
+                patrol.waypoints.begin(), patrol.waypoints.end(),
+                [id](const SectorAuthoringPatrolWaypoint& waypoint) {
+                    return waypoint.levelMarkerId == id;
+                });
+        if (referenced) {
+            context_.statusText = "Level Marker is used by patrol '"
+                    + patrol.id + "' and cannot be deleted";
+            return false;
+        }
+    }
     const auto oldSize = context_.authoringGraph.levelMarkers.size();
     context_.authoringGraph.levelMarkers.erase(
             std::remove_if(

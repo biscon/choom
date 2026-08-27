@@ -14,11 +14,13 @@ namespace game {
 class SectorMeshRenderer;
 struct NpcAiRuntime;
 struct NpcNavigationRuntime;
+struct SectorTopologyMap;
 
 void DrawNpcAiDebugWorld(
         const engine::World& world,
         const NpcNavigationRuntime& navigation,
         const NpcAiRuntime& aiRuntime,
+        const SectorTopologyMap& map,
         const SectorMeshRenderer& renderer);
 
 void DrawNpcAiDebugLabels(

@@ -7,6 +7,7 @@
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
+#include "sector_editor/patrols/SectorEditorPatrolEditorPanel.h"
 #include "sector_editor/items/SectorEditorItemEditorPanel.h"
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorPanel.h"
 #include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
@@ -414,6 +415,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     playerSettingsState = SectorEditorPlayerSettingsState{};
     materialRegistryEditorState = SectorEditorMaterialRegistryEditorState{};
     soundEditorState = SectorEditorSoundEditorState{};
+    patrolEditorState = SectorEditorPatrolEditorState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
@@ -511,6 +513,7 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || state.texturePicker.open
             || state.soundPicker.open
             || soundEditorState.open
+            || patrolEditorState.open
             || state.footstepPicker.open
             || state.decalTintModal.open
             || state.previewSettingsModal.open
@@ -651,6 +654,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         const bool hasBlockingModal = state.texturePicker.open
                 || state.soundPicker.open
                 || soundEditorState.open
+                || patrolEditorState.open
                 || npcEditorState.open
                 || materialRegistryEditorState.open
                 || state.footstepPicker.open
@@ -740,6 +744,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
             || state.soundPicker.open
             || state.footstepPicker.open
             || soundEditorState.open
+            || patrolEditorState.open
             || npcEditorState.open
             || itemEditorState.open
             || weaponEditorState.open
@@ -864,6 +869,12 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
+        if (patrolEditorState.open) {
+            DrawPatrolEditor(ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         if (soundEditorState.open) {
             DrawSoundEditor(ui, config, input, assets, font, smallFont);
             uiState.keyboardCaptured = true;
@@ -980,6 +991,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (patrolEditorState.open) {
+        DrawPatrolEditor(ui, config, input, assets, font, smallFont);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.setAllModal.open) {
         DrawSetAllModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -1076,6 +1093,7 @@ void SectorEditor::RenderUI(
             || state.soundPicker.open
             || state.footstepPicker.open
             || soundEditorState.open
+            || patrolEditorState.open
             || npcEditorState.open
             || itemEditorState.open
             || weaponEditorState.open
@@ -1387,6 +1405,7 @@ bool SectorEditor::IsMainMenuInteractionEnabled() const
     return !lightmapBake.IsBlocking()
             && !materialRegistryEditorState.open
             && !soundEditorState.open
+            && !patrolEditorState.open
             && !npcEditorState.open
             && !itemEditorState.open
             && !weaponEditorState.open
@@ -1447,6 +1466,9 @@ void SectorEditor::HandleMainMenuCommand(
             break;
         case SectorEditorMainMenuCommand::OpenSoundEditor:
             BuildSoundEditorService().Open();
+            break;
+        case SectorEditorMainMenuCommand::OpenPatrolEditor:
+            BuildPatrolEditorService().Open();
             break;
         case SectorEditorMainMenuCommand::OpenNpcEditor:
             BuildNpcEditorService().Open();
@@ -2523,6 +2545,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             || state.decalTintModal.open
             || state.previewSettingsModal.open
             || itemEditorState.open
+            || patrolEditorState.open
             || weaponEditorState.open;
     fpsPlayer.HandleWeaponSlotInput(
             input,
@@ -3699,6 +3722,19 @@ SectorEditorSoundEditorService SectorEditor::BuildSoundEditorService()
             TopologyMap(),
             MakeLiveDerivationAccess(documentState.derivation),
             Lifecycle(),
+            statusText};
+}
+
+SectorEditorPatrolEditorService SectorEditor::BuildPatrolEditorService()
+{
+    return SectorEditorPatrolEditorService{
+            patrolEditorState,
+            AuthoringGraph(),
+            TopologyMap(),
+            MakeLiveDerivationAccess(documentState.derivation),
+            Lifecycle(),
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
             statusText};
 }
 
@@ -5979,6 +6015,19 @@ void SectorEditor::DrawSoundEditor(
             == SectorEditorSoundEditorPanelResult::Saved) {
         BuildSoundService().RefreshCatalogHandles();
     }
+}
+
+void SectorEditor::DrawPatrolEditor(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    SectorEditorPatrolEditorService editor = BuildPatrolEditorService();
+    DrawSectorEditorPatrolEditorPanel(
+            ui, config, input, assets, font, smallFont, editor);
 }
 
 void SectorEditor::DrawSoundPickerModal(

@@ -28,6 +28,7 @@ bool HasAuthoringGraphData(const SectorAuthoringGraph& graph)
             || !graph.faceAnchors.empty()
             || !graph.fogVolumes.empty()
             || !graph.levelMarkers.empty()
+            || !graph.patrols.empty()
             || !graph.soundEmitters.empty()
             || !graph.triggers.empty();
 }

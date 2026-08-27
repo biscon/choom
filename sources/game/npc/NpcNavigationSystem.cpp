@@ -81,6 +81,30 @@ const NpcNavigationRecord* FindRecord(
     return found == runtime.records.end() ? nullptr : &*found;
 }
 
+NpcNavigationRecord* FindRecord(
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity)
+{
+    const auto found = std::find_if(
+            runtime.records.begin(), runtime.records.end(),
+            [entity](const NpcNavigationRecord& record) {
+                return record.occupied && record.entity == entity;
+            });
+    return found == runtime.records.end() ? nullptr : &*found;
+}
+
+const NpcNavigationRecord* FindRecord(
+        const NpcNavigationRuntime& runtime,
+        engine::Entity entity)
+{
+    const auto found = std::find_if(
+            runtime.records.begin(), runtime.records.end(),
+            [entity](const NpcNavigationRecord& record) {
+                return record.occupied && record.entity == entity;
+            });
+    return found == runtime.records.end() ? nullptr : &*found;
+}
+
 bool IsActive(NpcMovePhase phase)
 {
     return phase == NpcMovePhase::FollowingPath;
@@ -780,20 +804,16 @@ bool DeactivateNpcNavigation(
     return false;
 }
 
-NpcMoveRequestResult RequestNpcMove(
+static NpcMoveRequestResult RequestNpcMoveRecord(
         engine::World& world,
         SectorNavigationWorld& navigation,
         const SectorCollisionWorld& collisionWorld,
         NpcNavigationRuntime& runtime,
-        std::string_view instanceId,
+        NpcNavigationRecord* record,
         Vector2 destinationXZ,
         NpcMoveGait gait,
         NpcMoveAuthority authority)
 {
-    if (!IsValidNpcInstanceId(instanceId)) {
-        return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "invalid NPC instance ID");
-    }
-    NpcNavigationRecord* record = FindRecord(runtime, instanceId);
     if (record == nullptr || !world.IsAlive(record->entity)
             || !world.Has<SectorObjectTransform>(record->entity)
             || !world.Has<SectorObject>(record->entity)) {
@@ -807,7 +827,10 @@ NpcMoveRequestResult RequestNpcMove(
                 SectorNavigationQueryStatus::InvalidAgent,
                 "player detected; AI took control");
     }
-    if (IsActive(record->phase)) {
+    const bool replacingPatrol = IsActive(record->phase)
+            && authority == NpcMoveAuthority::Script
+            && record->authority == NpcMoveAuthority::Patrol;
+    if (IsActive(record->phase) && !replacingPatrol) {
         if (record->authority == NpcMoveAuthority::Script) {
             return FailRequest(
                     SectorNavigationQueryStatus::InvalidAgent,
@@ -884,6 +907,39 @@ NpcMoveRequestResult RequestNpcMove(
     return {true, SectorNavigationQueryStatus::Success, record->requestId, {}};
 }
 
+NpcMoveRequestResult RequestNpcMove(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        NpcNavigationRuntime& runtime,
+        std::string_view instanceId,
+        Vector2 destinationXZ,
+        NpcMoveGait gait,
+        NpcMoveAuthority authority)
+{
+    if (!IsValidNpcInstanceId(instanceId)) {
+        return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "invalid NPC instance ID");
+    }
+    return RequestNpcMoveRecord(
+            world, navigation, collisionWorld, runtime,
+            FindRecord(runtime, instanceId), destinationXZ, gait, authority);
+}
+
+NpcMoveRequestResult RequestNpcMoveForEntity(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity,
+        Vector2 destinationXZ,
+        NpcMoveGait gait,
+        NpcMoveAuthority authority)
+{
+    return RequestNpcMoveRecord(
+            world, navigation, collisionWorld, runtime,
+            FindRecord(runtime, entity), destinationXZ, gait, authority);
+}
+
 NpcMoveRequestResult RetargetNpcAiMove(
         engine::World& world,
         SectorNavigationWorld& navigation,
@@ -907,7 +963,8 @@ NpcMoveRequestResult RetargetNpcAiMove(
                 "NPC instance was not found");
     }
     const bool replacing = IsActive(record->phase);
-    if (replacing && record->authority != NpcMoveAuthority::Ai) {
+    if (replacing && record->authority != NpcMoveAuthority::Ai
+            && record->authority != NpcMoveAuthority::Patrol) {
         return FailRequest(
                 SectorNavigationQueryStatus::InvalidAgent,
                 "NPC movement is not controlled by AI");
@@ -1023,12 +1080,33 @@ bool CancelNpcMove(
     return true;
 }
 
-NpcMoveStatus GetNpcMoveStatus(
-        const NpcNavigationRuntime& runtime,
-        std::string_view instanceId)
+bool CancelNpcMoveForEntity(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity,
+        uint64_t expectedRequestId)
+{
+    NpcNavigationRecord* record = FindRecord(runtime, entity);
+    if (record == nullptr || !IsActive(record->phase)
+            || (expectedRequestId != 0 && record->requestId != expectedRequestId)) {
+        return false;
+    }
+    if (world.IsAlive(record->entity)
+            && world.Has<NpcRuntimeInstance>(record->entity)) {
+        world.Get<NpcRuntimeInstance>(record->entity).action = NpcAction::Idle;
+    }
+    SetTerminal(
+            world, navigation, runtime, *record,
+            NpcMovePhase::Cancelled,
+            SectorNavigationQueryStatus::Cancelled,
+            "movement cancelled");
+    return true;
+}
+
+static NpcMoveStatus MakeNpcMoveStatus(const NpcNavigationRecord* record)
 {
     NpcMoveStatus status;
-    const NpcNavigationRecord* record = FindRecord(runtime, instanceId);
     if (record == nullptr) return status;
     status.found = true;
     status.phase = record->phase;
@@ -1046,6 +1124,20 @@ NpcMoveStatus GetNpcMoveStatus(
     status.replanCount = record->replanCount;
     status.message = record->diagnostic;
     return status;
+}
+
+NpcMoveStatus GetNpcMoveStatus(
+        const NpcNavigationRuntime& runtime,
+        std::string_view instanceId)
+{
+    return MakeNpcMoveStatus(FindRecord(runtime, instanceId));
+}
+
+NpcMoveStatus GetNpcMoveStatusForEntity(
+        const NpcNavigationRuntime& runtime,
+        engine::Entity entity)
+{
+    return MakeNpcMoveStatus(FindRecord(runtime, entity));
 }
 
 bool UpdateNpcFootstepCadence(
@@ -1093,7 +1185,8 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
             continue;
         }
         const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
-        if (freezeAi && record.authority == NpcMoveAuthority::Ai) continue;
+        if (freezeAi && (record.authority == NpcMoveAuthority::Ai
+                || record.authority == NpcMoveAuthority::Patrol)) continue;
         const SectorObjectTransform& transform =
                 world.Get<SectorObjectTransform>(record.entity);
         if (record.doorPhase == NpcDoorTraversalPhase::None
@@ -1344,7 +1437,8 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 && world.Get<NpcCombatState>(record.entity)
                         .staggerRemainingSeconds > 0.0f;
         const bool frozenAi = freezeAi
-                && record.authority == NpcMoveAuthority::Ai;
+                && (record.authority == NpcMoveAuthority::Ai
+                    || record.authority == NpcMoveAuthority::Patrol);
         if (!staggered && !frozenAi && IsActive(record.phase)
                 && navigation.IsPathRecordValid(record.pathHandle)
                 && !record.tileReplanPending
@@ -1494,7 +1588,8 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 || (world.Has<Health>(record.entity)
                         && IsDepleted(world.Get<Health>(record.entity)));
         const bool frozenAi = freezeAi
-                && record.authority == NpcMoveAuthority::Ai;
+                && (record.authority == NpcMoveAuthority::Ai
+                    || record.authority == NpcMoveAuthority::Patrol);
         if (!staggered && !dead && !freezeAi && dt > 0.0f
                 && world.Has<NpcAiState>(record.entity)) {
             const NpcAiState& ai = world.Get<NpcAiState>(record.entity);

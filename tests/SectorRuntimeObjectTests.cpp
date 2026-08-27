@@ -5,6 +5,7 @@
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcCombatSystem.h"
 #include "game/npc/NpcRuntime.h"
 #include "game/npc/ai/NpcAiSystem.h"
@@ -6541,6 +6542,48 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
                   freshAiMove.requestId),
           "request-specific cancellation stops the fresh AI move");
 
+    const game::NpcMoveRequestResult patrolMove = game::RequestNpcMove(
+            world, navigation, collisionWorld, npcNavigation,
+            "walker", {4.0f, 6.0f}, game::NpcMoveGait::Walk,
+            game::NpcMoveAuthority::Patrol);
+    const game::NpcMoveRequestResult rejectedScriptTakeover =
+            game::RequestNpcMove(
+                    world, navigation, collisionWorld, npcNavigation,
+                    "walker", {-100.0f, -100.0f}, game::NpcMoveGait::Run,
+                    game::NpcMoveAuthority::Script);
+    const game::NpcMoveStatus preservedPatrol =
+            game::GetNpcMoveStatus(npcNavigation, "walker");
+    Check(patrolMove.accepted && !rejectedScriptTakeover.accepted
+                  && preservedPatrol.authority == game::NpcMoveAuthority::Patrol
+                  && preservedPatrol.requestId == patrolMove.requestId,
+          "rejected script takeover preserves the active patrol route");
+    const game::NpcMoveRequestResult acceptedScriptTakeover =
+            game::RequestNpcMove(
+                    world, navigation, collisionWorld, npcNavigation,
+                    "walker", {5.0f, 6.0f}, game::NpcMoveGait::Run,
+                    game::NpcMoveAuthority::Script);
+    Check(acceptedScriptTakeover.accepted
+                  && game::GetNpcMoveStatus(npcNavigation, "walker").authority
+                             == game::NpcMoveAuthority::Script
+                  && game::CancelNpcMove(
+                          world, navigation, npcNavigation, "walker",
+                          acceptedScriptTakeover.requestId),
+          "accepted script movement atomically takes patrol movement authority");
+    const game::NpcMoveRequestResult secondPatrolMove = game::RequestNpcMove(
+            world, navigation, collisionWorld, npcNavigation,
+            "walker", {4.0f, 6.0f}, game::NpcMoveGait::Walk,
+            game::NpcMoveAuthority::Patrol);
+    const game::NpcMoveRequestResult aiPatrolTakeover = game::RetargetNpcAiMove(
+            world, navigation, collisionWorld, npcNavigation,
+            "walker", {6.0f, 6.0f}, game::NpcMoveGait::Run);
+    Check(secondPatrolMove.accepted && aiPatrolTakeover.accepted
+                  && game::GetNpcMoveStatus(npcNavigation, "walker").authority
+                             == game::NpcMoveAuthority::Ai
+                  && game::CancelNpcMove(
+                          world, navigation, npcNavigation, "walker",
+                          aiPatrolTakeover.requestId),
+          "AI atomically takes patrol movement authority when the player is detected");
+
     game::NpcAiState detectedAi;
     detectedAi.awareness = game::NpcAwarenessState::Detected;
     world.Add(walker, detectedAi);
@@ -9970,10 +10013,134 @@ void TestWeaponPelletVolleyDamageAndPretrace()
           "pellet collisions are traced before lethal damage and do not pass through the killed target");
 }
 
+void TestNpcPatrolPlaybackModes()
+{
+    game::SectorCompiledPatrol patrol;
+    patrol.waypoints.resize(3);
+    game::NpcPatrolState state;
+
+    patrol.mode = game::SectorPatrolMode::Loop;
+    state.waypointIndex = 2;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    Check(state.waypointIndex == 0
+                  && state.phase == game::NpcPatrolPhase::Moving,
+          "loop patrol wraps from the last waypoint to the first");
+
+    patrol.mode = game::SectorPatrolMode::Once;
+    state.waypointIndex = 2;
+    state.phase = game::NpcPatrolPhase::Moving;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    Check(state.waypointIndex == 2
+                  && state.phase == game::NpcPatrolPhase::Complete,
+          "once patrol completes at its final waypoint");
+
+    patrol.mode = game::SectorPatrolMode::PingPong;
+    state = game::NpcPatrolState{};
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    const bool forwardOne = state.waypointIndex == 1 && state.direction == 1;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    const bool forwardEnd = state.waypointIndex == 2 && state.direction == 1;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    const bool reverseOne = state.waypointIndex == 1 && state.direction == -1;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    const bool reverseEnd = state.waypointIndex == 0 && state.direction == -1;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    Check(forwardOne && forwardEnd && reverseOne && reverseEnd
+                  && state.waypointIndex == 1 && state.direction == 1,
+          "ping-pong patrol reverses at both endpoint waypoints");
+
+    patrol.mode = game::SectorPatrolMode::Loop;
+    game::InitializeNpcPatrolTraversal(state, patrol, false, true, 17u);
+    const bool reverseStartsLast = state.waypointIndex == 2
+            && state.direction == -1;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    const bool reverseMiddle = state.waypointIndex == 1;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    const bool reverseFirst = state.waypointIndex == 0;
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    Check(reverseStartsLast && reverseMiddle && reverseFirst
+                  && state.waypointIndex == 2,
+          "reverse loop patrols start at the last waypoint and wrap backward");
+
+    patrol.mode = game::SectorPatrolMode::Once;
+    game::InitializeNpcPatrolTraversal(state, patrol, true, true, 23u);
+    Check(state.waypointIndex < patrol.waypoints.size()
+                  && state.direction == -1,
+          "random reverse patrol starts choose a valid waypoint and proceed backward");
+    while (state.phase != game::NpcPatrolPhase::Complete) {
+        game::AdvanceNpcPatrolWaypoint(state, patrol);
+    }
+    Check(state.waypointIndex == 0,
+          "reverse once patrols complete at the first waypoint");
+
+    patrol.mode = game::SectorPatrolMode::Once;
+    patrol.shuffleWaypoints = true;
+    game::InitializeNpcPatrolTraversal(state, patrol, false, true, 31u);
+    const size_t shuffleCapacity = state.shuffleOrder.capacity();
+    bool visited[3] = {false, false, false};
+    bool uniqueCycle = state.waypointIndex == 0 && state.direction == 1;
+    for (size_t visit = 0; visit < patrol.waypoints.size(); ++visit) {
+        uniqueCycle = uniqueCycle && !visited[state.waypointIndex];
+        visited[state.waypointIndex] = true;
+        game::AdvanceNpcPatrolWaypoint(state, patrol);
+    }
+    Check(uniqueCycle && visited[0] && visited[1] && visited[2]
+                  && state.phase == game::NpcPatrolPhase::Complete,
+          "shuffled once patrols visit every waypoint once and ignore reverse");
+
+    patrol.mode = game::SectorPatrolMode::Loop;
+    game::InitializeNpcPatrolTraversal(state, patrol, false, false, 47u);
+    bool noImmediateRepeat = true;
+    size_t previous = state.waypointIndex;
+    for (int advance = 0; advance < 24; ++advance) {
+        game::AdvanceNpcPatrolWaypoint(state, patrol);
+        noImmediateRepeat = noImmediateRepeat
+                && state.waypointIndex != previous;
+        previous = state.waypointIndex;
+    }
+    Check(noImmediateRepeat && state.shuffleOrder.capacity() == shuffleCapacity,
+          "shuffled loops avoid consecutive repeats and reuse spawn-time storage");
+
+    patrol.waypoints.resize(1);
+    game::InitializeNpcPatrolTraversal(state, patrol, false, false, 53u);
+    game::AdvanceNpcPatrolWaypoint(state, patrol);
+    Check(state.waypointIndex == 0
+                  && state.phase == game::NpcPatrolPhase::Complete,
+          "single-waypoint shuffled patrols idle instead of selecting the same waypoint");
+    patrol.shuffleWaypoints = false;
+    patrol.waypoints.resize(3);
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity npc = world.CreateEntity();
+    world.Add(npc, game::NpcPatrolState{});
+    game::NpcNavigationRuntime navigationRuntime;
+    game::NpcNavigationRecord record;
+    record.instanceId = "guard";
+    record.entity = npc;
+    record.occupied = true;
+    navigationRuntime.records.push_back(record);
+    game::NotifyNpcPatrolScriptMoveStarted(
+            world, navigationRuntime, "guard");
+    Check(world.Get<game::NpcPatrolState>(npc).phase
+                      == game::NpcPatrolPhase::SuspendedScript
+                  && world.Get<game::NpcPatrolState>(npc).scriptOverrideActive,
+          "accepted script movement suspends a resumable patrol");
+    game::NpcPatrolState& permanent = world.Get<game::NpcPatrolState>(npc);
+    permanent = game::NpcPatrolState{};
+    permanent.scriptMoveStopsPatrol = true;
+    game::NotifyNpcPatrolScriptMoveStarted(
+            world, navigationRuntime, "guard");
+    Check(permanent.phase == game::NpcPatrolPhase::StoppedByScript
+                  && permanent.stoppedByScript,
+          "per-instance script policy permanently stops patrol for the session");
+}
+
 int main()
 {
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
+    TestNpcPatrolPlaybackModes();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
     TestSectorItemUseTargetFallbackAndPendingGate();
     TestHeldObjectUseRayTargetOrderingAndOcclusion();
