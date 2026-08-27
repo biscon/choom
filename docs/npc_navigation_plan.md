@@ -820,8 +820,10 @@ Tasks:
 4. **Completed 2026-08-14:** move through authoritative sector, door, and prop collision. Update actual
    transform, grounded floor position, current sector, and dependent lighting
    state through existing runtime paths.
-5. **Completed 2026-08-14:** rotate toward actual movement while respecting authored initial yaw until a
-   movement request begins.
+5. **Completed 2026-08-14; refined 2026-08-27:** rotate toward stable path intent with only a bounded
+   forward-motion presentation bias, allowing short local-avoidance strafes or
+   backsteps without chasing them with rapid turns. Respect authored initial yaw
+   until a movement request produces physical movement.
 6. **Completed 2026-08-14:** use definition WalkSpeed/RunSpeed and requested gait consistently. Select
    semantic Idle, Walk, and Run actions and their normalized animation-speed
    multipliers; do not look up hardcoded animation clip names in locomotion.
@@ -1271,7 +1273,7 @@ Append one entry per slice attempt using this shape:
   programmatic request/cancel/status API; bounded straight-corner following;
   walk/run speed and semantic-action selection; authoritative topology, door,
   and static-prop collision; physical floor grounding and sector updates;
-  actual-motion facing; stall/drift detection with rate-limited bounded
+  intent-biased, rate-limited locomotion facing; stall/drift detection with bounded
   replans; lifecycle cleanup; baked-light/probe refresh; and selected/all-agent
   path, corner, direction, velocity, status, and counter visualization in the
   Nav tab.

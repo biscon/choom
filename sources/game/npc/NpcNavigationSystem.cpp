@@ -27,7 +27,8 @@ constexpr float ReplanTriggerSeconds = 1.50f;
 constexpr float ReplanCooldownSeconds = 0.50f;
 constexpr float DriftCheckIntervalSeconds = 0.25f;
 constexpr uint32_t MaximumReplans = 3;
-constexpr float TurnRateRadiansPerSecond = 12.566370614359172f;
+constexpr float TurnRateRadiansPerSecond = 6.283185307179586f;
+constexpr float ActualMotionFacingInfluence = 0.35f;
 constexpr float VisualStepSmoothingRate = 16.0f;
 constexpr float VisualOffsetEpsilon = 0.0001f;
 constexpr float PlayerAvoidancePredictionSeconds = 1.25f;
@@ -446,6 +447,37 @@ Vector2 ApplyFriendlyPlayerAvoidance(
 }
 
 } // namespace
+
+Vector2 ResolveNpcLocomotionFacingDirection(
+        Vector2 preferredVelocity,
+        Vector2 actualVelocity)
+{
+    const float preferredSpeed = Vector2Length(preferredVelocity);
+    if (!std::isfinite(preferredSpeed)
+            || preferredSpeed <= MovementDistanceEpsilon) {
+        return {};
+    }
+    const Vector2 intent = Vector2Scale(
+            preferredVelocity, 1.0f / preferredSpeed);
+    const float actualSpeed = Vector2Length(actualVelocity);
+    if (!std::isfinite(actualSpeed)
+            || actualSpeed <= MovementDistanceEpsilon) {
+        return intent;
+    }
+    const Vector2 motion = Vector2Scale(actualVelocity, 1.0f / actualSpeed);
+    const float forwardAlignment = std::clamp(
+            Vector2DotProduct(intent, motion), 0.0f, 1.0f);
+    const float speedRatio = std::clamp(
+            actualSpeed / preferredSpeed, 0.0f, 1.0f);
+    const float influence = ActualMotionFacingInfluence
+            * speedRatio * forwardAlignment;
+    const Vector2 biased = Vector2Add(
+            intent, Vector2Scale(motion, influence));
+    const float biasedLength = Vector2Length(biased);
+    return biasedLength > MovementDistanceEpsilon
+            ? Vector2Scale(biased, 1.0f / biasedLength)
+            : intent;
+}
 
 void ResetNpcWaypointProgressTracking(NpcNavigationRecord& record)
 {
@@ -1526,10 +1558,20 @@ void UpdateNpcNavigationAndLocomotionSystem(
             record.actualVelocity = dt > 0.0f
                     ? Vector2Scale(totalActual, 1.0f / dt) : Vector2{};
             if (actualDistance > MovementDistanceEpsilon) {
-                const float targetYaw = std::atan2(totalActual.x, totalActual.y);
-                const float delta = ShortestAngleDelta(transform.yawRadians, targetYaw);
-                const float maximumTurn = TurnRateRadiansPerSecond * dt;
-                transform.yawRadians += std::clamp(delta, -maximumTurn, maximumTurn);
+                const Vector2 facingDirection =
+                        ResolveNpcLocomotionFacingDirection(
+                                record.preferredVelocity,
+                                record.actualVelocity);
+                if (Vector2LengthSqr(facingDirection)
+                        > MovementDistanceEpsilon) {
+                    const float targetYaw = std::atan2(
+                            facingDirection.x, facingDirection.y);
+                    const float delta = ShortestAngleDelta(
+                            transform.yawRadians, targetYaw);
+                    const float maximumTurn = TurnRateRadiansPerSecond * dt;
+                    transform.yawRadians += std::clamp(
+                            delta, -maximumTurn, maximumTurn);
+                }
                 npc.action = record.gait == NpcMoveGait::Run
                         ? NpcAction::Run : NpcAction::Walk;
             } else if (record.doorPhase

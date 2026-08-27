@@ -4237,6 +4237,7 @@ void TestCrowdQueuesNpcAgentsThroughDoor()
     const std::vector<game::SectorStaticModelCollider> staticColliders;
     int maximumCrossingCount = 0;
     bool observedQueue = false;
+    bool observedFacingTargetAwayFromIntent = false;
     unsigned int observedCrossingAgents = 0;
     for (int frame = 0; frame < 800; ++frame) {
         constexpr float Dt = 0.05f;
@@ -4274,6 +4275,22 @@ void TestCrowdQueuesNpcAgentsThroughDoor()
                 world, assets, navigation, npcNavigation, definitions,
                 collisionWorld, runtimeObjects.dynamicDoorColliders,
                 staticColliders, probes, map, Dt);
+        for (const game::NpcNavigationRecord& record : npcNavigation.records) {
+            if (!record.occupied
+                    || Vector2LengthSqr(record.preferredVelocity) <= 0.0001f
+                    || Vector2LengthSqr(record.actualVelocity) <= 0.0001f) {
+                continue;
+            }
+            const Vector2 facing = game::ResolveNpcLocomotionFacingDirection(
+                    record.preferredVelocity,
+                    record.actualVelocity);
+            observedFacingTargetAwayFromIntent =
+                    observedFacingTargetAwayFromIntent
+                    || Vector2DotProduct(
+                            facing,
+                            Vector2Normalize(record.preferredVelocity))
+                            < std::cos(10.0f * DEG2RAD);
+        }
         if (game::GetNpcMoveStatus(npcNavigation, "door_queue_a").phase
                             == game::NpcMovePhase::Arrived
                 && game::GetNpcMoveStatus(npcNavigation, "door_queue_b").phase
@@ -4306,6 +4323,8 @@ void TestCrowdQueuesNpcAgentsThroughDoor()
     Check(queueA.phase == game::NpcMovePhase::Arrived
                   && queueB.phase == game::NpcMovePhase::Arrived,
           "queued Crowd agents cross sequentially and physically arrive");
+    Check(!observedFacingTargetAwayFromIntent,
+          "queued Crowd facing targets remain aligned with stable path intent");
     game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
     navigation.Shutdown();
 }
@@ -6255,7 +6274,7 @@ void TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate()
             world.Get<game::SectorObjectTransform>(npcEntity);
     const game::NpcMoveStatus firstStatus = game::GetNpcMoveStatus(
             npcNavigation, "slow_walker");
-    const float maximumTurn = 4.0f * PI * HighRefreshDt;
+    const float maximumTurn = 2.0f * PI * HighRefreshDt;
     const float expectedFirstVelocity =
             navigation.CrowdSettings().maximumAcceleration * HighRefreshDt;
     Check(firstTransform.position.x < 3.0f
@@ -6304,6 +6323,41 @@ void TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate()
 
     game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
     navigation.Shutdown();
+}
+
+void TestNpcLocomotionFacingRejectsAvoidanceReversals()
+{
+    const Vector2 intent{0.0f, 2.0f};
+    const Vector2 stopped = game::ResolveNpcLocomotionFacingDirection(
+            intent, {});
+    const Vector2 backward = game::ResolveNpcLocomotionFacingDirection(
+            intent, {0.0f, -2.0f});
+    const Vector2 lateral = game::ResolveNpcLocomotionFacingDirection(
+            intent, {2.0f, 0.0f});
+    const Vector2 fastDiagonal = game::ResolveNpcLocomotionFacingDirection(
+            intent, {2.0f, 2.0f});
+    const Vector2 slowDiagonal = game::ResolveNpcLocomotionFacingDirection(
+            intent, {0.2f, 0.2f});
+    const Vector2 alternatingLeft = game::ResolveNpcLocomotionFacingDirection(
+            intent, {-2.0f, 2.0f});
+    const Vector2 noIntent = game::ResolveNpcLocomotionFacingDirection(
+            {}, {0.0f, -2.0f});
+
+    Check(Near(stopped, Vector2{0.0f, 1.0f})
+                  && Near(backward, Vector2{0.0f, 1.0f})
+                  && Near(lateral, Vector2{0.0f, 1.0f}),
+          "backward and lateral avoidance motion preserve path-intent facing");
+    Check(fastDiagonal.x > slowDiagonal.x
+                  && slowDiagonal.x > 0.0f
+                  && Vector2DotProduct(fastDiagonal, Vector2{0.0f, 1.0f})
+                          > std::cos(10.0f * DEG2RAD),
+          "forward motion adds a small speed-scaled facing bias");
+    Check(alternatingLeft.x < 0.0f
+                  && Vector2DotProduct(
+                          alternatingLeft, Vector2{0.0f, 1.0f})
+                          > std::cos(10.0f * DEG2RAD)
+                  && Near(noIntent, Vector2{}),
+          "alternating avoidance remains bounded and zero intent holds yaw");
 }
 
 void TestNpcWaypointProgressTrackingRejectsJitterAndAcceptsSlowProgress()
@@ -9553,6 +9607,7 @@ int main()
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
     TestNpcNavigationReplansAroundDynamicTileCacheObstacle();
     TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate();
+    TestNpcLocomotionFacingRejectsAvoidanceReversals();
     TestNpcWaypointProgressTrackingRejectsJitterAndAcceptsSlowProgress();
     TestNpcCollisionCylindersAreSolidWithoutVerticalFalsePositives();
     TestCrowdFactionAwarePlayerAvoidanceAndHostileContact();

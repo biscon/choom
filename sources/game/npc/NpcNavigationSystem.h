@@ -112,6 +112,12 @@ bool UpdateNpcFootstepCadence(
         bool active,
         float resolvedHorizontalDistance);
 
+// Returns a unit presentation-facing direction, or zero when path intent does
+// not provide a stable direction and the caller should preserve current yaw.
+Vector2 ResolveNpcLocomotionFacingDirection(
+        Vector2 preferredVelocity,
+        Vector2 actualVelocity);
+
 void ResetNpcWaypointProgressTracking(NpcNavigationRecord& record);
 
 void UpdateNpcWaypointProgressTracking(
