@@ -4,6 +4,7 @@
 #include "engine/debug/DebugConsoleData.h"
 #include "engine/ui/UI.h"
 #include "engine/scripting/ScriptData.h"
+#include "engine/render/ScenePresentationShader.h"
 #include "game/ApplicationFlow.h"
 #include "game/FpsWeaponRegistry.h"
 #include "game/items/ItemAssets.h"
@@ -87,6 +88,7 @@ public:
             const engine::RenderTarget& viewmodelTarget);
     const engine::RenderTarget* HdrDebugPresentationSource() const;
     const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const;
+    engine::ScenePresentationEffectParameters ScenePresentationEffects() const;
     void Render3DHud(
             const engine::World& world,
             engine::AssetManager& assets,

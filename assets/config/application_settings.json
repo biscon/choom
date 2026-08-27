@@ -28,6 +28,22 @@
     "pickupVacuumDurationSeconds": 0.44999998807907104,
     "pickupVacuumTargetHeightWorld": 0.75
   },
+  "playerHealth": {
+    "lowHealthVisual": {
+      "enabled": true,
+      "thresholdRatio": 0.5,
+      "vignetteColor": {
+        "r": 40,
+        "g": 3,
+        "b": 7,
+        "a": 255
+      },
+      "vignetteInnerRadius": 0.5,
+      "vignetteOuterRadius": 1.0499999523162842,
+      "maximumVignetteOpacity": 0.6499999761581421,
+      "maximumDesaturation": 0.5199999809265137
+    }
+  },
   "hdrBloom": {
     "enabled": true,
     "threshold": 1.0,

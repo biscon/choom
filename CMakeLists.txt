@@ -273,6 +273,7 @@ if(BUILD_TESTING)
             sources/game/FpsViewmodel.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/PlayerStamina.cpp
             sources/game/FpsViewmodelEffectsRenderer.cpp
@@ -282,6 +283,14 @@ if(BUILD_TESTING)
     target_include_directories(fps_viewmodel_tests PRIVATE sources)
     target_link_libraries(fps_viewmodel_tests PRIVATE raylib)
     add_test(NAME fps_viewmodel COMMAND fps_viewmodel_tests)
+
+    add_executable(player_health_visual_tests
+            tests/PlayerHealthVisualTests.cpp
+            sources/game/PlayerHealthVisual.cpp
+    )
+    target_include_directories(player_health_visual_tests PRIVATE sources)
+    target_link_libraries(player_health_visual_tests PRIVATE raylib)
+    add_test(NAME player_health_visual COMMAND player_health_visual_tests)
 
     add_executable(pbr_lighting_policy_tests
             tests/PbrLightingPolicyTests.cpp
@@ -359,6 +368,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
@@ -432,6 +442,7 @@ if(BUILD_TESTING)
             tests/SectorTopologySerializationTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
@@ -593,6 +604,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemIconLayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/game/navigation/SectorNavigationBuildInput.cpp
@@ -692,6 +704,7 @@ if(BUILD_TESTING)
             tests/WeaponEditorServiceTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/FpsWeaponAudio.cpp
             sources/game/PlayerStamina.cpp
             sources/sector_editor/weapons/SectorEditorWeaponEditorService.cpp
@@ -718,6 +731,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemInventoryUILayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/sector_demo/SectorTopologyMap.cpp

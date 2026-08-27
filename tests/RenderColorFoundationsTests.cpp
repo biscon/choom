@@ -7,6 +7,7 @@
 #include "engine/render/RenderTarget.h"
 #include "engine/render/ScenePresentationShader.h"
 #include "engine/render/ToneMapping.h"
+#include "sector_demo/renderer/SectorBloomRenderer.h"
 
 #include <external/glad.h>
 
@@ -186,8 +187,43 @@ void TestNeutralToneMapping()
           "presentation shader applies the selected neutral tone curve");
     Check(shader.find("LinearSceneToDisplaySrgb") != std::string::npos,
           "presentation shader performs the exact sRGB transfer");
+    Check(shader.find("presentationDesaturation") != std::string::npos
+                  && shader.find("presentationVignetteOpacity")
+                          != std::string::npos
+                  && shader.find("presentationVignetteColorLinear")
+                          != std::string::npos,
+          "presentation shader exposes low-health effect uniforms");
+    Check(shader.find("pow(centered.x, 4.0)") != std::string::npos
+                  && shader.find("smoothstep(") != std::string::npos,
+          "presentation shader uses a soft rounded-screen vignette");
+    const size_t toneMapPosition = shader.find(
+            "vec3 mapped = ToneMapNeutralMaxChannel");
+    const size_t impairmentPosition = shader.find("float luminance = dot");
+    const size_t displayTransferPosition = shader.find(
+            "LinearSceneToDisplaySrgb(mapped)");
+    Check(toneMapPosition < impairmentPosition
+                  && impairmentPosition < displayTransferPosition,
+          "low-health effects operate in linear display space after tone mapping");
     Check(shader.find("ACES") == std::string::npos && shader.find("Aces") == std::string::npos,
           "presentation shader contains no alternate ACES operator");
+}
+
+void TestBloomDiagnosticViewPolicy()
+{
+    Check(!game::IsSectorBloomDiagnosticView(
+                  game::SectorBloomDebugView::Normal),
+          "normal bloom presentation permits gameplay presentation effects");
+    Check(game::IsSectorBloomDiagnosticView(
+                  game::SectorBloomDebugView::SceneBefore)
+                  && game::IsSectorBloomDiagnosticView(
+                          game::SectorBloomDebugView::Prefilter)
+                  && game::IsSectorBloomDiagnosticView(
+                          game::SectorBloomDebugView::BlurredBloom)
+                  && game::IsSectorBloomDiagnosticView(
+                          game::SectorBloomDebugView::BloomOnly)
+                  && game::IsSectorBloomDiagnosticView(
+                          game::SectorBloomDebugView::SceneAfter),
+          "every explicit bloom diagnostic view suppresses gameplay presentation effects");
 }
 
 void TestRenderTargetMetadata()
@@ -379,6 +415,7 @@ int main()
     TestTransferFunctions();
     TestTextureSemantics();
     TestNeutralToneMapping();
+    TestBloomDiagnosticViewPolicy();
     TestRenderTargetMetadata();
     TestPipelineDiagnosticFormatting();
     TestHdrEffectPolicy();

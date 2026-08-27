@@ -964,6 +964,13 @@ void SettingsResolutionAndPersistence()
     settings.playerStamina.breathingAudio.thresholdRatio = 0.3f;
     settings.playerStamina.breathingAudio.volume = 0.6f;
     settings.playerStamina.breathingAudio.fadeOutSeconds = 3.0f;
+    settings.playerHealth.lowHealthVisual.enabled = true;
+    settings.playerHealth.lowHealthVisual.thresholdRatio = 0.45f;
+    settings.playerHealth.lowHealthVisual.vignetteColor = Color{55, 4, 9, 255};
+    settings.playerHealth.lowHealthVisual.vignetteInnerRadius = 0.42f;
+    settings.playerHealth.lowHealthVisual.vignetteOuterRadius = 1.15f;
+    settings.playerHealth.lowHealthVisual.maximumVignetteOpacity = 0.72f;
+    settings.playerHealth.lowHealthVisual.maximumDesaturation = 0.31f;
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     std::ifstream savedSettingsInput(path);
@@ -1001,6 +1008,15 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerStamina.breathingAudio.thresholdRatio, 0.3f));
     assert(Near(loaded.playerStamina.breathingAudio.volume, 0.6f));
     assert(Near(loaded.playerStamina.breathingAudio.fadeOutSeconds, 3.0f));
+    assert(loaded.playerHealth.lowHealthVisual.enabled);
+    assert(Near(loaded.playerHealth.lowHealthVisual.thresholdRatio, 0.45f));
+    assert(loaded.playerHealth.lowHealthVisual.vignetteColor.r == 55);
+    assert(loaded.playerHealth.lowHealthVisual.vignetteColor.g == 4);
+    assert(loaded.playerHealth.lowHealthVisual.vignetteColor.b == 9);
+    assert(Near(loaded.playerHealth.lowHealthVisual.vignetteInnerRadius, 0.42f));
+    assert(Near(loaded.playerHealth.lowHealthVisual.vignetteOuterRadius, 1.15f));
+    assert(Near(loaded.playerHealth.lowHealthVisual.maximumVignetteOpacity, 0.72f));
+    assert(Near(loaded.playerHealth.lowHealthVisual.maximumDesaturation, 0.31f));
     assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
     assert(Near(loaded.footsteps.volume, 0.7f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
@@ -1123,6 +1139,24 @@ void SettingsResolutionAndPersistence()
             R"({"version":1,"playerStamina":{"breathingAudio":{"fadeOutSeconds":0}}})",
             loaded, &error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"enabled":"yes"}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"thresholdRatio":0}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"vignetteColor":{"r":40,"g":3,"b":7}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"vignetteInnerRadius":0.8,"vignetteOuterRadius":0.7}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"maximumVignetteOpacity":1.1}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"maximumDesaturation":-0.1}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"hdrBloom":{"threshold":-1}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"renderScale":2.1}})",loaded,&error));
@@ -1192,6 +1226,11 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerStamina.windedCamera.startThresholdRatio, 0.40f));
     assert(Near(loaded.playerStamina.breathingAudio.thresholdRatio, 0.20f));
     assert(Near(loaded.playerStamina.breathingAudio.fadeOutSeconds, 2.0f));
+    assert(loaded.playerHealth.lowHealthVisual.enabled);
+    assert(Near(loaded.playerHealth.lowHealthVisual.thresholdRatio, 0.50f));
+    assert(loaded.playerHealth.lowHealthVisual.vignetteColor.r == 40);
+    assert(Near(loaded.playerHealth.lowHealthVisual.maximumVignetteOpacity, 0.65f));
+    assert(Near(loaded.playerHealth.lowHealthVisual.maximumDesaturation, 0.22f));
     assert(loaded.graphics.vsync);
     assert(loaded.graphics.horizontalFovDegrees
             == game::DefaultFpsHorizontalFovDegrees);

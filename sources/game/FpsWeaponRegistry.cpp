@@ -1332,6 +1332,61 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                         static_cast<float>(value);
             }
         }
+        const auto playerHealth = root.find("playerHealth");
+        if (playerHealth != root.end()) {
+            const std::string healthContext = "application settings.playerHealth";
+            if (!playerHealth->is_object()) {
+                Fail(healthContext + " must be an object");
+            }
+            const auto lowHealthVisual = playerHealth->find("lowHealthVisual");
+            if (lowHealthVisual != playerHealth->end()) {
+                const std::string visualContext =
+                        healthContext + ".lowHealthVisual";
+                if (!lowHealthVisual->is_object()) {
+                    Fail(visualContext + " must be an object");
+                }
+                PlayerLowHealthVisualApplicationSettings& visual =
+                        parsed.playerHealth.lowHealthVisual;
+                visual.enabled = OptionalBoolean(
+                        *lowHealthVisual,
+                        "enabled",
+                        visualContext).value_or(visual.enabled);
+                visual.thresholdRatio = OptionalNumber(
+                        *lowHealthVisual,
+                        "thresholdRatio",
+                        visualContext).value_or(visual.thresholdRatio);
+                const auto vignetteColor = lowHealthVisual->find(
+                        "vignetteColor");
+                if (vignetteColor != lowHealthVisual->end()) {
+                    visual.vignetteColor = ReadColor(
+                            *vignetteColor,
+                            visualContext + ".vignetteColor");
+                }
+                visual.vignetteInnerRadius = OptionalNumber(
+                        *lowHealthVisual,
+                        "vignetteInnerRadius",
+                        visualContext).value_or(visual.vignetteInnerRadius);
+                visual.vignetteOuterRadius = OptionalNumber(
+                        *lowHealthVisual,
+                        "vignetteOuterRadius",
+                        visualContext).value_or(visual.vignetteOuterRadius);
+                visual.maximumVignetteOpacity = OptionalNumber(
+                        *lowHealthVisual,
+                        "maximumVignetteOpacity",
+                        visualContext).value_or(
+                                visual.maximumVignetteOpacity);
+                visual.maximumDesaturation = OptionalNumber(
+                        *lowHealthVisual,
+                        "maximumDesaturation",
+                        visualContext).value_or(
+                                visual.maximumDesaturation);
+            }
+            const std::string healthError = PlayerHealthSettingsError(
+                    parsed.playerHealth);
+            if (!healthError.empty()) {
+                Fail(healthContext + "." + healthError);
+            }
+        }
         const auto graphics = root.find("graphics");
         if (graphics != root.end()) {
             if (!graphics->is_object()) {
@@ -1883,6 +1938,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings playerInventory.pickupVacuumTargetHeightWorld must be finite and non-negative");
         return false;
     }
+    const std::string healthError = PlayerHealthSettingsError(
+            settings.playerHealth);
+    if (!healthError.empty()) {
+        SetError(error, "application settings playerHealth." + healthError);
+        return false;
+    }
     const std::string staminaError = PlayerStaminaSettingsError(
             settings.playerStamina);
     if (!staminaError.empty()) {
@@ -1942,6 +2003,18 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     settings.playerInventory.pickupVacuumDurationSeconds},
             {"pickupVacuumTargetHeightWorld",
                     settings.playerInventory.pickupVacuumTargetHeightWorld}};
+    const PlayerLowHealthVisualApplicationSettings& lowHealthVisual =
+            settings.playerHealth.lowHealthVisual;
+    root["playerHealth"] = {{"lowHealthVisual", {
+            {"enabled", lowHealthVisual.enabled},
+            {"thresholdRatio", lowHealthVisual.thresholdRatio},
+            {"vignetteColor", ColorValue(lowHealthVisual.vignetteColor)},
+            {"vignetteInnerRadius", lowHealthVisual.vignetteInnerRadius},
+            {"vignetteOuterRadius", lowHealthVisual.vignetteOuterRadius},
+            {"maximumVignetteOpacity",
+                    lowHealthVisual.maximumVignetteOpacity},
+            {"maximumDesaturation",
+                    lowHealthVisual.maximumDesaturation}}}};
     const engine::HdrBloomSettings hdrBloom =
             engine::NormalizeHdrBloomSettings(settings.hdrBloom);
     root["hdrBloom"] = {

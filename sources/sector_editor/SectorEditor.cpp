@@ -11,6 +11,7 @@
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorPanel.h"
 #include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
+#include "sector_editor/player/SectorEditorPlayerSettingsModal.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorHelpers.h"
@@ -382,6 +383,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     audioPicker.Close(weaponEditorState.audioPicker);
     BuildWeaponEditorService().Shutdown();
     BuildItemEditorService().Shutdown();
+    BuildPlayerSettingsService().Shutdown(context);
     BuildMaterialRegistryEditorService().Shutdown(assets);
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
@@ -409,6 +411,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     weaponEditorSessionState = SectorEditorWeaponEditorSessionState{};
     itemEditorState = SectorEditorItemEditorState{};
     itemEditorSessionState = SectorEditorItemEditorSessionState{};
+    playerSettingsState = SectorEditorPlayerSettingsState{};
     materialRegistryEditorState = SectorEditorMaterialRegistryEditorState{};
     soundEditorState = SectorEditorSoundEditorState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
@@ -436,6 +439,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     statusText.clear();
     gameSessionExists = false;
     clearGameSessionRequested = false;
+    playerAudioSettingsChanged = false;
     engineContext = nullptr;
     initialized = false;
 }
@@ -829,6 +833,13 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
+        if (playerSettingsState.open) {
+            DrawPlayerSettingsModal(
+                    ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         if (itemEditorState.open) {
             DrawItemEditor(ui, config, input, assets, font, smallFont);
             uiState.keyboardCaptured = true;
@@ -934,6 +945,13 @@ void SectorEditor::RenderUI(
     }
     if (state.lightmapBakeSetupModal.open) {
         DrawLightmapBakeSetupModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (playerSettingsState.open) {
+        DrawPlayerSettingsModal(
+                ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -1451,6 +1469,11 @@ void SectorEditor::HandleMainMenuCommand(
         case SectorEditorMainMenuCommand::OpenLevelSettings:
             OpenPreviewSettingsModal();
             break;
+        case SectorEditorMainMenuCommand::OpenPlayerSettings:
+            if (engineContext != nullptr) {
+                BuildPlayerSettingsService().Open(*engineContext);
+            }
+            break;
         case SectorEditorMainMenuCommand::None:
             break;
     }
@@ -1461,6 +1484,13 @@ bool SectorEditor::ConsumeClearGameSessionRequest()
     const bool requested = clearGameSessionRequested;
     clearGameSessionRequested = false;
     return requested;
+}
+
+bool SectorEditor::ConsumePlayerAudioSettingsChanged()
+{
+    const bool changed = playerAudioSettingsChanged;
+    playerAudioSettingsChanged = false;
+    return changed;
 }
 
 bool SectorEditor::IsMouseOverCanvas(const engine::Input& input) const
@@ -6587,6 +6617,41 @@ void SectorEditor::DrawPreviewSettingsModal(
             callbacks);
 }
 
+void SectorEditor::DrawPlayerSettingsModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    if (engineContext == nullptr) return;
+    SectorEditorPlayerSettingsService service = BuildPlayerSettingsService();
+    const SectorEditorPlayerSettingsSaveResult result =
+            DrawSectorEditorPlayerSettingsModal(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            smallFont,
+            *engineContext,
+            service);
+    if (!result.saved) return;
+    if (result.playerAudioChanged) {
+        RequestPlayerAudioAssets(
+                engineContext->assets,
+                applicationSettings.playerSounds,
+                playerAudio);
+        playerAudioSettingsChanged = true;
+    }
+    if (result.footstepsChanged
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        RebuildPreviewMeshesPreservingView(*engineContext);
+    }
+}
+
 void SectorEditor::DrawLightmapBakeModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -7081,7 +7146,8 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.decalTintModal.open
             || state.doorTextureSettingsModal.open
             || state.lightmapBakeSetupModal.open
-            || state.previewSettingsModal.open;
+            || state.previewSettingsModal.open
+            || playerSettingsState.open;
 }
 
 bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui)
@@ -7749,6 +7815,15 @@ SectorEditorItemEditorService SectorEditor::BuildItemEditorService()
             statusText,
             itemRegistryPath,
             std::filesystem::path(ASSETS_PATH) / "levels"};
+}
+
+SectorEditorPlayerSettingsService SectorEditor::BuildPlayerSettingsService()
+{
+    return SectorEditorPlayerSettingsService{
+            playerSettingsState,
+            applicationSettings,
+            statusText,
+            applicationSettingsPath};
 }
 
 SectorEditorMaterialRegistryEditorService SectorEditor::BuildMaterialRegistryEditorService()

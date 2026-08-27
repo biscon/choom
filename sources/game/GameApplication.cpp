@@ -3,6 +3,7 @@
 #include "engine/assets/FontLoadFlags.h"
 #include "engine/debug/DebugConsole.h"
 #include "engine/debug/DebugConsoleLogBridge.h"
+#include "engine/render/ColorTransfer.h"
 #include "game/GameMainMenu.h"
 
 #include <raylib.h>
@@ -458,6 +459,12 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         ClearGameSession(context);
     }
     editor.Update(context, dt);
+    if (editor.ConsumePlayerAudioSettingsChanged()) {
+        RequestPlayerAudioAssets(
+                context.assets,
+                applicationSettings.playerSounds,
+                playerAudio);
+    }
     if (editor.IsPreview3DActive()) {
         return;
     }
@@ -607,6 +614,35 @@ const SectorAtmosphereDiagnostics& GameApplication::AtmosphereDiagnostics() cons
         return gameScene.Renderer().AtmosphereDiagnostics();
     }
     return editor.PreviewAtmosphereDiagnostics();
+}
+
+engine::ScenePresentationEffectParameters
+GameApplication::ScenePresentationEffects() const
+{
+    engine::ScenePresentationEffectParameters result;
+    if (BackgroundScreen() != ApplicationScreen::Game
+            || !gameSession.IsRunning()
+            || IsSectorBloomDiagnosticView(
+                    gameScene.Renderer().BloomDebugView())) {
+        return result;
+    }
+
+    const PlayerLowHealthVisualApplicationSettings& settings =
+            applicationSettings.playerHealth.lowHealthVisual;
+    const float strength = PlayerLowHealthVisualStrength(
+            gameSession.PlayerHealth(),
+            settings);
+    const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
+            settings.vignetteColor);
+    result.desaturation = settings.maximumDesaturation * strength;
+    result.vignetteOpacity = settings.maximumVignetteOpacity * strength;
+    result.vignetteColorLinear = {
+            vignetteColor.x,
+            vignetteColor.y,
+            vignetteColor.z};
+    result.vignetteInnerRadius = settings.vignetteInnerRadius;
+    result.vignetteOuterRadius = settings.vignetteOuterRadius;
+    return result;
 }
 
 void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)

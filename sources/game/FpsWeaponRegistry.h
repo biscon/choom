@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "engine/render/HdrEffectPolicy.h"
+#include "game/PlayerHealthVisual.h"
 #include "game/PlayerStamina.h"
 
 #include <raylib.h>
@@ -334,6 +335,7 @@ struct FpsApplicationSettings {
     bool consoleEnabled = true;
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
+    PlayerHealthApplicationSettings playerHealth;
     PlayerStaminaApplicationSettings playerStamina;
     PlayerInventoryApplicationSettings playerInventory;
     FpsGraphicsSettings graphics;

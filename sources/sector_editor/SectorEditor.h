@@ -51,6 +51,8 @@
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
 #include "sector_editor/items/SectorEditorItemEditorService.h"
 #include "sector_editor/items/SectorEditorItemEditorState.h"
+#include "sector_editor/player/SectorEditorPlayerSettingsService.h"
+#include "sector_editor/player/SectorEditorPlayerSettingsState.h"
 #include "sector_demo/SectorSceneRuntime.h"
 #include "sector_demo/SectorUseInteraction.h"
 #include "sector_demo/SectorMaterialRegistry.h"
@@ -106,6 +108,7 @@ public:
     void Update(engine::EngineContext& context, float dt);
     void SetGameSessionExists(bool exists) { gameSessionExists = exists; }
     bool ConsumeClearGameSessionRequest();
+    bool ConsumePlayerAudioSettingsChanged();
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::EngineContext& context);
@@ -365,6 +368,13 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawPlayerSettingsModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawStatusPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -509,6 +519,7 @@ private:
     SectorEditorWeaponEditorService BuildWeaponEditorService();
     SectorEditorItemEditorService BuildItemEditorService();
     SectorEditorMaterialRegistryEditorService BuildMaterialRegistryEditorService();
+    SectorEditorPlayerSettingsService BuildPlayerSettingsService();
     void OpenWeaponEditor(bool fromPreview3D);
     void DrawItemEditor(
             engine::UIContext& ui,
@@ -573,6 +584,7 @@ private:
     SectorEditorWeaponEditorSessionState weaponEditorSessionState;
     SectorEditorItemEditorState itemEditorState;
     SectorEditorItemEditorSessionState itemEditorSessionState;
+    SectorEditorPlayerSettingsState playerSettingsState;
     SectorEditorMaterialRegistryEditorState materialRegistryEditorState;
     SectorEditorSoundEditorState soundEditorState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
@@ -619,6 +631,7 @@ private:
     bool initialized = false;
     bool gameSessionExists = false;
     bool clearGameSessionRequested = false;
+    bool playerAudioSettingsChanged = false;
 };
 
 } // namespace game

@@ -96,6 +96,13 @@ views and maps to world Z for generated 3D geometry.
 - `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
 - `3D Mode` (`Ctrl+D`, under `View`): rebuild the 3D preview from the current
   in-memory topology map, or return to 2D from preview mode.
+- `Settings -> Player`: open the application-wide Player Settings modal. Its
+  Stamina, Inventory, Audio, and Health tabs expose the player-specific values
+  stored in `assets/config/application_settings.json` that do not belong in the
+  end-user Graphics Settings screen. Apply validates and saves all player tabs;
+  Cancel leaves both the live settings and the JSON file unchanged. Audio sets
+  are selected from the discovered footstep/player sound catalogs and can be
+  previewed from the modal.
 - `Copy config` / `Paste config` (`Ctrl+C` / `Ctrl+V`): copy and paste the
   selected compatible editor configuration. Disabled commands do not fire.
 
@@ -962,14 +969,24 @@ and a bounded `0.25` world-unit committed-hit margin so navigation does not
 jitter at the melee boundary and nearby attackers resolve independently. A
 player who moves beyond that margin or behind cover still avoids the hit. AI
 never runs in either editor 3D preview control mode. Footstep and landing noise
-radii are application settings JSON values rather than editor controls. Runtime
-testing exposes `/god [on|off]`, `/freezeai [on|off]`, and
+radii are exposed under `Settings -> Player -> Audio`. Runtime testing exposes
+`/god [on|off]`, `/freezeai [on|off]`, and
 `/debugai [on|off]`; omitting the argument toggles the current campaign-session
 value. `/debugai` is game-mode only and draws fixed-size projected state labels
 above AI NPCs plus depth-tested vision, hearing, melee-range,
 last-known-player, active-sound-event, and path diagnostics. It is independent
 from the F8 navigation diagnostics and remains enabled across `/reload` until
 the campaign session ends or the command disables it.
+
+The game presentation shader also provides a configurable low-health screen
+effect under `Settings -> Player -> Health`. It starts below the authored health
+ratio (default `0.5`) and uses a smooth progression toward its configured
+maximum vignette opacity and desaturation as health approaches zero. The
+vignette is a soft rounded-screen mask tinted with the authored dark red color;
+it is applied after neutral tone mapping but before the final sRGB transfer, so
+it composes with the existing HDR presentation without another fullscreen pass.
+The effect is game-runtime-only: the editor 3D preview always supplies neutral
+presentation parameters, regardless of the settings.
 
 When player health reaches zero, game simulation stops behind a Game Over
 overlay. Its Main Menu button shuts down the level, clears the unsaved campaign
