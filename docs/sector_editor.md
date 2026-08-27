@@ -990,6 +990,29 @@ it composes with the existing HDR presentation without another fullscreen pass.
 The effect is game-runtime-only: the editor 3D preview always supplies neutral
 presentation parameters, regardless of the settings.
 
+The same Health tab configures three additional game-runtime-only responses.
+The heartbeat uses `audio/player/heartbeat_loop.wav` as a continuously mixed
+loop. By default it begins below `0.5` health at near-silent volume, reaches its
+configured full volume at `0.1` health, and increases pitch from `1.0` to `1.5`
+over that range. Volume and pitch respond smoothly to health changes; healing
+above the threshold fades and stops the loop, while disabling the effect or
+reaching Game Over stops it immediately. Missing or pending audio remains
+silent without preventing play.
+
+Low-health movement scaling is independently enabled and configured. It leaves
+walk, run, and crouched movement unchanged at or above the default `0.5` health
+ratio, then linearly reduces intentional horizontal movement to the configured
+`0.2` scale at zero health. It composes multiplicatively with stun slowdown.
+Jump physics, stamina behavior, and external knockback are not scaled.
+
+Low-health camera sway is also independently enabled. Its default strength is
+zero at `0.5` health and reaches full strength at `0.1`, with a nonlinear curve
+that keeps the onset subtle. Differently phased low-frequency lateral,
+vertical, pitch, yaw, and roll waves produce smooth irregular motion rather
+than frame-like jitter. This layer is applied only to the rendered game camera;
+it never changes the physical controller pose, collision, sector lookup,
+interaction origin, or physics.
+
 When player health reaches zero, game simulation stops behind a Game Over
 overlay. Its Main Menu button shuts down the level, clears the unsaved campaign
 and persistent script state, and returns the menu to `Start New Game`.

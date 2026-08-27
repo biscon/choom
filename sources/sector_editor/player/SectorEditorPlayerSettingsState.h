@@ -82,6 +82,23 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState healthOuterRadiusInput;
     engine::UIFloatInputState healthOpacityInput;
     engine::UIFloatInputState healthDesaturationInput;
+    engine::UIFloatInputState heartbeatStartThresholdInput;
+    engine::UIFloatInputState heartbeatFullEffectInput;
+    engine::UIFloatInputState heartbeatMaximumVolumeInput;
+    engine::UIFloatInputState heartbeatStartPitchInput;
+    engine::UIFloatInputState heartbeatMaximumPitchInput;
+    engine::UIFloatInputState heartbeatResponseInput;
+    engine::UIFloatInputState healthMovementThresholdInput;
+    engine::UIFloatInputState healthMovementMinimumSpeedInput;
+    engine::UIFloatInputState healthCameraThresholdInput;
+    engine::UIFloatInputState healthCameraFullEffectInput;
+    engine::UIFloatInputState healthCameraLateralInput;
+    engine::UIFloatInputState healthCameraVerticalInput;
+    engine::UIFloatInputState healthCameraPitchInput;
+    engine::UIFloatInputState healthCameraYawInput;
+    engine::UIFloatInputState healthCameraRollInput;
+    engine::UIFloatInputState healthCameraFrequencyInput;
+    engine::UIFloatInputState healthCameraResponseInput;
 };
 
 } // namespace game

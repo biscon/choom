@@ -239,8 +239,10 @@ private:
     bool gameOver = false;
     PlayerStamina playerStamina;
     PlayerWindedCameraState windedCamera;
+    PlayerLowHealthCameraState lowHealthCamera;
     PlayerHitCameraState hitCamera;
     PlayerBreathingAudioRuntime breathingAudio;
+    PlayerHeartbeatAudioRuntime heartbeatAudio;
     std::string failureError;
     SectorUseTarget useTarget;
     SectorUseHighlightState useHighlightState;

@@ -25,11 +25,19 @@ struct PlayerAudioRuntime {
     std::vector<PlayerSoundRuntimeSet> sets;
     std::vector<PlayerSoundRuntimeEvent> events;
     engine::MusicHandle heavyBreathing = engine::NullMusicHandle();
+    engine::SoundHandle heartbeat = engine::NullSoundHandle();
 };
 
 struct PlayerBreathingAudioRuntime {
     float volume = 0.0f;
     bool playing = false;
+};
+
+struct PlayerHeartbeatAudioRuntime {
+    engine::SoundPlaybackHandle playback =
+            engine::NullSoundPlaybackHandle();
+    float volume = 0.0f;
+    float pitch = 1.0f;
 };
 
 void RequestPlayerAudioAssets(
@@ -61,5 +69,17 @@ void StopPlayerBreathingAudio(
         engine::AudioSystem& audio,
         const PlayerAudioRuntime& playerAudio,
         PlayerBreathingAudioRuntime& runtime);
+void UpdatePlayerHeartbeatAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        const PlayerAudioRuntime& playerAudio,
+        PlayerHeartbeatAudioRuntime& runtime,
+        const PlayerHeartbeatAudioApplicationSettings& settings,
+        const Health& health,
+        float dt);
+void StopPlayerHeartbeatAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        PlayerHeartbeatAudioRuntime& runtime);
 
 } // namespace game

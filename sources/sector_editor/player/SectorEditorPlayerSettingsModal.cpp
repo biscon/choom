@@ -115,7 +115,7 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             break;
         case SectorEditorPlayerSettingsTab::Health:
             scrollState = &state.healthScroll;
-            contentHeight = 520.0f;
+            contentHeight = 1740.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -414,11 +414,87 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         drawFloat("player_health_desaturation", "Maximum desaturation",
                 health.maximumDesaturation,
                 state.healthDesaturationInput, 0.0f, 1.0f, 3);
+
+        PlayerHeartbeatAudioApplicationSettings& heartbeat =
+                state.draft.playerHealth.heartbeatAudio;
+        section("Low-health heartbeat (game runtime only)");
+        drawCheckbox("player_heartbeat_enabled", "Enabled",
+                heartbeat.enabled);
+        drawFloat("player_heartbeat_threshold", "Start threshold ratio",
+                heartbeat.startThresholdRatio,
+                state.heartbeatStartThresholdInput, 0.001f, 1.0f, 3);
+        drawFloat("player_heartbeat_full", "Full effect ratio",
+                heartbeat.fullEffectRatio,
+                state.heartbeatFullEffectInput, 0.0f, 0.999f, 3);
+        drawFloat("player_heartbeat_volume", "Maximum volume",
+                heartbeat.maximumVolume,
+                state.heartbeatMaximumVolumeInput, 0.0f, 1.0f, 3);
+        drawFloat("player_heartbeat_start_pitch", "Start pitch",
+                heartbeat.startPitch,
+                state.heartbeatStartPitchInput, 0.01f, 4.0f, 3);
+        drawFloat("player_heartbeat_max_pitch", "Maximum pitch",
+                heartbeat.maximumPitch,
+                state.heartbeatMaximumPitchInput, 0.01f, 4.0f, 3);
+        drawFloat("player_heartbeat_response", "Response (seconds)",
+                heartbeat.responseSeconds,
+                state.heartbeatResponseInput, 0.001f, 100.0f, 3);
+
+        PlayerLowHealthMovementApplicationSettings& movement =
+                state.draft.playerHealth.lowHealthMovement;
+        section("Low-health movement speed (game runtime only)");
+        drawCheckbox("player_health_movement_enabled", "Enabled",
+                movement.enabled);
+        drawFloat("player_health_movement_threshold",
+                "Start threshold ratio",
+                movement.startThresholdRatio,
+                state.healthMovementThresholdInput, 0.001f, 1.0f, 3);
+        drawFloat("player_health_movement_minimum",
+                "Speed scale at zero health",
+                movement.minimumSpeedScale,
+                state.healthMovementMinimumSpeedInput, 0.0f, 1.0f, 3);
+
+        PlayerLowHealthCameraApplicationSettings& camera =
+                state.draft.playerHealth.lowHealthCamera;
+        section("Low-health camera sway (game runtime only)");
+        drawCheckbox("player_health_camera_enabled", "Enabled",
+                camera.enabled);
+        drawFloat("player_health_camera_threshold", "Start threshold ratio",
+                camera.startThresholdRatio,
+                state.healthCameraThresholdInput, 0.001f, 1.0f, 3);
+        drawFloat("player_health_camera_full", "Full effect ratio",
+                camera.fullEffectRatio,
+                state.healthCameraFullEffectInput, 0.0f, 0.999f, 3);
+        drawFloat("player_health_camera_lateral",
+                "Lateral amplitude (world)",
+                camera.lateralAmplitudeWorld,
+                state.healthCameraLateralInput, 0.0f, 1.0f, 3);
+        drawFloat("player_health_camera_vertical",
+                "Vertical amplitude (world)",
+                camera.verticalAmplitudeWorld,
+                state.healthCameraVerticalInput, 0.0f, 1.0f, 3);
+        drawFloat("player_health_camera_pitch",
+                "Pitch amplitude (degrees)",
+                camera.pitchAmplitudeDegrees,
+                state.healthCameraPitchInput, 0.0f, 45.0f, 2);
+        drawFloat("player_health_camera_yaw",
+                "Yaw amplitude (degrees)",
+                camera.yawAmplitudeDegrees,
+                state.healthCameraYawInput, 0.0f, 45.0f, 2);
+        drawFloat("player_health_camera_roll",
+                "Roll amplitude (degrees)",
+                camera.rollAmplitudeDegrees,
+                state.healthCameraRollInput, 0.0f, 45.0f, 2);
+        drawFloat("player_health_camera_frequency", "Frequency (Hz)",
+                camera.frequencyHz,
+                state.healthCameraFrequencyInput, 0.0f, 20.0f, 2);
+        drawFloat("player_health_camera_response", "Response (seconds)",
+                camera.responseSeconds,
+                state.healthCameraResponseInput, 0.001f, 100.0f, 3);
         engine::Text(
                 ui, config, assets,
                 Rectangle{0.0f, y, scroll.viewport.width, 54.0f},
                 smallFont,
-                "This effect is never applied in editor 3D preview.",
+                "Low-health effects are never applied in editor 3D preview.",
                 engine::UITextJustify::Left,
                 config.mutedTextColor,
                 true);

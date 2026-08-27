@@ -2215,7 +2215,7 @@
         "swingSide": "back",
         "openAngleDegrees": 100.0,
         "openDistance": 2.643749952316284,
-        "interactionDistance": 2.5,
+        "interactionDistance": 3.0,
         "openSoundId": "door_open_01",
         "closeSoundId": "door_close_01"
       },

@@ -1003,8 +1003,10 @@ bool SectorGameSession::StartNew(
     gameOver = false;
     playerStamina = MakePlayerStamina(settings.playerStamina);
     ClearPlayerWindedCamera(windedCamera);
+    ClearPlayerLowHealthCamera(lowHealthCamera);
     ClearPlayerHitCamera(hitCamera);
     breathingAudio = PlayerBreathingAudioRuntime{};
+    heartbeatAudio = PlayerHeartbeatAudioRuntime{};
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
     if (path.empty()) {
@@ -1149,8 +1151,13 @@ void SectorGameSession::Shutdown(
                 context.audio,
                 *playerAudio,
                 breathingAudio);
+        StopPlayerHeartbeatAudio(
+                context.assets,
+                context.audio,
+                heartbeatAudio);
     } else {
         breathingAudio = PlayerBreathingAudioRuntime{};
+        heartbeatAudio = PlayerHeartbeatAudioRuntime{};
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
@@ -1171,6 +1178,7 @@ void SectorGameSession::Shutdown(
     aiDebugVisible = false;
     gameOver = false;
     ClearPlayerWindedCamera(windedCamera);
+    ClearPlayerLowHealthCamera(lowHealthCamera);
     ClearPlayerHitCamera(hitCamera);
     StopGameLevelLoading(loading);
     levelName.clear();
@@ -1401,6 +1409,11 @@ void SectorGameSession::Update(
             &npcGameplay);
     if (IsDepleted(playerHealth)) {
         gameOver = true;
+        ClearPlayerLowHealthCamera(lowHealthCamera);
+        StopPlayerHeartbeatAudio(
+                context.assets,
+                context.audio,
+                heartbeatAudio);
         SetInventoryOpen(false);
         ClearHeldObjectUse();
         LeaveSectorFreeflyController();
@@ -1447,10 +1460,15 @@ void SectorGameSession::Update(
                 engine::ConsumeEvent(event);
             });
 
+    if (applicationSettings != nullptr) {
+        input.movementSpeedScale *= PlayerLowHealthMovementSpeedScale(
+                playerHealth,
+                applicationSettings->playerHealth.lowHealthMovement);
+    }
     if (applicationSettings != nullptr && itemCampaign != nullptr) {
         if (playerStunRemainingSeconds > 0.0f) {
             input.run = false;
-            input.movementSpeedScale = 0.5f;
+            input.movementSpeedScale *= 0.5f;
         }
         if (input.run && !CanPlayerStaminaSprint(playerStamina)) {
             input.run = false;
@@ -1495,6 +1513,11 @@ void SectorGameSession::Update(
                 applicationSettings->playerStamina.windedCamera,
                 staminaRatio,
                 dt);
+        UpdatePlayerLowHealthCamera(
+                lowHealthCamera,
+                applicationSettings->playerHealth.lowHealthCamera,
+                playerHealth,
+                dt);
         if (playerAudio != nullptr) {
             UpdatePlayerBreathingAudio(
                     context.assets,
@@ -1503,6 +1526,14 @@ void SectorGameSession::Update(
                     breathingAudio,
                     applicationSettings->playerStamina.breathingAudio,
                     staminaRatio,
+                    dt);
+            UpdatePlayerHeartbeatAudio(
+                    context.assets,
+                    context.audio,
+                    *playerAudio,
+                    heartbeatAudio,
+                    applicationSettings->playerHealth.heartbeatAudio,
+                    playerHealth,
                     dt);
         }
     }
@@ -2266,18 +2297,42 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
             controller.visualStepOffsetY,
             controller.headBobState.offset,
             controller.landingDipState.offsetY);
-    SectorViewPose windedPose = basePose;
-    windedPose.position.y += windedCamera.verticalOffsetWorld;
-    windedPose.pitchRadians = ClampSectorFpsPitch(
-            windedPose.pitchRadians
+    SectorViewPose presentationPose = basePose;
+    presentationPose.position.y += windedCamera.verticalOffsetWorld;
+    presentationPose.pitchRadians = ClampSectorFpsPitch(
+            presentationPose.pitchRadians
                     + windedCamera.pitchOffsetDegrees * DEG2RAD);
+    const Vector3 cameraRight{
+            -std::sin(presentationPose.yawRadians),
+            0.0f,
+            std::cos(presentationPose.yawRadians)};
+    const Vector3 cameraForward{
+            std::cos(presentationPose.yawRadians),
+            0.0f,
+            std::sin(presentationPose.yawRadians)};
+    presentationPose.position = Vector3Add(
+            presentationPose.position,
+            Vector3Add(
+                    Vector3Scale(
+                            cameraRight,
+                            lowHealthCamera.positionOffsetLocal.x),
+                    Vector3Add(
+                            Vector3{0.0f,
+                                    lowHealthCamera.positionOffsetLocal.y,
+                                    0.0f},
+                            Vector3Scale(
+                                    cameraForward,
+                                    lowHealthCamera.positionOffsetLocal.z))));
     Vector3 cameraRotation =
             fpsPlayer.State().firing.cameraRecoil.rotationDegrees;
+    cameraRotation = Vector3Add(
+            cameraRotation,
+            lowHealthCamera.rotationDegrees);
     cameraRotation.x += hitCamera.rotationDegrees.x;
     cameraRotation.y += hitCamera.rotationDegrees.y;
     cameraRotation.z += hitCamera.rotationDegrees.z;
     scene.Renderer().ApplyRendererPose(ApplySectorFpsViewRotationOffset(
-            windedPose,
+            presentationPose,
             cameraRotation),
             false);
     controller.freeflyController.pose = basePose;
