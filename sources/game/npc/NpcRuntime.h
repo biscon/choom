@@ -34,6 +34,13 @@ enum class NpcAwarenessState : uint8_t {
     Detected
 };
 
+enum class NpcPursuitSlotKind : uint8_t {
+    None,
+    Melee,
+    Orbit,
+    Invalid
+};
+
 struct NpcAiState {
     std::string aiType;
     NpcPerceptionDefinition perception;
@@ -51,6 +58,11 @@ struct NpcAiState {
     bool attackHitResolved = false;
     bool scriptTakeoverPending = false;
     bool directAlertPending = false;
+    int pursuitSlotIndex = -1;
+    int pursuitSlotRing = -1;
+    NpcPursuitSlotKind pursuitSlotKind = NpcPursuitSlotKind::None;
+    float pursuitOrbitCooldownSeconds = 0.0f;
+    bool pursuitRetargetFailed = false;
 };
 
 struct NpcCombatState {
@@ -216,5 +228,6 @@ const char* NpcMovePhaseName(NpcMovePhase phase);
 const char* NpcMoveGaitName(NpcMoveGait gait);
 const char* NpcMoveAuthorityName(NpcMoveAuthority authority);
 const char* NpcDoorTraversalPhaseName(NpcDoorTraversalPhase phase);
+const char* NpcPursuitSlotKindName(NpcPursuitSlotKind kind);
 
 } // namespace game

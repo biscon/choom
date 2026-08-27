@@ -1,6 +1,7 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "engine/systems/AnimatedModelRaycast.h"
 #include "engine/systems/AnimatedModelSystem.h"
+#include "engine/audio/AudioSystem.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
@@ -5574,6 +5575,9 @@ void TestNpcAiDebugGeometryAndLabelsExposeRuntimeState()
     ai.attackCommitted = true;
     ai.attackHitResolved = false;
     ai.attack.rangeWorld = 1.25f;
+    ai.pursuitSlotIndex = 3;
+    ai.pursuitSlotRing = 1;
+    ai.pursuitSlotKind = game::NpcPursuitSlotKind::Orbit;
     game::Health health = game::MakeHealth(120);
     health.current = 75;
     game::NpcAiDebugLabelData label = game::BuildNpcAiDebugLabelData(
@@ -5589,7 +5593,9 @@ void TestNpcAiDebugGeometryAndLabelsExposeRuntimeState()
                   && std::strstr(label.lines[1].data(), "Detected") != nullptr
                   && std::strstr(label.lines[1].data(), "HP 75/120") != nullptr
                   && std::strstr(label.lines[2].data(), "2 corners") != nullptr
-                  && std::strstr(label.lines[3].data(), "hit pending") != nullptr,
+                  && std::strstr(label.lines[3].data(), "hit pending") != nullptr
+                  && std::strstr(label.lines[4].data(), "slot 3") != nullptr
+                  && std::strstr(label.lines[4].data(), "orbit") != nullptr,
           "AI debug labels report identity, awareness, health, path, freeze, and attack state");
 
     ai.attackCommitted = false;
@@ -5692,6 +5698,139 @@ void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
                   && game::ApplyNpcAiPlayerDamage(gameplay, 50) == 0
                   && notifications.count == 3,
           "lethal damage dispatches once and an already-dead player stays silent");
+}
+
+void TestNpcAiPursuitSlotsRouteAroundSupportingProp()
+{
+    game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorPlacedRuntimeObject obstacleObject;
+    obstacleObject.id = 940;
+    obstacleObject.kind = "static_model";
+    obstacleObject.staticModel.collision = true;
+    obstacleObject.staticModel.geometryFingerprint =
+            "npc-pursuit-slot-support";
+    map.runtimeObjects.push_back(obstacleObject);
+
+    game::SectorStaticModelCollider obstacle;
+    obstacle.placedObjectId = 940;
+    obstacle.center = {8.0f, 8.0f};
+    obstacle.axisX = {1.0f, 0.0f};
+    obstacle.axisZ = {0.0f, 1.0f};
+    obstacle.halfExtents = {2.0f, 2.0f};
+    obstacle.bottom = 0.0f;
+    obstacle.top = 0.75f;
+    obstacle.resolved = true;
+    const std::vector<game::SectorStaticModelCollider> colliders{obstacle};
+
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "pursuit-slot collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map, colliders);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "pursuit-slot navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity first = SpawnNavigationTestNpc(
+            world, "slot_chaser_a", 501, {2.0f, 0.0f, 7.0f}, 10,
+            2.0f, 3.0f);
+    const engine::Entity second = SpawnNavigationTestNpc(
+            world, "slot_chaser_b", 502, {2.0f, 0.0f, 9.0f}, 10,
+            2.0f, 3.0f);
+    for (engine::Entity entity : {first, second}) {
+        game::NpcRuntimeInstance& npc =
+                world.Get<game::NpcRuntimeInstance>(entity);
+        npc.hostile = true;
+        game::NpcAiState ai;
+        ai.aiType = game::kSeekAndDestroyNpcAiType;
+        ai.awareness = game::NpcAwarenessState::Detected;
+        ai.attack.rangeWorld = 1.2f;
+        world.Add(entity, ai);
+        world.Add(entity, game::MakeHealth(100));
+        world.Add(entity, game::NpcCombatState{});
+    }
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    game::NpcAiRuntime aiRuntime;
+    game::InitializeNpcAiRuntime(
+            aiRuntime, 8, navigation.Capacities().agentCapacity);
+    engine::AssetManager assets;
+    engine::AudioSystem audio;
+    game::Health playerHealth = game::MakeHealth(100);
+    game::NpcAiGameplayContext gameplay;
+    gameplay.playerFeetPosition = {8.0f, 0.75f, 8.0f};
+    gameplay.playerEyePosition = {8.0f, 1.95f, 8.0f};
+    gameplay.playerHealth = &playerHealth;
+    gameplay.playerGrounded = true;
+    gameplay.playerRadiusWorld = 0.25f;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, colliders, aiRuntime, gameplay, 0.25f);
+    const bool distinctSlots = aiRuntime.pursuitSlots.size() == 2
+            && aiRuntime.pursuitSlots[0].projected
+            && aiRuntime.pursuitSlots[1].projected
+            && aiRuntime.pursuitSlots[0].kind
+                    == game::NpcPursuitSlotKind::Orbit
+            && aiRuntime.pursuitSlots[1].kind
+                    == game::NpcPursuitSlotKind::Orbit
+            && Vector3Distance(
+                    aiRuntime.pursuitSlots[0].resolvedPosition,
+                    aiRuntime.pursuitSlots[1].resolvedPosition) > 0.25f;
+    Check(distinctSlots,
+          "wide supporting prop gives multiple chasers distinct orbit slots");
+    Check(game::GetNpcMoveStatus(npcNavigation, "slot_chaser_a").phase
+                        == game::NpcMovePhase::FollowingPath
+                  && game::GetNpcMoveStatus(npcNavigation, "slot_chaser_b").phase
+                        == game::NpcMovePhase::FollowingPath,
+          "prop-top chase starts valid routes instead of cancelling movement");
+
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const Vector3 firstStart =
+            world.Get<game::SectorObjectTransform>(first).position;
+    for (int frame = 0; frame < 40; ++frame) {
+        constexpr float Dt = 0.05f;
+        game::UpdateNpcAiSystem(
+                world, assets, audio, navigation, npcNavigation,
+                collisionWorld, doors, colliders, aiRuntime, gameplay, Dt);
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, Dt);
+    }
+    const Vector3 firstMoved =
+            world.Get<game::SectorObjectTransform>(first).position;
+    Check(Vector2Distance(
+                  {firstStart.x, firstStart.z},
+                  {firstMoved.x, firstMoved.z}) > 0.25f
+                  && game::GetNpcMoveStatus(
+                          npcNavigation, "slot_chaser_a").phase
+                          != game::NpcMovePhase::Cancelled,
+          "orbit-slot chaser remains mobile around an unreachable melee target");
+
+    gameplay.playerFeetPosition = {4.0f, 0.0f, 4.0f};
+    gameplay.playerEyePosition = {4.0f, 1.2f, 4.0f};
+    for (engine::Entity entity : {first, second}) {
+        game::NpcAiState& ai = world.Get<game::NpcAiState>(entity);
+        ai.awareness = game::NpcAwarenessState::Detected;
+        ai.directAlertPending = true;
+    }
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, colliders, aiRuntime, gameplay, 0.25f);
+    Check(!aiRuntime.pursuitSlots.empty()
+                  && aiRuntime.pursuitSlots[0].kind
+                          == game::NpcPursuitSlotKind::Melee,
+          "leaving the prop returns pursuit to an ordinary melee slot");
+
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
 }
 
 void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
@@ -5878,6 +6017,31 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
                   && scriptStatus.authority == game::NpcMoveAuthority::Ai
                   && scriptStatus.requestId == aiRequest.requestId,
           "script authority cannot overwrite active AI movement");
+    const uint64_t cancellationsBeforeRetarget =
+            npcNavigation.counters.cancellations;
+    const game::NpcMoveStatus beforeInvalidRetarget =
+            game::GetNpcMoveStatus(npcNavigation, "walker");
+    const game::NpcMoveRequestResult invalidRetarget =
+            game::RetargetNpcAiMove(
+                    world,
+                    navigation,
+                    collisionWorld,
+                    npcNavigation,
+                    "walker",
+                    {8.0f, 8.0f},
+                    game::NpcMoveGait::Run);
+    const game::NpcMoveStatus afterInvalidRetarget =
+            game::GetNpcMoveStatus(npcNavigation, "walker");
+    Check(!invalidRetarget.accepted
+                  && beforeInvalidRetarget.phase
+                          == game::NpcMovePhase::FollowingPath
+                  && afterInvalidRetarget.phase
+                          == game::NpcMovePhase::FollowingPath
+                  && afterInvalidRetarget.requestId
+                          == beforeInvalidRetarget.requestId
+                  && npcNavigation.counters.cancellations
+                          == cancellationsBeforeRetarget,
+          "failed AI retarget preserves the active route without recording a cancellation");
     Check(game::CancelNpcMove(
                   world,
                   navigation,
@@ -9385,6 +9549,7 @@ int main()
     TestNpcFootstepCadenceUsesResolvedTravel();
     TestNpcAiDebugGeometryAndLabelsExposeRuntimeState();
     TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
+    TestNpcAiPursuitSlotsRouteAroundSupportingProp();
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
     TestNpcNavigationReplansAroundDynamicTileCacheObstacle();
     TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate();

@@ -146,6 +146,15 @@ NpcAiDebugLabelData BuildNpcAiDebugLabelData(
                 ai.perception.hearingRangeWorld,
                 ai.attack.rangeWorld);
     }
+    if (ai.pursuitSlotIndex >= 0) {
+        Format(result.lines[4], "slot %d | ring %d | %s%s",
+                ai.pursuitSlotIndex,
+                ai.pursuitSlotRing,
+                NpcPursuitSlotKindName(ai.pursuitSlotKind),
+                ai.pursuitRetargetFailed ? " | RETARGET FAILED" : " | claimed");
+    } else {
+        Format(result.lines[4], "slot none");
+    }
     return result;
 }
 

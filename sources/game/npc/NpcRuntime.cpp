@@ -55,4 +55,15 @@ const char* NpcDoorTraversalPhaseName(NpcDoorTraversalPhase phase)
     return "Unknown";
 }
 
+const char* NpcPursuitSlotKindName(NpcPursuitSlotKind kind)
+{
+    switch (kind) {
+        case NpcPursuitSlotKind::None: return "none";
+        case NpcPursuitSlotKind::Melee: return "melee";
+        case NpcPursuitSlotKind::Orbit: return "orbit";
+        case NpcPursuitSlotKind::Invalid: return "invalid";
+    }
+    return "unknown";
+}
+
 } // namespace game

@@ -85,6 +85,17 @@ NpcMoveRequestResult RequestNpcMove(
         NpcMoveGait gait = NpcMoveGait::Walk,
         NpcMoveAuthority authority = NpcMoveAuthority::Programmatic);
 
+// Replaces an AI-owned route only after its new path has been found. A failed
+// retarget leaves the previous route, door holds, and request ID intact.
+NpcMoveRequestResult RetargetNpcAiMove(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        NpcNavigationRuntime& runtime,
+        std::string_view instanceId,
+        Vector2 destinationXZ,
+        NpcMoveGait gait = NpcMoveGait::Run);
+
 bool CancelNpcMove(
         engine::World& world,
         SectorNavigationWorld& navigation,

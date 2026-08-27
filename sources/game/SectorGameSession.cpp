@@ -1357,6 +1357,8 @@ void SectorGameSession::Update(
     };
     npcGameplay.godMode = godMode;
     npcGameplay.frozen = aiFrozen;
+    npcGameplay.playerGrounded = controller.fpsControllerState.grounded;
+    npcGameplay.playerRadiusWorld = obstacleConfig.playerRadius;
     scene.Update(
             context,
             topologyMap,

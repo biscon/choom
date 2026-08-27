@@ -78,7 +78,8 @@ bool SectorSceneRuntime::Rebuild(
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
-    InitializeNpcAiRuntime(npcAi);
+    InitializeNpcAiRuntime(
+            npcAi, 64, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     BeginLevelAudio(
             context,
@@ -103,7 +104,8 @@ bool SectorSceneRuntime::RebuildNavigationForMap(
     navigation.RequestRebuild();
     InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
-    InitializeNpcAiRuntime(npcAi);
+    InitializeNpcAiRuntime(
+            npcAi, 64, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     return true;
 }
@@ -147,7 +149,8 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
-    InitializeNpcAiRuntime(npcAi);
+    InitializeNpcAiRuntime(
+            npcAi, 64, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     BindRuntimeObjectAudio(context.world);
 }

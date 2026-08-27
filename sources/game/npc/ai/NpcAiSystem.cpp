@@ -6,6 +6,7 @@
 #include "engine/ecs/World.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "game/Health.h"
+#include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/ai/NpcAiTypes.h"
 #include "sector_demo/SectorCollisionWorld.h"
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 namespace game {
 namespace {
@@ -30,6 +32,12 @@ constexpr float LineOfSightEpsilon = 0.03f;
 constexpr float AttackSoundMinimumDistanceWorld = 1.0f;
 constexpr float AttackSoundMaximumDistanceWorld = 25.0f;
 constexpr float CommittedMeleeHitGraceWorld = 0.25f;
+constexpr float PursuitSlotPaddingWorld = 0.10f;
+constexpr float PursuitSlotAttackInsetWorld = 0.05f;
+constexpr float PursuitSupportHeightToleranceWorld = 0.10f;
+constexpr float PursuitOrbitRadiansPerSecond = 0.45f;
+constexpr float PursuitMeleeToleranceWorld = 0.10f;
+constexpr int MinimumPursuitSlotsPerRing = 6;
 
 NpcNavigationRecord* FindNavigationRecord(
         NpcNavigationRuntime& runtime,
@@ -174,11 +182,264 @@ void RequestAiMove(
         const Vector2 delta = Vector2Subtract(
                 status.requestedDestinationXZ, destination);
         if (Vector2Length(delta) <= ChaseRetargetDistanceWorld) return;
-        CancelNpcMove(world, navigation, runtime, npc.instanceId, status.requestId);
     }
-    RequestNpcMove(
+    RetargetNpcAiMove(
             world, navigation, collisionWorld, runtime,
-            npc.instanceId, destination, gait, NpcMoveAuthority::Ai);
+            npc.instanceId, destination, gait);
+}
+
+float Dot2(Vector2 a, Vector2 b)
+{
+    return a.x * b.x + a.y * b.y;
+}
+
+Vector2 ToColliderLocal(Vector2 point, const SectorStaticModelCollider& collider)
+{
+    const Vector2 relative{
+            point.x - collider.center.x,
+            point.y - collider.center.y};
+    return {Dot2(relative, collider.axisX), Dot2(relative, collider.axisZ)};
+}
+
+bool PlayerSupportedByCollider(
+        const NpcAiGameplayContext& gameplay,
+        const SectorStaticModelCollider& collider)
+{
+    if (!gameplay.playerGrounded || !collider.resolved || collider.failed
+            || std::fabs(gameplay.playerFeetPosition.y - collider.top)
+                    > PursuitSupportHeightToleranceWorld) {
+        return false;
+    }
+    const Vector2 local = ToColliderLocal(
+            {gameplay.playerFeetPosition.x, gameplay.playerFeetPosition.z},
+            collider);
+    const Vector2 closest{
+            std::clamp(local.x, -collider.halfExtents.x, collider.halfExtents.x),
+            std::clamp(local.y, -collider.halfExtents.y, collider.halfExtents.y)};
+    const Vector2 delta{local.x - closest.x, local.y - closest.y};
+    return Dot2(delta, delta)
+            <= gameplay.playerRadiusWorld * gameplay.playerRadiusWorld;
+}
+
+float RayExitDistanceFromExpandedCollider(
+        Vector2 origin,
+        Vector2 direction,
+        const SectorStaticModelCollider& collider,
+        float expansion)
+{
+    const Vector2 localOrigin = ToColliderLocal(origin, collider);
+    const Vector2 localDirection{
+            Dot2(direction, collider.axisX),
+            Dot2(direction, collider.axisZ)};
+    const Vector2 bounds{
+            collider.halfExtents.x + expansion,
+            collider.halfExtents.y + expansion};
+    if (std::fabs(localOrigin.x) > bounds.x
+            || std::fabs(localOrigin.y) > bounds.y) return 0.0f;
+    float exit = std::numeric_limits<float>::infinity();
+    if (std::fabs(localDirection.x) > 0.000001f) {
+        const float face = localDirection.x > 0.0f ? bounds.x : -bounds.x;
+        exit = std::min(exit, (face - localOrigin.x) / localDirection.x);
+    }
+    if (std::fabs(localDirection.y) > 0.000001f) {
+        const float face = localDirection.y > 0.0f ? bounds.y : -bounds.y;
+        exit = std::min(exit, (face - localOrigin.y) / localDirection.y);
+    }
+    return std::isfinite(exit) ? std::max(0.0f, exit) : 0.0f;
+}
+
+NpcPursuitSlot* FindPursuitSlot(
+        NpcAiRuntime& runtime,
+        engine::Entity owner)
+{
+    const auto found = std::find_if(
+            runtime.pursuitSlots.begin(),
+            runtime.pursuitSlots.end(),
+            [owner](const NpcPursuitSlot& slot) {
+                return slot.claimed && slot.owner == owner;
+            });
+    return found == runtime.pursuitSlots.end() ? nullptr : &*found;
+}
+
+void ResetPursuitAssignment(NpcAiState& ai)
+{
+    ai.pursuitSlotIndex = -1;
+    ai.pursuitSlotRing = -1;
+    ai.pursuitSlotKind = NpcPursuitSlotKind::None;
+    ai.pursuitRetargetFailed = false;
+}
+
+void BuildPlayerPursuitSlots(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders,
+        const std::vector<SectorStaticModelCollider>& staticColliders,
+        NpcNavigationRuntime& npcNavigation,
+        NpcAiRuntime& runtime,
+        const NpcAiGameplayContext& gameplay,
+        float dt)
+{
+    runtime.pursuitSlots.clear();
+    runtime.pursuitParticipants.clear();
+    runtime.pursuitOrbitPhaseRadians = std::fmod(
+            runtime.pursuitOrbitPhaseRadians
+                    + std::max(0.0f, dt) * PursuitOrbitRadiansPerSecond,
+            2.0f * PI);
+
+    for (const NpcNavigationRecord& record : npcNavigation.records) {
+        if (!record.occupied || !world.IsAlive(record.entity)
+                || !world.Has<NpcRuntimeInstance>(record.entity)
+                || !world.Has<NpcAiState>(record.entity)
+                || !world.Has<Health>(record.entity)
+                || !world.Has<NpcCombatState>(record.entity)) {
+            continue;
+        }
+        NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
+        NpcAiState& ai = world.Get<NpcAiState>(record.entity);
+        const NpcCombatState& combat = world.Get<NpcCombatState>(record.entity);
+        const Health& health = world.Get<Health>(record.entity);
+        const bool eligible = npc.hostile
+                && ai.aiType == kSeekAndDestroyNpcAiType
+                && ai.awareness == NpcAwarenessState::Detected
+                && !combat.dead && !IsDepleted(health);
+        if (!eligible) {
+            ResetPursuitAssignment(ai);
+            continue;
+        }
+        if (runtime.pursuitParticipants.size()
+                == runtime.pursuitParticipants.capacity()
+                && !runtime.pursuitCapacityWarningPrinted) {
+            runtime.pursuitCapacityWarningPrinted = true;
+            std::fprintf(stderr,
+                    "[NPC AI WARNING] pursuit-slot capacity exceeded; runtime allocation may occur.\n");
+        }
+        runtime.pursuitParticipants.push_back({
+                record.entity,
+                record.placedObjectId,
+                ai.attack.rangeWorld});
+    }
+    std::sort(
+            runtime.pursuitParticipants.begin(),
+            runtime.pursuitParticipants.end(),
+            [](const NpcPursuitParticipant& a,
+                    const NpcPursuitParticipant& b) {
+                return a.placedObjectId < b.placedObjectId;
+            });
+
+    const SectorNavigationSettings& nav = navigation.Settings();
+    const float spacing = nav.agentRadius * 2.0f + PursuitSlotPaddingWorld;
+    const Vector2 playerXZ{
+            gameplay.playerFeetPosition.x,
+            gameplay.playerFeetPosition.z};
+    for (size_t participantIndex = 0;
+            participantIndex < runtime.pursuitParticipants.size();
+            ++participantIndex) {
+        const NpcPursuitParticipant& participant =
+                runtime.pursuitParticipants[participantIndex];
+        NpcAiState& ai = world.Get<NpcAiState>(participant.entity);
+        float radius = std::max(
+                gameplay.playerRadiusWorld + nav.agentRadius
+                        + PursuitSlotAttackInsetWorld,
+                participant.attackRangeWorld - PursuitSlotAttackInsetWorld);
+        size_t ordinal = participantIndex;
+        int ring = 0;
+        int capacity = MinimumPursuitSlotsPerRing;
+        for (;;) {
+            capacity = std::max(
+                    MinimumPursuitSlotsPerRing,
+                    static_cast<int>(std::floor(2.0f * PI * radius / spacing)));
+            if (ordinal < static_cast<size_t>(capacity)) break;
+            ordinal -= static_cast<size_t>(capacity);
+            radius += spacing;
+            ++ring;
+        }
+        float radians = 2.0f * PI * static_cast<float>(ordinal)
+                / static_cast<float>(capacity);
+        Vector2 direction{std::sin(radians), std::cos(radians)};
+        float resolvedRadius = radius;
+        for (const SectorStaticModelCollider& collider : staticColliders) {
+            if (!PlayerSupportedByCollider(gameplay, collider)) continue;
+            resolvedRadius = std::max(
+                    resolvedRadius,
+                    RayExitDistanceFromExpandedCollider(
+                            playerXZ,
+                            direction,
+                            collider,
+                            nav.agentRadius + nav.cellSize)
+                            + nav.cellSize);
+        }
+
+        bool meleeCandidate = resolvedRadius
+                <= participant.attackRangeWorld + PursuitMeleeToleranceWorld;
+        if (!meleeCandidate) {
+            const float orbitDirection = (ring & 1) == 0 ? 1.0f : -1.0f;
+            radians += runtime.pursuitOrbitPhaseRadians * orbitDirection;
+            direction = {std::sin(radians), std::cos(radians)};
+            resolvedRadius = radius;
+            for (const SectorStaticModelCollider& collider : staticColliders) {
+                if (!PlayerSupportedByCollider(gameplay, collider)) continue;
+                resolvedRadius = std::max(
+                        resolvedRadius,
+                        RayExitDistanceFromExpandedCollider(
+                                playerXZ,
+                                direction,
+                                collider,
+                                nav.agentRadius + nav.cellSize)
+                                + nav.cellSize);
+            }
+        }
+
+        NpcPursuitSlot slot;
+        slot.owner = participant.entity;
+        slot.index = static_cast<int>(participantIndex);
+        slot.ring = ring;
+        slot.claimed = true;
+        slot.requestedPosition = {
+                playerXZ.x + direction.x * resolvedRadius,
+                gameplay.playerFeetPosition.y,
+                playerXZ.y + direction.y * resolvedRadius};
+        const int sectorId = collisionWorld.FindSectorContainingPoint(
+                {slot.requestedPosition.x, slot.requestedPosition.z});
+        SectorCollisionHeights heights;
+        if (sectorId != 0
+                && collisionWorld.GetSectorFloorCeiling(sectorId, &heights)) {
+            const SectorNavigationNearestPointResult nearest =
+                    navigation.FindNearestPoint({
+                            slot.requestedPosition.x,
+                            heights.floorZ,
+                            slot.requestedPosition.z});
+            if (nearest.status == SectorNavigationQueryStatus::Success) {
+                slot.projected = true;
+                slot.resolvedPosition = nearest.nearestPosition;
+            }
+        }
+        if (!slot.projected) {
+            slot.kind = NpcPursuitSlotKind::Invalid;
+        } else {
+            const Vector2 delta{
+                    gameplay.playerFeetPosition.x - slot.resolvedPosition.x,
+                    gameplay.playerFeetPosition.z - slot.resolvedPosition.z};
+            const bool inRange = Vector2Length(delta)
+                    <= participant.attackRangeWorld
+                            + PursuitMeleeToleranceWorld;
+            const bool lineOfSight = HasLineOfSight(
+                    collisionWorld,
+                    doorColliders,
+                    staticColliders,
+                    {slot.resolvedPosition.x,
+                            slot.resolvedPosition.y + 1.4f,
+                            slot.resolvedPosition.z},
+                    gameplay.playerEyePosition);
+            slot.kind = inRange && lineOfSight
+                    ? NpcPursuitSlotKind::Melee
+                    : NpcPursuitSlotKind::Orbit;
+        }
+        ai.pursuitSlotIndex = slot.index;
+        ai.pursuitSlotRing = slot.ring;
+        ai.pursuitSlotKind = slot.kind;
+        runtime.pursuitSlots.push_back(slot);
+    }
 }
 
 float AttackAnimationPhase(
@@ -288,19 +549,32 @@ void FinishAttack(NpcRuntimeInstance& npc, NpcAiState& ai)
 
 } // namespace
 
-void InitializeNpcAiRuntime(NpcAiRuntime& runtime, size_t soundCapacity)
+void InitializeNpcAiRuntime(
+        NpcAiRuntime& runtime,
+        size_t soundCapacity,
+        size_t pursuitCapacity)
 {
     runtime.playerSounds.clear();
     runtime.playerSounds.reserve(soundCapacity);
+    runtime.pursuitSlots.clear();
+    runtime.pursuitSlots.reserve(pursuitCapacity);
+    runtime.pursuitParticipants.clear();
+    runtime.pursuitParticipants.reserve(pursuitCapacity);
     runtime.nextSoundSequence = 1;
+    runtime.pursuitOrbitPhaseRadians = 0.0f;
     runtime.capacityWarningPrinted = false;
+    runtime.pursuitCapacityWarningPrinted = false;
 }
 
 void ClearNpcAiRuntime(NpcAiRuntime& runtime)
 {
     runtime.playerSounds.clear();
+    runtime.pursuitSlots.clear();
+    runtime.pursuitParticipants.clear();
     runtime.nextSoundSequence = 1;
+    runtime.pursuitOrbitPhaseRadians = 0.0f;
     runtime.capacityWarningPrinted = false;
+    runtime.pursuitCapacityWarningPrinted = false;
 }
 
 void EmitNpcPlayerSound(
@@ -413,6 +687,17 @@ void UpdateNpcAiSystem(
                         return sound.remainingSeconds <= 0.0f;
                     }),
             runtime.playerSounds.end());
+
+    BuildPlayerPursuitSlots(
+            world,
+            navigation,
+            collisionWorld,
+            doorColliders,
+            staticColliders,
+            npcNavigation,
+            runtime,
+            gameplay,
+            safeDt);
 
     world.ForEach<NpcRuntimeInstance, NpcAiState, SectorObjectTransform,
             Health, NpcCombatState>(
@@ -562,10 +847,25 @@ void UpdateNpcAiSystem(
             FinishAttack(npc, ai);
             ai.retargetRemainingSeconds -= safeDt;
             if (ai.retargetRemainingSeconds <= 0.0f) {
+                const NpcPursuitSlot* slot = FindPursuitSlot(runtime, entity);
+                const Vector2 destination = slot != nullptr && slot->projected
+                        ? Vector2{slot->resolvedPosition.x,
+                                slot->resolvedPosition.z}
+                        : Vector2{pursuitPosition.x, pursuitPosition.z};
+                const NpcMoveStatus before = GetNpcMoveStatus(
+                        npcNavigation, npc.instanceId);
                 RequestAiMove(
                         world, navigation, collisionWorld, npcNavigation, npc,
-                        {pursuitPosition.x, pursuitPosition.z},
+                        destination,
                         NpcMoveGait::Run);
+                const NpcMoveStatus after = GetNpcMoveStatus(
+                        npcNavigation, npc.instanceId);
+                ai.pursuitRetargetFailed = slot != nullptr
+                        && (!after.found
+                            || after.requestId == before.requestId)
+                        && Vector2Distance(
+                                before.requestedDestinationXZ,
+                                destination) > ChaseRetargetDistanceWorld;
                 ai.retargetRemainingSeconds = ChaseRetargetSeconds;
             }
             return;

@@ -22,6 +22,8 @@ namespace {
 constexpr float FloorOffsetWorld = 0.04f;
 constexpr float PathOffsetWorld = 0.07f;
 constexpr float LabelHeadClearanceWorld = 0.25f;
+constexpr float SlotOffsetWorld = 0.10f;
+constexpr float SlotMarkerRadiusWorld = 0.13f;
 
 Color LinearOverlayColor(Color color)
 {
@@ -110,6 +112,34 @@ void DrawLastKnownMarker(Vector3 position, Color color)
             color);
 }
 
+void DrawDashedLine(Vector3 start, Vector3 end, Color color)
+{
+    constexpr int Segments = 10;
+    for (int segment = 0; segment < Segments; segment += 2) {
+        const float begin = static_cast<float>(segment)
+                / static_cast<float>(Segments);
+        const float finish = static_cast<float>(segment + 1)
+                / static_cast<float>(Segments);
+        DrawLine3D(
+                Vector3Lerp(start, end, begin),
+                Vector3Lerp(start, end, finish),
+                color);
+    }
+}
+
+void DrawInvalidSlotMarker(Vector3 position, Color color)
+{
+    constexpr float HalfSize = 0.16f;
+    DrawLine3D(
+            {position.x - HalfSize, position.y, position.z - HalfSize},
+            {position.x + HalfSize, position.y, position.z + HalfSize},
+            color);
+    DrawLine3D(
+            {position.x - HalfSize, position.y, position.z + HalfSize},
+            {position.x + HalfSize, position.y, position.z - HalfSize},
+            color);
+}
+
 bool IsDeadNpc(const engine::World& world, engine::Entity entity)
 {
     if (!world.Has<Health>(entity)) return false;
@@ -177,6 +207,12 @@ void DrawNpcAiDebugWorld(
             Color{255, 214, 78, 245});
     const Color soundColor = LinearOverlayColor(
             Color{255, 170, 62, 205});
+    const Color meleeSlotColor = LinearOverlayColor(
+            Color{78, 244, 116, 245});
+    const Color orbitSlotColor = LinearOverlayColor(
+            Color{255, 178, 52, 245});
+    const Color invalidSlotColor = LinearOverlayColor(
+            Color{255, 64, 64, 245});
 
     BeginMode3D(renderer.RenderCamera());
     for (const NpcSoundEvent& sound : aiRuntime.playerSounds) {
@@ -191,6 +227,36 @@ void DrawNpcAiDebugWorld(
         DrawLine3D(center,
                 Vector3{center.x, center.y + 0.25f, center.z},
                 faded);
+    }
+
+    for (const NpcPursuitSlot& slot : aiRuntime.pursuitSlots) {
+        const Color color = slot.kind == NpcPursuitSlotKind::Melee
+                ? meleeSlotColor
+                : slot.kind == NpcPursuitSlotKind::Orbit
+                ? orbitSlotColor
+                : invalidSlotColor;
+        Vector3 requested = slot.requestedPosition;
+        requested.y += SlotOffsetWorld;
+        if (!slot.projected) {
+            DrawInvalidSlotMarker(requested, color);
+            continue;
+        }
+        Vector3 resolved = slot.resolvedPosition;
+        resolved.y += SlotOffsetWorld;
+        DrawGroundRing(resolved, SlotMarkerRadiusWorld, color, false);
+        if (slot.claimed) DrawSphere(resolved, 0.055f, color);
+        const Vector2 projectionDelta{
+                resolved.x - requested.x,
+                resolved.z - requested.z};
+        if (Vector2Length(projectionDelta) > 0.05f) {
+            DrawDashedLine(requested, resolved, color);
+        }
+        if (slot.claimed && world.IsAlive(slot.owner)
+                && world.Has<SectorObjectTransform>(slot.owner)) {
+            Vector3 owner = world.Get<SectorObjectTransform>(slot.owner).position;
+            owner.y += SlotOffsetWorld;
+            DrawLine3D(owner, resolved, color);
+        }
     }
 
     for (const NpcNavigationRecord& record : navigation.records) {

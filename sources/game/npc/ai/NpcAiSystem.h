@@ -30,10 +30,31 @@ struct NpcSoundEvent {
     float remainingSeconds = 0.0f;
 };
 
+struct NpcPursuitSlot {
+    engine::Entity owner = engine::NullEntity();
+    Vector3 requestedPosition{};
+    Vector3 resolvedPosition{};
+    int index = -1;
+    int ring = -1;
+    NpcPursuitSlotKind kind = NpcPursuitSlotKind::None;
+    bool claimed = false;
+    bool projected = false;
+};
+
+struct NpcPursuitParticipant {
+    engine::Entity entity = engine::NullEntity();
+    int placedObjectId = 0;
+    float attackRangeWorld = 0.0f;
+};
+
 struct NpcAiRuntime {
     std::vector<NpcSoundEvent> playerSounds;
+    std::vector<NpcPursuitSlot> pursuitSlots;
+    std::vector<NpcPursuitParticipant> pursuitParticipants;
     uint64_t nextSoundSequence = 1;
+    float pursuitOrbitPhaseRadians = 0.0f;
     bool capacityWarningPrinted = false;
+    bool pursuitCapacityWarningPrinted = false;
 };
 
 using NpcAiScriptTakeoverFn = void (*)(
@@ -56,9 +77,14 @@ struct NpcAiGameplayContext {
     NpcAiPlayerDamagedFn playerDamaged = nullptr;
     bool godMode = false;
     bool frozen = false;
+    bool playerGrounded = false;
+    float playerRadiusWorld = 0.25f;
 };
 
-void InitializeNpcAiRuntime(NpcAiRuntime& runtime, size_t soundCapacity = 64);
+void InitializeNpcAiRuntime(
+        NpcAiRuntime& runtime,
+        size_t soundCapacity = 64,
+        size_t pursuitCapacity = 128);
 void ClearNpcAiRuntime(NpcAiRuntime& runtime);
 void EmitNpcPlayerSound(
         NpcAiRuntime& runtime,

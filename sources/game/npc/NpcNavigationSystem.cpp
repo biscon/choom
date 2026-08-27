@@ -743,6 +743,115 @@ NpcMoveRequestResult RequestNpcMove(
     return {true, SectorNavigationQueryStatus::Success, record->requestId, {}};
 }
 
+NpcMoveRequestResult RetargetNpcAiMove(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        NpcNavigationRuntime& runtime,
+        std::string_view instanceId,
+        Vector2 destinationXZ,
+        NpcMoveGait gait)
+{
+    if (!IsValidNpcInstanceId(instanceId)) {
+        return FailRequest(
+                SectorNavigationQueryStatus::InvalidAgent,
+                "invalid NPC instance ID");
+    }
+    NpcNavigationRecord* record = FindRecord(runtime, instanceId);
+    if (record == nullptr || !world.IsAlive(record->entity)
+            || !world.Has<SectorObjectTransform>(record->entity)
+            || !world.Has<SectorObject>(record->entity)) {
+        return FailRequest(
+                SectorNavigationQueryStatus::InvalidAgent,
+                "NPC instance was not found");
+    }
+    const bool replacing = IsActive(record->phase);
+    if (replacing && record->authority != NpcMoveAuthority::Ai) {
+        return FailRequest(
+                SectorNavigationQueryStatus::InvalidAgent,
+                "NPC movement is not controlled by AI");
+    }
+    if (navigation.State() != SectorNavigationState::Ready) {
+        return FailRequest(
+                SectorNavigationQueryStatus::NavigationUnavailable,
+                "navigation is not ready");
+    }
+    if (!navigation.IsAgentRecordValid(record->agentHandle)) {
+        if (replacing) {
+            return FailRequest(
+                    SectorNavigationQueryStatus::InvalidAgent,
+                    "active AI navigation agent was invalid");
+        }
+        record->agentHandle = navigation.AllocateAgentRecord();
+        if (IsNull(record->agentHandle)) {
+            ++runtime.counters.capacityWarnings;
+            return FailRequest(
+                    SectorNavigationQueryStatus::CapacityExceeded,
+                    "navigation agent capacity was exceeded");
+        }
+    }
+
+    const SectorObjectTransform& transform =
+            world.Get<SectorObjectTransform>(record->entity);
+    const SectorObject& object = world.Get<SectorObject>(record->entity);
+    const int destinationSector =
+            collisionWorld.FindSectorContainingPointPreferCurrent(
+                    destinationXZ,
+                    object.currentSectorId);
+    SectorCollisionHeights destinationHeights;
+    if (destinationSector == 0
+            || !collisionWorld.GetSectorFloorCeiling(
+                    destinationSector,
+                    &destinationHeights)) {
+        return FailRequest(
+                SectorNavigationQueryStatus::DestinationNotOnNavmesh,
+                "destination is outside sector collision");
+    }
+    const Vector3 destination{
+            destinationXZ.x,
+            destinationHeights.floorZ,
+            destinationXZ.y};
+    const bool canOpenDoors = world.Has<NpcRuntimeInstance>(record->entity)
+            && world.Get<NpcRuntimeInstance>(record->entity).canOpenDoors;
+    const SectorNavigationPathResult path = navigation.FindPath(
+            transform.position,
+            destination,
+            {canOpenDoors});
+    if (path.status != SectorNavigationQueryStatus::Success) {
+        return FailRequest(
+                path.status,
+                SectorNavigationQueryStatusName(path.status));
+    }
+
+    // The old path remains live until this point. Releasing its fixed-capacity
+    // record guarantees CopySuccessfulPath can reuse that capacity.
+    if (!CopySuccessfulPath(world, navigation, *record, path)) {
+        ++runtime.counters.capacityWarnings;
+        return FailRequest(
+                SectorNavigationQueryStatus::CapacityExceeded,
+                "navigation path record capacity was exceeded");
+    }
+    record->phase = NpcMovePhase::FollowingPath;
+    record->gait = gait;
+    record->authority = NpcMoveAuthority::Ai;
+    record->requestId = AllocateRequestId(runtime);
+    record->requestedDestinationXZ = destinationXZ;
+    record->projectedDestination = path.projectedDestination;
+    record->desiredVelocity = {};
+    record->actualVelocity = {};
+    record->footstepDistanceWorld = 0.0f;
+    record->footstepEvent = false;
+    ResetProgressTracking(*record);
+    record->replanCooldownSeconds = 0.0f;
+    record->driftCheckSeconds = 0.0f;
+    record->replanCount = 0;
+    SetDiagnostic(*record, replacing
+            ? "following atomically retargeted AI path"
+            : "following AI pursuit path");
+    ++runtime.counters.requests;
+    return {true, SectorNavigationQueryStatus::Success, record->requestId, {}};
+}
+
 bool CancelNpcMove(
         engine::World& world,
         SectorNavigationWorld& navigation,
