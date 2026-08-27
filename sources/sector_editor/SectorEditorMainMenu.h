@@ -25,7 +25,8 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     ToggleShowAxes,
     ToggleShowIds,
     OpenLevelSettings,
-    OpenPlayerSettings
+    OpenPlayerSettings,
+    OpenSneakSettings
 };
 
 SectorEditorMainMenuCommand DrawSectorEditorMainMenu(

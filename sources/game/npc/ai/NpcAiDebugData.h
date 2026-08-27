@@ -10,7 +10,7 @@
 
 namespace game {
 
-inline constexpr size_t kNpcAiDebugLabelLineCount = 5;
+inline constexpr size_t kNpcAiDebugLabelLineCount = 6;
 inline constexpr size_t kNpcAiDebugLabelLineCapacity = 192;
 
 struct NpcAiDebugVisionGeometry {

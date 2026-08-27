@@ -66,4 +66,19 @@ const char* NpcPursuitSlotKindName(NpcPursuitSlotKind kind)
     return "unknown";
 }
 
+const char* NpcVisualDetectionReasonName(NpcVisualDetectionReason reason)
+{
+    switch (reason) {
+        case NpcVisualDetectionReason::NoPlayer: return "no player";
+        case NpcVisualDetectionReason::OutsideRange: return "out of range";
+        case NpcVisualDetectionReason::OutsideCone: return "outside cone";
+        case NpcVisualDetectionReason::Occluded: return "occluded";
+        case NpcVisualDetectionReason::Darkness: return "darkness";
+        case NpcVisualDetectionReason::Building: return "building";
+        case NpcVisualDetectionReason::Decaying: return "decaying";
+        case NpcVisualDetectionReason::Detected: return "detected";
+    }
+    return "unknown";
+}
+
 } // namespace game

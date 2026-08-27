@@ -124,6 +124,7 @@ struct NpcDefinition {
     float corpseFadeDurationSeconds = kDefaultNpcCorpseFadeDurationSeconds;
     std::string modelPath;
     float animationBlendSeconds = kDefaultNpcAnimationBlendSeconds;
+    std::string playerDetectedSoundPath;
     NpcPerceptionDefinition perception;
     NpcAmbientVocalizationDefinition ambientVocalizations;
     std::array<NpcActionDefinition, kNpcActionCount> actions;

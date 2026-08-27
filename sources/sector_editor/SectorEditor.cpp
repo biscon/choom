@@ -1474,6 +1474,13 @@ void SectorEditor::HandleMainMenuCommand(
                 BuildPlayerSettingsService().Open(*engineContext);
             }
             break;
+        case SectorEditorMainMenuCommand::OpenSneakSettings:
+            if (engineContext != nullptr) {
+                BuildPlayerSettingsService().Open(
+                        *engineContext,
+                        SectorEditorPlayerSettingsTab::Sneaking);
+            }
+            break;
         case SectorEditorMainMenuCommand::None:
             break;
     }

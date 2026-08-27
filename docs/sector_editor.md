@@ -936,6 +936,11 @@ the NPC Editor. Hostile/friendly remains faction and collision data. The AI Type
 dropdown filters registered AI descriptors by that alignment and also permits
 `None`. Per-definition perception fields author vision range, the full
 horizontal vision-cone angle, hearing range, and investigation duration.
+Hostile definitions may also assign an optional Player detected sound
+(`playerDetectedSound` in JSON). It plays spatially from the NPC whenever the
+NPC newly enters the Detected state, whether through sight or a direct alert,
+and may play again after the NPC loses and reacquires the player. Detection
+vocals interrupt ambient vocals but yield to hurt and death vocals.
 
 The semantic action list includes `Attack`. Like other actions it assigns a
 model animation and playback speed; it additionally authors normalized hit

@@ -3,6 +3,7 @@
 #include "sector_editor/player/SectorEditorPlayerSettingsState.h"
 
 #include <filesystem>
+#include <optional>
 
 namespace engine { struct EngineContext; }
 
@@ -22,7 +23,10 @@ public:
             std::string& statusText,
             std::filesystem::path settingsPath);
 
-    void Open(engine::EngineContext& context);
+    void Open(
+            engine::EngineContext& context,
+            std::optional<SectorEditorPlayerSettingsTab> selectedTab =
+                    std::nullopt);
     void Cancel(engine::EngineContext& context);
     void Shutdown(engine::EngineContext& context);
     SectorEditorPlayerSettingsSaveResult SaveAndClose(

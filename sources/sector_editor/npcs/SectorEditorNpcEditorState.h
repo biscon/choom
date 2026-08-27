@@ -26,6 +26,7 @@ struct SectorEditorNpcDefinitionDraft {
 
 enum class SectorEditorNpcAudioPickerTarget {
     None,
+    PlayerDetected,
     Action,
     Attack,
     AmbientAdd,

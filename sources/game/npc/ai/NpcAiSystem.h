@@ -1,6 +1,8 @@
 #pragma once
 
 #include "engine/ecs/Entity.h"
+#include "game/PlayerLightLevel.h"
+#include "game/PlayerSneak.h"
 #include "game/npc/NpcRuntime.h"
 
 #include <raylib.h>
@@ -55,6 +57,10 @@ struct NpcAiRuntime {
     float pursuitOrbitPhaseRadians = 0.0f;
     bool capacityWarningPrinted = false;
     bool pursuitCapacityWarningPrinted = false;
+    PlayerLightLevelSample playerLightLevel;
+    float playerLightDetectionFactor = 1.0f;
+    float playerCrouchBlend = 0.0f;
+    float playerMovementNoiseMultiplier = 1.0f;
 };
 
 using NpcAiScriptTakeoverFn = void (*)(
@@ -86,6 +92,11 @@ struct NpcAiGameplayContext {
     bool frozen = false;
     bool playerGrounded = false;
     float playerRadiusWorld = 0.25f;
+    float playerNormalizedLightLevel = 1.0f;
+    float playerCrouchBlend = 0.0f;
+    float playerMovementNoiseMultiplier = 1.0f;
+    const PlayerSneakApplicationSettings* playerSneakSettings = nullptr;
+    const PlayerLightLevelSample* playerLightLevel = nullptr;
 };
 
 void InitializeNpcAiRuntime(

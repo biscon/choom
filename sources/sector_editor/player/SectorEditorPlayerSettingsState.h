@@ -14,7 +14,8 @@ enum class SectorEditorPlayerSettingsTab {
     Stamina,
     Inventory,
     Audio,
-    Health
+    Health,
+    Sneaking
 };
 
 struct SectorEditorPlayerSoundEventDraft {
@@ -48,6 +49,7 @@ struct SectorEditorPlayerSettingsState {
     engine::UIScrollState inventoryScroll;
     engine::UIScrollState audioScroll;
     engine::UIScrollState healthScroll;
+    engine::UIScrollState sneakingScroll;
     std::string errorMessage;
 
     engine::UIFloatInputState staminaMaximumInput;
@@ -99,6 +101,15 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState healthCameraRollInput;
     engine::UIFloatInputState healthCameraFrequencyInput;
     engine::UIFloatInputState healthCameraResponseInput;
+
+    engine::UIFloatInputState sneakFullVisibilityLightInput;
+    engine::UIFloatInputState sneakDarknessCutoffInput;
+    engine::UIFloatInputState sneakLightHalfResponseInput;
+    engine::UIFloatInputState sneakDetectionBuildInput;
+    engine::UIFloatInputState sneakDetectionDecayInput;
+    engine::UIFloatInputState sneakProximityRangeInput;
+    engine::UIFloatInputState sneakCrouchVisualInput;
+    engine::UIFloatInputState sneakCrouchNoiseInput;
 };
 
 } // namespace game

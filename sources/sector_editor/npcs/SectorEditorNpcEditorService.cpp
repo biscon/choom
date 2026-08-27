@@ -74,6 +74,8 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
                     != right.corpseFadeDurationSeconds
             || left.modelPath != right.modelPath
             || left.animationBlendSeconds != right.animationBlendSeconds
+            || left.playerDetectedSoundPath
+                    != right.playerDetectedSoundPath
             || left.perception.visionRangeWorld
                     != right.perception.visionRangeWorld
             || left.perception.visionAngleDegrees
@@ -472,6 +474,15 @@ void SectorEditorNpcEditorService::SetSelectedAnimation(
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
     if (draft == nullptr) return;
     GetNpcAction(draft->definition, action).animation = animation;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedPlayerDetectedSound(
+        const std::string& soundPath)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.playerDetectedSoundPath = soundPath;
     state_.validationMessage.clear();
 }
 

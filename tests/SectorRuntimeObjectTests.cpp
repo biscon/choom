@@ -469,19 +469,37 @@ void TestNpcVocalPriorityDelayAndShufflePolicy()
     record.occupied = true;
     record.hurtSound = engine::SoundHandle{3, 1};
     record.deathSound = engine::SoundHandle{4, 1};
+    record.playerDetectedSound = engine::SoundHandle{5, 1};
+    record.playbackKind = game::NpcVocalPlaybackKind::Ambient;
     record.minimumAmbientDelaySeconds = 5.0f;
     record.maximumAmbientDelaySeconds = 12.0f;
     record.delayRandomState = 12345u;
     runtime.records.push_back(record);
 
     Check(game::QueueNpcVocalEvent(
+                  runtime, record.entity,
+                  game::NpcVocalEvent::PlayerDetected)
+                  && runtime.records.front().pendingEvent
+                          == game::NpcVocalEvent::PlayerDetected,
+          "NPC player-detected vocal queues over ambient playback");
+    Check(!game::QueueNpcVocalEvent(
+                  runtime, record.entity,
+                  game::NpcVocalEvent::PlayerDetected),
+          "repeated NPC player-detected vocal is ignored while pending");
+    Check(game::QueueNpcVocalEvent(
                   runtime, record.entity, game::NpcVocalEvent::Hurt)
                   && runtime.records.front().pendingEvent
                           == game::NpcVocalEvent::Hurt,
-          "NPC hurt vocal queues when its channel is available");
+          "NPC hurt vocal overrides a pending player-detected vocal");
     Check(!game::QueueNpcVocalEvent(
                   runtime, record.entity, game::NpcVocalEvent::Hurt),
           "repeated NPC hurt vocal is ignored while already pending");
+    runtime.records.front().pendingEvent = game::NpcVocalEvent::None;
+    runtime.records.front().playbackKind = game::NpcVocalPlaybackKind::Hurt;
+    Check(!game::QueueNpcVocalEvent(
+                  runtime, record.entity,
+                  game::NpcVocalEvent::PlayerDetected),
+          "NPC player-detected vocal cannot interrupt hurt playback");
     Check(game::QueueNpcVocalEvent(
                   runtime, record.entity, game::NpcVocalEvent::Death)
                   && runtime.records.front().pendingEvent
@@ -5613,8 +5631,10 @@ void TestNpcAiDebugGeometryAndLabelsExposeRuntimeState()
                   && std::strstr(label.lines[1].data(), "HP 75/120") != nullptr
                   && std::strstr(label.lines[2].data(), "2 corners") != nullptr
                   && std::strstr(label.lines[3].data(), "hit pending") != nullptr
-                  && std::strstr(label.lines[4].data(), "slot 3") != nullptr
-                  && std::strstr(label.lines[4].data(), "orbit") != nullptr,
+                  && std::strstr(label.lines[4].data(), "detect") != nullptr
+                  && std::strstr(label.lines[4].data(), "prox") != nullptr
+                  && std::strstr(label.lines[5].data(), "slot 3") != nullptr
+                  && std::strstr(label.lines[5].data(), "orbit") != nullptr,
           "AI debug labels report identity, awareness, health, path, freeze, and attack state");
 
     ai.attackCommitted = false;
@@ -5754,6 +5774,125 @@ void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
                   && notifications.count == 3
                   && notifications.attackHitCount == 3,
           "lethal NPC attacks dispatch once and an already-dead player stays silent");
+}
+
+void TestNpcPlayerDetectedAudioTransitionPolicy()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "player-detected audio collision fixture builds");
+
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "player-detected audio navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity entity = SpawnNavigationTestNpc(
+            world, "detection_audio", 780, {4.0f, 0.0f, 4.0f}, 10);
+    game::NpcRuntimeInstance& npc =
+            world.Get<game::NpcRuntimeInstance>(entity);
+    npc.hostile = true;
+    game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    transform.yawRadians = 0.0f;
+    game::NpcAiState ai;
+    ai.aiType = game::kSeekAndDestroyNpcAiType;
+    ai.perception.visionRangeWorld = 12.0f;
+    ai.perception.visionAngleDegrees = 120.0f;
+    ai.attack.rangeWorld = 0.5f;
+    world.Add(entity, ai);
+    world.Add(entity, game::MakeHealth(100));
+    world.Add(entity, game::NpcCombatState{});
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    game::NpcAiRuntime aiRuntime;
+    game::InitializeNpcAiRuntime(
+            aiRuntime, 4, navigation.Capacities().agentCapacity);
+    engine::AssetManager assets;
+    engine::AudioSystem audio;
+    game::Health playerHealth = game::MakeHealth(100);
+    game::NpcAiGameplayContext gameplay;
+    gameplay.playerFeetPosition = {4.0f, 0.0f, 6.0f};
+    gameplay.playerEyePosition = {4.0f, 1.2f, 6.0f};
+    gameplay.playerHealth = &playerHealth;
+    gameplay.playerGrounded = true;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> staticColliders;
+
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    Check(world.Get<game::NpcAiState>(entity).awareness
+                          == game::NpcAwarenessState::Detected
+                  && world.Get<game::NpcAiState>(entity)
+                          .playerDetectionAudioPending,
+          "first visual detection raises one player-detected audio event");
+
+    game::NpcAudioRuntime audioRuntime;
+    game::UpdateNpcAudioSystem(world, assets, audio, audioRuntime, 0.0f);
+    Check(!world.Get<game::NpcAiState>(entity)
+                       .playerDetectionAudioPending,
+          "player-detected audio event is consumed when no sound is assigned");
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    Check(!world.Get<game::NpcAiState>(entity)
+                       .playerDetectionAudioPending,
+          "continuous detection does not repeat the player-detected sound");
+
+    gameplay.playerFeetPosition = {40.0f, 0.0f, 40.0f};
+    gameplay.playerEyePosition = {40.0f, 1.2f, 40.0f};
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    Check(world.Get<game::NpcAiState>(entity).awareness
+                          != game::NpcAwarenessState::Detected,
+          "losing sight leaves detected state before reacquisition");
+
+    transform.position = {4.0f, 0.0f, 4.0f};
+    transform.yawRadians = 0.0f;
+    gameplay.playerFeetPosition = {4.0f, 0.0f, 6.0f};
+    gameplay.playerEyePosition = {4.0f, 1.2f, 6.0f};
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    Check(world.Get<game::NpcAiState>(entity).awareness
+                          == game::NpcAwarenessState::Detected
+                  && world.Get<game::NpcAiState>(entity)
+                          .playerDetectionAudioPending,
+          "visual reacquisition raises a new player-detected audio event");
+
+    game::NpcAiState& state = world.Get<game::NpcAiState>(entity);
+    state.awareness = game::NpcAwarenessState::Unaware;
+    state.playerDetectionAudioPending = false;
+    game::AlertNpcToPlayerPosition(world, entity, gameplay.playerFeetPosition);
+    Check(state.awareness == game::NpcAwarenessState::Detected
+                  && state.playerDetectionAudioPending,
+          "direct alerts raise the same player-detected audio event");
+    state.playerDetectionAudioPending = false;
+    game::AlertNpcToPlayerPosition(world, entity, gameplay.playerFeetPosition);
+    Check(!state.playerDetectionAudioPending,
+          "repeated direct alerts do not replay while already detected");
+
+    npc.hostile = false;
+    state.awareness = game::NpcAwarenessState::Unaware;
+    game::AlertNpcToPlayerPosition(world, entity, gameplay.playerFeetPosition);
+    Check(!state.playerDetectionAudioPending,
+          "non-hostile NPC alerts do not raise player-detected audio events");
+
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
 }
 
 void TestNpcAiPursuitSlotsRouteAroundSupportingProp()
@@ -9640,6 +9779,7 @@ int main()
     TestNpcFootstepCadenceUsesResolvedTravel();
     TestNpcAiDebugGeometryAndLabelsExposeRuntimeState();
     TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
+    TestNpcPlayerDetectedAudioTransitionPolicy();
     TestNpcAiPursuitSlotsRouteAroundSupportingProp();
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
     TestNpcNavigationReplansAroundDynamicTileCacheObstacle();

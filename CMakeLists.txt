@@ -495,6 +495,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
+            sources/game/PlayerLightLevel.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
@@ -505,6 +506,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorDynamicPointLightSelection.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorLightmapReport.cpp
@@ -515,6 +517,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
+            sources/engine/render/ColorTransfer.cpp
             sources/sector_demo/renderer/SectorLightAtmosphere.cpp
             sources/sector_demo/renderer/SectorLocalFogLighting.cpp
     )
@@ -743,6 +746,17 @@ if(BUILD_TESTING)
             ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(item_definition_tests PRIVATE raylib)
     add_test(NAME item_definition COMMAND item_definition_tests)
+
+    add_executable(player_sneak_tests
+            tests/PlayerSneakTests.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
+    )
+    target_include_directories(player_sneak_tests PRIVATE sources)
+    target_link_libraries(player_sneak_tests PRIVATE raylib)
+    add_test(NAME player_sneak COMMAND player_sneak_tests)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp

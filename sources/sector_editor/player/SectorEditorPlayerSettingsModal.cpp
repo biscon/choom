@@ -73,10 +73,11 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                     modal.width - 56.0f, 42.0f},
             font, "Player Settings");
 
-    const char* tabNames[] = {"Stamina", "Inventory", "Audio", "Health"};
+    const char* tabNames[] = {
+            "Stamina", "Inventory", "Audio", "Health", "Sneaking"};
     const float tabY = modal.y + 70.0f;
-    const float tabWidth = (modal.width - 56.0f - 24.0f) / 4.0f;
-    for (int i = 0; i < 4; ++i) {
+    const float tabWidth = (modal.width - 56.0f - 32.0f) / 5.0f;
+    for (int i = 0; i < 5; ++i) {
         const bool active = static_cast<int>(state.activeTab) == i;
         if (engine::ToolButton(
                     ui, config, input, assets,
@@ -116,6 +117,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         case SectorEditorPlayerSettingsTab::Health:
             scrollState = &state.healthScroll;
             contentHeight = 1740.0f;
+            break;
+        case SectorEditorPlayerSettingsTab::Sneaking:
+            scrollState = &state.sneakingScroll;
+            contentHeight = 520.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -372,6 +377,54 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                     engine::UITextJustify::Left,
                     config.mutedTextColor);
         }
+    } else if (state.activeTab == SectorEditorPlayerSettingsTab::Sneaking) {
+        PlayerSneakApplicationSettings& sneak = state.draft.playerSneak;
+        section("Light-aware visual detection");
+        drawFloat("player_sneak_full_visibility_light",
+                "Full visibility light level",
+                sneak.fullVisibilityLightLevel,
+                state.sneakFullVisibilityLightInput,
+                0.001f, 1000.0f, 3);
+        drawFloat("player_sneak_darkness_cutoff",
+                "Darkness cutoff (normalized)",
+                sneak.darknessCutoffNormalized,
+                state.sneakDarknessCutoffInput,
+                0.0f, 0.999f, 3);
+        drawFloat("player_sneak_light_half_response",
+                "Light half-response above cutoff",
+                sneak.lightHalfResponseRangeNormalized,
+                state.sneakLightHalfResponseInput,
+                0.0001f,
+                std::max(
+                        0.0001f,
+                        1.0f - sneak.darknessCutoffNormalized - 0.0001f),
+                4);
+        drawFloat("player_sneak_detection_build",
+                "Full-light detection time (seconds)",
+                sneak.visualDetectionBuildSeconds,
+                state.sneakDetectionBuildInput,
+                0.001f, 600.0f, 3);
+        drawFloat("player_sneak_detection_decay",
+                "Detection decay time (seconds)",
+                sneak.visualDetectionDecaySeconds,
+                state.sneakDetectionDecayInput,
+                0.001f, 600.0f, 3);
+        drawFloat("player_sneak_proximity_range",
+                "Darkness proximity outer range (world)",
+                sneak.darknessProximityRangeWorld,
+                state.sneakProximityRangeInput,
+                0.0f, 1000.0f, 3);
+        section("Crouching modifiers");
+        drawFloat("player_sneak_crouch_visual",
+                "Visual detection multiplier",
+                sneak.crouchVisualDetectionMultiplier,
+                state.sneakCrouchVisualInput,
+                0.0f, 1.0f, 3);
+        drawFloat("player_sneak_crouch_noise",
+                "Movement noise multiplier",
+                sneak.crouchMovementNoiseMultiplier,
+                state.sneakCrouchNoiseInput,
+                0.0f, 1.0f, 3);
     } else {
         PlayerLowHealthVisualApplicationSettings& health =
                 state.draft.playerHealth.lowHealthVisual;

@@ -28,6 +28,16 @@
     "pickupVacuumDurationSeconds": 0.44999998807907104,
     "pickupVacuumTargetHeightWorld": 0.75
   },
+  "playerSneak": {
+    "fullVisibilityLightLevel": 1.0,
+    "darknessCutoffNormalized": 0.05000000074505806,
+    "lightHalfResponseRangeNormalized": 0.05000000074505806,
+    "visualDetectionBuildSeconds": 0.75,
+    "visualDetectionDecaySeconds": 1.25,
+    "darknessProximityRangeWorld": 4.0,
+    "crouchVisualDetectionMultiplier": 0.8500000238418579,
+    "crouchMovementNoiseMultiplier": 0.25
+  },
   "playerHealth": {
     "lowHealthVisual": {
       "enabled": true,

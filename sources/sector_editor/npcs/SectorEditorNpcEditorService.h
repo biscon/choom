@@ -49,6 +49,7 @@ public:
             const std::string& modelPath,
             engine::AssetManager& assets);
     void SetSelectedAnimation(NpcAction action, const std::string& animation);
+    void SetSelectedPlayerDetectedSound(const std::string& soundPath);
     void SetSelectedActionSound(NpcAction action, const std::string& soundPath);
     void SetSelectedAttackSound(const std::string& soundPath);
     void SetSelectedAnimationSpeed(NpcAction action, float speed);

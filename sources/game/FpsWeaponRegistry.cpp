@@ -1332,6 +1332,68 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                         static_cast<float>(value);
             }
         }
+        const auto playerSneak = root.find("playerSneak");
+        if (playerSneak != root.end()) {
+            const std::string sneakContext =
+                    "application settings.playerSneak";
+            if (!playerSneak->is_object()) {
+                Fail(sneakContext + " must be an object");
+            }
+            parsed.playerSneak.fullVisibilityLightLevel = OptionalNumber(
+                    *playerSneak,
+                    "fullVisibilityLightLevel",
+                    sneakContext).value_or(
+                            parsed.playerSneak.fullVisibilityLightLevel);
+            parsed.playerSneak.darknessCutoffNormalized = OptionalNumber(
+                    *playerSneak,
+                    "darknessCutoffNormalized",
+                    sneakContext).value_or(
+                            parsed.playerSneak.darknessCutoffNormalized);
+            const std::optional<double> lightHalfResponseRange =
+                    OptionalNumber(
+                            *playerSneak,
+                            "lightHalfResponseRangeNormalized",
+                            sneakContext);
+            if (lightHalfResponseRange.has_value()) {
+                parsed.playerSneak.lightHalfResponseRangeNormalized =
+                        static_cast<float>(*lightHalfResponseRange);
+            } else {
+                parsed.playerSneak.lightHalfResponseRangeNormalized = std::min(
+                        parsed.playerSneak.lightHalfResponseRangeNormalized,
+                        (1.0f - parsed.playerSneak.darknessCutoffNormalized)
+                                * 0.5f);
+            }
+            parsed.playerSneak.visualDetectionBuildSeconds = OptionalNumber(
+                    *playerSneak,
+                    "visualDetectionBuildSeconds",
+                    sneakContext).value_or(
+                            parsed.playerSneak.visualDetectionBuildSeconds);
+            parsed.playerSneak.visualDetectionDecaySeconds = OptionalNumber(
+                    *playerSneak,
+                    "visualDetectionDecaySeconds",
+                    sneakContext).value_or(
+                            parsed.playerSneak.visualDetectionDecaySeconds);
+            parsed.playerSneak.darknessProximityRangeWorld = OptionalNumber(
+                    *playerSneak,
+                    "darknessProximityRangeWorld",
+                    sneakContext).value_or(
+                            parsed.playerSneak.darknessProximityRangeWorld);
+            parsed.playerSneak.crouchVisualDetectionMultiplier = OptionalNumber(
+                    *playerSneak,
+                    "crouchVisualDetectionMultiplier",
+                    sneakContext).value_or(
+                            parsed.playerSneak.crouchVisualDetectionMultiplier);
+            parsed.playerSneak.crouchMovementNoiseMultiplier = OptionalNumber(
+                    *playerSneak,
+                    "crouchMovementNoiseMultiplier",
+                    sneakContext).value_or(
+                            parsed.playerSneak.crouchMovementNoiseMultiplier);
+            const std::string sneakError = PlayerSneakSettingsError(
+                    parsed.playerSneak);
+            if (!sneakError.empty()) {
+                Fail(sneakContext + "." + sneakError);
+            }
+        }
         const auto playerHealth = root.find("playerHealth");
         if (playerHealth != root.end()) {
             const std::string healthContext = "application settings.playerHealth";
@@ -2073,6 +2135,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings playerStamina." + staminaError);
         return false;
     }
+    const std::string sneakError = PlayerSneakSettingsError(
+            settings.playerSneak);
+    if (!sneakError.empty()) {
+        SetError(error, "application settings playerSneak." + sneakError);
+        return false;
+    }
     std::unordered_set<std::string> playerSoundEventIds;
     for (const PlayerSoundEventSettings& event : settings.playerSounds.events) {
         if (!ValidSoundSetId(event.id)
@@ -2126,6 +2194,23 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     settings.playerInventory.pickupVacuumDurationSeconds},
             {"pickupVacuumTargetHeightWorld",
                     settings.playerInventory.pickupVacuumTargetHeightWorld}};
+    root["playerSneak"] = {
+            {"fullVisibilityLightLevel",
+                    settings.playerSneak.fullVisibilityLightLevel},
+            {"darknessCutoffNormalized",
+                    settings.playerSneak.darknessCutoffNormalized},
+            {"lightHalfResponseRangeNormalized",
+                    settings.playerSneak.lightHalfResponseRangeNormalized},
+            {"visualDetectionBuildSeconds",
+                    settings.playerSneak.visualDetectionBuildSeconds},
+            {"visualDetectionDecaySeconds",
+                    settings.playerSneak.visualDetectionDecaySeconds},
+            {"darknessProximityRangeWorld",
+                    settings.playerSneak.darknessProximityRangeWorld},
+            {"crouchVisualDetectionMultiplier",
+                    settings.playerSneak.crouchVisualDetectionMultiplier},
+            {"crouchMovementNoiseMultiplier",
+                    settings.playerSneak.crouchMovementNoiseMultiplier}};
     const PlayerLowHealthVisualApplicationSettings& lowHealthVisual =
             settings.playerHealth.lowHealthVisual;
     const PlayerHeartbeatAudioApplicationSettings& heartbeatAudio =

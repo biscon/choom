@@ -41,6 +41,17 @@ enum class NpcPursuitSlotKind : uint8_t {
     Invalid
 };
 
+enum class NpcVisualDetectionReason : uint8_t {
+    NoPlayer,
+    OutsideRange,
+    OutsideCone,
+    Occluded,
+    Darkness,
+    Building,
+    Decaying,
+    Detected
+};
+
 struct NpcAiState {
     std::string aiType;
     NpcPerceptionDefinition perception;
@@ -62,6 +73,14 @@ struct NpcAiState {
     int pursuitSlotRing = -1;
     NpcPursuitSlotKind pursuitSlotKind = NpcPursuitSlotKind::None;
     float pursuitOrbitCooldownSeconds = 0.0f;
+    float visualDetectionProgress = 0.0f;
+    float visualLightDetectionFactor = 0.0f;
+    float visualProximityDetectionFactor = 0.0f;
+    float visualDetectionRateFactor = 0.0f;
+    NpcVisualDetectionReason visualDetectionReason =
+            NpcVisualDetectionReason::NoPlayer;
+    bool playerInGeometricSight = false;
+    bool playerDetectionAudioPending = false;
     bool pursuitRetargetFailed = false;
 };
 
@@ -229,5 +248,6 @@ const char* NpcMoveGaitName(NpcMoveGait gait);
 const char* NpcMoveAuthorityName(NpcMoveAuthority authority);
 const char* NpcDoorTraversalPhaseName(NpcDoorTraversalPhase phase);
 const char* NpcPursuitSlotKindName(NpcPursuitSlotKind kind);
+const char* NpcVisualDetectionReasonName(NpcVisualDetectionReason reason);
 
 } // namespace game

@@ -153,6 +153,9 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
             const std::string selected = audioPicker.SelectedPath(
                     state.audioPicker.assetPicker);
             switch (state.audioPicker.target) {
+                case SectorEditorNpcAudioPickerTarget::PlayerDetected:
+                    editor.SetSelectedPlayerDetectedSound(selected);
+                    break;
                 case SectorEditorNpcAudioPickerTarget::Action:
                     editor.SetSelectedActionSound(
                             state.audioPicker.action, selected);
@@ -273,7 +276,7 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         editor.RefreshAnimationOptions(assets);
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
-        const float contentHeight = 20.0f * (RowHeight + RowGap)
+        const float contentHeight = 21.0f * (RowHeight + RowGap)
                 + static_cast<float>(
                         selected->definition.ambientVocalizations.soundPaths.size())
                         * (RowHeight + RowGap)
@@ -366,6 +369,54 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                     aiOptionIds[static_cast<size_t>(selectedAi)]);
         }
         y += RowHeight + RowGap;
+
+        if (selected->definition.hostile) {
+            drawLabel("Player detected sound");
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{
+                            fieldX,
+                            y,
+                            std::max(0.0f, fieldW - 206.0f),
+                            RowHeight},
+                    smallFont,
+                    selected->definition.playerDetectedSoundPath.empty()
+                            ? "<none>"
+                            : selected->definition
+                                    .playerDetectedSoundPath.c_str(),
+                    engine::UITextJustify::Left,
+                    selected->definition.playerDetectedSoundPath.empty()
+                            ? config.mutedTextColor
+                            : config.textColor);
+            if (engine::Button(
+                        ui, config, input, assets,
+                        "sector_editor_npc_pick_player_detected_sound",
+                        Rectangle{
+                                fieldX + fieldW - 196.0f,
+                                y,
+                                92.0f,
+                                RowHeight},
+                        font, "Pick")) {
+                state.audioPicker.target =
+                        SectorEditorNpcAudioPickerTarget::PlayerDetected;
+                audioPicker.Open(
+                        state.audioPicker.assetPicker,
+                        "Pick Player Detected Sound",
+                        selected->definition.playerDetectedSoundPath);
+            }
+            if (engine::Button(
+                        ui, config, input, assets,
+                        "sector_editor_npc_clear_player_detected_sound",
+                        Rectangle{
+                                fieldX + fieldW - 96.0f,
+                                y,
+                                96.0f,
+                                RowHeight},
+                        font, "Clear")) {
+                editor.SetSelectedPlayerDetectedSound({});
+            }
+            y += RowHeight + RowGap;
+        }
 
         drawLabel("Vision range world");
         float visionRange = selected->definition.perception.visionRangeWorld;

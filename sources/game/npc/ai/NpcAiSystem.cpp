@@ -121,7 +121,14 @@ bool HasLineOfSight(
     return true;
 }
 
-bool CanSeePlayer(
+struct NpcPlayerSightEvaluation {
+    bool visible = false;
+    float distanceWorld = 0.0f;
+    NpcVisualDetectionReason failureReason =
+            NpcVisualDetectionReason::NoPlayer;
+};
+
+NpcPlayerSightEvaluation EvaluatePlayerSight(
         const NpcAiState& ai,
         const SectorObjectTransform& transform,
         const SectorCollisionWorld& collisionWorld,
@@ -130,11 +137,16 @@ bool CanSeePlayer(
         Vector3 playerFeet,
         Vector3 playerEye)
 {
+    NpcPlayerSightEvaluation result;
     const Vector2 toPlayer{
             playerFeet.x - transform.position.x,
             playerFeet.z - transform.position.z};
     const float distance = Vector2Length(toPlayer);
-    if (distance > ai.perception.visionRangeWorld) return false;
+    result.distanceWorld = distance;
+    if (distance > ai.perception.visionRangeWorld) {
+        result.failureReason = NpcVisualDetectionReason::OutsideRange;
+        return result;
+    }
     if (distance > 0.0001f) {
         const Vector2 forward{
                 std::sin(transform.yawRadians),
@@ -143,15 +155,22 @@ bool CanSeePlayer(
                 forward, Vector2Scale(toPlayer, 1.0f / distance));
         const float minimumCosine = std::cos(
                 ai.perception.visionAngleDegrees * 0.5f * DEG2RAD);
-        if (cosine < minimumCosine) return false;
+        if (cosine < minimumCosine) {
+            result.failureReason = NpcVisualDetectionReason::OutsideCone;
+            return result;
+        }
     }
     const Vector3 npcEye{
             transform.position.x,
             transform.position.y + 1.4f,
             transform.position.z};
-    return HasLineOfSight(
+    result.visible = HasLineOfSight(
             collisionWorld, doorColliders, staticColliders,
             npcEye, playerEye);
+    result.failureReason = result.visible
+            ? NpcVisualDetectionReason::Building
+            : NpcVisualDetectionReason::Occluded;
+    return result;
 }
 
 void CancelAiMove(
@@ -564,6 +583,10 @@ void InitializeNpcAiRuntime(
     runtime.pursuitOrbitPhaseRadians = 0.0f;
     runtime.capacityWarningPrinted = false;
     runtime.pursuitCapacityWarningPrinted = false;
+    runtime.playerLightLevel = {};
+    runtime.playerLightDetectionFactor = 1.0f;
+    runtime.playerCrouchBlend = 0.0f;
+    runtime.playerMovementNoiseMultiplier = 1.0f;
 }
 
 void ClearNpcAiRuntime(NpcAiRuntime& runtime)
@@ -575,6 +598,10 @@ void ClearNpcAiRuntime(NpcAiRuntime& runtime)
     runtime.pursuitOrbitPhaseRadians = 0.0f;
     runtime.capacityWarningPrinted = false;
     runtime.pursuitCapacityWarningPrinted = false;
+    runtime.playerLightLevel = {};
+    runtime.playerLightDetectionFactor = 1.0f;
+    runtime.playerCrouchBlend = 0.0f;
+    runtime.playerMovementNoiseMultiplier = 1.0f;
 }
 
 void EmitNpcPlayerSound(
@@ -603,10 +630,18 @@ void AlertNpcToPlayerPosition(
 {
     if (!world.IsAlive(entity) || !world.Has<NpcAiState>(entity)) return;
     NpcAiState& ai = world.Get<NpcAiState>(entity);
+    const bool newlyDetected = ai.awareness != NpcAwarenessState::Detected;
     ai.awareness = NpcAwarenessState::Detected;
+    ai.visualDetectionProgress = 1.0f;
+    ai.visualDetectionReason = NpcVisualDetectionReason::Detected;
     ai.lastKnownPlayerPosition = playerPositionWorld;
     ai.scriptTakeoverPending = true;
     ai.directAlertPending = true;
+    if (newlyDetected
+            && world.Has<NpcRuntimeInstance>(entity)
+            && world.Get<NpcRuntimeInstance>(entity).hostile) {
+        ai.playerDetectionAudioPending = true;
+    }
 }
 
 int ApplyNpcAiPlayerDamage(
@@ -684,6 +719,24 @@ void UpdateNpcAiSystem(
         float dt)
 {
     const float safeDt = std::max(0.0f, dt);
+    runtime.playerLightLevel = gameplay.playerLightLevel != nullptr
+            ? *gameplay.playerLightLevel
+            : PlayerLightLevelSample{};
+    runtime.playerLightDetectionFactor =
+            gameplay.playerSneakSettings != nullptr
+            ? PlayerSneakLightDetectionFactor(
+                    gameplay.playerNormalizedLightLevel,
+                    gameplay.playerSneakSettings->darknessCutoffNormalized,
+                    gameplay.playerSneakSettings
+                            ->lightHalfResponseRangeNormalized)
+            : 1.0f;
+    runtime.playerCrouchBlend = std::isfinite(gameplay.playerCrouchBlend)
+            ? std::clamp(gameplay.playerCrouchBlend, 0.0f, 1.0f)
+            : 0.0f;
+    runtime.playerMovementNoiseMultiplier =
+            std::isfinite(gameplay.playerMovementNoiseMultiplier)
+            ? std::max(0.0f, gameplay.playerMovementNoiseMultiplier)
+            : 1.0f;
     for (NpcSoundEvent& sound : runtime.playerSounds) {
         sound.remainingSeconds -= safeDt;
     }
@@ -748,20 +801,94 @@ void UpdateNpcAiSystem(
         ai.directAlertPending = false;
         const bool playerAlive = gameplay.playerHealth != nullptr
                 && !IsDepleted(*gameplay.playerHealth);
-        const bool seesPlayer = playerAlive && CanSeePlayer(
-                ai, transform, collisionWorld, doorColliders,
-                staticColliders, gameplay.playerFeetPosition,
-                gameplay.playerEyePosition);
+        NpcPlayerSightEvaluation sight;
+        if (playerAlive) {
+            sight = EvaluatePlayerSight(
+                    ai, transform, collisionWorld, doorColliders,
+                    staticColliders, gameplay.playerFeetPosition,
+                    gameplay.playerEyePosition);
+        }
+        ai.playerInGeometricSight = playerAlive && sight.visible;
+        if (!playerAlive) {
+            ai.visualLightDetectionFactor = 0.0f;
+            ai.visualProximityDetectionFactor = 0.0f;
+        } else if (gameplay.playerSneakSettings != nullptr) {
+            ai.visualLightDetectionFactor = PlayerSneakLightDetectionFactor(
+                    gameplay.playerNormalizedLightLevel,
+                    gameplay.playerSneakSettings->darknessCutoffNormalized,
+                    gameplay.playerSneakSettings
+                            ->lightHalfResponseRangeNormalized);
+            ai.visualProximityDetectionFactor =
+                    PlayerSneakProximityDetectionFactor(
+                            sight.distanceWorld,
+                            gameplay.playerSneakSettings
+                                    ->darknessProximityRangeWorld);
+        } else {
+            ai.visualLightDetectionFactor = 1.0f;
+            ai.visualProximityDetectionFactor = 0.0f;
+        }
+        bool seesPlayer = false;
+        if (ai.awareness == NpcAwarenessState::Detected) {
+            seesPlayer = ai.playerInGeometricSight;
+            ai.visualDetectionProgress = 1.0f;
+            ai.visualDetectionRateFactor = 1.0f;
+            ai.visualDetectionReason = directAlert || seesPlayer
+                    ? NpcVisualDetectionReason::Detected
+                    : sight.failureReason;
+        } else if (gameplay.playerSneakSettings == nullptr) {
+            seesPlayer = ai.playerInGeometricSight;
+            ai.visualDetectionProgress = seesPlayer ? 1.0f : 0.0f;
+            ai.visualDetectionRateFactor = seesPlayer ? 1.0f : 0.0f;
+            ai.visualDetectionReason = seesPlayer
+                    ? NpcVisualDetectionReason::Detected
+                    : sight.failureReason;
+        } else {
+            const PlayerVisualDetectionStep detection =
+                    AdvancePlayerVisualDetection(
+                            ai.visualDetectionProgress,
+                            ai.playerInGeometricSight,
+                            sight.distanceWorld,
+                            gameplay.playerNormalizedLightLevel,
+                            gameplay.playerCrouchBlend,
+                            *gameplay.playerSneakSettings,
+                            safeDt);
+            ai.visualDetectionProgress = detection.progress;
+            ai.visualLightDetectionFactor = detection.lightFactor;
+            ai.visualProximityDetectionFactor = detection.proximityFactor;
+            ai.visualDetectionRateFactor = detection.rateFactor;
+            seesPlayer = detection.detected;
+            if (!playerAlive) {
+                ai.visualDetectionReason =
+                        NpcVisualDetectionReason::NoPlayer;
+            } else if (!ai.playerInGeometricSight) {
+                ai.visualDetectionReason = sight.failureReason;
+            } else if (!detection.building) {
+                ai.visualDetectionReason =
+                        NpcVisualDetectionReason::Darkness;
+            } else {
+                ai.visualDetectionReason = detection.detected
+                        ? NpcVisualDetectionReason::Detected
+                        : NpcVisualDetectionReason::Building;
+            }
+        }
         if (seesPlayer) {
             ai.awareness = NpcAwarenessState::Detected;
+            ai.visualDetectionProgress = 1.0f;
+            ai.visualDetectionReason = NpcVisualDetectionReason::Detected;
             ai.lastKnownPlayerPosition = gameplay.playerFeetPosition;
             ai.searchRemainingSeconds = 0.0f;
         } else if (ai.awareness == NpcAwarenessState::Detected
                 && !directAlert
                 && !ai.attackCommitted) {
             ai.awareness = NpcAwarenessState::InvestigatingTravel;
+            ai.visualDetectionProgress = 0.0f;
             ai.searchRemainingSeconds =
                     ai.perception.investigationDurationMilliseconds / 1000.0f;
+        }
+        if (npc.hostile
+                && previousAwareness != NpcAwarenessState::Detected
+                && ai.awareness == NpcAwarenessState::Detected) {
+            ai.playerDetectionAudioPending = true;
         }
 
         if (ai.awareness != NpcAwarenessState::Detected) {

@@ -10,6 +10,7 @@
 #include "game/items/ItemInventoryUI.h"
 #include "game/PlayerAudio.h"
 #include "game/PlayerHitCamera.h"
+#include "game/PlayerLightLevel.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
 #include "engine/scripting/ScriptSystem.h"
@@ -243,6 +244,7 @@ private:
     PlayerHitCameraState hitCamera;
     PlayerBreathingAudioRuntime breathingAudio;
     PlayerHeartbeatAudioRuntime heartbeatAudio;
+    PlayerLightLevelSample playerLightLevel;
     std::string failureError;
     SectorUseTarget useTarget;
     SectorUseHighlightState useHighlightState;

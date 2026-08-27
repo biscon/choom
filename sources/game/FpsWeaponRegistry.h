@@ -3,6 +3,7 @@
 #include "engine/assets/AssetHandles.h"
 #include "engine/render/HdrEffectPolicy.h"
 #include "game/PlayerHealthVisual.h"
+#include "game/PlayerSneak.h"
 #include "game/PlayerStamina.h"
 
 #include <raylib.h>
@@ -336,6 +337,7 @@ struct FpsApplicationSettings {
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
     PlayerHealthApplicationSettings playerHealth;
+    PlayerSneakApplicationSettings playerSneak;
     PlayerStaminaApplicationSettings playerStamina;
     PlayerInventoryApplicationSettings playerInventory;
     FpsGraphicsSettings graphics;

@@ -196,6 +196,10 @@ public:
             float runtimeSeconds) const;
     void SetRuntimePointLight(
             const SectorPreviewDynamicPointLightSource* light);
+    const SectorPreviewDynamicPointLightSource* RuntimePointLight() const
+    {
+        return runtimePointLightActive ? &runtimePointLight : nullptr;
+    }
     void SetMaxDynamicLights(std::size_t count) {
         maxDynamicLights = std::min(count, MaxDynamicLights);
     }

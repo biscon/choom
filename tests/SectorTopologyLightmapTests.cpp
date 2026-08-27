@@ -1,10 +1,15 @@
 #include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
 #include "engine/assets/AssetManager.h"
+#include "game/PlayerLightLevel.h"
+#include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorReflectionProbes.h"
+#include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorStaticModelCollision.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
+#include "sector_demo/SectorUnits.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
 
@@ -3407,6 +3412,58 @@ void TestObjectLightProbeSamplingFallbacksAndFiniteOutput()
     }
 }
 
+void TestPlayerLightLevelSamplesCapsuleAndDynamicLights()
+{
+    game::SectorTopologyMap map;
+    game::SectorTopologyDynamicPointLight light;
+    light.id = 1;
+    light.position = Vector3{
+            0.0f,
+            game::SectorWorldToAuthoringDistance(0.8f),
+            0.0f};
+    light.radius = game::SectorWorldToAuthoringDistance(4.0f);
+    light.intensity = 1.0f;
+    light.color = WHITE;
+    map.dynamicPointLights.push_back(light);
+
+    const game::SectorCollisionWorld collision;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> models;
+    const game::PlayerLightLevelSample sample = game::SamplePlayerLightLevel(
+            game::SectorBakedObjectLightProbeRuntimeData{},
+            map,
+            collision,
+            doors,
+            models,
+            models,
+            nullptr,
+            Vector3{},
+            1.6f,
+            0.25f,
+            0,
+            1.0f,
+            0.0f);
+
+    Check(Near(sample.points[0].positionWorld.y, 0.25f)
+                    && Near(sample.points[1].positionWorld.y, 0.8f)
+                    && Near(sample.points[2].positionWorld.y, 1.35f),
+            "player light query samples lower, middle, and upper capsule heights");
+    Check(sample.points[1].dynamicLight
+                    > sample.points[0].dynamicLight
+                    && sample.points[1].dynamicLight
+                            > sample.points[2].dynamicLight,
+            "player light query evaluates dynamic light independently at each height");
+    Check(sample.bakedLight > 0.0f
+                    && sample.dynamicLight > 0.0f
+                    && sample.combinedLight
+                            > sample.bakedLight
+                    && sample.normalizedLight >= 0.0f
+                    && sample.normalizedLight <= 1.0f,
+            "player light query averages baked and dynamic illumination into a normalized value");
+    Check(!sample.bakedProbeAvailable,
+            "player light query reports ambient fallback without baked probes");
+}
+
 void TestLocalFogProbeLightingReductionInterpolationAndFallback()
 {
     game::BakedObjectLightingSample cube;
@@ -5034,6 +5091,7 @@ int main()
     TestObjectLightProbeSamplingDoesNotBlendThroughClosedOrUnavailableAdjacency();
     TestObjectLightProbeSamplingKeepsAllProbeFallbackWithoutPreferredProbes();
     TestObjectLightProbeSamplingFallbacksAndFiniteOutput();
+    TestPlayerLightLevelSamplesCapsuleAndDynamicLights();
     TestObjectAmbientCubeNormalBlending();
     TestLocalFogProbeLightingReductionInterpolationAndFallback();
     TestLightAtmosphereVolumeShapesAndSources();

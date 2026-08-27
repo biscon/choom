@@ -24,6 +24,7 @@ void DrawNpcAiDebugWorld(
 void DrawNpcAiDebugLabels(
         const engine::World& world,
         const NpcNavigationRuntime& navigation,
+        const NpcAiRuntime& aiRuntime,
         const SectorMeshRenderer& renderer,
         float agentHeight,
         Vector3 playerFeetPosition,

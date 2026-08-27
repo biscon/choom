@@ -334,6 +334,12 @@ bool ValidateNpcDefinition(
         outError = "NPC animation blend time must be between 0.01 and 2 seconds";
         return false;
     }
+    if (!definition.playerDetectedSoundPath.empty()
+            && !IsValidNpcAudioPath(
+                    definition.playerDetectedSoundPath)) {
+        outError = "NPC player-detected sound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio";
+        return false;
+    }
     const NpcAmbientVocalizationDefinition& ambient =
             definition.ambientVocalizations;
     if (!std::isfinite(ambient.minimumDelaySeconds)
@@ -451,7 +457,8 @@ bool ParseNpcDefinitionJson(
                 {"formatVersion", "id", "name", "hostile", "aiType", "perception", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
-                 "animationBlendSeconds", "ambientVocalizations", "actions"},
+                 "animationBlendSeconds", "playerDetectedSound",
+                 "ambientVocalizations", "actions"},
                 "NPC definition");
 
         const Json& version = RequireField(root, "formatVersion", "NPC definition");
@@ -486,6 +493,11 @@ bool ParseNpcDefinitionJson(
                 root,
                 "animationBlendSeconds",
                 kDefaultNpcAnimationBlendSeconds,
+                "NPC definition");
+        parsed.playerDetectedSoundPath = OptionalString(
+                root,
+                "playerDetectedSound",
+                {},
                 "NPC definition");
 
         const auto perception = root.find("perception");
@@ -681,6 +693,10 @@ bool SerializeNpcDefinitionJson(
         root["modelPath"] = definition.modelPath;
         if (definition.animationBlendSeconds != kDefaultNpcAnimationBlendSeconds) {
             root["animationBlendSeconds"] = definition.animationBlendSeconds;
+        }
+        if (!definition.playerDetectedSoundPath.empty()) {
+            root["playerDetectedSound"] =
+                    definition.playerDetectedSoundPath;
         }
         const NpcPerceptionDefinition& perception = definition.perception;
         if (perception.visionRangeWorld != kDefaultNpcVisionRangeWorld

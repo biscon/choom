@@ -79,6 +79,7 @@ void TestRoundTripDefaultsAndSharedClips()
     original.perception.visionAngleDegrees = 100.0f;
     original.perception.hearingRangeWorld = 9.0f;
     original.perception.investigationDurationMilliseconds = 2750;
+    original.playerDetectedSoundPath = "npc/zombie/player_detected.wav";
     game::NpcActionDefinition& attack = game::GetNpcAction(
             original, game::NpcAction::Attack);
     attack.hitPhase = 0.6f;
@@ -128,6 +129,8 @@ void TestRoundTripDefaultsAndSharedClips()
                   && Near(document["actions"]["attack"]["cameraImpact"]
                                   ["springDampingRatio"].get<float>(), 0.9f)
                   && document["aiType"] == "seek_and_destroy"
+                  && document["playerDetectedSound"]
+                          == "npc/zombie/player_detected.wav"
                   && Near(document["perception"]["visionRangeWorld"].get<float>(), 18.0f)
                   && document["actions"]["hurt"]["animation"] == "Hit"
                   && document["actions"]["hurt"]["sound"]
@@ -153,6 +156,8 @@ void TestRoundTripDefaultsAndSharedClips()
                   && parsed.name == original.name
                   && parsed.hostile
                   && parsed.aiType == game::kSeekAndDestroyNpcAiType
+                  && parsed.playerDetectedSoundPath
+                          == "npc/zombie/player_detected.wav"
                   && Near(parsed.perception.visionRangeWorld, 18.0f)
                   && parsed.perception.investigationDurationMilliseconds == 2750
                   && parsed.canOpenDoors
@@ -207,6 +212,7 @@ void TestRoundTripDefaultsAndSharedClips()
                   && !Json::parse(json).contains("despawnOnDeath")
                   && !Json::parse(json).contains("corpseDespawnDelaySeconds")
                   && !Json::parse(json).contains("corpseFadeDurationSeconds")
+                  && !Json::parse(json).contains("playerDetectedSound")
                   && !Json::parse(json).contains("ambientVocalizations")
                   && !Json::parse(json)["actions"]["attack"]
                           .contains("cameraImpact"),
@@ -297,6 +303,10 @@ void TestValidation()
     definition.corpseFadeDurationSeconds = 0.0f;
     Check(!game::ValidateNpcDefinition(definition, error),
           "zero corpse fade duration is rejected");
+    definition = MakeDefinition("fred");
+    definition.playerDetectedSoundPath = "../detected.wav";
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "unsafe NPC player-detected audio path is rejected");
     definition = MakeDefinition("fred");
     game::GetNpcAction(
             definition, game::NpcAction::Idle).soundPath = "npc/idle.wav";
@@ -487,6 +497,8 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
           "NPC editor service updates health and corpse behavior through its draft API");
     service.SetSelectedActionSound(
             game::NpcAction::Hurt, "npc/zombie/hurt.wav");
+    service.SetSelectedPlayerDetectedSound(
+            "npc/zombie/player_detected.wav");
     service.SetSelectedActionSound(
             game::NpcAction::Attack, "npc/zombie/impact.wav");
     service.SetSelectedAttackSound("npc/zombie/attack.wav");
@@ -505,6 +517,9 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                           service.SelectedDraft()->definition,
                           game::NpcAction::Hurt).soundPath
                           == "npc/zombie/hurt.wav"
+                  && service.SelectedDraft()->definition
+                                  .playerDetectedSoundPath
+                          == "npc/zombie/player_detected.wav"
                   && game::GetNpcAction(
                           service.SelectedDraft()->definition,
                           game::NpcAction::Attack).soundPath
@@ -536,6 +551,9 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                   && service.SelectedDraft()->definition
                           .ambientVocalizations.soundPaths.empty(),
           "NPC editor service updates attack, vocal, and ambient audio drafts");
+    service.SetSelectedPlayerDetectedSound({});
+    Check(service.SelectedDraft()->definition.playerDetectedSoundPath.empty(),
+          "NPC editor service clears the optional player-detected sound");
     service.SelectedDraft()->definition.id = "RENAMED_beta";
     session.selectedNpcId = "RENAMED_beta";
     Check(service.SaveAndClose(nullptr)

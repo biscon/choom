@@ -1329,6 +1329,26 @@ void SectorGameSession::Update(
             controller.fpsControllerState.feetPosition,
             obstacleConfig.playerRadius,
             obstacleConfig.playerHeight};
+    SectorRuntimeObjectState& objects = scene.RuntimeObjects();
+    if (applicationSettings != nullptr
+            && objects.objectSectorLookupWorldValid) {
+        playerLightLevel = SamplePlayerLightLevel(
+                objects.objectLightProbes,
+                topologyMap,
+                objects.objectSectorLookupWorld,
+                objects.dynamicDoorColliders,
+                objects.staticModelColliders,
+                objects.dynamicModelColliders,
+                scene.Renderer().RuntimePointLight(),
+                playerPosition,
+                obstacleConfig.playerHeight,
+                obstacleConfig.playerRadius,
+                controller.fpsControllerState.currentSectorId,
+                applicationSettings->playerSneak.fullVisibilityLightLevel,
+                scene.Renderer().RuntimeSeconds());
+    } else {
+        playerLightLevel = {};
+    }
     struct ScriptTakeoverContext {
         engine::EngineContext* engine = nullptr;
         SectorScriptHost* host = nullptr;
@@ -1399,6 +1419,17 @@ void SectorGameSession::Update(
     npcGameplay.frozen = aiFrozen;
     npcGameplay.playerGrounded = controller.fpsControllerState.grounded;
     npcGameplay.playerRadiusWorld = obstacleConfig.playerRadius;
+    npcGameplay.playerNormalizedLightLevel = playerLightLevel.normalizedLight;
+    npcGameplay.playerCrouchBlend = SectorFpsCrouchBlend(
+            controller.fpsControllerState);
+    if (applicationSettings != nullptr) {
+        npcGameplay.playerMovementNoiseMultiplier =
+                PlayerSneakMovementNoiseMultiplier(
+                        applicationSettings->playerSneak,
+                        npcGameplay.playerCrouchBlend);
+        npcGameplay.playerSneakSettings = &applicationSettings->playerSneak;
+    }
+    npcGameplay.playerLightLevel = &playerLightLevel;
     scene.Update(
             context,
             topologyMap,
@@ -1428,8 +1459,6 @@ void SectorGameSession::Update(
         UpdateItemHealingEffects(*itemCampaign, playerHealth, dt);
     }
     UpdateSectorScriptOperations(context, scriptHost);
-    SectorRuntimeObjectState& objects = scene.RuntimeObjects();
-
     SectorFpsControllerInput input;
     if (!gameplayInputCaptured) {
         input.moveForward = context.input.IsKeyDown(KEY_W);
@@ -1696,7 +1725,11 @@ void SectorGameSession::Update(
                 applicationSettings->footsteps.volume);
         scene.EmitPlayerSound(
                 controller.fpsControllerState.feetPosition,
-                applicationSettings->footsteps.noiseRadiusWorld);
+                applicationSettings->footsteps.noiseRadiusWorld
+                        * PlayerSneakMovementNoiseMultiplier(
+                                applicationSettings->playerSneak,
+                                SectorFpsCrouchBlend(
+                                        controller.fpsControllerState)));
     }
     if (playerAudio != nullptr) {
         if (controller.frameEvents.jumped) {
@@ -1726,7 +1759,11 @@ void SectorGameSession::Update(
                         1.0f));
         scene.EmitPlayerSound(
                 controller.fpsControllerState.feetPosition,
-                applicationSettings->footsteps.landingNoiseRadiusWorld);
+                applicationSettings->footsteps.landingNoiseRadiusWorld
+                        * PlayerSneakMovementNoiseMultiplier(
+                                applicationSettings->playerSneak,
+                                SectorFpsCrouchBlend(
+                                        controller.fpsControllerState)));
     }
     bool acceptedShot = false;
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
@@ -2007,6 +2044,7 @@ void SectorGameSession::RenderAiDebugHud(
     DrawNpcAiDebugLabels(
             world,
             scene.NpcNavigation(),
+            scene.NpcAi(),
             scene.Renderer(),
             scene.Navigation().Settings().agentHeight,
             controller.fpsControllerState.feetPosition,

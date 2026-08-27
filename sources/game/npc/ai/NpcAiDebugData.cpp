@@ -146,14 +146,22 @@ NpcAiDebugLabelData BuildNpcAiDebugLabelData(
                 ai.perception.hearingRangeWorld,
                 ai.attack.rangeWorld);
     }
+    Format(result.lines[4],
+            "detect %.0f%% | %s | light x%.2f | prox x%.2f | rate x%.2f | sight %s",
+            std::clamp(ai.visualDetectionProgress, 0.0f, 1.0f) * 100.0f,
+            NpcVisualDetectionReasonName(ai.visualDetectionReason),
+            std::max(0.0f, ai.visualLightDetectionFactor),
+            std::max(0.0f, ai.visualProximityDetectionFactor),
+            std::max(0.0f, ai.visualDetectionRateFactor),
+            ai.playerInGeometricSight ? "yes" : "no");
     if (ai.pursuitSlotIndex >= 0) {
-        Format(result.lines[4], "slot %d | ring %d | %s%s",
+        Format(result.lines[5], "slot %d | ring %d | %s%s",
                 ai.pursuitSlotIndex,
                 ai.pursuitSlotRing,
                 NpcPursuitSlotKindName(ai.pursuitSlotKind),
                 ai.pursuitRetargetFailed ? " | RETARGET FAILED" : " | claimed");
     } else {
-        Format(result.lines[4], "slot none");
+        Format(result.lines[5], "slot none");
     }
     return result;
 }

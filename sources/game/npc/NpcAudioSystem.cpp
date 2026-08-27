@@ -133,6 +133,7 @@ void InitializeNpcAudioRuntime(
                         .soundPaths.empty();
                 if (hurt.soundPath.empty()
                         && death.soundPath.empty()
+                        && definition->playerDetectedSoundPath.empty()
                         && !hasAmbient) {
                     return;
                 }
@@ -150,6 +151,10 @@ void InitializeNpcAudioRuntime(
                         assets, assetScope, hurt.soundPath);
                 record.deathSound = RequestNpcSound(
                         assets, assetScope, death.soundPath);
+                record.playerDetectedSound = RequestNpcSound(
+                        assets,
+                        assetScope,
+                        definition->playerDetectedSoundPath);
                 record.ambientSounds.id = npc.definitionId + ":ambient";
                 record.ambientSounds.sounds.reserve(
                         definition->ambientVocalizations.soundPaths.size());
@@ -194,14 +199,29 @@ bool QueueNpcVocalEvent(
         record->pendingEvent = NpcVocalEvent::Death;
         return true;
     }
+    if (event == NpcVocalEvent::Hurt) {
+        if (record->ambientDisabled
+                || record->pendingEvent == NpcVocalEvent::Death
+                || engine::IsNull(record->hurtSound)
+                || record->pendingEvent == NpcVocalEvent::Hurt
+                || record->playbackKind == NpcVocalPlaybackKind::Hurt) {
+            return false;
+        }
+        record->pendingEvent = NpcVocalEvent::Hurt;
+        return true;
+    }
     if (record->ambientDisabled
+            || engine::IsNull(record->playerDetectedSound)
             || record->pendingEvent == NpcVocalEvent::Death
-            || engine::IsNull(record->hurtSound)
             || record->pendingEvent == NpcVocalEvent::Hurt
-            || record->playbackKind == NpcVocalPlaybackKind::Hurt) {
+            || record->pendingEvent == NpcVocalEvent::PlayerDetected
+            || record->playbackKind == NpcVocalPlaybackKind::Death
+            || record->playbackKind == NpcVocalPlaybackKind::Hurt
+            || record->playbackKind
+                    == NpcVocalPlaybackKind::PlayerDetected) {
         return false;
     }
-    record->pendingEvent = NpcVocalEvent::Hurt;
+    record->pendingEvent = NpcVocalEvent::PlayerDetected;
     return true;
 }
 
@@ -227,6 +247,13 @@ void UpdateNpcAudioSystem(
         float rawDt)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    world.ForEach<NpcAiState>(
+            [&](engine::Entity entity, NpcAiState& ai) {
+                if (!ai.playerDetectionAudioPending) return;
+                QueueNpcVocalEvent(
+                        runtime, entity, NpcVocalEvent::PlayerDetected);
+                ai.playerDetectionAudioPending = false;
+            });
     for (NpcAudioRecord& record : runtime.records) {
         if (!record.occupied) continue;
         if (!world.IsAlive(record.entity)
@@ -273,6 +300,23 @@ void UpdateNpcAudioSystem(
             record.playbackKind = engine::IsNull(record.vocalPlayback)
                     ? NpcVocalPlaybackKind::None
                     : NpcVocalPlaybackKind::Hurt;
+            if (engine::IsNull(record.vocalPlayback)
+                    && !record.ambientDisabled) {
+                ScheduleAmbientDelay(record);
+            }
+            continue;
+        }
+        if (record.pendingEvent == NpcVocalEvent::PlayerDetected) {
+            record.pendingEvent = NpcVocalEvent::None;
+            StopVocalPlayback(assets, audio, record);
+            record.vocalPlayback = PlayActionSound(
+                    assets,
+                    audio,
+                    record.playerDetectedSound,
+                    position);
+            record.playbackKind = engine::IsNull(record.vocalPlayback)
+                    ? NpcVocalPlaybackKind::None
+                    : NpcVocalPlaybackKind::PlayerDetected;
             if (engine::IsNull(record.vocalPlayback)
                     && !record.ambientDisabled) {
                 ScheduleAmbientDelay(record);

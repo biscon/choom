@@ -62,13 +62,15 @@ SectorEditorPlayerSettingsService::SectorEditorPlayerSettingsService(
 {
 }
 
-void SectorEditorPlayerSettingsService::Open(engine::EngineContext& context)
+void SectorEditorPlayerSettingsService::Open(
+        engine::EngineContext& context,
+        std::optional<SectorEditorPlayerSettingsTab> selectedTab)
 {
     StopAudioPreview(context);
     const SectorEditorPlayerSettingsTab activeTab = state_.activeTab;
     state_ = SectorEditorPlayerSettingsState{};
     state_.open = true;
-    state_.activeTab = activeTab;
+    state_.activeTab = selectedTab.value_or(activeTab);
     state_.draft = settings_;
     state_.soundEvents.reserve(settings_.playerSounds.events.size() + 4u);
     for (const PlayerSoundEventSettings& event : settings_.playerSounds.events) {
@@ -123,6 +125,7 @@ SectorEditorPlayerSettingsService::SaveAndClose(engine::EngineContext& context)
     candidate.playerStamina = state_.draft.playerStamina;
     candidate.playerInventory = state_.draft.playerInventory;
     candidate.playerHealth = state_.draft.playerHealth;
+    candidate.playerSneak = state_.draft.playerSneak;
     std::string saveError;
     if (!SaveFpsApplicationSettings(
                 settingsPath_.string(), candidate, &saveError)) {
@@ -169,6 +172,9 @@ void SectorEditorPlayerSettingsService::ResetActiveTab()
             break;
         case SectorEditorPlayerSettingsTab::Health:
             state_.draft.playerHealth = defaults.playerHealth;
+            break;
+        case SectorEditorPlayerSettingsTab::Sneaking:
+            state_.draft.playerSneak = defaults.playerSneak;
             break;
     }
     state_.errorMessage.clear();

@@ -6,6 +6,7 @@
   "aiType": "seek_and_destroy",
   "modelPath": "assets/models/characters/Zombie1.glb",
   "animationBlendSeconds": 0.25,
+  "playerDetectedSound": "npc/zombie/Zombie_Long_01.mp3",
   "perception": {
     "hearingRangeWorld": 20.0
   },

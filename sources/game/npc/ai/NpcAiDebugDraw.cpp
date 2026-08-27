@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace game {
 namespace {
@@ -215,6 +216,27 @@ void DrawNpcAiDebugWorld(
             Color{255, 64, 64, 245});
 
     BeginMode3D(renderer.RenderCamera());
+    const auto sampleColor = [](float normalized) {
+        const float value = std::clamp(normalized, 0.0f, 1.0f);
+        return LinearOverlayColor(Color{
+                static_cast<unsigned char>(35.0f + value * 220.0f),
+                static_cast<unsigned char>(70.0f + value * 180.0f),
+                static_cast<unsigned char>(160.0f - value * 80.0f),
+                245});
+    };
+    for (size_t index = 0;
+            index < aiRuntime.playerLightLevel.points.size(); ++index) {
+        const PlayerLightPointSample& point =
+                aiRuntime.playerLightLevel.points[index];
+        const Color color = sampleColor(point.normalizedLight);
+        DrawSphere(point.positionWorld, 0.055f, color);
+        if (index > 0) {
+            DrawLine3D(
+                    aiRuntime.playerLightLevel.points[index - 1].positionWorld,
+                    point.positionWorld,
+                    color);
+        }
+    }
     for (const NpcSoundEvent& sound : aiRuntime.playerSounds) {
         Vector3 center = sound.positionWorld;
         center.y += FloorOffsetWorld;
@@ -283,6 +305,21 @@ void DrawNpcAiDebugWorld(
                 center, ai.attack.rangeWorld,
                 attackRangeColor, false);
 
+        const Vector3 npcEye{
+                transform.position.x,
+                transform.position.y + 1.4f,
+                transform.position.z};
+        const Vector3 playerTarget =
+                aiRuntime.playerLightLevel.points.back().positionWorld;
+        const Color sightColor = LinearOverlayColor(
+                ai.visualDetectionReason == NpcVisualDetectionReason::Detected
+                        ? Color{255, 70, 70, 245}
+                        : ai.visualDetectionReason
+                                        == NpcVisualDetectionReason::Building
+                        ? Color{255, 205, 60, 235}
+                        : Color{90, 130, 180, 170});
+        DrawLine3D(npcEye, playerTarget, sightColor);
+
         if (ai.awareness != NpcAwarenessState::Unaware) {
             DrawLastKnownMarker(ai.lastKnownPlayerPosition, lastKnownColor);
         }
@@ -307,6 +344,7 @@ void DrawNpcAiDebugWorld(
 void DrawNpcAiDebugLabels(
         const engine::World& world,
         const NpcNavigationRuntime& navigation,
+        const NpcAiRuntime& aiRuntime,
         const SectorMeshRenderer& renderer,
         float agentHeight,
         Vector3 playerFeetPosition,
@@ -328,6 +366,38 @@ void DrawNpcAiDebugLabels(
     constexpr float PaddingY = 5.0f;
     const float lineHeight = fontSize + 2.0f;
     const Camera3D& camera = renderer.RenderCamera();
+
+    char playerText[320];
+    std::snprintf(
+            playerText,
+            sizeof(playerText),
+            "PLAYER VISIBILITY %.3f | response x%.2f | baked %.3f + dynamic %.3f = %.3f | crouch %.0f%% | move noise x%.2f%s",
+            aiRuntime.playerLightLevel.normalizedLight,
+            aiRuntime.playerLightDetectionFactor,
+            aiRuntime.playerLightLevel.bakedLight,
+            aiRuntime.playerLightLevel.dynamicLight,
+            aiRuntime.playerLightLevel.combinedLight,
+            aiRuntime.playerCrouchBlend * 100.0f,
+            aiRuntime.playerMovementNoiseMultiplier,
+            aiRuntime.playerLightLevel.bakedProbeAvailable
+                    ? "" : " | AMBIENT FALLBACK");
+    const Vector2 playerTextSize = MeasureTextEx(
+            nativeFont, playerText, fontSize, Spacing);
+    const Rectangle playerBox{
+            playableViewport.x + 8.0f,
+            playableViewport.y + 8.0f,
+            std::min(playerTextSize.x + PaddingX * 2.0f,
+                    playableViewport.width - 16.0f),
+            lineHeight + PaddingY * 2.0f};
+    DrawRectangleRec(playerBox, Color{8, 10, 14, 220});
+    DrawRectangleLinesEx(playerBox, 1.0f, Color{100, 180, 255, 255});
+    DrawTextEx(
+            nativeFont,
+            playerText,
+            Vector2{playerBox.x + PaddingX, playerBox.y + PaddingY},
+            fontSize,
+            Spacing,
+            WHITE);
 
     for (const NpcNavigationRecord& record : navigation.records) {
         if (!HasAiDebugComponents(world, record)) continue;
