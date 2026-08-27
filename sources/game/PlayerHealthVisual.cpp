@@ -122,6 +122,11 @@ std::string PlayerHealthSettingsError(
             || movement.minimumSpeedScale > 1.0f) {
         return "lowHealthMovement.minimumSpeedScale must be between 0 and 1";
     }
+    if (!finite(movement.minimumSprintSpeedScale)
+            || movement.minimumSprintSpeedScale < 0.0f
+            || movement.minimumSprintSpeedScale > 1.0f) {
+        return "lowHealthMovement.minimumSprintSpeedScale must be between 0 and 1";
+    }
 
     const PlayerLowHealthCameraApplicationSettings& camera =
             settings.lowHealthCamera;
@@ -245,14 +250,18 @@ float PlayerHeartbeatPitch(
 
 float PlayerLowHealthMovementSpeedScale(
         const Health& health,
-        const PlayerLowHealthMovementApplicationSettings& settings)
+        const PlayerLowHealthMovementApplicationSettings& settings,
+        bool usingRunSpeed)
 {
     if (!settings.enabled) return 1.0f;
     const float threshold = std::clamp(
             FiniteOr(settings.startThresholdRatio, 0.50f), 0.0f, 1.0f);
     if (threshold <= 0.0f) return 1.0f;
-    const float minimum = std::clamp(
-            FiniteOr(settings.minimumSpeedScale, 0.20f), 0.0f, 1.0f);
+    const float minimum = std::clamp(FiniteOr(
+            usingRunSpeed
+                    ? settings.minimumSprintSpeedScale
+                    : settings.minimumSpeedScale,
+            0.20f), 0.0f, 1.0f);
     const float healthyFraction = std::clamp(
             PlayerHealthRatio(health) / threshold, 0.0f, 1.0f);
     return minimum + (1.0f - minimum) * healthyFraction;

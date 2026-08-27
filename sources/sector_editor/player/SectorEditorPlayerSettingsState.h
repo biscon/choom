@@ -92,6 +92,7 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState heartbeatResponseInput;
     engine::UIFloatInputState healthMovementThresholdInput;
     engine::UIFloatInputState healthMovementMinimumSpeedInput;
+    engine::UIFloatInputState healthMovementMinimumSprintSpeedInput;
     engine::UIFloatInputState healthCameraThresholdInput;
     engine::UIFloatInputState healthCameraFullEffectInput;
     engine::UIFloatInputState healthCameraLateralInput;

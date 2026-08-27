@@ -994,6 +994,54 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                 }
                 y += RowHeight + RowGap;
 
+                drawLabel("Advance speed multiplier");
+                value = action.advanceSpeedMultiplier;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_advance_speed_multiplier",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackAdvanceSpeedMultiplierInput,
+                        0.0f, kMaximumNpcAttackAdvanceSpeedMultiplier, 3);
+                if (floatResult.changed) {
+                    editor.SetSelectedAttackMotion(
+                            value,
+                            action.aimTrackingEndPhase,
+                            action.hitArcDegrees);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Aim tracking end phase");
+                value = action.aimTrackingEndPhase;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_aim_tracking_end_phase",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackAimTrackingEndPhaseInput,
+                        0.0f, action.hitPhase, 3);
+                if (floatResult.changed) {
+                    editor.SetSelectedAttackMotion(
+                            action.advanceSpeedMultiplier,
+                            value,
+                            action.hitArcDegrees);
+                }
+                y += RowHeight + RowGap;
+
+                drawLabel("Hit arc degrees");
+                value = action.hitArcDegrees;
+                floatResult = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_attack_hit_arc_degrees",
+                        Rectangle{fieldX, y, 190.0f, RowHeight}, font,
+                        value, state.attackHitArcDegreesInput,
+                        0.001f, 360.0f, 2);
+                if (floatResult.changed) {
+                    editor.SetSelectedAttackMotion(
+                            action.advanceSpeedMultiplier,
+                            action.aimTrackingEndPhase,
+                            value);
+                }
+                y += RowHeight + RowGap;
+
                 drawLabel("Damage");
                 int integerValue = action.damage;
                 auto intResult = engine::IntInput(

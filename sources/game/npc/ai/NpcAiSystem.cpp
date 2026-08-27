@@ -540,6 +540,7 @@ bool StartAttack(
     npc.actionLockedByAi = true;
     ai.attackCommitted = true;
     ai.attackHitResolved = false;
+    ai.attackPhase = 0.0f;
     engine::SetAnimatedModelAnimation(
             animator, state.animationIndices[index],
             state.blendSeconds, true);
@@ -562,6 +563,7 @@ void FinishAttack(NpcRuntimeInstance& npc, NpcAiState& ai)
 {
     ai.attackCommitted = false;
     ai.attackHitResolved = false;
+    ai.attackPhase = 0.0f;
     npc.actionLockedByAi = false;
     npc.action = NpcAction::Idle;
 }
@@ -705,6 +707,48 @@ bool IsNpcAiCommittedMeleeHitInRange(
             && attackRangeWorld >= 0.0f
             && playerDistanceWorld
                     <= attackRangeWorld + CommittedMeleeHitGraceWorld;
+}
+
+bool IsNpcAiCommittedMeleeHitWithinArc(
+        Vector2 directionFromAttackerToPlayer,
+        float attackerYawRadians,
+        float hitArcDegrees)
+{
+    if (!std::isfinite(directionFromAttackerToPlayer.x)
+            || !std::isfinite(directionFromAttackerToPlayer.y)
+            || !std::isfinite(attackerYawRadians)
+            || !std::isfinite(hitArcDegrees)
+            || hitArcDegrees <= 0.0f || hitArcDegrees > 360.0f) {
+        return false;
+    }
+    if (hitArcDegrees >= 360.0f) return true;
+    const float distance = Vector2Length(directionFromAttackerToPlayer);
+    if (distance <= 0.0001f) return true;
+    const Vector2 direction = Vector2Scale(
+            directionFromAttackerToPlayer, 1.0f / distance);
+    const Vector2 forward{
+            std::sin(attackerYawRadians),
+            std::cos(attackerYawRadians)};
+    const float halfArcRadians = hitArcDegrees * DEG2RAD * 0.5f;
+    return Vector2DotProduct(forward, direction)
+            >= std::cos(halfArcRadians);
+}
+
+float NpcAiAttackAdvanceSpeedFactor(
+        float attackPhase,
+        float hitPhase,
+        float advanceSpeedMultiplier)
+{
+    if (!std::isfinite(attackPhase) || !std::isfinite(hitPhase)
+            || !std::isfinite(advanceSpeedMultiplier)
+            || hitPhase <= 0.0f || advanceSpeedMultiplier <= 0.0f
+            || attackPhase >= hitPhase) {
+        return 0.0f;
+    }
+    const float progress = std::clamp(attackPhase / hitPhase, 0.0f, 1.0f);
+    const float smoothProgress = progress * progress
+            * (3.0f - 2.0f * progress);
+    return advanceSpeedMultiplier * (1.0f - smoothProgress);
 }
 
 void UpdateNpcAiSystem(
@@ -1017,6 +1061,16 @@ void UpdateNpcAiSystem(
             return;
         }
         const float phase = AttackAnimationPhase(world, assets, entity);
+        ai.attackPhase = phase;
+        if (phase <= ai.attack.aimTrackingEndPhase) {
+            const Vector2 trackingDirection{
+                    gameplay.playerFeetPosition.x - transform.position.x,
+                    gameplay.playerFeetPosition.z - transform.position.z};
+            if (Vector2Length(trackingDirection) > 0.0001f) {
+                transform.yawRadians = std::atan2(
+                        trackingDirection.x, trackingDirection.y);
+            }
+        }
         if (!ai.attackHitResolved && phase >= ai.attack.hitPhase) {
             ai.attackHitResolved = true;
             const Vector2 actualToPlayer{
@@ -1025,6 +1079,10 @@ void UpdateNpcAiSystem(
             const float actualPlayerDistance = Vector2Length(actualToPlayer);
             const bool connected = IsNpcAiCommittedMeleeHitInRange(
                             actualPlayerDistance, ai.attack.rangeWorld)
+                    && IsNpcAiCommittedMeleeHitWithinArc(
+                            actualToPlayer,
+                            transform.yawRadians,
+                            ai.attack.hitArcDegrees)
                     && HasLineOfSight(
                             collisionWorld, doorColliders, staticColliders,
                             {transform.position.x,

@@ -5736,6 +5736,26 @@ void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
     Check(!game::IsNpcAiCommittedMeleeHitInRange(1.451f, 1.2f)
                   && !game::IsNpcAiCommittedMeleeHitInRange(NAN, 1.2f),
           "committed melee hit grace remains bounded and rejects invalid distances");
+    Check(game::IsNpcAiCommittedMeleeHitWithinArc(
+                    Vector2{0.0f, 1.0f}, 0.0f, 110.0f)
+                  && !game::IsNpcAiCommittedMeleeHitWithinArc(
+                          Vector2{1.0f, 0.0f}, 0.0f, 110.0f)
+                  && game::IsNpcAiCommittedMeleeHitWithinArc(
+                          Vector2{0.0f, -1.0f}, 0.0f, 360.0f),
+          "committed melee hits respect authored forward arcs and full-circle attacks");
+    Check(Near(game::NpcAiAttackAdvanceSpeedFactor(
+                          0.0f, 0.4f, 1.0f),
+                  1.0f)
+                  && Near(game::NpcAiAttackAdvanceSpeedFactor(
+                                  0.2f, 0.4f, 1.0f),
+                          0.5f)
+                  && Near(game::NpcAiAttackAdvanceSpeedFactor(
+                                  0.4f, 0.4f, 1.0f),
+                          0.0f)
+                  && Near(game::NpcAiAttackAdvanceSpeedFactor(
+                                  0.1f, 0.4f, 0.0f),
+                          0.0f),
+          "committed melee advance begins at run speed and smoothstep-decelerates to the hit phase");
 
     gameplay.godMode = true;
     Check(game::ApplyNpcAiPlayerAttackEffects(
@@ -5774,6 +5794,102 @@ void TestNpcAiPlayerDamageDispatchesEveryAppliedHit()
                   && notifications.count == 3
                   && notifications.attackHitCount == 3,
           "lethal NPC attacks dispatch once and an already-dead player stays silent");
+}
+
+void TestNpcCommittedAttackAdvanceUsesRunSpeedAndCollision()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "attack-advance collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity entity = SpawnNavigationTestNpc(
+            world, "attack_advance", 970, {4.0f, 0.0f, 4.0f}, 10,
+            2.0f, 6.5f);
+    game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    transform.yawRadians = 0.0f;
+    game::NpcRuntimeInstance& npc =
+            world.Get<game::NpcRuntimeInstance>(entity);
+    npc.action = game::NpcAction::Attack;
+    npc.actionLockedByAi = true;
+    game::NpcAiState ai;
+    ai.attackCommitted = true;
+    ai.attackPhase = 0.0f;
+    ai.attack.hitPhase = 0.4f;
+    ai.attack.advanceSpeedMultiplier = 1.0f;
+    world.Add(entity, ai);
+    world.Add(entity, game::NpcCombatState{});
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> staticColliders;
+
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, staticColliders, probes, map, 0.1f);
+    Check(Near(transform.position.z, 4.65f, 0.001f)
+                  && npc.action == game::NpcAction::Attack,
+          "committed attack begins advancing at the authored run speed without changing action");
+
+    transform.position = {4.0f, 0.0f, 4.0f};
+    world.Get<game::SectorObject>(entity).currentSectorId = 10;
+    world.Get<game::NpcAiState>(entity).attackPhase = 0.2f;
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, staticColliders, probes, map, 0.1f);
+    Check(Near(transform.position.z, 4.325f, 0.001f),
+          "half-windup smoothstep advances at half run speed");
+
+    transform.position = {4.0f, 0.0f, 4.0f};
+    world.Get<game::SectorObject>(entity).currentSectorId = 10;
+    world.Get<game::NpcAiState>(entity).attackPhase = 0.0f;
+    const game::SectorDoorPlayerObstacle playerObstacle{
+            {4.0f, 0.0f, 5.0f}, 0.25f, 1.8f};
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, staticColliders, probes, map, 0.1f,
+            &playerObstacle);
+    Check(transform.position.z <= 4.501f,
+          "attack advance respects the player collision cylinder");
+
+    transform.position = {4.0f, 0.0f, 4.0f};
+    world.Get<game::SectorObject>(entity).currentSectorId = 10;
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, staticColliders, probes, map, 0.1f,
+            nullptr, true);
+    Check(Near(transform.position.z, 4.0f),
+          "AI freeze suppresses committed attack advance");
+
+    world.Get<game::NpcAiState>(entity).attackPhase = 0.4f;
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, staticColliders, probes, map, 0.1f);
+    Check(Near(transform.position.z, 4.0f),
+          "committed attack stops advancing at the hit phase");
+
+    world.Get<game::NpcAiState>(entity).attackPhase = 0.0f;
+    world.Get<game::NpcCombatState>(entity).dead = true;
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, staticColliders, probes, map, 0.1f);
+    Check(Near(transform.position.z, 4.0f),
+          "dead NPCs cannot continue committed attack advance");
+
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
 }
 
 void TestNpcPlayerDetectedAudioTransitionPolicy()
@@ -6359,13 +6475,71 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
                   && npcNavigation.counters.cancellations
                           == cancellationsBeforeRetarget,
           "failed AI retarget preserves the active route without recording a cancellation");
+
+    game::NpcNavigationRecord* walkerNavigationRecord = nullptr;
+    for (game::NpcNavigationRecord& record : npcNavigation.records) {
+        if (record.instanceId == "walker") {
+            walkerNavigationRecord = &record;
+            break;
+        }
+    }
+    Check(walkerNavigationRecord != nullptr,
+          "walker navigation record remains available for AI retarget testing");
+    walkerNavigationRecord->desiredVelocity = {1.5f, -0.25f};
+    walkerNavigationRecord->actualVelocity = {1.25f, -0.5f};
+    walkerNavigationRecord->footstepDistanceWorld = 0.37f;
+    walkerNavigationRecord->footstepEvent = true;
+    const game::NpcMoveRequestResult successfulRetarget =
+            game::RetargetNpcAiMove(
+                    world,
+                    navigation,
+                    collisionWorld,
+                    npcNavigation,
+                    "walker",
+                    {4.0f, 6.0f},
+                    game::NpcMoveGait::Run);
+    Check(successfulRetarget.accepted
+                  && successfulRetarget.requestId != aiRequest.requestId
+                  && Near(walkerNavigationRecord->desiredVelocity.x, 1.5f)
+                  && Near(walkerNavigationRecord->desiredVelocity.y, -0.25f)
+                  && Near(walkerNavigationRecord->actualVelocity.x, 1.25f)
+                  && Near(walkerNavigationRecord->actualVelocity.y, -0.5f)
+                  && Near(walkerNavigationRecord->footstepDistanceWorld, 0.37f)
+                  && !walkerNavigationRecord->footstepEvent,
+          "successful active AI retarget preserves movement momentum and footstep cadence");
     Check(game::CancelNpcMove(
                   world,
                   navigation,
                   npcNavigation,
                   "walker",
-                  aiRequest.requestId),
-          "request-specific cancellation still stops the retained AI move");
+                  successfulRetarget.requestId),
+          "request-specific cancellation stops the retargeted AI move");
+
+    walkerNavigationRecord->desiredVelocity = {2.0f, 1.0f};
+    walkerNavigationRecord->actualVelocity = {1.0f, 0.5f};
+    walkerNavigationRecord->footstepDistanceWorld = 0.5f;
+    const game::NpcMoveRequestResult freshAiMove = game::RetargetNpcAiMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "walker",
+            {5.0f, 6.0f},
+            game::NpcMoveGait::Run);
+    Check(freshAiMove.accepted
+                  && Near(walkerNavigationRecord->desiredVelocity.x, 0.0f)
+                  && Near(walkerNavigationRecord->desiredVelocity.y, 0.0f)
+                  && Near(walkerNavigationRecord->actualVelocity.x, 0.0f)
+                  && Near(walkerNavigationRecord->actualVelocity.y, 0.0f)
+                  && Near(walkerNavigationRecord->footstepDistanceWorld, 0.0f),
+          "a fresh AI movement request still initializes locomotion from rest");
+    Check(game::CancelNpcMove(
+                  world,
+                  navigation,
+                  npcNavigation,
+                  "walker",
+                  freshAiMove.requestId),
+          "request-specific cancellation stops the fresh AI move");
 
     game::NpcAiState detectedAi;
     detectedAi.awareness = game::NpcAwarenessState::Detected;
@@ -9901,6 +10075,7 @@ int main()
     TestNpcFootstepCadenceUsesResolvedTravel();
     TestNpcAiDebugGeometryAndLabelsExposeRuntimeState();
     TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
+    TestNpcCommittedAttackAdvanceUsesRunSpeedAndCollision();
     TestNpcPlayerDetectedAudioTransitionPolicy();
     TestNpcSneakDetectionOnlyAppliesWhileCrouching();
     TestNpcAiPursuitSlotsRouteAroundSupportingProp();

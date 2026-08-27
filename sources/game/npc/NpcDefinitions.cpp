@@ -397,13 +397,23 @@ bool ValidateNpcDefinition(
                     || !std::isfinite(action.rangeWorld)
                     || action.rangeWorld <= 0.0f
                     || action.rangeWorld > MaxWorldDistance
+                    || !std::isfinite(action.advanceSpeedMultiplier)
+                    || action.advanceSpeedMultiplier < 0.0f
+                    || action.advanceSpeedMultiplier
+                            > kMaximumNpcAttackAdvanceSpeedMultiplier
+                    || !std::isfinite(action.aimTrackingEndPhase)
+                    || action.aimTrackingEndPhase < 0.0f
+                    || action.aimTrackingEndPhase > action.hitPhase
+                    || !std::isfinite(action.hitArcDegrees)
+                    || action.hitArcDegrees <= 0.0f
+                    || action.hitArcDegrees > 360.0f
                     || action.damage < 0 || action.damage > 1000000
                     || !std::isfinite(action.knockbackImpulseWorldPerSecond)
                     || action.knockbackImpulseWorldPerSecond < 0.0f
                     || action.knockbackImpulseWorldPerSecond > MaxKnockbackImpulse
                     || action.stunMilliseconds < 0
                     || action.stunMilliseconds > MaxStunMilliseconds)) {
-            outError = "NPC Attack hit phase, range, damage, knockback, or stun is outside its supported range";
+            outError = "NPC Attack hit phase, range, advance, aim tracking, hit arc, damage, knockback, or stun is outside its supported range";
             return false;
         }
         if (metadata.action == NpcAction::Attack) {
@@ -577,6 +587,9 @@ bool ParseNpcDefinitionJson(
                 actionFields.insert("attackSound");
                 actionFields.insert("hitPhase");
                 actionFields.insert("rangeWorld");
+                actionFields.insert("advanceSpeedMultiplier");
+                actionFields.insert("aimTrackingEndPhase");
+                actionFields.insert("hitArcDegrees");
                 actionFields.insert("damage");
                 actionFields.insert("knockbackImpulseWorldPerSecond");
                 actionFields.insert("stunMilliseconds");
@@ -604,6 +617,15 @@ bool ParseNpcDefinitionJson(
                         *it, "hitPhase", kDefaultNpcAttackHitPhase, context);
                 action.rangeWorld = OptionalFloat(
                         *it, "rangeWorld", kDefaultNpcAttackRangeWorld, context);
+                action.advanceSpeedMultiplier = OptionalFloat(
+                        *it, "advanceSpeedMultiplier",
+                        kDefaultNpcAttackAdvanceSpeedMultiplier, context);
+                action.aimTrackingEndPhase = OptionalFloat(
+                        *it, "aimTrackingEndPhase",
+                        kDefaultNpcAttackAimTrackingEndPhase, context);
+                action.hitArcDegrees = OptionalFloat(
+                        *it, "hitArcDegrees",
+                        kDefaultNpcAttackHitArcDegrees, context);
                 action.damage = OptionalInt(
                         *it, "damage", kDefaultNpcAttackDamage, context);
                 action.knockbackImpulseWorldPerSecond = OptionalFloat(
@@ -768,6 +790,20 @@ bool SerializeNpcDefinitionJson(
                 }
                 if (action.rangeWorld != kDefaultNpcAttackRangeWorld) {
                     actionJson["rangeWorld"] = action.rangeWorld;
+                }
+                if (action.advanceSpeedMultiplier
+                        != kDefaultNpcAttackAdvanceSpeedMultiplier) {
+                    actionJson["advanceSpeedMultiplier"] =
+                            action.advanceSpeedMultiplier;
+                }
+                if (action.aimTrackingEndPhase
+                        != kDefaultNpcAttackAimTrackingEndPhase) {
+                    actionJson["aimTrackingEndPhase"] =
+                            action.aimTrackingEndPhase;
+                }
+                if (action.hitArcDegrees
+                        != kDefaultNpcAttackHitArcDegrees) {
+                    actionJson["hitArcDegrees"] = action.hitArcDegrees;
                 }
                 if (action.damage != kDefaultNpcAttackDamage) {
                     actionJson["damage"] = action.damage;

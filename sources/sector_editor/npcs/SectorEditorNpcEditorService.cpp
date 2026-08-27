@@ -40,6 +40,9 @@ bool SameAction(
             && left.movementSpeed == right.movementSpeed
             && left.hitPhase == right.hitPhase
             && left.rangeWorld == right.rangeWorld
+            && left.advanceSpeedMultiplier == right.advanceSpeedMultiplier
+            && left.aimTrackingEndPhase == right.aimTrackingEndPhase
+            && left.hitArcDegrees == right.hitArcDegrees
             && left.damage == right.damage
             && left.knockbackImpulseWorldPerSecond
                     == right.knockbackImpulseWorldPerSecond
@@ -538,10 +541,27 @@ void SectorEditorNpcEditorService::SetSelectedAttack(
     NpcActionDefinition& attack = GetNpcAction(
             draft->definition, NpcAction::Attack);
     attack.hitPhase = hitPhase;
+    attack.aimTrackingEndPhase = std::min(
+            attack.aimTrackingEndPhase, hitPhase);
     attack.rangeWorld = rangeWorld;
     attack.damage = damage;
     attack.knockbackImpulseWorldPerSecond = knockbackImpulseWorldPerSecond;
     attack.stunMilliseconds = stunMilliseconds;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedAttackMotion(
+        float advanceSpeedMultiplier,
+        float aimTrackingEndPhase,
+        float hitArcDegrees)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    NpcActionDefinition& attack = GetNpcAction(
+            draft->definition, NpcAction::Attack);
+    attack.advanceSpeedMultiplier = advanceSpeedMultiplier;
+    attack.aimTrackingEndPhase = aimTrackingEndPhase;
+    attack.hitArcDegrees = hitArcDegrees;
     state_.validationMessage.clear();
 }
 
@@ -724,6 +744,9 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.investigationDurationMillisecondsInput = {};
     state_.attackHitPhaseInput = {};
     state_.attackRangeWorldInput = {};
+    state_.attackAdvanceSpeedMultiplierInput = {};
+    state_.attackAimTrackingEndPhaseInput = {};
+    state_.attackHitArcDegreesInput = {};
     state_.attackDamageInput = {};
     state_.attackKnockbackInput = {};
     state_.attackStunMillisecondsInput = {};

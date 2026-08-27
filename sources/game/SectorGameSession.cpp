@@ -1497,11 +1497,6 @@ void SectorGameSession::Update(
                 engine::ConsumeEvent(event);
             });
 
-    if (applicationSettings != nullptr) {
-        input.movementSpeedScale *= PlayerLowHealthMovementSpeedScale(
-                playerHealth,
-                applicationSettings->playerHealth.lowHealthMovement);
-    }
     if (applicationSettings != nullptr && itemCampaign != nullptr) {
         if (playerStunRemainingSeconds > 0.0f) {
             input.run = false;
@@ -1516,6 +1511,12 @@ void SectorGameSession::Update(
                         applicationSettings->playerStamina)) {
             input.jumpPressed = false;
         }
+    }
+    if (applicationSettings != nullptr) {
+        input.movementSpeedScale *= PlayerLowHealthMovementSpeedScale(
+                playerHealth,
+                applicationSettings->playerHealth.lowHealthMovement,
+                SectorFpsInputUsesRunSpeed(input));
     }
 
     const float previousVisualEyeY = scene.Renderer().RendererPose().position.y;

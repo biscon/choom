@@ -64,6 +64,9 @@ struct SectorEditorNpcEditorState {
     engine::UIIntInputState investigationDurationMillisecondsInput;
     engine::UIFloatInputState attackHitPhaseInput;
     engine::UIFloatInputState attackRangeWorldInput;
+    engine::UIFloatInputState attackAdvanceSpeedMultiplierInput;
+    engine::UIFloatInputState attackAimTrackingEndPhaseInput;
+    engine::UIFloatInputState attackHitArcDegreesInput;
     engine::UIIntInputState attackDamageInput;
     engine::UIFloatInputState attackKnockbackInput;
     engine::UIIntInputState attackStunMillisecondsInput;

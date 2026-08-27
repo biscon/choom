@@ -125,6 +125,14 @@ int ApplyNpcAiPlayerAttackEffects(
 bool IsNpcAiCommittedMeleeHitInRange(
         float playerDistanceWorld,
         float attackRangeWorld);
+bool IsNpcAiCommittedMeleeHitWithinArc(
+        Vector2 directionFromAttackerToPlayer,
+        float attackerYawRadians,
+        float hitArcDegrees);
+float NpcAiAttackAdvanceSpeedFactor(
+        float attackPhase,
+        float hitPhase,
+        float advanceSpeedMultiplier);
 
 void UpdateNpcAiSystem(
         engine::World& world,

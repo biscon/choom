@@ -502,9 +502,14 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                 movement.startThresholdRatio,
                 state.healthMovementThresholdInput, 0.001f, 1.0f, 3);
         drawFloat("player_health_movement_minimum",
-                "Speed scale at zero health",
+                "Walk scale at zero health",
                 movement.minimumSpeedScale,
                 state.healthMovementMinimumSpeedInput, 0.0f, 1.0f, 3);
+        drawFloat("player_health_movement_minimum_sprint",
+                "Sprint scale at zero health",
+                movement.minimumSprintSpeedScale,
+                state.healthMovementMinimumSprintSpeedInput,
+                0.0f, 1.0f, 3);
 
         PlayerLowHealthCameraApplicationSettings& camera =
                 state.draft.playerHealth.lowHealthCamera;

@@ -65,7 +65,8 @@
     "lowHealthMovement": {
       "enabled": true,
       "startThresholdRatio": 0.4000000059604645,
-      "minimumSpeedScale": 0.3499999940395355
+      "minimumSpeedScale": 0.3499999940395355,
+      "minimumSprintSpeedScale": 0.75
     },
     "lowHealthCamera": {
       "enabled": true,

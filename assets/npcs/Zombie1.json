@@ -29,14 +29,16 @@
     },
     "run": {
       "animation": "Running",
-      "movementSpeed": 3.0
+      "movementSpeed": 3.5
     },
     "attack": {
       "animation": "Attack",
       "sound": "npc/zombie/Zombie_Impact_01.ogg",
+      "animationSpeed": 1.5,
       "attackSound": "npc/zombie/Zombie_Attack_01.ogg",
       "hitPhase": 0.4000000059604645,
       "rangeWorld": 1.2000000476837158,
+      "advanceSpeedMultiplier": 1.2000000476837158,
       "knockbackImpulseWorldPerSecond": 2.5,
       "stunMilliseconds": 500,
       "cameraImpact": {

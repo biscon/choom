@@ -84,6 +84,9 @@ void TestRoundTripDefaultsAndSharedClips()
             original, game::NpcAction::Attack);
     attack.hitPhase = 0.6f;
     attack.rangeWorld = 1.25f;
+    attack.advanceSpeedMultiplier = 0.8f;
+    attack.aimTrackingEndPhase = 0.35f;
+    attack.hitArcDegrees = 95.0f;
     attack.damage = 23;
     attack.knockbackImpulseWorldPerSecond = 2.5f;
     attack.stunMilliseconds = 500;
@@ -118,6 +121,15 @@ void TestRoundTripDefaultsAndSharedClips()
                   && document["actions"]["run"]["animation"] == "Walk"
                   && document["actions"]["attack"]["animation"] == "Attack"
                   && document["actions"]["attack"]["damage"] == 23
+                  && Near(document["actions"]["attack"]
+                                  ["advanceSpeedMultiplier"].get<float>(),
+                          0.8f)
+                  && Near(document["actions"]["attack"]
+                                  ["aimTrackingEndPhase"].get<float>(),
+                          0.35f)
+                  && Near(document["actions"]["attack"]
+                                  ["hitArcDegrees"].get<float>(),
+                          95.0f)
                   && document["actions"]["attack"]["attackSound"]
                           == "npc/zombie/attack.wav"
                   && document["actions"]["attack"]["sound"]
@@ -188,6 +200,20 @@ void TestRoundTripDefaultsAndSharedClips()
                           parsed, game::NpcAction::Attack).attackSoundPath
                           == "npc/zombie/attack.wav"
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Attack).hitPhase, 0.6f)
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Attack)
+                                  .advanceSpeedMultiplier,
+                          0.8f)
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Attack)
+                                  .aimTrackingEndPhase,
+                          0.35f)
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Attack).hitArcDegrees,
+                          95.0f)
                   && !game::GetNpcAction(
                           parsed, game::NpcAction::Attack).cameraImpact.enabled
                   && Near(game::GetNpcAction(
@@ -215,7 +241,13 @@ void TestRoundTripDefaultsAndSharedClips()
                   && !Json::parse(json).contains("playerDetectedSound")
                   && !Json::parse(json).contains("ambientVocalizations")
                   && !Json::parse(json)["actions"]["attack"]
-                          .contains("cameraImpact"),
+                          .contains("cameraImpact")
+                  && !Json::parse(json)["actions"]["attack"]
+                          .contains("advanceSpeedMultiplier")
+                  && !Json::parse(json)["actions"]["attack"]
+                          .contains("aimTrackingEndPhase")
+                  && !Json::parse(json)["actions"]["attack"]
+                          .contains("hitArcDegrees"),
           "default combat, blend, and door fields are omitted from serialized definitions");
 
     Json partialCamera = Json::parse(R"({
@@ -284,6 +316,24 @@ void TestValidation()
     game::GetNpcAction(definition, game::NpcAction::Run).movementSpeed = 201.0f;
     Check(!game::ValidateNpcDefinition(definition, error),
           "out-of-range movement speed is rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Attack).advanceSpeedMultiplier = 4.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "out-of-range attack advance multiplier is rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Attack).aimTrackingEndPhase = 0.75f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "attack aim tracking beyond the hit phase is rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Attack).hitArcDegrees = 361.0f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "out-of-range attack hit arc is rejected");
     definition = MakeDefinition("fred");
     definition.animationBlendSeconds = 0.0f;
     Check(!game::ValidateNpcDefinition(definition, error),
@@ -502,6 +552,7 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
     service.SetSelectedActionSound(
             game::NpcAction::Attack, "npc/zombie/impact.wav");
     service.SetSelectedAttackSound("npc/zombie/attack.wav");
+    service.SetSelectedAttackMotion(0.75f, 0.2f, 90.0f);
     game::NpcAttackCameraImpactDefinition cameraImpact;
     cameraImpact.pitchKickDegrees = 6.5f;
     cameraImpact.rollKickDegrees = 7.5f;
@@ -528,6 +579,20 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                           service.SelectedDraft()->definition,
                           game::NpcAction::Attack).attackSoundPath
                           == "npc/zombie/attack.wav"
+                  && Near(game::GetNpcAction(
+                                  service.SelectedDraft()->definition,
+                                  game::NpcAction::Attack)
+                                  .advanceSpeedMultiplier,
+                          0.75f)
+                  && Near(game::GetNpcAction(
+                                  service.SelectedDraft()->definition,
+                                  game::NpcAction::Attack)
+                                  .aimTrackingEndPhase,
+                          0.2f)
+                  && Near(game::GetNpcAction(
+                                  service.SelectedDraft()->definition,
+                                  game::NpcAction::Attack).hitArcDegrees,
+                          90.0f)
                   && Near(game::GetNpcAction(
                                   service.SelectedDraft()->definition,
                                   game::NpcAction::Attack).cameraImpact

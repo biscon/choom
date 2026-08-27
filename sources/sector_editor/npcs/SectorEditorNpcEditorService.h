@@ -60,6 +60,10 @@ public:
             int damage,
             float knockbackImpulseWorldPerSecond,
             int stunMilliseconds);
+    void SetSelectedAttackMotion(
+            float advanceSpeedMultiplier,
+            float aimTrackingEndPhase,
+            float hitArcDegrees);
     void SetSelectedAttackCameraImpact(
             const NpcAttackCameraImpactDefinition& cameraImpact);
     void SetSelectedAmbientDelayRange(float minimumSeconds, float maximumSeconds);

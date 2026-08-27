@@ -94,11 +94,22 @@ hysteresis without moving that policy into generic perception. Seek & Destroy
 enters melee within `0.10` world units beyond the authored range and remains
 engaged until `0.25` world units beyond it. This cancels chase before crowd and
 physical stopping tolerances can oscillate at a single exact boundary.
+Successful pursuit retargets replace the path atomically while preserving the
+NPC's current steering velocity and accumulated footstep distance. Only a new
+AI move starts those locomotion values from rest, so frequent moving-target
+updates do not repeatedly force the Crowd agent to accelerate from zero.
 
 An attack is committed for its full non-looping animation. The authored
-normalized hit phase performs a fresh LOS test and accepts a bounded `0.25`
-world-unit committed-swing range margin. Moving farther away or gaining cover
-still makes the swing miss. A connection applies damage plus optional
+advance-speed multiplier begins windup movement from the NPC's Run speed and
+smoothstep-decelerates it to zero at the normalized hit phase. This movement
+uses the ordinary sector, door, static-object, NPC, and player-cylinder
+collision path, but does not pathfind, use Crowd steering, select a locomotion
+animation, or emit footsteps. The NPC tracks the player through the authored
+aim-tracking phase and then commits its facing. The hit performs a fresh LOS
+test, requires the player to remain within the authored forward arc, and
+accepts a bounded `0.25` world-unit committed-swing range margin. Moving
+farther away, strafing outside the committed arc, or gaining cover makes the
+swing miss. A connection applies damage plus optional
 knockback/stun through one per-attacker operation, dispatches one player-damage
 event, applies the attack's optional directional spring camera impact, and
 plays the optional player-impact sound spatialized from the attacker.

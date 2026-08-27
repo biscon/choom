@@ -32,6 +32,10 @@ inline constexpr float kDefaultNpcHearingRangeWorld = 12.0f;
 inline constexpr int kDefaultNpcInvestigationDurationMilliseconds = 4000;
 inline constexpr float kDefaultNpcAttackHitPhase = 0.55f;
 inline constexpr float kDefaultNpcAttackRangeWorld = 1.0f;
+inline constexpr float kDefaultNpcAttackAdvanceSpeedMultiplier = 1.0f;
+inline constexpr float kDefaultNpcAttackAimTrackingEndPhase = 0.25f;
+inline constexpr float kDefaultNpcAttackHitArcDegrees = 110.0f;
+inline constexpr float kMaximumNpcAttackAdvanceSpeedMultiplier = 4.0f;
 inline constexpr int kDefaultNpcAttackDamage = 15;
 inline constexpr float kDefaultNpcAttackKnockbackImpulseWorldPerSecond = 0.0f;
 inline constexpr int kDefaultNpcAttackStunMilliseconds = 0;
@@ -91,6 +95,10 @@ struct NpcActionDefinition {
     float movementSpeed = 0.0f;
     float hitPhase = kDefaultNpcAttackHitPhase;
     float rangeWorld = kDefaultNpcAttackRangeWorld;
+    float advanceSpeedMultiplier =
+            kDefaultNpcAttackAdvanceSpeedMultiplier;
+    float aimTrackingEndPhase = kDefaultNpcAttackAimTrackingEndPhase;
+    float hitArcDegrees = kDefaultNpcAttackHitArcDegrees;
     int damage = kDefaultNpcAttackDamage;
     float knockbackImpulseWorldPerSecond =
             kDefaultNpcAttackKnockbackImpulseWorldPerSecond;

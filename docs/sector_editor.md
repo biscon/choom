@@ -944,11 +944,17 @@ vocals interrupt ambient vocals but yield to hurt and death vocals.
 
 The semantic action list includes `Attack`. Like other actions it assigns a
 model animation and playback speed; it additionally authors normalized hit
-phase, world-space range, damage, optional knockback impulse, optional stun in
-milliseconds, and an optional spatialized attack sound. The sound plays when
-the NPC begins the committed attack animation, whether or not the later hit
-connects. The separately authored player-impact sound plays only when the hit
-connects and is spatialized from the attacker so concurrent hits remain
+phase, world-space range, Run-speed advance multiplier, aim-tracking end phase,
+forward hit arc, damage, optional knockback impulse, optional stun in
+milliseconds, and an optional spatialized attack sound. During windup the NPC
+begins at its Run speed multiplied by the authored advance value and smoothly
+decelerates to zero at the hit phase. Movement remains collision-resolved but
+does not pathfind, use Crowd steering, change animations, or emit footsteps.
+Aim follows the player through the authored tracking phase and then locks, so
+a timely strafe can leave the committed forward arc. The attack sound plays
+when the NPC begins the committed attack animation, whether or not the later
+hit connects. The separately authored player-impact sound plays only when the
+hit connects and is spatialized from the attacker so concurrent hits remain
 directionally distinct. A stun value of `0` disables stun and a knockback value
 of `0` disables knockback.
 The Attack action also has an optional `cameraImpact` object. Existing NPCs use
@@ -978,7 +984,8 @@ center-to-center range; runtime uses a
 `0.10` world-unit engagement tolerance, a `0.25` world-unit disengagement band,
 and a bounded `0.25` world-unit committed-hit margin so navigation does not
 jitter at the melee boundary and nearby attackers resolve independently. A
-player who moves beyond that margin or behind cover still avoids the hit. AI
+player who moves beyond that margin, leaves the committed hit arc, or moves
+behind cover still avoids the hit. AI
 never runs in either editor 3D preview control mode. Footstep and landing noise
 radii are exposed under `Settings -> Player -> Audio`. Runtime testing exposes
 `/god [on|off]`, `/freezeai [on|off]`, and
@@ -1012,9 +1019,12 @@ silent without preventing play.
 
 Low-health movement scaling is independently enabled and configured. It leaves
 walk, run, and crouched movement unchanged at or above the default `0.5` health
-ratio, then linearly reduces intentional horizontal movement to the configured
-`0.2` scale at zero health. It composes multiplicatively with stun slowdown.
-Jump physics, stamina behavior, and external knockback are not scaled.
+ratio, then linearly reduces intentional horizontal movement toward separately
+configured walk and sprint minimum scales at zero health. Stun, stamina, and
+movement direction are resolved before choosing which scale applies, so an
+exhausted, stunned, or backward-moving player receives the walk scale. The
+result composes multiplicatively with stun slowdown. Jump physics and external
+knockback are not scaled.
 
 Low-health camera sway is also independently enabled. Its default strength is
 zero at `0.5` health and reaches full strength at `0.1`, with a nonlinear curve

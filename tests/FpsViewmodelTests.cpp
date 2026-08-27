@@ -981,6 +981,7 @@ void SettingsResolutionAndPersistence()
     settings.playerHealth.lowHealthMovement.enabled = false;
     settings.playerHealth.lowHealthMovement.startThresholdRatio = 0.6f;
     settings.playerHealth.lowHealthMovement.minimumSpeedScale = 0.3f;
+    settings.playerHealth.lowHealthMovement.minimumSprintSpeedScale = 0.8f;
     settings.playerHealth.lowHealthCamera.enabled = false;
     settings.playerHealth.lowHealthCamera.startThresholdRatio = 0.48f;
     settings.playerHealth.lowHealthCamera.fullEffectRatio = 0.08f;
@@ -1047,6 +1048,9 @@ void SettingsResolutionAndPersistence()
     assert(!loaded.playerHealth.lowHealthMovement.enabled);
     assert(Near(loaded.playerHealth.lowHealthMovement.startThresholdRatio, 0.6f));
     assert(Near(loaded.playerHealth.lowHealthMovement.minimumSpeedScale, 0.3f));
+    assert(Near(
+            loaded.playerHealth.lowHealthMovement.minimumSprintSpeedScale,
+            0.8f));
     assert(!loaded.playerHealth.lowHealthCamera.enabled);
     assert(Near(loaded.playerHealth.lowHealthCamera.startThresholdRatio, 0.48f));
     assert(Near(loaded.playerHealth.lowHealthCamera.fullEffectRatio, 0.08f));
@@ -1209,6 +1213,9 @@ void SettingsResolutionAndPersistence()
             R"({"version":1,"playerHealth":{"lowHealthMovement":{"minimumSpeedScale":1.1}}})",
             loaded, &error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthMovement":{"minimumSprintSpeedScale":1.1}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerHealth":{"lowHealthCamera":{"startThresholdRatio":0.5,"fullEffectRatio":0.6}}})",
             loaded, &error));
     assert(!game::ParseFpsApplicationSettings(
@@ -1297,6 +1304,9 @@ void SettingsResolutionAndPersistence()
     assert(loaded.playerHealth.lowHealthMovement.enabled);
     assert(Near(loaded.playerHealth.lowHealthMovement.startThresholdRatio, 0.50f));
     assert(Near(loaded.playerHealth.lowHealthMovement.minimumSpeedScale, 0.20f));
+    assert(Near(
+            loaded.playerHealth.lowHealthMovement.minimumSprintSpeedScale,
+            0.20f));
     assert(loaded.playerHealth.lowHealthCamera.enabled);
     assert(Near(loaded.playerHealth.lowHealthCamera.startThresholdRatio, 0.50f));
     assert(Near(loaded.playerHealth.lowHealthCamera.fullEffectRatio, 0.10f));

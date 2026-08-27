@@ -32,6 +32,7 @@ struct PlayerLowHealthMovementApplicationSettings {
     bool enabled = true;
     float startThresholdRatio = 0.50f;
     float minimumSpeedScale = 0.20f;
+    float minimumSprintSpeedScale = 0.20f;
 };
 
 struct PlayerLowHealthCameraApplicationSettings {
@@ -81,7 +82,8 @@ float PlayerHeartbeatPitch(
         const PlayerHeartbeatAudioApplicationSettings& settings);
 float PlayerLowHealthMovementSpeedScale(
         const Health& health,
-        const PlayerLowHealthMovementApplicationSettings& settings);
+        const PlayerLowHealthMovementApplicationSettings& settings,
+        bool usingRunSpeed = false);
 float PlayerLowHealthCameraStrength(
         const Health& health,
         const PlayerLowHealthCameraApplicationSettings& settings);

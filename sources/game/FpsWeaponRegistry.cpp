@@ -1508,6 +1508,11 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                         "minimumSpeedScale",
                         movementContext).value_or(
                                 movement.minimumSpeedScale);
+                movement.minimumSprintSpeedScale = OptionalNumber(
+                        *lowHealthMovement,
+                        "minimumSprintSpeedScale",
+                        movementContext).value_or(
+                                movement.minimumSpeedScale);
             }
             const auto lowHealthCamera = playerHealth->find(
                     "lowHealthCamera");
@@ -2241,7 +2246,9 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         {"lowHealthMovement", {
             {"enabled", lowHealthMovement.enabled},
             {"startThresholdRatio", lowHealthMovement.startThresholdRatio},
-            {"minimumSpeedScale", lowHealthMovement.minimumSpeedScale}}},
+            {"minimumSpeedScale", lowHealthMovement.minimumSpeedScale},
+            {"minimumSprintSpeedScale",
+                    lowHealthMovement.minimumSprintSpeedScale}}},
         {"lowHealthCamera", {
             {"enabled", lowHealthCamera.enabled},
             {"startThresholdRatio", lowHealthCamera.startThresholdRatio},

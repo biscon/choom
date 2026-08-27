@@ -65,6 +65,7 @@ struct NpcAiState {
     float searchTurnDirection = 1.0f;
     uint64_t lastHeardSoundSequence = 0;
     NpcAiIntent previousIntent = NpcAiIntent::Idle;
+    float attackPhase = 0.0f;
     bool attackCommitted = false;
     bool attackHitResolved = false;
     bool scriptTakeoverPending = false;

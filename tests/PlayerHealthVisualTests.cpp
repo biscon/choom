@@ -82,6 +82,17 @@ int main()
     assert(Near(game::PlayerLowHealthMovementSpeedScale(
                         game::Health{100, 100, 0}, movement),
                 0.2f));
+    game::PlayerLowHealthMovementApplicationSettings sprintMovement = movement;
+    sprintMovement.minimumSprintSpeedScale = 0.75f;
+    assert(Near(game::PlayerLowHealthMovementSpeedScale(
+                        game::Health{100, 100, 25}, sprintMovement, true),
+                0.875f));
+    assert(Near(game::PlayerLowHealthMovementSpeedScale(
+                        game::Health{100, 100, 10}, sprintMovement, true),
+                0.80f));
+    assert(Near(game::PlayerLowHealthMovementSpeedScale(
+                        game::Health{100, 100, 0}, sprintMovement, true),
+                0.75f));
 
     const auto& camera = healthSettings.lowHealthCamera;
     assert(Near(game::PlayerLowHealthCameraStrength(
@@ -150,6 +161,9 @@ int main()
     assert(!game::PlayerHealthSettingsError(healthSettings).empty());
     healthSettings = {};
     healthSettings.lowHealthMovement.minimumSpeedScale = 1.01f;
+    assert(!game::PlayerHealthSettingsError(healthSettings).empty());
+    healthSettings = {};
+    healthSettings.lowHealthMovement.minimumSprintSpeedScale = -0.01f;
     assert(!game::PlayerHealthSettingsError(healthSettings).empty());
     healthSettings = {};
     healthSettings.lowHealthCamera.fullEffectRatio = 0.75f;

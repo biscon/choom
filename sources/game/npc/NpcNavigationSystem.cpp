@@ -5,6 +5,7 @@
 #include "engine/ecs/World.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/ai/NpcAiSystem.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -380,6 +381,114 @@ SectorFpsVerticalContext BuildVerticalContext(
         result.ceilingZ = heights.ceilingZ;
     }
     return result;
+}
+
+SectorCollisionMoveResult ResolveNpcHorizontalMovement(
+        const SectorCollisionWorld& collisionWorld,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders,
+        const std::vector<SectorStaticModelCollider>& staticColliders,
+        const SectorTopologyMap& map,
+        const NpcNavigationRuntime& runtime,
+        const NpcNavigationRecord& record,
+        const SectorDoorPlayerObstacle* playerObstacle,
+        const SectorCollisionMoveConfig& moveConfig,
+        const SectorCollisionMoveState& moveState,
+        Vector2 desiredDelta)
+{
+    SectorCollisionMoveResult result = collisionWorld.ResolveMovement(
+            moveState, desiredDelta, moveConfig);
+    result = ResolveSectorDoorDynamicCollidersForPlayerMovement(
+            moveState, result, moveConfig, doorColliders);
+    const SectorFpsVerticalContext sectorContext = BuildVerticalContext(
+            collisionWorld, result.currentSectorId);
+    result = ResolveSectorStaticModelCollidersForPlayerMovement(
+            moveState,
+            result,
+            moveConfig,
+            sectorContext,
+            staticColliders);
+    if (map.previewSettings.npcToNpcCollisionEnabled) {
+        result = ResolveNpcCollisionCylindersForMovement(
+                moveState,
+                result,
+                moveConfig,
+                record.placedObjectId,
+                runtime.collisionCylinders.data(),
+                runtime.collisionCylinders.size());
+    }
+    if (playerObstacle != nullptr) {
+        const NpcCollisionCylinder playerCylinder{
+                -1,
+                playerObstacle->feetPosition,
+                playerObstacle->radius,
+                playerObstacle->height};
+        result = ResolveNpcCollisionCylindersForMovement(
+                moveState,
+                result,
+                moveConfig,
+                record.placedObjectId,
+                &playerCylinder,
+                1);
+    }
+    return result;
+}
+
+Vector2 ApplyNpcMovementResult(
+        const SectorCollisionWorld& collisionWorld,
+        const std::vector<SectorStaticModelCollider>& staticColliders,
+        NpcNavigationRuntime& runtime,
+        const NpcNavigationRecord& record,
+        const SectorCollisionMoveConfig& moveConfig,
+        const SectorCollisionMoveResult& result,
+        SectorObjectTransform& transform,
+        SectorObject& object,
+        SectorObjectVisualOffset* visualOffset,
+        bool& capturedStepOffset)
+{
+    const Vector2 previousXZ{transform.position.x, transform.position.z};
+    const float previousPhysicalY = transform.position.y;
+    const float previousVisualY = previousPhysicalY
+            + (visualOffset != nullptr ? visualOffset->position.y : 0.0f);
+    transform.position.x = result.positionXZ.x;
+    transform.position.z = result.positionXZ.y;
+    object.currentSectorId = result.currentSectorId;
+    SectorFpsVerticalContext support = BuildVerticalContext(
+            collisionWorld, object.currentSectorId);
+    if (support.hasSector) {
+        SectorFpsControllerState supportState;
+        supportState.feetPosition = transform.position;
+        supportState.feetPosition.y = previousPhysicalY;
+        supportState.currentSectorId = object.currentSectorId;
+        supportState.grounded = true;
+        SectorFpsControllerConfig supportConfig;
+        supportConfig.playerRadius = moveConfig.radius;
+        supportConfig.playerHeight = moveConfig.playerHeight;
+        supportConfig.stepHeight = moveConfig.stepHeight;
+        support = BuildSectorStaticModelVerticalContext(
+                support,
+                supportState,
+                supportConfig,
+                staticColliders);
+        const float floorDelta = support.floorZ - previousPhysicalY;
+        if (std::fabs(floorDelta) <= moveConfig.stepHeight + 0.001f) {
+            transform.position.y = support.floorZ;
+            if (visualOffset != nullptr
+                    && std::fabs(transform.position.y - previousPhysicalY)
+                            > 0.001f) {
+                visualOffset->position.y = previousVisualY - transform.position.y;
+                capturedStepOffset = true;
+            }
+        }
+    }
+    for (NpcCollisionCylinder& cylinder : runtime.collisionCylinders) {
+        if (cylinder.stableId == record.placedObjectId) {
+            cylinder.feetPosition = transform.position;
+            break;
+        }
+    }
+    return {
+            transform.position.x - previousXZ.x,
+            transform.position.z - previousXZ.y};
 }
 
 Vector2 ApplyFriendlyPlayerAvoidance(
@@ -869,9 +978,11 @@ NpcMoveRequestResult RetargetNpcAiMove(
     record->requestId = AllocateRequestId(runtime);
     record->requestedDestinationXZ = destinationXZ;
     record->projectedDestination = path.projectedDestination;
-    record->desiredVelocity = {};
-    record->actualVelocity = {};
-    record->footstepDistanceWorld = 0.0f;
+    if (!replacing) {
+        record->desiredVelocity = {};
+        record->actualVelocity = {};
+        record->footstepDistanceWorld = 0.0f;
+    }
     record->footstepEvent = false;
     ResetProgressTracking(*record);
     record->replanCooldownSeconds = 0.0f;
@@ -1378,8 +1489,61 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const bool staggered = world.Has<NpcCombatState>(record.entity)
                 && world.Get<NpcCombatState>(record.entity)
                         .staggerRemainingSeconds > 0.0f;
+        const bool dead = (world.Has<NpcCombatState>(record.entity)
+                        && world.Get<NpcCombatState>(record.entity).dead)
+                || (world.Has<Health>(record.entity)
+                        && IsDepleted(world.Get<Health>(record.entity)));
         const bool frozenAi = freezeAi
                 && record.authority == NpcMoveAuthority::Ai;
+        if (!staggered && !dead && !freezeAi && dt > 0.0f
+                && world.Has<NpcAiState>(record.entity)) {
+            const NpcAiState& ai = world.Get<NpcAiState>(record.entity);
+            const float advanceFactor = ai.attackCommitted
+                    ? NpcAiAttackAdvanceSpeedFactor(
+                            ai.attackPhase,
+                            ai.attack.hitPhase,
+                            ai.attack.advanceSpeedMultiplier)
+                    : 0.0f;
+            if (advanceFactor > 0.0f) {
+                const Vector2 direction{
+                        std::sin(transform.yawRadians),
+                        std::cos(transform.yawRadians)};
+                const Vector2 desiredDelta = Vector2Scale(
+                        direction, npc.runSpeed * advanceFactor * dt);
+                const SectorCollisionMoveState moveState{
+                        {transform.position.x, transform.position.z},
+                        transform.position.y,
+                        object.currentSectorId,
+                        true};
+                const SectorCollisionMoveResult result =
+                        ResolveNpcHorizontalMovement(
+                                collisionWorld,
+                                doorColliders,
+                                staticColliders,
+                                map,
+                                runtime,
+                                record,
+                                playerObstacle,
+                                moveConfig,
+                                moveState,
+                                desiredDelta);
+                const Vector2 actual = ApplyNpcMovementResult(
+                        collisionWorld,
+                        staticColliders,
+                        runtime,
+                        record,
+                        moveConfig,
+                        result,
+                        transform,
+                        object,
+                        visualOffset,
+                        capturedStepOffset);
+                record.actualVelocity = Vector2Scale(actual, 1.0f / dt);
+                if (Vector2Length(actual) > MovementDistanceEpsilon) {
+                    movedAnyNpc = true;
+                }
+            }
+        }
         if (!staggered && !frozenAi && IsActive(record.phase)
                 && !record.tileReplanPending && dt > 0.0f) {
             const float movementSpeed = record.gait == NpcMoveGait::Run
@@ -1446,89 +1610,29 @@ void UpdateNpcNavigationAndLocomotionSystem(
                         transform.position.y,
                         object.currentSectorId,
                         true};
-                SectorCollisionMoveResult result = collisionWorld.ResolveMovement(
-                        moveState, desiredDelta, moveConfig);
-                result = ResolveSectorDoorDynamicCollidersForPlayerMovement(
-                        moveState, result, moveConfig, doorColliders);
-                const SectorFpsVerticalContext sectorContext = BuildVerticalContext(
-                        collisionWorld, result.currentSectorId);
-                result = ResolveSectorStaticModelCollidersForPlayerMovement(
-                        moveState,
-                        result,
+                const SectorCollisionMoveResult result =
+                        ResolveNpcHorizontalMovement(
+                                collisionWorld,
+                                doorColliders,
+                                staticColliders,
+                                map,
+                                runtime,
+                                record,
+                                playerObstacle,
+                                moveConfig,
+                                moveState,
+                                desiredDelta);
+                const Vector2 actual = ApplyNpcMovementResult(
+                        collisionWorld,
+                        staticColliders,
+                        runtime,
+                        record,
                         moveConfig,
-                        sectorContext,
-                        staticColliders);
-                if (map.previewSettings.npcToNpcCollisionEnabled) {
-                    result = ResolveNpcCollisionCylindersForMovement(
-                            moveState,
-                            result,
-                            moveConfig,
-                            record.placedObjectId,
-                            runtime.collisionCylinders.data(),
-                            runtime.collisionCylinders.size());
-                }
-                if (playerObstacle != nullptr) {
-                    const NpcCollisionCylinder playerCylinder{
-                            -1,
-                            playerObstacle->feetPosition,
-                            playerObstacle->radius,
-                            playerObstacle->height};
-                    result = ResolveNpcCollisionCylindersForMovement(
-                            moveState,
-                            result,
-                            moveConfig,
-                            record.placedObjectId,
-                            &playerCylinder,
-                            1);
-                }
-
-                const Vector2 previousXZ{transform.position.x, transform.position.z};
-                const float previousPhysicalY = transform.position.y;
-                const float previousVisualY = previousPhysicalY
-                        + (visualOffset != nullptr ? visualOffset->position.y : 0.0f);
-                transform.position.x = result.positionXZ.x;
-                transform.position.z = result.positionXZ.y;
-                object.currentSectorId = result.currentSectorId;
-                SectorFpsVerticalContext support = BuildVerticalContext(
-                        collisionWorld, object.currentSectorId);
-                if (support.hasSector) {
-                    SectorFpsControllerState supportState;
-                    supportState.feetPosition = transform.position;
-                    supportState.feetPosition.y = previousPhysicalY;
-                    supportState.currentSectorId = object.currentSectorId;
-                    supportState.grounded = true;
-                    SectorFpsControllerConfig supportConfig;
-                    supportConfig.playerRadius = moveConfig.radius;
-                    supportConfig.playerHeight = moveConfig.playerHeight;
-                    supportConfig.stepHeight = moveConfig.stepHeight;
-                    support = BuildSectorStaticModelVerticalContext(
-                            support,
-                            supportState,
-                            supportConfig,
-                            staticColliders);
-                    const float floorDelta = support.floorZ - previousPhysicalY;
-                    if (std::fabs(floorDelta)
-                            <= moveConfig.stepHeight + 0.001f) {
-                        transform.position.y = support.floorZ;
-                        if (visualOffset != nullptr
-                                && std::fabs(transform.position.y - previousPhysicalY)
-                                        > 0.001f) {
-                            visualOffset->position.y = previousVisualY - transform.position.y;
-                            capturedStepOffset = true;
-                        }
-                    }
-                }
-                for (NpcCollisionCylinder& cylinder :
-                        runtime.collisionCylinders) {
-                    if (cylinder.stableId == record.placedObjectId) {
-                        cylinder.feetPosition = transform.position;
-                        break;
-                    }
-                }
-
-                const Vector2 actual{
-                        transform.position.x - previousXZ.x,
-                        transform.position.z - previousXZ.y};
+                        result,
+                        transform,
+                        object,
+                        visualOffset,
+                        capturedStepOffset);
                 totalActual = Vector2Add(totalActual, actual);
                 const float actualDistance = Vector2Length(actual);
                 movementBudget -= requestedDistance;
