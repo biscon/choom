@@ -69,4 +69,19 @@ float PlayerLowHealthVisualStrength(
     return deficit * deficit * (3.0f - 2.0f * deficit);
 }
 
+float PlayerLowHealthVignetteOpacity(
+        const Health& health,
+        const PlayerLowHealthVisualApplicationSettings& settings)
+{
+    const float authoredOpacity = std::clamp(
+            settings.maximumVignetteOpacity
+                    * PlayerLowHealthVisualStrength(health, settings),
+            0.0f,
+            1.0f);
+    // Treat the authored value as an artist-facing intensity. A quadratic
+    // ease-out makes injury readable earlier and lets high values feel
+    // substantially less transparent without changing the vignette shape.
+    return authoredOpacity * (2.0f - authoredOpacity);
+}
+
 } // namespace game

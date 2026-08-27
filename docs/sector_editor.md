@@ -983,7 +983,9 @@ effect under `Settings -> Player -> Health`. It starts below the authored health
 ratio (default `0.5`) and uses a smooth progression toward its configured
 maximum vignette opacity and desaturation as health approaches zero. The
 vignette is a soft rounded-screen mask tinted with the authored dark red color;
-it is applied after neutral tone mapping but before the final sRGB transfer, so
+its artist-facing opacity uses a quadratic ease-out so injuries become readable
+earlier and high opacity values appear substantially less transparent. It is
+applied after neutral tone mapping but before the final sRGB transfer, so
 it composes with the existing HDR presentation without another fullscreen pass.
 The effect is game-runtime-only: the editor 3D preview always supplies neutral
 presentation parameters, regardless of the settings.

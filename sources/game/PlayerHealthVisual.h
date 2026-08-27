@@ -28,5 +28,8 @@ float PlayerHealthRatio(const Health& health);
 float PlayerLowHealthVisualStrength(
         const Health& health,
         const PlayerLowHealthVisualApplicationSettings& settings);
+float PlayerLowHealthVignetteOpacity(
+        const Health& health,
+        const PlayerLowHealthVisualApplicationSettings& settings);
 
 } // namespace game

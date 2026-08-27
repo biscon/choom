@@ -635,7 +635,8 @@ GameApplication::ScenePresentationEffects() const
     const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
             settings.vignetteColor);
     result.desaturation = settings.maximumDesaturation * strength;
-    result.vignetteOpacity = settings.maximumVignetteOpacity * strength;
+    result.vignetteOpacity = PlayerLowHealthVignetteOpacity(
+            gameSession.PlayerHealth(), settings);
     result.vignetteColorLinear = {
             vignetteColor.x,
             vignetteColor.y,

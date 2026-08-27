@@ -30,6 +30,18 @@ int main()
     assert(Near(game::PlayerLowHealthVisualStrength(
                         game::Health{100, 100, 0}, visual),
                 1.0f));
+    assert(Near(game::PlayerLowHealthVignetteOpacity(
+                        game::Health{100, 100, 100}, visual),
+                0.0f));
+    assert(Near(game::PlayerLowHealthVignetteOpacity(
+                        game::Health{100, 100, 50}, visual),
+                0.0f));
+    assert(Near(game::PlayerLowHealthVignetteOpacity(
+                        game::Health{100, 100, 25}, visual),
+                0.544375f));
+    assert(Near(game::PlayerLowHealthVignetteOpacity(
+                        game::Health{100, 100, 0}, visual),
+                0.8775f));
     assert(Near(game::PlayerHealthRatio(game::Health{100, 100, 150}), 1.0f));
     assert(Near(game::PlayerHealthRatio(game::Health{100, 100, -10}), 0.0f));
     assert(Near(game::PlayerHealthRatio(game::Health{100, 0, 0}), 0.0f));
@@ -37,6 +49,9 @@ int main()
     game::PlayerLowHealthVisualApplicationSettings disabled = visual;
     disabled.enabled = false;
     assert(Near(game::PlayerLowHealthVisualStrength(
+                        game::Health{100, 100, 0}, disabled),
+                0.0f));
+    assert(Near(game::PlayerLowHealthVignetteOpacity(
                         game::Health{100, 100, 0}, disabled),
                 0.0f));
 
