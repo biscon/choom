@@ -61,6 +61,7 @@ struct NpcAiRuntime {
     float playerLightDetectionFactor = 1.0f;
     float playerCrouchBlend = 0.0f;
     float playerMovementNoiseMultiplier = 1.0f;
+    bool playerSneaking = false;
 };
 
 using NpcAiScriptTakeoverFn = void (*)(
@@ -91,6 +92,7 @@ struct NpcAiGameplayContext {
     bool godMode = false;
     bool frozen = false;
     bool playerGrounded = false;
+    bool playerSneaking = false;
     float playerRadiusWorld = 0.25f;
     float playerNormalizedLightLevel = 1.0f;
     float playerCrouchBlend = 0.0f;

@@ -67,7 +67,12 @@ collision. Player sound events are scene-owned, short-lived, pre-reserved
 records with a source radius. Hearing requires both the event radius and the
 NPC's authored hearing range to reach. Footsteps, landings, and shots publish
 events; weapon damage also supplies the exact shot origin as a direct generic
-stimulus.
+stimulus. A standing player is detected immediately when the geometric vision
+checks pass, regardless of light level. While crouch is targeted, generic
+vision instead uses the configured light, darkness-proximity, buildup/decay,
+and crouch-response scalers, and movement sounds use the configured crouch
+noise multiplier. Sneak mode follows the accepted crouch toggle state rather
+than waiting for the short visual crouch transition to finish.
 
 Detected or investigating AI owns navigation authority. Script movement cannot
 replace an active AI path, and a patrol coroutine that wakes after detection

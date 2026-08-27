@@ -371,12 +371,15 @@ void DrawNpcAiDebugLabels(
     std::snprintf(
             playerText,
             sizeof(playerText),
-            "PLAYER VISIBILITY %.3f | response x%.2f | baked %.3f + dynamic %.3f = %.3f | crouch %.0f%% | move noise x%.2f%s",
+            "PLAYER VISIBILITY %.3f | response x%.2f | "
+            "baked %.3f + dynamic %.3f = %.3f | sneak %s | "
+            "crouch %.0f%% | move noise x%.2f%s",
             aiRuntime.playerLightLevel.normalizedLight,
             aiRuntime.playerLightDetectionFactor,
             aiRuntime.playerLightLevel.bakedLight,
             aiRuntime.playerLightLevel.dynamicLight,
             aiRuntime.playerLightLevel.combinedLight,
+            aiRuntime.playerSneaking ? "yes" : "no",
             aiRuntime.playerCrouchBlend * 100.0f,
             aiRuntime.playerMovementNoiseMultiplier,
             aiRuntime.playerLightLevel.bakedProbeAvailable

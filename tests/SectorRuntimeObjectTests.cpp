@@ -5895,6 +5895,128 @@ void TestNpcPlayerDetectedAudioTransitionPolicy()
     navigation.Shutdown();
 }
 
+void TestNpcSneakDetectionOnlyAppliesWhileCrouching()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "sneak-detection collision fixture builds");
+
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "sneak-detection navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity entity = SpawnNavigationTestNpc(
+            world, "sneak_detection", 781, {4.0f, 0.0f, 4.0f}, 10);
+    game::NpcRuntimeInstance& npc =
+            world.Get<game::NpcRuntimeInstance>(entity);
+    npc.hostile = true;
+    game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    transform.yawRadians = 0.0f;
+    game::NpcAiState ai;
+    ai.perception.visionRangeWorld = 12.0f;
+    ai.perception.visionAngleDegrees = 120.0f;
+    world.Add(entity, ai);
+    world.Add(entity, game::MakeHealth(100));
+    world.Add(entity, game::NpcCombatState{});
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    game::NpcAiRuntime aiRuntime;
+    game::InitializeNpcAiRuntime(
+            aiRuntime, 4, navigation.Capacities().agentCapacity);
+    engine::AssetManager assets;
+    engine::AudioSystem audio;
+    game::Health playerHealth = game::MakeHealth(100);
+    const game::PlayerSneakApplicationSettings sneakSettings;
+    game::NpcAiGameplayContext gameplay;
+    gameplay.playerFeetPosition = {4.0f, 0.0f, 10.0f};
+    gameplay.playerEyePosition = {4.0f, 1.2f, 10.0f};
+    gameplay.playerHealth = &playerHealth;
+    gameplay.playerGrounded = true;
+    gameplay.playerNormalizedLightLevel = 0.0f;
+    gameplay.playerCrouchBlend = 1.0f;
+    gameplay.playerMovementNoiseMultiplier =
+            sneakSettings.crouchMovementNoiseMultiplier;
+    gameplay.playerSneakSettings = &sneakSettings;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> staticColliders;
+
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    game::NpcAiState& state = world.Get<game::NpcAiState>(entity);
+    Check(state.awareness == game::NpcAwarenessState::Detected
+                  && Near(state.visualDetectionProgress, 1.0f)
+                  && Near(state.visualLightDetectionFactor, 1.0f)
+                  && Near(state.visualProximityDetectionFactor, 0.0f)
+                  && Near(state.visualDetectionRateFactor, 1.0f),
+          "standing player is detected immediately in darkness despite a remaining crouch blend");
+    Check(!aiRuntime.playerSneaking
+                  && Near(aiRuntime.playerLightDetectionFactor, 1.0f)
+                  && Near(aiRuntime.playerMovementNoiseMultiplier, 1.0f),
+          "standing mode bypasses light and movement-noise sneak scalers");
+
+    state.awareness = game::NpcAwarenessState::Unaware;
+    state.visualDetectionProgress = 0.0f;
+    state.playerDetectionAudioPending = false;
+    gameplay.playerSneaking = true;
+    gameplay.playerCrouchBlend = 0.0f;
+    gameplay.playerMovementNoiseMultiplier = 1.0f;
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, sneakSettings.visualDetectionBuildSeconds);
+    Check(state.awareness == game::NpcAwarenessState::Unaware
+                  && state.visualDetectionReason
+                          == game::NpcVisualDetectionReason::Darkness
+                  && Near(state.visualDetectionProgress, 0.0f),
+          "crouch toggle enables darkness stealth before the visual crouch blend advances");
+
+    gameplay.playerNormalizedLightLevel = 1.0f;
+    gameplay.playerCrouchBlend = 1.0f;
+    gameplay.playerMovementNoiseMultiplier =
+            sneakSettings.crouchMovementNoiseMultiplier;
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay,
+            sneakSettings.visualDetectionBuildSeconds * 0.5f);
+    Check(state.awareness == game::NpcAwarenessState::Unaware
+                  && state.visualDetectionReason
+                          == game::NpcVisualDetectionReason::Building
+                  && Near(
+                          state.visualDetectionProgress,
+                          sneakSettings.crouchVisualDetectionMultiplier
+                                  * 0.5f)
+                  && aiRuntime.playerSneaking
+                  && Near(
+                          aiRuntime.playerMovementNoiseMultiplier,
+                          sneakSettings.crouchMovementNoiseMultiplier),
+          "crouched player retains light-based buildup and movement-noise scaling");
+
+    gameplay.playerSneaking = false;
+    gameplay.playerNormalizedLightLevel = 0.0f;
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    Check(state.awareness == game::NpcAwarenessState::Detected
+                  && Near(state.visualDetectionProgress, 1.0f),
+          "accepted stand toggle restores immediate detection before the crouch blend finishes");
+
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
+}
+
 void TestNpcAiPursuitSlotsRouteAroundSupportingProp()
 {
     game::SectorTopologyMap map = MakeNavigationSquareMap();
@@ -9780,6 +9902,7 @@ int main()
     TestNpcAiDebugGeometryAndLabelsExposeRuntimeState();
     TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
     TestNpcPlayerDetectedAudioTransitionPolicy();
+    TestNpcSneakDetectionOnlyAppliesWhileCrouching();
     TestNpcAiPursuitSlotsRouteAroundSupportingProp();
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
     TestNpcNavigationReplansAroundDynamicTileCacheObstacle();

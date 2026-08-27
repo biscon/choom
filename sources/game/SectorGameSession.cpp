@@ -1321,6 +1321,16 @@ void SectorGameSession::Update(
 
     const Vector3 playerPosition =
             controller.fpsControllerState.feetPosition;
+    const bool playerSneaking =
+            controller.fpsControllerState.crouchTargeted;
+    const float playerCrouchBlend = SectorFpsCrouchBlend(
+            controller.fpsControllerState);
+    const float playerMovementNoiseMultiplier = applicationSettings != nullptr
+            && playerSneaking
+            ? PlayerSneakMovementNoiseMultiplier(
+                    applicationSettings->playerSneak,
+                    playerCrouchBlend)
+            : 1.0f;
     const SectorFpsControllerConfig obstacleConfig =
             EffectiveSectorFpsControllerConfig(
                     controller.fpsControllerState,
@@ -1418,15 +1428,13 @@ void SectorGameSession::Update(
     npcGameplay.godMode = godMode;
     npcGameplay.frozen = aiFrozen;
     npcGameplay.playerGrounded = controller.fpsControllerState.grounded;
+    npcGameplay.playerSneaking = playerSneaking;
     npcGameplay.playerRadiusWorld = obstacleConfig.playerRadius;
     npcGameplay.playerNormalizedLightLevel = playerLightLevel.normalizedLight;
-    npcGameplay.playerCrouchBlend = SectorFpsCrouchBlend(
-            controller.fpsControllerState);
+    npcGameplay.playerCrouchBlend = playerCrouchBlend;
     if (applicationSettings != nullptr) {
         npcGameplay.playerMovementNoiseMultiplier =
-                PlayerSneakMovementNoiseMultiplier(
-                        applicationSettings->playerSneak,
-                        npcGameplay.playerCrouchBlend);
+                playerMovementNoiseMultiplier;
         npcGameplay.playerSneakSettings = &applicationSettings->playerSneak;
     }
     npcGameplay.playerLightLevel = &playerLightLevel;
@@ -1726,10 +1734,7 @@ void SectorGameSession::Update(
         scene.EmitPlayerSound(
                 controller.fpsControllerState.feetPosition,
                 applicationSettings->footsteps.noiseRadiusWorld
-                        * PlayerSneakMovementNoiseMultiplier(
-                                applicationSettings->playerSneak,
-                                SectorFpsCrouchBlend(
-                                        controller.fpsControllerState)));
+                        * playerMovementNoiseMultiplier);
     }
     if (playerAudio != nullptr) {
         if (controller.frameEvents.jumped) {
@@ -1760,10 +1765,7 @@ void SectorGameSession::Update(
         scene.EmitPlayerSound(
                 controller.fpsControllerState.feetPosition,
                 applicationSettings->footsteps.landingNoiseRadiusWorld
-                        * PlayerSneakMovementNoiseMultiplier(
-                                applicationSettings->playerSneak,
-                                SectorFpsCrouchBlend(
-                                        controller.fpsControllerState)));
+                        * playerMovementNoiseMultiplier);
     }
     bool acceptedShot = false;
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {

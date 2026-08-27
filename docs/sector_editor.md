@@ -968,7 +968,13 @@ may still jump.
 Seek & Destroy is the first hostile AI type. In the real game it uses generic
 vision/hearing and last-known-position investigation, runs toward a detected
 player, and commits to melee animations until their hit/finish points. The
-authored range remains the baseline center-to-center range; runtime uses a
+generic vision host detects a standing player immediately when authored range,
+cone, and line-of-sight checks pass, independent of light level. Light,
+darkness-proximity, timed detection, and reduced movement-noise settings apply
+only while crouch/sneak mode is targeted. Sneak mode starts with the accepted
+crouch toggle and ends with the accepted stand toggle, while the physical
+crouch pose continues its short blend. The authored range remains the baseline
+center-to-center range; runtime uses a
 `0.10` world-unit engagement tolerance, a `0.25` world-unit disengagement band,
 and a bounded `0.25` world-unit committed-hit margin so navigation does not
 jitter at the melee boundary and nearby attackers resolve independently. A

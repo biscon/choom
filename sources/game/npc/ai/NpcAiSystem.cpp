@@ -587,6 +587,7 @@ void InitializeNpcAiRuntime(
     runtime.playerLightDetectionFactor = 1.0f;
     runtime.playerCrouchBlend = 0.0f;
     runtime.playerMovementNoiseMultiplier = 1.0f;
+    runtime.playerSneaking = false;
 }
 
 void ClearNpcAiRuntime(NpcAiRuntime& runtime)
@@ -602,6 +603,7 @@ void ClearNpcAiRuntime(NpcAiRuntime& runtime)
     runtime.playerLightDetectionFactor = 1.0f;
     runtime.playerCrouchBlend = 0.0f;
     runtime.playerMovementNoiseMultiplier = 1.0f;
+    runtime.playerSneaking = false;
 }
 
 void EmitNpcPlayerSound(
@@ -719,11 +721,13 @@ void UpdateNpcAiSystem(
         float dt)
 {
     const float safeDt = std::max(0.0f, dt);
+    const bool useSneakDetection = gameplay.playerSneaking
+            && gameplay.playerSneakSettings != nullptr;
     runtime.playerLightLevel = gameplay.playerLightLevel != nullptr
             ? *gameplay.playerLightLevel
             : PlayerLightLevelSample{};
     runtime.playerLightDetectionFactor =
-            gameplay.playerSneakSettings != nullptr
+            useSneakDetection
             ? PlayerSneakLightDetectionFactor(
                     gameplay.playerNormalizedLightLevel,
                     gameplay.playerSneakSettings->darknessCutoffNormalized,
@@ -733,10 +737,11 @@ void UpdateNpcAiSystem(
     runtime.playerCrouchBlend = std::isfinite(gameplay.playerCrouchBlend)
             ? std::clamp(gameplay.playerCrouchBlend, 0.0f, 1.0f)
             : 0.0f;
-    runtime.playerMovementNoiseMultiplier =
-            std::isfinite(gameplay.playerMovementNoiseMultiplier)
+    runtime.playerMovementNoiseMultiplier = gameplay.playerSneaking
+            && std::isfinite(gameplay.playerMovementNoiseMultiplier)
             ? std::max(0.0f, gameplay.playerMovementNoiseMultiplier)
             : 1.0f;
+    runtime.playerSneaking = gameplay.playerSneaking;
     for (NpcSoundEvent& sound : runtime.playerSounds) {
         sound.remainingSeconds -= safeDt;
     }
@@ -812,7 +817,7 @@ void UpdateNpcAiSystem(
         if (!playerAlive) {
             ai.visualLightDetectionFactor = 0.0f;
             ai.visualProximityDetectionFactor = 0.0f;
-        } else if (gameplay.playerSneakSettings != nullptr) {
+        } else if (useSneakDetection) {
             ai.visualLightDetectionFactor = PlayerSneakLightDetectionFactor(
                     gameplay.playerNormalizedLightLevel,
                     gameplay.playerSneakSettings->darknessCutoffNormalized,
@@ -835,7 +840,7 @@ void UpdateNpcAiSystem(
             ai.visualDetectionReason = directAlert || seesPlayer
                     ? NpcVisualDetectionReason::Detected
                     : sight.failureReason;
-        } else if (gameplay.playerSneakSettings == nullptr) {
+        } else if (!useSneakDetection) {
             seesPlayer = ai.playerInGeometricSight;
             ai.visualDetectionProgress = seesPlayer ? 1.0f : 0.0f;
             ai.visualDetectionRateFactor = seesPlayer ? 1.0f : 0.0f;
