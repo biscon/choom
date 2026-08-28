@@ -16,6 +16,8 @@ std::optional<MainMenuAction> DrawGameMainMenu(
         engine::FontHandle font,
         engine::FontHandle smallFont,
         bool gameRunning,
+        bool saveEnabled,
+        const char* saveBlockedReason,
         const char* statusText);
 
 bool DrawGameOverOverlay(

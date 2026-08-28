@@ -246,6 +246,10 @@ bool QueueRemoveSectorRuntimeObjectByEntity(
         SectorRuntimeObjectState& state,
         engine::Entity entity);
 
+void RefreshSectorDoorSpatialCaches(
+        engine::World& world,
+        SectorRuntimeObjectState& state);
+
 void UpdateSectorRuntimeObjects(
         engine::World& world,
         engine::AssetManager& assets,

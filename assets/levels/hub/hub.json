@@ -6476,7 +6476,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -6575,7 +6576,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "3f14b5675b089044",
+    "sourceHash": "b7cff0fdbcf94036",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6583,19 +6584,19 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.2421875,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 839
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 1379
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "3f14b5675b089044",
+      "sourceHash": "b7cff0fdbcf94036",
       "count": 2671,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -6608,24 +6609,31 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 16026,
-        "rgbChannelsAboveOne": 33
+        "rgbChannelsAboveOne": 32
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "3f14b5675b089044",
+      "sourceHash": "b7cff0fdbcf94036",
       "modelCount": 51,
       "objectCount": 131,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",

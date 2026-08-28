@@ -1613,6 +1613,19 @@ void SpawnPlacedRuntimeObjects(
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
 }
 
+void RefreshSectorDoorSpatialCaches(
+        engine::World& world,
+        SectorRuntimeObjectState& state)
+{
+    UpdateSectorDoorDerivedStateSystem(world);
+    state.dynamicDoorColliders.clear();
+    CollectSectorDoorDynamicColliders(world, state.dynamicDoorColliders);
+    state.dynamicPortalBlockers.clear();
+    CollectSectorDoorDynamicPortalBlockers(world, state.dynamicPortalBlockers);
+    state.doorSpatialStateChanged = true;
+    state.doorCollisionCacheInitialized = true;
+}
+
 void UpdateSectorRuntimeObjects(
         engine::World& world,
         engine::AssetManager& assets,

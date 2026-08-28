@@ -863,6 +863,8 @@ int main(int argc, char** argv)
         }
 
         application.Update(context, dt);
+        application.ProcessPendingGameSave(
+                context, scenePresentationTarget.texture);
         application.ProcessDeferredDebugActions(context);
         if (const game::FpsApplicationSettings* pending =
                     application.PendingGraphicsSettings()) {

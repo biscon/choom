@@ -5,10 +5,16 @@
 #include "engine/debug/DebugConsoleLogBridge.h"
 #include "engine/render/ColorTransfer.h"
 #include "game/GameMainMenu.h"
+#include "game/SectorLevelLoader.h"
+#include "game/save/GameSaveRuntime.h"
+#include "game/save/GameSaveStorage.h"
 
 #include <raylib.h>
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <filesystem>
 
 namespace game {
 
@@ -31,6 +37,7 @@ bool GameApplication::Init(
 {
     Shutdown(context);
     applicationSettings = std::move(initialSettings);
+    saveRoot = ResolveGameSaveRoot("sector_engine");
     menuStatus = std::move(settingsLoadError);
     applicationSettings.graphics =
             NormalizeFpsGraphicsSettings(applicationSettings.graphics);
@@ -127,6 +134,7 @@ bool GameApplication::IsGlobalPreparationFinished() const
 
 void GameApplication::Shutdown(engine::EngineContext& context)
 {
+    CloseGameSaveMenu(saveMenu, context.assets);
     context.audio.StopAll(context.assets);
     if (gameSession.IsRunning()) {
         gameSession.Shutdown(context, gameScene);
@@ -144,6 +152,10 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     applicationSettings = FpsApplicationSettings{};
     playerAudio = PlayerAudioRuntime{};
     persistentScripts = engine::PersistentScriptStore{};
+    levelSaveStates.clear();
+    saveRoot.clear();
+    pendingSaveMenuAction.reset();
+    pendingGameSave.reset();
     weaponRegistry = FpsWeaponRegistry{};
     itemRegistry = ItemRegistry{};
     itemCampaign = ItemCampaignState{};
@@ -326,7 +338,19 @@ void GameApplication::RenderInteractiveUI(
         }
     }
     if (flow.screen == ApplicationScreen::MainMenu) {
-        if (graphicsSettingsOpen) {
+        if (saveMenu.mode != GameSaveMenuMode::Closed) {
+            const GameSaveMenuAction action = DrawGameSaveMenu(
+                    saveMenu,
+                    menuUi,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    smallFont);
+            if (action.type != GameSaveMenuActionType::None) {
+                pendingSaveMenuAction = action;
+            }
+        } else if (graphicsSettingsOpen) {
             const GameGraphicsSettingsAction action = DrawGameGraphicsSettings(
                     menuUi, config, input, assets, font, smallFont,
                     graphicsSettingsDraft, menuStatus.c_str());
@@ -334,6 +358,15 @@ void GameApplication::RenderInteractiveUI(
                 pendingSettingsAction = action;
             }
         } else {
+            const bool regularGameplayMenu = flow.gameRunning
+                    && flow.menuReturnScreen == ApplicationScreen::Game;
+            const bool saveEnabled = regularGameplayMenu
+                    && gameSession.CanSaveGame();
+            const char* saveBlockedReason = !regularGameplayMenu
+                    ? "Saving is only available during regular gameplay."
+                    : gameSession.SaveGameBlockedReason().empty()
+                    ? "Saving is currently unavailable."
+                    : gameSession.SaveGameBlockedReason().c_str();
             pendingMenuAction = DrawGameMainMenu(
                     menuUi,
                     config,
@@ -342,6 +375,8 @@ void GameApplication::RenderInteractiveUI(
                     font,
                     smallFont,
                     flow.gameRunning,
+                    saveEnabled,
+                    saveBlockedReason,
                     menuStatus.c_str());
         }
     }
@@ -355,6 +390,12 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
     if (pendingGameOverMainMenu) {
         pendingGameOverMainMenu = false;
         EndGameToMainMenu(context);
+        return;
+    }
+    if (pendingSaveMenuAction.has_value()) {
+        const GameSaveMenuAction action = std::move(*pendingSaveMenuAction);
+        pendingSaveMenuAction.reset();
+        HandleSaveMenuAction(context, action);
         return;
     }
     if (pendingMenuAction.has_value()) {
@@ -411,6 +452,16 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
                     if (graphicsSettingsOpen) {
                         graphicsSettingsOpen = false;
                         pendingGraphicsSettings.reset();
+                        menuStatus.clear();
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
+                    if (saveMenu.mode != GameSaveMenuMode::Closed) {
+                        if (saveMenu.confirmationOpen) {
+                            saveMenu.confirmationOpen = false;
+                        } else {
+                            CloseGameSaveMenu(saveMenu, context.assets);
+                        }
                         menuStatus.clear();
                         engine::ConsumeEvent(event);
                         return;
@@ -747,8 +798,34 @@ void GameApplication::HandleMenuAction(
             ResumeGame(context);
             break;
         case MainMenuAction::LoadGame:
-        case MainMenuAction::SaveGame:
+            OpenGameSaveMenu(
+                    saveMenu,
+                    GameSaveMenuMode::Load,
+                    flow.gameRunning,
+                    saveRoot,
+                    context.assets);
+            menuStatus.clear();
             break;
+        case MainMenuAction::SaveGame: {
+            const bool regularGameplayMenu = flow.gameRunning
+                    && flow.menuReturnScreen == ApplicationScreen::Game;
+            if (!regularGameplayMenu || !gameSession.CanSaveGame()) {
+                menuStatus = !regularGameplayMenu
+                        ? "Saving is only available during regular gameplay."
+                        : gameSession.SaveGameBlockedReason().empty()
+                        ? "Saving is currently unavailable."
+                        : gameSession.SaveGameBlockedReason();
+                break;
+            }
+            OpenGameSaveMenu(
+                    saveMenu,
+                    GameSaveMenuMode::Save,
+                    false,
+                    saveRoot,
+                    context.assets);
+            menuStatus.clear();
+            break;
+        }
         case MainMenuAction::Settings:
             graphicsSettingsDraft = applicationSettings;
             pendingGraphicsSettings.reset();
@@ -762,6 +839,197 @@ void GameApplication::HandleMenuAction(
             RequestApplicationQuit(flow);
             break;
     }
+}
+
+void GameApplication::HandleSaveMenuAction(
+        engine::EngineContext& context,
+        const GameSaveMenuAction& action)
+{
+    switch (action.type) {
+        case GameSaveMenuActionType::None:
+            return;
+        case GameSaveMenuActionType::Back:
+            CloseGameSaveMenu(saveMenu, context.assets);
+            menuStatus.clear();
+            return;
+        case GameSaveMenuActionType::Save:
+            if (flow.menuReturnScreen != ApplicationScreen::Game
+                    || !gameSession.CanSaveGame()) {
+                saveMenu.status = gameSession.SaveGameBlockedReason().empty()
+                        ? "Saving is currently unavailable."
+                        : gameSession.SaveGameBlockedReason();
+                return;
+            }
+            if (action.slot < 1 || action.slot > GameSaveSlotCount
+                    || !IsValidGameSaveName(action.name)) {
+                saveMenu.status = "Select a slot and enter a valid save name.";
+                return;
+            }
+            pendingGameSave = PendingGameSave{action.slot, action.name};
+            CloseGameSaveMenu(saveMenu, context.assets);
+            menuStatus = "Saving...";
+            return;
+        case GameSaveMenuActionType::Load:
+            LoadGameFromSlot(context, action.slot);
+            return;
+    }
+}
+
+void GameApplication::LoadGameFromSlot(
+        engine::EngineContext& context,
+        int slot)
+{
+    GameSaveData candidate;
+    std::string error;
+    if (!LoadGameSaveSlot(saveRoot, slot, candidate, error)) {
+        saveMenu.status = error.empty() ? "Could not read the save game" : error;
+        return;
+    }
+
+    const std::string levelPath = ApplicationLevelAssetPath(
+            candidate.currentLevelId);
+    SectorTopologyMap preflightMap;
+    if (levelPath.empty() || !LoadSectorRuntimeLevel(
+                levelPath, materialRegistry, preflightMap, error)) {
+        saveMenu.status = error.empty()
+                ? "The saved level is unavailable" : error;
+        return;
+    }
+
+    CloseGameSaveMenu(saveMenu, context.assets);
+    context.audio.StopAll(context.assets);
+    editor.SuspendRuntime(context);
+    if (gameSession.IsRunning()) {
+        gameSession.Shutdown(context, gameScene);
+    } else if (gameScene.IsReady()) {
+        gameScene.Shutdown(context);
+    }
+
+    itemCampaign = std::move(candidate.itemCampaign);
+    persistentScripts = std::move(candidate.persistentScripts);
+    levelSaveStates = std::move(candidate.levels);
+    if (!gameSession.StartNew(
+                context,
+                gameScene,
+                SectorLevelEntryRequest{candidate.currentLevelId, std::nullopt},
+                materialRegistry,
+                weaponRegistry,
+                itemRegistry,
+                itemModelAssets,
+                itemCampaign,
+                applicationSettings,
+                playerAudio,
+                persistentScripts,
+                levelSaveStates,
+                true,
+                &candidate.player,
+                true,
+                error)) {
+        menuStatus = error.empty() ? "Could not load the save game" : error;
+        itemCampaign = ItemCampaignState{};
+        persistentScripts = engine::PersistentScriptStore{};
+        levelSaveStates.clear();
+        editorAttachedToGame = false;
+        editor.SetGameSessionExists(false);
+        MarkApplicationGameStopped(flow);
+        return;
+    }
+    editorAttachedToGame = false;
+    editor.SetGameSessionExists(true);
+    debugConsole.open = false;
+    menuStatus.clear();
+    MarkApplicationGameStarted(flow);
+}
+
+void GameApplication::ProcessPendingGameSave(
+        engine::EngineContext& context,
+        const Texture2D& scenePresentationTexture)
+{
+    if (!pendingGameSave.has_value()) return;
+    const PendingGameSave request = std::move(*pendingGameSave);
+    pendingGameSave.reset();
+
+    if (flow.menuReturnScreen != ApplicationScreen::Game
+            || !gameSession.CanSaveGame()) {
+        menuStatus = gameSession.SaveGameBlockedReason().empty()
+                ? "Saving is currently unavailable."
+                : gameSession.SaveGameBlockedReason();
+        return;
+    }
+    if (!gameSession.CaptureCurrentLevelSaveState(context, gameScene)) {
+        menuStatus = "Could not capture the current level state.";
+        return;
+    }
+
+    GameSaveData previous;
+    std::string ignoredError;
+    const bool hadPrevious = LoadGameSaveSlot(
+            saveRoot, request.slot, previous, ignoredError);
+
+    GameSaveData save;
+    save.slot = request.slot;
+    save.name = request.name;
+    save.savedAtUtc = CurrentGameSaveTimestampUtc();
+    save.currentLevelId = gameSession.LevelName();
+    save.player = gameSession.CapturePlayerSaveState();
+    save.itemCampaign = itemCampaign;
+    save.persistentScripts = persistentScripts;
+    save.levels = levelSaveStates;
+
+    std::filesystem::path newThumbnail;
+    if (IsTextureValid(scenePresentationTexture)) {
+        std::error_code filesystemError;
+        std::filesystem::create_directories(saveRoot, filesystemError);
+        if (!filesystemError) {
+            const long long generation = std::chrono::duration_cast<
+                    std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+            char filename[80]{};
+            std::snprintf(filename, sizeof(filename),
+                    "slot%02d_%lld.png", request.slot, generation);
+            newThumbnail = saveRoot / filename;
+            const std::filesystem::path temporary =
+                    newThumbnail.string() + ".tmp.png";
+            Image image = LoadImageFromTexture(scenePresentationTexture);
+            if (IsImageValid(image)) {
+                ImageFlipVertical(&image);
+                ImageResize(&image, GameSaveThumbnailWidth,
+                        GameSaveThumbnailHeight);
+                if (ExportImage(image, temporary.string().c_str())) {
+                    std::filesystem::rename(
+                            temporary, newThumbnail, filesystemError);
+                    if (!filesystemError) save.thumbnailFile = filename;
+                }
+                UnloadImage(image);
+            }
+            if (save.thumbnailFile.empty()) {
+                std::filesystem::remove(temporary, filesystemError);
+                newThumbnail.clear();
+                TraceLog(LOG_WARNING,
+                        "Could not write the save-game thumbnail");
+            }
+        }
+    }
+
+    std::string error;
+    if (!WriteGameSaveSlot(saveRoot, save, error)) {
+        if (!newThumbnail.empty()) {
+            std::error_code filesystemError;
+            std::filesystem::remove(newThumbnail, filesystemError);
+        }
+        menuStatus = error.empty() ? "Could not write the save game" : error;
+        return;
+    }
+
+    if (hadPrevious && !previous.thumbnailFile.empty()
+            && previous.thumbnailFile != save.thumbnailFile
+            && previous.thumbnailFile.find('/') == std::string::npos
+            && previous.thumbnailFile.find('\\') == std::string::npos) {
+        std::error_code filesystemError;
+        std::filesystem::remove(
+                saveRoot / previous.thumbnailFile, filesystemError);
+    }
+    menuStatus = "Saved to slot " + std::to_string(request.slot) + ".";
 }
 
 const FpsApplicationSettings* GameApplication::PendingGraphicsSettings() const
@@ -817,6 +1085,7 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
     editor.SuspendRuntime(context);
     std::string error;
     persistentScripts = engine::PersistentScriptStore{};
+    levelSaveStates.clear();
     InitializeItemCampaignState(
             itemCampaign,
             applicationSettings.playerInventory,
@@ -833,6 +1102,9 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
                 applicationSettings,
                 playerAudio,
                 persistentScripts,
+                levelSaveStates,
+                false,
+                nullptr,
                 false,
                 error)) {
         menuStatus = error.empty() ? "Could not start a new game" : error;
@@ -879,6 +1151,7 @@ void GameApplication::ClearGameSession(engine::EngineContext& context)
     gameSession.Shutdown(context, gameScene);
     itemCampaign = ItemCampaignState{};
     persistentScripts = engine::PersistentScriptStore{};
+    levelSaveStates.clear();
     editorAttachedToGame = false;
     editor.SetGameSessionExists(false);
     debugConsole.open = false;
@@ -894,6 +1167,7 @@ void GameApplication::EndGameToMainMenu(engine::EngineContext& context)
     gameSession.Shutdown(context, gameScene);
     itemCampaign = ItemCampaignState{};
     persistentScripts = engine::PersistentScriptStore{};
+    levelSaveStates.clear();
     editorAttachedToGame = false;
     editor.SetGameSessionExists(false);
     debugConsole.open = false;

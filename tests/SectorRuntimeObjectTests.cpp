@@ -537,6 +537,54 @@ void TestNpcVocalPriorityDelayAndShufflePolicy()
     }
 }
 
+void TestNpcAudioSilencesRestoredDeadNpc()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity deadNpc = world.CreateEntity();
+    world.Add(deadNpc, game::SectorObjectTransform{});
+    game::NpcCombatState deadCombat;
+    deadCombat.dead = true;
+    world.Add(deadNpc, deadCombat);
+    game::NpcAiState deadAi;
+    deadAi.playerDetectionAudioPending = true;
+    world.Add(deadNpc, deadAi);
+
+    const engine::Entity liveNpc = world.CreateEntity();
+    world.Add(liveNpc, game::SectorObjectTransform{});
+    world.Add(liveNpc, game::NpcCombatState{});
+
+    game::NpcAudioRuntime runtime;
+    runtime.records.reserve(2);
+    game::NpcAudioRecord deadRecord;
+    deadRecord.entity = deadNpc;
+    deadRecord.occupied = true;
+    deadRecord.pendingEvent = game::NpcVocalEvent::PlayerDetected;
+    deadRecord.ambientDelayRemainingSeconds = 0.0f;
+    runtime.records.push_back(deadRecord);
+    game::NpcAudioRecord liveRecord;
+    liveRecord.entity = liveNpc;
+    liveRecord.occupied = true;
+    runtime.records.push_back(liveRecord);
+
+    engine::AssetManager assets;
+    engine::AudioSystem audio;
+    game::UpdateNpcAudioSystem(world, assets, audio, runtime, 1.0f);
+
+    Check(!world.Get<game::NpcAiState>(deadNpc)
+                       .playerDetectionAudioPending,
+          "restored dead NPC clears pending player-detection vocalization");
+    Check(runtime.records[0].ambientDisabled
+                  && runtime.records[0].pendingEvent
+                          == game::NpcVocalEvent::None
+                  && runtime.records[0].playbackKind
+                          == game::NpcVocalPlaybackKind::None
+                  && engine::IsNull(runtime.records[0].vocalPlayback),
+          "restored dead NPC disables ambient vocals and remains silent");
+    Check(!runtime.records[1].ambientDisabled,
+          "live NPC audio remains eligible for ambient vocalizations");
+}
+
 bool NearTranslation(Matrix actual, Vector3 expected, float epsilon = 0.00001f)
 {
     return Near(actual.m12, expected.x, epsilon)
@@ -4998,6 +5046,52 @@ void TestSectorDoorDynamicPortalBlockerCollectionBuildsDirectedVisibilityKeys()
     game::CollectSectorDoorDynamicPortalBlockers(openWorld, openBlockers);
     Check(openBlockers.empty(),
           "partly open door portal blocker collection emits no visibility blockers");
+}
+
+void TestSectorDoorSpatialCacheRefreshAppliesRestoredMotionImmediately()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    game::SectorRuntimeObjectState state;
+    const engine::Entity door = AddDoorForDerivedState(
+            world,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+
+    game::RefreshSectorDoorSpatialCaches(world, state);
+    Check(state.dynamicPortalBlockers.size() == 2
+                  && state.dynamicDoorColliders.size() == 1,
+          "door spatial cache refresh captures the initial closed door state");
+
+    game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(door);
+    motion.openFraction = 1.0f;
+    motion.targetOpenFraction = 1.0f;
+    Check(state.dynamicPortalBlockers.size() == 2,
+          "directly restored door motion leaves the previous portal cache stale before refresh");
+
+    game::RefreshSectorDoorSpatialCaches(world, state);
+    const game::SectorDoorCollider& openCollider =
+            world.Get<game::SectorDoorCollider>(door);
+    Check(state.dynamicPortalBlockers.empty(),
+          "door spatial cache refresh removes blockers for a restored open door");
+    Check(state.dynamicDoorColliders.size() == 1
+                  && Near(state.dynamicDoorColliders[0].bottom, openCollider.bottom)
+                  && Near(state.dynamicDoorColliders[0].top, openCollider.top)
+                  && Near(world.Get<game::SectorObjectTransform>(door).position,
+                          Vector3{0.625f, 2.75f - kExpectedDoorParkingEpsilonWorld, 0.25f}),
+          "door spatial cache refresh synchronizes restored transform and collision data");
+    Check(state.doorCollisionCacheInitialized
+                  && state.doorSpatialStateChanged,
+          "door spatial cache refresh marks rebuilt state available to scene consumers");
+
+    motion.openFraction = 0.0f;
+    motion.targetOpenFraction = 0.0f;
+    game::RefreshSectorDoorSpatialCaches(world, state);
+    Check(state.dynamicPortalBlockers.size() == 2
+                  && state.dynamicDoorColliders.size() == 1
+                  && Near(state.dynamicDoorColliders[0].bottom, 0.5f),
+          "door spatial cache refresh restores blockers and collision for a closed door");
 }
 
 void TestSpawnedDoorRuntimeUpdateRefreshesPortalBlockerCollection()
@@ -10692,6 +10786,7 @@ int main()
     TestItemRuntimeSpawnAndFocusedRemoval();
     TestSectorUseHighlightPulsesAndReleases();
     TestNpcVocalPriorityDelayAndShufflePolicy();
+    TestNpcAudioSilencesRestoredDeadNpc();
     TestSectorSpatialSoundOcclusion();
     TestResolveSectorDoorAnchorValidPortal();
     TestResolveSectorDoorAnchorRejectsOneSidedWall();
@@ -10769,6 +10864,7 @@ int main()
     TestSectorDoorDynamicCollisionRoundedCornerSweep();
     TestSectorDoorDynamicCollisionIgnoresPortalBlockerState();
     TestSectorDoorDynamicPortalBlockerCollectionBuildsDirectedVisibilityKeys();
+    TestSectorDoorSpatialCacheRefreshAppliesRestoredMotionImmediately();
     TestSpawnedDoorRuntimeUpdateRefreshesPortalBlockerCollection();
     TestSectorDoorDynamicCollisionAllowsVerticalNonOverlap();
     TestSectorDoorDynamicCollisionAllowsPhysicallyClearCrossing();

@@ -322,7 +322,8 @@ bool Button(
         Rectangle bounds,
         FontHandle font,
         const char* text,
-        UITextJustify justify = UITextJustify::Center);
+        UITextJustify justify = UITextJustify::Center,
+        bool enabled = true);
 
 bool ToolButton(
         UIContext& ui,

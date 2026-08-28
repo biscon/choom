@@ -33,6 +33,8 @@ std::optional<MainMenuAction> DrawGameMainMenu(
         engine::FontHandle font,
         engine::FontHandle smallFont,
         bool gameRunning,
+        bool saveEnabled,
+        const char* saveBlockedReason,
         const char* statusText)
 {
     DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
@@ -79,32 +81,42 @@ std::optional<MainMenuAction> DrawGameMainMenu(
 
     float y = panel.y + 100.0f;
     std::optional<MainMenuAction> selected;
+    bool saveHovered = false;
     for (size_t i = 0; i < items.count; ++i) {
         const MainMenuAction action = items.values[i];
+        const bool enabled = action != MainMenuAction::SaveGame || saveEnabled;
+        const Rectangle buttonBounds{panel.x + horizontalPadding, y,
+                panel.width - horizontalPadding * 2.0f, buttonHeight};
         if (engine::Button(
                     ui,
                     config,
                     input,
                     assets,
                     MainMenuActionId(action),
-                    Rectangle{panel.x + horizontalPadding, y,
-                            panel.width - horizontalPadding * 2.0f,
-                            buttonHeight},
+                    buttonBounds,
                     font,
-                    MainMenuActionLabel(action))) {
+                    MainMenuActionLabel(action),
+                    engine::UITextJustify::Center,
+                    enabled)) {
             selected = action;
+        }
+        if (action == MainMenuAction::SaveGame && !enabled) {
+            saveHovered = CheckCollisionPointRec(ui.mousePosition, buttonBounds);
         }
         y += buttonHeight + buttonGap;
     }
 
-    if (statusText != nullptr && statusText[0] != '\0') {
+    const char* visibleStatus = saveHovered
+            && saveBlockedReason != nullptr && saveBlockedReason[0] != '\0'
+            ? saveBlockedReason : statusText;
+    if (visibleStatus != nullptr && visibleStatus[0] != '\0') {
         engine::Text(
                 config,
                 assets,
                 Rectangle{panel.x + horizontalPadding, y + 2.0f,
                         panel.width - horizontalPadding * 2.0f, 56.0f},
                 smallFont,
-                statusText,
+                visibleStatus,
                 engine::UITextJustify::Center,
                 config.invalidColor,
                 true);

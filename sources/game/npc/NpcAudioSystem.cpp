@@ -250,6 +250,11 @@ void UpdateNpcAudioSystem(
     world.ForEach<NpcAiState>(
             [&](engine::Entity entity, NpcAiState& ai) {
                 if (!ai.playerDetectionAudioPending) return;
+                if (world.Has<NpcCombatState>(entity)
+                        && world.Get<NpcCombatState>(entity).dead) {
+                    ai.playerDetectionAudioPending = false;
+                    return;
+                }
                 QueueNpcVocalEvent(
                         runtime, entity, NpcVocalEvent::PlayerDetected);
                 ai.playerDetectionAudioPending = false;
@@ -260,6 +265,14 @@ void UpdateNpcAudioSystem(
                 || !world.Has<SectorObjectTransform>(record.entity)) {
             StopVocalPlayback(assets, audio, record);
             record.occupied = false;
+            continue;
+        }
+        if (world.Has<NpcCombatState>(record.entity)
+                && world.Get<NpcCombatState>(record.entity).dead
+                && !record.ambientDisabled) {
+            StopVocalPlayback(assets, audio, record);
+            record.pendingEvent = NpcVocalEvent::None;
+            record.ambientDisabled = true;
             continue;
         }
         const Vector3 position =
