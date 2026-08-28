@@ -122,6 +122,7 @@ void RegistrySuccess()
     assert(Near(pistol->crosshair.outlineThicknessPixels, 1.0f));
     assert(Near(pistol->firing.shotIntervalSeconds, 0.18f));
     assert(Near(pistol->firing.maximumRangeWorld, 100.0f));
+    assert(Near(pistol->firing.noiseRadiusWorld, 40.0f));
     assert(!pistol->firing.pellets.enabled
             && pistol->firing.pellets.count == 8
             && Near(
@@ -337,6 +338,7 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     rifle.reload.dryFireSoundPath = "weapons/rifle/dry_fire.ogg";
     rifle.reload.reloadSoundPath = "weapons/rifle/reload.ogg";
     rifle.firing.shotIntervalSeconds = 0.09f;
+    rifle.firing.noiseRadiusWorld = 65.0f;
     rifle.firing.pellets = {true, 12, 7.5f};
     rifle.viewmodel.attachment.gripCorrection.translation.x = 0.11f;
     registry.weapons.push_back(rifle);
@@ -357,6 +359,7 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     assert(!Near(
             pistol->firing.shotIntervalSeconds,
             loadedRifle->firing.shotIntervalSeconds));
+    assert(Near(loadedRifle->firing.noiseRadiusWorld, 65.0f));
     assert(pistol->weaponSlot == 1 && loadedRifle->weaponSlot == 2);
     assert(pistol->reload.magazineSize == 18
             && Near(pistol->reload.durationSeconds, 0.63f)
@@ -808,6 +811,8 @@ void SettingsResolutionAndPersistence()
     assert(Near(settings.hdrBloom.threshold,1.25f)
             && Near(settings.hdrBloom.intensity,0.35f));
     assert(Near(settings.footsteps.landingImpactVolumeMultiplier, 1.5f));
+    assert(Near(settings.footsteps.noiseRadiusWorld, 6.0f));
+    assert(Near(settings.footsteps.landingNoiseRadiusWorld, 12.0f));
     assert(settings.playerSounds.events.size() == 3);
     assert(settings.playerSounds.events[0].id == "jump");
     assert(settings.playerSounds.events[0].set == "Jump");
@@ -959,6 +964,34 @@ void SettingsResolutionAndPersistence()
     settings.playerStamina.breathingAudio.thresholdRatio = 0.3f;
     settings.playerStamina.breathingAudio.volume = 0.6f;
     settings.playerStamina.breathingAudio.fadeOutSeconds = 3.0f;
+    settings.playerHealth.lowHealthVisual.enabled = true;
+    settings.playerHealth.lowHealthVisual.thresholdRatio = 0.45f;
+    settings.playerHealth.lowHealthVisual.vignetteColor = Color{55, 4, 9, 255};
+    settings.playerHealth.lowHealthVisual.vignetteInnerRadius = 0.42f;
+    settings.playerHealth.lowHealthVisual.vignetteOuterRadius = 1.15f;
+    settings.playerHealth.lowHealthVisual.maximumVignetteOpacity = 0.72f;
+    settings.playerHealth.lowHealthVisual.maximumDesaturation = 0.31f;
+    settings.playerHealth.heartbeatAudio.enabled = false;
+    settings.playerHealth.heartbeatAudio.startThresholdRatio = 0.55f;
+    settings.playerHealth.heartbeatAudio.fullEffectRatio = 0.12f;
+    settings.playerHealth.heartbeatAudio.maximumVolume = 0.8f;
+    settings.playerHealth.heartbeatAudio.startPitch = 0.9f;
+    settings.playerHealth.heartbeatAudio.maximumPitch = 1.6f;
+    settings.playerHealth.heartbeatAudio.responseSeconds = 0.4f;
+    settings.playerHealth.lowHealthMovement.enabled = false;
+    settings.playerHealth.lowHealthMovement.startThresholdRatio = 0.6f;
+    settings.playerHealth.lowHealthMovement.minimumSpeedScale = 0.3f;
+    settings.playerHealth.lowHealthMovement.minimumSprintSpeedScale = 0.8f;
+    settings.playerHealth.lowHealthCamera.enabled = false;
+    settings.playerHealth.lowHealthCamera.startThresholdRatio = 0.48f;
+    settings.playerHealth.lowHealthCamera.fullEffectRatio = 0.08f;
+    settings.playerHealth.lowHealthCamera.lateralAmplitudeWorld = 0.03f;
+    settings.playerHealth.lowHealthCamera.verticalAmplitudeWorld = 0.02f;
+    settings.playerHealth.lowHealthCamera.pitchAmplitudeDegrees = 1.1f;
+    settings.playerHealth.lowHealthCamera.yawAmplitudeDegrees = 0.9f;
+    settings.playerHealth.lowHealthCamera.rollAmplitudeDegrees = 1.8f;
+    settings.playerHealth.lowHealthCamera.frequencyHz = 0.7f;
+    settings.playerHealth.lowHealthCamera.responseSeconds = 0.5f;
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     std::ifstream savedSettingsInput(path);
@@ -996,9 +1029,43 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerStamina.breathingAudio.thresholdRatio, 0.3f));
     assert(Near(loaded.playerStamina.breathingAudio.volume, 0.6f));
     assert(Near(loaded.playerStamina.breathingAudio.fadeOutSeconds, 3.0f));
+    assert(loaded.playerHealth.lowHealthVisual.enabled);
+    assert(Near(loaded.playerHealth.lowHealthVisual.thresholdRatio, 0.45f));
+    assert(loaded.playerHealth.lowHealthVisual.vignetteColor.r == 55);
+    assert(loaded.playerHealth.lowHealthVisual.vignetteColor.g == 4);
+    assert(loaded.playerHealth.lowHealthVisual.vignetteColor.b == 9);
+    assert(Near(loaded.playerHealth.lowHealthVisual.vignetteInnerRadius, 0.42f));
+    assert(Near(loaded.playerHealth.lowHealthVisual.vignetteOuterRadius, 1.15f));
+    assert(Near(loaded.playerHealth.lowHealthVisual.maximumVignetteOpacity, 0.72f));
+    assert(Near(loaded.playerHealth.lowHealthVisual.maximumDesaturation, 0.31f));
+    assert(!loaded.playerHealth.heartbeatAudio.enabled);
+    assert(Near(loaded.playerHealth.heartbeatAudio.startThresholdRatio, 0.55f));
+    assert(Near(loaded.playerHealth.heartbeatAudio.fullEffectRatio, 0.12f));
+    assert(Near(loaded.playerHealth.heartbeatAudio.maximumVolume, 0.8f));
+    assert(Near(loaded.playerHealth.heartbeatAudio.startPitch, 0.9f));
+    assert(Near(loaded.playerHealth.heartbeatAudio.maximumPitch, 1.6f));
+    assert(Near(loaded.playerHealth.heartbeatAudio.responseSeconds, 0.4f));
+    assert(!loaded.playerHealth.lowHealthMovement.enabled);
+    assert(Near(loaded.playerHealth.lowHealthMovement.startThresholdRatio, 0.6f));
+    assert(Near(loaded.playerHealth.lowHealthMovement.minimumSpeedScale, 0.3f));
+    assert(Near(
+            loaded.playerHealth.lowHealthMovement.minimumSprintSpeedScale,
+            0.8f));
+    assert(!loaded.playerHealth.lowHealthCamera.enabled);
+    assert(Near(loaded.playerHealth.lowHealthCamera.startThresholdRatio, 0.48f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.fullEffectRatio, 0.08f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.lateralAmplitudeWorld, 0.03f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.verticalAmplitudeWorld, 0.02f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.pitchAmplitudeDegrees, 1.1f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.yawAmplitudeDegrees, 0.9f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.rollAmplitudeDegrees, 1.8f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.frequencyHz, 0.7f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.responseSeconds, 0.5f));
     assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
     assert(Near(loaded.footsteps.volume, 0.7f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
+    assert(Near(loaded.footsteps.noiseRadiusWorld, 6.0f));
+    assert(Near(loaded.footsteps.landingNoiseRadiusWorld, 12.0f));
     assert(loaded.playerSounds.events.size() == 3);
     assert(loaded.playerSounds.events[2].set == "future/WallImpact");
     assert(Near(loaded.playerSounds.events[2].volume, 0.6f));
@@ -1116,6 +1183,45 @@ void SettingsResolutionAndPersistence()
             R"({"version":1,"playerStamina":{"breathingAudio":{"fadeOutSeconds":0}}})",
             loaded, &error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"enabled":"yes"}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"thresholdRatio":0}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"vignetteColor":{"r":40,"g":3,"b":7}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"vignetteInnerRadius":0.8,"vignetteOuterRadius":0.7}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"maximumVignetteOpacity":1.1}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthVisual":{"maximumDesaturation":-0.1}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"heartbeatAudio":{"enabled":"yes"}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"heartbeatAudio":{"startThresholdRatio":0.5,"fullEffectRatio":0.5}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"heartbeatAudio":{"maximumPitch":0.5}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthMovement":{"minimumSpeedScale":1.1}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthMovement":{"minimumSprintSpeedScale":1.1}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthCamera":{"startThresholdRatio":0.5,"fullEffectRatio":0.6}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerHealth":{"lowHealthCamera":{"frequencyHz":21.0}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"hdrBloom":{"threshold":-1}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"renderScale":2.1}})",loaded,&error));
@@ -1167,10 +1273,15 @@ void SettingsResolutionAndPersistence()
     assert(loaded.footsteps.defaultSet == "Tile_Mono");
     assert(Near(loaded.footsteps.volume, 0.65f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.35f));
-    assert(loaded.playerSounds.events.size() == 2);
+    assert(Near(loaded.footsteps.noiseRadiusWorld, 6.0f));
+    assert(Near(loaded.footsteps.landingNoiseRadiusWorld, 12.0f));
+    assert(loaded.playerSounds.events.size() == 3);
     assert(loaded.playerSounds.events[0].id == "jump");
     assert(loaded.playerSounds.events[0].set == "Jump");
     assert(loaded.playerSounds.events[1].id == "land");
+    assert(loaded.playerSounds.events[2].id == "pain");
+    assert(loaded.playerSounds.events[2].set == "human_pain");
+    assert(Near(loaded.playerSounds.events[2].volume, 1.0f));
     assert(Near(loaded.playerStamina.maximum, 100.0f));
     assert(Near(loaded.playerStamina.sprintDrainPerSecond, 20.0f));
     assert(Near(loaded.playerStamina.jumpCost, 20.0f));
@@ -1180,6 +1291,26 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerStamina.windedCamera.startThresholdRatio, 0.40f));
     assert(Near(loaded.playerStamina.breathingAudio.thresholdRatio, 0.20f));
     assert(Near(loaded.playerStamina.breathingAudio.fadeOutSeconds, 2.0f));
+    assert(loaded.playerHealth.lowHealthVisual.enabled);
+    assert(Near(loaded.playerHealth.lowHealthVisual.thresholdRatio, 0.50f));
+    assert(loaded.playerHealth.lowHealthVisual.vignetteColor.r == 40);
+    assert(Near(loaded.playerHealth.lowHealthVisual.maximumVignetteOpacity, 0.65f));
+    assert(Near(loaded.playerHealth.lowHealthVisual.maximumDesaturation, 0.22f));
+    assert(loaded.playerHealth.heartbeatAudio.enabled);
+    assert(Near(loaded.playerHealth.heartbeatAudio.startThresholdRatio, 0.50f));
+    assert(Near(loaded.playerHealth.heartbeatAudio.fullEffectRatio, 0.10f));
+    assert(Near(loaded.playerHealth.heartbeatAudio.maximumVolume, 1.0f));
+    assert(Near(loaded.playerHealth.heartbeatAudio.maximumPitch, 1.5f));
+    assert(loaded.playerHealth.lowHealthMovement.enabled);
+    assert(Near(loaded.playerHealth.lowHealthMovement.startThresholdRatio, 0.50f));
+    assert(Near(loaded.playerHealth.lowHealthMovement.minimumSpeedScale, 0.20f));
+    assert(Near(
+            loaded.playerHealth.lowHealthMovement.minimumSprintSpeedScale,
+            0.20f));
+    assert(loaded.playerHealth.lowHealthCamera.enabled);
+    assert(Near(loaded.playerHealth.lowHealthCamera.startThresholdRatio, 0.50f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.fullEffectRatio, 0.10f));
+    assert(Near(loaded.playerHealth.lowHealthCamera.rollAmplitudeDegrees, 1.50f));
     assert(loaded.graphics.vsync);
     assert(loaded.graphics.horizontalFovDegrees
             == game::DefaultFpsHorizontalFovDegrees);

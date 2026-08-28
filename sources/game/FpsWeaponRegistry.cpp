@@ -352,6 +352,7 @@ void ValidateFiring(
 {
     const float values[] = {
             value.shotIntervalSeconds, value.maximumRangeWorld,
+            value.noiseRadiusWorld,
             value.pellets.spreadHalfAngleDegrees,
             value.recoil.translationImpulse.x, value.recoil.translationImpulse.y,
             value.recoil.translationImpulse.z,
@@ -399,6 +400,9 @@ void ValidateFiring(
     }
     if (value.shotIntervalSeconds <= 0.0f || value.maximumRangeWorld <= 0.0f) {
         Fail(context + " shot interval and maximum range must be greater than zero");
+    }
+    if (value.noiseRadiusWorld < 0.0f || value.noiseRadiusWorld > 10000.0f) {
+        Fail(context + ".noiseRadiusWorld must be between 0 and 10000");
     }
     if (value.pellets.count < 1
             || value.pellets.count > MaxFpsWeaponPellets
@@ -505,6 +509,13 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     FpsWeaponFiringDefinition result;
     result.shotIntervalSeconds = Number(object, "shotIntervalSeconds", context);
     result.maximumRangeWorld = Number(object, "maximumRangeWorld", context);
+    if (const auto noiseRadius = object.find("noiseRadiusWorld");
+            noiseRadius != object.end()) {
+        if (!noiseRadius->is_number()) {
+            Fail(context + ".noiseRadiusWorld must be a number");
+        }
+        result.noiseRadiusWorld = noiseRadius->get<float>();
+    }
     const auto pellets = object.find("pellets");
     if (pellets != object.end()) {
         const std::string pelletsContext = context + ".pellets";
@@ -777,6 +788,7 @@ Json FiringValue(const FpsWeaponFiringDefinition& value)
     Json firing{
             {"shotIntervalSeconds", value.shotIntervalSeconds},
             {"maximumRangeWorld", value.maximumRangeWorld},
+            {"noiseRadiusWorld", value.noiseRadiusWorld},
             {"recoil", {
                     {"translationImpulse", Vec(value.recoil.translationImpulse)},
                     {"rotationImpulseDegrees", Vec(value.recoil.rotationImpulseDegrees)},
@@ -1320,6 +1332,251 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                         static_cast<float>(value);
             }
         }
+        const auto playerSneak = root.find("playerSneak");
+        if (playerSneak != root.end()) {
+            const std::string sneakContext =
+                    "application settings.playerSneak";
+            if (!playerSneak->is_object()) {
+                Fail(sneakContext + " must be an object");
+            }
+            parsed.playerSneak.fullVisibilityLightLevel = OptionalNumber(
+                    *playerSneak,
+                    "fullVisibilityLightLevel",
+                    sneakContext).value_or(
+                            parsed.playerSneak.fullVisibilityLightLevel);
+            parsed.playerSneak.darknessCutoffNormalized = OptionalNumber(
+                    *playerSneak,
+                    "darknessCutoffNormalized",
+                    sneakContext).value_or(
+                            parsed.playerSneak.darknessCutoffNormalized);
+            const std::optional<double> lightHalfResponseRange =
+                    OptionalNumber(
+                            *playerSneak,
+                            "lightHalfResponseRangeNormalized",
+                            sneakContext);
+            if (lightHalfResponseRange.has_value()) {
+                parsed.playerSneak.lightHalfResponseRangeNormalized =
+                        static_cast<float>(*lightHalfResponseRange);
+            } else {
+                parsed.playerSneak.lightHalfResponseRangeNormalized = std::min(
+                        parsed.playerSneak.lightHalfResponseRangeNormalized,
+                        (1.0f - parsed.playerSneak.darknessCutoffNormalized)
+                                * 0.5f);
+            }
+            parsed.playerSneak.visualDetectionBuildSeconds = OptionalNumber(
+                    *playerSneak,
+                    "visualDetectionBuildSeconds",
+                    sneakContext).value_or(
+                            parsed.playerSneak.visualDetectionBuildSeconds);
+            parsed.playerSneak.visualDetectionDecaySeconds = OptionalNumber(
+                    *playerSneak,
+                    "visualDetectionDecaySeconds",
+                    sneakContext).value_or(
+                            parsed.playerSneak.visualDetectionDecaySeconds);
+            parsed.playerSneak.darknessProximityRangeWorld = OptionalNumber(
+                    *playerSneak,
+                    "darknessProximityRangeWorld",
+                    sneakContext).value_or(
+                            parsed.playerSneak.darknessProximityRangeWorld);
+            parsed.playerSneak.crouchVisualDetectionMultiplier = OptionalNumber(
+                    *playerSneak,
+                    "crouchVisualDetectionMultiplier",
+                    sneakContext).value_or(
+                            parsed.playerSneak.crouchVisualDetectionMultiplier);
+            parsed.playerSneak.crouchMovementNoiseMultiplier = OptionalNumber(
+                    *playerSneak,
+                    "crouchMovementNoiseMultiplier",
+                    sneakContext).value_or(
+                            parsed.playerSneak.crouchMovementNoiseMultiplier);
+            const std::string sneakError = PlayerSneakSettingsError(
+                    parsed.playerSneak);
+            if (!sneakError.empty()) {
+                Fail(sneakContext + "." + sneakError);
+            }
+        }
+        const auto playerHealth = root.find("playerHealth");
+        if (playerHealth != root.end()) {
+            const std::string healthContext = "application settings.playerHealth";
+            if (!playerHealth->is_object()) {
+                Fail(healthContext + " must be an object");
+            }
+            const auto lowHealthVisual = playerHealth->find("lowHealthVisual");
+            if (lowHealthVisual != playerHealth->end()) {
+                const std::string visualContext =
+                        healthContext + ".lowHealthVisual";
+                if (!lowHealthVisual->is_object()) {
+                    Fail(visualContext + " must be an object");
+                }
+                PlayerLowHealthVisualApplicationSettings& visual =
+                        parsed.playerHealth.lowHealthVisual;
+                visual.enabled = OptionalBoolean(
+                        *lowHealthVisual,
+                        "enabled",
+                        visualContext).value_or(visual.enabled);
+                visual.thresholdRatio = OptionalNumber(
+                        *lowHealthVisual,
+                        "thresholdRatio",
+                        visualContext).value_or(visual.thresholdRatio);
+                const auto vignetteColor = lowHealthVisual->find(
+                        "vignetteColor");
+                if (vignetteColor != lowHealthVisual->end()) {
+                    visual.vignetteColor = ReadColor(
+                            *vignetteColor,
+                            visualContext + ".vignetteColor");
+                }
+                visual.vignetteInnerRadius = OptionalNumber(
+                        *lowHealthVisual,
+                        "vignetteInnerRadius",
+                        visualContext).value_or(visual.vignetteInnerRadius);
+                visual.vignetteOuterRadius = OptionalNumber(
+                        *lowHealthVisual,
+                        "vignetteOuterRadius",
+                        visualContext).value_or(visual.vignetteOuterRadius);
+                visual.maximumVignetteOpacity = OptionalNumber(
+                        *lowHealthVisual,
+                        "maximumVignetteOpacity",
+                        visualContext).value_or(
+                                visual.maximumVignetteOpacity);
+                visual.maximumDesaturation = OptionalNumber(
+                        *lowHealthVisual,
+                        "maximumDesaturation",
+                        visualContext).value_or(
+                                visual.maximumDesaturation);
+            }
+            const auto heartbeatAudio = playerHealth->find("heartbeatAudio");
+            if (heartbeatAudio != playerHealth->end()) {
+                const std::string heartbeatContext =
+                        healthContext + ".heartbeatAudio";
+                if (!heartbeatAudio->is_object()) {
+                    Fail(heartbeatContext + " must be an object");
+                }
+                PlayerHeartbeatAudioApplicationSettings& heartbeat =
+                        parsed.playerHealth.heartbeatAudio;
+                heartbeat.enabled = OptionalBoolean(
+                        *heartbeatAudio,
+                        "enabled",
+                        heartbeatContext).value_or(heartbeat.enabled);
+                heartbeat.startThresholdRatio = OptionalNumber(
+                        *heartbeatAudio,
+                        "startThresholdRatio",
+                        heartbeatContext).value_or(
+                                heartbeat.startThresholdRatio);
+                heartbeat.fullEffectRatio = OptionalNumber(
+                        *heartbeatAudio,
+                        "fullEffectRatio",
+                        heartbeatContext).value_or(
+                                heartbeat.fullEffectRatio);
+                heartbeat.maximumVolume = OptionalNumber(
+                        *heartbeatAudio,
+                        "maximumVolume",
+                        heartbeatContext).value_or(heartbeat.maximumVolume);
+                heartbeat.startPitch = OptionalNumber(
+                        *heartbeatAudio,
+                        "startPitch",
+                        heartbeatContext).value_or(heartbeat.startPitch);
+                heartbeat.maximumPitch = OptionalNumber(
+                        *heartbeatAudio,
+                        "maximumPitch",
+                        heartbeatContext).value_or(heartbeat.maximumPitch);
+                heartbeat.responseSeconds = OptionalNumber(
+                        *heartbeatAudio,
+                        "responseSeconds",
+                        heartbeatContext).value_or(
+                                heartbeat.responseSeconds);
+            }
+            const auto lowHealthMovement = playerHealth->find(
+                    "lowHealthMovement");
+            if (lowHealthMovement != playerHealth->end()) {
+                const std::string movementContext =
+                        healthContext + ".lowHealthMovement";
+                if (!lowHealthMovement->is_object()) {
+                    Fail(movementContext + " must be an object");
+                }
+                PlayerLowHealthMovementApplicationSettings& movement =
+                        parsed.playerHealth.lowHealthMovement;
+                movement.enabled = OptionalBoolean(
+                        *lowHealthMovement,
+                        "enabled",
+                        movementContext).value_or(movement.enabled);
+                movement.startThresholdRatio = OptionalNumber(
+                        *lowHealthMovement,
+                        "startThresholdRatio",
+                        movementContext).value_or(
+                                movement.startThresholdRatio);
+                movement.minimumSpeedScale = OptionalNumber(
+                        *lowHealthMovement,
+                        "minimumSpeedScale",
+                        movementContext).value_or(
+                                movement.minimumSpeedScale);
+                movement.minimumSprintSpeedScale = OptionalNumber(
+                        *lowHealthMovement,
+                        "minimumSprintSpeedScale",
+                        movementContext).value_or(
+                                movement.minimumSpeedScale);
+            }
+            const auto lowHealthCamera = playerHealth->find(
+                    "lowHealthCamera");
+            if (lowHealthCamera != playerHealth->end()) {
+                const std::string cameraContext =
+                        healthContext + ".lowHealthCamera";
+                if (!lowHealthCamera->is_object()) {
+                    Fail(cameraContext + " must be an object");
+                }
+                PlayerLowHealthCameraApplicationSettings& camera =
+                        parsed.playerHealth.lowHealthCamera;
+                camera.enabled = OptionalBoolean(
+                        *lowHealthCamera,
+                        "enabled",
+                        cameraContext).value_or(camera.enabled);
+                camera.startThresholdRatio = OptionalNumber(
+                        *lowHealthCamera,
+                        "startThresholdRatio",
+                        cameraContext).value_or(
+                                camera.startThresholdRatio);
+                camera.fullEffectRatio = OptionalNumber(
+                        *lowHealthCamera,
+                        "fullEffectRatio",
+                        cameraContext).value_or(camera.fullEffectRatio);
+                camera.lateralAmplitudeWorld = OptionalNumber(
+                        *lowHealthCamera,
+                        "lateralAmplitudeWorld",
+                        cameraContext).value_or(
+                                camera.lateralAmplitudeWorld);
+                camera.verticalAmplitudeWorld = OptionalNumber(
+                        *lowHealthCamera,
+                        "verticalAmplitudeWorld",
+                        cameraContext).value_or(
+                                camera.verticalAmplitudeWorld);
+                camera.pitchAmplitudeDegrees = OptionalNumber(
+                        *lowHealthCamera,
+                        "pitchAmplitudeDegrees",
+                        cameraContext).value_or(
+                                camera.pitchAmplitudeDegrees);
+                camera.yawAmplitudeDegrees = OptionalNumber(
+                        *lowHealthCamera,
+                        "yawAmplitudeDegrees",
+                        cameraContext).value_or(
+                                camera.yawAmplitudeDegrees);
+                camera.rollAmplitudeDegrees = OptionalNumber(
+                        *lowHealthCamera,
+                        "rollAmplitudeDegrees",
+                        cameraContext).value_or(
+                                camera.rollAmplitudeDegrees);
+                camera.frequencyHz = OptionalNumber(
+                        *lowHealthCamera,
+                        "frequencyHz",
+                        cameraContext).value_or(camera.frequencyHz);
+                camera.responseSeconds = OptionalNumber(
+                        *lowHealthCamera,
+                        "responseSeconds",
+                        cameraContext).value_or(camera.responseSeconds);
+            }
+            const std::string healthError = PlayerHealthSettingsError(
+                    parsed.playerHealth);
+            if (!healthError.empty()) {
+                Fail(healthContext + "." + healthError);
+            }
+        }
         const auto graphics = root.find("graphics");
         if (graphics != root.end()) {
             if (!graphics->is_object()) {
@@ -1516,6 +1773,24 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 parsed.footsteps.landingImpactVolumeMultiplier =
                         static_cast<float>(value);
             }
+            const auto readNoiseRadius = [&](const char* name, float& output) {
+                const auto member = footsteps->find(name);
+                if (member == footsteps->end()) return;
+                if (!member->is_number()) {
+                    Fail(std::string("application settings.footsteps.") + name
+                            + " must be a number");
+                }
+                const double value = member->get<double>();
+                if (!std::isfinite(value) || value < 0.0 || value > 10000.0) {
+                    Fail(std::string("application settings.footsteps.") + name
+                            + " must be between 0 and 10000");
+                }
+                output = static_cast<float>(value);
+            };
+            readNoiseRadius("noiseRadiusWorld", parsed.footsteps.noiseRadiusWorld);
+            readNoiseRadius(
+                    "landingNoiseRadiusWorld",
+                    parsed.footsteps.landingNoiseRadiusWorld);
         }
         const auto playerSounds = root.find("playerSounds");
         if (playerSounds != root.end()) {
@@ -1822,6 +2097,15 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings landing footstep volume multiplier must be non-negative");
         return false;
     }
+    if (!std::isfinite(settings.footsteps.noiseRadiusWorld)
+            || settings.footsteps.noiseRadiusWorld < 0.0f
+            || settings.footsteps.noiseRadiusWorld > 10000.0f
+            || !std::isfinite(settings.footsteps.landingNoiseRadiusWorld)
+            || settings.footsteps.landingNoiseRadiusWorld < 0.0f
+            || settings.footsteps.landingNoiseRadiusWorld > 10000.0f) {
+        SetError(error, "application settings footstep noise radii must be between 0 and 10000");
+        return false;
+    }
     if (!std::isfinite(settings.playerInventory.maxCarryWeightKg)
             || settings.playerInventory.maxCarryWeightKg <= 0.0f) {
         SetError(error, "application settings playerInventory.maxCarryWeightKg must be finite and positive");
@@ -1844,10 +2128,22 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings playerInventory.pickupVacuumTargetHeightWorld must be finite and non-negative");
         return false;
     }
+    const std::string healthError = PlayerHealthSettingsError(
+            settings.playerHealth);
+    if (!healthError.empty()) {
+        SetError(error, "application settings playerHealth." + healthError);
+        return false;
+    }
     const std::string staminaError = PlayerStaminaSettingsError(
             settings.playerStamina);
     if (!staminaError.empty()) {
         SetError(error, "application settings playerStamina." + staminaError);
+        return false;
+    }
+    const std::string sneakError = PlayerSneakSettingsError(
+            settings.playerSneak);
+    if (!sneakError.empty()) {
+        SetError(error, "application settings playerSneak." + sneakError);
         return false;
     }
     std::unordered_set<std::string> playerSoundEventIds;
@@ -1876,7 +2172,10 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"defaultSet", settings.footsteps.defaultSet},
                     {"volume", settings.footsteps.volume},
                     {"landingImpactVolumeMultiplier",
-                            settings.footsteps.landingImpactVolumeMultiplier}}}};
+                            settings.footsteps.landingImpactVolumeMultiplier},
+                    {"noiseRadiusWorld", settings.footsteps.noiseRadiusWorld},
+                    {"landingNoiseRadiusWorld",
+                            settings.footsteps.landingNoiseRadiusWorld}}}};
     const FpsGraphicsSettings graphics =
             NormalizeFpsGraphicsSettings(settings.graphics);
     root["graphics"] = {
@@ -1900,6 +2199,70 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     settings.playerInventory.pickupVacuumDurationSeconds},
             {"pickupVacuumTargetHeightWorld",
                     settings.playerInventory.pickupVacuumTargetHeightWorld}};
+    root["playerSneak"] = {
+            {"fullVisibilityLightLevel",
+                    settings.playerSneak.fullVisibilityLightLevel},
+            {"darknessCutoffNormalized",
+                    settings.playerSneak.darknessCutoffNormalized},
+            {"lightHalfResponseRangeNormalized",
+                    settings.playerSneak.lightHalfResponseRangeNormalized},
+            {"visualDetectionBuildSeconds",
+                    settings.playerSneak.visualDetectionBuildSeconds},
+            {"visualDetectionDecaySeconds",
+                    settings.playerSneak.visualDetectionDecaySeconds},
+            {"darknessProximityRangeWorld",
+                    settings.playerSneak.darknessProximityRangeWorld},
+            {"crouchVisualDetectionMultiplier",
+                    settings.playerSneak.crouchVisualDetectionMultiplier},
+            {"crouchMovementNoiseMultiplier",
+                    settings.playerSneak.crouchMovementNoiseMultiplier}};
+    const PlayerLowHealthVisualApplicationSettings& lowHealthVisual =
+            settings.playerHealth.lowHealthVisual;
+    const PlayerHeartbeatAudioApplicationSettings& heartbeatAudio =
+            settings.playerHealth.heartbeatAudio;
+    const PlayerLowHealthMovementApplicationSettings& lowHealthMovement =
+            settings.playerHealth.lowHealthMovement;
+    const PlayerLowHealthCameraApplicationSettings& lowHealthCamera =
+            settings.playerHealth.lowHealthCamera;
+    root["playerHealth"] = {
+        {"lowHealthVisual", {
+            {"enabled", lowHealthVisual.enabled},
+            {"thresholdRatio", lowHealthVisual.thresholdRatio},
+            {"vignetteColor", ColorValue(lowHealthVisual.vignetteColor)},
+            {"vignetteInnerRadius", lowHealthVisual.vignetteInnerRadius},
+            {"vignetteOuterRadius", lowHealthVisual.vignetteOuterRadius},
+            {"maximumVignetteOpacity",
+                    lowHealthVisual.maximumVignetteOpacity},
+            {"maximumDesaturation",
+                    lowHealthVisual.maximumDesaturation}}},
+        {"heartbeatAudio", {
+            {"enabled", heartbeatAudio.enabled},
+            {"startThresholdRatio", heartbeatAudio.startThresholdRatio},
+            {"fullEffectRatio", heartbeatAudio.fullEffectRatio},
+            {"maximumVolume", heartbeatAudio.maximumVolume},
+            {"startPitch", heartbeatAudio.startPitch},
+            {"maximumPitch", heartbeatAudio.maximumPitch},
+            {"responseSeconds", heartbeatAudio.responseSeconds}}},
+        {"lowHealthMovement", {
+            {"enabled", lowHealthMovement.enabled},
+            {"startThresholdRatio", lowHealthMovement.startThresholdRatio},
+            {"minimumSpeedScale", lowHealthMovement.minimumSpeedScale},
+            {"minimumSprintSpeedScale",
+                    lowHealthMovement.minimumSprintSpeedScale}}},
+        {"lowHealthCamera", {
+            {"enabled", lowHealthCamera.enabled},
+            {"startThresholdRatio", lowHealthCamera.startThresholdRatio},
+            {"fullEffectRatio", lowHealthCamera.fullEffectRatio},
+            {"lateralAmplitudeWorld",
+                    lowHealthCamera.lateralAmplitudeWorld},
+            {"verticalAmplitudeWorld",
+                    lowHealthCamera.verticalAmplitudeWorld},
+            {"pitchAmplitudeDegrees",
+                    lowHealthCamera.pitchAmplitudeDegrees},
+            {"yawAmplitudeDegrees", lowHealthCamera.yawAmplitudeDegrees},
+            {"rollAmplitudeDegrees", lowHealthCamera.rollAmplitudeDegrees},
+            {"frequencyHz", lowHealthCamera.frequencyHz},
+            {"responseSeconds", lowHealthCamera.responseSeconds}}}};
     const engine::HdrBloomSettings hdrBloom =
             engine::NormalizeHdrBloomSettings(settings.hdrBloom);
     root["hdrBloom"] = {
@@ -2610,6 +2973,9 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
 {
     value.shotIntervalSeconds = std::clamp(value.shotIntervalSeconds, 0.03f, 5.0f);
     value.maximumRangeWorld = std::clamp(value.maximumRangeWorld, 1.0f, 10000.0f);
+    value.noiseRadiusWorld = std::isfinite(value.noiseRadiusWorld)
+            ? std::clamp(value.noiseRadiusWorld, 0.0f, 10000.0f)
+            : FpsWeaponFiringDefinition{}.noiseRadiusWorld;
     value.pellets.count = std::clamp(
             value.pellets.count, 1, MaxFpsWeaponPellets);
     value.pellets.spreadHalfAngleDegrees = std::isfinite(

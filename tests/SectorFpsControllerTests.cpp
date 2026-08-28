@@ -1,6 +1,7 @@
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorFreeflyController.h"
 #include "game/PlayerStamina.h"
+#include "game/PlayerHitCamera.h"
 
 #include <raymath.h>
 
@@ -319,6 +320,90 @@ void TestCameraRecoilPoseComposition()
           "non-finite recoil offsets cannot corrupt the camera pose");
 }
 
+void TestPlayerHitCameraDirectionalImpulseAndRecovery()
+{
+    game::NpcAttackCameraImpactDefinition definition;
+    definition.pitchKickDegrees = 3.0f;
+    definition.rollKickDegrees = 4.0f;
+    definition.maxPitchDegrees = 5.0f;
+    definition.maxRollDegrees = 6.0f;
+    definition.springFrequencyHz = 4.0f;
+    definition.springDampingRatio = 0.75f;
+
+    game::PlayerHitCameraState camera;
+    game::ApplyPlayerHitCameraImpulse(
+            camera, definition, Vector2{-1.0f, 0.0f}, 0.0f);
+    Check(Near(camera.rotationDegrees, Vector3{3.0f, 0.0f, 0.0f}),
+          "an attacker in front produces a positive pitch kick");
+
+    game::ClearPlayerHitCamera(camera);
+    game::ApplyPlayerHitCameraImpulse(
+            camera, definition, Vector2{1.0f, 0.0f}, 0.0f);
+    Check(Near(camera.rotationDegrees, Vector3{-3.0f, 0.0f, 0.0f}),
+          "an attacker behind produces the opposite pitch kick");
+
+    game::ClearPlayerHitCamera(camera);
+    game::ApplyPlayerHitCameraImpulse(
+            camera, definition, Vector2{0.0f, -1.0f}, 0.0f);
+    Check(Near(camera.rotationDegrees, Vector3{0.0f, 0.0f, 4.0f}),
+          "an attacker on the right produces a positive roll kick");
+    game::ClearPlayerHitCamera(camera);
+    game::ApplyPlayerHitCameraImpulse(
+            camera, definition, Vector2{0.0f, 1.0f}, 0.0f);
+    Check(Near(camera.rotationDegrees, Vector3{0.0f, 0.0f, -4.0f}),
+          "an attacker on the left produces the opposite roll kick");
+
+    game::ClearPlayerHitCamera(camera);
+    game::ApplyPlayerHitCameraImpulse(
+            camera, definition, Vector2{0.0f, -2.0f}, PI * 0.5f);
+    Check(Near(camera.rotationDegrees.x, 3.0f)
+                  && Near(camera.rotationDegrees.z, 0.0f),
+          "directional hit camera mapping follows player yaw");
+
+    game::ClearPlayerHitCamera(camera);
+    game::ApplyPlayerHitCameraImpulse(
+            camera, definition, Vector2{}, 0.0f);
+    Check(Near(camera.rotationDegrees.x, 3.0f),
+          "an overlapping attacker falls back to a visible pitch kick");
+    game::ApplyPlayerHitCameraImpulse(
+            camera, definition, Vector2{-1.0f, 0.0f}, 0.0f);
+    Check(Near(camera.rotationDegrees.x, 5.0f),
+          "repeated hit camera impulses clamp at the authored limit");
+    game::ApplyPlayerHitCameraImpulse(
+            camera, definition, Vector2{1.0f, 0.0f}, 0.0f);
+    Check(Near(camera.rotationDegrees.x, 2.0f),
+          "opposite hit directions cancel accumulated camera rotation");
+
+    game::NpcAttackCameraImpactDefinition disabled = definition;
+    disabled.enabled = false;
+    const Vector3 beforeDisabled = camera.rotationDegrees;
+    game::ApplyPlayerHitCameraImpulse(
+            camera, disabled, Vector2{-1.0f, 0.0f}, 0.0f);
+    Check(Near(camera.rotationDegrees, beforeDisabled),
+          "a disabled attack adds no camera impulse without clearing recovery");
+
+    const Vector3 beforeZeroDt = camera.rotationDegrees;
+    game::UpdatePlayerHitCamera(camera, 0.0f);
+    Check(Near(camera.rotationDegrees, beforeZeroDt),
+          "zero dt does not advance the hit camera spring");
+    bool rebounded = false;
+    for (int step = 0; step < 240; ++step) {
+        game::UpdatePlayerHitCamera(camera, 1.0f / 240.0f);
+        rebounded = rebounded || camera.rotationDegrees.x < 0.0f;
+    }
+    Check(rebounded,
+          "the default underdamped hit camera response includes a small rebound");
+    Check(std::fabs(camera.rotationDegrees.x) < 0.001f
+                  && std::fabs(camera.rotationDegrees.z) < 0.001f,
+          "the hit camera spring recovers to its neutral pose");
+
+    camera.rotationDegrees.x = NAN;
+    game::UpdatePlayerHitCamera(camera, 1.0f / 60.0f);
+    Check(Near(camera.rotationDegrees, Vector3{})
+                  && Near(camera.rotationVelocityDegrees, Vector3{}),
+          "non-finite hit camera state resets safely");
+}
+
 void TestFootstepCadenceUsesResolvedTravel()
 {
     game::SectorFpsControllerConfig config;
@@ -554,6 +639,16 @@ void TestRunAndWalkSpeeds()
     runInput.run = true;
     UpdateSectorFpsController(running, config, runInput, 1.0f);
     Check(Near(running.feetPosition.x, 12.0f), "run speed is used with run input");
+
+    game::SectorFpsControllerInput slowedInput;
+    slowedInput.moveForward = true;
+    slowedInput.run = true;
+    slowedInput.movementSpeedScale = 0.5f;
+    slowedInput.externalHorizontalMovementDelta = {0.0f, 1.25f};
+    const Vector2 slowedDelta = game::ComputeSectorFpsHorizontalMovementDelta(
+            game::SectorFpsControllerState{}, config, slowedInput, 1.0f);
+    Check(Near(slowedDelta, Vector2{6.0f, 1.25f}),
+          "movement speed scaling leaves external collision movement unscaled");
 
     game::SectorFpsControllerInput strafeInput;
     strafeInput.strafeRight = true;
@@ -1209,6 +1304,7 @@ int main()
     TestHeadBobInactiveAndDisabledBehavior();
     TestHeadBobVisualOnlyPoseLayer();
     TestCameraRecoilPoseComposition();
+    TestPlayerHitCameraDirectionalImpulseAndRecovery();
     TestFootstepCadenceUsesResolvedTravel();
     TestFrameEventsReportSuccessfulJumpAndLanding();
     TestLandingDipAmountCurve();

@@ -721,9 +721,12 @@ SectorDoorModelDrawPolicy ResolveSectorDoorModelDrawPolicy(
 
 bool ShouldDrawSectorDoorForVisibility(
         const SectorDoorResolvedAnchor& anchor,
-        const RuntimePortalVisibilityResult& visibility)
+        const RuntimePortalVisibilityResult& visibility,
+        bool boundsVisibleInCamera)
 {
-    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
+    if (boundsVisibleInCamera
+            || !visibility.validStartSector
+            || visibility.fallbackDrawAll) {
         return true;
     }
     const auto visible = [&visibility](int sectorId) {

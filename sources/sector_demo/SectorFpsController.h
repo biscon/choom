@@ -42,6 +42,8 @@ struct SectorFpsControllerInput {
     bool crouchTogglePressed = false;
     bool mouseLookEnabled = false;
     Vector2 mouseDelta = {};
+    float movementSpeedScale = 1.0f;
+    Vector2 externalHorizontalMovementDelta = {};
 };
 
 struct SectorFpsVerticalContext {

@@ -26,6 +26,17 @@ Vector4 CompositeHdrPremultipliedAtmosphere(
         Vector4 premultipliedScattering);
 Vector4 CompositeHdrBloom(Vector4 linearScene, Vector3 bloomRgb, float intensity);
 
+enum class HdrPostProcessOverlayRoute {
+    Skip,
+    DrawSceneTarget,
+    CommitScratchThenDrawSceneTarget
+};
+
+HdrPostProcessOverlayRoute ResolveHdrPostProcessOverlayRoute(
+        bool overlayRequested,
+        bool presentingFromScratch,
+        bool diagnosticPresentationOverride);
+
 // Canonical GLSL 330 storage policy for generated shaders and policy tests.
 // Embedded renderer shaders mirror this named contract at RGBA16F writes.
 extern const char* const Rgba16fStoragePolicyGlsl;

@@ -141,6 +141,34 @@ struct SectorCompiledLevelMarker {
     float yawRadians = 0.0f;
 };
 
+enum class SectorPatrolMode {
+    Once,
+    Loop,
+    PingPong
+};
+
+enum class SectorPatrolGait {
+    Walk,
+    Run
+};
+
+struct SectorCompiledPatrolWaypoint {
+    int sourceAuthoringMarkerId = -1;
+    int delayMilliseconds = 0;
+    SectorPatrolGait gait = SectorPatrolGait::Walk;
+    bool lookAround = false;
+    float lookArcDegrees = 90.0f;
+};
+
+struct SectorCompiledPatrol {
+    int sourceAuthoringPatrolId = -1;
+    std::string id;
+    SectorPatrolMode mode = SectorPatrolMode::Loop;
+    std::vector<SectorCompiledPatrolWaypoint> waypoints;
+    bool shuffleWaypoints = false;
+    bool faceWaypointOrientation = true;
+};
+
 struct SectorCompiledSoundEmitter {
     int sourceAuthoringEmitterId = -1;
     std::string id;
@@ -221,6 +249,10 @@ struct SectorPlacedItem {
 struct SectorPlacedNpc {
     std::string definitionId;
     std::string instanceId;
+    int patrolEditorId = 0;
+    bool randomPatrolStart = false;
+    bool reversePatrol = false;
+    bool scriptMoveStopsPatrol = false;
     float scale = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
@@ -352,6 +384,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyDynamicRectLight> dynamicRectLights;
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     std::vector<SectorCompiledLevelMarker> levelMarkers;
+    std::vector<SectorCompiledPatrol> patrols;
     std::vector<SectorCompiledSoundEmitter> soundEmitters;
     std::vector<SectorCompiledTrigger> triggers;
     SectorPreviewSettings previewSettings;
@@ -483,6 +516,12 @@ bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 const SectorCompiledLevelMarker* FindSectorCompiledLevelMarker(
         const SectorTopologyMap& map,
         const std::string& id);
+const SectorCompiledLevelMarker* FindSectorCompiledLevelMarkerByAuthoringId(
+        const SectorTopologyMap& map,
+        int sourceAuthoringMarkerId);
+const SectorCompiledPatrol* FindSectorCompiledPatrol(
+        const SectorTopologyMap& map,
+        int sourceAuthoringPatrolId);
 
 SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
         const SectorTopologyMap& map,

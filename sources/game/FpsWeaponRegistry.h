@@ -2,6 +2,8 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "engine/render/HdrEffectPolicy.h"
+#include "game/PlayerHealthVisual.h"
+#include "game/PlayerSneak.h"
 #include "game/PlayerStamina.h"
 
 #include <raylib.h>
@@ -148,6 +150,7 @@ struct FpsWeaponPelletDefinition {
 struct FpsWeaponFiringDefinition {
     float shotIntervalSeconds = 0.18f;
     float maximumRangeWorld = 100.0f;
+    float noiseRadiusWorld = 40.0f;
     FpsWeaponPelletDefinition pellets;
     std::string shootSoundPath;
     engine::SoundHandle shootSound = engine::NullSoundHandle();
@@ -269,6 +272,8 @@ struct FootstepApplicationSettings {
     std::string defaultSet = "Tile_Mono";
     float volume = 0.65f;
     float landingImpactVolumeMultiplier = 1.35f;
+    float noiseRadiusWorld = 6.0f;
+    float landingNoiseRadiusWorld = 12.0f;
 };
 
 struct PlayerSoundEventSettings {
@@ -280,7 +285,8 @@ struct PlayerSoundEventSettings {
 struct PlayerSoundApplicationSettings {
     std::vector<PlayerSoundEventSettings> events{
             PlayerSoundEventSettings{"jump", "Jump", 1.0f},
-            PlayerSoundEventSettings{"land", "Land", 1.0f}};
+            PlayerSoundEventSettings{"land", "Land", 1.0f},
+            PlayerSoundEventSettings{"pain", "human_pain", 1.0f}};
 };
 
 enum class FpsShadowQuality {
@@ -330,6 +336,8 @@ struct FpsApplicationSettings {
     bool consoleEnabled = true;
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
+    PlayerHealthApplicationSettings playerHealth;
+    PlayerSneakApplicationSettings playerSneak;
     PlayerStaminaApplicationSettings playerStamina;
     PlayerInventoryApplicationSettings playerInventory;
     FpsGraphicsSettings graphics;

@@ -5,8 +5,11 @@
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcCombatSystem.h"
+#include "game/npc/ai/NpcAiSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorAudioOcclusion.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 #include "sector_demo/renderer/SectorImpactParticleSystem.h"
@@ -56,7 +59,8 @@ public:
             float dt,
             const Vector3* playerPosition,
             int playerSectorId,
-            const SectorDoorPlayerObstacle* playerObstacle = nullptr);
+            const SectorDoorPlayerObstacle* playerObstacle = nullptr,
+            const NpcAiGameplayContext* npcGameplay = nullptr);
     void UpdateLoadPreparation(
             engine::EngineContext& context,
             const SectorTopologyMap& map);
@@ -74,6 +78,10 @@ public:
             uint64_t shotSequence,
             const FpsWeaponFiringDefinition& firing,
             FpsShotResult& outShot);
+    void EmitPlayerSound(Vector3 positionWorld, float radiusWorld)
+    {
+        EmitNpcPlayerSound(npcAi, positionWorld, radiusWorld);
+    }
 
     void RenderShadowMaps(engine::EngineContext& context);
     void RenderScene(
@@ -89,6 +97,9 @@ public:
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
             bool presentFromScratch = false);
+    bool PreparePostBloomWorldOverlays(
+            engine::RenderTarget& sceneTarget,
+            bool overlayRequested);
     bool CompositeViewmodel(
             engine::RenderTarget& sceneTarget,
             const engine::RenderTarget& viewmodelTarget);
@@ -105,6 +116,8 @@ public:
     const SectorNavigationWorld& Navigation() const { return navigation; }
     NpcNavigationRuntime& NpcNavigation() { return npcNavigation; }
     const NpcNavigationRuntime& NpcNavigation() const { return npcNavigation; }
+    const NpcAiRuntime& NpcAi() const { return npcAi; }
+    const NpcPatrolRuntime& NpcPatrol() const { return npcPatrol; }
     NpcMoveRequestResult RequestNpcMove(
             engine::EngineContext& context,
             std::string_view instanceId,
@@ -165,6 +178,9 @@ private:
     SectorNavigationWorld navigation;
     NpcNavigationRuntime npcNavigation;
     NpcCombatRuntime npcCombat;
+    NpcAiRuntime npcAi;
+    SectorSoundPropagationWorld soundPropagation;
+    NpcPatrolRuntime npcPatrol;
     NpcAudioRuntime npcAudio;
     SectorImpactParticleSystem impactParticles;
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();

@@ -4,6 +4,7 @@
 #include "engine/debug/DebugConsoleData.h"
 #include "engine/ui/UI.h"
 #include "engine/scripting/ScriptData.h"
+#include "engine/render/ScenePresentationShader.h"
 #include "game/ApplicationFlow.h"
 #include "game/FpsWeaponRegistry.h"
 #include "game/items/ItemAssets.h"
@@ -76,7 +77,8 @@ public:
     void Render3DShadowMaps(engine::EngineContext& context);
     void Render3DScene(engine::EngineContext& context);
     void Render3DViewmodel(engine::AssetManager& assets);
-    void Render3DOverlays();
+    bool Prepare3DOverlayPass(engine::RenderTarget& sceneTarget);
+    void Render3DOverlays(const engine::World& world);
     void Apply3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             bool collectGpuDiagnostics = false);
@@ -86,7 +88,9 @@ public:
             const engine::RenderTarget& viewmodelTarget);
     const engine::RenderTarget* HdrDebugPresentationSource() const;
     const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const;
+    engine::ScenePresentationEffectParameters ScenePresentationEffects() const;
     void Render3DHud(
+            const engine::World& world,
             engine::AssetManager& assets,
             engine::FontHandle font,
             Rectangle playableViewport) const;
@@ -102,6 +106,7 @@ private:
     void StartNewGame(engine::EngineContext& context);
     void ResumeGame(engine::EngineContext& context);
     void ClearGameSession(engine::EngineContext& context);
+    void EndGameToMainMenu(engine::EngineContext& context);
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
     bool DebugConsoleAvailable() const;
@@ -126,6 +131,7 @@ private:
     std::optional<FpsApplicationSettings> pendingGraphicsSettings;
     FpsApplicationSettings graphicsSettingsDraft;
     bool graphicsSettingsOpen = false;
+    bool pendingGameOverMainMenu = false;
     bool editorAttachedToGame = false;
     engine::FontHandle usePromptFont = engine::NullFontHandle();
     bool initialized = false;

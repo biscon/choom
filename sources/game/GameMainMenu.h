@@ -18,6 +18,14 @@ std::optional<MainMenuAction> DrawGameMainMenu(
         bool gameRunning,
         const char* statusText);
 
+bool DrawGameOverOverlay(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont);
+
 enum class GameGraphicsSettingsAction {
     None,
     Apply,

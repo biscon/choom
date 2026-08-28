@@ -584,6 +584,16 @@ int main(int argc, char** argv)
     Shader scenePresentationShader = LoadShaderFromMemory(
             nullptr,
             scenePresentationFragmentShader.c_str());
+    const int presentationDesaturationLoc = GetShaderLocation(
+            scenePresentationShader, "presentationDesaturation");
+    const int presentationVignetteOpacityLoc = GetShaderLocation(
+            scenePresentationShader, "presentationVignetteOpacity");
+    const int presentationVignetteColorLoc = GetShaderLocation(
+            scenePresentationShader, "presentationVignetteColorLinear");
+    const int presentationVignetteInnerRadiusLoc = GetShaderLocation(
+            scenePresentationShader, "presentationVignetteInnerRadius");
+    const int presentationVignetteOuterRadiusLoc = GetShaderLocation(
+            scenePresentationShader, "presentationVignetteOuterRadius");
     if (!IsShaderValid(scenePresentationShader)) {
         TraceLog(LOG_ERROR, "RENDER: required neutral tone-map/sRGB presentation shader unavailable");
         if (IsShaderValid(fxaaShader)) UnloadShader(fxaaShader);
@@ -941,9 +951,11 @@ int main(int argc, char** argv)
             application.Apply3DHdrBloom(worldTargetResource);
             performanceProfiler.End(RenderProfilePass::Bloom);
 
-            BeginTextureMode(worldTarget);
-            application.Render3DOverlays();
-            EndTextureMode();
+            if (application.Prepare3DOverlayPass(worldTargetResource)) {
+                BeginTextureMode(worldTarget);
+                application.Render3DOverlays(context.world);
+                EndTextureMode();
+            }
 
             const engine::RenderTarget* hdrDebugSource =
                     application.HdrDebugPresentationSource();
@@ -956,6 +968,33 @@ int main(int argc, char** argv)
             BeginTextureMode(scenePresentationTarget);
             ClearBackground(BLANK);
             rlDisableColorBlend();
+            const engine::ScenePresentationEffectParameters presentationEffects =
+                    application.ScenePresentationEffects();
+            SetShaderValue(
+                    scenePresentationShader,
+                    presentationDesaturationLoc,
+                    &presentationEffects.desaturation,
+                    SHADER_UNIFORM_FLOAT);
+            SetShaderValue(
+                    scenePresentationShader,
+                    presentationVignetteOpacityLoc,
+                    &presentationEffects.vignetteOpacity,
+                    SHADER_UNIFORM_FLOAT);
+            SetShaderValue(
+                    scenePresentationShader,
+                    presentationVignetteColorLoc,
+                    &presentationEffects.vignetteColorLinear,
+                    SHADER_UNIFORM_VEC3);
+            SetShaderValue(
+                    scenePresentationShader,
+                    presentationVignetteInnerRadiusLoc,
+                    &presentationEffects.vignetteInnerRadius,
+                    SHADER_UNIFORM_FLOAT);
+            SetShaderValue(
+                    scenePresentationShader,
+                    presentationVignetteOuterRadiusLoc,
+                    &presentationEffects.vignetteOuterRadius,
+                    SHADER_UNIFORM_FLOAT);
             BeginShaderMode(scenePresentationShader);
             DrawTexturePro(
                     linearSceneTexture,
@@ -1002,7 +1041,8 @@ int main(int argc, char** argv)
                 DrawTexturePro(editorTarget.texture, editorSrc, dst, {0,0}, 0.0f, WHITE);
             }
             if (render3D) {
-                application.Render3DHud(assets, smallFont, dst);
+                application.Render3DHud(
+                        context.world, assets, smallFont, dst);
             }
             Rectangle uiSrc = GetFullscreenSrcRect(uiTarget.texture);
             DrawTexturePro(uiTarget.texture, uiSrc, dst, {0,0}, 0.0f, WHITE);

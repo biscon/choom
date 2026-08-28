@@ -18,13 +18,16 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     Toggle3DMode,
     OpenMaterialEditor,
     OpenSoundEditor,
+    OpenPatrolEditor,
     OpenNpcEditor,
     OpenWeaponEditor,
     OpenItemEditor,
     ToggleShowGrid,
     ToggleShowAxes,
     ToggleShowIds,
-    OpenLevelSettings
+    OpenLevelSettings,
+    OpenPlayerSettings,
+    OpenSneakSettings
 };
 
 SectorEditorMainMenuCommand DrawSectorEditorMainMenu(

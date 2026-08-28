@@ -47,14 +47,23 @@ bool SectorSceneRuntime::Rebuild(
 {
     ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
     navigation.Shutdown();
     StopLevelAudio(context);
+    soundPropagation.Clear();
     if (!renderer.RebuildRendererResources(
                 context.assets,
                 map,
                 assetScopeName,
                 error)) {
         return false;
+    }
+    std::string soundPropagationError;
+    if (!soundPropagation.Build(map, &soundPropagationError)) {
+        TraceLog(
+                LOG_WARNING,
+                "Sound propagation graph build failed: %s",
+                soundPropagationError.c_str());
     }
     if (!navigation.Initialize(BuildSectorNavigationSettingsForMap(map))) {
         TraceLog(LOG_WARNING, "Navigation service initialization failed");
@@ -78,6 +87,10 @@ bool SectorSceneRuntime::Rebuild(
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    InitializeNpcAiRuntime(
+            npcAi, 64, navigation.Capacities().agentCapacity);
+    InitializeNpcPatrolRuntime(
+            npcPatrol, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     BeginLevelAudio(
             context,
@@ -94,6 +107,7 @@ bool SectorSceneRuntime::RebuildNavigationForMap(
         const SectorTopologyMap& map)
 {
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
     navigation.Shutdown();
     if (!navigation.Initialize(BuildSectorNavigationSettingsForMap(map))) {
         TraceLog(LOG_WARNING, "Navigation service initialization failed");
@@ -102,6 +116,10 @@ bool SectorSceneRuntime::RebuildNavigationForMap(
     navigation.RequestRebuild();
     InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    InitializeNpcAiRuntime(
+            npcAi, 64, navigation.Capacities().agentCapacity);
+    InitializeNpcPatrolRuntime(
+            npcPatrol, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     return true;
 }
@@ -110,7 +128,10 @@ void SectorSceneRuntime::Shutdown(engine::EngineContext& context)
 {
     ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
     ClearNpcCombatRuntime(npcCombat);
+    ClearNpcAiRuntime(npcAi);
+    soundPropagation.Clear();
     impactParticles.Clear();
     navigation.Shutdown();
     StopLevelAudio(context);
@@ -124,6 +145,7 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
 {
     ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
     navigation.ResetForRebuild();
     ResetSectorRuntimeObjectsForMap(
             context.world,
@@ -144,6 +166,10 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
     InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    InitializeNpcAiRuntime(
+            npcAi, 64, navigation.Capacities().agentCapacity);
+    InitializeNpcPatrolRuntime(
+            npcPatrol, navigation.Capacities().agentCapacity);
     impactParticles.Clear();
     BindRuntimeObjectAudio(context.world);
 }
@@ -172,7 +198,8 @@ void SectorSceneRuntime::Update(
         float dt,
         const Vector3* playerPosition,
         int playerSectorId,
-        const SectorDoorPlayerObstacle* playerObstacle)
+        const SectorDoorPlayerObstacle* playerObstacle,
+        const NpcAiGameplayContext* npcGameplay)
 {
     UpdateLevelAudio(context, map, dt, playerSectorId);
     PrepareNpcDoorTraversalAndHoldsSystem(
@@ -180,7 +207,8 @@ void SectorSceneRuntime::Update(
             navigation,
             npcNavigation,
             runtimeObjects.dynamicDoorColliders,
-            dt);
+            dt,
+            npcGameplay != nullptr && npcGameplay->frozen);
     CollectNpcDoorObstacles(
             context.world,
             npcNavigation,
@@ -239,6 +267,32 @@ void SectorSceneRuntime::Update(
             context.world,
             navigation,
             runtimeObjects.dynamicDoorColliders);
+    if (npcGameplay != nullptr
+            && runtimeObjects.objectSectorLookupWorldValid) {
+        UpdateNpcAiSystem(
+                context.world,
+                context.assets,
+                context.audio,
+                navigation,
+                npcNavigation,
+                runtimeObjects.objectSectorLookupWorld,
+                runtimeObjects.dynamicDoorColliders,
+                runtimeObjects.staticModelColliders,
+                npcAi,
+                *npcGameplay,
+                dt,
+                &soundPropagation,
+                &runtimeObjects.dynamicPortalBlockers);
+        UpdateNpcPatrolSystem(
+                context.world,
+                navigation,
+                runtimeObjects.objectSectorLookupWorld,
+                npcNavigation,
+                npcPatrol,
+                map,
+                dt,
+                npcGameplay->frozen);
+    }
     if (runtimeObjects.objectSectorLookupWorldValid) {
         UpdateNpcNavigationAndLocomotionSystem(
                 context.world,
@@ -252,7 +306,17 @@ void SectorSceneRuntime::Update(
                 runtimeObjects.objectLightProbes,
                 map,
                 dt,
-                playerObstacle);
+                playerObstacle,
+                npcGameplay != nullptr && npcGameplay->frozen);
+    }
+    engine::AnimatedModelSystem(context.world, context.assets, dt);
+    if (runtimeObjects.objectSectorLookupWorldValid) {
+        UpdateNpcFootstepEventsSystem(
+                context.world,
+                context.assets,
+                npcNavigation,
+                runtimeObjects.npcDefinitionCatalog,
+                dt);
         PlayPendingNpcFootsteps(context);
     }
     UpdateNpcAudioSystem(
@@ -267,11 +331,12 @@ void SectorSceneRuntime::Update(
                 &runtimeObjects.objectSectorLookupWorld;
     }
     audioOcclusion.doorColliders = &runtimeObjects.dynamicDoorColliders;
-    context.audio.UpdatePositionalSoundOcclusion(
+    audioOcclusion.portalBlockers = &runtimeObjects.dynamicPortalBlockers;
+    audioOcclusion.propagationWorld = &soundPropagation;
+    context.audio.UpdatePositionalSoundPropagation(
             dt,
             &audioOcclusion,
-            QuerySectorSoundOcclusion);
-    engine::AnimatedModelSystem(context.world, context.assets, dt);
+            QuerySectorSoundPropagation);
     impactParticles.Update(context.world, &context.assets, dt);
     renderer.AdvanceRuntime(dt);
 }
@@ -299,7 +364,8 @@ bool SectorSceneRuntime::ResolvePlayerWeaponShot(
             shotSequence,
             firing,
             volley,
-            &npcAudio);
+            &npcAudio,
+            &npcAi);
     outShot = volley.shots[0];
     for (int pelletIndex = 0;
             pelletIndex < volley.pelletCount;
@@ -1035,6 +1101,14 @@ void SectorSceneRuntime::ApplyHdrBloom(
         bool presentFromScratch)
 {
     renderer.ApplyHdrBloom(sceneTarget, settings, presentFromScratch);
+}
+
+bool SectorSceneRuntime::PreparePostBloomWorldOverlays(
+        engine::RenderTarget& sceneTarget,
+        bool overlayRequested)
+{
+    return renderer.PreparePostBloomWorldOverlays(
+            sceneTarget, overlayRequested);
 }
 
 bool SectorSceneRuntime::CompositeViewmodel(

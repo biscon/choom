@@ -33,6 +33,12 @@ public:
     void ApplyIdBuffer();
     void ApplyNameBuffer();
     void SetSelectedHostile(bool hostile);
+    void SetSelectedAiType(const std::string& aiType);
+    void SetSelectedPerception(
+            float visionRangeWorld,
+            float visionAngleDegrees,
+            float hearingRangeWorld,
+            int investigationDurationMilliseconds);
     void SetSelectedCanOpenDoors(bool canOpenDoors);
     void SetSelectedBaseHealth(int health);
     void SetSelectedDespawnOnDeath(bool despawn);
@@ -43,9 +49,27 @@ public:
             const std::string& modelPath,
             engine::AssetManager& assets);
     void SetSelectedAnimation(NpcAction action, const std::string& animation);
+    void SetSelectedPlayerDetectedSound(const std::string& soundPath);
     void SetSelectedActionSound(NpcAction action, const std::string& soundPath);
+    void SetSelectedAttackSound(const std::string& soundPath);
     void SetSelectedAnimationSpeed(NpcAction action, float speed);
     void SetSelectedMovementSpeed(NpcAction action, float speed);
+    void SetSelectedFootstepPhase(
+            NpcAction action,
+            size_t phaseIndex,
+            float phase);
+    void SetSelectedAttack(
+            float hitPhase,
+            float rangeWorld,
+            int damage,
+            float knockbackImpulseWorldPerSecond,
+            int stunMilliseconds);
+    void SetSelectedAttackMotion(
+            float advanceSpeedMultiplier,
+            float aimTrackingEndPhase,
+            float hitArcDegrees);
+    void SetSelectedAttackCameraImpact(
+            const NpcAttackCameraImpactDefinition& cameraImpact);
     void SetSelectedAmbientDelayRange(float minimumSeconds, float maximumSeconds);
     bool AddSelectedAmbientSound(const std::string& soundPath);
     bool ReplaceSelectedAmbientSound(size_t index, const std::string& soundPath);

@@ -2073,10 +2073,11 @@ bool Checkbox(
         FontHandle font,
         const char* text,
         bool& checked,
-        UITextJustify justify)
+        UITextJustify justify,
+        bool enabled)
 {
     const uint32_t widgetId = HashId(id);
-    if (ContainsWidget(ui, bounds, ui.mousePosition)) {
+    if (enabled && ContainsWidget(ui, bounds, ui.mousePosition)) {
         ui.hotId = widgetId;
         if (ui.mouseDown) {
             ui.activeId = widgetId;
@@ -2085,12 +2086,15 @@ bool Checkbox(
     }
 
     bool changed = false;
-    if (ConsumeMouseClick(ui, input, bounds)) {
+    if (enabled && ConsumeMouseClick(ui, input, bounds)) {
         checked = !checked;
         changed = true;
     }
 
-    DrawWidgetBackground(ui, config, bounds, InteractiveFill(config, ui, widgetId), config.borderColor);
+    DrawWidgetBackground(
+            ui, config, bounds,
+            enabled ? InteractiveFill(config, ui, widgetId) : config.panelColor,
+            config.borderColor);
 
     const float boxSize = std::max(0.0f, bounds.height - config.paddingY * 2.0f);
     const Rectangle boxLocal{
@@ -2101,7 +2105,8 @@ bool Checkbox(
     };
     const Rectangle box = TransformBounds(ui, boxLocal);
     DrawRectangleRec(box, config.panelColor);
-    DrawRectangleLinesEx(box, config.borderThickness, config.borderColor);
+    DrawRectangleLinesEx(box, config.borderThickness,
+            enabled ? config.borderColor : config.disabledColor);
     if (checked) {
         const Rectangle mark{
                 box.x + config.checkboxMarkPadding,
@@ -2109,13 +2114,15 @@ bool Checkbox(
                 box.width - config.checkboxMarkPadding * 2.0f,
                 box.height - config.checkboxMarkPadding * 2.0f
         };
-        DrawRectangleRec(mark, config.accentColor);
+        DrawRectangleRec(mark,
+                enabled ? config.accentColor : config.disabledColor);
     }
 
     Rectangle textBounds = bounds;
     textBounds.x = boxLocal.x + boxLocal.width + config.paddingX;
     textBounds.width = std::max(0.0f, bounds.x + bounds.width - textBounds.x - config.paddingX);
-    Text(ui, config, assets, textBounds, font, text, justify, config.textColor);
+    Text(ui, config, assets, textBounds, font, text, justify,
+            enabled ? config.textColor : config.disabledColor);
     return changed;
 }
 

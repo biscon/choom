@@ -142,4 +142,17 @@ Vector4 CompositeHdrBloom(Vector4 linearScene, Vector3 bloomRgb, float intensity
             SanitizeBoundedAlpha(linearScene.w,1.0f)};
 }
 
+HdrPostProcessOverlayRoute ResolveHdrPostProcessOverlayRoute(
+        bool overlayRequested,
+        bool presentingFromScratch,
+        bool diagnosticPresentationOverride)
+{
+    if (!overlayRequested || diagnosticPresentationOverride) {
+        return HdrPostProcessOverlayRoute::Skip;
+    }
+    return presentingFromScratch
+            ? HdrPostProcessOverlayRoute::CommitScratchThenDrawSceneTarget
+            : HdrPostProcessOverlayRoute::DrawSceneTarget;
+}
+
 } // namespace engine

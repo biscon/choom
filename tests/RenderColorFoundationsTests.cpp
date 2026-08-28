@@ -7,6 +7,7 @@
 #include "engine/render/RenderTarget.h"
 #include "engine/render/ScenePresentationShader.h"
 #include "engine/render/ToneMapping.h"
+#include "sector_demo/renderer/SectorBloomRenderer.h"
 
 #include <external/glad.h>
 
@@ -186,8 +187,43 @@ void TestNeutralToneMapping()
           "presentation shader applies the selected neutral tone curve");
     Check(shader.find("LinearSceneToDisplaySrgb") != std::string::npos,
           "presentation shader performs the exact sRGB transfer");
+    Check(shader.find("presentationDesaturation") != std::string::npos
+                  && shader.find("presentationVignetteOpacity")
+                          != std::string::npos
+                  && shader.find("presentationVignetteColorLinear")
+                          != std::string::npos,
+          "presentation shader exposes low-health effect uniforms");
+    Check(shader.find("pow(centered.x, 4.0)") != std::string::npos
+                  && shader.find("smoothstep(") != std::string::npos,
+          "presentation shader uses a soft rounded-screen vignette");
+    const size_t toneMapPosition = shader.find(
+            "vec3 mapped = ToneMapNeutralMaxChannel");
+    const size_t impairmentPosition = shader.find("float luminance = dot");
+    const size_t displayTransferPosition = shader.find(
+            "LinearSceneToDisplaySrgb(mapped)");
+    Check(toneMapPosition < impairmentPosition
+                  && impairmentPosition < displayTransferPosition,
+          "low-health effects operate in linear display space after tone mapping");
     Check(shader.find("ACES") == std::string::npos && shader.find("Aces") == std::string::npos,
           "presentation shader contains no alternate ACES operator");
+}
+
+void TestBloomDiagnosticViewPolicy()
+{
+    Check(!game::IsSectorBloomDiagnosticView(
+                  game::SectorBloomDebugView::Normal),
+          "normal bloom presentation permits gameplay presentation effects");
+    Check(game::IsSectorBloomDiagnosticView(
+                  game::SectorBloomDebugView::SceneBefore)
+                  && game::IsSectorBloomDiagnosticView(
+                          game::SectorBloomDebugView::Prefilter)
+                  && game::IsSectorBloomDiagnosticView(
+                          game::SectorBloomDebugView::BlurredBloom)
+                  && game::IsSectorBloomDiagnosticView(
+                          game::SectorBloomDebugView::BloomOnly)
+                  && game::IsSectorBloomDiagnosticView(
+                          game::SectorBloomDebugView::SceneAfter),
+          "every explicit bloom diagnostic view suppresses gameplay presentation effects");
 }
 
 void TestRenderTargetMetadata()
@@ -259,6 +295,7 @@ void TestRenderTargetMetadata()
 void TestHdrEffectPolicy()
 {
     using engine::EvaluateHdrBloomPrefilter;
+    using engine::HdrPostProcessOverlayRoute;
     engine::HdrBloomSettings settings;
     engine::HdrBloomSettings invalidSettings;
     invalidSettings.threshold=std::numeric_limits<float>::quiet_NaN();
@@ -282,6 +319,19 @@ void TestHdrEffectPolicy()
                   && engine::SanitizeLinearHdrChannelForRgba16f(
                              std::numeric_limits<float>::quiet_NaN())==0.0f,
           "half storage sanitizer has deterministic non-finite policy");
+
+    Check(engine::ResolveHdrPostProcessOverlayRoute(false, true, false)
+                    == HdrPostProcessOverlayRoute::Skip,
+          "inactive world overlays do not trigger an HDR scratch commit");
+    Check(engine::ResolveHdrPostProcessOverlayRoute(true, false, false)
+                    == HdrPostProcessOverlayRoute::DrawSceneTarget,
+          "world overlays draw directly when scene color is authoritative");
+    Check(engine::ResolveHdrPostProcessOverlayRoute(true, true, false)
+                    == HdrPostProcessOverlayRoute::CommitScratchThenDrawSceneTarget,
+          "scratch presentation commits before depth-tested world overlays");
+    Check(engine::ResolveHdrPostProcessOverlayRoute(true, true, true)
+                    == HdrPostProcessOverlayRoute::Skip,
+          "explicit HDR diagnostic presentation is not overwritten by world overlays");
 
     settings.threshold=0.0f; settings.softKnee=0.5f;
     Vector3 value=EvaluateHdrBloomPrefilter(Vector3{0.25f,0.0f,0.0f},settings);
@@ -365,6 +415,7 @@ int main()
     TestTransferFunctions();
     TestTextureSemantics();
     TestNeutralToneMapping();
+    TestBloomDiagnosticViewPolicy();
     TestRenderTargetMetadata();
     TestPipelineDiagnosticFormatting();
     TestHdrEffectPolicy();

@@ -90,12 +90,21 @@ views and maps to world Z for generated 3D geometry.
 - `Sound Editor`: add, remove, rename, retype, and replace map-local Sound and
   Music entries. Referenced IDs, types, and removals are locked while their
   underlying audio files may still be replaced.
+- `Patrol Editor`: author stable-ID routes from Level Markers, with per-waypoint
+  delay, gait, and optional look sweep plus Once, Loop, or Ping-pong playback.
 - Billboard tool: place a generic authored billboard marker inside a sector.
 - Door tool: place a portal-attached procedural door on a valid two-sided
   linedef.
 - `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
 - `3D Mode` (`Ctrl+D`, under `View`): rebuild the 3D preview from the current
   in-memory topology map, or return to 2D from preview mode.
+- `Settings -> Player`: open the application-wide Player Settings modal. Its
+  Stamina, Inventory, Audio, and Health tabs expose the player-specific values
+  stored in `assets/config/application_settings.json` that do not belong in the
+  end-user Graphics Settings screen. Apply validates and saves all player tabs;
+  Cancel leaves both the live settings and the JSON file unchanged. Audio sets
+  are selected from the discovered footstep/player sound catalogs and can be
+  previewed from the modal.
 - `Copy config` / `Paste config` (`Ctrl+C` / `Ctrl+V`): copy and paste the
   selected compatible editor configuration. Disabled commands do not fire.
 
@@ -508,12 +517,49 @@ and other emitters using the same map audio entry. The emitter inspector accepts
 an exact ID or opens a picker containing all registered entries; invalid text is
 not committed and is restored to the authored value.
 
+Game-runtime positional audio propagates through the topology rather than
+ignoring it. A direct path loses 80 percent of its remaining volume for every
+solid wall or closed-door slab it crosses and receives an increasingly low
+low-pass cutoff, so multiple barriers matter cumulatively. Open two-sided
+linedefs also form a cached portal graph. When the route through openings is
+stronger than direct wall transmission, distance attenuation follows that route,
+panning points toward its first opening, and turns add diffraction volume and
+low-pass loss. Propagation is sampled at 10 Hz and smoothly blended over half a
+second to avoid abrupt changes as doors move or the listener crosses a portal.
+
 IDs used by sector roomtones, Sound Emitters, or door open/close sounds cannot
 be renamed, retyped, or removed. The details pane reports those known level
 references in a word-wrapped usage box. Replacing the audio file remains
 available because it preserves the stable ID and loading role. Lua may refer to
 IDs dynamically or from external scripts, so script strings are not treated as
 statically discoverable references.
+
+## Patrol Editor
+
+`Editors -> Patrol Editor` uses the standard scrolling-list/details layout.
+Patrols reference stable Level Marker editor IDs; referenced markers and
+NPC-assigned patrols cannot be removed until they are unassigned. Each placed
+NPC inspector can select a patrol or `None`. Assigned NPCs can start at a random
+waypoint or traverse an ordered route in reverse; reverse starts at the final
+waypoint unless random start is enabled. An accepted script move can optionally
+stop that patrol for the rest of the game session.
+
+`Shuffle Waypoints` visits every waypoint once per randomized cycle without
+selecting the same waypoint twice in a row. Shuffled patrols support Once and
+Loop playback; enabling shuffle changes Ping-pong playback to Loop and keeps
+Ping-pong unavailable until shuffle is disabled. Reverse is disabled for NPCs
+assigned to a shuffled patrol because shuffled routes have no direction.
+
+`Face Waypoint Orientation` is enabled by default. On arrival the NPC stops and
+turns toward the Level Marker orientation by the shortest direction before the
+waypoint delay and optional Look around begin. Disabling it preserves the NPC's
+arrival heading; Look around then uses that arrival heading as its center.
+
+Patrols execute only in game sessions. AI detection and script movement take
+locomotion authority temporarily, after which a resumable patrol continues at
+its interrupted waypoint. NPCs moving toward the same patrol waypoint receive
+deterministic projected ring slots around the marker to avoid converging on one
+exact Crowd destination. A single NPC still uses the exact marker position.
 
 ## Move, Split, And Delete Tools
 
@@ -610,7 +656,9 @@ starts. Press `H` to equip it. In gameplay and 3D Gameplay control mode, the
 top-row keys `1` through `6` switch to assigned weapons by holstering the old
 weapon completely before automatically unholstering the new weapon.
 Firing definitions can optionally enable hitscan pellets and configure their
-count and spread half-angle. A pellet weapon performs one normal firing event
+count and spread half-angle. `Noise radius` is the world-space radius published
+to NPC hearing for each accepted shot; `0` makes the shot silent to AI. A pellet
+weapon performs one normal firing event
 for cooldown, sound, recoil, muzzle flash, and muzzle light, while each pellet
 independently resolves its first collision, damage, knockback, stagger, and
 impact effects. Weapons without pellets enabled retain one centered hitscan
@@ -919,8 +967,124 @@ functional generic billboards by the editor. The old F5 temporary
 non-serialized spawn path has been removed; placed billboards are the runtime
 object authoring path. Placed NPCs can use the shared bounded navigation,
 collision-constrained locomotion, door traversal, and Crowd avoidance service.
-General NPC AI/state machines, unrestricted actor physics, attached lights,
-and transparent alpha-blended sprites are still deferred.
+Unrestricted actor physics, attached lights, and transparent alpha-blended
+sprites are still deferred.
+
+NPC definitions are global JSON assets under `assets/npcs` and are edited from
+the NPC Editor. Hostile/friendly remains faction and collision data. The AI Type
+dropdown filters registered AI descriptors by that alignment and also permits
+`None`. Per-definition perception fields author vision range, the full
+horizontal vision-cone angle, hearing range, and investigation duration.
+NPC hearing uses the same wall, closed-door, and open-portal propagation routes
+as positional audio. The route length must fit the NPC hearing range and the
+sound event radius is reduced by that route's transmission or diffraction gain.
+Consequently, one wall makes a sound substantially harder to hear and additional
+walls compound that loss; an open doorway can preserve a stronger but longer
+route around the obstruction.
+Hostile definitions may also assign an optional Player detected sound
+(`playerDetectedSound` in JSON). It plays spatially from the NPC whenever the
+NPC newly enters the Detected state, whether through sight or a direct alert,
+and may play again after the NPC loses and reacquires the player. Detection
+vocals interrupt ambient vocals but yield to hurt and death vocals.
+
+The semantic action list includes `Attack`. Like other actions it assigns a
+model animation and playback speed; it additionally authors normalized hit
+phase, world-space range, Run-speed advance multiplier, aim-tracking end phase,
+forward hit arc, damage, optional knockback impulse, optional stun in
+milliseconds, and an optional spatialized attack sound. During windup the NPC
+begins at its Run speed multiplied by the authored advance value and smoothly
+decelerates to zero at the hit phase. Movement remains collision-resolved but
+does not pathfind, use Crowd steering, change animations, or emit footsteps.
+Aim follows the player through the authored tracking phase and then locks, so
+a timely strafe can leave the committed forward arc. The attack sound plays
+when the NPC begins the committed attack animation, whether or not the later
+hit connects. The separately authored player-impact sound plays only when the
+hit connects and is spatialized from the attacker so concurrent hits remain
+directionally distinct. A stun value of `0` disables stun and a knockback value
+of `0` disables knockback.
+The Attack action also has an optional `cameraImpact` object. Existing NPCs use
+the default enabled response: a directional `2.5` degree pitch and `3.5` degree
+roll impulse, recovering through a `4 Hz`, `0.75` damping-ratio spring and
+clamped to `7.5` degrees pitch and `10` degrees roll. The NPC Editor exposes the
+enabled state, both kick strengths, spring frequency/damping, and accumulated
+pitch/roll limits. Front/back attacks map to pitch, left/right attacks map to
+roll, repeated hits accumulate within the configured limits, and omitted
+fields retain their defaults. This camera layer is visual-only with respect to
+controller state, collision, sector lookup, and physics. Like weapon camera
+recoil, pitch affects the effective center ray while active; roll changes only
+the rendered camera orientation.
+During a stun the game player cannot sprint and moves at half walk speed, but
+may still jump.
+
+Seek & Destroy is the first hostile AI type. In the real game it uses generic
+vision/hearing and last-known-position investigation, runs toward a detected
+player, and commits to melee animations until their hit/finish points. The
+generic vision host detects a standing player immediately when authored range,
+cone, and line-of-sight checks pass, independent of light level. Light,
+darkness-proximity, timed detection, and reduced movement-noise settings apply
+only while crouch/sneak mode is targeted. Sneak mode starts with the accepted
+crouch toggle and ends with the accepted stand toggle, while the physical
+crouch pose continues its short blend. The authored range remains the baseline
+center-to-center range; runtime uses a
+`0.10` world-unit engagement tolerance, a `0.25` world-unit disengagement band,
+and a bounded `0.25` world-unit committed-hit margin so navigation does not
+jitter at the melee boundary and nearby attackers resolve independently. A
+player who moves beyond that margin, leaves the committed hit arc, or moves
+behind cover still avoids the hit. AI
+never runs in either editor 3D preview control mode. Footstep and landing noise
+radii are exposed under `Settings -> Player -> Audio`. Runtime testing exposes
+`/god [on|off]`, `/invisible [on|off]`, `/freezeai [on|off]`, and
+`/debugai [on|off]`; omitting the argument toggles the current campaign-session
+value. `/invisible` makes hostile NPCs drop existing player alerts and ignore
+player sight and sound detection, allowing their normal patrols to resume.
+`/debugai` is game-mode only and draws fixed-size projected state labels
+above AI NPCs plus depth-tested vision, hearing, melee-range,
+last-known-player, active-sound-event, path, active patrol-route, and patrol-slot
+diagnostics. Patrol routes also appear for non-hostile NPCs. It is independent
+from the F8 navigation diagnostics and remains enabled across `/reload` until
+the campaign session ends or the command disables it.
+
+The game presentation shader also provides a configurable low-health screen
+effect under `Settings -> Player -> Health`. It starts below the authored health
+ratio (default `0.5`) and uses a smooth progression toward its configured
+maximum vignette opacity and desaturation as health approaches zero. The
+vignette is a soft rounded-screen mask tinted with the authored dark red color;
+its artist-facing opacity uses a quadratic ease-out so injuries become readable
+earlier and high opacity values appear substantially less transparent. It is
+applied after neutral tone mapping but before the final sRGB transfer, so
+it composes with the existing HDR presentation without another fullscreen pass.
+The effect is game-runtime-only: the editor 3D preview always supplies neutral
+presentation parameters, regardless of the settings.
+
+The same Health tab configures three additional game-runtime-only responses.
+The heartbeat uses `audio/player/heartbeat_loop.wav` as a continuously mixed
+loop. By default it begins below `0.5` health at near-silent volume, reaches its
+configured full volume at `0.1` health, and increases pitch from `1.0` to `1.5`
+over that range. Volume and pitch respond smoothly to health changes; healing
+above the threshold fades and stops the loop, while disabling the effect or
+reaching Game Over stops it immediately. Missing or pending audio remains
+silent without preventing play.
+
+Low-health movement scaling is independently enabled and configured. It leaves
+walk, run, and crouched movement unchanged at or above the default `0.5` health
+ratio, then linearly reduces intentional horizontal movement toward separately
+configured walk and sprint minimum scales at zero health. Stun, stamina, and
+movement direction are resolved before choosing which scale applies, so an
+exhausted, stunned, or backward-moving player receives the walk scale. The
+result composes multiplicatively with stun slowdown. Jump physics and external
+knockback are not scaled.
+
+Low-health camera sway is also independently enabled. Its default strength is
+zero at `0.5` health and reaches full strength at `0.1`, with a nonlinear curve
+that keeps the onset subtle. Differently phased low-frequency lateral,
+vertical, pitch, yaw, and roll waves produce smooth irregular motion rather
+than frame-like jitter. This layer is applied only to the rendered game camera;
+it never changes the physical controller pose, collision, sector lookup,
+interaction origin, or physics.
+
+When player health reaches zero, game simulation stops behind a Game Over
+overlay. Its Main Menu button shuts down the level, clears the unsaved campaign
+and persistent script state, and returns the menu to `Start New Game`.
 
 ## Baked Lightmaps
 

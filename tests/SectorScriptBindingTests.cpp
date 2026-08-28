@@ -656,6 +656,40 @@ end
 
 }
 
+void AiTakeoverCancelsScriptNpcMoveWithReason()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+local movement
+function init()
+    movement = startMoveNpc("script_guard", 12.0, 8.0, "walk")
+    assert(movement ~= nil)
+end
+function inspectMovement()
+    local state, reason = operationStatus(movement)
+    setPersistentString("state", state)
+    setPersistentString("reason", reason or "")
+end
+)");
+    assert(Create(
+            fixture.context,
+            fixture.runtime,
+            fixture.persistent,
+            fixture.host,
+            fixture.files));
+    game::InterruptSectorScriptNpcMoveForAi(
+            fixture.context, fixture.host, "script_guard");
+    assert(engine::ScriptSystemCallForegroundHook(
+            fixture.runtime, "inspectMovement").result
+            == engine::ScriptCallResult::Completed);
+    assert(fixture.persistent.strings.at("state") == "cancelled");
+    assert(fixture.persistent.strings.at("reason")
+            == "player detected; AI took control");
+    assert(game::GetNpcMoveStatus(
+            fixture.npcNavigation, "script_guard").phase
+            == game::NpcMovePhase::Cancelled);
+}
+
 void NpcMoveRebuildDeletionUnloadAndImmediateFailuresResolve()
 {
     {
@@ -1129,6 +1163,7 @@ void RunSectorScriptBindingTests()
     NpcMoveLevelMarkerOverloadsResolvePositionOnly();
     AsyncNpcMoveSupportsAwaitDuplicateValidationAndCancellation();
     AsyncNpcMoveCancellationAndLifecycleFailuresResolve();
+    AiTakeoverCancelsScriptNpcMoveWithReason();
     NpcMoveRebuildDeletionUnloadAndImmediateFailuresResolve();
     TravelPreservesFirstRequest();
     TriggerContainmentUsesExplicitCoordinateSpaces();

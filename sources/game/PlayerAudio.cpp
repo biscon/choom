@@ -5,6 +5,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace game {
 
@@ -13,6 +14,7 @@ namespace {
 constexpr float MinimumPlayerSoundPitch = 0.98f;
 constexpr float MaximumPlayerSoundPitch = 1.02f;
 constexpr float BreathingVolumeEpsilon = 0.0001f;
+constexpr float HeartbeatVolumeEpsilon = 0.0001f;
 
 PlayerSoundRuntimeEvent* FindPlayerSoundEvent(
         PlayerAudioRuntime& runtime,
@@ -72,6 +74,11 @@ void RequestPlayerAudioAssets(
     runtime.heavyBreathing = assets.RequestMusic(
             assets.GlobalScope(),
             breathingPath.c_str());
+    const std::string heartbeatPath = ResolveSectorAudioAssetPath(
+            "player/heartbeat_loop.wav");
+    runtime.heartbeat = assets.RequestSound(
+            assets.GlobalScope(),
+            heartbeatPath.c_str());
     const SoundSetCatalog catalog = DiscoverSoundSetCatalog(
             ASSETS_PATH "audio/player",
             "player");
@@ -201,6 +208,75 @@ void StopPlayerBreathingAudio(
         audio.StopMusic(assets, playerAudio.heavyBreathing);
     }
     runtime = PlayerBreathingAudioRuntime{};
+}
+
+void UpdatePlayerHeartbeatAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        const PlayerAudioRuntime& playerAudio,
+        PlayerHeartbeatAudioRuntime& runtime,
+        const PlayerHeartbeatAudioApplicationSettings& settings,
+        const Health& health,
+        float rawDt)
+{
+    if (!settings.enabled || IsDepleted(health)) {
+        StopPlayerHeartbeatAudio(assets, audio, runtime);
+        return;
+    }
+    if (!std::isfinite(runtime.volume) || !std::isfinite(runtime.pitch)) {
+        StopPlayerHeartbeatAudio(assets, audio, runtime);
+    }
+
+    const float targetVolume = PlayerHeartbeatVolume(health, settings);
+    const float targetPitch = PlayerHeartbeatPitch(health, settings);
+    const float dt = std::isfinite(rawDt)
+            ? std::clamp(rawDt, 0.0f, 0.25f)
+            : 0.0f;
+    if (dt > 0.0f) {
+        const float responseSeconds = std::max(
+                0.001f, settings.responseSeconds);
+        const float response = 1.0f - std::exp(-dt / responseSeconds);
+        runtime.volume += (targetVolume - runtime.volume) * response;
+        runtime.pitch += (targetPitch - runtime.pitch) * response;
+    }
+    runtime.volume = std::clamp(runtime.volume, 0.0f, 1.0f);
+    runtime.pitch = std::clamp(runtime.pitch, 0.01f, 4.0f);
+
+    if (runtime.volume <= HeartbeatVolumeEpsilon
+            && targetVolume <= HeartbeatVolumeEpsilon) {
+        StopPlayerHeartbeatAudio(assets, audio, runtime);
+        return;
+    }
+
+    const engine::SoundPlaybackSettings playbackSettings{
+            runtime.volume,
+            runtime.pitch,
+            0.0f,
+            true};
+    if (!audio.IsSoundPlaying(runtime.playback)) {
+        runtime.playback = audio.PlaySound(
+                assets,
+                playerAudio.heartbeat,
+                playbackSettings);
+        return;
+    }
+    if (!audio.SetSoundPlaybackSettings(
+                assets,
+                runtime.playback,
+                playbackSettings)) {
+        runtime.playback = engine::NullSoundPlaybackHandle();
+    }
+}
+
+void StopPlayerHeartbeatAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        PlayerHeartbeatAudioRuntime& runtime)
+{
+    if (!engine::IsNull(runtime.playback)) {
+        audio.StopSound(assets, runtime.playback);
+    }
+    runtime = PlayerHeartbeatAudioRuntime{};
 }
 
 } // namespace game

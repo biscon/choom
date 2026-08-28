@@ -51,6 +51,37 @@ int ReadInt(
         const char* field,
         const std::string& context);
 
+SectorPatrolMode ReadPatrolMode(
+        const Json& value,
+        const std::string& context)
+{
+    const std::string mode = ReadString(value, "mode", context);
+    if (mode == "once") return SectorPatrolMode::Once;
+    if (mode == "loop") return SectorPatrolMode::Loop;
+    if (mode == "pingpong") return SectorPatrolMode::PingPong;
+    Fail(context + ".mode must be 'once', 'loop', or 'pingpong'");
+}
+
+const char* WritePatrolMode(SectorPatrolMode mode)
+{
+    switch (mode) {
+        case SectorPatrolMode::Once: return "once";
+        case SectorPatrolMode::Loop: return "loop";
+        case SectorPatrolMode::PingPong: return "pingpong";
+    }
+    Fail("Invalid patrol mode");
+}
+
+SectorPatrolGait ReadPatrolGait(
+        const Json& value,
+        const std::string& context)
+{
+    const std::string gait = ReadString(value, "gait", context);
+    if (gait == "walk") return SectorPatrolGait::Walk;
+    if (gait == "run") return SectorPatrolGait::Run;
+    Fail(context + ".gait must be 'walk' or 'run'");
+}
+
 bool IsValidAudioPath(const std::string& path)
 {
     if (path.empty()) return false;
@@ -1112,6 +1143,18 @@ SectorPlacedNpc ReadPlacedNpc(const Json& value, const std::string& context)
     SectorPlacedNpc npc;
     npc.definitionId = ReadString(value, "definitionId", context);
     npc.instanceId = ReadOptionalString(value, "instanceId", context, npc.instanceId);
+    if (value.contains("patrolEditorId")) {
+        npc.patrolEditorId = ReadInt(value, "patrolEditorId", context);
+    }
+    npc.randomPatrolStart = ReadOptionalBool(
+            value, "randomPatrolStart", context,
+            npc.randomPatrolStart);
+    npc.reversePatrol = ReadOptionalBool(
+            value, "reversePatrol", context,
+            npc.reversePatrol);
+    npc.scriptMoveStopsPatrol = ReadOptionalBool(
+            value, "scriptMoveStopsPatrol", context,
+            npc.scriptMoveStopsPatrol);
     npc.scale = ReadOptionalPositiveFloat(value, "scale", context, npc.scale);
     const std::string shadowMode = ReadOptionalString(
             value, "shadowMode", context, "contact");
@@ -2332,6 +2375,9 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
                     && !IsValidNpcInstanceId(object.npc.instanceId)) {
                 Fail(context + ".npc.instanceId is invalid");
             }
+            if (object.npc.patrolEditorId < 0) {
+                Fail(context + ".npc.patrolEditorId must be zero or a positive integer");
+            }
             if (!std::isfinite(object.npc.scale) || object.npc.scale <= 0.0f) {
                 Fail(context + ".npc.scale must be a finite positive value");
             }
@@ -2343,6 +2389,18 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             }
             Json npc{{"definitionId", object.npc.definitionId}};
             if (!object.npc.instanceId.empty()) npc["instanceId"] = object.npc.instanceId;
+            if (object.npc.patrolEditorId > 0) {
+                npc["patrolEditorId"] = object.npc.patrolEditorId;
+            }
+            if (object.npc.randomPatrolStart) {
+                npc["randomPatrolStart"] = true;
+            }
+            if (object.npc.reversePatrol) {
+                npc["reversePatrol"] = true;
+            }
+            if (object.npc.scriptMoveStopsPatrol) {
+                npc["scriptMoveStopsPatrol"] = true;
+            }
             if (object.npc.scale != 1.0f) npc["scale"] = object.npc.scale;
             if (object.npc.shadowMode == SectorDynamicModelShadowMode::None) {
                 npc["shadowMode"] = "none";
@@ -3133,6 +3191,22 @@ void ValidateAuthoringSoundReferences(const SectorAuthoringGraph& graph)
     }
 }
 
+void ValidateAuthoringPatrolAssignments(
+        const SectorAuthoringGraph& graph,
+        const SectorTopologyMap& map)
+{
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        if (object.kind != RuntimeObjectKindNpc
+                || object.npc.patrolEditorId == 0) {
+            continue;
+        }
+        if (FindSectorAuthoringPatrol(graph, object.npc.patrolEditorId) == nullptr) {
+            Fail("runtime object " + std::to_string(object.id)
+                    + ".npc.patrolEditorId references a missing patrol");
+        }
+    }
+}
+
 void ValidateAuthoringMapData(const SectorTopologyMap& map)
 {
     ValidateAudioSettings(map.audioSettings, "root.audio");
@@ -3266,6 +3340,10 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                     if (!npcInstanceIds.insert(object.npc.instanceId).second) {
                         Fail(objectContext + ".npc.instanceId duplicates another NPC instance ID");
                     }
+                }
+                if (object.npc.patrolEditorId < 0) {
+                    Fail(objectContext
+                            + ".npc.patrolEditorId must be zero or a positive integer");
                 }
                 if (!std::isfinite(object.npc.scale) || object.npc.scale <= 0.0f) {
                     Fail(objectContext + ".npc.scale must be a finite positive value");
@@ -4139,6 +4217,56 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    const auto patrolsIt = value.find("patrols");
+    if (patrolsIt != value.end()) {
+        if (!patrolsIt->is_array()) {
+            Fail("root.authoringGraph.patrols must be an array");
+        }
+        for (size_t patrolIndex = 0; patrolIndex < patrolsIt->size(); ++patrolIndex) {
+            const Json& patrolJson = (*patrolsIt)[patrolIndex];
+            const std::string context = "root.authoringGraph.patrols["
+                    + std::to_string(patrolIndex) + "]";
+            if (!patrolJson.is_object()) Fail(context + " must be an object");
+            SectorAuthoringPatrol patrol;
+            patrol.editorId = ReadInt(patrolJson, "editorId", context);
+            patrol.id = ReadString(patrolJson, "id", context);
+            patrol.mode = patrolJson.contains("mode")
+                    ? ReadPatrolMode(patrolJson, context)
+                    : SectorPatrolMode::Loop;
+            patrol.shuffleWaypoints = ReadOptionalBool(
+                    patrolJson, "shuffleWaypoints", context, false);
+            patrol.faceWaypointOrientation = ReadOptionalBool(
+                    patrolJson, "faceWaypointOrientation", context, true);
+            const Json& waypoints = RequireArrayField(
+                    patrolJson, "waypoints", context);
+            patrol.waypoints.reserve(waypoints.size());
+            for (size_t waypointIndex = 0;
+                    waypointIndex < waypoints.size(); ++waypointIndex) {
+                const Json& waypointJson = waypoints[waypointIndex];
+                const std::string waypointContext = context + ".waypoints["
+                        + std::to_string(waypointIndex) + "]";
+                if (!waypointJson.is_object()) {
+                    Fail(waypointContext + " must be an object");
+                }
+                SectorAuthoringPatrolWaypoint waypoint;
+                waypoint.levelMarkerId = ReadInt(
+                        waypointJson, "levelMarkerEditorId", waypointContext);
+                waypoint.delayMilliseconds = waypointJson.contains("delayMilliseconds")
+                        ? ReadInt(waypointJson, "delayMilliseconds", waypointContext)
+                        : 0;
+                waypoint.gait = waypointJson.contains("gait")
+                        ? ReadPatrolGait(waypointJson, waypointContext)
+                        : SectorPatrolGait::Walk;
+                waypoint.lookAround = ReadOptionalBool(
+                        waypointJson, "lookAround", waypointContext, false);
+                waypoint.lookArcDegrees = ReadOptionalFloat(
+                        waypointJson, "lookArcDegrees", waypointContext, 90.0f);
+                patrol.waypoints.push_back(waypoint);
+            }
+            graph.patrols.push_back(std::move(patrol));
+        }
+    }
+
     const auto soundEmittersIt = value.find("soundEmitters");
     if (soundEmittersIt != value.end()) {
         if (!soundEmittersIt->is_array()) {
@@ -4198,6 +4326,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
             ValidateSectorAuthoringGraphReferences(graph);
     const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return (issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+                        || issue.objectKind == SectorAuthoringObjectKind::Patrol
                         || issue.objectKind == SectorAuthoringObjectKind::SoundEmitter
                         || issue.objectKind == SectorAuthoringObjectKind::Trigger)
                 && issue.severity == SectorAuthoringValidationSeverity::Error;
@@ -4256,6 +4385,7 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
     document.graph = ReadAuthoringGraph(RequireField(root, "authoringGraph", "root"));
     document.graph.audioSettings = document.mapData.audioSettings;
     ValidateAuthoringSoundReferences(document.graph);
+    ValidateAuthoringPatrolAssignments(document.graph, document.mapData);
     document.derivation = DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
     CopyMapLevelFieldsToDerivedTopology(document);
     return document;
@@ -4575,6 +4705,61 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         }
     }
 
+    if (!graph.patrols.empty()) {
+        const std::vector<SectorAuthoringValidationIssue> issues =
+                ValidateSectorAuthoringGraphReferences(graph);
+        const auto patrolError = std::find_if(
+                issues.begin(), issues.end(), [](const auto& issue) {
+                    return issue.objectKind == SectorAuthoringObjectKind::Patrol
+                            && issue.severity
+                                    == SectorAuthoringValidationSeverity::Error;
+                });
+        if (patrolError != issues.end()) {
+            Fail("Invalid authoring patrol: " + patrolError->message);
+        }
+        graphJson["patrols"] = Json::array();
+        std::vector<const SectorAuthoringPatrol*> patrols;
+        patrols.reserve(graph.patrols.size());
+        for (const SectorAuthoringPatrol& patrol : graph.patrols) {
+            patrols.push_back(&patrol);
+        }
+        std::sort(patrols.begin(), patrols.end(), [](const auto* left, const auto* right) {
+            return left->editorId < right->editorId;
+        });
+        for (const SectorAuthoringPatrol* patrol : patrols) {
+            Json patrolJson{
+                    {"editorId", patrol->editorId},
+                    {"id", patrol->id},
+                    {"waypoints", Json::array()}};
+            if (patrol->mode != SectorPatrolMode::Loop) {
+                patrolJson["mode"] = WritePatrolMode(patrol->mode);
+            }
+            if (patrol->shuffleWaypoints) {
+                patrolJson["shuffleWaypoints"] = true;
+            }
+            if (!patrol->faceWaypointOrientation) {
+                patrolJson["faceWaypointOrientation"] = false;
+            }
+            for (const SectorAuthoringPatrolWaypoint& waypoint : patrol->waypoints) {
+                Json waypointJson{{"levelMarkerEditorId", waypoint.levelMarkerId}};
+                if (waypoint.delayMilliseconds != 0) {
+                    waypointJson["delayMilliseconds"] = waypoint.delayMilliseconds;
+                }
+                if (waypoint.gait == SectorPatrolGait::Run) {
+                    waypointJson["gait"] = "run";
+                }
+                if (waypoint.lookAround) {
+                    waypointJson["lookAround"] = true;
+                    if (waypoint.lookArcDegrees != 90.0f) {
+                        waypointJson["lookArcDegrees"] = waypoint.lookArcDegrees;
+                    }
+                }
+                patrolJson["waypoints"].push_back(std::move(waypointJson));
+            }
+            graphJson["patrols"].push_back(std::move(patrolJson));
+        }
+    }
+
 
     if (!graph.soundEmitters.empty()) {
         const std::vector<SectorAuthoringValidationIssue> issues =
@@ -4650,6 +4835,7 @@ Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
     AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
     ValidateAuthoringMapData(normalizedMap);
     ValidateAuthoringSoundReferences(document.graph);
+    ValidateAuthoringPatrolAssignments(document.graph, normalizedMap);
 
     Json root;
     root["formatVersion"] = 4;

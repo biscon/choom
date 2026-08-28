@@ -3,8 +3,13 @@
   "id": "Zombie1",
   "name": "Zombie",
   "hostile": true,
+  "aiType": "seek_and_destroy",
   "modelPath": "assets/models/characters/Zombie1.glb",
   "animationBlendSeconds": 0.25,
+  "playerDetectedSound": "npc/zombie/Zombie_Long_01.mp3",
+  "perception": {
+    "hearingRangeWorld": 20.0
+  },
   "ambientVocalizations": {
     "sounds": [
       "npc/zombie/Zombie_Growl_01.wav",
@@ -20,11 +25,33 @@
     "walk": {
       "animation": "Walk",
       "animationSpeed": 2.0,
-      "movementSpeed": 0.75
+      "movementSpeed": 0.75,
+      "footstepPhases": [0.12, 0.60]
     },
     "run": {
       "animation": "Running",
-      "movementSpeed": 3.0
+      "animationSpeed": 1.100000023841858,
+      "movementSpeed": 4.0,
+      "footstepPhases": [0.42, 0.95]
+    },
+    "attack": {
+      "animation": "Attack",
+      "sound": "npc/zombie/Zombie_Impact_01.ogg",
+      "animationSpeed": 1.5,
+      "attackSound": "npc/zombie/Zombie_Attack_01.ogg",
+      "hitPhase": 0.4000000059604645,
+      "rangeWorld": 1.2000000476837158,
+      "advanceSpeedMultiplier": 1.2000000476837158,
+      "knockbackImpulseWorldPerSecond": 2.5,
+      "stunMilliseconds": 500,
+      "cameraImpact": {
+        "pitchKickDegrees": 14.0,
+        "rollKickDegrees": 20.0,
+        "springFrequencyHz": 3.25,
+        "springDampingRatio": 0.3499999940395355,
+        "maxPitchDegrees": 28.0,
+        "maxRollDegrees": 40.0
+      }
     },
     "hurt": {
       "animation": "Reaction Hit",

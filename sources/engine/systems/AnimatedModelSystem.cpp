@@ -111,6 +111,33 @@ void SetAnimatedModelAnimation(
     animator.poseDirty = true;
 }
 
+bool SetAnimatedModelAnimationLoop(
+        AnimatedModelAnimator& animator,
+        uint32_t animationIndex,
+        bool loop)
+{
+    if (animator.targetAnimationIndex == animationIndex) {
+        animator.targetLoop = loop;
+        return true;
+    }
+    if (animator.animationIndex == animationIndex) {
+        animator.loop = loop;
+        return true;
+    }
+    return false;
+}
+
+bool IsAnimatedModelAnimationFinished(
+        const AnimatedModelAnimator& animator,
+        uint32_t animationIndex)
+{
+    if (animator.targetAnimationIndex == animationIndex) {
+        return animator.targetFinished;
+    }
+    return animator.animationIndex == animationIndex
+            && animator.finished;
+}
+
 bool SetAnimatedModelClip(
         AnimatedModelAnimator& animator,
         const ModelAsset& asset,
@@ -349,8 +376,9 @@ void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
                                   .keyframeCount
                         : asset->animations[animator.animationIndex]
                                   .keyframeCount;
+                const float animationDt = animator.paused ? 0.0f : dt;
                 AdvanceAnimatedModelAnimator(
-                        animator, keyframeCount, dt);
+                        animator, keyframeCount, animationDt);
                 const bool applyPose = animator.playing
                         || animator.poseDirty;
 
@@ -372,8 +400,8 @@ void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
                                 false,
                                 animator.speed,
                                 target.keyframeCount,
-                                dt);
-                        animator.transitionElapsedSeconds += std::max(0.0f, dt);
+                                animationDt);
+                        animator.transitionElapsedSeconds += std::max(0.0f, animationDt);
                         const float blend = animator.transitionDurationSeconds > 0.0f
                                 ? std::clamp(
                                         animator.transitionElapsedSeconds

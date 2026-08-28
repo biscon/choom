@@ -1916,6 +1916,18 @@ int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph)
     return AllocateNextId(graph.levelMarkers);
 }
 
+int AllocateSectorAuthoringPatrolId(const SectorAuthoringGraph& graph)
+{
+    int next = 1;
+    for (const SectorAuthoringPatrol& patrol : graph.patrols) {
+        if (patrol.editorId >= next
+                && patrol.editorId < std::numeric_limits<int>::max()) {
+            next = patrol.editorId + 1;
+        }
+    }
+    return next;
+}
+
 int AllocateSectorAuthoringSoundEmitterId(const SectorAuthoringGraph& graph)
 {
     return AllocateNextId(graph.soundEmitters);
@@ -1951,6 +1963,11 @@ bool IsValidSectorAuthoringSoundEmitterReferenceId(const std::string& id)
     return IsValidSectorAuthoringLevelMarkerReferenceId(id);
 }
 
+bool IsValidSectorAuthoringPatrolReferenceId(const std::string& id)
+{
+    return IsValidSectorAuthoringLevelMarkerReferenceId(id);
+}
+
 bool IsValidSectorTriggerReferenceId(const std::string& id)
 {
     return IsValidSectorAuthoringLevelMarkerReferenceId(id);
@@ -1977,6 +1994,19 @@ std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringG
     for (int suffix = 1; suffix < std::numeric_limits<int>::max(); ++suffix) {
         const std::string candidate = "marker_" + std::to_string(suffix);
         if (FindSectorAuthoringLevelMarkerByReferenceId(graph, candidate) == nullptr) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+std::string AllocateSectorAuthoringPatrolReferenceId(
+        const SectorAuthoringGraph& graph)
+{
+    for (int suffix = 1; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = suffix == 1
+                ? "patrol" : "patrol_" + std::to_string(suffix);
+        if (FindSectorAuthoringPatrolByReferenceId(graph, candidate) == nullptr) {
             return candidate;
         }
     }
@@ -2150,6 +2180,35 @@ const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
         if (marker.referenceId == referenceId) {
             return &marker;
         }
+    }
+    return nullptr;
+}
+
+const SectorAuthoringPatrol* FindSectorAuthoringPatrol(
+        const SectorAuthoringGraph& graph,
+        int editorId)
+{
+    if (!IsValidSectorAuthoringId(editorId)) return nullptr;
+    for (const SectorAuthoringPatrol& patrol : graph.patrols) {
+        if (patrol.editorId == editorId) return &patrol;
+    }
+    return nullptr;
+}
+
+SectorAuthoringPatrol* FindSectorAuthoringPatrol(
+        SectorAuthoringGraph& graph,
+        int editorId)
+{
+    return const_cast<SectorAuthoringPatrol*>(FindSectorAuthoringPatrol(
+            static_cast<const SectorAuthoringGraph&>(graph), editorId));
+}
+
+const SectorAuthoringPatrol* FindSectorAuthoringPatrolByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& id)
+{
+    for (const SectorAuthoringPatrol& patrol : graph.patrols) {
+        if (patrol.id == id) return &patrol;
     }
     return nullptr;
 }
@@ -2629,6 +2688,61 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
         if (!std::isfinite(marker.y) || !std::isfinite(marker.orientationDegrees)) {
             AddIssue(issues, SectorAuthoringObjectKind::LevelMarker, marker.id,
                      "Authoring level marker transform must be finite");
+        }
+    }
+
+    std::set<int> patrolEditorIds;
+    std::set<std::string> patrolReferenceIds;
+    for (const SectorAuthoringPatrol& patrol : graph.patrols) {
+        if (!IsValidSectorAuthoringId(patrol.editorId)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                    "Invalid authoring patrol editor ID");
+        } else if (!patrolEditorIds.insert(patrol.editorId).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                    "Duplicate authoring patrol editor ID");
+        }
+        if (!IsValidSectorAuthoringPatrolReferenceId(patrol.id)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                    "Patrol ID must contain 1-63 letters, digits, underscores, or dashes");
+        } else if (!patrolReferenceIds.insert(patrol.id).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                    "Duplicate patrol ID");
+        }
+        if (patrol.waypoints.empty()) {
+            AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                    "Patrol must contain at least one waypoint");
+        }
+        if (patrol.mode != SectorPatrolMode::Once
+                && patrol.mode != SectorPatrolMode::Loop
+                && patrol.mode != SectorPatrolMode::PingPong) {
+            AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                    "Patrol has an invalid playback mode");
+        }
+        if (patrol.shuffleWaypoints
+                && patrol.mode == SectorPatrolMode::PingPong) {
+            AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                    "Shuffled patrols cannot use ping-pong playback");
+        }
+        for (const SectorAuthoringPatrolWaypoint& waypoint : patrol.waypoints) {
+            if (FindSectorAuthoringLevelMarker(graph, waypoint.levelMarkerId) == nullptr) {
+                AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                        "Patrol references a missing Level Marker");
+            }
+            if (waypoint.delayMilliseconds < 0) {
+                AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                        "Patrol waypoint delay must be non-negative");
+            }
+            if (waypoint.gait != SectorPatrolGait::Walk
+                    && waypoint.gait != SectorPatrolGait::Run) {
+                AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                        "Patrol waypoint has an invalid gait");
+            }
+            if (!std::isfinite(waypoint.lookArcDegrees)
+                    || waypoint.lookArcDegrees < 0.0f
+                    || waypoint.lookArcDegrees > 360.0f) {
+                AddIssue(issues, SectorAuthoringObjectKind::Patrol, patrol.editorId,
+                        "Patrol waypoint look arc must be between 0 and 360 degrees");
+            }
         }
     }
 
@@ -3170,6 +3284,26 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
                 SectorCoordToVisibleAuthoring(marker.z)};
         compiled.yawRadians = marker.orientationDegrees * DegreesToRadians;
         result.topology.levelMarkers.push_back(std::move(compiled));
+    }
+
+    result.topology.patrols.reserve(graph.patrols.size());
+    for (const SectorAuthoringPatrol& patrol : graph.patrols) {
+        SectorCompiledPatrol compiled;
+        compiled.sourceAuthoringPatrolId = patrol.editorId;
+        compiled.id = patrol.id;
+        compiled.mode = patrol.mode;
+        compiled.waypoints.reserve(patrol.waypoints.size());
+        for (const SectorAuthoringPatrolWaypoint& waypoint : patrol.waypoints) {
+            compiled.waypoints.push_back(SectorCompiledPatrolWaypoint{
+                    waypoint.levelMarkerId,
+                    waypoint.delayMilliseconds,
+                    waypoint.gait,
+                    waypoint.lookAround,
+                    waypoint.lookArcDegrees});
+        }
+        compiled.shuffleWaypoints = patrol.shuffleWaypoints;
+        compiled.faceWaypointOrientation = patrol.faceWaypointOrientation;
+        result.topology.patrols.push_back(std::move(compiled));
     }
 
     result.topology.soundEmitters.reserve(graph.soundEmitters.size());

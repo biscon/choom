@@ -125,23 +125,6 @@
       "yawDegrees": 90.0
     },
     {
-      "id": 11,
-      "kind": "dynamic_model",
-      "dynamicModel": {
-        "instanceId": "prop_11",
-        "modelPath": "assets/models/characters/TestCharacter.glb",
-        "collision": true,
-        "animation": "Sitting Idle",
-        "shadowMode": "dynamic"
-      },
-      "position": [
-        -72.0,
-        0.0,
-        75.0
-      ],
-      "yawDegrees": 180.0
-    },
-    {
       "id": 13,
       "kind": "static_model",
       "staticModel": {
@@ -583,6 +566,8 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie01",
+        "patrolEditorId": 1,
+        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -598,6 +583,8 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie02",
+        "patrolEditorId": 1,
+        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -613,6 +600,8 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie03",
+        "patrolEditorId": 1,
+        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -2215,7 +2204,7 @@
         "swingSide": "back",
         "openAngleDegrees": 100.0,
         "openDistance": 2.643749952316284,
-        "interactionDistance": 2.5,
+        "interactionDistance": 3.0,
         "openSoundId": "door_open_01",
         "closeSoundId": "door_close_01"
       },
@@ -2812,6 +2801,39 @@
         -67.0
       ],
       "yawDegrees": 94.99999237060547
+    },
+    {
+      "id": 170,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "TestCharacter",
+        "instanceId": "test_npc",
+        "patrolEditorId": 2,
+        "randomPatrolStart": true
+      },
+      "position": [
+        -81.0,
+        0.0,
+        60.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 171,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_171",
+        "modelPath": "assets/models/dynamic/ceiling_fan.glb",
+        "heightOffsetWorld": 3.4000000953674316,
+        "scale": 0.6499999761581421,
+        "animationSpeed": 2.0
+      },
+      "position": [
+        -84.0,
+        0.0,
+        52.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -6454,8 +6476,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -6554,7 +6575,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "b7cff0fdbcf94036",
+    "sourceHash": "3f14b5675b089044",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6562,19 +6583,19 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.666015625,
-        1.666015625
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 1379
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 839
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "b7cff0fdbcf94036",
+      "sourceHash": "3f14b5675b089044",
       "count": 2671,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -6587,31 +6608,24 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.192941665649414,
+          1.9389466047286987,
+          1.8518656492233276
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 16026,
-        "rgbChannelsAboveOne": 32
+        "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "b7cff0fdbcf94036",
+      "sourceHash": "3f14b5675b089044",
       "modelCount": 51,
       "objectCount": 131,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
@@ -23705,62 +23719,6 @@
         "orientationDegrees": 90.0
       },
       {
-        "editorId": 2,
-        "id": "wp1",
-        "x": 64,
-        "y": 0.0,
-        "z": 304,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 3,
-        "id": "wp2",
-        "x": 320,
-        "y": 0.0,
-        "z": 832,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 4,
-        "id": "wp3",
-        "x": 256,
-        "y": 0.0,
-        "z": 1648,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 5,
-        "id": "wp4",
-        "x": -640,
-        "y": 0.0,
-        "z": 1536,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 6,
-        "id": "wp5",
-        "x": -1280,
-        "y": 0.0,
-        "z": 896,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 7,
-        "id": "wp6",
-        "x": -1104,
-        "y": 0.0,
-        "z": 1696,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 8,
-        "id": "wp7",
-        "x": -2352,
-        "y": -27.0,
-        "z": 1568,
-        "orientationDegrees": 0.0
-      },
-      {
         "editorId": 9,
         "id": "marker_1",
         "x": -3232,
@@ -23815,6 +23773,109 @@
         "y": -27.0,
         "z": 992,
         "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 16,
+        "id": "wp1",
+        "x": -656,
+        "y": 0.0,
+        "z": 1072,
+        "orientationDegrees": 90.0
+      },
+      {
+        "editorId": 17,
+        "id": "wp2",
+        "x": -1024,
+        "y": 0.0,
+        "z": 576,
+        "orientationDegrees": 180.0
+      },
+      {
+        "editorId": 18,
+        "id": "wp3",
+        "x": -1616,
+        "y": 0.0,
+        "z": 832,
+        "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 19,
+        "id": "wp4",
+        "x": -1152,
+        "y": 0.0,
+        "z": 1008,
+        "orientationDegrees": 180.0
+      }
+    ],
+    "patrols": [
+      {
+        "editorId": 1,
+        "id": "zombie_patrol1",
+        "waypoints": [
+          {
+            "levelMarkerEditorId": 9,
+            "delayMilliseconds": 3000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 10,
+            "delayMilliseconds": 2000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 11,
+            "delayMilliseconds": 4000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 12,
+            "delayMilliseconds": 2000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 13,
+            "delayMilliseconds": 5000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 14,
+            "delayMilliseconds": 2500,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 15,
+            "delayMilliseconds": 3000,
+            "lookAround": true
+          }
+        ],
+        "shuffleWaypoints": true,
+        "faceWaypointOrientation": false
+      },
+      {
+        "editorId": 2,
+        "id": "test_npc_patrol",
+        "waypoints": [
+          {
+            "levelMarkerEditorId": 16,
+            "delayMilliseconds": 3000,
+            "lookAround": true,
+            "lookArcDegrees": 75.0
+          },
+          {
+            "levelMarkerEditorId": 17,
+            "delayMilliseconds": 4000
+          },
+          {
+            "levelMarkerEditorId": 18,
+            "delayMilliseconds": 5000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 19,
+            "delayMilliseconds": 3500
+          }
+        ],
+        "shuffleWaypoints": true
       }
     ],
     "soundEmitters": [

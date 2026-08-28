@@ -15,6 +15,8 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorState.h"
+#include "sector_editor/patrols/SectorEditorPatrolEditorService.h"
+#include "sector_editor/patrols/SectorEditorPatrolEditorState.h"
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorService.h"
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorState.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorService.h"
@@ -51,6 +53,8 @@
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
 #include "sector_editor/items/SectorEditorItemEditorService.h"
 #include "sector_editor/items/SectorEditorItemEditorState.h"
+#include "sector_editor/player/SectorEditorPlayerSettingsService.h"
+#include "sector_editor/player/SectorEditorPlayerSettingsState.h"
 #include "sector_demo/SectorSceneRuntime.h"
 #include "sector_demo/SectorUseInteraction.h"
 #include "sector_demo/SectorMaterialRegistry.h"
@@ -106,6 +110,7 @@ public:
     void Update(engine::EngineContext& context, float dt);
     void SetGameSessionExists(bool exists) { gameSessionExists = exists; }
     bool ConsumeClearGameSessionRequest();
+    bool ConsumePlayerAudioSettingsChanged();
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::EngineContext& context);
@@ -290,6 +295,13 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
+    void DrawPatrolEditor(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawSoundPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -365,6 +377,13 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawPlayerSettingsModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawStatusPanel(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -504,11 +523,13 @@ private:
             SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr,
             SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr);
     SectorEditorSoundEditorService BuildSoundEditorService();
+    SectorEditorPatrolEditorService BuildPatrolEditorService();
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorNpcEditorService BuildNpcEditorService();
     SectorEditorWeaponEditorService BuildWeaponEditorService();
     SectorEditorItemEditorService BuildItemEditorService();
     SectorEditorMaterialRegistryEditorService BuildMaterialRegistryEditorService();
+    SectorEditorPlayerSettingsService BuildPlayerSettingsService();
     void OpenWeaponEditor(bool fromPreview3D);
     void DrawItemEditor(
             engine::UIContext& ui,
@@ -573,8 +594,10 @@ private:
     SectorEditorWeaponEditorSessionState weaponEditorSessionState;
     SectorEditorItemEditorState itemEditorState;
     SectorEditorItemEditorSessionState itemEditorSessionState;
+    SectorEditorPlayerSettingsState playerSettingsState;
     SectorEditorMaterialRegistryEditorState materialRegistryEditorState;
     SectorEditorSoundEditorState soundEditorState;
+    SectorEditorPatrolEditorState patrolEditorState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
@@ -619,6 +642,7 @@ private:
     bool initialized = false;
     bool gameSessionExists = false;
     bool clearGameSessionRequested = false;
+    bool playerAudioSettingsChanged = false;
 };
 
 } // namespace game

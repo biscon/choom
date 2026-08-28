@@ -72,12 +72,23 @@ struct DebugConsoleStyle {
 enum class DeferredDebugActionType {
     None,
     ReloadCurrentMap,
+    SetGodMode,
+    SetInvisible,
+    SetFreezeAi,
+    SetDebugAi,
     QuitApplication
+};
+
+enum class DeferredDebugBooleanMode {
+    Toggle,
+    Enable,
+    Disable
 };
 
 struct DeferredDebugAction {
     DeferredDebugActionType type = DeferredDebugActionType::None;
     std::string mapId;
+    DeferredDebugBooleanMode booleanMode = DeferredDebugBooleanMode::Toggle;
 };
 
 struct DebugConsoleData {

@@ -6,6 +6,7 @@
 #include "game/Health.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcRuntime.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -324,6 +325,8 @@ BeginNpcMoveResult BeginNpcMove(
         RecordNpcMoveOutcome(host, instanceId, result.error.c_str());
         return result;
     }
+    NotifyNpcPatrolScriptMoveStarted(
+            context.world, *host.npcNavigation, instanceId);
 
     if (host.npcMoves.size() == host.npcMoves.capacity()) {
         ++host.npcMoveDiagnostics.capacityWarnings;
@@ -1569,6 +1572,26 @@ void UpdateSectorScriptOperations(
                         return !move.active;
                     }),
             host.npcMoves.end());
+}
+
+void InterruptSectorScriptNpcMoveForAi(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        const char* instanceId)
+{
+    if (instanceId == nullptr || host.scripts == nullptr) return;
+    for (SectorScriptNpcMove& move : host.npcMoves) {
+        if (!move.active || move.instanceId != instanceId) continue;
+        ++host.npcMoveDiagnostics.cancellations;
+        RecordNpcMoveOutcome(
+                host, move.instanceId, "player detected; AI took control");
+        engine::ScriptSystemCancelOperation(
+                context,
+                *host.scripts,
+                move.operation,
+                "player detected; AI took control");
+        move.active = false;
+    }
 }
 
 bool SetSectorScriptTriggerEnabled(

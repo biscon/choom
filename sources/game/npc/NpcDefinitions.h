@@ -26,11 +26,40 @@ inline constexpr float kMaximumNpcCorpseFadeDurationSeconds = 60.0f;
 inline constexpr float kDefaultNpcAmbientMinimumDelaySeconds = 5.0f;
 inline constexpr float kDefaultNpcAmbientMaximumDelaySeconds = 12.0f;
 inline constexpr float kMaximumNpcAmbientDelaySeconds = 600.0f;
+inline constexpr float kDefaultNpcVisionRangeWorld = 15.0f;
+inline constexpr float kDefaultNpcVisionAngleDegrees = 120.0f;
+inline constexpr float kDefaultNpcHearingRangeWorld = 12.0f;
+inline constexpr int kDefaultNpcInvestigationDurationMilliseconds = 4000;
+inline constexpr float kDefaultNpcAttackHitPhase = 0.55f;
+inline constexpr float kDefaultNpcAttackRangeWorld = 1.0f;
+inline constexpr float kDefaultNpcAttackAdvanceSpeedMultiplier = 1.0f;
+inline constexpr float kDefaultNpcAttackAimTrackingEndPhase = 0.25f;
+inline constexpr float kDefaultNpcAttackHitArcDegrees = 110.0f;
+inline constexpr float kMaximumNpcAttackAdvanceSpeedMultiplier = 4.0f;
+inline constexpr int kDefaultNpcAttackDamage = 15;
+inline constexpr float kDefaultNpcAttackKnockbackImpulseWorldPerSecond = 0.0f;
+inline constexpr int kDefaultNpcAttackStunMilliseconds = 0;
+inline constexpr bool kDefaultNpcAttackCameraImpactEnabled = true;
+inline constexpr float kDefaultNpcAttackCameraImpactPitchKickDegrees = 2.5f;
+inline constexpr float kDefaultNpcAttackCameraImpactRollKickDegrees = 3.5f;
+inline constexpr float kDefaultNpcAttackCameraImpactSpringFrequencyHz = 4.0f;
+inline constexpr float kDefaultNpcAttackCameraImpactSpringDampingRatio = 0.75f;
+inline constexpr float kDefaultNpcAttackCameraImpactMaxPitchDegrees = 7.5f;
+inline constexpr float kDefaultNpcAttackCameraImpactMaxRollDegrees = 10.0f;
+inline constexpr float kMinimumNpcAttackCameraImpactSpringFrequencyHz = 0.5f;
+inline constexpr float kMaximumNpcAttackCameraImpactSpringFrequencyHz = 40.0f;
+inline constexpr float kMinimumNpcAttackCameraImpactSpringDampingRatio = 0.1f;
+inline constexpr float kMaximumNpcAttackCameraImpactSpringDampingRatio = 3.0f;
+inline constexpr float kMaximumNpcAttackCameraImpactKickDegrees = 45.0f;
+inline constexpr float kMaximumNpcAttackCameraImpactLimitDegrees = 90.0f;
+inline constexpr std::array<float, 2> kDefaultNpcFootstepPhases{
+        0.0f, 0.5f};
 
 enum class NpcAction {
     Idle,
     Walk,
     Run,
+    Attack,
     Hurt,
     Death,
     Count
@@ -48,11 +77,44 @@ struct NpcActionMetadata {
     bool hasSound = false;
 };
 
+struct NpcAttackCameraImpactDefinition {
+    bool enabled = kDefaultNpcAttackCameraImpactEnabled;
+    float pitchKickDegrees = kDefaultNpcAttackCameraImpactPitchKickDegrees;
+    float rollKickDegrees = kDefaultNpcAttackCameraImpactRollKickDegrees;
+    float springFrequencyHz =
+            kDefaultNpcAttackCameraImpactSpringFrequencyHz;
+    float springDampingRatio =
+            kDefaultNpcAttackCameraImpactSpringDampingRatio;
+    float maxPitchDegrees = kDefaultNpcAttackCameraImpactMaxPitchDegrees;
+    float maxRollDegrees = kDefaultNpcAttackCameraImpactMaxRollDegrees;
+};
+
 struct NpcActionDefinition {
     std::string animation;
     std::string soundPath;
+    std::string attackSoundPath;
     float animationSpeed = 1.0f;
     float movementSpeed = 0.0f;
+    std::array<float, 2> footstepPhases = kDefaultNpcFootstepPhases;
+    float hitPhase = kDefaultNpcAttackHitPhase;
+    float rangeWorld = kDefaultNpcAttackRangeWorld;
+    float advanceSpeedMultiplier =
+            kDefaultNpcAttackAdvanceSpeedMultiplier;
+    float aimTrackingEndPhase = kDefaultNpcAttackAimTrackingEndPhase;
+    float hitArcDegrees = kDefaultNpcAttackHitArcDegrees;
+    int damage = kDefaultNpcAttackDamage;
+    float knockbackImpulseWorldPerSecond =
+            kDefaultNpcAttackKnockbackImpulseWorldPerSecond;
+    int stunMilliseconds = kDefaultNpcAttackStunMilliseconds;
+    NpcAttackCameraImpactDefinition cameraImpact;
+};
+
+struct NpcPerceptionDefinition {
+    float visionRangeWorld = kDefaultNpcVisionRangeWorld;
+    float visionAngleDegrees = kDefaultNpcVisionAngleDegrees;
+    float hearingRangeWorld = kDefaultNpcHearingRangeWorld;
+    int investigationDurationMilliseconds =
+            kDefaultNpcInvestigationDurationMilliseconds;
 };
 
 struct NpcAmbientVocalizationDefinition {
@@ -65,6 +127,7 @@ struct NpcDefinition {
     std::string id;
     std::string name;
     bool hostile = false;
+    std::string aiType;
     bool canOpenDoors = true;
     int baseHealth = kDefaultNpcBaseHealth;
     bool despawnOnDeath = false;
@@ -72,6 +135,8 @@ struct NpcDefinition {
     float corpseFadeDurationSeconds = kDefaultNpcCorpseFadeDurationSeconds;
     std::string modelPath;
     float animationBlendSeconds = kDefaultNpcAnimationBlendSeconds;
+    std::string playerDetectedSoundPath;
+    NpcPerceptionDefinition perception;
     NpcAmbientVocalizationDefinition ambientVocalizations;
     std::array<NpcActionDefinition, kNpcActionCount> actions;
 };

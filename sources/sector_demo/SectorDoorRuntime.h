@@ -358,7 +358,8 @@ SectorDoorModelDrawPolicy ResolveSectorDoorModelDrawPolicy(
 
 bool ShouldDrawSectorDoorForVisibility(
         const SectorDoorResolvedAnchor& anchor,
-        const RuntimePortalVisibilityResult& visibility);
+        const RuntimePortalVisibilityResult& visibility,
+        bool boundsVisibleInCamera);
 
 int ResolveSectorDoorAdjacentLightingSector(
         const SectorDoorResolvedAnchor& anchor,

@@ -6,8 +6,9 @@ geometry are never authored or serialized.
 
 ## Ownership and lifecycle
 
-`SectorSceneRuntime` owns one `SectorNavigationWorld` and one
-`NpcNavigationRuntime`. A level or preview rebuild follows this order:
+`SectorSceneRuntime` owns one `SectorNavigationWorld`, one
+`NpcNavigationRuntime`, and one bounded `NpcAiRuntime` stimulus buffer. A level
+or preview rebuild follows this order:
 
 1. release NPC paths, Crowd agents, and door holds;
 2. shut down the old navigation world;
@@ -41,6 +42,115 @@ maximum climb remain valid stair connections, while larger drops behave as
 blocking ledges. This prevents avoidance steering from moving a non-falling NPC
 off the navigation surface; NPC gravity and airborne traversal remain out of
 scope.
+
+NPC AI is evaluated only when `SectorGameSession` supplies an explicit
+`NpcAiGameplayContext`. Editor Gameplay and FreeFly previews call the same scene
+runtime without that context, so they retain animation, collision, navigation
+authoring, and audio behavior without running perception or AI decisions. In a
+game frame the generic AI host ages sound events, evaluates perception and
+investigation, calls the selected AI-type callback for an intent, then lets the
+existing navigation and animation systems execute that intent.
+
+## Perception, investigation, and AI-type boundary
+
+`NpcAiState` is plain per-entity data. It stores the selected type ID, copied
+definition settings, generic awareness state, last-known position, and the
+small amount of committed-attack state needed by the host. `NpcAiTypeRegistry`
+is the stable extension boundary: a descriptor declares ID, editor label,
+friendly/hostile compatibility, awareness use, and a function that receives a
+restricted `NpcAiPluginInput` and returns an `NpcAiIntent`. AI-type callbacks do
+not query the ECS, collision, scripts, audio, or player health directly.
+
+The host owns all shared perception. Vision is a definition-authored horizontal
+cone plus range and direct LOS through sector, closed-door, and static-model
+collision. Player sound events are scene-owned, short-lived, pre-reserved
+records with a source radius. Hearing requires both the event radius and the
+NPC's authored hearing range to reach. Footsteps, landings, and shots publish
+events; weapon damage also supplies the exact shot origin as a direct generic
+stimulus. A standing player is detected immediately when the geometric vision
+checks pass, regardless of light level. While crouch is targeted, generic
+vision instead uses the configured light, darkness-proximity, buildup/decay,
+and crouch-response scalers, and movement sounds use the configured crouch
+noise multiplier. Sneak mode follows the accepted crouch toggle state rather
+than waiting for the short visual crouch transition to finish.
+
+Detected or investigating AI owns navigation authority. Script movement cannot
+replace an active AI path, and a patrol coroutine that wakes after detection
+receives the normal AI-takeover failure from its next move request. Unaware NPCs
+continue to accept ordinary script movement.
+
+Loss of sight does not immediately forget the player. Generic investigation
+runs to the last-known position, performs a deterministic turning search for
+the authored duration, then returns to unaware. Hearing begins at investigation
+rather than exact player tracking. Reacquired sight changes immediately to
+detected. Any first awareness transition cancels a script-owned NPC move; the
+blocking or awaited Lua operation resumes with `false` and the AI-takeover
+reason.
+
+The first registered type is `seek_and_destroy`. When detected it returns a
+run-to-player intent outside melee range and an attack intent inside range. Its
+plugin input includes the previous intent so the type can own its state-change
+hysteresis without moving that policy into generic perception. Seek & Destroy
+enters melee within `0.10` world units beyond the authored range and remains
+engaged until `0.25` world units beyond it. This cancels chase before crowd and
+physical stopping tolerances can oscillate at a single exact boundary.
+Successful pursuit retargets replace the path atomically while preserving the
+NPC's current steering velocity and footstep animation phase. Walk and Run
+actions author two normalized foot-contact phases. Runtime locomotion emits a
+footstep when the active animation, including an incoming blend target, crosses
+either phase after resolved horizontal movement. Missing animation data falls
+back to two-foot distance cadence. Only a new AI move starts locomotion state
+from rest, so frequent moving-target updates do not repeatedly force the Crowd
+agent to accelerate or restart its footstep cycle.
+
+An attack is committed for its full non-looping animation. The authored
+advance-speed multiplier begins windup movement from the NPC's Run speed and
+smoothstep-decelerates it to zero at the normalized hit phase. This movement
+uses the ordinary sector, door, static-object, NPC, and player-cylinder
+collision path, but does not pathfind, use Crowd steering, select a locomotion
+animation, or emit footsteps. The NPC tracks the player through the authored
+aim-tracking phase and then commits its facing. The hit performs a fresh LOS
+test, requires the player to remain within the authored forward arc, and
+accepts a bounded `0.25` world-unit committed-swing range margin. Moving
+farther away, strafing outside the committed arc, or gaining cover makes the
+swing miss. A connection applies damage plus optional
+knockback/stun through one per-attacker operation, dispatches one player-damage
+event, applies the attack's optional directional spring camera impact, and
+plays the optional player-impact sound spatialized from the attacker.
+Player-damage events select from the globally loaded pain sound set, including
+when multiple NPC hits land in one frame; their knockback impulses accumulate.
+The separate optional spatialized attack sound plays when the committed attack
+animation begins, independent of the later hit result. Positive weapon stagger
+interrupts a swing; zero-stagger damage does not. The animation itself supplies
+attack cadence. During a blended transition, loop and completion state belong
+to the selected target clip: an outgoing Run/Walk clip keeps its own looping
+state and cannot finish the Attack, Hurt, or Death action. This also guarantees
+that attack-start audio is emitted once per genuine committed swing rather than
+being retriggered by a blend restart.
+
+AI freeze stops generic perception/investigation timers, AI path movement,
+decisions, and active AI locomotion/attack animation. Sound events still age,
+and script movement, combat knockback, hurt/death handling, and ambient audio
+continue. God mode suppresses player damage, stun, and knockback while enemies
+continue detecting, attacking, and playing authored attack audio.
+
+`/debugai [on|off]` controls a read-only game-session diagnostic overlay. Its
+world pass draws cyan hearing rings, a faint green maximum vision ring with a
+bright exact vision cone, red melee range, magenta remaining path corners,
+yellow last-known-player markers, fading amber player-sound radii, and active
+patrol routes with their claimed waypoint destinations. Patrol geometry is
+drawn for assigned non-hostile NPCs as well. Its HUD
+pass projects fixed-size identity, awareness/intent/action, health, navigation,
+distance, attack, and investigation text above each AI NPC. Labels intentionally
+remain visible through walls for debugging, while world geometry remains
+depth-tested. Dead NPCs retain an inactive label but no perception geometry.
+The overlay is separate from F8 navigation diagnostics and is never called by
+editor previews. Gameplay normally presents bloom's alternate HDR target
+without copying it back. While either AI or F8 navigation world diagnostics
+are visible, the renderer conditionally commits that result to the original
+depth-bearing world target before drawing the lines. This debug-only copy keeps
+the diagnostics depth-tested and in the presented image; it is skipped when
+both overlays are off.
 
 Passable portals between different floor heights receive deterministic
 walkable-area variants during the derived navigation build. Straight-path
@@ -80,6 +190,12 @@ revisions have separate meanings. Navigation rebuild/debug actions do not
 invalidate the 2D topology render cache, mark the authoring document dirty, or
 change the lightmap source hash.
 
+The AI debug overlay builds no persistent cache. When disabled, game rendering
+returns at the session-owned boolean guard before ECS traversal, text
+formatting, projection, path inspection, or draw calls. Enabling it reads the
+existing bounded sound-event buffer and fixed navigation corner arrays without
+changing navigation revisions or allocating per frame.
+
 ## Settings and diagnostics
 
 The map preview step height supplies the navigation agent maximum climb. Other
@@ -118,8 +234,10 @@ ready navigation and report invalid NPCs, off-mesh targets, partial/no paths,
 rebuilds, deletion, stalls, and capacity failures without exposing Detour
 types.
 
-Only one shared humanoid navigation profile exists. Crouch/jump/drop/climb,
-manual links and area costs, moving platforms, save-game persistence of active
-moves, dynamic sector geometry, and general AI behaviors remain out of scope.
+Only one shared humanoid navigation profile and one AI type exist. Friendly,
+ranged, fleeing, coordinated, and lighting-sensitive AI types can use the same
+registry/host boundary but are not implemented. Crouch/jump/drop/climb, manual
+links and area costs, moving platforms, save-game persistence of active moves,
+and dynamic sector geometry remain out of scope.
 Middle textures do not become navigation collision, and dynamic obstacles are
 bounded box/cylinder TileCache inputs rather than arbitrary animated meshes.

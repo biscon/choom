@@ -13,8 +13,9 @@ namespace {
 
 constexpr size_t InvalidSlot = std::numeric_limits<size_t>::max();
 constexpr float PositionalFadeStart = 0.8f;
-constexpr float PositionalOcclusionQueryIntervalSeconds = 0.1f;
-constexpr float PositionalOcclusionBlendSeconds = 0.1f;
+constexpr float PositionalPropagationQueryIntervalSeconds = 0.1f;
+constexpr float PositionalPropagationBlendSeconds = 0.5f;
+constexpr float MinimumLowPassCutoffHz = 20.0f;
 
 float FiniteOr(float value, float fallback)
 {
@@ -70,7 +71,126 @@ float MoveTowards(float current, float target, float maximumDelta)
     return std::max(current - maximumDelta, target);
 }
 
+bool IsFinite(Vector3 value)
+{
+    return std::isfinite(value.x)
+            && std::isfinite(value.y)
+            && std::isfinite(value.z);
+}
+
+PositionalSoundPropagation NormalizePropagation(
+        PositionalSoundPropagation propagation,
+        const AudioListener& listener,
+        const PositionalSoundSettings& source)
+{
+    if (!IsFinite(propagation.apparentPosition)) {
+        propagation.apparentPosition = source.position;
+    }
+    if (!std::isfinite(propagation.distanceWorld)
+            || propagation.distanceWorld < 0.0f) {
+        propagation.distanceWorld = Vector3Distance(
+                listener.position, source.position);
+    }
+    propagation.volumeScale = std::clamp(
+            FiniteOr(propagation.volumeScale, 1.0f), 0.0f, 1.0f);
+    propagation.lowPassCutoffHz = std::clamp(
+            FiniteOr(
+                    propagation.lowPassCutoffHz,
+                    AudioUnfilteredLowPassCutoffHz),
+            MinimumLowPassCutoffHz,
+            AudioUnfilteredLowPassCutoffHz);
+    return propagation;
+}
+
+void AdvancePropagation(
+        PositionalSoundPropagation& current,
+        const PositionalSoundPropagation& target,
+        float dt)
+{
+    const float blend = PositionalPropagationBlendSeconds > 0.0f
+            ? std::clamp(dt / PositionalPropagationBlendSeconds, 0.0f, 1.0f)
+            : 1.0f;
+    current.volumeScale = MoveTowards(
+            current.volumeScale,
+            target.volumeScale,
+            blend);
+    current.distanceWorld +=
+            (target.distanceWorld - current.distanceWorld) * blend;
+    current.apparentPosition = Vector3Lerp(
+            current.apparentPosition,
+            target.apparentPosition,
+            blend);
+    const float currentLog = std::log(std::max(
+            current.lowPassCutoffHz, MinimumLowPassCutoffHz));
+    const float targetLog = std::log(std::max(
+            target.lowPassCutoffHz, MinimumLowPassCutoffHz));
+    current.lowPassCutoffHz = std::exp(
+            currentLog + (targetLog - currentLog) * blend);
+}
+
+template<typename Playback>
+void UpdatePlaybackPropagation(
+        Playback& playback,
+        const AudioListener& listener,
+        float dt,
+        void* queryContext,
+        PositionalSoundPropagationQuery query)
+{
+    playback.propagationQueryRemainingSeconds -= dt;
+    if (!playback.propagationInitialized
+            || playback.propagationQueryRemainingSeconds <= 0.0f) {
+        PositionalSoundPropagation queried;
+        queried.apparentPosition = playback.positionalSettings.position;
+        queried.distanceWorld = Vector3Distance(
+                listener.position,
+                playback.positionalSettings.position);
+        if (query != nullptr) {
+            queried = query(
+                    queryContext,
+                    listener.position,
+                    playback.positionalSettings);
+        }
+        playback.propagationTarget = NormalizePropagation(
+                queried, listener, playback.positionalSettings);
+        playback.propagationQueryRemainingSeconds =
+                PositionalPropagationQueryIntervalSeconds;
+        if (!playback.propagationInitialized) {
+            playback.propagation = playback.propagationTarget;
+            playback.propagationInitialized = true;
+        }
+    }
+    AdvancePropagation(
+            playback.propagation,
+            playback.propagationTarget,
+            dt);
+}
+
 } // namespace
+
+float ComputeAudioDistanceAttenuation(
+        float rawDistanceWorld,
+        const PositionalSoundSettings& unnormalizedSource)
+{
+    const PositionalSoundSettings source = NormalizePositional(
+            unnormalizedSource);
+    const float distance = std::max(
+            0.0f, FiniteOr(rawDistanceWorld, 0.0f));
+    if (distance <= source.minimumDistanceWorld) return 1.0f;
+    if (distance >= source.maximumDistanceWorld) return 0.0f;
+    const float distancePastMinimum =
+            distance - source.minimumDistanceWorld;
+    const float referenceDistance = std::max(
+            1.0f, source.minimumDistanceWorld);
+    const float inverseDistanceGain = referenceDistance
+            / (referenceDistance + distancePastMinimum);
+    const float rangeT = distancePastMinimum
+            / (source.maximumDistanceWorld
+                    - source.minimumDistanceWorld);
+    const float fadeT = (rangeT - PositionalFadeStart)
+            / (1.0f - PositionalFadeStart);
+    const float cutoffGain = 1.0f - SmoothStep01(fadeT);
+    return inverseDistanceGain * cutoffGain;
+}
 
 AudioSpatialization ComputeAudioSpatialization(
         const AudioListener& listener,
@@ -82,25 +202,7 @@ AudioSpatialization ComputeAudioSpatialization(
     const float distance = Vector3Length(offset);
 
     AudioSpatialization result;
-    if (distance <= source.minimumDistanceWorld) {
-        result.volumeScale = 1.0f;
-    } else if (distance >= source.maximumDistanceWorld) {
-        result.volumeScale = 0.0f;
-    } else {
-        const float distancePastMinimum =
-                distance - source.minimumDistanceWorld;
-        const float referenceDistance = std::max(
-                1.0f, source.minimumDistanceWorld);
-        const float inverseDistanceGain = referenceDistance
-                / (referenceDistance + distancePastMinimum);
-        const float rangeT = distancePastMinimum
-                / (source.maximumDistanceWorld
-                        - source.minimumDistanceWorld);
-        const float fadeT = (rangeT - PositionalFadeStart)
-                / (1.0f - PositionalFadeStart);
-        const float cutoffGain = 1.0f - SmoothStep01(fadeT);
-        result.volumeScale = inverseDistanceGain * cutoffGain;
-    }
+    result.volumeScale = ComputeAudioDistanceAttenuation(distance, source);
 
     Vector3 forward = listener.forward;
     Vector3 up = listener.up;
@@ -165,69 +267,21 @@ void AudioSystem::SetListener(const AudioListener& value)
     listener = value;
 }
 
-void AudioSystem::UpdatePositionalSoundOcclusion(
+void AudioSystem::UpdatePositionalSoundPropagation(
         float rawDt,
         void* queryContext,
-        PositionalSoundOcclusionQuery query)
+        PositionalSoundPropagationQuery query)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     for (SoundPlaybackSlot& playback : soundPlaybacks) {
         if (!playback.active || !playback.positional) continue;
-        playback.occlusionQueryRemainingSeconds -= dt;
-        if (!playback.occlusionInitialized
-                || playback.occlusionQueryRemainingSeconds <= 0.0f) {
-            const float queried = query == nullptr
-                    ? 1.0f
-                    : query(
-                            queryContext,
-                            listener.position,
-                            playback.positionalSettings.position);
-            playback.occlusionTargetScale = std::clamp(
-                    FiniteOr(queried, 1.0f), 0.0f, 1.0f);
-            playback.occlusionQueryRemainingSeconds =
-                    PositionalOcclusionQueryIntervalSeconds;
-            if (!playback.occlusionInitialized) {
-                playback.occlusionVolumeScale =
-                        playback.occlusionTargetScale;
-                playback.occlusionInitialized = true;
-            }
-        }
-        const float maximumDelta = PositionalOcclusionBlendSeconds > 0.0f
-                ? dt / PositionalOcclusionBlendSeconds
-                : 1.0f;
-        playback.occlusionVolumeScale = MoveTowards(
-                playback.occlusionVolumeScale,
-                playback.occlusionTargetScale,
-                maximumDelta);
+        UpdatePlaybackPropagation(
+                playback, listener, dt, queryContext, query);
     }
     for (MusicPlaybackSlot& playback : musicPlaybacks) {
         if (!playback.active || !playback.positional) continue;
-        playback.occlusionQueryRemainingSeconds -= dt;
-        if (!playback.occlusionInitialized
-                || playback.occlusionQueryRemainingSeconds <= 0.0f) {
-            const float queried = query == nullptr
-                    ? 1.0f
-                    : query(
-                            queryContext,
-                            listener.position,
-                            playback.positionalSettings.position);
-            playback.occlusionTargetScale = std::clamp(
-                    FiniteOr(queried, 1.0f), 0.0f, 1.0f);
-            playback.occlusionQueryRemainingSeconds =
-                    PositionalOcclusionQueryIntervalSeconds;
-            if (!playback.occlusionInitialized) {
-                playback.occlusionVolumeScale =
-                        playback.occlusionTargetScale;
-                playback.occlusionInitialized = true;
-            }
-        }
-        const float maximumDelta = PositionalOcclusionBlendSeconds > 0.0f
-                ? dt / PositionalOcclusionBlendSeconds
-                : 1.0f;
-        playback.occlusionVolumeScale = MoveTowards(
-                playback.occlusionVolumeScale,
-                playback.occlusionTargetScale,
-                maximumDelta);
+        UpdatePlaybackPropagation(
+                playback, listener, dt, queryContext, query);
     }
 }
 
@@ -367,10 +421,10 @@ bool AudioSystem::PlayMusicInternal(
             if (positional != nullptr) {
                 playback.positionalSettings = NormalizePositional(*positional);
                 if (!wasPositional) {
-                    playback.occlusionVolumeScale = 1.0f;
-                    playback.occlusionTargetScale = 1.0f;
-                    playback.occlusionQueryRemainingSeconds = 0.0f;
-                    playback.occlusionInitialized = false;
+                    playback.propagation = {};
+                    playback.propagationTarget = {};
+                    playback.propagationQueryRemainingSeconds = 0.0f;
+                    playback.propagationInitialized = false;
                 }
             }
             Music stream = asset->stream;
@@ -604,16 +658,32 @@ void AudioSystem::ApplySoundMix(
     float volume = playback.settings.volume;
     float pan = playback.settings.pan;
     if (playback.positional) {
+        PositionalSoundSettings apparent = playback.positionalSettings;
+        apparent.position = playback.propagationInitialized
+                ? playback.propagation.apparentPosition
+                : playback.positionalSettings.position;
         const AudioSpatialization spatial = ComputeAudioSpatialization(
-                listener,
-                playback.positionalSettings);
-        volume *= spatial.volumeScale * playback.occlusionVolumeScale;
+                listener, apparent);
+        const float distance = playback.propagationInitialized
+                ? playback.propagation.distanceWorld
+                : Vector3Distance(
+                        listener.position,
+                        playback.positionalSettings.position);
+        const float propagationScale = playback.propagationInitialized
+                ? playback.propagation.volumeScale : 1.0f;
+        volume *= ComputeAudioDistanceAttenuation(
+                distance, playback.positionalSettings) * propagationScale;
         pan = spatial.pan;
     }
     ::SetSoundVolume(voice, volume);
     ::SetSoundPitch(voice, playback.settings.pitch);
     ::SetSoundPan(voice, ToRaylibPan(pan));
     ::SetSoundLooping(voice, playback.settings.looping);
+    ::SetAudioStreamLowPassFilter(
+            voice.stream,
+            playback.positional && playback.propagationInitialized
+                    ? playback.propagation.lowPassCutoffHz
+                    : AudioUnfilteredLowPassCutoffHz);
 }
 
 void AudioSystem::ApplyMusicMix(
@@ -623,16 +693,32 @@ void AudioSystem::ApplyMusicMix(
     float volume = playback.settings.volume;
     float pan = playback.settings.pan;
     if (playback.positional) {
+        PositionalSoundSettings apparent = playback.positionalSettings;
+        apparent.position = playback.propagationInitialized
+                ? playback.propagation.apparentPosition
+                : playback.positionalSettings.position;
         const AudioSpatialization spatial = ComputeAudioSpatialization(
-                listener,
-                playback.positionalSettings);
-        volume *= spatial.volumeScale * playback.occlusionVolumeScale;
+                listener, apparent);
+        const float distance = playback.propagationInitialized
+                ? playback.propagation.distanceWorld
+                : Vector3Distance(
+                        listener.position,
+                        playback.positionalSettings.position);
+        const float propagationScale = playback.propagationInitialized
+                ? playback.propagation.volumeScale : 1.0f;
+        volume *= ComputeAudioDistanceAttenuation(
+                distance, playback.positionalSettings) * propagationScale;
         pan = spatial.pan;
     }
     stream.looping = playback.settings.looping;
     ::SetMusicVolume(stream, volume);
     ::SetMusicPitch(stream, playback.settings.pitch);
     ::SetMusicPan(stream, ToRaylibPan(pan));
+    ::SetAudioStreamLowPassFilter(
+            stream.stream,
+            playback.positional && playback.propagationInitialized
+                    ? playback.propagation.lowPassCutoffHz
+                    : AudioUnfilteredLowPassCutoffHz);
 }
 
 void AudioSystem::DeactivateSoundSlot(

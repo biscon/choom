@@ -41,9 +41,10 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Save As...", CommandId(SectorEditorMainMenuCommand::SaveLevelAs)},
             {"Reload", CommandId(SectorEditorMainMenuCommand::ReloadLevel)}
     }};
-    const std::array<engine::UIMenuItem, 5> editorItems{{
+    const std::array<engine::UIMenuItem, 6> editorItems{{
             {"Material Editor", CommandId(SectorEditorMainMenuCommand::OpenMaterialEditor)},
             {"Sound Editor", CommandId(SectorEditorMainMenuCommand::OpenSoundEditor)},
+            {"Patrol Editor", CommandId(SectorEditorMainMenuCommand::OpenPatrolEditor)},
             {"NPC Editor", CommandId(SectorEditorMainMenuCommand::OpenNpcEditor)},
             {"Weapons Editor", CommandId(SectorEditorMainMenuCommand::OpenWeaponEditor)},
             {"Item Editor", CommandId(SectorEditorMainMenuCommand::OpenItemEditor)}
@@ -71,8 +72,10 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Show ids", CommandId(SectorEditorMainMenuCommand::ToggleShowIds),
                     engine::UIMenuItemKind::Checkbox, true, editorState.showSectorIds}
     }};
-    const std::array<engine::UIMenuItem, 1> settingsItems{{
-            {"Level", CommandId(SectorEditorMainMenuCommand::OpenLevelSettings)}
+    const std::array<engine::UIMenuItem, 3> settingsItems{{
+            {"Level", CommandId(SectorEditorMainMenuCommand::OpenLevelSettings)},
+            {"Player", CommandId(SectorEditorMainMenuCommand::OpenPlayerSettings)},
+            {"Sneaking", CommandId(SectorEditorMainMenuCommand::OpenSneakSettings)}
     }};
     const std::array<engine::UIMenuRoot, 6> roots{{
             {"Level", levelItems.data(), levelItems.size()},

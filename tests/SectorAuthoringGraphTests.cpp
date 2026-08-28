@@ -13611,6 +13611,15 @@ void TestLevelMarkerAuthoringSelectionCacheAndPicking()
                     7);
     Check(cache.valid && cache.levelMarkers.size() == 2,
           "2D render cache stores Level Marker draw data");
+    const Vector2 south = game::SectorEditorLevelMarkerOrientationDirection(0.0f);
+    const Vector2 east = game::SectorEditorLevelMarkerOrientationDirection(90.0f);
+    const Vector2 north = game::SectorEditorLevelMarkerOrientationDirection(180.0f);
+    const Vector2 west = game::SectorEditorLevelMarkerOrientationDirection(-90.0f);
+    Check(Near(south.x, 0.0f) && Near(south.y, 1.0f)
+                  && Near(east.x, 1.0f) && Near(east.y, 0.0f)
+                  && Near(north.x, 0.0f) && Near(north.y, -1.0f)
+                  && Near(west.x, -1.0f) && Near(west.y, 0.0f),
+          "Level Marker arrows use the runtime NPC yaw convention");
     game::SectorEditorTopologyDrawContext drawContext;
     drawContext.canvasRect = Rectangle{0.0f, 0.0f, 200.0f, 200.0f};
     drawContext.viewZoom = 1.0f;

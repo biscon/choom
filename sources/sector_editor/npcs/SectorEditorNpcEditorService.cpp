@@ -35,8 +35,32 @@ bool SameAction(
 {
     return left.animation == right.animation
             && left.soundPath == right.soundPath
+            && left.attackSoundPath == right.attackSoundPath
             && left.animationSpeed == right.animationSpeed
-            && left.movementSpeed == right.movementSpeed;
+            && left.movementSpeed == right.movementSpeed
+            && left.footstepPhases == right.footstepPhases
+            && left.hitPhase == right.hitPhase
+            && left.rangeWorld == right.rangeWorld
+            && left.advanceSpeedMultiplier == right.advanceSpeedMultiplier
+            && left.aimTrackingEndPhase == right.aimTrackingEndPhase
+            && left.hitArcDegrees == right.hitArcDegrees
+            && left.damage == right.damage
+            && left.knockbackImpulseWorldPerSecond
+                    == right.knockbackImpulseWorldPerSecond
+            && left.stunMilliseconds == right.stunMilliseconds
+            && left.cameraImpact.enabled == right.cameraImpact.enabled
+            && left.cameraImpact.pitchKickDegrees
+                    == right.cameraImpact.pitchKickDegrees
+            && left.cameraImpact.rollKickDegrees
+                    == right.cameraImpact.rollKickDegrees
+            && left.cameraImpact.springFrequencyHz
+                    == right.cameraImpact.springFrequencyHz
+            && left.cameraImpact.springDampingRatio
+                    == right.cameraImpact.springDampingRatio
+            && left.cameraImpact.maxPitchDegrees
+                    == right.cameraImpact.maxPitchDegrees
+            && left.cameraImpact.maxRollDegrees
+                    == right.cameraImpact.maxRollDegrees;
 }
 
 bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
@@ -44,6 +68,7 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
     if (left.id != right.id
             || left.name != right.name
             || left.hostile != right.hostile
+            || left.aiType != right.aiType
             || left.canOpenDoors != right.canOpenDoors
             || left.baseHealth != right.baseHealth
             || left.despawnOnDeath != right.despawnOnDeath
@@ -53,6 +78,16 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
                     != right.corpseFadeDurationSeconds
             || left.modelPath != right.modelPath
             || left.animationBlendSeconds != right.animationBlendSeconds
+            || left.playerDetectedSoundPath
+                    != right.playerDetectedSoundPath
+            || left.perception.visionRangeWorld
+                    != right.perception.visionRangeWorld
+            || left.perception.visionAngleDegrees
+                    != right.perception.visionAngleDegrees
+            || left.perception.hearingRangeWorld
+                    != right.perception.hearingRangeWorld
+            || left.perception.investigationDurationMilliseconds
+                    != right.perception.investigationDurationMilliseconds
             || left.ambientVocalizations.soundPaths
                     != right.ambientVocalizations.soundPaths
             || left.ambientVocalizations.minimumDelaySeconds
@@ -345,6 +380,30 @@ void SectorEditorNpcEditorService::SetSelectedHostile(bool hostile)
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedAiType(const std::string& aiType)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.aiType = aiType;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedPerception(
+        float visionRangeWorld,
+        float visionAngleDegrees,
+        float hearingRangeWorld,
+        int investigationDurationMilliseconds)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.perception = NpcPerceptionDefinition{
+            visionRangeWorld,
+            visionAngleDegrees,
+            hearingRangeWorld,
+            investigationDurationMilliseconds};
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedCanOpenDoors(bool canOpenDoors)
 {
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
@@ -422,6 +481,15 @@ void SectorEditorNpcEditorService::SetSelectedAnimation(
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedPlayerDetectedSound(
+        const std::string& soundPath)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.playerDetectedSoundPath = soundPath;
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedActionSound(
         NpcAction action,
         const std::string& soundPath)
@@ -429,6 +497,16 @@ void SectorEditorNpcEditorService::SetSelectedActionSound(
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
     if (draft == nullptr || !GetNpcActionMetadata(action).hasSound) return;
     GetNpcAction(draft->definition, action).soundPath = soundPath;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedAttackSound(
+        const std::string& soundPath)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    GetNpcAction(
+            draft->definition, NpcAction::Attack).attackSoundPath = soundPath;
     state_.validationMessage.clear();
 }
 
@@ -449,6 +527,68 @@ void SectorEditorNpcEditorService::SetSelectedMovementSpeed(
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
     if (draft == nullptr) return;
     GetNpcAction(draft->definition, action).movementSpeed = speed;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedFootstepPhase(
+        NpcAction action,
+        size_t phaseIndex,
+        float phase)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr
+            || !GetNpcActionMetadata(action).hasMovementSpeed
+            || phaseIndex >= 2) {
+        return;
+    }
+    GetNpcAction(draft->definition, action).footstepPhases[phaseIndex] = phase;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedAttack(
+        float hitPhase,
+        float rangeWorld,
+        int damage,
+        float knockbackImpulseWorldPerSecond,
+        int stunMilliseconds)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    NpcActionDefinition& attack = GetNpcAction(
+            draft->definition, NpcAction::Attack);
+    attack.hitPhase = hitPhase;
+    attack.aimTrackingEndPhase = std::min(
+            attack.aimTrackingEndPhase, hitPhase);
+    attack.rangeWorld = rangeWorld;
+    attack.damage = damage;
+    attack.knockbackImpulseWorldPerSecond = knockbackImpulseWorldPerSecond;
+    attack.stunMilliseconds = stunMilliseconds;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedAttackMotion(
+        float advanceSpeedMultiplier,
+        float aimTrackingEndPhase,
+        float hitArcDegrees)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    NpcActionDefinition& attack = GetNpcAction(
+            draft->definition, NpcAction::Attack);
+    attack.advanceSpeedMultiplier = advanceSpeedMultiplier;
+    attack.aimTrackingEndPhase = aimTrackingEndPhase;
+    attack.hitArcDegrees = hitArcDegrees;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedAttackCameraImpact(
+        const NpcAttackCameraImpactDefinition& cameraImpact)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    GetNpcAction(
+            draft->definition,
+            NpcAction::Attack).cameraImpact = cameraImpact;
     state_.validationMessage.clear();
 }
 
@@ -614,11 +754,30 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.animationBlendSecondsInput = {};
     state_.ambientMinimumDelaySecondsInput = {};
     state_.ambientMaximumDelaySecondsInput = {};
+    state_.visionRangeWorldInput = {};
+    state_.visionAngleDegreesInput = {};
+    state_.hearingRangeWorldInput = {};
+    state_.investigationDurationMillisecondsInput = {};
+    state_.attackHitPhaseInput = {};
+    state_.attackRangeWorldInput = {};
+    state_.attackAdvanceSpeedMultiplierInput = {};
+    state_.attackAimTrackingEndPhaseInput = {};
+    state_.attackHitArcDegreesInput = {};
+    state_.attackDamageInput = {};
+    state_.attackKnockbackInput = {};
+    state_.attackStunMillisecondsInput = {};
+    state_.attackCameraPitchKickInput = {};
+    state_.attackCameraRollKickInput = {};
+    state_.attackCameraSpringFrequencyInput = {};
+    state_.attackCameraSpringDampingInput = {};
+    state_.attackCameraMaxPitchInput = {};
+    state_.attackCameraMaxRollInput = {};
     state_.baseHealthInput = {};
     state_.corpseDespawnDelayMillisecondsInput = {};
     state_.corpseFadeDurationMillisecondsInput = {};
     state_.animationSpeedInputs = {};
     state_.movementSpeedInputs = {};
+    state_.footstepPhaseInputs = {};
 }
 
 void SectorEditorNpcEditorService::RebuildListLabels()

@@ -3,6 +3,7 @@
 #include "engine/assets/FontLoadFlags.h"
 #include "engine/debug/DebugConsole.h"
 #include "engine/debug/DebugConsoleLogBridge.h"
+#include "engine/render/ColorTransfer.h"
 #include "game/GameMainMenu.h"
 
 #include <raylib.h>
@@ -195,6 +196,59 @@ void GameApplication::ProcessDeferredDebugActions(
         RequestApplicationQuit(flow);
         return;
     }
+    if (action.type == engine::DeferredDebugActionType::SetGodMode
+            || action.type == engine::DeferredDebugActionType::SetInvisible
+            || action.type == engine::DeferredDebugActionType::SetFreezeAi
+            || action.type == engine::DeferredDebugActionType::SetDebugAi) {
+        if (!gameSession.IsRunning()
+                || action.mapId != gameSession.LevelName()) {
+            engine::DebugConsoleAddLine(
+                    debugConsole,
+                    "debug toggle cancelled: the active game map changed",
+                    engine::DebugConsoleSeverity::Error);
+            return;
+        }
+        const bool current = action.type
+                        == engine::DeferredDebugActionType::SetGodMode
+                ? gameSession.GodMode()
+                : action.type
+                        == engine::DeferredDebugActionType::SetInvisible
+                ? gameSession.Invisible()
+                : action.type
+                        == engine::DeferredDebugActionType::SetFreezeAi
+                ? gameSession.AiFrozen()
+                : gameSession.AiDebugVisible();
+        const bool enabled = action.booleanMode
+                        == engine::DeferredDebugBooleanMode::Toggle
+                ? !current
+                : action.booleanMode
+                        == engine::DeferredDebugBooleanMode::Enable;
+        if (action.type == engine::DeferredDebugActionType::SetGodMode) {
+            gameSession.SetGodMode(enabled);
+        } else if (action.type
+                == engine::DeferredDebugActionType::SetInvisible) {
+            gameSession.SetInvisible(enabled);
+        } else if (action.type
+                == engine::DeferredDebugActionType::SetFreezeAi) {
+            gameSession.SetAiFrozen(enabled);
+        } else {
+            gameSession.SetAiDebugVisible(enabled);
+        }
+        engine::DebugConsoleAddLine(
+                debugConsole,
+                std::string{action.type
+                                == engine::DeferredDebugActionType::SetGodMode
+                            ? "god mode "
+                            : action.type
+                                    == engine::DeferredDebugActionType::SetInvisible
+                            ? "invisibility "
+                            : action.type
+                                    == engine::DeferredDebugActionType::SetFreezeAi
+                            ? "AI freeze " : "AI diagnostics "}
+                        + (enabled ? "on" : "off"),
+                engine::DebugConsoleSeverity::Success);
+        return;
+    }
     if (!gameSession.IsRunning() || action.mapId != gameSession.LevelName()) {
         engine::DebugConsoleAddLine(
                 debugConsole,
@@ -266,6 +320,10 @@ void GameApplication::RenderInteractiveUI(
                 usePromptFont);
         gameSession.RenderNavigationDebugPanel(
                 config, assets, smallFont, gameScene);
+        if (gameSession.IsGameOver()) {
+            pendingGameOverMainMenu = DrawGameOverOverlay(
+                    menuUi, config, input, assets, font, smallFont);
+        }
     }
     if (flow.screen == ApplicationScreen::MainMenu) {
         if (graphicsSettingsOpen) {
@@ -292,6 +350,11 @@ void GameApplication::RenderInteractiveUI(
 void GameApplication::Update(engine::EngineContext& context, float dt)
 {
     if (!initialized) {
+        return;
+    }
+    if (pendingGameOverMainMenu) {
+        pendingGameOverMainMenu = false;
+        EndGameToMainMenu(context);
         return;
     }
     if (pendingMenuAction.has_value()) {
@@ -368,6 +431,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
     }
 
     if (flow.screen == ApplicationScreen::Game) {
+        if (gameSession.IsGameOver()) return;
         bool menuRequested = false;
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
@@ -405,6 +469,12 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         ClearGameSession(context);
     }
     editor.Update(context, dt);
+    if (editor.ConsumePlayerAudioSettingsChanged()) {
+        RequestPlayerAudioAssets(
+                context.assets,
+                applicationSettings.playerSounds,
+                playerAudio);
+    }
     if (editor.IsPreview3DActive()) {
         return;
     }
@@ -511,10 +581,22 @@ void GameApplication::Render3DViewmodel(engine::AssetManager& assets)
     }
 }
 
-void GameApplication::Render3DOverlays()
+bool GameApplication::Prepare3DOverlayPass(
+        engine::RenderTarget& sceneTarget)
+{
+    if (flow.screen == ApplicationScreen::Game) {
+        return gameScene.PreparePostBloomWorldOverlays(
+                sceneTarget,
+                gameSession.HasWorldDebugOverlays());
+    }
+    return BackgroundScreen() == ApplicationScreen::Editor;
+}
+
+void GameApplication::Render3DOverlays(const engine::World& world)
 {
     if (flow.screen == ApplicationScreen::Game) {
         gameSession.RenderNavigationDebugWorld(gameScene);
+        gameSession.RenderAiDebugWorld(world, gameScene);
     } else if (BackgroundScreen() == ApplicationScreen::Editor) {
         editor.RenderPreview3DOverlays();
     }
@@ -542,6 +624,36 @@ const SectorAtmosphereDiagnostics& GameApplication::AtmosphereDiagnostics() cons
         return gameScene.Renderer().AtmosphereDiagnostics();
     }
     return editor.PreviewAtmosphereDiagnostics();
+}
+
+engine::ScenePresentationEffectParameters
+GameApplication::ScenePresentationEffects() const
+{
+    engine::ScenePresentationEffectParameters result;
+    if (BackgroundScreen() != ApplicationScreen::Game
+            || !gameSession.IsRunning()
+            || IsSectorBloomDiagnosticView(
+                    gameScene.Renderer().BloomDebugView())) {
+        return result;
+    }
+
+    const PlayerLowHealthVisualApplicationSettings& settings =
+            applicationSettings.playerHealth.lowHealthVisual;
+    const float strength = PlayerLowHealthVisualStrength(
+            gameSession.PlayerHealth(),
+            settings);
+    const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
+            settings.vignetteColor);
+    result.desaturation = settings.maximumDesaturation * strength;
+    result.vignetteOpacity = PlayerLowHealthVignetteOpacity(
+            gameSession.PlayerHealth(), settings);
+    result.vignetteColorLinear = {
+            vignetteColor.x,
+            vignetteColor.y,
+            vignetteColor.z};
+    result.vignetteInnerRadius = settings.vignetteInnerRadius;
+    result.vignetteOuterRadius = settings.vignetteOuterRadius;
+    return result;
 }
 
 void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)
@@ -573,6 +685,7 @@ const engine::RenderTarget* GameApplication::HdrDebugPresentationSource() const
 }
 
 void GameApplication::Render3DHud(
+        const engine::World& world,
         engine::AssetManager& assets,
         engine::FontHandle font,
         Rectangle playableViewport) const
@@ -580,6 +693,10 @@ void GameApplication::Render3DHud(
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameSession.RenderHud(
                 assets, font, usePromptFont, playableViewport);
+        if (flow.screen == ApplicationScreen::Game) {
+            gameSession.RenderAiDebugHud(
+                    world, assets, font, playableViewport, gameScene);
+        }
     } else {
         editor.RenderPreview3DHud(
                 assets, usePromptFont, playableViewport);
@@ -768,6 +885,20 @@ void GameApplication::ClearGameSession(engine::EngineContext& context)
     menuStatus.clear();
     MarkApplicationGameStopped(flow);
     ShowApplicationEditor(flow);
+}
+
+void GameApplication::EndGameToMainMenu(engine::EngineContext& context)
+{
+    if (!gameSession.IsRunning()) return;
+    context.audio.StopAll(context.assets);
+    gameSession.Shutdown(context, gameScene);
+    itemCampaign = ItemCampaignState{};
+    persistentScripts = engine::PersistentScriptStore{};
+    editorAttachedToGame = false;
+    editor.SetGameSessionExists(false);
+    debugConsole.open = false;
+    menuStatus.clear();
+    MarkApplicationGameStopped(flow);
 }
 
 void GameApplication::OpenEditor(engine::EngineContext& context)

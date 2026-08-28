@@ -1,6 +1,7 @@
 #include "game/npc/NpcCombatSystem.h"
 
 #include "game/npc/NpcAudioSystem.h"
+#include "game/npc/ai/NpcAiSystem.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/components/AnimatedModel.h"
@@ -434,7 +435,8 @@ static void ApplyPlayerWeaponImpact(
         const RayCandidate& best,
         const FpsShotResult& outShot,
         WeaponImpactEvent& outImpact,
-        NpcAudioRuntime* npcAudio)
+        NpcAudioRuntime* npcAudio,
+        NpcAiRuntime* npcAi)
 {
     outImpact = {};
     if (best.kind == FpsShotHitKind::Npc
@@ -446,6 +448,9 @@ static void ApplyPlayerWeaponImpact(
         NpcCombatState& combat = world.Get<NpcCombatState>(best.entity);
         const int appliedDamage = ApplyDamage(health, impact.damage);
         if (appliedDamage > 0) {
+            if (npcAi != nullptr) {
+                AlertNpcToPlayerPosition(world, best.entity, outShot.rayOrigin);
+            }
             const Vector2 horizontal{outShot.rayDirection.x, outShot.rayDirection.z};
             const float length = Vector2Length(horizontal);
             if (length > RayEpsilon) {
@@ -469,7 +474,12 @@ static void ApplyPlayerWeaponImpact(
                 }
             } else {
                 combat.staggerRemainingSeconds = impact.staggerSeconds;
-                combat.hurtAnimationRequested = true;
+                const bool committedUnstaggeredAttack =
+                        impact.staggerSeconds <= 0.0f
+                        && world.Has<NpcRuntimeInstance>(best.entity)
+                        && world.Get<NpcRuntimeInstance>(best.entity)
+                                .actionLockedByAi;
+                combat.hurtAnimationRequested = !committedUnstaggeredAttack;
                 if (npcAudio != nullptr) {
                     QueueNpcVocalEvent(
                             *npcAudio, best.entity, NpcVocalEvent::Hurt);
@@ -522,7 +532,8 @@ bool ResolvePlayerWeaponShot(
         const FpsWeaponImpactDefinition& impact,
         FpsShotResult& outShot,
         WeaponImpactEvent& outImpact,
-        NpcAudioRuntime* npcAudio)
+        NpcAudioRuntime* npcAudio,
+        NpcAiRuntime* npcAi)
 {
     RayCandidate candidate;
     const bool hit = TracePlayerWeaponShot(
@@ -546,7 +557,8 @@ bool ResolvePlayerWeaponShot(
                 candidate,
                 outShot,
                 outImpact,
-                npcAudio);
+                npcAudio,
+                npcAi);
     }
     return hit;
 }
@@ -564,7 +576,8 @@ bool ResolvePlayerWeaponPelletVolley(
         uint64_t shotSequence,
         const FpsWeaponFiringDefinition& rawFiring,
         WeaponPelletVolleyResult& outVolley,
-        NpcAudioRuntime* npcAudio)
+        NpcAudioRuntime* npcAudio,
+        NpcAiRuntime* npcAi)
 {
     outVolley = {};
     const int configuredPelletCount = std::clamp(
@@ -613,7 +626,8 @@ bool ResolvePlayerWeaponPelletVolley(
                 candidates[index],
                 outVolley.shots[index],
                 outVolley.impacts[index],
-                npcAudio);
+                npcAudio,
+                npcAi);
     }
     return outVolley.hitCount > 0;
 }

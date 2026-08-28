@@ -5,7 +5,9 @@
   "footsteps": {
     "defaultSet": "Tile_Mono",
     "volume": 0.6499999761581421,
-    "landingImpactVolumeMultiplier": 1.350000023841858
+    "landingImpactVolumeMultiplier": 1.350000023841858,
+    "noiseRadiusWorld": 6.0,
+    "landingNoiseRadiusWorld": 12.0
   },
   "graphics": {
     "renderScale": 1.5,
@@ -23,8 +25,61 @@
   "playerInventory": {
     "maxCarryWeightKg": 30.0,
     "maxSlots": 24,
-    "pickupVacuumDurationSeconds": 0.45,
+    "pickupVacuumDurationSeconds": 0.44999998807907104,
     "pickupVacuumTargetHeightWorld": 0.75
+  },
+  "playerSneak": {
+    "fullVisibilityLightLevel": 1.0,
+    "darknessCutoffNormalized": 0.05000000074505806,
+    "lightHalfResponseRangeNormalized": 0.05000000074505806,
+    "visualDetectionBuildSeconds": 0.75,
+    "visualDetectionDecaySeconds": 1.25,
+    "darknessProximityRangeWorld": 4.0,
+    "crouchVisualDetectionMultiplier": 0.8500000238418579,
+    "crouchMovementNoiseMultiplier": 0.25
+  },
+  "playerHealth": {
+    "lowHealthVisual": {
+      "enabled": true,
+      "thresholdRatio": 0.5,
+      "vignetteColor": {
+        "r": 40,
+        "g": 3,
+        "b": 7,
+        "a": 255
+      },
+      "vignetteInnerRadius": 0.5,
+      "vignetteOuterRadius": 1.0499999523162842,
+      "maximumVignetteOpacity": 0.6499999761581421,
+      "maximumDesaturation": 0.5199999809265137
+    },
+    "heartbeatAudio": {
+      "enabled": true,
+      "startThresholdRatio": 0.5,
+      "fullEffectRatio": 0.10000000149011612,
+      "maximumVolume": 1.0,
+      "startPitch": 1.0,
+      "maximumPitch": 1.5,
+      "responseSeconds": 0.25
+    },
+    "lowHealthMovement": {
+      "enabled": true,
+      "startThresholdRatio": 0.4000000059604645,
+      "minimumSpeedScale": 0.3499999940395355,
+      "minimumSprintSpeedScale": 0.75
+    },
+    "lowHealthCamera": {
+      "enabled": true,
+      "startThresholdRatio": 0.5,
+      "fullEffectRatio": 0.07500000298023224,
+      "lateralAmplitudeWorld": 0.019999999552965164,
+      "verticalAmplitudeWorld": 0.012000000104308128,
+      "pitchAmplitudeDegrees": 0.8500000238418579,
+      "yawAmplitudeDegrees": 0.6499999761581421,
+      "rollAmplitudeDegrees": 1.5,
+      "frequencyHz": 0.550000011920929,
+      "responseSeconds": 0.3499999940395355
+    }
   },
   "hdrBloom": {
     "enabled": true,
@@ -41,6 +96,10 @@
       },
       "land": {
         "set": "Land",
+        "volume": 1.0
+      },
+      "pain": {
+        "set": "human_pain",
         "volume": 1.0
       }
     }

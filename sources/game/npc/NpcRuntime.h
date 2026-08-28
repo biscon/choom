@@ -2,8 +2,10 @@
 
 #include "game/npc/NpcDefinitions.h"
 #include "game/npc/NpcCollision.h"
+#include "game/npc/ai/NpcAiTypes.h"
 #include "game/Health.h"
 #include "engine/ecs/Entity.h"
+#include "engine/assets/AssetHandles.h"
 #include "game/navigation/SectorNavigationTypes.h"
 
 #include <array>
@@ -22,6 +24,65 @@ struct NpcRuntimeInstance {
     bool canOpenDoors = true;
     float walkSpeed = 1.5f;
     float runSpeed = 3.0f;
+    bool actionLockedByAi = false;
+};
+
+enum class NpcAwarenessState : uint8_t {
+    Unaware,
+    InvestigatingTravel,
+    InvestigatingSearch,
+    Detected
+};
+
+enum class NpcPursuitSlotKind : uint8_t {
+    None,
+    Melee,
+    Orbit,
+    Invalid
+};
+
+enum class NpcVisualDetectionReason : uint8_t {
+    NoPlayer,
+    OutsideRange,
+    OutsideCone,
+    Occluded,
+    Darkness,
+    Building,
+    Decaying,
+    Detected
+};
+
+struct NpcAiState {
+    std::string aiType;
+    NpcPerceptionDefinition perception;
+    NpcActionDefinition attack;
+    engine::SoundHandle attackSound = engine::NullSoundHandle();
+    engine::SoundHandle attackImpactSound = engine::NullSoundHandle();
+    NpcAwarenessState awareness = NpcAwarenessState::Unaware;
+    Vector3 lastKnownPlayerPosition{};
+    float searchRemainingSeconds = 0.0f;
+    float retargetRemainingSeconds = 0.0f;
+    float searchTurnDirection = 1.0f;
+    uint64_t lastHeardSoundSequence = 0;
+    NpcAiIntent previousIntent = NpcAiIntent::Idle;
+    float attackPhase = 0.0f;
+    bool attackCommitted = false;
+    bool attackHitResolved = false;
+    bool scriptTakeoverPending = false;
+    bool directAlertPending = false;
+    int pursuitSlotIndex = -1;
+    int pursuitSlotRing = -1;
+    NpcPursuitSlotKind pursuitSlotKind = NpcPursuitSlotKind::None;
+    float pursuitOrbitCooldownSeconds = 0.0f;
+    float visualDetectionProgress = 0.0f;
+    float visualLightDetectionFactor = 0.0f;
+    float visualProximityDetectionFactor = 0.0f;
+    float visualDetectionRateFactor = 0.0f;
+    NpcVisualDetectionReason visualDetectionReason =
+            NpcVisualDetectionReason::NoPlayer;
+    bool playerInGeometricSight = false;
+    bool playerDetectionAudioPending = false;
+    bool pursuitRetargetFailed = false;
 };
 
 struct NpcCombatState {
@@ -44,9 +105,10 @@ struct NpcAnimationState {
             UINT32_MAX,
             UINT32_MAX,
             UINT32_MAX,
+            UINT32_MAX,
             UINT32_MAX};
     std::array<float, kNpcActionCount> animationSpeeds{
-            1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+            1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
     float blendSeconds = kDefaultNpcAnimationBlendSeconds;
     NpcAction appliedAction = NpcAction::Idle;
     NpcAction pendingAction = NpcAction::Idle;
@@ -64,7 +126,42 @@ enum class NpcMoveAuthority : uint8_t {
     None,
     Programmatic,
     Script,
+    Patrol,
     Ai
+};
+
+enum class NpcPatrolPhase : uint8_t {
+    Moving,
+    Turning,
+    Waiting,
+    SuspendedAi,
+    SuspendedScript,
+    Complete,
+    Failed,
+    StoppedByScript
+};
+
+struct NpcPatrolState {
+    int patrolEditorId = 0;
+    size_t waypointIndex = 0;
+    int direction = 1;
+    std::vector<size_t> shuffleOrder;
+    size_t shuffleCursor = 0;
+    uint32_t randomState = 0x6d2b79f5u;
+    NpcPatrolPhase phase = NpcPatrolPhase::Moving;
+    NpcPatrolPhase resumePhase = NpcPatrolPhase::Moving;
+    float waitRemainingSeconds = 0.0f;
+    float waypointBaseYawRadians = 0.0f;
+    float lookOffsetRadians = 0.0f;
+    float lookDirection = 1.0f;
+    float retryRemainingSeconds = 0.0f;
+    uint64_t requestId = 0;
+    int slotIndex = -1;
+    Vector2 destinationXZ{};
+    bool scriptMoveStopsPatrol = false;
+    bool scriptOverrideActive = false;
+    bool stoppedByScript = false;
+    bool destinationInitialized = false;
 };
 
 enum class NpcMovePhase : uint8_t {
@@ -117,6 +214,8 @@ struct NpcNavigationRecord {
     Vector3 physicalPosition = {};
     Vector3 visualPosition = {};
     float footstepDistanceWorld = 0.0f;
+    float footstepPreviousPhase = 0.0f;
+    uint32_t footstepAnimationIndex = UINT32_MAX;
     float stallSeconds = 0.0f;
     float bestCornerDistance = 0.0f;
     size_t trackedCornerIndex = SIZE_MAX;
@@ -132,6 +231,8 @@ struct NpcNavigationRecord {
     bool holdsDoor = false;
     bool steeringRecoveryActive = false;
     bool tileReplanPending = false;
+    bool footstepPhaseValid = false;
+    bool footstepMovementActive = false;
     bool footstepEvent = false;
     std::array<char, 192> diagnostic{};
     bool occupied = false;
@@ -186,5 +287,7 @@ const char* NpcMovePhaseName(NpcMovePhase phase);
 const char* NpcMoveGaitName(NpcMoveGait gait);
 const char* NpcMoveAuthorityName(NpcMoveAuthority authority);
 const char* NpcDoorTraversalPhaseName(NpcDoorTraversalPhase phase);
+const char* NpcPursuitSlotKindName(NpcPursuitSlotKind kind);
+const char* NpcVisualDetectionReasonName(NpcVisualDetectionReason reason);
 
 } // namespace game

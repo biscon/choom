@@ -210,6 +210,10 @@ void PlayerSoundCatalogAndPlaybackSelection()
         std::ofstream(root / ("Jump_0" + std::to_string(variation) + ".wav"))
                 .put('\0');
     }
+    for (int variation = 1; variation <= 6; ++variation) {
+        std::ofstream(root / ("human_pain_0"
+                + std::to_string(variation) + ".wav")).put('\0');
+    }
     std::ofstream(root / "Land_01.wav").put('\0');
     for (int variation = 1; variation <= 12; ++variation) {
         std::ofstream(root / "future" / ("WallImpact_"
@@ -221,7 +225,7 @@ void PlayerSoundCatalogAndPlaybackSelection()
     const game::SoundSetCatalog catalog = game::DiscoverSoundSetCatalog(
             root.string(),
             "player");
-    assert(catalog.sets.size() == 4);
+    assert(catalog.sets.size() == 5);
     const game::SoundSetCatalogSet* jump = game::FindSoundSetCatalogSet(
             catalog,
             "Jump");
@@ -231,6 +235,12 @@ void PlayerSoundCatalogAndPlaybackSelection()
             catalog,
             "Land");
     assert(land != nullptr && land->relativePaths.size() == 1);
+    const game::SoundSetCatalogSet* pain = game::FindSoundSetCatalogSet(
+            catalog,
+            "human_pain");
+    assert(pain != nullptr && pain->relativePaths.size() == 6);
+    assert(pain->relativePaths.front() == "player/human_pain_01.wav");
+    assert(pain->relativePaths.back() == "player/human_pain_06.wav");
     const game::SoundSetCatalogSet* future = game::FindSoundSetCatalogSet(
             catalog,
             "future/WallImpact");
@@ -246,6 +256,16 @@ void PlayerSoundCatalogAndPlaybackSelection()
     const size_t secondJump = game::SelectSoundSetVariation(
             jumpState, "Jump", 3);
     assert(firstJump != secondJump);
+    game::SoundSetPlaybackState painState;
+    game::ReserveSoundSetPlaybackState(painState, 6, 10);
+    size_t previousPain = static_cast<size_t>(-1);
+    for (int selection = 0; selection < 100; ++selection) {
+        const size_t painVariation = game::SelectSoundSetVariation(
+                painState, "human_pain", 6);
+        assert(painVariation < 6);
+        assert(painVariation != previousPain);
+        previousPain = painVariation;
+    }
     for (int i = 0; i < 100; ++i) {
         const float pitch = game::SelectSoundSetPitch(
                 jumpState,

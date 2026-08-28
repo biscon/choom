@@ -26,7 +26,9 @@ struct SectorEditorNpcDefinitionDraft {
 
 enum class SectorEditorNpcAudioPickerTarget {
     None,
+    PlayerDetected,
     Action,
+    Attack,
     AmbientAdd,
     AmbientReplace
 };
@@ -56,10 +58,30 @@ struct SectorEditorNpcEditorState {
     engine::UIFloatInputState animationBlendSecondsInput;
     engine::UIFloatInputState ambientMinimumDelaySecondsInput;
     engine::UIFloatInputState ambientMaximumDelaySecondsInput;
+    engine::UIFloatInputState visionRangeWorldInput;
+    engine::UIFloatInputState visionAngleDegreesInput;
+    engine::UIFloatInputState hearingRangeWorldInput;
+    engine::UIIntInputState investigationDurationMillisecondsInput;
+    engine::UIFloatInputState attackHitPhaseInput;
+    engine::UIFloatInputState attackRangeWorldInput;
+    engine::UIFloatInputState attackAdvanceSpeedMultiplierInput;
+    engine::UIFloatInputState attackAimTrackingEndPhaseInput;
+    engine::UIFloatInputState attackHitArcDegreesInput;
+    engine::UIIntInputState attackDamageInput;
+    engine::UIFloatInputState attackKnockbackInput;
+    engine::UIIntInputState attackStunMillisecondsInput;
+    engine::UIFloatInputState attackCameraPitchKickInput;
+    engine::UIFloatInputState attackCameraRollKickInput;
+    engine::UIFloatInputState attackCameraSpringFrequencyInput;
+    engine::UIFloatInputState attackCameraSpringDampingInput;
+    engine::UIFloatInputState attackCameraMaxPitchInput;
+    engine::UIFloatInputState attackCameraMaxRollInput;
     std::array<engine::UIFloatInputState, kNpcActionCount>
             animationSpeedInputs;
     std::array<engine::UIFloatInputState, kNpcActionCount>
             movementSpeedInputs;
+    std::array<std::array<engine::UIFloatInputState, 2>, kNpcActionCount>
+            footstepPhaseInputs;
 
     bool deleteConfirmationOpen = false;
     std::string deleteConfirmationId;

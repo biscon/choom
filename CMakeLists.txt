@@ -169,6 +169,16 @@ execute_process(
 if(NOT RAYLIB_SOUND_LOOP_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to apply the raylib sound-looping patch")
 endif()
+execute_process(
+        COMMAND ${CMAKE_COMMAND}
+                "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
+                "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-audio-low-pass.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibAudioLowPassPatch.cmake"
+        RESULT_VARIABLE RAYLIB_AUDIO_LOW_PASS_PATCH_RESULT
+)
+if(NOT RAYLIB_AUDIO_LOW_PASS_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to apply the raylib audio low-pass patch")
+endif()
 target_compile_definitions(raylib PRIVATE
     SUPPORT_FILEFORMAT_JPG=1
     SUPPORT_GPU_SKINNING=1
@@ -273,6 +283,7 @@ if(BUILD_TESTING)
             sources/game/FpsViewmodel.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/PlayerStamina.cpp
             sources/game/FpsViewmodelEffectsRenderer.cpp
@@ -282,6 +293,14 @@ if(BUILD_TESTING)
     target_include_directories(fps_viewmodel_tests PRIVATE sources)
     target_link_libraries(fps_viewmodel_tests PRIVATE raylib)
     add_test(NAME fps_viewmodel COMMAND fps_viewmodel_tests)
+
+    add_executable(player_health_visual_tests
+            tests/PlayerHealthVisualTests.cpp
+            sources/game/PlayerHealthVisual.cpp
+    )
+    target_include_directories(player_health_visual_tests PRIVATE sources)
+    target_link_libraries(player_health_visual_tests PRIVATE raylib)
+    add_test(NAME player_health_visual COMMAND player_health_visual_tests)
 
     add_executable(pbr_lighting_policy_tests
             tests/PbrLightingPolicyTests.cpp
@@ -359,9 +378,11 @@ if(BUILD_TESTING)
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/ai/NpcAiTypes.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
             sources/sector_editor/SectorEditorDirtyState.cpp
@@ -431,9 +452,11 @@ if(BUILD_TESTING)
             tests/SectorTopologySerializationTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/ai/NpcAiTypes.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/game/SectorLevelLoader.cpp
             sources/sector_demo/SectorMaterialRefactor.cpp
@@ -482,6 +505,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
+            sources/game/PlayerLightLevel.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
@@ -492,6 +516,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorDynamicPointLightSelection.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorLightmapReport.cpp
@@ -502,6 +527,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
+            sources/engine/render/ColorTransfer.cpp
             sources/sector_demo/renderer/SectorLightAtmosphere.cpp
             sources/sector_demo/renderer/SectorLocalFogLighting.cpp
     )
@@ -574,6 +600,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_fps_controller_tests
             tests/SectorFpsControllerTests.cpp
+            sources/game/PlayerHitCamera.cpp
             sources/game/PlayerStamina.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -590,6 +617,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemIconLayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/game/navigation/SectorNavigationBuildInput.cpp
@@ -599,10 +627,14 @@ if(BUILD_TESTING)
             sources/game/SoundSetAudio.cpp
             sources/game/npc/NpcAudioSystem.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/ai/NpcAiTypes.cpp
+            sources/game/npc/ai/NpcAiDebugData.cpp
             sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcCombatSystem.cpp
+            sources/game/npc/ai/NpcAiSystem.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/npc/NpcNavigationSystem.cpp
+            sources/game/npc/NpcPatrolSystem.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/engine/scripting/ScriptSystem.cpp
             sources/engine/scripting/ScriptPersistence.cpp
@@ -621,6 +653,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorStaticModelShadow.cpp
             sources/sector_demo/SectorDynamicModelShadowCasters.cpp
@@ -666,6 +699,7 @@ if(BUILD_TESTING)
     add_executable(npc_definition_tests
             tests/NpcDefinitionTests.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/ai/NpcAiTypes.cpp
             sources/sector_editor/npcs/SectorEditorNpcEditorService.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/engine/assets/AssetManager.cpp
@@ -685,6 +719,7 @@ if(BUILD_TESTING)
             tests/WeaponEditorServiceTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/FpsWeaponAudio.cpp
             sources/game/PlayerStamina.cpp
             sources/sector_editor/weapons/SectorEditorWeaponEditorService.cpp
@@ -711,6 +746,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemInventoryUILayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -722,6 +758,17 @@ if(BUILD_TESTING)
             ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(item_definition_tests PRIVATE raylib)
     add_test(NAME item_definition COMMAND item_definition_tests)
+
+    add_executable(player_sneak_tests
+            tests/PlayerSneakTests.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerHealthVisual.cpp
+            sources/game/PlayerStamina.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
+    )
+    target_include_directories(player_sneak_tests PRIVATE sources)
+    target_link_libraries(player_sneak_tests PRIVATE raylib)
+    add_test(NAME player_sneak COMMAND player_sneak_tests)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp

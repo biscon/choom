@@ -21,6 +21,7 @@ class SectorCollisionWorld;
 class SectorNavigationWorld;
 struct NpcNavigationRuntime;
 struct NpcAudioRuntime;
+struct NpcAiRuntime;
 struct SectorDynamicDoorCollider;
 struct SectorStaticModelCollider;
 struct SectorTopologyMap;
@@ -70,7 +71,8 @@ bool ResolvePlayerWeaponShot(
         const FpsWeaponImpactDefinition& impact,
         FpsShotResult& outShot,
         WeaponImpactEvent& outImpact,
-        NpcAudioRuntime* npcAudio = nullptr);
+        NpcAudioRuntime* npcAudio = nullptr,
+        NpcAiRuntime* npcAi = nullptr);
 
 bool ResolvePlayerWeaponPelletVolley(
         engine::World& world,
@@ -85,7 +87,8 @@ bool ResolvePlayerWeaponPelletVolley(
         uint64_t shotSequence,
         const FpsWeaponFiringDefinition& firing,
         WeaponPelletVolleyResult& outVolley,
-        NpcAudioRuntime* npcAudio = nullptr);
+        NpcAudioRuntime* npcAudio = nullptr,
+        NpcAiRuntime* npcAi = nullptr);
 
 bool UpdateNpcCombatSystem(
         engine::World& world,

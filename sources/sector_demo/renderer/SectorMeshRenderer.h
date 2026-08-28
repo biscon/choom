@@ -120,6 +120,9 @@ public:
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
             bool presentFromScratch = false);
+    bool PreparePostBloomWorldOverlays(
+            engine::RenderTarget& sceneTarget,
+            bool overlayRequested);
     bool CompositeViewmodel(
             engine::RenderTarget& sceneTarget,
             const engine::RenderTarget& viewmodelTarget);
@@ -145,6 +148,7 @@ public:
     bool IsReady() const { return initialized; }
     bool IsRendererReady() const { return IsReady(); }
     Vector3 Position() const { return position; }
+    float RuntimeSeconds() const { return runtimeSeconds; }
     const Camera3D& Camera() const { return camera; }
     const Camera3D& RenderCamera() const { return Camera(); }
     SectorViewPose Pose() const;
@@ -159,6 +163,10 @@ public:
             const SectorPreviewDynamicPointLightSource* light)
     {
         dynamicLightState.SetRuntimePointLight(light);
+    }
+    const SectorPreviewDynamicPointLightSource* RuntimePointLight() const
+    {
+        return dynamicLightState.RuntimePointLight();
     }
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.sectorDrawRecords.size(); }

@@ -502,6 +502,8 @@ SectorEditorWeaponEditorPanelResult DrawSectorEditorWeaponEditorPanel(
                 weapon->firing.shotIntervalSeconds, 0.001f, 60.0f, 3);
         drawFloat("sector_editor_weapon_max_range", "Maximum range",
                 weapon->firing.maximumRangeWorld, 0.001f, 1000000.0f, 2);
+        drawFloat("sector_editor_weapon_noise_radius", "Noise radius",
+                weapon->firing.noiseRadiusWorld, 0.0f, 10000.0f, 2);
         drawCheckbox("sector_editor_weapon_pellets_enabled", "Pellets enabled",
                 weapon->firing.pellets.enabled);
         drawInt("sector_editor_weapon_pellet_count", "Pellet count",

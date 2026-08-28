@@ -3,6 +3,7 @@
 #include "sector_demo/SectorFpsController.h"
 #include "game/items/ItemDropPlacement.h"
 #include "game/items/ItemPresentation.h"
+#include "game/npc/ai/NpcAiDebugDraw.h"
 #include "engine/components/AnimatedModel.h"
 #include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
@@ -994,9 +995,19 @@ bool SectorGameSession::StartNew(
 {
     failureError.clear();
     playerHealth = MakeHealth(100);
+    playerKnockbackVelocity = {};
+    playerStunRemainingSeconds = 0.0f;
+    godMode = false;
+    invisible = false;
+    aiFrozen = false;
+    aiDebugVisible = false;
+    gameOver = false;
     playerStamina = MakePlayerStamina(settings.playerStamina);
     ClearPlayerWindedCamera(windedCamera);
+    ClearPlayerLowHealthCamera(lowHealthCamera);
+    ClearPlayerHitCamera(hitCamera);
     breathingAudio = PlayerBreathingAudioRuntime{};
+    heartbeatAudio = PlayerHeartbeatAudioRuntime{};
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
     if (path.empty()) {
@@ -1141,8 +1152,13 @@ void SectorGameSession::Shutdown(
                 context.audio,
                 *playerAudio,
                 breathingAudio);
+        StopPlayerHeartbeatAudio(
+                context.assets,
+                context.audio,
+                heartbeatAudio);
     } else {
         breathingAudio = PlayerBreathingAudioRuntime{};
+        heartbeatAudio = PlayerHeartbeatAudioRuntime{};
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
@@ -1156,7 +1172,16 @@ void SectorGameSession::Shutdown(
     collision = SectorEditorPreviewCollisionState{};
     navigationDebug = SectorGameNavigationDebugState{};
     playerStamina = PlayerStamina{};
+    playerKnockbackVelocity = {};
+    playerStunRemainingSeconds = 0.0f;
+    godMode = false;
+    invisible = false;
+    aiFrozen = false;
+    aiDebugVisible = false;
+    gameOver = false;
     ClearPlayerWindedCamera(windedCamera);
+    ClearPlayerLowHealthCamera(lowHealthCamera);
+    ClearPlayerHitCamera(hitCamera);
     StopGameLevelLoading(loading);
     levelName.clear();
     levelPath.clear();
@@ -1227,6 +1252,15 @@ void SectorGameSession::SetConsoleInputCaptured(bool captured)
     RefreshMouseLookCapture();
 }
 
+void SectorGameSession::SetGodMode(bool enabled)
+{
+    godMode = enabled;
+    if (enabled) {
+        playerKnockbackVelocity = {};
+        playerStunRemainingSeconds = 0.0f;
+    }
+}
+
 void SectorGameSession::Update(
         engine::EngineContext& context,
         SectorSceneRuntime& scene,
@@ -1239,6 +1273,14 @@ void SectorGameSession::Update(
     if (!running || paused) {
         return;
     }
+    if (gameOver) {
+        UpdatePlayerHitCamera(hitCamera, dt);
+        ApplyPlayerPose(scene);
+        return;
+    }
+    UpdatePlayerHitCamera(hitCamera, dt);
+    playerStunRemainingSeconds = std::max(
+            0.0f, playerStunRemainingSeconds - std::max(0.0f, dt));
     if (!consoleInputCaptured) {
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
@@ -1281,6 +1323,16 @@ void SectorGameSession::Update(
 
     const Vector3 playerPosition =
             controller.fpsControllerState.feetPosition;
+    const bool playerSneaking =
+            controller.fpsControllerState.crouchTargeted;
+    const float playerCrouchBlend = SectorFpsCrouchBlend(
+            controller.fpsControllerState);
+    const float playerMovementNoiseMultiplier = applicationSettings != nullptr
+            && playerSneaking
+            ? PlayerSneakMovementNoiseMultiplier(
+                    applicationSettings->playerSneak,
+                    playerCrouchBlend)
+            : 1.0f;
     const SectorFpsControllerConfig obstacleConfig =
             EffectiveSectorFpsControllerConfig(
                     controller.fpsControllerState,
@@ -1289,13 +1341,127 @@ void SectorGameSession::Update(
             controller.fpsControllerState.feetPosition,
             obstacleConfig.playerRadius,
             obstacleConfig.playerHeight};
+    SectorRuntimeObjectState& objects = scene.RuntimeObjects();
+    if (applicationSettings != nullptr
+            && objects.objectSectorLookupWorldValid) {
+        playerLightLevel = SamplePlayerLightLevel(
+                objects.objectLightProbes,
+                topologyMap,
+                objects.objectSectorLookupWorld,
+                objects.dynamicDoorColliders,
+                objects.staticModelColliders,
+                objects.dynamicModelColliders,
+                scene.Renderer().RuntimePointLight(),
+                playerPosition,
+                obstacleConfig.playerHeight,
+                obstacleConfig.playerRadius,
+                controller.fpsControllerState.currentSectorId,
+                applicationSettings->playerSneak.fullVisibilityLightLevel,
+                scene.Renderer().RuntimeSeconds());
+    } else {
+        playerLightLevel = {};
+    }
+    struct ScriptTakeoverContext {
+        engine::EngineContext* engine = nullptr;
+        SectorScriptHost* host = nullptr;
+    } takeoverContext{&context, &scriptHost};
+    struct PlayerDamageAudioContext {
+        engine::AssetManager* assets = nullptr;
+        engine::AudioSystem* audio = nullptr;
+        PlayerAudioRuntime* playerAudio = nullptr;
+        PlayerHitCameraState* hitCamera = nullptr;
+        const SectorFpsControllerState* controller = nullptr;
+    } damageAudioContext{
+            &context.assets,
+            &context.audio,
+            playerAudio,
+            &hitCamera,
+            &controller.fpsControllerState};
+    NpcAiGameplayContext npcGameplay;
+    npcGameplay.playerFeetPosition = playerPosition;
+    npcGameplay.playerEyePosition = SectorFpsControllerEyePosition(
+            controller.fpsControllerState,
+            controller.fpsControllerConfig);
+    npcGameplay.playerHealth = &playerHealth;
+    npcGameplay.playerKnockbackVelocity = &playerKnockbackVelocity;
+    npcGameplay.playerStunRemainingSeconds = &playerStunRemainingSeconds;
+    npcGameplay.scriptUserData = &takeoverContext;
+    npcGameplay.interruptScriptMovement = [](
+            void* userData, engine::Entity, const char* instanceId) {
+        auto* takeover = static_cast<ScriptTakeoverContext*>(userData);
+        if (takeover == nullptr || takeover->engine == nullptr
+                || takeover->host == nullptr) return;
+        InterruptSectorScriptNpcMoveForAi(
+                *takeover->engine, *takeover->host, instanceId);
+    };
+    npcGameplay.playerDamageUserData = &damageAudioContext;
+    npcGameplay.playerDamaged = [](void* userData, int appliedDamage) {
+        auto* damageAudio = static_cast<PlayerDamageAudioContext*>(userData);
+        if (appliedDamage <= 0 || damageAudio == nullptr
+                || damageAudio->assets == nullptr
+                || damageAudio->audio == nullptr
+                || damageAudio->playerAudio == nullptr) {
+            return;
+        }
+        PlayPlayerSound(
+                *damageAudio->assets,
+                *damageAudio->audio,
+                *damageAudio->playerAudio,
+                "pain");
+    };
+    npcGameplay.playerAttackHitUserData = &damageAudioContext;
+    npcGameplay.playerAttackHit = [](
+            void* userData,
+            int appliedDamage,
+            const NpcAttackCameraImpactDefinition& cameraImpact,
+            Vector2 directionFromAttackerToPlayerWorld) {
+        auto* damage = static_cast<PlayerDamageAudioContext*>(userData);
+        if (appliedDamage <= 0 || damage == nullptr
+                || damage->hitCamera == nullptr
+                || damage->controller == nullptr) {
+            return;
+        }
+        ApplyPlayerHitCameraImpulse(
+                *damage->hitCamera,
+                cameraImpact,
+                directionFromAttackerToPlayerWorld,
+                damage->controller->yawRadians);
+    };
+    npcGameplay.godMode = godMode;
+    npcGameplay.playerInvisible = invisible;
+    npcGameplay.frozen = aiFrozen;
+    npcGameplay.playerGrounded = controller.fpsControllerState.grounded;
+    npcGameplay.playerSneaking = playerSneaking;
+    npcGameplay.playerRadiusWorld = obstacleConfig.playerRadius;
+    npcGameplay.playerNormalizedLightLevel = playerLightLevel.normalizedLight;
+    npcGameplay.playerCrouchBlend = playerCrouchBlend;
+    if (applicationSettings != nullptr) {
+        npcGameplay.playerMovementNoiseMultiplier =
+                playerMovementNoiseMultiplier;
+        npcGameplay.playerSneakSettings = &applicationSettings->playerSneak;
+    }
+    npcGameplay.playerLightLevel = &playerLightLevel;
     scene.Update(
             context,
             topologyMap,
             dt,
             &playerPosition,
             controller.fpsControllerState.currentSectorId,
-            &playerObstacle);
+            &playerObstacle,
+            &npcGameplay);
+    if (IsDepleted(playerHealth)) {
+        gameOver = true;
+        ClearPlayerLowHealthCamera(lowHealthCamera);
+        StopPlayerHeartbeatAudio(
+                context.assets,
+                context.audio,
+                heartbeatAudio);
+        SetInventoryOpen(false);
+        ClearHeldObjectUse();
+        LeaveSectorFreeflyController();
+        ApplyPlayerPose(scene);
+        return;
+    }
     ProcessInventoryAction(context, scene);
     const bool gameplayInputCaptured = consoleInputCaptured
             || inventoryUi.open
@@ -1304,8 +1470,6 @@ void SectorGameSession::Update(
         UpdateItemHealingEffects(*itemCampaign, playerHealth, dt);
     }
     UpdateSectorScriptOperations(context, scriptHost);
-    SectorRuntimeObjectState& objects = scene.RuntimeObjects();
-
     SectorFpsControllerInput input;
     if (!gameplayInputCaptured) {
         input.moveForward = context.input.IsKeyDown(KEY_W);
@@ -1337,6 +1501,10 @@ void SectorGameSession::Update(
             });
 
     if (applicationSettings != nullptr && itemCampaign != nullptr) {
+        if (playerStunRemainingSeconds > 0.0f) {
+            input.run = false;
+            input.movementSpeedScale *= 0.5f;
+        }
         if (input.run && !CanPlayerStaminaSprint(playerStamina)) {
             input.run = false;
         }
@@ -1347,8 +1515,16 @@ void SectorGameSession::Update(
             input.jumpPressed = false;
         }
     }
+    if (applicationSettings != nullptr) {
+        input.movementSpeedScale *= PlayerLowHealthMovementSpeedScale(
+                playerHealth,
+                applicationSettings->playerHealth.lowHealthMovement,
+                SectorFpsInputUsesRunSpeed(input));
+    }
 
     const float previousVisualEyeY = scene.Renderer().RendererPose().position.y;
+    input.externalHorizontalMovementDelta = Vector2Scale(
+            playerKnockbackVelocity, std::max(0.0f, dt));
     UpdateSectorEditorGameplayPreview(
             objects.dynamicDoorColliders,
             objects.staticModelColliders,
@@ -1359,6 +1535,12 @@ void SectorGameSession::Update(
             previousVisualEyeY,
             dt,
             &scene.NpcNavigation().collisionCylinders);
+    playerKnockbackVelocity = Vector2Scale(
+            playerKnockbackVelocity,
+            std::exp(-8.0f * std::max(0.0f, dt)));
+    if (Vector2Length(playerKnockbackVelocity) < 0.01f) {
+        playerKnockbackVelocity = {};
+    }
     if (applicationSettings != nullptr) {
         UpdatePlayerStamina(
                 playerStamina,
@@ -1372,6 +1554,11 @@ void SectorGameSession::Update(
                 applicationSettings->playerStamina.windedCamera,
                 staminaRatio,
                 dt);
+        UpdatePlayerLowHealthCamera(
+                lowHealthCamera,
+                applicationSettings->playerHealth.lowHealthCamera,
+                playerHealth,
+                dt);
         if (playerAudio != nullptr) {
             UpdatePlayerBreathingAudio(
                     context.assets,
@@ -1380,6 +1567,14 @@ void SectorGameSession::Update(
                     breathingAudio,
                     applicationSettings->playerStamina.breathingAudio,
                     staminaRatio,
+                    dt);
+            UpdatePlayerHeartbeatAudio(
+                    context.assets,
+                    context.audio,
+                    *playerAudio,
+                    heartbeatAudio,
+                    applicationSettings->playerHealth.heartbeatAudio,
+                    playerHealth,
                     dt);
         }
     }
@@ -1540,6 +1735,10 @@ void SectorGameSession::Update(
                 context,
                 controller.fpsControllerState.currentSectorId,
                 applicationSettings->footsteps.volume);
+        scene.EmitPlayerSound(
+                controller.fpsControllerState.feetPosition,
+                applicationSettings->footsteps.noiseRadiusWorld
+                        * playerMovementNoiseMultiplier);
     }
     if (playerAudio != nullptr) {
         if (controller.frameEvents.jumped) {
@@ -1567,6 +1766,10 @@ void SectorGameSession::Update(
                                         .landingImpactVolumeMultiplier,
                         0.0f,
                         1.0f));
+        scene.EmitPlayerSound(
+                controller.fpsControllerState.feetPosition,
+                applicationSettings->footsteps.landingNoiseRadiusWorld
+                        * playerMovementNoiseMultiplier);
     }
     bool acceptedShot = false;
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
@@ -1613,6 +1816,9 @@ void SectorGameSession::Update(
                     fpsPlayer.State().firing.definition,
                     resolvedShot);
             fpsPlayer.RecordShotResolution(resolvedShot);
+            scene.EmitPlayerSound(
+                    request.rayOrigin,
+                    fpsPlayer.State().firing.definition.noiseRadiusWorld);
             ApplyPlayerPose(scene);
         }
         fpsPlayer.UpdateTransformsAndLight(
@@ -1821,6 +2027,40 @@ void SectorGameSession::RenderNavigationDebugWorld(
             scene.Renderer());
 }
 
+void SectorGameSession::RenderAiDebugWorld(
+        const engine::World& world,
+        const SectorSceneRuntime& scene) const
+{
+    if (!IsActive() || !aiDebugVisible) return;
+    DrawNpcAiDebugWorld(
+            world,
+            scene.NpcNavigation(),
+            scene.NpcAi(),
+            topologyMap,
+            scene.Renderer());
+}
+
+void SectorGameSession::RenderAiDebugHud(
+        const engine::World& world,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        Rectangle playableViewport,
+        const SectorSceneRuntime& scene) const
+{
+    if (!IsActive() || !aiDebugVisible) return;
+    DrawNpcAiDebugLabels(
+            world,
+            scene.NpcNavigation(),
+            scene.NpcAi(),
+            scene.Renderer(),
+            scene.Navigation().Settings().agentHeight,
+            controller.fpsControllerState.feetPosition,
+            aiFrozen,
+            assets,
+            font,
+            playableViewport);
+}
+
 void SectorGameSession::RenderNavigationDebugPanel(
         const engine::UIConfig& config,
         engine::AssetManager& assets,
@@ -1890,6 +2130,7 @@ bool SectorGameSession::RebuildFromMap(
     completedItemPresentations.clear();
     completedItemPresentations.reserve(topologyMap.runtimeObjects.capacity());
     ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
+    ClearPlayerHitCamera(hitCamera);
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
     controller.fpsControllerState = savedPlayer;
@@ -2101,14 +2342,43 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
             controller.visualStepOffsetY,
             controller.headBobState.offset,
             controller.landingDipState.offsetY);
-    SectorViewPose windedPose = basePose;
-    windedPose.position.y += windedCamera.verticalOffsetWorld;
-    windedPose.pitchRadians = ClampSectorFpsPitch(
-            windedPose.pitchRadians
+    SectorViewPose presentationPose = basePose;
+    presentationPose.position.y += windedCamera.verticalOffsetWorld;
+    presentationPose.pitchRadians = ClampSectorFpsPitch(
+            presentationPose.pitchRadians
                     + windedCamera.pitchOffsetDegrees * DEG2RAD);
+    const Vector3 cameraRight{
+            -std::sin(presentationPose.yawRadians),
+            0.0f,
+            std::cos(presentationPose.yawRadians)};
+    const Vector3 cameraForward{
+            std::cos(presentationPose.yawRadians),
+            0.0f,
+            std::sin(presentationPose.yawRadians)};
+    presentationPose.position = Vector3Add(
+            presentationPose.position,
+            Vector3Add(
+                    Vector3Scale(
+                            cameraRight,
+                            lowHealthCamera.positionOffsetLocal.x),
+                    Vector3Add(
+                            Vector3{0.0f,
+                                    lowHealthCamera.positionOffsetLocal.y,
+                                    0.0f},
+                            Vector3Scale(
+                                    cameraForward,
+                                    lowHealthCamera.positionOffsetLocal.z))));
+    Vector3 cameraRotation =
+            fpsPlayer.State().firing.cameraRecoil.rotationDegrees;
+    cameraRotation = Vector3Add(
+            cameraRotation,
+            lowHealthCamera.rotationDegrees);
+    cameraRotation.x += hitCamera.rotationDegrees.x;
+    cameraRotation.y += hitCamera.rotationDegrees.y;
+    cameraRotation.z += hitCamera.rotationDegrees.z;
     scene.Renderer().ApplyRendererPose(ApplySectorFpsViewRotationOffset(
-            windedPose,
-            fpsPlayer.State().firing.cameraRecoil.rotationDegrees),
+            presentationPose,
+            cameraRotation),
             false);
     controller.freeflyController.pose = basePose;
 }

@@ -9,6 +9,8 @@
 #include "game/items/ItemInventory.h"
 #include "game/items/ItemInventoryUI.h"
 #include "game/PlayerAudio.h"
+#include "game/PlayerHitCamera.h"
+#include "game/PlayerLightLevel.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
 #include "engine/scripting/ScriptSystem.h"
@@ -57,6 +59,15 @@ public:
             engine::FontHandle usePromptFont,
             Rectangle playableViewport) const;
     void RenderNavigationDebugWorld(const SectorSceneRuntime& scene) const;
+    void RenderAiDebugWorld(
+            const engine::World& world,
+            const SectorSceneRuntime& scene) const;
+    void RenderAiDebugHud(
+            const engine::World& world,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            Rectangle playableViewport,
+            const SectorSceneRuntime& scene) const;
     void RenderNavigationDebugPanel(
             const engine::UIConfig& config,
             engine::AssetManager& assets,
@@ -120,6 +131,18 @@ public:
     }
     const Health& PlayerHealth() const { return playerHealth; }
     const PlayerStamina& PlayerStaminaState() const { return playerStamina; }
+    void SetGodMode(bool enabled);
+    void SetInvisible(bool enabled) { invisible = enabled; }
+    void SetAiFrozen(bool frozen) { aiFrozen = frozen; }
+    void SetAiDebugVisible(bool visible) { aiDebugVisible = visible; }
+    bool GodMode() const { return godMode; }
+    bool Invisible() const { return invisible; }
+    bool AiFrozen() const { return aiFrozen; }
+    bool AiDebugVisible() const { return aiDebugVisible; }
+    bool HasWorldDebugOverlays() const {
+        return IsActive() && (navigationDebug.visible || aiDebugVisible);
+    }
+    bool IsGameOver() const { return gameOver; }
 
 private:
     struct PendingItemTake {
@@ -211,9 +234,20 @@ private:
     SectorScriptHost scriptHost;
     SectorGameNavigationDebugState navigationDebug;
     Health playerHealth = MakeHealth(100);
+    Vector2 playerKnockbackVelocity{};
+    float playerStunRemainingSeconds = 0.0f;
+    bool godMode = false;
+    bool invisible = false;
+    bool aiFrozen = false;
+    bool aiDebugVisible = false;
+    bool gameOver = false;
     PlayerStamina playerStamina;
     PlayerWindedCameraState windedCamera;
+    PlayerLowHealthCameraState lowHealthCamera;
+    PlayerHitCameraState hitCamera;
     PlayerBreathingAudioRuntime breathingAudio;
+    PlayerHeartbeatAudioRuntime heartbeatAudio;
+    PlayerLightLevelSample playerLightLevel;
     std::string failureError;
     SectorUseTarget useTarget;
     SectorUseHighlightState useHighlightState;

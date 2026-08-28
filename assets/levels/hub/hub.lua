@@ -3,9 +3,9 @@ function init()
     setPropAnimationProgress("ceiling_switch_01", 0.0, "switch|switchAction")
     setPropAnimationProgress("ceiling_vent_01", 0.0, "Ventilator")
     playPropAnimation("ceiling_vent_01", "Ventilator", "loop")
-    startScript("patrolZombie01")
-    startScript("patrolZombie02")
-    startScript("patrolZombie03")
+    --startScript("patrolZombie01")
+    --startScript("patrolZombie02")
+    --startScript("patrolZombie03")
 end
 
 function shutdown()

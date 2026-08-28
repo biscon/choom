@@ -28,7 +28,8 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& runtime,
         const std::vector<SectorDynamicDoorCollider>& doorColliders,
-        float dt);
+        float dt,
+        bool freezeAi = false);
 
 void SynchronizeSectorNavigationDoorLinksSystem(
         engine::World& world,
@@ -84,6 +85,27 @@ NpcMoveRequestResult RequestNpcMove(
         NpcMoveGait gait = NpcMoveGait::Walk,
         NpcMoveAuthority authority = NpcMoveAuthority::Programmatic);
 
+NpcMoveRequestResult RequestNpcMoveForEntity(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity,
+        Vector2 destinationXZ,
+        NpcMoveGait gait,
+        NpcMoveAuthority authority);
+
+// Replaces an AI-owned route only after its new path has been found. A failed
+// retarget leaves the previous route, door holds, and request ID intact.
+NpcMoveRequestResult RetargetNpcAiMove(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        NpcNavigationRuntime& runtime,
+        std::string_view instanceId,
+        Vector2 destinationXZ,
+        NpcMoveGait gait = NpcMoveGait::Run);
+
 bool CancelNpcMove(
         engine::World& world,
         SectorNavigationWorld& navigation,
@@ -91,14 +113,46 @@ bool CancelNpcMove(
         std::string_view instanceId,
         uint64_t expectedRequestId = 0);
 
+bool CancelNpcMoveForEntity(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity,
+        uint64_t expectedRequestId = 0);
+
 NpcMoveStatus GetNpcMoveStatus(
         const NpcNavigationRuntime& runtime,
         std::string_view instanceId);
+
+NpcMoveStatus GetNpcMoveStatusForEntity(
+        const NpcNavigationRuntime& runtime,
+        engine::Entity entity);
 
 bool UpdateNpcFootstepCadence(
         NpcNavigationRecord& record,
         bool active,
         float resolvedHorizontalDistance);
+
+bool UpdateNpcFootstepAnimationPhase(
+        NpcNavigationRecord& record,
+        bool active,
+        uint32_t animationIndex,
+        float normalizedPhase,
+        float normalizedPhaseAdvance,
+        const std::array<float, 2>& footstepPhases);
+
+void UpdateNpcFootstepEventsSystem(
+        engine::World& world,
+        engine::AssetManager& assets,
+        NpcNavigationRuntime& runtime,
+        const NpcDefinitionCatalog& definitions,
+        float dt);
+
+// Returns a unit presentation-facing direction, or zero when path intent does
+// not provide a stable direction and the caller should preserve current yaw.
+Vector2 ResolveNpcLocomotionFacingDirection(
+        Vector2 preferredVelocity,
+        Vector2 actualVelocity);
 
 void ResetNpcWaypointProgressTracking(NpcNavigationRecord& record);
 
@@ -122,6 +176,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap& map,
         float dt,
-        const SectorDoorPlayerObstacle* playerObstacle = nullptr);
+        const SectorDoorPlayerObstacle* playerObstacle = nullptr,
+        bool freezeAi = false);
 
 } // namespace game

@@ -118,6 +118,23 @@ struct SectorAuthoringLevelMarker {
     float orientationDegrees = 0.0f;
 };
 
+struct SectorAuthoringPatrolWaypoint {
+    int levelMarkerId = -1;
+    int delayMilliseconds = 0;
+    SectorPatrolGait gait = SectorPatrolGait::Walk;
+    bool lookAround = false;
+    float lookArcDegrees = 90.0f;
+};
+
+struct SectorAuthoringPatrol {
+    int editorId = -1;
+    std::string id;
+    SectorPatrolMode mode = SectorPatrolMode::Loop;
+    std::vector<SectorAuthoringPatrolWaypoint> waypoints;
+    bool shuffleWaypoints = false;
+    bool faceWaypointOrientation = true;
+};
+
 struct SectorAuthoringSoundEmitter {
     int id = -1;
     std::string referenceId;
@@ -149,6 +166,7 @@ struct SectorAuthoringGraph {
     std::vector<SectorAuthoringFogVolume> fogVolumes;
     std::vector<SectorAuthoringReflectionProbe> reflectionProbes;
     std::vector<SectorAuthoringLevelMarker> levelMarkers;
+    std::vector<SectorAuthoringPatrol> patrols;
     std::vector<SectorAuthoringSoundEmitter> soundEmitters;
     std::vector<SectorAuthoringTrigger> triggers;
 };
@@ -167,6 +185,7 @@ enum class SectorAuthoringObjectKind {
     FogVolume,
     ReflectionProbe,
     LevelMarker,
+    Patrol,
     SoundEmitter,
     Trigger
 };
@@ -385,12 +404,15 @@ int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringReflectionProbeId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph);
+int AllocateSectorAuthoringPatrolId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringSoundEmitterId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph);
+std::string AllocateSectorAuthoringPatrolReferenceId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringSoundEmitterReferenceId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringTriggerReferenceId(const SectorAuthoringGraph& graph);
 bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id);
+bool IsValidSectorAuthoringPatrolReferenceId(const std::string& id);
 bool IsValidSectorAuthoringSoundEmitterReferenceId(const std::string& id);
 bool IsValidSectorTriggerReferenceId(const std::string& id);
 bool IsValidSectorTriggerScriptName(const std::string& name);
@@ -437,6 +459,15 @@ SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
 const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
         const SectorAuthoringGraph& graph,
         const std::string& referenceId);
+const SectorAuthoringPatrol* FindSectorAuthoringPatrol(
+        const SectorAuthoringGraph& graph,
+        int editorId);
+SectorAuthoringPatrol* FindSectorAuthoringPatrol(
+        SectorAuthoringGraph& graph,
+        int editorId);
+const SectorAuthoringPatrol* FindSectorAuthoringPatrolByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& id);
 const SectorAuthoringSoundEmitter* FindSectorAuthoringSoundEmitter(
         const SectorAuthoringGraph& graph,
         int id);

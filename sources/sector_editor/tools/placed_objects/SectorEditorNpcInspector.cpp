@@ -12,12 +12,14 @@ namespace game {
 
 float MeasureSectorEditorNpcInspectorContentHeight(
         const SectorEditorPlacedObjectInspectorMeasureContext& context,
-        const SectorPlacedRuntimeObject&)
+        const SectorPlacedRuntimeObject& object)
 {
     const SectorEditorNpcPlacementState& state =
             context.editingState.npcPlacement;
     return 38.0f * 2.0f
-            + (context.rowH + context.gap) * 8.0f
+            + (context.rowH + context.gap) * 10.0f
+            + (object.npc.patrolEditorId > 0
+                    ? (context.rowH + context.gap) * 2.0f : 0.0f)
             + 68.0f
             + (state.instanceIdError.empty() ? 0.0f : 40.0f);
 }
@@ -140,6 +142,116 @@ void DrawSectorEditorNpcInspector(
                 true);
         y += 40.0f;
     }
+
+    object = context.editing.SelectedObject();
+    if (object == nullptr || object->kind != "npc") return;
+    std::vector<std::string> patrolLabels{"None"};
+    std::vector<int> patrolIds{0};
+    patrolLabels.reserve(context.authoringGraph.patrols.size() + 1);
+    patrolIds.reserve(context.authoringGraph.patrols.size() + 1);
+    int selectedPatrol = 0;
+    for (const SectorAuthoringPatrol& patrol : context.authoringGraph.patrols) {
+        patrolIds.push_back(patrol.editorId);
+        patrolLabels.push_back(patrol.id + " (#" + std::to_string(patrol.editorId) + ")");
+        if (patrol.editorId == object->npc.patrolEditorId) {
+            selectedPatrol = static_cast<int>(patrolIds.size()) - 1;
+        }
+    }
+    const int previousPatrol = selectedPatrol;
+    if (engine::Option(
+                context.ui, context.config, context.input, context.assets,
+                "sector_editor_npc_patrol",
+                Rectangle{0.0f, y, contentW, rowH},
+                context.font, patrolLabels, selectedPatrol)
+            && selectedPatrol != previousPatrol
+            && selectedPatrol >= 0
+            && selectedPatrol < static_cast<int>(patrolIds.size())) {
+        const int patrolId = patrolIds[static_cast<size_t>(selectedPatrol)];
+        context.editing.MutateSelected(
+                "Updated NPC patrol",
+                [patrolId](SectorPlacedRuntimeObject& target) {
+                    if (target.kind != "npc"
+                            || target.npc.patrolEditorId == patrolId) return false;
+                    target.npc.patrolEditorId = patrolId;
+                    if (patrolId == 0) {
+                        target.npc.randomPatrolStart = false;
+                        target.npc.reversePatrol = false;
+                    }
+                    return true;
+                });
+    }
+    y += rowH + gap;
+
+    object = context.editing.SelectedObject();
+    if (object == nullptr || object->kind != "npc") return;
+    if (object->npc.patrolEditorId > 0) {
+        bool randomStart = object->npc.randomPatrolStart;
+        if (engine::Checkbox(
+                    context.ui, context.config, context.input, context.assets,
+                    "sector_editor_npc_random_patrol_start",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    context.font, "Random Start WP", randomStart)) {
+            context.editing.MutateSelected(
+                    "Updated NPC random patrol start",
+                    [randomStart](SectorPlacedRuntimeObject& target) {
+                        if (target.kind != "npc"
+                                || target.npc.randomPatrolStart == randomStart) {
+                            return false;
+                        }
+                        target.npc.randomPatrolStart = randomStart;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        object = context.editing.SelectedObject();
+        if (object == nullptr || object->kind != "npc") return;
+        const SectorAuthoringPatrol* assignedPatrol =
+                FindSectorAuthoringPatrol(
+                        context.authoringGraph, object->npc.patrolEditorId);
+        const bool reverseEnabled = assignedPatrol == nullptr
+                || !assignedPatrol->shuffleWaypoints;
+        bool reverse = object->npc.reversePatrol;
+        if (engine::Checkbox(
+                    context.ui, context.config, context.input, context.assets,
+                    "sector_editor_npc_reverse_patrol",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    context.font, "Reverse patrol", reverse,
+                    engine::UITextJustify::Left, reverseEnabled)) {
+            context.editing.MutateSelected(
+                    "Updated NPC reverse patrol",
+                    [reverse](SectorPlacedRuntimeObject& target) {
+                        if (target.kind != "npc"
+                                || target.npc.reversePatrol == reverse) {
+                            return false;
+                        }
+                        target.npc.reversePatrol = reverse;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+    }
+
+    object = context.editing.SelectedObject();
+    if (object == nullptr || object->kind != "npc") return;
+    bool stopPatrol = object->npc.scriptMoveStopsPatrol;
+    if (engine::Checkbox(
+                context.ui, context.config, context.input, context.assets,
+                "sector_editor_npc_script_stops_patrol",
+                Rectangle{0.0f, y, contentW, rowH},
+                context.font,
+                "Script move stops patrol for session",
+                stopPatrol)) {
+        context.editing.MutateSelected(
+                "Updated NPC patrol script behavior",
+                [stopPatrol](SectorPlacedRuntimeObject& target) {
+                    if (target.kind != "npc"
+                            || target.npc.scriptMoveStopsPatrol == stopPatrol) return false;
+                    target.npc.scriptMoveStopsPatrol = stopPatrol;
+                    return true;
+                });
+    }
+    y += rowH + gap;
 
     const auto drawFloat = [&] (
             const char* id,

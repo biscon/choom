@@ -1,5 +1,7 @@
 #include "game/npc/NpcDefinitions.h"
 
+#include "game/npc/ai/NpcAiTypes.h"
+
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -21,6 +23,9 @@ constexpr float MinAnimationSpeed = 0.01f;
 constexpr float MaxAnimationSpeed = 10.0f;
 constexpr float MinMovementSpeed = 0.1f;
 constexpr float MaxMovementSpeed = 200.0f;
+constexpr float MaxWorldDistance = 10000.0f;
+constexpr float MaxKnockbackImpulse = 100.0f;
+constexpr int MaxStunMilliseconds = 60000;
 
 [[noreturn]] void Fail(const std::string& message)
 {
@@ -121,6 +126,35 @@ float OptionalFloat(
     return static_cast<float>(number);
 }
 
+std::array<float, 2> OptionalFootstepPhases(
+        const Json& object,
+        const char* field,
+        const std::array<float, 2>& fallback,
+        const std::string& context)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) return fallback;
+    if (!it->is_array() || it->size() != 2) {
+        Fail(context + "." + field
+                + " must be an array of exactly two numbers");
+    }
+    std::array<float, 2> phases{};
+    for (size_t index = 0; index < phases.size(); ++index) {
+        const Json& value = (*it)[index];
+        if (!value.is_number()) {
+            Fail(context + "." + field + " values must be numbers");
+        }
+        const double number = value.get<double>();
+        if (!std::isfinite(number)
+                || number < -std::numeric_limits<float>::max()
+                || number > std::numeric_limits<float>::max()) {
+            Fail(context + "." + field + " values must be finite floats");
+        }
+        phases[index] = static_cast<float>(number);
+    }
+    return phases;
+}
+
 int OptionalInt(
         const Json& object,
         const char* field,
@@ -156,6 +190,7 @@ const std::array<NpcActionMetadata, kNpcActionCount>& NpcActionMetadataTable()
             {NpcAction::Idle, "idle", "Idle", false, 0.0f, false},
             {NpcAction::Walk, "walk", "Walk", true, 1.5f, false},
             {NpcAction::Run, "run", "Run", true, 3.0f, false},
+            {NpcAction::Attack, "attack", "Attack", false, 0.0f, true},
             {NpcAction::Hurt, "hurt", "Hurt", false, 0.0f, true},
             {NpcAction::Death, "death", "Death", false, 0.0f, true}
     }};
@@ -263,6 +298,45 @@ bool ValidateNpcDefinition(
         outError = "NPC model must be a normalized .glb or .gltf path under assets/models/characters";
         return false;
     }
+    if (!definition.aiType.empty()
+            && !IsValidNpcDefinitionId(definition.aiType)) {
+        outError = "NPC AI type must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    if (!definition.aiType.empty()) {
+        const NpcAiTypeDescriptor* aiType = FindNpcAiType(definition.aiType);
+        if (aiType == nullptr) {
+            outError = "NPC AI type is not registered: " + definition.aiType;
+            return false;
+        }
+        if (!IsNpcAiTypeCompatible(*aiType, definition.hostile)) {
+            outError = "NPC AI type is incompatible with the Hostile setting";
+            return false;
+        }
+        if (definition.aiType == kSeekAndDestroyNpcAiType) {
+            const NpcActionDefinition& attack = GetNpcAction(
+                    definition, NpcAction::Attack);
+            if (attack.animation.empty() || attack.damage <= 0) {
+                outError = "Seek & Destroy NPCs require an Attack animation and positive damage";
+                return false;
+            }
+        }
+    }
+    const NpcPerceptionDefinition& perception = definition.perception;
+    if (!std::isfinite(perception.visionRangeWorld)
+            || perception.visionRangeWorld < 0.0f
+            || perception.visionRangeWorld > MaxWorldDistance
+            || !std::isfinite(perception.visionAngleDegrees)
+            || perception.visionAngleDegrees <= 0.0f
+            || perception.visionAngleDegrees >= 360.0f
+            || !std::isfinite(perception.hearingRangeWorld)
+            || perception.hearingRangeWorld < 0.0f
+            || perception.hearingRangeWorld > MaxWorldDistance
+            || perception.investigationDurationMilliseconds < 0
+            || perception.investigationDurationMilliseconds > 600000) {
+        outError = "NPC perception ranges must be finite and non-negative, vision angle must be between 0 and 360 degrees, and investigation duration must be between 0 and 600000 ms";
+        return false;
+    }
     if (definition.baseHealth < kMinimumNpcBaseHealth
             || definition.baseHealth > kMaximumNpcBaseHealth) {
         outError = "NPC base health must be between 1 and 1000000";
@@ -287,6 +361,12 @@ bool ValidateNpcDefinition(
             || definition.animationBlendSeconds < kMinimumNpcAnimationBlendSeconds
             || definition.animationBlendSeconds > kMaximumNpcAnimationBlendSeconds) {
         outError = "NPC animation blend time must be between 0.01 and 2 seconds";
+        return false;
+    }
+    if (!definition.playerDetectedSoundPath.empty()
+            && !IsValidNpcAudioPath(
+                    definition.playerDetectedSoundPath)) {
+        outError = "NPC player-detected sound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio";
         return false;
     }
     const NpcAmbientVocalizationDefinition& ambient =
@@ -318,6 +398,13 @@ bool ValidateNpcDefinition(
                     + " sound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio";
             return false;
         }
+        if (!action.attackSoundPath.empty()
+                && (metadata.action != NpcAction::Attack
+                    || !IsValidNpcAudioPath(action.attackSoundPath))) {
+            outError = std::string{"NPC "} + metadata.displayName
+                    + " attack sound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio";
+            return false;
+        }
         if (!std::isfinite(action.animationSpeed)
                 || action.animationSpeed < MinAnimationSpeed
                 || action.animationSpeed > MaxAnimationSpeed) {
@@ -332,6 +419,82 @@ bool ValidateNpcDefinition(
             outError = std::string{"NPC "} + metadata.displayName
                     + " movement speed must be between 0.1 and 200 world units per second";
             return false;
+        }
+        if (metadata.hasMovementSpeed) {
+            if (!std::isfinite(action.footstepPhases[0])
+                    || !std::isfinite(action.footstepPhases[1])
+                    || action.footstepPhases[0] < 0.0f
+                    || action.footstepPhases[0] >= 1.0f
+                    || action.footstepPhases[1] < 0.0f
+                    || action.footstepPhases[1] >= 1.0f
+                    || action.footstepPhases[0]
+                            >= action.footstepPhases[1]) {
+                outError = std::string{"NPC "} + metadata.displayName
+                        + " footstep phases must be ascending values between 0 and 1";
+                return false;
+            }
+        } else if (action.footstepPhases != kDefaultNpcFootstepPhases) {
+            outError = std::string{"NPC "} + metadata.displayName
+                    + " action cannot define footstep phases";
+            return false;
+        }
+        if (metadata.action == NpcAction::Attack
+                && (!std::isfinite(action.hitPhase)
+                    || action.hitPhase < 0.0f || action.hitPhase > 1.0f
+                    || !std::isfinite(action.rangeWorld)
+                    || action.rangeWorld <= 0.0f
+                    || action.rangeWorld > MaxWorldDistance
+                    || !std::isfinite(action.advanceSpeedMultiplier)
+                    || action.advanceSpeedMultiplier < 0.0f
+                    || action.advanceSpeedMultiplier
+                            > kMaximumNpcAttackAdvanceSpeedMultiplier
+                    || !std::isfinite(action.aimTrackingEndPhase)
+                    || action.aimTrackingEndPhase < 0.0f
+                    || action.aimTrackingEndPhase > action.hitPhase
+                    || !std::isfinite(action.hitArcDegrees)
+                    || action.hitArcDegrees <= 0.0f
+                    || action.hitArcDegrees > 360.0f
+                    || action.damage < 0 || action.damage > 1000000
+                    || !std::isfinite(action.knockbackImpulseWorldPerSecond)
+                    || action.knockbackImpulseWorldPerSecond < 0.0f
+                    || action.knockbackImpulseWorldPerSecond > MaxKnockbackImpulse
+                    || action.stunMilliseconds < 0
+                    || action.stunMilliseconds > MaxStunMilliseconds)) {
+            outError = "NPC Attack hit phase, range, advance, aim tracking, hit arc, damage, knockback, or stun is outside its supported range";
+            return false;
+        }
+        if (metadata.action == NpcAction::Attack) {
+            const NpcAttackCameraImpactDefinition& camera =
+                    action.cameraImpact;
+            if (!std::isfinite(camera.pitchKickDegrees)
+                    || camera.pitchKickDegrees < 0.0f
+                    || camera.pitchKickDegrees
+                            > kMaximumNpcAttackCameraImpactKickDegrees
+                    || !std::isfinite(camera.rollKickDegrees)
+                    || camera.rollKickDegrees < 0.0f
+                    || camera.rollKickDegrees
+                            > kMaximumNpcAttackCameraImpactKickDegrees
+                    || !std::isfinite(camera.springFrequencyHz)
+                    || camera.springFrequencyHz
+                            < kMinimumNpcAttackCameraImpactSpringFrequencyHz
+                    || camera.springFrequencyHz
+                            > kMaximumNpcAttackCameraImpactSpringFrequencyHz
+                    || !std::isfinite(camera.springDampingRatio)
+                    || camera.springDampingRatio
+                            < kMinimumNpcAttackCameraImpactSpringDampingRatio
+                    || camera.springDampingRatio
+                            > kMaximumNpcAttackCameraImpactSpringDampingRatio
+                    || !std::isfinite(camera.maxPitchDegrees)
+                    || camera.maxPitchDegrees < 0.0f
+                    || camera.maxPitchDegrees
+                            > kMaximumNpcAttackCameraImpactLimitDegrees
+                    || !std::isfinite(camera.maxRollDegrees)
+                    || camera.maxRollDegrees < 0.0f
+                    || camera.maxRollDegrees
+                            > kMaximumNpcAttackCameraImpactLimitDegrees) {
+                outError = "NPC Attack camera impact is outside its supported range";
+                return false;
+            }
         }
     }
     outError.clear();
@@ -348,10 +511,11 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "canOpenDoors",
+                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
-                 "animationBlendSeconds", "ambientVocalizations", "actions"},
+                 "animationBlendSeconds", "playerDetectedSound",
+                 "ambientVocalizations", "actions"},
                 "NPC definition");
 
         const Json& version = RequireField(root, "formatVersion", "NPC definition");
@@ -364,6 +528,7 @@ bool ParseNpcDefinitionJson(
         parsed.id = RequireString(root, "id", "NPC definition");
         parsed.name = OptionalString(root, "name", {}, "NPC definition");
         parsed.hostile = OptionalBool(root, "hostile", false, "NPC definition");
+        parsed.aiType = OptionalString(root, "aiType", {}, "NPC definition");
         parsed.canOpenDoors = OptionalBool(
                 root, "canOpenDoors", true, "NPC definition");
         parsed.baseHealth = OptionalInt(
@@ -386,6 +551,34 @@ bool ParseNpcDefinitionJson(
                 "animationBlendSeconds",
                 kDefaultNpcAnimationBlendSeconds,
                 "NPC definition");
+        parsed.playerDetectedSoundPath = OptionalString(
+                root,
+                "playerDetectedSound",
+                {},
+                "NPC definition");
+
+        const auto perception = root.find("perception");
+        if (perception != root.end()) {
+            const std::string context = "NPC definition.perception";
+            if (!perception->is_object()) Fail(context + " must be an object");
+            RejectUnknownFields(
+                    *perception,
+                    {"visionRangeWorld", "visionAngleDegrees", "hearingRangeWorld",
+                     "investigationDurationMilliseconds"},
+                    context);
+            parsed.perception.visionRangeWorld = OptionalFloat(
+                    *perception, "visionRangeWorld",
+                    kDefaultNpcVisionRangeWorld, context);
+            parsed.perception.visionAngleDegrees = OptionalFloat(
+                    *perception, "visionAngleDegrees",
+                    kDefaultNpcVisionAngleDegrees, context);
+            parsed.perception.hearingRangeWorld = OptionalFloat(
+                    *perception, "hearingRangeWorld",
+                    kDefaultNpcHearingRangeWorld, context);
+            parsed.perception.investigationDurationMilliseconds = OptionalInt(
+                    *perception, "investigationDurationMilliseconds",
+                    kDefaultNpcInvestigationDurationMilliseconds, context);
+        }
 
         const auto ambient = root.find("ambientVocalizations");
         if (ambient != root.end()) {
@@ -435,8 +628,23 @@ bool ParseNpcDefinitionJson(
             if (!it->is_object()) Fail(context + " must be an object");
             std::unordered_set<std::string> actionFields{
                     "animation", "animationSpeed"};
-            if (metadata.hasMovementSpeed) actionFields.insert("movementSpeed");
+            if (metadata.hasMovementSpeed) {
+                actionFields.insert("movementSpeed");
+                actionFields.insert("footstepPhases");
+            }
             if (metadata.hasSound) actionFields.insert("sound");
+            if (metadata.action == NpcAction::Attack) {
+                actionFields.insert("attackSound");
+                actionFields.insert("hitPhase");
+                actionFields.insert("rangeWorld");
+                actionFields.insert("advanceSpeedMultiplier");
+                actionFields.insert("aimTrackingEndPhase");
+                actionFields.insert("hitArcDegrees");
+                actionFields.insert("damage");
+                actionFields.insert("knockbackImpulseWorldPerSecond");
+                actionFields.insert("stunMilliseconds");
+                actionFields.insert("cameraImpact");
+            }
             RejectUnknownFields(
                     *it,
                     actionFields,
@@ -451,6 +659,72 @@ bool ParseNpcDefinitionJson(
             if (metadata.hasMovementSpeed) {
                 action.movementSpeed = OptionalFloat(
                         *it, "movementSpeed", action.movementSpeed, context);
+                action.footstepPhases = OptionalFootstepPhases(
+                        *it,
+                        "footstepPhases",
+                        action.footstepPhases,
+                        context);
+            }
+            if (metadata.action == NpcAction::Attack) {
+                action.attackSoundPath = OptionalString(
+                        *it, "attackSound", {}, context);
+                action.hitPhase = OptionalFloat(
+                        *it, "hitPhase", kDefaultNpcAttackHitPhase, context);
+                action.rangeWorld = OptionalFloat(
+                        *it, "rangeWorld", kDefaultNpcAttackRangeWorld, context);
+                action.advanceSpeedMultiplier = OptionalFloat(
+                        *it, "advanceSpeedMultiplier",
+                        kDefaultNpcAttackAdvanceSpeedMultiplier, context);
+                action.aimTrackingEndPhase = OptionalFloat(
+                        *it, "aimTrackingEndPhase",
+                        kDefaultNpcAttackAimTrackingEndPhase, context);
+                action.hitArcDegrees = OptionalFloat(
+                        *it, "hitArcDegrees",
+                        kDefaultNpcAttackHitArcDegrees, context);
+                action.damage = OptionalInt(
+                        *it, "damage", kDefaultNpcAttackDamage, context);
+                action.knockbackImpulseWorldPerSecond = OptionalFloat(
+                        *it, "knockbackImpulseWorldPerSecond",
+                        kDefaultNpcAttackKnockbackImpulseWorldPerSecond, context);
+                action.stunMilliseconds = OptionalInt(
+                        *it, "stunMilliseconds",
+                        kDefaultNpcAttackStunMilliseconds, context);
+                const auto cameraImpact = it->find("cameraImpact");
+                if (cameraImpact != it->end()) {
+                    const std::string cameraContext = context + ".cameraImpact";
+                    if (!cameraImpact->is_object()) {
+                        Fail(cameraContext + " must be an object");
+                    }
+                    RejectUnknownFields(
+                            *cameraImpact,
+                            {"enabled", "pitchKickDegrees", "rollKickDegrees",
+                                    "springFrequencyHz", "springDampingRatio",
+                                    "maxPitchDegrees", "maxRollDegrees"},
+                            cameraContext);
+                    NpcAttackCameraImpactDefinition& camera =
+                            action.cameraImpact;
+                    camera.enabled = OptionalBool(
+                            *cameraImpact, "enabled", camera.enabled,
+                            cameraContext);
+                    camera.pitchKickDegrees = OptionalFloat(
+                            *cameraImpact, "pitchKickDegrees",
+                            camera.pitchKickDegrees, cameraContext);
+                    camera.rollKickDegrees = OptionalFloat(
+                            *cameraImpact, "rollKickDegrees",
+                            camera.rollKickDegrees, cameraContext);
+                    camera.springFrequencyHz = OptionalFloat(
+                            *cameraImpact, "springFrequencyHz",
+                            camera.springFrequencyHz, cameraContext);
+                    camera.springDampingRatio = OptionalFloat(
+                            *cameraImpact, "springDampingRatio",
+                            camera.springDampingRatio, cameraContext);
+                    camera.maxPitchDegrees = OptionalFloat(
+                            *cameraImpact, "maxPitchDegrees",
+                            camera.maxPitchDegrees, cameraContext);
+                    camera.maxRollDegrees = OptionalFloat(
+                            *cameraImpact, "maxRollDegrees",
+                            camera.maxRollDegrees, cameraContext);
+                }
             }
         }
 
@@ -477,6 +751,7 @@ bool SerializeNpcDefinitionJson(
         root["id"] = definition.id;
         if (!definition.name.empty()) root["name"] = definition.name;
         if (definition.hostile) root["hostile"] = true;
+        if (!definition.aiType.empty()) root["aiType"] = definition.aiType;
         if (!definition.canOpenDoors) root["canOpenDoors"] = false;
         if (definition.baseHealth != kDefaultNpcBaseHealth) {
             root["baseHealth"] = definition.baseHealth;
@@ -495,6 +770,33 @@ bool SerializeNpcDefinitionJson(
         root["modelPath"] = definition.modelPath;
         if (definition.animationBlendSeconds != kDefaultNpcAnimationBlendSeconds) {
             root["animationBlendSeconds"] = definition.animationBlendSeconds;
+        }
+        if (!definition.playerDetectedSoundPath.empty()) {
+            root["playerDetectedSound"] =
+                    definition.playerDetectedSoundPath;
+        }
+        const NpcPerceptionDefinition& perception = definition.perception;
+        if (perception.visionRangeWorld != kDefaultNpcVisionRangeWorld
+                || perception.visionAngleDegrees != kDefaultNpcVisionAngleDegrees
+                || perception.hearingRangeWorld != kDefaultNpcHearingRangeWorld
+                || perception.investigationDurationMilliseconds
+                        != kDefaultNpcInvestigationDurationMilliseconds) {
+            Json perceptionJson = Json::object();
+            if (perception.visionRangeWorld != kDefaultNpcVisionRangeWorld) {
+                perceptionJson["visionRangeWorld"] = perception.visionRangeWorld;
+            }
+            if (perception.visionAngleDegrees != kDefaultNpcVisionAngleDegrees) {
+                perceptionJson["visionAngleDegrees"] = perception.visionAngleDegrees;
+            }
+            if (perception.hearingRangeWorld != kDefaultNpcHearingRangeWorld) {
+                perceptionJson["hearingRangeWorld"] = perception.hearingRangeWorld;
+            }
+            if (perception.investigationDurationMilliseconds
+                    != kDefaultNpcInvestigationDurationMilliseconds) {
+                perceptionJson["investigationDurationMilliseconds"] =
+                        perception.investigationDurationMilliseconds;
+            }
+            root["perception"] = std::move(perceptionJson);
         }
 
         const NpcAmbientVocalizationDefinition& ambient =
@@ -533,6 +835,94 @@ bool SerializeNpcDefinitionJson(
             }
             if (metadata.hasMovementSpeed) {
                 actionJson["movementSpeed"] = action.movementSpeed;
+                if (action.footstepPhases != kDefaultNpcFootstepPhases) {
+                    actionJson["footstepPhases"] = action.footstepPhases;
+                }
+            }
+            if (metadata.action == NpcAction::Attack) {
+                if (!action.attackSoundPath.empty()) {
+                    actionJson["attackSound"] = action.attackSoundPath;
+                }
+                if (action.hitPhase != kDefaultNpcAttackHitPhase) {
+                    actionJson["hitPhase"] = action.hitPhase;
+                }
+                if (action.rangeWorld != kDefaultNpcAttackRangeWorld) {
+                    actionJson["rangeWorld"] = action.rangeWorld;
+                }
+                if (action.advanceSpeedMultiplier
+                        != kDefaultNpcAttackAdvanceSpeedMultiplier) {
+                    actionJson["advanceSpeedMultiplier"] =
+                            action.advanceSpeedMultiplier;
+                }
+                if (action.aimTrackingEndPhase
+                        != kDefaultNpcAttackAimTrackingEndPhase) {
+                    actionJson["aimTrackingEndPhase"] =
+                            action.aimTrackingEndPhase;
+                }
+                if (action.hitArcDegrees
+                        != kDefaultNpcAttackHitArcDegrees) {
+                    actionJson["hitArcDegrees"] = action.hitArcDegrees;
+                }
+                if (action.damage != kDefaultNpcAttackDamage) {
+                    actionJson["damage"] = action.damage;
+                }
+                if (action.knockbackImpulseWorldPerSecond
+                        != kDefaultNpcAttackKnockbackImpulseWorldPerSecond) {
+                    actionJson["knockbackImpulseWorldPerSecond"] =
+                            action.knockbackImpulseWorldPerSecond;
+                }
+                if (action.stunMilliseconds != kDefaultNpcAttackStunMilliseconds) {
+                    actionJson["stunMilliseconds"] = action.stunMilliseconds;
+                }
+                const NpcAttackCameraImpactDefinition& camera =
+                        action.cameraImpact;
+                if (camera.enabled != kDefaultNpcAttackCameraImpactEnabled
+                        || camera.pitchKickDegrees
+                                != kDefaultNpcAttackCameraImpactPitchKickDegrees
+                        || camera.rollKickDegrees
+                                != kDefaultNpcAttackCameraImpactRollKickDegrees
+                        || camera.springFrequencyHz
+                                != kDefaultNpcAttackCameraImpactSpringFrequencyHz
+                        || camera.springDampingRatio
+                                != kDefaultNpcAttackCameraImpactSpringDampingRatio
+                        || camera.maxPitchDegrees
+                                != kDefaultNpcAttackCameraImpactMaxPitchDegrees
+                        || camera.maxRollDegrees
+                                != kDefaultNpcAttackCameraImpactMaxRollDegrees) {
+                    Json cameraJson = Json::object();
+                    if (camera.enabled
+                            != kDefaultNpcAttackCameraImpactEnabled) {
+                        cameraJson["enabled"] = camera.enabled;
+                    }
+                    if (camera.pitchKickDegrees
+                            != kDefaultNpcAttackCameraImpactPitchKickDegrees) {
+                        cameraJson["pitchKickDegrees"] =
+                                camera.pitchKickDegrees;
+                    }
+                    if (camera.rollKickDegrees
+                            != kDefaultNpcAttackCameraImpactRollKickDegrees) {
+                        cameraJson["rollKickDegrees"] = camera.rollKickDegrees;
+                    }
+                    if (camera.springFrequencyHz
+                            != kDefaultNpcAttackCameraImpactSpringFrequencyHz) {
+                        cameraJson["springFrequencyHz"] =
+                                camera.springFrequencyHz;
+                    }
+                    if (camera.springDampingRatio
+                            != kDefaultNpcAttackCameraImpactSpringDampingRatio) {
+                        cameraJson["springDampingRatio"] =
+                                camera.springDampingRatio;
+                    }
+                    if (camera.maxPitchDegrees
+                            != kDefaultNpcAttackCameraImpactMaxPitchDegrees) {
+                        cameraJson["maxPitchDegrees"] = camera.maxPitchDegrees;
+                    }
+                    if (camera.maxRollDegrees
+                            != kDefaultNpcAttackCameraImpactMaxRollDegrees) {
+                        cameraJson["maxRollDegrees"] = camera.maxRollDegrees;
+                    }
+                    actionJson["cameraImpact"] = std::move(cameraJson);
+                }
             }
             actions[metadata.jsonKey] = std::move(actionJson);
         }

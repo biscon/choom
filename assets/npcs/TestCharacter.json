@@ -11,11 +11,16 @@
     },
     "walk": {
       "animation": "Standard Walk",
-      "movementSpeed": 1.5
+      "movementSpeed": 1.5,
+      "footstepPhases": [
+        0.3199999928474426,
+        0.8199999928474426
+      ]
     },
     "run": {
       "movementSpeed": 3.0
     },
+    "attack": {},
     "hurt": {},
     "death": {}
   }

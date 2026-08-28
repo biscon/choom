@@ -41,13 +41,25 @@ struct AudioSpatialization {
     float pan = 0.0f;
 };
 
-using PositionalSoundOcclusionQuery = float (*)(
+inline constexpr float AudioUnfilteredLowPassCutoffHz = 20000.0f;
+
+struct PositionalSoundPropagation {
+    Vector3 apparentPosition{};
+    float distanceWorld = 0.0f;
+    float volumeScale = 1.0f;
+    float lowPassCutoffHz = AudioUnfilteredLowPassCutoffHz;
+};
+
+using PositionalSoundPropagationQuery = PositionalSoundPropagation (*)(
         void* context,
         Vector3 listenerPosition,
-        Vector3 sourcePosition);
+        const PositionalSoundSettings& source);
 
 AudioSpatialization ComputeAudioSpatialization(
         const AudioListener& listener,
+        const PositionalSoundSettings& source);
+float ComputeAudioDistanceAttenuation(
+        float distanceWorld,
         const PositionalSoundSettings& source);
 
 class AudioSystem {
@@ -66,10 +78,10 @@ public:
 
     void SetListener(const AudioListener& value);
     const AudioListener& Listener() const { return listener; }
-    void UpdatePositionalSoundOcclusion(
+    void UpdatePositionalSoundPropagation(
             float dt,
             void* queryContext,
-            PositionalSoundOcclusionQuery query);
+            PositionalSoundPropagationQuery query);
     void Update(AssetManager& assets);
 
     SoundPlaybackHandle PlaySound(
@@ -120,10 +132,10 @@ private:
         uint64_t sequence = 0;
         SoundPlaybackSettings settings;
         PositionalSoundSettings positionalSettings;
-        float occlusionVolumeScale = 1.0f;
-        float occlusionTargetScale = 1.0f;
-        float occlusionQueryRemainingSeconds = 0.0f;
-        bool occlusionInitialized = false;
+        PositionalSoundPropagation propagation;
+        PositionalSoundPropagation propagationTarget;
+        float propagationQueryRemainingSeconds = 0.0f;
+        bool propagationInitialized = false;
     };
 
     struct MusicPlaybackSlot {
@@ -133,10 +145,10 @@ private:
         MusicHandle music = NullMusicHandle();
         MusicPlaybackSettings settings;
         PositionalSoundSettings positionalSettings;
-        float occlusionVolumeScale = 1.0f;
-        float occlusionTargetScale = 1.0f;
-        float occlusionQueryRemainingSeconds = 0.0f;
-        bool occlusionInitialized = false;
+        PositionalSoundPropagation propagation;
+        PositionalSoundPropagation propagationTarget;
+        float propagationQueryRemainingSeconds = 0.0f;
+        bool propagationInitialized = false;
     };
 
     SoundPlaybackHandle PlaySoundInternal(

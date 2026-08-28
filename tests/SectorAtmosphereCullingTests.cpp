@@ -34,6 +34,19 @@ void TestProjectedScissors()
     assert(game::SectorAtmosphereScissorCoverage(visible, 100, 100) > 0.0f);
     assert(game::SectorAtmosphereScissorCoverage(visible, 100, 100) < 1.0f);
 
+    const game::SectorAtmosphereScissorRect crossingEdge =
+            game::ProjectSectorAtmosphereBoundsToScissor(
+                    camera,
+                    1.0f,
+                    0.1f,
+                    Vector3{3.9f, -1.0f, 4.0f},
+                    Vector3{5.0f, 1.0f, 6.0f},
+                    100,
+                    100);
+    assert(!crossingEdge.Empty());
+    assert(crossingEdge.x == 0
+            || crossingEdge.x + crossingEdge.width == 100);
+
     const game::SectorAtmosphereScissorRect offscreen =
             game::ProjectSectorAtmosphereBoundsToScissor(
                     camera,

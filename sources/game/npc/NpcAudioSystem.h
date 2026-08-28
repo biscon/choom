@@ -20,6 +20,7 @@ struct NpcDefinitionCatalog;
 
 enum class NpcVocalEvent : uint8_t {
     None,
+    PlayerDetected,
     Hurt,
     Death
 };
@@ -27,6 +28,7 @@ enum class NpcVocalEvent : uint8_t {
 enum class NpcVocalPlaybackKind : uint8_t {
     None,
     Ambient,
+    PlayerDetected,
     Hurt,
     Death
 };
@@ -35,6 +37,7 @@ struct NpcAudioRecord {
     engine::Entity entity = engine::NullEntity();
     engine::SoundHandle hurtSound = engine::NullSoundHandle();
     engine::SoundHandle deathSound = engine::NullSoundHandle();
+    engine::SoundHandle playerDetectedSound = engine::NullSoundHandle();
     LoadedSoundSet ambientSounds;
     SoundSetPlaybackState ambientPlayback;
     engine::SoundPlaybackHandle vocalPlayback =

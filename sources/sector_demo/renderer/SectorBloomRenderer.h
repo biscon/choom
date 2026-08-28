@@ -18,6 +18,11 @@ enum class SectorBloomDebugView {
     SceneAfter
 };
 
+constexpr bool IsSectorBloomDiagnosticView(SectorBloomDebugView view)
+{
+    return view != SectorBloomDebugView::Normal;
+}
+
 struct SectorBloomDiagnostics {
     bool ready = false;
     bool disabled = false;
