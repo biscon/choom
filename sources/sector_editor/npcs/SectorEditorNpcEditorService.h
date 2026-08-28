@@ -54,6 +54,10 @@ public:
     void SetSelectedAttackSound(const std::string& soundPath);
     void SetSelectedAnimationSpeed(NpcAction action, float speed);
     void SetSelectedMovementSpeed(NpcAction action, float speed);
+    void SetSelectedFootstepPhase(
+            NpcAction action,
+            size_t phaseIndex,
+            float phase);
     void SetSelectedAttack(
             float hitPhase,
             float rangeWorld,

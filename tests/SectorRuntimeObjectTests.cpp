@@ -5643,12 +5643,12 @@ void TestNpcFootstepCadenceUsesResolvedTravel()
 {
     game::NpcNavigationRecord record;
     record.gait = game::NpcMoveGait::Walk;
-    Check(!game::UpdateNpcFootstepCadence(record, true, 1.0f)
-                  && Near(record.footstepDistanceWorld, 1.0f),
-          "NPC walk cadence accumulates partial resolved travel");
-    Check(game::UpdateNpcFootstepCadence(record, true, 0.5f)
+    Check(!game::UpdateNpcFootstepCadence(record, true, 0.5f)
+                  && Near(record.footstepDistanceWorld, 0.5f),
+          "NPC fallback walk cadence accumulates partial resolved travel");
+    Check(game::UpdateNpcFootstepCadence(record, true, 0.25f)
                   && record.footstepEvent,
-          "NPC walk cadence emits at the player walk stride");
+          "NPC fallback walk cadence emits twice per former full stride");
     Check(!game::UpdateNpcFootstepCadence(record, true, 0.0f)
                   && !record.footstepEvent,
           "stationary NPC frames do not emit footsteps");
@@ -5662,10 +5662,44 @@ void TestNpcFootstepCadenceUsesResolvedTravel()
                   && Near(record.footstepDistanceWorld, 0.0f),
           "inactive NPC movement resets footstep cadence");
     record.gait = game::NpcMoveGait::Run;
-    Check(!game::UpdateNpcFootstepCadence(record, true, 2.3f),
-          "NPC run cadence waits for the player run stride");
+    Check(!game::UpdateNpcFootstepCadence(record, true, 1.0f),
+          "NPC fallback run cadence waits for its two-foot step spacing");
     Check(game::UpdateNpcFootstepCadence(record, true, 0.2f),
           "NPC run cadence emits after enough resolved travel");
+}
+
+void TestNpcFootstepAnimationPhaseCrossings()
+{
+    constexpr std::array<float, 2> Phases{0.2f, 0.7f};
+    game::NpcNavigationRecord record;
+    Check(!game::UpdateNpcFootstepAnimationPhase(
+                  record, true, 3, 0.1f, 0.1f, Phases),
+          "first NPC animation phase sample initializes without a false step");
+    Check(game::UpdateNpcFootstepAnimationPhase(
+                  record, true, 3, 0.25f, 0.15f, Phases),
+          "NPC animation phase emits at the first foot contact");
+    Check(!game::UpdateNpcFootstepAnimationPhase(
+                  record, true, 3, 0.6f, 0.35f, Phases),
+          "NPC animation phase remains quiet between contacts");
+    Check(game::UpdateNpcFootstepAnimationPhase(
+                  record, true, 3, 0.75f, 0.15f, Phases),
+          "NPC animation phase emits at the second foot contact");
+    Check(!game::UpdateNpcFootstepAnimationPhase(
+                  record, true, 3, 0.05f, 0.3f, Phases),
+          "NPC animation loop wrap remains quiet before the first contact");
+    Check(game::UpdateNpcFootstepAnimationPhase(
+                  record, true, 3, 0.25f, 0.2f, Phases),
+          "NPC animation loop wrap emits the next first-foot contact");
+    Check(!game::UpdateNpcFootstepAnimationPhase(
+                  record, true, 4, 0.75f, 0.5f, Phases),
+          "changing NPC locomotion clips resets phase without a false step");
+    Check(game::UpdateNpcFootstepAnimationPhase(
+                  record, true, 4, 0.8f, 1.1f, Phases),
+          "large animation advances emit at most one bounded step event");
+    Check(!game::UpdateNpcFootstepAnimationPhase(
+                  record, false, 4, 0.9f, 0.1f, Phases)
+                  && !record.footstepPhaseValid,
+          "inactive NPC locomotion clears animation footstep phase state");
 }
 
 void TestNpcAiDebugGeometryAndLabelsExposeRuntimeState()
@@ -6788,6 +6822,9 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
     walkerNavigationRecord->desiredVelocity = {1.5f, -0.25f};
     walkerNavigationRecord->actualVelocity = {1.25f, -0.5f};
     walkerNavigationRecord->footstepDistanceWorld = 0.37f;
+    walkerNavigationRecord->footstepPreviousPhase = 0.42f;
+    walkerNavigationRecord->footstepAnimationIndex = 7;
+    walkerNavigationRecord->footstepPhaseValid = true;
     walkerNavigationRecord->footstepEvent = true;
     const game::NpcMoveRequestResult successfulRetarget =
             game::RetargetNpcAiMove(
@@ -6805,6 +6842,9 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
                   && Near(walkerNavigationRecord->actualVelocity.x, 1.25f)
                   && Near(walkerNavigationRecord->actualVelocity.y, -0.5f)
                   && Near(walkerNavigationRecord->footstepDistanceWorld, 0.37f)
+                  && Near(walkerNavigationRecord->footstepPreviousPhase, 0.42f)
+                  && walkerNavigationRecord->footstepAnimationIndex == 7
+                  && walkerNavigationRecord->footstepPhaseValid
                   && !walkerNavigationRecord->footstepEvent,
           "successful active AI retarget preserves movement momentum and footstep cadence");
     Check(game::CancelNpcMove(
@@ -6818,6 +6858,9 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
     walkerNavigationRecord->desiredVelocity = {2.0f, 1.0f};
     walkerNavigationRecord->actualVelocity = {1.0f, 0.5f};
     walkerNavigationRecord->footstepDistanceWorld = 0.5f;
+    walkerNavigationRecord->footstepPreviousPhase = 0.75f;
+    walkerNavigationRecord->footstepAnimationIndex = 9;
+    walkerNavigationRecord->footstepPhaseValid = true;
     const game::NpcMoveRequestResult freshAiMove = game::RetargetNpcAiMove(
             world,
             navigation,
@@ -6831,7 +6874,8 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
                   && Near(walkerNavigationRecord->desiredVelocity.y, 0.0f)
                   && Near(walkerNavigationRecord->actualVelocity.x, 0.0f)
                   && Near(walkerNavigationRecord->actualVelocity.y, 0.0f)
-                  && Near(walkerNavigationRecord->footstepDistanceWorld, 0.0f),
+                  && Near(walkerNavigationRecord->footstepDistanceWorld, 0.0f)
+                  && !walkerNavigationRecord->footstepPhaseValid,
           "a fresh AI movement request still initializes locomotion from rest");
     Check(game::CancelNpcMove(
                   world,
@@ -10660,6 +10704,7 @@ int main()
     TestDynamicModelColliderCollectionIsSeparatedForNavigation();
     TestSpawnNpcResolvesDefinitionAndIdlePlayback();
     TestNpcFootstepCadenceUsesResolvedTravel();
+    TestNpcFootstepAnimationPhaseCrossings();
     TestNpcAiDebugGeometryAndLabelsExposeRuntimeState();
     TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
     TestNpcCommittedAttackAdvanceUsesRunSpeedAndCollision();

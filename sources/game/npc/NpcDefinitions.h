@@ -52,6 +52,8 @@ inline constexpr float kMinimumNpcAttackCameraImpactSpringDampingRatio = 0.1f;
 inline constexpr float kMaximumNpcAttackCameraImpactSpringDampingRatio = 3.0f;
 inline constexpr float kMaximumNpcAttackCameraImpactKickDegrees = 45.0f;
 inline constexpr float kMaximumNpcAttackCameraImpactLimitDegrees = 90.0f;
+inline constexpr std::array<float, 2> kDefaultNpcFootstepPhases{
+        0.0f, 0.5f};
 
 enum class NpcAction {
     Idle,
@@ -93,6 +95,7 @@ struct NpcActionDefinition {
     std::string attackSoundPath;
     float animationSpeed = 1.0f;
     float movementSpeed = 0.0f;
+    std::array<float, 2> footstepPhases = kDefaultNpcFootstepPhases;
     float hitPhase = kDefaultNpcAttackHitPhase;
     float rangeWorld = kDefaultNpcAttackRangeWorld;
     float advanceSpeedMultiplier =

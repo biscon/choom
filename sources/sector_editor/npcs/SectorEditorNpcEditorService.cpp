@@ -38,6 +38,7 @@ bool SameAction(
             && left.attackSoundPath == right.attackSoundPath
             && left.animationSpeed == right.animationSpeed
             && left.movementSpeed == right.movementSpeed
+            && left.footstepPhases == right.footstepPhases
             && left.hitPhase == right.hitPhase
             && left.rangeWorld == right.rangeWorld
             && left.advanceSpeedMultiplier == right.advanceSpeedMultiplier
@@ -529,6 +530,21 @@ void SectorEditorNpcEditorService::SetSelectedMovementSpeed(
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedFootstepPhase(
+        NpcAction action,
+        size_t phaseIndex,
+        float phase)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr
+            || !GetNpcActionMetadata(action).hasMovementSpeed
+            || phaseIndex >= 2) {
+        return;
+    }
+    GetNpcAction(draft->definition, action).footstepPhases[phaseIndex] = phase;
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedAttack(
         float hitPhase,
         float rangeWorld,
@@ -761,6 +777,7 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.corpseFadeDurationMillisecondsInput = {};
     state_.animationSpeedInputs = {};
     state_.movementSpeedInputs = {};
+    state_.footstepPhaseInputs = {};
 }
 
 void SectorEditorNpcEditorService::RebuildListLabels()

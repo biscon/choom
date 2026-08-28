@@ -95,9 +95,13 @@ enters melee within `0.10` world units beyond the authored range and remains
 engaged until `0.25` world units beyond it. This cancels chase before crowd and
 physical stopping tolerances can oscillate at a single exact boundary.
 Successful pursuit retargets replace the path atomically while preserving the
-NPC's current steering velocity and accumulated footstep distance. Only a new
-AI move starts those locomotion values from rest, so frequent moving-target
-updates do not repeatedly force the Crowd agent to accelerate from zero.
+NPC's current steering velocity and footstep animation phase. Walk and Run
+actions author two normalized foot-contact phases. Runtime locomotion emits a
+footstep when the active animation, including an incoming blend target, crosses
+either phase after resolved horizontal movement. Missing animation data falls
+back to two-foot distance cadence. Only a new AI move starts locomotion state
+from rest, so frequent moving-target updates do not repeatedly force the Crowd
+agent to accelerate or restart its footstep cycle.
 
 An attack is committed for its full non-looping animation. The authored
 advance-speed multiplier begins windup movement from the NPC's Run speed and

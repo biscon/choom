@@ -308,6 +308,15 @@ void SectorSceneRuntime::Update(
                 dt,
                 playerObstacle,
                 npcGameplay != nullptr && npcGameplay->frozen);
+    }
+    engine::AnimatedModelSystem(context.world, context.assets, dt);
+    if (runtimeObjects.objectSectorLookupWorldValid) {
+        UpdateNpcFootstepEventsSystem(
+                context.world,
+                context.assets,
+                npcNavigation,
+                runtimeObjects.npcDefinitionCatalog,
+                dt);
         PlayPendingNpcFootsteps(context);
     }
     UpdateNpcAudioSystem(
@@ -328,7 +337,6 @@ void SectorSceneRuntime::Update(
             dt,
             &audioOcclusion,
             QuerySectorSoundPropagation);
-    engine::AnimatedModelSystem(context.world, context.assets, dt);
     impactParticles.Update(context.world, &context.assets, dt);
     renderer.AdvanceRuntime(dt);
 }

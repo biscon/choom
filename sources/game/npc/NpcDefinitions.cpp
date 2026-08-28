@@ -126,6 +126,35 @@ float OptionalFloat(
     return static_cast<float>(number);
 }
 
+std::array<float, 2> OptionalFootstepPhases(
+        const Json& object,
+        const char* field,
+        const std::array<float, 2>& fallback,
+        const std::string& context)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) return fallback;
+    if (!it->is_array() || it->size() != 2) {
+        Fail(context + "." + field
+                + " must be an array of exactly two numbers");
+    }
+    std::array<float, 2> phases{};
+    for (size_t index = 0; index < phases.size(); ++index) {
+        const Json& value = (*it)[index];
+        if (!value.is_number()) {
+            Fail(context + "." + field + " values must be numbers");
+        }
+        const double number = value.get<double>();
+        if (!std::isfinite(number)
+                || number < -std::numeric_limits<float>::max()
+                || number > std::numeric_limits<float>::max()) {
+            Fail(context + "." + field + " values must be finite floats");
+        }
+        phases[index] = static_cast<float>(number);
+    }
+    return phases;
+}
+
 int OptionalInt(
         const Json& object,
         const char* field,
@@ -391,6 +420,24 @@ bool ValidateNpcDefinition(
                     + " movement speed must be between 0.1 and 200 world units per second";
             return false;
         }
+        if (metadata.hasMovementSpeed) {
+            if (!std::isfinite(action.footstepPhases[0])
+                    || !std::isfinite(action.footstepPhases[1])
+                    || action.footstepPhases[0] < 0.0f
+                    || action.footstepPhases[0] >= 1.0f
+                    || action.footstepPhases[1] < 0.0f
+                    || action.footstepPhases[1] >= 1.0f
+                    || action.footstepPhases[0]
+                            >= action.footstepPhases[1]) {
+                outError = std::string{"NPC "} + metadata.displayName
+                        + " footstep phases must be ascending values between 0 and 1";
+                return false;
+            }
+        } else if (action.footstepPhases != kDefaultNpcFootstepPhases) {
+            outError = std::string{"NPC "} + metadata.displayName
+                    + " action cannot define footstep phases";
+            return false;
+        }
         if (metadata.action == NpcAction::Attack
                 && (!std::isfinite(action.hitPhase)
                     || action.hitPhase < 0.0f || action.hitPhase > 1.0f
@@ -581,7 +628,10 @@ bool ParseNpcDefinitionJson(
             if (!it->is_object()) Fail(context + " must be an object");
             std::unordered_set<std::string> actionFields{
                     "animation", "animationSpeed"};
-            if (metadata.hasMovementSpeed) actionFields.insert("movementSpeed");
+            if (metadata.hasMovementSpeed) {
+                actionFields.insert("movementSpeed");
+                actionFields.insert("footstepPhases");
+            }
             if (metadata.hasSound) actionFields.insert("sound");
             if (metadata.action == NpcAction::Attack) {
                 actionFields.insert("attackSound");
@@ -609,6 +659,11 @@ bool ParseNpcDefinitionJson(
             if (metadata.hasMovementSpeed) {
                 action.movementSpeed = OptionalFloat(
                         *it, "movementSpeed", action.movementSpeed, context);
+                action.footstepPhases = OptionalFootstepPhases(
+                        *it,
+                        "footstepPhases",
+                        action.footstepPhases,
+                        context);
             }
             if (metadata.action == NpcAction::Attack) {
                 action.attackSoundPath = OptionalString(
@@ -780,6 +835,9 @@ bool SerializeNpcDefinitionJson(
             }
             if (metadata.hasMovementSpeed) {
                 actionJson["movementSpeed"] = action.movementSpeed;
+                if (action.footstepPhases != kDefaultNpcFootstepPhases) {
+                    actionJson["footstepPhases"] = action.footstepPhases;
+                }
             }
             if (metadata.action == NpcAction::Attack) {
                 if (!action.attackSoundPath.empty()) {

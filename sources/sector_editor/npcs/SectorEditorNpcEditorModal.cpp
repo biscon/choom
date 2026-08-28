@@ -916,6 +916,37 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                     editor.SetSelectedMovementSpeed(metadata.action, movementSpeed);
                 }
                 y += RowHeight + RowGap;
+
+                for (size_t phaseIndex = 0; phaseIndex < 2; ++phaseIndex) {
+                    const std::string label = std::string{"Footstep "}
+                            + std::to_string(phaseIndex + 1) + " phase";
+                    drawLabel(label.c_str());
+                    float phase = action.footstepPhases[phaseIndex];
+                    const std::string phaseId =
+                            std::string{"sector_editor_npc_footstep_phase_"}
+                            + metadata.jsonKey + "_"
+                            + std::to_string(phaseIndex);
+                    const engine::UINumericInputResult phaseResult =
+                            engine::FloatInput(
+                                    ui, config, input, assets,
+                                    phaseId.c_str(),
+                                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                                    font,
+                                    phase,
+                                    state.footstepPhaseInputs[
+                                            static_cast<size_t>(metadata.action)]
+                                            [phaseIndex],
+                                    0.0f,
+                                    0.999f,
+                                    3);
+                    if (phaseResult.changed) {
+                        editor.SetSelectedFootstepPhase(
+                                metadata.action,
+                                phaseIndex,
+                                phase);
+                    }
+                    y += RowHeight + RowGap;
+                }
             }
 
             if (metadata.action == NpcAction::Attack) {

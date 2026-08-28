@@ -133,6 +133,21 @@ bool UpdateNpcFootstepCadence(
         bool active,
         float resolvedHorizontalDistance);
 
+bool UpdateNpcFootstepAnimationPhase(
+        NpcNavigationRecord& record,
+        bool active,
+        uint32_t animationIndex,
+        float normalizedPhase,
+        float normalizedPhaseAdvance,
+        const std::array<float, 2>& footstepPhases);
+
+void UpdateNpcFootstepEventsSystem(
+        engine::World& world,
+        engine::AssetManager& assets,
+        NpcNavigationRuntime& runtime,
+        const NpcDefinitionCatalog& definitions,
+        float dt);
+
 // Returns a unit presentation-facing direction, or zero when path intent does
 // not provide a stable direction and the caller should preserve current yaw.
 Vector2 ResolveNpcLocomotionFacingDirection(

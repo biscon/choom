@@ -80,6 +80,9 @@ void TestRoundTripDefaultsAndSharedClips()
     original.perception.hearingRangeWorld = 9.0f;
     original.perception.investigationDurationMilliseconds = 2750;
     original.playerDetectedSoundPath = "npc/zombie/player_detected.wav";
+    game::GetNpcAction(
+            original,
+            game::NpcAction::Walk).footstepPhases = {0.12f, 0.60f};
     game::NpcActionDefinition& attack = game::GetNpcAction(
             original, game::NpcAction::Attack);
     attack.hitPhase = 0.6f;
@@ -118,6 +121,12 @@ void TestRoundTripDefaultsAndSharedClips()
     Check(document["formatVersion"] == 1
                   && Near(document["animationBlendSeconds"].get<float>(), 0.35f)
                   && document["actions"]["walk"]["animation"] == "Walk"
+                  && Near(document["actions"]["walk"]
+                                  ["footstepPhases"][0].get<float>(),
+                          0.12f)
+                  && Near(document["actions"]["walk"]
+                                  ["footstepPhases"][1].get<float>(),
+                          0.60f)
                   && document["actions"]["run"]["animation"] == "Walk"
                   && document["actions"]["attack"]["animation"] == "Attack"
                   && document["actions"]["attack"]["damage"] == 23
@@ -190,6 +199,14 @@ void TestRoundTripDefaultsAndSharedClips()
                           parsed, game::NpcAction::Death).soundPath
                           == "npc/zombie/death.mp3"
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation == "Walk"
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Walk).footstepPhases[0],
+                          0.12f)
+                  && Near(game::GetNpcAction(
+                                  parsed,
+                                  game::NpcAction::Walk).footstepPhases[1],
+                          0.60f)
                   && game::GetNpcAction(parsed, game::NpcAction::Run).animation == "Walk"
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Run).animationSpeed, 1.6f)
                   && game::GetNpcAction(parsed, game::NpcAction::Attack).damage == 23
@@ -249,6 +266,13 @@ void TestRoundTripDefaultsAndSharedClips()
                   && !Json::parse(json)["actions"]["attack"]
                           .contains("hitArcDegrees"),
           "default combat, blend, and door fields are omitted from serialized definitions");
+    Check(!Json::parse(json)["actions"]["walk"]
+                          .contains("footstepPhases")
+                  && game::GetNpcAction(
+                          defaults,
+                          game::NpcAction::Walk).footstepPhases
+                          == game::kDefaultNpcFootstepPhases,
+          "default NPC footstep phases remain backward-compatible and are omitted");
 
     Json partialCamera = Json::parse(R"({
         "formatVersion": 1,
@@ -316,6 +340,24 @@ void TestValidation()
     game::GetNpcAction(definition, game::NpcAction::Run).movementSpeed = 201.0f;
     Check(!game::ValidateNpcDefinition(definition, error),
           "out-of-range movement speed is rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Walk).footstepPhases = {0.8f, 0.2f};
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "unordered NPC footstep phases are rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Run).footstepPhases = {0.2f, 1.0f};
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "out-of-range NPC footstep phases are rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition,
+            game::NpcAction::Idle).footstepPhases = {0.1f, 0.6f};
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "non-locomotion actions cannot define footstep phases");
     definition = MakeDefinition("fred");
     game::GetNpcAction(
             definition,
@@ -407,6 +449,26 @@ void TestValidation()
     Check(!game::ParseNpcDefinitionJson(
                   invalidActionSound.dump(), definition, error),
           "non-vocal action sound field is rejected by the JSON parser");
+
+    Json invalidFootstepCount = Json::parse(R"({
+        "formatVersion": 1,
+        "id": "fred",
+        "modelPath": "assets/models/characters/Fred.glb",
+        "actions": {"walk": {"footstepPhases": [0.25]}}
+    })");
+    Check(!game::ParseNpcDefinitionJson(
+                  invalidFootstepCount.dump(), definition, error),
+          "footstep phase JSON requires exactly two values");
+
+    Json invalidIdleFootsteps = Json::parse(R"({
+        "formatVersion": 1,
+        "id": "fred",
+        "modelPath": "assets/models/characters/Fred.glb",
+        "actions": {"idle": {"footstepPhases": [0.0, 0.5]}}
+    })");
+    Check(!game::ParseNpcDefinitionJson(
+                  invalidIdleFootsteps.dump(), definition, error),
+          "footstep phase JSON is rejected for non-locomotion actions");
 
     Json unknownCameraField = Json::parse(R"({
         "formatVersion": 1,
@@ -558,6 +620,8 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
     cameraImpact.rollKickDegrees = 7.5f;
     cameraImpact.springDampingRatio = 0.6f;
     service.SetSelectedAttackCameraImpact(cameraImpact);
+    service.SetSelectedFootstepPhase(game::NpcAction::Walk, 0, 0.15f);
+    service.SetSelectedFootstepPhase(game::NpcAction::Walk, 1, 0.65f);
     service.SetSelectedAmbientDelayRange(6.0f, 11.0f);
     Check(service.AddSelectedAmbientSound("npc/zombie/moan_01.wav")
                   && !service.AddSelectedAmbientSound(
@@ -603,6 +667,14 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                                   game::NpcAction::Attack).cameraImpact
                                   .springDampingRatio,
                           0.6f)
+                  && Near(game::GetNpcAction(
+                                  service.SelectedDraft()->definition,
+                                  game::NpcAction::Walk).footstepPhases[0],
+                          0.15f)
+                  && Near(game::GetNpcAction(
+                                  service.SelectedDraft()->definition,
+                                  game::NpcAction::Walk).footstepPhases[1],
+                          0.65f)
                   && Near(service.SelectedDraft()->definition
                                   .ambientVocalizations.minimumDelaySeconds,
                           6.0f)

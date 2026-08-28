@@ -32,6 +32,8 @@ constexpr float TurnRateRadiansPerSecond = 6.283185307179586f;
 constexpr float ActualMotionFacingInfluence = 0.35f;
 constexpr float VisualStepSmoothingRate = 16.0f;
 constexpr float VisualOffsetEpsilon = 0.0001f;
+constexpr float NpcWalkFallbackStepDistanceWorld = 0.75f;
+constexpr float NpcRunFallbackStepDistanceWorld = 1.20f;
 constexpr float PlayerAvoidancePredictionSeconds = 1.25f;
 constexpr float PlayerAvoidancePadding = 0.15f;
 
@@ -39,6 +41,13 @@ size_t ActionIndex(NpcAction action)
 {
     const size_t index = static_cast<size_t>(action);
     return index < kNpcActionCount ? index : 0;
+}
+
+void ClearNpcFootstepAnimationPhase(NpcNavigationRecord& record)
+{
+    record.footstepPreviousPhase = 0.0f;
+    record.footstepAnimationIndex = engine::InvalidModelAnimationIndex;
+    record.footstepPhaseValid = false;
 }
 
 void SetDiagnostic(NpcNavigationRecord& record, const char* message)
@@ -897,6 +906,8 @@ static NpcMoveRequestResult RequestNpcMoveRecord(
     record->desiredVelocity = {};
     record->actualVelocity = {};
     record->footstepDistanceWorld = 0.0f;
+    ClearNpcFootstepAnimationPhase(*record);
+    record->footstepMovementActive = false;
     record->footstepEvent = false;
     ResetProgressTracking(*record);
     record->replanCooldownSeconds = 0.0f;
@@ -1039,6 +1050,8 @@ NpcMoveRequestResult RetargetNpcAiMove(
         record->desiredVelocity = {};
         record->actualVelocity = {};
         record->footstepDistanceWorld = 0.0f;
+        ClearNpcFootstepAnimationPhase(*record);
+        record->footstepMovementActive = false;
     }
     record->footstepEvent = false;
     ResetProgressTracking(*record);
@@ -1145,20 +1158,157 @@ bool UpdateNpcFootstepCadence(
         bool active,
         float resolvedHorizontalDistance)
 {
-    SectorFpsFootstepCadenceState cadence{
-            record.footstepDistanceWorld};
-    const SectorFpsControllerConfig config =
-            DefaultSectorFpsControllerConfig();
-    const float gaitSpeed = record.gait == NpcMoveGait::Run
-            ? config.runSpeed : config.walkSpeed;
-    record.footstepEvent = UpdateSectorFpsFootstepCadence(
-            cadence,
-            config,
-            active,
-            resolvedHorizontalDistance,
-            gaitSpeed);
-    record.footstepDistanceWorld = cadence.accumulatedDistanceWorld;
+    record.footstepMovementActive = active
+            && std::isfinite(resolvedHorizontalDistance)
+            && resolvedHorizontalDistance > MovementDistanceEpsilon;
+    if (!active) {
+        record.footstepDistanceWorld = 0.0f;
+        record.footstepEvent = false;
+        ClearNpcFootstepAnimationPhase(record);
+        return false;
+    }
+    if (!std::isfinite(record.footstepDistanceWorld)
+            || record.footstepDistanceWorld < 0.0f) {
+        record.footstepDistanceWorld = 0.0f;
+    }
+    if (!record.footstepMovementActive) {
+        record.footstepEvent = false;
+        return false;
+    }
+    const float stepDistance = record.gait == NpcMoveGait::Run
+            ? NpcRunFallbackStepDistanceWorld
+            : NpcWalkFallbackStepDistanceWorld;
+    record.footstepDistanceWorld += resolvedHorizontalDistance;
+    if (record.footstepDistanceWorld < stepDistance) {
+        record.footstepEvent = false;
+        return false;
+    }
+    record.footstepDistanceWorld = std::fmod(
+            record.footstepDistanceWorld,
+            stepDistance);
+    record.footstepEvent = true;
     return record.footstepEvent;
+}
+
+bool UpdateNpcFootstepAnimationPhase(
+        NpcNavigationRecord& record,
+        bool active,
+        uint32_t animationIndex,
+        float normalizedPhase,
+        float normalizedPhaseAdvance,
+        const std::array<float, 2>& footstepPhases)
+{
+    if (!active
+            || animationIndex == engine::InvalidModelAnimationIndex
+            || !std::isfinite(normalizedPhase)
+            || normalizedPhase < 0.0f
+            || normalizedPhase >= 1.0f) {
+        ClearNpcFootstepAnimationPhase(record);
+        return false;
+    }
+    if (!record.footstepPhaseValid
+            || record.footstepAnimationIndex != animationIndex) {
+        record.footstepPreviousPhase = normalizedPhase;
+        record.footstepAnimationIndex = animationIndex;
+        record.footstepPhaseValid = true;
+        return false;
+    }
+
+    const float previousPhase = record.footstepPreviousPhase;
+    record.footstepPreviousPhase = normalizedPhase;
+    const bool skippedCompleteCycle =
+            std::isfinite(normalizedPhaseAdvance)
+            && normalizedPhaseAdvance >= 1.0f;
+    if (skippedCompleteCycle) return true;
+
+    for (const float phase : footstepPhases) {
+        const bool crossed = normalizedPhase >= previousPhase
+                ? phase > previousPhase && phase <= normalizedPhase
+                : phase > previousPhase || phase <= normalizedPhase;
+        if (crossed) return true;
+    }
+    return false;
+}
+
+void UpdateNpcFootstepEventsSystem(
+        engine::World& world,
+        engine::AssetManager& assets,
+        NpcNavigationRuntime& runtime,
+        const NpcDefinitionCatalog& definitions,
+        float rawDt)
+{
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    for (NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied || !world.IsAlive(record.entity)
+                || !world.Has<NpcRuntimeInstance>(record.entity)
+                || !world.Has<NpcAnimationState>(record.entity)
+                || !world.Has<engine::AnimatedModelInstance>(record.entity)
+                || !world.Has<engine::AnimatedModelAnimator>(record.entity)) {
+            ClearNpcFootstepAnimationPhase(record);
+            continue;
+        }
+
+        const NpcRuntimeInstance& npc =
+                world.Get<NpcRuntimeInstance>(record.entity);
+        const NpcAnimationState& animationState =
+                world.Get<NpcAnimationState>(record.entity);
+        const NpcAction action = npc.action;
+        if (!record.footstepMovementActive
+                || (action != NpcAction::Walk && action != NpcAction::Run)) {
+            record.footstepEvent = false;
+            ClearNpcFootstepAnimationPhase(record);
+            continue;
+        }
+
+        const NpcDefinition* definition =
+                FindNpcDefinition(definitions, npc.definitionId);
+        const size_t actionIndex = ActionIndex(action);
+        const uint32_t animationIndex =
+                animationState.animationIndices[actionIndex];
+        const engine::AnimatedModelInstance& instance =
+                world.Get<engine::AnimatedModelInstance>(record.entity);
+        const engine::AnimatedModelAnimator& animator =
+                world.Get<engine::AnimatedModelAnimator>(record.entity);
+        const engine::ModelAsset* asset = assets.GetModelAsset(instance.model);
+        if (definition == nullptr || asset == nullptr
+                || !instance.poseReady || instance.poseFailed
+                || animationIndex == engine::InvalidModelAnimationIndex) {
+            ClearNpcFootstepAnimationPhase(record);
+            continue;
+        }
+
+        const int keyframeCount = engine::ModelAnimationClipKeyframeCount(
+                *asset,
+                animationIndex);
+        if (keyframeCount <= 0) {
+            ClearNpcFootstepAnimationPhase(record);
+            continue;
+        }
+
+        float frame = 0.0f;
+        if (animator.targetAnimationIndex == animationIndex) {
+            frame = animator.targetFrame;
+        } else if (animator.animationIndex == animationIndex) {
+            frame = animator.frame;
+        } else {
+            ClearNpcFootstepAnimationPhase(record);
+            continue;
+        }
+        const float frameCount = static_cast<float>(keyframeCount);
+        const float normalizedPhase = frame / frameCount;
+        const float normalizedAdvance = animator.paused
+                ? 0.0f
+                : dt * engine::GltfAnimationFramesPerSecond
+                        * animator.speed / frameCount;
+        record.footstepDistanceWorld = 0.0f;
+        record.footstepEvent = UpdateNpcFootstepAnimationPhase(
+                record,
+                true,
+                animationIndex,
+                normalizedPhase,
+                normalizedAdvance,
+                GetNpcAction(*definition, action).footstepPhases);
+    }
 }
 
 void PrepareNpcDoorTraversalAndHoldsSystem(
@@ -1398,6 +1548,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
             true};
 
     for (NpcNavigationRecord& record : runtime.records) {
+        record.footstepMovementActive = false;
         record.footstepEvent = false;
     }
 

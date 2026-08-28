@@ -80,6 +80,8 @@ struct SectorEditorNpcEditorState {
             animationSpeedInputs;
     std::array<engine::UIFloatInputState, kNpcActionCount>
             movementSpeedInputs;
+    std::array<std::array<engine::UIFloatInputState, 2>, kNpcActionCount>
+            footstepPhaseInputs;
 
     bool deleteConfirmationOpen = false;
     std::string deleteConfirmationId;

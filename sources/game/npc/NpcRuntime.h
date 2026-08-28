@@ -214,6 +214,8 @@ struct NpcNavigationRecord {
     Vector3 physicalPosition = {};
     Vector3 visualPosition = {};
     float footstepDistanceWorld = 0.0f;
+    float footstepPreviousPhase = 0.0f;
+    uint32_t footstepAnimationIndex = UINT32_MAX;
     float stallSeconds = 0.0f;
     float bestCornerDistance = 0.0f;
     size_t trackedCornerIndex = SIZE_MAX;
@@ -229,6 +231,8 @@ struct NpcNavigationRecord {
     bool holdsDoor = false;
     bool steeringRecoveryActive = false;
     bool tileReplanPending = false;
+    bool footstepPhaseValid = false;
+    bool footstepMovementActive = false;
     bool footstepEvent = false;
     std::array<char, 192> diagnostic{};
     bool occupied = false;
