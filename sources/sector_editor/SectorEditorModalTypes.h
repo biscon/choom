@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "engine/render/HdrEffectPolicy.h"
+#include "engine/render/ToneMapping.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
@@ -19,6 +20,13 @@
 #include <vector>
 
 namespace game {
+
+struct SectorEditorColorSettingsModalState {
+    bool open = false;
+    engine::ToneMappingSettings draft;
+    engine::UIFloatInputState exposureInput;
+    std::string errorMessage;
+};
 
 enum class TopologyTexturePickerTargetKind {
     None,

@@ -165,26 +165,79 @@ void TestTextureSemantics()
     Check(sceneSprite.handle != displaySprite.handle, "sprite atlas semantic participates in identity");
 }
 
-void TestNeutralToneMapping()
+void TestToneMapping()
 {
-    const Vector3 black = engine::ToneMapNeutralMaxChannel(Vector3{});
+    const Vector3 black = engine::ToneMapKhronosPbrNeutral(Vector3{});
     Check(Near(black.x, 0.0f) && Near(black.y, 0.0f) && Near(black.z, 0.0f),
-          "neutral tone map preserves black");
-    const Vector3 mapped = engine::ToneMapNeutralMaxChannel(Vector3{4.0f, 2.0f, 1.0f});
-    Check(Near(mapped.x, 0.8f) && Near(mapped.y, 0.4f) && Near(mapped.z, 0.2f),
-          "neutral tone map scales all channels by the maximum-channel curve");
-    Check(Near(mapped.x / mapped.y, 2.0f) && Near(mapped.y / mapped.z, 2.0f),
-          "neutral tone map preserves channel ratios");
-    const Vector3 safe = engine::ToneMapNeutralMaxChannel(Vector3{
+          "Khronos PBR Neutral preserves black");
+    const Vector3 uncompressed = engine::ToneMapKhronosPbrNeutral(
+            Vector3{0.5f, 0.25f, 0.1f});
+    Check(Near(uncompressed.x, 0.46f)
+                  && Near(uncompressed.y, 0.21f)
+                  && Near(uncompressed.z, 0.06f),
+          "Khronos PBR Neutral applies its dielectric offset below highlight compression");
+    const Vector3 neutralWhite = engine::ToneMapKhronosPbrNeutral(
+            Vector3{1.0f, 1.0f, 1.0f});
+    Check(Near(neutralWhite.x, 0.8690909f, 0.000001f)
+                  && Near(neutralWhite.y, neutralWhite.x)
+                  && Near(neutralWhite.z, neutralWhite.x),
+          "Khronos PBR Neutral matches the reference highlight compression");
+    const Vector3 compressed = engine::ToneMapKhronosPbrNeutral(
+            Vector3{4.0f, 2.0f, 1.0f});
+    Check(compressed.x < 1.0f && compressed.y < compressed.x
+                  && compressed.z < compressed.y && compressed.z > 0.0f,
+          "Khronos PBR Neutral bounds and desaturates bright colored input");
+    const Vector3 safe = engine::ToneMapKhronosPbrNeutral(Vector3{
             -1.0f,
             std::numeric_limits<float>::infinity(),
             std::numeric_limits<float>::quiet_NaN()});
     Check(Near(safe.x, 0.0f) && Near(safe.y, 0.0f) && Near(safe.z, 0.0f),
-          "neutral tone map handles negative and non-finite inputs safely");
+          "Khronos PBR Neutral handles negative and non-finite inputs safely");
+
+    const Vector3 acesWhite = engine::ToneMapAcesFilmicFitted(
+            Vector3{1.0f, 1.0f, 1.0f});
+    Check(Near(acesWhite.x, 0.8037975f, 0.000001f)
+                  && Near(acesWhite.y, acesWhite.x)
+                  && Near(acesWhite.z, acesWhite.x),
+          "ACES fitted matches the Narkowicz reference curve");
+    const Vector3 safeAces = engine::ToneMapAcesFilmicFitted(Vector3{
+            -1.0f,
+            std::numeric_limits<float>::infinity(),
+            std::numeric_limits<float>::quiet_NaN()});
+    Check(Near(safeAces.x, 0.0f) && Near(safeAces.y, 0.0f)
+                  && Near(safeAces.z, 0.0f),
+          "ACES fitted handles negative and non-finite inputs safely");
+    engine::ToneMappingSettings acesSettings;
+    acesSettings.toneMapper = engine::ToneMappingOperator::AcesFilmicFitted;
+    const Vector3 selectedAces = engine::ApplyToneMapping(
+            Vector3{1.0f, 1.0f, 1.0f}, acesSettings);
+    Check(Near(selectedAces.x, acesWhite.x),
+          "tone-mapping settings select ACES fitted");
+    engine::ToneMappingSettings exposedSettings;
+    exposedSettings.exposureCompensationEv = 1.0f;
+    const Vector3 exposed = engine::ApplyToneMapping(
+            Vector3{1.0f, 1.0f, 1.0f}, exposedSettings);
+    Check(Near(exposed.x, 0.96f, 0.000001f),
+          "+1 EV doubles scene-linear input before Khronos tone mapping");
+    engine::ToneMappingSettings invalidSettings;
+    invalidSettings.toneMapper = static_cast<engine::ToneMappingOperator>(99);
+    invalidSettings.exposureCompensationEv =
+            std::numeric_limits<float>::quiet_NaN();
+    const engine::ToneMappingSettings normalized =
+            engine::NormalizeToneMappingSettings(invalidSettings);
+    Check(normalized.toneMapper
+                    == engine::ToneMappingOperator::KhronosPbrNeutral
+                  && Near(normalized.exposureCompensationEv, 0.0f),
+          "invalid tone-mapping settings normalize to the neutral defaults");
 
     const std::string shader = engine::BuildScenePresentationFragmentShader();
-    Check(shader.find("ToneMapNeutralMaxChannel") != std::string::npos,
-          "presentation shader applies the selected neutral tone curve");
+    Check(shader.find("ToneMapKhronosPbrNeutral") != std::string::npos
+                  && shader.find("ToneMapAcesFilmicFitted") != std::string::npos
+                  && shader.find("presentationToneMapper") != std::string::npos,
+          "presentation shader contains both selectable tone curves");
+    Check(shader.find("presentationExposureEv") != std::string::npos
+                  && shader.find("exp2(clamp(") != std::string::npos,
+          "presentation shader exposes EV compensation");
     Check(shader.find("LinearSceneToDisplaySrgb") != std::string::npos,
           "presentation shader performs the exact sRGB transfer");
     Check(shader.find("presentationDesaturation") != std::string::npos
@@ -196,16 +249,16 @@ void TestNeutralToneMapping()
     Check(shader.find("pow(centered.x, 4.0)") != std::string::npos
                   && shader.find("smoothstep(") != std::string::npos,
           "presentation shader uses a soft rounded-screen vignette");
+    const size_t exposurePosition = shader.find("vec3 exposed =");
     const size_t toneMapPosition = shader.find(
-            "vec3 mapped = ToneMapNeutralMaxChannel");
+            "vec3 mapped = ApplyToneMapping");
     const size_t impairmentPosition = shader.find("float luminance = dot");
     const size_t displayTransferPosition = shader.find(
             "LinearSceneToDisplaySrgb(mapped)");
-    Check(toneMapPosition < impairmentPosition
+    Check(exposurePosition < toneMapPosition
+                  && toneMapPosition < impairmentPosition
                   && impairmentPosition < displayTransferPosition,
-          "low-health effects operate in linear display space after tone mapping");
-    Check(shader.find("ACES") == std::string::npos && shader.find("Aces") == std::string::npos,
-          "presentation shader contains no alternate ACES operator");
+          "exposure, tone mapping, low-health effects, and sRGB transfer are ordered correctly");
 }
 
 void TestBloomDiagnosticViewPolicy()
@@ -402,8 +455,9 @@ void TestPipelineDiagnosticFormatting()
     Check(formatted.find("active=linear-HDR") != std::string::npos, "pipeline diagnostic reports linear HDR");
     Check(formatted.find("default-fb rgba=8/8/8/8 encoding=GL_LINEAR") != std::string::npos,
           "pipeline diagnostic formats framebuffer state");
-    Check(formatted.find("neutral max-channel") != std::string::npos,
-          "pipeline diagnostic reports the fixed neutral global tone curve");
+    Check(formatted.find("Khronos PBR Neutral exposure=0 EV")
+                    != std::string::npos,
+          "pipeline diagnostic reports the selected tone curve and exposure");
     Check(formatted.find("no local tone map") != std::string::npos,
           "pipeline diagnostic reports linear model output");
 }
@@ -414,7 +468,7 @@ int main()
 {
     TestTransferFunctions();
     TestTextureSemantics();
-    TestNeutralToneMapping();
+    TestToneMapping();
     TestBloomDiagnosticViewPolicy();
     TestRenderTargetMetadata();
     TestPipelineDiagnosticFormatting();

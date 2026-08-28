@@ -810,6 +810,19 @@ void SettingsResolutionAndPersistence()
     assert(Near(settings.footsteps.volume, 0.7f));
     assert(Near(settings.hdrBloom.threshold,1.25f)
             && Near(settings.hdrBloom.intensity,0.35f));
+    assert(settings.toneMapping.toneMapper
+            == engine::ToneMappingOperator::KhronosPbrNeutral);
+    assert(Near(settings.toneMapping.exposureCompensationEv, 0.0f));
+    game::FpsApplicationSettings parsedToneMapping;
+    assert(game::ParseFpsApplicationSettings(
+            R"({"version":1,"toneMapping":{"operator":"acesFilmicFitted","exposureCompensationEv":-1.25}})",
+            parsedToneMapping,
+            &error));
+    assert(parsedToneMapping.toneMapping.toneMapper
+            == engine::ToneMappingOperator::AcesFilmicFitted);
+    assert(Near(
+            parsedToneMapping.toneMapping.exposureCompensationEv,
+            -1.25f));
     assert(Near(settings.footsteps.landingImpactVolumeMultiplier, 1.5f));
     assert(Near(settings.footsteps.noiseRadiusWorld, 6.0f));
     assert(Near(settings.footsteps.landingNoiseRadiusWorld, 12.0f));
@@ -950,6 +963,9 @@ void SettingsResolutionAndPersistence()
     settings.graphics.performanceOverlay = true;
     settings.graphics.vsync = false;
     settings.graphics.horizontalFovDegrees = 96;
+    settings.toneMapping.toneMapper =
+            engine::ToneMappingOperator::AcesFilmicFitted;
+    settings.toneMapping.exposureCompensationEv = 1.5f;
     settings.playerStamina.maximum = 120.0f;
     settings.playerStamina.sprintDrainPerSecond = 18.0f;
     settings.playerStamina.jumpCost = 24.0f;
@@ -1015,6 +1031,9 @@ void SettingsResolutionAndPersistence()
     assert(loaded.graphics.performanceOverlay);
     assert(!loaded.graphics.vsync);
     assert(loaded.graphics.horizontalFovDegrees == 96);
+    assert(loaded.toneMapping.toneMapper
+            == engine::ToneMappingOperator::AcesFilmicFitted);
+    assert(Near(loaded.toneMapping.exposureCompensationEv, 1.5f));
     assert(Near(loaded.playerStamina.maximum, 120.0f));
     assert(Near(loaded.playerStamina.sprintDrainPerSecond, 18.0f));
     assert(Near(loaded.playerStamina.jumpCost, 24.0f));
@@ -1224,6 +1243,12 @@ void SettingsResolutionAndPersistence()
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"hdrBloom":{"threshold":-1}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"toneMapping":false})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"toneMapping":{"operator":"aces"}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"toneMapping":{"exposureCompensationEv":8.01}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"renderScale":2.1}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"renderScale":"fast"}})",loaded,&error));
@@ -1270,6 +1295,9 @@ void SettingsResolutionAndPersistence()
             game::DefaultFpsDynamicLightFadeInSeconds));
     assert(!loaded.graphics.depthPrepass);
     assert(!loaded.graphics.showFpsCounter);
+    assert(loaded.toneMapping.toneMapper
+            == engine::ToneMappingOperator::KhronosPbrNeutral);
+    assert(Near(loaded.toneMapping.exposureCompensationEv, 0.0f));
     assert(loaded.footsteps.defaultSet == "Tile_Mono");
     assert(Near(loaded.footsteps.volume, 0.65f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.35f));

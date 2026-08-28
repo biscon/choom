@@ -377,6 +377,13 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawColorSettingsModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawPlayerSettingsModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -464,6 +471,8 @@ private:
     void InitializeGameplayVerticalState();
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
+    void OpenColorSettingsModal();
+    void ApplyColorSettingsModal();
     void OpenDoorTextureSettingsModal();
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();

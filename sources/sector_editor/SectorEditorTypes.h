@@ -115,6 +115,7 @@ struct SectorEditorState {
     DoorTextureSettingsModalState doorTextureSettingsModal;
     SectorLightmapBakeSetupModalState lightmapBakeSetupModal;
     SectorPreviewSettingsModalState previewSettingsModal;
+    SectorEditorColorSettingsModalState colorSettingsModal;
 };
 
 struct SectorEditorUiState {

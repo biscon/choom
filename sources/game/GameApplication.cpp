@@ -41,6 +41,8 @@ bool GameApplication::Init(
     menuStatus = std::move(settingsLoadError);
     applicationSettings.graphics =
             NormalizeFpsGraphicsSettings(applicationSettings.graphics);
+    applicationSettings.toneMapping = engine::NormalizeToneMappingSettings(
+            applicationSettings.toneMapping);
     engine::SetDebugConsoleLogCaptureEnabled(
             applicationSettings.consoleEnabled);
     const engine::FontHandle consoleFont = context.assets.RequestFont(

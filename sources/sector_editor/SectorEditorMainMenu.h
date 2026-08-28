@@ -26,6 +26,7 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     ToggleShowAxes,
     ToggleShowIds,
     OpenLevelSettings,
+    OpenColorSettings,
     OpenPlayerSettings,
     OpenSneakSettings
 };

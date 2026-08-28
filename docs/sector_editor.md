@@ -1054,6 +1054,17 @@ diagnostics. Patrol routes also appear for non-hostile NPCs. It is independent
 from the F8 navigation diagnostics and remains enabled across `/reload` until
 the campaign session ends or the command disables it.
 
+The global HDR presentation uses the project-authored tone mapping selected
+under `Settings -> Color`. `Khronos PBR Neutral` is the default and follows the
+Khronos reference operator; `ACES Filmic (fitted)` provides the lightweight
+Narkowicz real-time fit rather than a full ACES output transform. Shared
+exposure compensation is expressed in EV, defaults to `0`, and is applied to
+the combined linear HDR scene before the selected operator. These values are
+stored in application settings and affect both editor 3D preview and gameplay,
+but are intentionally absent from the player-facing graphics menu. They are
+post-processing settings and do not affect level data or lightmap source
+hashes.
+
 The game presentation shader also provides a configurable low-health screen
 effect under `Settings -> Player -> Health`. It starts below the authored health
 ratio (default `0.5`) and uses a smooth progression toward its configured
@@ -1061,7 +1072,7 @@ maximum vignette opacity and desaturation as health approaches zero. The
 vignette is a soft rounded-screen mask tinted with the authored dark red color;
 its artist-facing opacity uses a quadratic ease-out so injuries become readable
 earlier and high opacity values appear substantially less transparent. It is
-applied after neutral tone mapping but before the final sRGB transfer, so
+applied after the selected tone mapping but before the final sRGB transfer, so
 it composes with the existing HDR presentation without another fullscreen pass.
 The effect is game-runtime-only: the editor 3D preview always supplies neutral
 presentation parameters, regardless of the settings.

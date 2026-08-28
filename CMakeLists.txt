@@ -292,6 +292,7 @@ if(BUILD_TESTING)
             sources/game/FpsViewmodel.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/PlayerStamina.cpp
@@ -387,6 +388,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -461,6 +463,7 @@ if(BUILD_TESTING)
             tests/SectorTopologySerializationTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -626,6 +629,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemIconLayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -730,6 +734,7 @@ if(BUILD_TESTING)
             tests/WeaponEditorServiceTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/FpsWeaponAudio.cpp
             sources/game/PlayerStamina.cpp
@@ -757,6 +762,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemInventoryUILayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -773,6 +779,7 @@ if(BUILD_TESTING)
     add_executable(player_sneak_tests
             tests/PlayerSneakTests.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp

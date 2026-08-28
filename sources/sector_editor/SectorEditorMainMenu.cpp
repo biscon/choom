@@ -72,8 +72,9 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Show ids", CommandId(SectorEditorMainMenuCommand::ToggleShowIds),
                     engine::UIMenuItemKind::Checkbox, true, editorState.showSectorIds}
     }};
-    const std::array<engine::UIMenuItem, 3> settingsItems{{
+    const std::array<engine::UIMenuItem, 4> settingsItems{{
             {"Level", CommandId(SectorEditorMainMenuCommand::OpenLevelSettings)},
+            {"Color", CommandId(SectorEditorMainMenuCommand::OpenColorSettings)},
             {"Player", CommandId(SectorEditorMainMenuCommand::OpenPlayerSettings)},
             {"Sneaking", CommandId(SectorEditorMainMenuCommand::OpenSneakSettings)}
     }};

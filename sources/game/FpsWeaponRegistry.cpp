@@ -1695,6 +1695,46 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             }
             parsed.graphics = NormalizeFpsGraphicsSettings(parsed.graphics);
         }
+        const auto toneMapping = root.find("toneMapping");
+        if (toneMapping != root.end()) {
+            const std::string context = "application settings.toneMapping";
+            if (!toneMapping->is_object()) {
+                Fail(context + " must be an object");
+            }
+            const auto toneMapper = toneMapping->find("operator");
+            if (toneMapper != toneMapping->end()) {
+                if (!toneMapper->is_string()) {
+                    Fail(context + ".operator must be a string");
+                }
+                const std::string name = toneMapper->get<std::string>();
+                if (name == "khronosPbrNeutral") {
+                    parsed.toneMapping.toneMapper =
+                            engine::ToneMappingOperator::KhronosPbrNeutral;
+                } else if (name == "acesFilmicFitted") {
+                    parsed.toneMapping.toneMapper =
+                            engine::ToneMappingOperator::AcesFilmicFitted;
+                } else {
+                    Fail(context + ".operator must be khronosPbrNeutral or acesFilmicFitted");
+                }
+            }
+            const auto exposure = toneMapping->find(
+                    "exposureCompensationEv");
+            if (exposure != toneMapping->end()) {
+                if (!exposure->is_number()) {
+                    Fail(context + ".exposureCompensationEv must be a number");
+                }
+                const double value = exposure->get<double>();
+                if (!std::isfinite(value)
+                        || value < engine::MinimumToneMappingExposureEv
+                        || value > engine::MaximumToneMappingExposureEv) {
+                    Fail(context + ".exposureCompensationEv must be between -8 and 8");
+                }
+                parsed.toneMapping.exposureCompensationEv =
+                        static_cast<float>(value);
+            }
+            parsed.toneMapping = engine::NormalizeToneMappingSettings(
+                    parsed.toneMapping);
+        }
         const auto hdrBloom = root.find("hdrBloom");
         if (hdrBloom != root.end()) {
             if (!hdrBloom->is_object()) {
@@ -2146,6 +2186,17 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings playerSneak." + sneakError);
         return false;
     }
+    const engine::ToneMappingSettings normalizedToneMapping =
+            engine::NormalizeToneMappingSettings(settings.toneMapping);
+    if (settings.toneMapping.toneMapper != normalizedToneMapping.toneMapper
+            || !std::isfinite(settings.toneMapping.exposureCompensationEv)
+            || settings.toneMapping.exposureCompensationEv
+                    < engine::MinimumToneMappingExposureEv
+            || settings.toneMapping.exposureCompensationEv
+                    > engine::MaximumToneMappingExposureEv) {
+        SetError(error, "application settings tone mapping is invalid");
+        return false;
+    }
     std::unordered_set<std::string> playerSoundEventIds;
     for (const PlayerSoundEventSettings& event : settings.playerSounds.events) {
         if (!ValidSoundSetId(event.id)
@@ -2192,6 +2243,11 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},
             {"horizontalFovDegrees", graphics.horizontalFovDegrees}};
+    root["toneMapping"] = {
+            {"operator", engine::ToneMappingOperatorName(
+                    normalizedToneMapping.toneMapper)},
+            {"exposureCompensationEv",
+                    normalizedToneMapping.exposureCompensationEv}};
     root["playerInventory"] = {
             {"maxCarryWeightKg", settings.playerInventory.maxCarryWeightKg},
             {"maxSlots", settings.playerInventory.maxSlots},
