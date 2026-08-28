@@ -4,11 +4,13 @@
 #include "engine/scripting/ScriptSystem.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "game/Health.h"
+#include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcRuntime.h"
 #include "sector_demo/SectorDoorRuntime.h"
+#include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTriggers.h"
@@ -118,6 +120,21 @@ engine::Entity FindPropEntity(
                 }
             });
     return found;
+}
+
+engine::Entity FindAnyPropEntity(
+        engine::World& world,
+        std::string_view instanceId)
+{
+    engine::Entity found = engine::NullEntity();
+    world.ForEach<SectorStaticModel>(
+            [&](engine::Entity entity, SectorStaticModel& prop) {
+                if (engine::IsNull(found) && prop.instanceId == instanceId) {
+                    found = entity;
+                }
+            });
+    if (!engine::IsNull(found)) return found;
+    return FindPropEntity(world, instanceId);
 }
 
 engine::Entity FindNpcEntity(
@@ -283,7 +300,8 @@ BeginNpcMoveResult BeginNpcMove(
         SectorScriptHost& host,
         std::string instanceId,
         Vector2 destinationXZ,
-        NpcMoveGait gait)
+        NpcMoveGait gait,
+        float movementSpeedOverride)
 {
     BeginNpcMoveResult result;
     ++host.npcMoveDiagnostics.requests;
@@ -303,7 +321,8 @@ BeginNpcMoveResult BeginNpcMove(
             instanceId,
             destinationXZ,
             gait,
-            NpcMoveAuthority::Script);
+            NpcMoveAuthority::Script,
+            movementSpeedOverride);
     if (!request.accepted) {
         result.error = request.message.empty()
                 ? SectorNavigationQueryStatusName(request.status)
@@ -349,6 +368,7 @@ bool ParseNpcMove(
         std::string& instanceId,
         Vector2& destinationXZ,
         NpcMoveGait& gait,
+        float& movementSpeedOverride,
         std::string& error)
 {
     size_t idLength = 0;
@@ -400,18 +420,28 @@ bool ParseNpcMove(
     }
 
     gait = NpcMoveGait::Walk;
-    if (lua_isnoneornil(state, gaitArgument)) return true;
-    size_t gaitLength = 0;
-    const char* rawGait = luaL_checklstring(
-            state, gaitArgument, &gaitLength);
-    const std::string_view gaitName{rawGait, gaitLength};
-    if (gaitName == "walk") return true;
-    if (gaitName == "run") {
-        gait = NpcMoveGait::Run;
-        return true;
+    movementSpeedOverride = 0.0f;
+    if (!lua_isnoneornil(state, gaitArgument)) {
+        size_t gaitLength = 0;
+        const char* rawGait = luaL_checklstring(
+                state, gaitArgument, &gaitLength);
+        const std::string_view gaitName{rawGait, gaitLength};
+        if (gaitName == "run") gait = NpcMoveGait::Run;
+        else if (gaitName != "walk") {
+            error = "unsupported NPC gait; expected 'walk' or 'run'";
+            return false;
+        }
     }
-    error = "unsupported NPC gait; expected 'walk' or 'run'";
-    return false;
+    if (!lua_isnoneornil(state, gaitArgument + 1)) {
+        const lua_Number speed = luaL_checknumber(state, gaitArgument + 1);
+        if (!std::isfinite(static_cast<double>(speed))
+                || speed < 0.1 || speed > 200.0) {
+            error = "NPC movementSpeed must be between 0.1 and 200";
+            return false;
+        }
+        movementSpeedOverride = static_cast<float>(speed);
+    }
+    return true;
 }
 
 int PushNpcMoveStartError(
@@ -434,9 +464,11 @@ int LuaMoveNpc(lua_State* state)
     std::string instanceId;
     Vector2 destinationXZ{};
     NpcMoveGait gait = NpcMoveGait::Walk;
+    float movementSpeedOverride = 0.0f;
     std::string parseError;
     if (!ParseNpcMove(
-            state, host, instanceId, destinationXZ, gait, parseError)) {
+            state, host, instanceId, destinationXZ, gait,
+            movementSpeedOverride, parseError)) {
         ++host.npcMoveDiagnostics.requests;
         ++host.npcMoveDiagnostics.failures;
         RecordNpcMoveOutcome(host, instanceId, parseError.c_str());
@@ -444,7 +476,8 @@ int LuaMoveNpc(lua_State* state)
     }
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     const BeginNpcMoveResult begin = BeginNpcMove(
-            context, host, instanceId, destinationXZ, gait);
+            context, host, instanceId, destinationXZ, gait,
+            movementSpeedOverride);
     if (!begin.started) {
         return PushNpcMoveStartError(state, false, begin.error);
     }
@@ -478,9 +511,11 @@ int LuaStartMoveNpc(lua_State* state)
     std::string instanceId;
     Vector2 destinationXZ{};
     NpcMoveGait gait = NpcMoveGait::Walk;
+    float movementSpeedOverride = 0.0f;
     std::string parseError;
     if (!ParseNpcMove(
-            state, host, instanceId, destinationXZ, gait, parseError)) {
+            state, host, instanceId, destinationXZ, gait,
+            movementSpeedOverride, parseError)) {
         ++host.npcMoveDiagnostics.requests;
         ++host.npcMoveDiagnostics.failures;
         RecordNpcMoveOutcome(host, instanceId, parseError.c_str());
@@ -488,7 +523,8 @@ int LuaStartMoveNpc(lua_State* state)
     }
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     const BeginNpcMoveResult begin = BeginNpcMove(
-            context, host, instanceId, destinationXZ, gait);
+            context, host, instanceId, destinationXZ, gait,
+            movementSpeedOverride);
     if (!begin.started) {
         return PushNpcMoveStartError(state, true, begin.error);
     }
@@ -507,6 +543,471 @@ int LuaStartMoveNpc(lua_State* state)
     }
     BindNpcOperation(host, begin.token, operation);
     engine::ScriptSystemPushOperationUserdata(state, operation);
+    return 1;
+}
+
+void CancelScriptPlayerMove(
+        engine::EngineContext&,
+        void* hostContext,
+        uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host == nullptr || host->cutscene == nullptr) return;
+    CancelSectorCutscenePlayerMove(*host->cutscene, host->navigation, token);
+}
+
+void CancelScriptLook(
+        engine::EngineContext&,
+        void* hostContext,
+        uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host != nullptr && host->cutscene != nullptr) {
+        CancelSectorCutsceneLook(*host->cutscene, token);
+    }
+}
+
+void CancelScriptCaption(
+        engine::EngineContext&,
+        void* hostContext,
+        uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host != nullptr && host->cutscene != nullptr) {
+        CancelSectorCutsceneCaption(*host->cutscene, token);
+    }
+}
+
+void CancelScriptFade(
+        engine::EngineContext&,
+        void* hostContext,
+        uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host != nullptr && host->cutscene != nullptr) {
+        CancelSectorCutsceneFade(*host->cutscene, token);
+    }
+}
+
+bool ParseGaitAndSpeed(
+        lua_State* state,
+        int gaitArgument,
+        NpcMoveGait& gait,
+        float& movementSpeedOverride,
+        std::string& error)
+{
+    gait = NpcMoveGait::Walk;
+    movementSpeedOverride = 0.0f;
+    if (!lua_isnoneornil(state, gaitArgument)) {
+        size_t gaitLength = 0;
+        const char* rawGait = luaL_checklstring(state, gaitArgument, &gaitLength);
+        const std::string_view name{rawGait, gaitLength};
+        if (name == "run") gait = NpcMoveGait::Run;
+        else if (name != "walk") {
+            error = "unsupported gait; expected 'walk' or 'run'";
+            return false;
+        }
+    }
+    if (!lua_isnoneornil(state, gaitArgument + 1)) {
+        const lua_Number speed = luaL_checknumber(state, gaitArgument + 1);
+        if (!std::isfinite(static_cast<double>(speed))
+                || speed < 0.1 || speed > 200.0) {
+            error = "movementSpeed must be between 0.1 and 200";
+            return false;
+        }
+        movementSpeedOverride = static_cast<float>(speed);
+    }
+    return true;
+}
+
+bool ParsePlayerMove(
+        lua_State* state,
+        const SectorScriptHost& host,
+        Vector2& destinationXZ,
+        NpcMoveGait& gait,
+        float& movementSpeed,
+        std::string& error)
+{
+    int gaitArgument = 3;
+    if (lua_type(state, 1) == LUA_TSTRING) {
+        size_t markerLength = 0;
+        const char* rawMarker = lua_tolstring(state, 1, &markerLength);
+        const std::string markerId{rawMarker, markerLength};
+        if (markerId.empty()) {
+            error = "level marker ID must not be empty";
+            return false;
+        }
+        if (host.map == nullptr) {
+            error = "level marker runtime is unavailable";
+            return false;
+        }
+        const SectorCompiledLevelMarker* marker =
+                FindSectorCompiledLevelMarker(*host.map, markerId);
+        if (marker == nullptr) {
+            error = "level marker not found: " + markerId;
+            return false;
+        }
+        const Vector3 worldPosition = SectorAuthoringToWorldPosition(marker->position);
+        destinationXZ = {worldPosition.x, worldPosition.z};
+        gaitArgument = 2;
+    } else {
+        const lua_Number rawX = luaL_checknumber(state, 1);
+        const lua_Number rawZ = luaL_checknumber(state, 2);
+        if (!std::isfinite(static_cast<double>(rawX))
+                || !std::isfinite(static_cast<double>(rawZ))
+                || std::fabs(static_cast<double>(rawX))
+                        > std::numeric_limits<float>::max()
+                || std::fabs(static_cast<double>(rawZ))
+                        > std::numeric_limits<float>::max()) {
+            error = "player destination coordinates must be finite";
+            return false;
+        }
+        destinationXZ = {static_cast<float>(rawX), static_cast<float>(rawZ)};
+    }
+    float overrideSpeed = 0.0f;
+    if (!ParseGaitAndSpeed(
+            state, gaitArgument, gait, overrideSpeed, error)) return false;
+    if (host.playerConfig == nullptr) {
+        error = "player controller runtime is unavailable";
+        return false;
+    }
+    movementSpeed = overrideSpeed > 0.0f
+            ? overrideSpeed
+            : (gait == NpcMoveGait::Run
+                    ? host.playerConfig->runSpeed : host.playerConfig->walkSpeed);
+    return true;
+}
+
+int PushCutsceneStartError(lua_State* state, bool async, const std::string& error)
+{
+    if (async) lua_pushnil(state);
+    else lua_pushboolean(state, 0);
+    lua_pushlstring(state, error.data(), error.size());
+    return 2;
+}
+
+int StartPlayerMove(lua_State* state, bool async)
+{
+    const int originalTop = lua_gettop(state);
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    if (async && scripts.phase != engine::ScriptRuntimePhase::Loading
+            && scripts.phase != engine::ScriptRuntimePhase::Active) {
+        return PushCutsceneStartError(
+                state, true, "script runtime is shutting down");
+    }
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.cutscene == nullptr || host.navigation == nullptr
+            || host.runtimeObjects == nullptr || host.playerState == nullptr
+            || !host.runtimeObjects->objectSectorLookupWorldValid) {
+        return PushCutsceneStartError(
+                state, async, "player cutscene movement runtime is unavailable");
+    }
+    Vector2 destination{};
+    NpcMoveGait gait = NpcMoveGait::Walk;
+    float movementSpeed = 0.0f;
+    std::string error;
+    if (!ParsePlayerMove(
+            state, host, destination, gait, movementSpeed, error)) {
+        return PushCutsceneStartError(state, async, error);
+    }
+    uint64_t token = 0;
+    if (!BeginSectorCutscenePlayerMove(
+            *host.cutscene,
+            *host.navigation,
+            host.runtimeObjects->objectSectorLookupWorld,
+            *host.playerState,
+            destination,
+            gait,
+            movementSpeed,
+            token,
+            error)) {
+        return PushCutsceneStartError(state, async, error);
+    }
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    const engine::ScriptOperationHandle operation =
+            engine::ScriptSystemCreateOperation(
+                    scripts,
+                    async ? engine::ScriptOperationLaunchStyle::Async
+                          : engine::ScriptOperationLaunchStyle::Blocking,
+                    async ? engine::ScriptSystemTryCurrentTaskFromLua(state)
+                          : engine::ScriptSystemCurrentTaskFromLua(state),
+                    "movePlayer",
+                    token,
+                    CancelScriptPlayerMove);
+    if (!engine::IsValid(operation)) {
+        CancelSectorCutscenePlayerMove(
+                *host.cutscene, host.navigation, token);
+        return PushCutsceneStartError(
+                state, async, "could not allocate player move operation");
+    }
+    BindSectorCutscenePlayerMoveOperation(*host.cutscene, token, operation);
+    if (async) {
+        engine::ScriptSystemPushOperationUserdata(state, operation);
+        return 1;
+    }
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
+int LuaMovePlayer(lua_State* state) { return StartPlayerMove(state, false); }
+int LuaStartMovePlayer(lua_State* state) { return StartPlayerMove(state, true); }
+
+int StartLook(lua_State* state, SectorCutsceneLookTargetKind kind, bool async)
+{
+    const int originalTop = lua_gettop(state);
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    if (async && scripts.phase != engine::ScriptRuntimePhase::Loading
+            && scripts.phase != engine::ScriptRuntimePhase::Active) {
+        return PushCutsceneStartError(
+                state, true, "script runtime is shutting down");
+    }
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.cutscene == nullptr || host.playerState == nullptr) {
+        return PushCutsceneStartError(
+                state, async, "player cutscene look runtime is unavailable");
+    }
+    size_t idLength = 0;
+    const char* rawId = luaL_checklstring(state, 1, &idLength);
+    const std::string_view id{rawId, idLength};
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    const engine::Entity entity = kind == SectorCutsceneLookTargetKind::Npc
+            ? FindNpcEntity(context.world, id)
+            : FindAnyPropEntity(context.world, id);
+    if (engine::IsNull(entity)) {
+        return PushCutsceneStartError(
+                state, async,
+                std::string(kind == SectorCutsceneLookTargetKind::Npc
+                        ? "NPC not found: " : "prop not found: ")
+                        + std::string(id));
+    }
+    const lua_Number durationMs = luaL_checknumber(state, 2);
+    const lua_Number targetHeight = luaL_optnumber(state, 3, 0.5);
+    if (!std::isfinite(static_cast<double>(durationMs)) || durationMs < 0.0) {
+        return PushCutsceneStartError(
+                state, async, "look duration must be a finite non-negative number");
+    }
+    if (!std::isfinite(static_cast<double>(targetHeight))
+            || targetHeight < 0.0 || targetHeight > 1.0) {
+        return PushCutsceneStartError(
+                state, async, "look target height must be between 0 and 1");
+    }
+    uint64_t token = 0;
+    std::string error;
+    if (!BeginSectorCutsceneLook(
+            *host.cutscene,
+            entity,
+            kind,
+            static_cast<float>(targetHeight),
+            static_cast<double>(durationMs) / 1000.0,
+            *host.playerState,
+            token,
+            error)) {
+        return PushCutsceneStartError(state, async, error);
+    }
+    const engine::ScriptOperationHandle operation =
+            engine::ScriptSystemCreateOperation(
+                    scripts,
+                    async ? engine::ScriptOperationLaunchStyle::Async
+                          : engine::ScriptOperationLaunchStyle::Blocking,
+                    async ? engine::ScriptSystemTryCurrentTaskFromLua(state)
+                          : engine::ScriptSystemCurrentTaskFromLua(state),
+                    kind == SectorCutsceneLookTargetKind::Npc
+                            ? "lookAtNpc" : "lookAtProp",
+                    token,
+                    CancelScriptLook);
+    if (!engine::IsValid(operation)) {
+        CancelSectorCutsceneLook(*host.cutscene, token);
+        return PushCutsceneStartError(
+                state, async, "could not allocate look operation");
+    }
+    BindSectorCutsceneLookOperation(*host.cutscene, token, operation);
+    if (async) {
+        engine::ScriptSystemPushOperationUserdata(state, operation);
+        return 1;
+    }
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
+int LuaLookAtNpc(lua_State* state)
+{
+    return StartLook(state, SectorCutsceneLookTargetKind::Npc, false);
+}
+int LuaStartLookAtNpc(lua_State* state)
+{
+    return StartLook(state, SectorCutsceneLookTargetKind::Npc, true);
+}
+int LuaLookAtProp(lua_State* state)
+{
+    return StartLook(state, SectorCutsceneLookTargetKind::Prop, false);
+}
+int LuaStartLookAtProp(lua_State* state)
+{
+    return StartLook(state, SectorCutsceneLookTargetKind::Prop, true);
+}
+
+int StartCaption(
+        lua_State* state,
+        SectorCutsceneCaptionKind kind)
+{
+    const int originalTop = lua_gettop(state);
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.cutscene == nullptr) {
+        return PushCutsceneStartError(
+                state, false, "cutscene caption runtime is unavailable");
+    }
+    size_t textLength = 0;
+    const char* rawText = luaL_checklstring(state, 1, &textLength);
+    SectorCutsceneTextPosition position = SectorCutsceneTextPosition::Bottom;
+    int holdArgument = 2;
+    if (kind == SectorCutsceneCaptionKind::Text) {
+        const lua_Integer rawPosition = luaL_checkinteger(state, 2);
+        if (rawPosition < static_cast<int>(SectorCutsceneTextPosition::Top)
+                || rawPosition > static_cast<int>(SectorCutsceneTextPosition::Bottom)) {
+            return PushCutsceneStartError(
+                    state, false, "text position must be TOP, CENTER, or BOTTOM");
+        }
+        position = static_cast<SectorCutsceneTextPosition>(rawPosition);
+        holdArgument = 3;
+    }
+    double holdSeconds = 0.0;
+    const double* hold = nullptr;
+    if (!lua_isnoneornil(state, holdArgument)) {
+        const lua_Number holdMs = luaL_checknumber(state, holdArgument);
+        if (!std::isfinite(static_cast<double>(holdMs)) || holdMs < 0.0) {
+            return PushCutsceneStartError(
+                    state, false, "caption duration must be a finite non-negative number");
+        }
+        holdSeconds = static_cast<double>(holdMs) / 1000.0;
+        hold = &holdSeconds;
+    }
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    const engine::ScriptOperationHandle replacedOperation =
+            host.cutscene->caption.operation;
+    std::string error;
+    uint64_t token = 0;
+    if (!BeginSectorCutsceneCaption(
+            *host.cutscene,
+            kind,
+            position,
+            std::string_view{rawText, textLength},
+            hold,
+            token,
+            error)) {
+        return PushCutsceneStartError(state, false, error);
+    }
+    if (engine::IsValid(replacedOperation)) {
+        engine::ScriptSystemCancelOperation(
+                context,
+                scripts,
+                replacedOperation,
+                "caption replaced");
+    }
+    const engine::ScriptOperationHandle operation =
+            engine::ScriptSystemCreateOperation(
+                    scripts,
+                    engine::ScriptOperationLaunchStyle::Blocking,
+                    engine::ScriptSystemCurrentTaskFromLua(state),
+                    kind == SectorCutsceneCaptionKind::Say ? "say" : "text",
+                    token,
+                    CancelScriptCaption);
+    if (!engine::IsValid(operation)) {
+        CancelSectorCutsceneCaption(*host.cutscene, token);
+        return PushCutsceneStartError(
+                state, false, "could not allocate caption operation");
+    }
+    BindSectorCutsceneCaptionOperation(*host.cutscene, token, operation);
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
+int LuaSay(lua_State* state) { return StartCaption(state, SectorCutsceneCaptionKind::Say); }
+int LuaText(lua_State* state) { return StartCaption(state, SectorCutsceneCaptionKind::Text); }
+
+int StartFade(lua_State* state, float targetOpacity)
+{
+    const int originalTop = lua_gettop(state);
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.cutscene == nullptr) {
+        return PushCutsceneStartError(state, false, "cutscene fade runtime is unavailable");
+    }
+    const lua_Number durationMs = luaL_checknumber(state, 1);
+    if (!std::isfinite(static_cast<double>(durationMs)) || durationMs < 0.0) {
+        return PushCutsceneStartError(
+                state, false, "fade duration must be a finite non-negative number");
+    }
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    if (engine::IsValid(host.cutscene->fade.operation)) {
+        engine::ScriptSystemCancelOperation(
+                context, scripts, host.cutscene->fade.operation, "fade replaced");
+    }
+    std::string error;
+    uint64_t token = 0;
+    if (!BeginSectorCutsceneFade(
+            *host.cutscene,
+            targetOpacity,
+            static_cast<double>(durationMs) / 1000.0,
+            token,
+            error)) {
+        return PushCutsceneStartError(state, false, error);
+    }
+    const engine::ScriptOperationHandle operation =
+            engine::ScriptSystemCreateOperation(
+                    scripts,
+                    engine::ScriptOperationLaunchStyle::Blocking,
+                    engine::ScriptSystemCurrentTaskFromLua(state),
+                    targetOpacity > 0.5f ? "fadeOut" : "fadeIn",
+                    token,
+                    CancelScriptFade);
+    if (!engine::IsValid(operation)) {
+        CancelSectorCutsceneFade(*host.cutscene, token);
+        return PushCutsceneStartError(
+                state, false, "could not allocate fade operation");
+    }
+    BindSectorCutsceneFadeOperation(*host.cutscene, token, operation);
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
+int LuaFadeOut(lua_State* state) { return StartFade(state, 1.0f); }
+int LuaFadeIn(lua_State* state) { return StartFade(state, 0.0f); }
+
+int LuaEnableControls(lua_State* state)
+{
+    luaL_checktype(state, 1, LUA_TBOOLEAN);
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.cutscene == nullptr || host.controls.setControlsEnabled == nullptr) {
+        lua_pushboolean(state, 0);
+        lua_pushliteral(state, "cutscene control runtime is unavailable");
+        return 2;
+    }
+    const bool enabled = lua_toboolean(state, 1) != 0;
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    if (enabled) {
+        if (host.cutscene->playerMove.active
+                && engine::IsValid(host.cutscene->playerMove.operation)) {
+            engine::ScriptSystemCancelOperation(
+                    context,
+                    *host.scripts,
+                    host.cutscene->playerMove.operation,
+                    "controls re-enabled");
+        }
+        if (host.cutscene->look.active
+                && engine::IsValid(host.cutscene->look.operation)) {
+            engine::ScriptSystemCancelOperation(
+                    context,
+                    *host.scripts,
+                    host.cutscene->look.operation,
+                    "controls re-enabled");
+        }
+    }
+    std::string error;
+    if (!host.controls.setControlsEnabled(
+            host.controls.userData, context, enabled, error)) {
+        lua_pushboolean(state, 0);
+        lua_pushlstring(state, error.data(), error.size());
+        return 2;
+    }
+    host.cutscene->controlsEnabled = enabled;
+    lua_pushboolean(state, 1);
     return 1;
 }
 
@@ -1290,14 +1791,22 @@ void InitializeSectorScriptHost(
         SectorNavigationWorld* navigation,
         NpcNavigationRuntime* npcNavigation,
         SectorScriptAudioApi audio,
-        Health* playerHealth)
+        Health* playerHealth,
+        SectorCutsceneRuntime* cutscene,
+        SectorFpsControllerState* playerState,
+        const SectorFpsControllerConfig* playerConfig,
+        SectorScriptControlApi controls)
 {
     host.runtimeObjects = &runtimeObjects;
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
+    host.cutscene = cutscene;
+    host.playerState = playerState;
+    host.playerConfig = playerConfig;
     host.playerHealth = playerHealth;
     host.map = &map;
     host.audio = audio;
+    host.controls = controls;
     host.scripts = &scripts;
     host.doorMoves.clear();
     host.doorMoves.reserve(64);
@@ -1324,9 +1833,13 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.runtimeObjects = nullptr;
     host.navigation = nullptr;
     host.npcNavigation = nullptr;
+    host.cutscene = nullptr;
+    host.playerState = nullptr;
+    host.playerConfig = nullptr;
     host.playerHealth = nullptr;
     host.map = nullptr;
     host.audio = {};
+    host.controls = {};
     host.scripts = nullptr;
     host.doorMoves.clear();
     host.npcMoves.clear();
@@ -1355,12 +1868,29 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);
     Register(state, "moveNpc", LuaMoveNpc);
     Register(state, "startMoveNpc", LuaStartMoveNpc);
+    Register(state, "enableControls", LuaEnableControls);
+    Register(state, "movePlayer", LuaMovePlayer);
+    Register(state, "startMovePlayer", LuaStartMovePlayer);
+    Register(state, "lookAtNpc", LuaLookAtNpc);
+    Register(state, "startLookAtNpc", LuaStartLookAtNpc);
+    Register(state, "lookAtProp", LuaLookAtProp);
+    Register(state, "startLookAtProp", LuaStartLookAtProp);
+    Register(state, "say", LuaSay);
+    Register(state, "text", LuaText);
+    Register(state, "fadeOut", LuaFadeOut);
+    Register(state, "fadeIn", LuaFadeIn);
     Register(state, "changeMap", LuaChangeMap);
     Register(state, "enableTrigger", LuaEnableTrigger);
     Register(state, "disableTrigger", LuaDisableTrigger);
     Register(state, "playMapSound", LuaPlayMapSound);
     Register(state, "playSoundEmitter", LuaPlaySoundEmitter);
     Register(state, "stopSoundEmitter", LuaStopSoundEmitter);
+    lua_pushinteger(state, static_cast<lua_Integer>(SectorCutsceneTextPosition::Top));
+    lua_setglobal(state, "TOP");
+    lua_pushinteger(state, static_cast<lua_Integer>(SectorCutsceneTextPosition::Center));
+    lua_setglobal(state, "CENTER");
+    lua_pushinteger(state, static_cast<lua_Integer>(SectorCutsceneTextPosition::Bottom));
+    lua_setglobal(state, "BOTTOM");
 }
 
 bool ReturnedTrue(const std::vector<engine::ScriptValue>& values)

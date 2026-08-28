@@ -440,12 +440,14 @@ local ok, reason = setNpcHealth("guard_1", 25)
 ## NPC movement
 
 `instanceId` is a placed NPC's unique instance ID. `gait` is optional and is
-`"walk"` by default; `"run"` is also supported.
+`"walk"` by default; `"run"` is also supported. Optional `movementSpeed`
+must be a finite runtime-world speed from `0.1` through `200`; it overrides
+the NPC's authored walk/run speed for that request only.
 
 Coordinate destinations use runtime world X/Z:
 
 ```lua
-moveNpc("guard_1", 12.0, 8.0, "run")
+moveNpc("guard_1", 12.0, 8.0, "run", 2.5)
 local movement = startMoveNpc("guard_1", 4.0, 8.0)
 ```
 
@@ -461,8 +463,8 @@ local movement = startMoveNpc("guard_1", "guard_post")
 ### Blocking forms
 
 ```text
-moveNpc(instanceId, x, z [, gait]) -> true | false, reason
-moveNpc(instanceId, levelMarkerId [, gait]) -> true | false, reason
+moveNpc(instanceId, x, z [, gait [, movementSpeed]]) -> true | false, reason
+moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]]) -> true | false, reason
 ```
 
 They resume only after collision-constrained locomotion physically arrives or
@@ -490,8 +492,8 @@ last-resort safeguard, each managed script start/resume has a budget of
 ### Async forms
 
 ```text
-startMoveNpc(instanceId, x, z [, gait]) -> operation | nil, reason
-startMoveNpc(instanceId, levelMarkerId [, gait]) -> operation | nil, reason
+startMoveNpc(instanceId, x, z [, gait [, movementSpeed]]) -> operation | nil, reason
+startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]]) -> operation | nil, reason
 ```
 
 Only one script-owned move may control an NPC at a time. Use `await`,
@@ -514,6 +516,98 @@ Navigation must be ready when the request starts. Rebuilds, map unload, NPC
 deletion, unreachable destinations, capacity limits, and prolonged stalls end
 the operation with a reason. Cancelling an operation also releases any door
 hold owned by that move.
+
+## Cutscenes and player camera
+
+Cutscene state is transient: player moves, looks, captions, fades, tasks, and
+operations are not saved. A map load resets them, including world fade
+opacity. A typical cutscene disables controls, performs blocking actions, and
+then restores controls:
+
+```lua
+function intro()
+    assert(enableControls(false))
+    say("Follow me this way...")
+    movePlayer("hall_corner", "walk", 2.0)
+    lookAtNpc("guide", 750, 0.7)
+    assert(enableControls(true))
+end
+```
+
+### `enableControls(enabled) -> true | false, reason`
+
+`false` disables player movement, mouse look, jump, crouch, Use, weapons, and
+inventory input while leaving scripts, simulation, the HUD, console, and menus
+running. It also engages the save gate. `true` restores gameplay input and
+clears that save gate. Restoring controls cancels any active scripted player
+move or look and releases its navigation door hold.
+
+### Player movement
+
+Player movement uses the navigation map, pathfinding, door traversal, and the
+normal FPS collision/controller path. Gravity, steps, headbob, landing effects,
+and footsteps therefore behave as during normal walking. Scripted speed is
+deterministic and is not changed by stamina, health, stun, sprint, or crouch
+modifiers.
+
+`gait` defaults to `"walk"` and may be `"run"`. With no explicit speed, the
+player's configured walk/run speed is used. `movementSpeed`, when supplied,
+must be from `0.1` through `200` world units per second.
+
+```text
+movePlayer(x, z [, gait [, movementSpeed]]) -> true | false, reason
+movePlayer(levelMarkerId [, gait [, movementSpeed]]) -> true | false, reason
+startMovePlayer(x, z [, gait [, movementSpeed]]) -> operation | nil, reason
+startMovePlayer(levelMarkerId [, gait [, movementSpeed]]) -> operation | nil, reason
+```
+
+Blocking forms resume on physical arrival or failure. Async forms work with
+`await`, `operationStatus`, and `cancelOperation`. Only one scripted player
+move may be active. The camera turns toward the route while moving unless a
+scripted look is active.
+
+### Animated camera looks
+
+```text
+lookAtNpc(instanceId, durationMs [, targetHeight]) -> true | false, reason
+startLookAtNpc(instanceId, durationMs [, targetHeight]) -> operation | nil, reason
+lookAtProp(instanceId, durationMs [, targetHeight]) -> true | false, reason
+startLookAtProp(instanceId, durationMs [, targetHeight]) -> operation | nil, reason
+```
+
+The camera uses a quintic smoother-step curve rather than rotating linearly.
+`targetHeight` defaults to `0.5` and is normalized over the target's visual
+bounds: `0` is the bottom and `1` is the top. Targets are followed live while
+they move. `lookAtProp` accepts static 3D and dynamic props from their shared
+instance-ID namespace. Only one scripted look may be active.
+
+### Captions
+
+```text
+say(message [, holdMs]) -> true | false, reason
+text(message, TOP|CENTER|BOTTOM [, holdMs]) -> true | false, reason
+```
+
+Both block until presentation finishes. `say` is bottom-centered and reveals
+text at 40 Unicode codepoints per second. `text` displays the whole message
+and fades in over 250 ms at the selected vertical position. Both word-wrap
+within 80% of the viewport, use the game's 48-pixel bold font, and fade out
+over 350 ms. `holdMs` is the interval after reveal/fade-in and before fade-out.
+If omitted, it is 45 ms per codepoint, clamped to `1500..8000` ms. Starting a
+new caption replaces and cancels the current caption.
+
+### World fades
+
+```text
+fadeOut(durationMs) -> true | false, reason
+fadeIn(durationMs) -> true | false, reason
+```
+
+These block while smoothly changing a persistent black world overlay. The
+overlay affects the rendered world and viewmodel, but not the HUD, menus,
+`say`, or `text`, so captions remain readable over black. A new fade replaces
+the active fade. `fadeOut` leaves the world black until `fadeIn` or a map reset
+changes it.
 
 ## Map travel
 

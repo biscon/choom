@@ -29,7 +29,8 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
         NpcNavigationRuntime& runtime,
         const std::vector<SectorDynamicDoorCollider>& doorColliders,
         float dt,
-        bool freezeAi = false);
+        bool freezeAi = false,
+        int externalDoorHoldId = 0);
 
 void SynchronizeSectorNavigationDoorLinksSystem(
         engine::World& world,
@@ -83,7 +84,8 @@ NpcMoveRequestResult RequestNpcMove(
         std::string_view instanceId,
         Vector2 destinationXZ,
         NpcMoveGait gait = NpcMoveGait::Walk,
-        NpcMoveAuthority authority = NpcMoveAuthority::Programmatic);
+        NpcMoveAuthority authority = NpcMoveAuthority::Programmatic,
+        float movementSpeedOverride = 0.0f);
 
 NpcMoveRequestResult RequestNpcMoveForEntity(
         engine::World& world,
@@ -93,7 +95,8 @@ NpcMoveRequestResult RequestNpcMoveForEntity(
         engine::Entity entity,
         Vector2 destinationXZ,
         NpcMoveGait gait,
-        NpcMoveAuthority authority);
+        NpcMoveAuthority authority,
+        float movementSpeedOverride = 0.0f);
 
 // Replaces an AI-owned route only after its new path has been found. A failed
 // retarget leaves the previous route, door holds, and request ID intact.

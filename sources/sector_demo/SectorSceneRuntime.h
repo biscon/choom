@@ -61,7 +61,8 @@ public:
             const Vector3* playerPosition,
             int playerSectorId,
             const SectorDoorPlayerObstacle* playerObstacle = nullptr,
-            const NpcAiGameplayContext* npcGameplay = nullptr);
+            const NpcAiGameplayContext* npcGameplay = nullptr,
+            int externalDoorHoldId = 0);
     void UpdateLoadPreparation(
             engine::EngineContext& context,
             const SectorTopologyMap& map);

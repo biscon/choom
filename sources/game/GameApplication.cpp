@@ -737,6 +737,12 @@ const engine::RenderTarget* GameApplication::HdrDebugPresentationSource() const
     return editor.Preview3DHdrDebugPresentationSource();
 }
 
+float GameApplication::WorldFadeOpacity() const
+{
+    return BackgroundScreen() == ApplicationScreen::Game
+            ? gameSession.WorldFadeOpacity() : 0.0f;
+}
+
 void GameApplication::Render3DHud(
         const engine::World& world,
         engine::AssetManager& assets,

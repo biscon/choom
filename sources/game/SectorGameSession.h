@@ -11,6 +11,7 @@
 #include "game/PlayerAudio.h"
 #include "game/PlayerHitCamera.h"
 #include "game/PlayerLightLevel.h"
+#include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
 #include "game/save/GameSaveData.h"
@@ -118,6 +119,7 @@ public:
     float LoadOverlayOpacity() const {
         return GameLevelLoadOverlayOpacity(loading);
     }
+    float WorldFadeOpacity() const { return cutscene.fade.opacity; }
     std::string TakeFailureError();
     const SectorTopologyMap& Map() const { return topologyMap; }
     SectorUseHighlight UseHighlight() const
@@ -192,6 +194,10 @@ private:
     void ShowDropRefusal();
     void ShowOutOfAmmo();
     void RefreshMouseLookCapture();
+    bool SetCutsceneControlsEnabled(
+            engine::EngineContext& context,
+            bool enabled,
+            std::string& error);
     void SetInventoryOpen(bool open);
     void ClearHeldObjectUse();
     bool BeginHeldObjectUse(std::uint64_t runtimeId);
@@ -252,6 +258,7 @@ private:
     std::optional<GameSavePlayerState> pendingPlayerRestore;
     engine::ScriptRuntime scripts;
     SectorScriptHost scriptHost;
+    SectorCutsceneRuntime cutscene;
     SectorGameNavigationDebugState navigationDebug;
     Health playerHealth = MakeHealth(100);
     Vector2 playerKnockbackVelocity{};

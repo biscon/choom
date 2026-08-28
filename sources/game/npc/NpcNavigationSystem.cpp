@@ -821,7 +821,8 @@ static NpcMoveRequestResult RequestNpcMoveRecord(
         NpcNavigationRecord* record,
         Vector2 destinationXZ,
         NpcMoveGait gait,
-        NpcMoveAuthority authority)
+        NpcMoveAuthority authority,
+        float movementSpeedOverride)
 {
     if (record == nullptr || !world.IsAlive(record->entity)
             || !world.Has<SectorObjectTransform>(record->entity)
@@ -899,6 +900,9 @@ static NpcMoveRequestResult RequestNpcMoveRecord(
     }
     record->phase = NpcMovePhase::FollowingPath;
     record->gait = gait;
+    record->movementSpeedOverride = std::isfinite(movementSpeedOverride)
+            && movementSpeedOverride > 0.0f
+            ? movementSpeedOverride : 0.0f;
     record->authority = authority;
     record->requestId = AllocateRequestId(runtime);
     record->requestedDestinationXZ = destinationXZ;
@@ -926,14 +930,16 @@ NpcMoveRequestResult RequestNpcMove(
         std::string_view instanceId,
         Vector2 destinationXZ,
         NpcMoveGait gait,
-        NpcMoveAuthority authority)
+        NpcMoveAuthority authority,
+        float movementSpeedOverride)
 {
     if (!IsValidNpcInstanceId(instanceId)) {
         return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "invalid NPC instance ID");
     }
     return RequestNpcMoveRecord(
             world, navigation, collisionWorld, runtime,
-            FindRecord(runtime, instanceId), destinationXZ, gait, authority);
+            FindRecord(runtime, instanceId), destinationXZ, gait, authority,
+            movementSpeedOverride);
 }
 
 NpcMoveRequestResult RequestNpcMoveForEntity(
@@ -944,11 +950,13 @@ NpcMoveRequestResult RequestNpcMoveForEntity(
         engine::Entity entity,
         Vector2 destinationXZ,
         NpcMoveGait gait,
-        NpcMoveAuthority authority)
+        NpcMoveAuthority authority,
+        float movementSpeedOverride)
 {
     return RequestNpcMoveRecord(
             world, navigation, collisionWorld, runtime,
-            FindRecord(runtime, entity), destinationXZ, gait, authority);
+            FindRecord(runtime, entity), destinationXZ, gait, authority,
+            movementSpeedOverride);
 }
 
 NpcMoveRequestResult RetargetNpcAiMove(
@@ -1317,7 +1325,8 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
         NpcNavigationRuntime& runtime,
         const std::vector<SectorDynamicDoorCollider>& doorColliders,
         float rawDt,
-        bool freezeAi)
+        bool freezeAi,
+        int externalDoorHoldId)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     world.ForEach<SectorDoorOpenControl>(
@@ -1459,6 +1468,16 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
                     });
         }
     }
+    if (externalDoorHoldId > 0) {
+        world.ForEach<SectorDoor, SectorDoorOpenControl>(
+                [externalDoorHoldId](engine::Entity, SectorDoor& door,
+                        SectorDoorOpenControl& control) {
+                    if (door.enabled
+                            && door.placedObjectId == externalDoorHoldId) {
+                        ++control.navigationHolderCount;
+                    }
+                });
+    }
 }
 
 void SynchronizeSectorNavigationDoorLinksSystem(
@@ -1581,8 +1600,10 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
         const SectorObjectTransform& transform =
                 world.Get<SectorObjectTransform>(record.entity);
-        const float maximumSpeed = record.gait == NpcMoveGait::Run
+        const float authoredSpeed = record.gait == NpcMoveGait::Run
                 ? npc.runSpeed : npc.walkSpeed;
+        const float maximumSpeed = record.movementSpeedOverride > 0.0f
+                ? record.movementSpeedOverride : authoredSpeed;
         Vector2 preferred{};
         const bool staggered = world.Has<NpcCombatState>(record.entity)
                 && world.Get<NpcCombatState>(record.entity)
@@ -1792,8 +1813,10 @@ void UpdateNpcNavigationAndLocomotionSystem(
         }
         if (!staggered && !frozenAi && IsActive(record.phase)
                 && !record.tileReplanPending && dt > 0.0f) {
-            const float movementSpeed = record.gait == NpcMoveGait::Run
+            const float authoredMovementSpeed = record.gait == NpcMoveGait::Run
                     ? npc.runSpeed : npc.walkSpeed;
+            const float movementSpeed = record.movementSpeedOverride > 0.0f
+                    ? record.movementSpeedOverride : authoredMovementSpeed;
             const SectorNavigationCrowdAgentState crowdState =
                     navigation.GetCrowdAgentState(record.agentHandle);
             record.crowdAttached = crowdState.attached;

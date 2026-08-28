@@ -1059,6 +1059,12 @@ int main(int argc, char** argv)
                 if (useWorldFxaa) {
                     EndShaderMode();
                 }
+                const float worldFadeOpacity = application.WorldFadeOpacity();
+                if (worldFadeOpacity > 0.0f) {
+                    DrawRectangleRec(
+                            dst,
+                            Fade(BLACK, std::clamp(worldFadeOpacity, 0.0f, 1.0f)));
+                }
             } else if (contentKind == game::ApplicationContentKind::Editor2D) {
                 Rectangle editorSrc = GetFullscreenSrcRect(editorTarget.texture);
                 DrawTexturePro(editorTarget.texture, editorSrc, dst, {0,0}, 0.0f, WHITE);

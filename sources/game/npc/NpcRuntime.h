@@ -201,6 +201,8 @@ struct NpcNavigationRecord {
     SectorNavigationPathHandle pathHandle;
     NpcMovePhase phase = NpcMovePhase::Idle;
     NpcMoveGait gait = NpcMoveGait::Walk;
+    // Request-local override. Zero keeps the authored Walk/Run action speed.
+    float movementSpeedOverride = 0.0f;
     NpcMoveAuthority authority = NpcMoveAuthority::None;
     uint64_t requestId = 0;
     SectorNavigationQueryStatus lastQueryStatus =

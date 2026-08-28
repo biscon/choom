@@ -654,6 +654,7 @@ if(BUILD_TESTING)
             sources/engine/scripting/ScriptSystem.cpp
             sources/engine/scripting/ScriptPersistence.cpp
             sources/game/SectorScriptBindings.cpp
+            sources/game/cutscene/SectorCutsceneRuntime.cpp
             sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
             sources/engine/systems/AnimatedModelRaycast.cpp

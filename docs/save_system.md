@@ -36,10 +36,15 @@ story state that spans levels.
 
 Saving is permitted only while a campaign is active in regular gameplay. The
 main-menu Save item remains visible but disabled when the session reports a
-save block; hovering it displays the block reason. Cutscene integration can
-use `SectorGameSession::SetSaveGameBlocked(true, reason)` and clear the gate
-when the cutscene ends. This is deliberately a C++ integration point for now;
-no new Lua binding is exposed.
+save block; hovering it displays the block reason. Calling the Lua cutscene
+command `enableControls(false)` disables gameplay input and engages this gate
+with a cutscene-specific reason. `enableControls(true)` restores controls and
+clears the cutscene save block. Map teardown/reset also clears it.
+
+Saving must remain blocked for the complete interval in which a cutscene owns
+player/camera control. Player move/look operations, caption/fade timelines,
+Lua coroutine state, and world-fade opacity are transient and are not added to
+the save schema.
 
 Thumbnail capture reads the retained 8-bit scene-presentation render target,
 before HUD and menu composition, flips it to image orientation, and scales it

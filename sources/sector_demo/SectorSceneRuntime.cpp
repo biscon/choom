@@ -199,7 +199,8 @@ void SectorSceneRuntime::Update(
         const Vector3* playerPosition,
         int playerSectorId,
         const SectorDoorPlayerObstacle* playerObstacle,
-        const NpcAiGameplayContext* npcGameplay)
+        const NpcAiGameplayContext* npcGameplay,
+        int externalDoorHoldId)
 {
     UpdateLevelAudio(context, map, dt, playerSectorId);
     PrepareNpcDoorTraversalAndHoldsSystem(
@@ -208,7 +209,8 @@ void SectorSceneRuntime::Update(
             npcNavigation,
             runtimeObjects.dynamicDoorColliders,
             dt,
-            npcGameplay != nullptr && npcGameplay->frozen);
+            npcGameplay != nullptr && npcGameplay->frozen,
+            externalDoorHoldId);
     CollectNpcDoorObstacles(
             context.world,
             npcNavigation,
