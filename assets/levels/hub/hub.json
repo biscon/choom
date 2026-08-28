@@ -125,23 +125,6 @@
       "yawDegrees": 90.0
     },
     {
-      "id": 11,
-      "kind": "dynamic_model",
-      "dynamicModel": {
-        "instanceId": "prop_11",
-        "modelPath": "assets/models/characters/TestCharacter.glb",
-        "collision": true,
-        "animation": "Sitting Idle",
-        "shadowMode": "dynamic"
-      },
-      "position": [
-        -72.0,
-        0.0,
-        75.0
-      ],
-      "yawDegrees": 180.0
-    },
-    {
       "id": 13,
       "kind": "static_model",
       "staticModel": {
@@ -2818,6 +2801,22 @@
         -67.0
       ],
       "yawDegrees": 94.99999237060547
+    },
+    {
+      "id": 170,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "TestCharacter",
+        "instanceId": "test_npc",
+        "patrolEditorId": 2,
+        "randomPatrolStart": true
+      },
+      "position": [
+        -72.0,
+        0.0,
+        72.0
+      ],
+      "yawDegrees": 180.0
     }
   ],
   "staticLights": [
@@ -23711,62 +23710,6 @@
         "orientationDegrees": 90.0
       },
       {
-        "editorId": 2,
-        "id": "wp1",
-        "x": 64,
-        "y": 0.0,
-        "z": 304,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 3,
-        "id": "wp2",
-        "x": 320,
-        "y": 0.0,
-        "z": 832,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 4,
-        "id": "wp3",
-        "x": 256,
-        "y": 0.0,
-        "z": 1648,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 5,
-        "id": "wp4",
-        "x": -640,
-        "y": 0.0,
-        "z": 1536,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 6,
-        "id": "wp5",
-        "x": -1280,
-        "y": 0.0,
-        "z": 896,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 7,
-        "id": "wp6",
-        "x": -1104,
-        "y": 0.0,
-        "z": 1696,
-        "orientationDegrees": 0.0
-      },
-      {
-        "editorId": 8,
-        "id": "wp7",
-        "x": -2352,
-        "y": -27.0,
-        "z": 1568,
-        "orientationDegrees": 0.0
-      },
-      {
         "editorId": 9,
         "id": "marker_1",
         "x": -3232,
@@ -23821,6 +23764,38 @@
         "y": -27.0,
         "z": 992,
         "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 16,
+        "id": "wp1",
+        "x": -656,
+        "y": 0.0,
+        "z": 1072,
+        "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 17,
+        "id": "wp2",
+        "x": -1024,
+        "y": 0.0,
+        "z": 576,
+        "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 18,
+        "id": "wp3",
+        "x": -1616,
+        "y": 0.0,
+        "z": 832,
+        "orientationDegrees": 180.0
+      },
+      {
+        "editorId": 19,
+        "id": "wp4",
+        "x": -1104,
+        "y": 0.0,
+        "z": 1120,
+        "orientationDegrees": 0.0
       }
     ],
     "patrols": [
@@ -23862,6 +23837,32 @@
             "levelMarkerEditorId": 15,
             "delayMilliseconds": 3000,
             "lookAround": true
+          }
+        ],
+        "shuffleWaypoints": true
+      },
+      {
+        "editorId": 2,
+        "id": "test_npc_patrol",
+        "waypoints": [
+          {
+            "levelMarkerEditorId": 16,
+            "delayMilliseconds": 3000,
+            "lookAround": true,
+            "lookArcDegrees": 75.0
+          },
+          {
+            "levelMarkerEditorId": 17,
+            "delayMilliseconds": 4000
+          },
+          {
+            "levelMarkerEditorId": 18,
+            "delayMilliseconds": 5000,
+            "lookAround": true
+          },
+          {
+            "levelMarkerEditorId": 19,
+            "delayMilliseconds": 3500
           }
         ],
         "shuffleWaypoints": true

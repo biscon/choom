@@ -9990,16 +9990,18 @@ void TestSectorDoorModelVisibilityUsesEitherAdjacentSector()
     game::RuntimePortalVisibilityResult visibility;
     visibility.validStartSector = true;
     visibility.visibleSectorIds = {10};
-    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility),
+    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility, false),
           "model door is visible from its front adjacent sector");
     visibility.visibleSectorIds = {20};
-    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility),
+    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility, false),
           "model door is visible from its back adjacent sector");
     visibility.visibleSectorIds = {30};
-    Check(!game::ShouldDrawSectorDoorForVisibility(anchor, visibility),
+    Check(!game::ShouldDrawSectorDoorForVisibility(anchor, visibility, false),
           "model door is culled when neither adjacent sector is visible");
+    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility, true),
+          "onscreen model door bounds override an excluded adjacent sector");
     visibility.fallbackDrawAll = true;
-    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility),
+    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility, false),
           "fallback visibility conservatively includes model doors");
 }
 

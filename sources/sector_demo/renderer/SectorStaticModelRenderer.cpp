@@ -1,5 +1,6 @@
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 
+#include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include "sector_demo/renderer/SectorDynamicShadowSampling.h"
 
 #include "engine/assets/AssetManager.h"
@@ -1684,6 +1685,12 @@ void SectorStaticModelRenderer::Draw(
                 SHADER_UNIFORM_VEC3);
     }
     const bool environmentActive = environment != nullptr && environment->id != 0;
+    const int viewWidth = GetScreenWidth();
+    const int viewHeight = GetScreenHeight();
+    const float viewAspect = viewWidth > 0 && viewHeight > 0
+            ? static_cast<float>(viewWidth) / static_cast<float>(viewHeight)
+            : 0.0f;
+    const float viewNearPlane = static_cast<float>(rlGetCullDistanceNear());
     worldDiagnostics = {};
 
     size_t considered = 0;
@@ -2199,10 +2206,16 @@ void SectorStaticModelRenderer::Draw(
              &visibility,
              environment,
              objectProbeBakeCurrent,
+             &camera,
+             viewWidth,
+             viewHeight,
+             viewAspect,
+             viewNearPlane,
              &considered,
              &drawn,
              &portalCulled,
-             &skipped](
+             &skipped,
+             staticCaptureOnly](
                     engine::Entity,
                     SectorObject& object,
                     SectorObjectLighting& lighting,
@@ -2214,7 +2227,20 @@ void SectorStaticModelRenderer::Draw(
                     return;
                 }
                 ++considered;
-                if (!ShouldDrawSectorDoorForVisibility(anchor, visibility)) {
+                const bool boundsVisibleInCamera = !staticCaptureOnly
+                        && !ProjectSectorAtmosphereBoundsToScissor(
+                                    camera,
+                                    viewAspect,
+                                    viewNearPlane,
+                                    modelRender.receiverBounds.min,
+                                    modelRender.receiverBounds.max,
+                                    viewWidth,
+                                    viewHeight)
+                                    .Empty();
+                if (!ShouldDrawSectorDoorForVisibility(
+                            anchor,
+                            visibility,
+                            boundsVisibleInCamera)) {
                     ++portalCulled;
                     return;
                 }
