@@ -277,6 +277,9 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
         const float contentHeight = 21.0f * (RowHeight + RowGap)
+                + (!selected->definition.hostile
+                                ? 7.0f * (RowHeight + RowGap)
+                                : 0.0f)
                 + static_cast<float>(
                         selected->definition.ambientVocalizations.soundPaths.size())
                         * (RowHeight + RowGap)
@@ -620,6 +623,146 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                         ? config.invalidColor
                         : config.mutedTextColor);
         y += RowHeight + RowGap;
+
+        if (!selected->definition.hostile) {
+            engine::Separator(
+                    config,
+                    Rectangle{
+                            formScroll.viewport.x,
+                            formScroll.viewport.y
+                                    - editor.Session().formScroll.offset.y + y,
+                            formScroll.viewport.width,
+                            12.0f});
+            y += 18.0f;
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{0.0f, y, formScroll.viewport.width, 34.0f},
+                    font, "Head look",
+                    engine::UITextJustify::Left,
+                    config.accentColor);
+            y += 38.0f;
+
+            NpcHeadLookDefinition headLook = selected->definition.headLook;
+            bool headLookEnabled = headLook.enabled;
+            if (engine::Checkbox(
+                        ui, config, input, assets,
+                        "sector_editor_npc_head_look_enabled",
+                        Rectangle{fieldX, y, 300.0f, RowHeight},
+                        font, "Look toward player", headLookEnabled)) {
+                headLook.enabled = headLookEnabled;
+                editor.SetSelectedHeadLook(headLook);
+            }
+            y += RowHeight + RowGap;
+
+            if (selected->definition.headLook.enabled) {
+                headLook = selected->definition.headLook;
+                drawLabel("Head bone");
+                if (!state.boneOptions.empty()) {
+                    int selectedBone = 0;
+                    for (size_t index = 1;
+                            index < state.boneOptionStorage.size(); ++index) {
+                        if (state.boneOptionStorage[index]
+                                == headLook.boneName) {
+                            selectedBone = static_cast<int>(index);
+                            break;
+                        }
+                    }
+                    if (engine::Option(
+                                ui, config, input, assets,
+                                "sector_editor_npc_head_look_bone",
+                                Rectangle{fieldX, y, fieldW, RowHeight},
+                                font,
+                                state.boneOptions.data(),
+                                state.boneOptions.size(),
+                                selectedBone)) {
+                        headLook.boneName = selectedBone >= 0
+                                        && selectedBone < static_cast<int>(
+                                                state.boneOptionStorage.size())
+                                ? state.boneOptionStorage[
+                                          static_cast<size_t>(selectedBone)]
+                                : std::string{};
+                        editor.SetSelectedHeadLook(headLook);
+                    }
+                } else {
+                    engine::Text(
+                            ui, config, assets,
+                            Rectangle{fieldX, y, fieldW, RowHeight},
+                            smallFont,
+                            headLook.boneName.empty()
+                                    ? "<No skeletal bones loaded>"
+                                    : headLook.boneName.c_str(),
+                            engine::UITextJustify::Left,
+                            config.invalidColor);
+                }
+                y += RowHeight + 2.0f;
+
+                const bool missingBone = !headLook.boneName.empty()
+                        && editor.SelectedModelReady(assets)
+                        && !editor.SelectedBoneExists(
+                                assets, headLook.boneName);
+                const char* boneMessage = headLook.boneName.empty()
+                        ? "Select a skeletal head bone"
+                        : (missingBone
+                                ? "Saved bone is missing from this model"
+                                : "Rotation also affects descendant bones");
+                engine::Text(
+                        ui, config, assets,
+                        Rectangle{fieldX, y, fieldW, 28.0f},
+                        smallFont, boneMessage,
+                        engine::UITextJustify::Left,
+                        headLook.boneName.empty() || missingBone
+                                ? config.invalidColor
+                                : config.mutedTextColor);
+                y += 30.0f;
+
+                drawLabel("Look range world");
+                float rangeWorld = headLook.rangeWorld;
+                engine::UINumericInputResult headLookInput = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_head_look_range",
+                        Rectangle{fieldX, y, 190.0f, RowHeight},
+                        font, rangeWorld,
+                        state.headLookRangeWorldInput,
+                        0.0f, 10000.0f, 2);
+                if (headLookInput.changed) {
+                    headLook.rangeWorld = rangeWorld;
+                    editor.SetSelectedHeadLook(headLook);
+                }
+                y += RowHeight + RowGap;
+
+                headLook = selected->definition.headLook;
+                drawLabel("Max yaw per side");
+                float maxYawDegrees = headLook.maxYawDegrees;
+                headLookInput = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_head_look_max_yaw",
+                        Rectangle{fieldX, y, 190.0f, RowHeight},
+                        font, maxYawDegrees,
+                        state.headLookMaxYawDegreesInput,
+                        0.0f, kMaximumNpcHeadLookYawDegrees, 2);
+                if (headLookInput.changed) {
+                    headLook.maxYawDegrees = maxYawDegrees;
+                    editor.SetSelectedHeadLook(headLook);
+                }
+                y += RowHeight + RowGap;
+
+                headLook = selected->definition.headLook;
+                drawLabel("Max pitch");
+                float maxPitchDegrees = headLook.maxPitchDegrees;
+                headLookInput = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_head_look_max_pitch",
+                        Rectangle{fieldX, y, 190.0f, RowHeight},
+                        font, maxPitchDegrees,
+                        state.headLookMaxPitchDegreesInput,
+                        0.0f, kMaximumNpcHeadLookPitchDegrees, 2);
+                if (headLookInput.changed) {
+                    headLook.maxPitchDegrees = maxPitchDegrees;
+                    editor.SetSelectedHeadLook(headLook);
+                }
+                y += RowHeight + RowGap;
+            }
+        }
 
         engine::Separator(
                 config,

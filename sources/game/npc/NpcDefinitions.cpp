@@ -337,6 +337,31 @@ bool ValidateNpcDefinition(
         outError = "NPC perception ranges must be finite and non-negative, vision angle must be between 0 and 360 degrees, and investigation duration must be between 0 and 600000 ms";
         return false;
     }
+    const NpcHeadLookDefinition& headLook = definition.headLook;
+    if (definition.hostile && headLook.enabled) {
+        outError = "NPC head look is available only to non-hostile NPCs";
+        return false;
+    }
+    if (headLook.enabled && headLook.boneName.empty()) {
+        outError = "Enabled NPC head look requires a bone name";
+        return false;
+    }
+    if (headLook.boneName.size() > kMaximumNpcBoneNameLength) {
+        outError = "NPC head-look bone name must fit the model bone-name limit";
+        return false;
+    }
+    if (!std::isfinite(headLook.rangeWorld)
+            || headLook.rangeWorld < 0.0f
+            || headLook.rangeWorld > MaxWorldDistance
+            || !std::isfinite(headLook.maxYawDegrees)
+            || headLook.maxYawDegrees < 0.0f
+            || headLook.maxYawDegrees > kMaximumNpcHeadLookYawDegrees
+            || !std::isfinite(headLook.maxPitchDegrees)
+            || headLook.maxPitchDegrees < 0.0f
+            || headLook.maxPitchDegrees > kMaximumNpcHeadLookPitchDegrees) {
+        outError = "NPC head-look range must be between 0 and 10000 world units, yaw between 0 and 90 degrees, and pitch between 0 and 60 degrees";
+        return false;
+    }
     if (definition.baseHealth < kMinimumNpcBaseHealth
             || definition.baseHealth > kMaximumNpcBaseHealth) {
         outError = "NPC base health must be between 1 and 1000000";
@@ -511,7 +536,7 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "canOpenDoors",
+                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "headLook", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
                  "animationBlendSeconds", "playerDetectedSound",
@@ -578,6 +603,30 @@ bool ParseNpcDefinitionJson(
             parsed.perception.investigationDurationMilliseconds = OptionalInt(
                     *perception, "investigationDurationMilliseconds",
                     kDefaultNpcInvestigationDurationMilliseconds, context);
+        }
+
+        const auto headLook = root.find("headLook");
+        if (headLook != root.end()) {
+            const std::string context = "NPC definition.headLook";
+            if (!headLook->is_object()) Fail(context + " must be an object");
+            RejectUnknownFields(
+                    *headLook,
+                    {"enabled", "boneName", "rangeWorld", "maxYawDegrees",
+                     "maxPitchDegrees"},
+                    context);
+            parsed.headLook.enabled = OptionalBool(
+                    *headLook, "enabled", false, context);
+            parsed.headLook.boneName = OptionalString(
+                    *headLook, "boneName", {}, context);
+            parsed.headLook.rangeWorld = OptionalFloat(
+                    *headLook, "rangeWorld",
+                    kDefaultNpcHeadLookRangeWorld, context);
+            parsed.headLook.maxYawDegrees = OptionalFloat(
+                    *headLook, "maxYawDegrees",
+                    kDefaultNpcHeadLookMaxYawDegrees, context);
+            parsed.headLook.maxPitchDegrees = OptionalFloat(
+                    *headLook, "maxPitchDegrees",
+                    kDefaultNpcHeadLookMaxPitchDegrees, context);
         }
 
         const auto ambient = root.find("ambientVocalizations");
@@ -797,6 +846,33 @@ bool SerializeNpcDefinitionJson(
                         perception.investigationDurationMilliseconds;
             }
             root["perception"] = std::move(perceptionJson);
+        }
+
+        const NpcHeadLookDefinition& headLook = definition.headLook;
+        if (headLook.enabled
+                || !headLook.boneName.empty()
+                || headLook.rangeWorld != kDefaultNpcHeadLookRangeWorld
+                || headLook.maxYawDegrees
+                        != kDefaultNpcHeadLookMaxYawDegrees
+                || headLook.maxPitchDegrees
+                        != kDefaultNpcHeadLookMaxPitchDegrees) {
+            Json headLookJson = Json::object();
+            if (headLook.enabled) headLookJson["enabled"] = true;
+            if (!headLook.boneName.empty()) {
+                headLookJson["boneName"] = headLook.boneName;
+            }
+            if (headLook.rangeWorld != kDefaultNpcHeadLookRangeWorld) {
+                headLookJson["rangeWorld"] = headLook.rangeWorld;
+            }
+            if (headLook.maxYawDegrees
+                    != kDefaultNpcHeadLookMaxYawDegrees) {
+                headLookJson["maxYawDegrees"] = headLook.maxYawDegrees;
+            }
+            if (headLook.maxPitchDegrees
+                    != kDefaultNpcHeadLookMaxPitchDegrees) {
+                headLookJson["maxPitchDegrees"] = headLook.maxPitchDegrees;
+            }
+            root["headLook"] = std::move(headLookJson);
         }
 
         const NpcAmbientVocalizationDefinition& ambient =

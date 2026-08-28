@@ -30,6 +30,12 @@ inline constexpr float kDefaultNpcVisionRangeWorld = 15.0f;
 inline constexpr float kDefaultNpcVisionAngleDegrees = 120.0f;
 inline constexpr float kDefaultNpcHearingRangeWorld = 12.0f;
 inline constexpr int kDefaultNpcInvestigationDurationMilliseconds = 4000;
+inline constexpr float kDefaultNpcHeadLookRangeWorld = 5.0f;
+inline constexpr float kDefaultNpcHeadLookMaxYawDegrees = 60.0f;
+inline constexpr float kDefaultNpcHeadLookMaxPitchDegrees = 30.0f;
+inline constexpr float kMaximumNpcHeadLookYawDegrees = 90.0f;
+inline constexpr float kMaximumNpcHeadLookPitchDegrees = 60.0f;
+inline constexpr size_t kMaximumNpcBoneNameLength = 31;
 inline constexpr float kDefaultNpcAttackHitPhase = 0.55f;
 inline constexpr float kDefaultNpcAttackRangeWorld = 1.0f;
 inline constexpr float kDefaultNpcAttackAdvanceSpeedMultiplier = 1.0f;
@@ -123,6 +129,14 @@ struct NpcAmbientVocalizationDefinition {
     float maximumDelaySeconds = kDefaultNpcAmbientMaximumDelaySeconds;
 };
 
+struct NpcHeadLookDefinition {
+    bool enabled = false;
+    std::string boneName;
+    float rangeWorld = kDefaultNpcHeadLookRangeWorld;
+    float maxYawDegrees = kDefaultNpcHeadLookMaxYawDegrees;
+    float maxPitchDegrees = kDefaultNpcHeadLookMaxPitchDegrees;
+};
+
 struct NpcDefinition {
     std::string id;
     std::string name;
@@ -137,6 +151,7 @@ struct NpcDefinition {
     float animationBlendSeconds = kDefaultNpcAnimationBlendSeconds;
     std::string playerDetectedSoundPath;
     NpcPerceptionDefinition perception;
+    NpcHeadLookDefinition headLook;
     NpcAmbientVocalizationDefinition ambientVocalizations;
     std::array<NpcActionDefinition, kNpcActionCount> actions;
 };

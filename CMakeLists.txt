@@ -640,6 +640,8 @@ if(BUILD_TESTING)
             sources/game/npc/ai/NpcAiDebugData.cpp
             sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcCombatSystem.cpp
+            sources/game/npc/NpcHeadLookSystem.cpp
+            sources/game/npc/NpcLineOfSight.cpp
             sources/game/npc/ai/NpcAiSystem.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/npc/NpcNavigationSystem.cpp

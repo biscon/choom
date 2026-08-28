@@ -2807,9 +2807,7 @@
       "kind": "npc",
       "npc": {
         "definitionId": "TestCharacter",
-        "instanceId": "test_npc",
-        "patrolEditorId": 2,
-        "randomPatrolStart": true
+        "instanceId": "test_npc"
       },
       "position": [
         -81.0,

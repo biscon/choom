@@ -5,6 +5,10 @@
   "despawnOnDeath": true,
   "modelPath": "assets/models/characters/TestCharacter.glb",
   "animationBlendSeconds": 0.5,
+  "headLook": {
+    "enabled": true,
+    "boneName": "mixamorig:Head"
+  },
   "actions": {
     "idle": {
       "animation": "Idle"

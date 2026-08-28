@@ -975,6 +975,16 @@ the NPC Editor. Hostile/friendly remains faction and collision data. The AI Type
 dropdown filters registered AI descriptors by that alignment and also permits
 `None`. Per-definition perception fields author vision range, the full
 horizontal vision-cone angle, hearing range, and investigation duration.
+Non-hostile definitions may also enable procedural Head look. The editor reads
+the selected character model's skeleton for an exact head-bone dropdown and
+authors a horizontal activation range plus separate per-side yaw and pitch
+limits. At runtime the selected bone and its descendants smoothly turn toward
+the player's eye position at 180 degrees per second after the current idle,
+walk, or other skeletal animation has been sampled. Walls, closed doors, and
+solid static props block the look; leaving the range or angle limits smoothly
+returns the pose to its animation. Hostile, dead, disabled, missing-model, and
+missing-bone NPCs do not track. The optional `headLook` JSON object defaults to
+disabled, so existing definitions are unchanged.
 NPC hearing uses the same wall, closed-door, and open-portal propagation routes
 as positional audio. The route length must fit the NPC hearing range and the
 sound event radius is reduced by that route's transmission or diffraction gain.

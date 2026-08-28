@@ -6,6 +6,7 @@
 #include "game/Health.h"
 #include "engine/ecs/Entity.h"
 #include "engine/assets/AssetHandles.h"
+#include "engine/components/AnimatedModel.h"
 #include "game/navigation/SectorNavigationTypes.h"
 
 #include <array>
@@ -115,6 +116,19 @@ struct NpcAnimationState {
     uint8_t missingAnimationMask = 0;
     bool resolved = false;
     bool hasPendingAction = false;
+};
+
+struct NpcHeadLookState {
+    std::string boneName;
+    float rangeWorld = kDefaultNpcHeadLookRangeWorld;
+    float maxYawDegrees = kDefaultNpcHeadLookMaxYawDegrees;
+    float maxPitchDegrees = kDefaultNpcHeadLookMaxPitchDegrees;
+    float currentYawRadians = 0.0f;
+    float currentPitchRadians = 0.0f;
+    int boneIndex = -1;
+    std::array<uint8_t, engine::MaxAnimatedModelBones> affectedBones{};
+    bool boneResolutionAttempted = false;
+    bool warningPrinted = false;
 };
 
 enum class NpcMoveGait : uint8_t {

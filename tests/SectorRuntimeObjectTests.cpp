@@ -7,6 +7,7 @@
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcCombatSystem.h"
+#include "game/npc/NpcHeadLookSystem.h"
 #include "game/npc/NpcRuntime.h"
 #include "game/npc/ai/NpcAiSystem.h"
 #include "game/npc/ai/NpcAiDebugData.h"
@@ -5731,6 +5732,108 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     Check(animatedModel.poseSource
                     == engine::AnimatedModelPoseSource::RaylibSkeletal,
           "NPCs retain raylib skeletal evaluation and transition blending");
+    Check(!world.Has<game::NpcHeadLookState>(entity),
+          "hostile NPCs omit the friendly head-look runtime component");
+}
+
+void TestSpawnFriendlyNpcCopiesHeadLookDefinition()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 32;
+    object.kind = "npc";
+    object.position = Vector3{2.0f, 8.0f, 2.0f};
+    object.npc.definitionId = "friendly_head_look";
+    object.npc.instanceId = "friendly_one";
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::NpcDefinition definition = game::MakeDefaultNpcDefinition();
+    definition.id = "friendly_head_look";
+    definition.modelPath = "assets/models/characters/TestCharacter.glb";
+    definition.headLook.enabled = true;
+    definition.headLook.boneName = "Head";
+    definition.headLook.rangeWorld = 8.0f;
+    definition.headLook.maxYawDegrees = 50.0f;
+    definition.headLook.maxPitchDegrees = 20.0f;
+    game::GetNpcAction(
+            definition, game::NpcAction::Idle).animation = "Idle";
+    state.npcDefinitionCatalog.definitions.push_back(definition);
+
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.placedObjectEntities.size() == 1,
+          "friendly NPC with head look spawns one runtime entity");
+    if (state.placedObjectEntities.empty()) return;
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Has<game::NpcHeadLookState>(entity),
+          "enabled friendly NPC receives pre-reserved head-look state");
+    if (!world.Has<game::NpcHeadLookState>(entity)) return;
+    const game::NpcHeadLookState& headLook =
+            world.Get<game::NpcHeadLookState>(entity);
+    Check(headLook.boneName == "Head"
+                  && Near(headLook.rangeWorld, 8.0f)
+                  && Near(headLook.maxYawDegrees, 50.0f)
+                  && Near(headLook.maxPitchDegrees, 20.0f)
+                  && headLook.boneIndex == -1
+                  && !headLook.boneResolutionAttempted,
+          "friendly NPC copies authored head-look tuning for deferred bone resolution");
+}
+
+void TestNpcHeadLookTargetLimitsAndSmoothing()
+{
+    game::NpcHeadLookDefinition definition;
+    definition.enabled = true;
+    definition.boneName = "Head";
+    definition.rangeWorld = 10.0f;
+    definition.maxYawDegrees = 45.0f;
+    definition.maxPitchDegrees = 30.0f;
+    const Vector3 npcPosition{};
+    const Vector3 headPosition{0.0f, 1.0f, 0.0f};
+
+    const game::NpcHeadLookTargetAngles visible =
+            game::EvaluateNpcHeadLookTargetAngles(
+                    npcPosition,
+                    0.0f,
+                    headPosition,
+                    Vector3{1.0f, 1.5f, 1.7320508f},
+                    definition,
+                    true);
+    Check(visible.active
+                  && Near(visible.yawRadians, 30.0f * DEG2RAD, 0.0001f)
+                  && Near(visible.pitchRadians,
+                          std::atan2(0.5f, 2.0f), 0.0001f),
+          "head look evaluates player yaw and pitch inside its configured cone");
+    Check(!game::EvaluateNpcHeadLookTargetAngles(
+                          npcPosition, 0.0f, headPosition,
+                          Vector3{11.0f, 1.0f, 0.0f}, definition, true)
+                          .active,
+          "head look rejects players outside its horizontal range");
+    Check(!game::EvaluateNpcHeadLookTargetAngles(
+                          npcPosition, 0.0f, headPosition,
+                          Vector3{2.0f, 1.0f, 0.0f}, definition, true)
+                          .active,
+          "head look rejects players beyond its per-side yaw limit");
+    Check(!game::EvaluateNpcHeadLookTargetAngles(
+                          npcPosition, 0.0f, headPosition,
+                          Vector3{0.0f, 3.0f, 1.0f}, definition, true)
+                          .active,
+          "head look rejects players beyond its pitch limit");
+    Check(!game::EvaluateNpcHeadLookTargetAngles(
+                          npcPosition, 0.0f, headPosition,
+                          Vector3{0.0f, 1.0f, 2.0f}, definition, false)
+                          .active,
+          "head look rejects occluded players");
+
+    const float turned = game::MoveNpcHeadLookAngleToward(
+            0.0f, 90.0f * DEG2RAD, 0.25f);
+    Check(Near(turned, 45.0f * DEG2RAD, 0.0001f)
+                  && Near(game::MoveNpcHeadLookAngleToward(
+                                  turned, 0.0f, 0.25f),
+                          0.0f, 0.0001f),
+          "head look turns and returns at the fixed 180-degree-per-second speed");
 }
 
 void TestNpcFootstepCadenceUsesResolvedTravel()
@@ -10880,6 +10983,8 @@ int main()
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
     TestDynamicModelColliderCollectionIsSeparatedForNavigation();
     TestSpawnNpcResolvesDefinitionAndIdlePlayback();
+    TestSpawnFriendlyNpcCopiesHeadLookDefinition();
+    TestNpcHeadLookTargetLimitsAndSmoothing();
     TestNpcFootstepCadenceUsesResolvedTravel();
     TestNpcFootstepAnimationPhaseCrossings();
     TestNpcAiDebugGeometryAndLabelsExposeRuntimeState();

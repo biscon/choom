@@ -311,6 +311,20 @@ void SectorSceneRuntime::Update(
     }
     engine::AnimatedModelSystem(context.world, context.assets, dt);
     if (runtimeObjects.objectSectorLookupWorldValid) {
+        const Vector3* headLookTarget = npcGameplay != nullptr
+                        && !npcGameplay->playerInvisible
+                ? &npcGameplay->playerEyePosition
+                : nullptr;
+        UpdateNpcHeadLookSystem(
+                context.world,
+                context.assets,
+                runtimeObjects.objectSectorLookupWorld,
+                runtimeObjects.dynamicDoorColliders,
+                runtimeObjects.staticModelColliders,
+                headLookTarget,
+                dt);
+    }
+    if (runtimeObjects.objectSectorLookupWorldValid) {
         UpdateNpcFootstepEventsSystem(
                 context.world,
                 context.assets,

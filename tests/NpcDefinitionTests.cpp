@@ -256,6 +256,7 @@ void TestRoundTripDefaultsAndSharedClips()
                   && !Json::parse(json).contains("corpseDespawnDelaySeconds")
                   && !Json::parse(json).contains("corpseFadeDurationSeconds")
                   && !Json::parse(json).contains("playerDetectedSound")
+                  && !Json::parse(json).contains("headLook")
                   && !Json::parse(json).contains("ambientVocalizations")
                   && !Json::parse(json)["actions"]["attack"]
                           .contains("cameraImpact")
@@ -316,6 +317,52 @@ void TestRoundTripDefaultsAndSharedClips()
                   && game::GetNpcAction(parsed, game::NpcAction::Idle).animation.empty()
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation.empty(),
           "unassigned actions remain valid and default safely");
+}
+
+void TestHeadLookDefinitionRoundTripAndValidation()
+{
+    game::NpcDefinition definition = MakeDefinition("friendly_look");
+    definition.hostile = false;
+    definition.headLook.enabled = true;
+    definition.headLook.boneName = "Head";
+    definition.headLook.rangeWorld = 7.5f;
+    definition.headLook.maxYawDegrees = 55.0f;
+    definition.headLook.maxPitchDegrees = 25.0f;
+    std::string json;
+    std::string error;
+    game::NpcDefinition parsed;
+    Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                  && Json::parse(json)["headLook"]["enabled"] == true
+                  && Json::parse(json)["headLook"]["boneName"] == "Head"
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.headLook.enabled
+                  && parsed.headLook.boneName == "Head"
+                  && Near(parsed.headLook.rangeWorld, 7.5f)
+                  && Near(parsed.headLook.maxYawDegrees, 55.0f)
+                  && Near(parsed.headLook.maxPitchDegrees, 25.0f),
+          "friendly NPC head-look settings round-trip through optional JSON");
+
+    definition.headLook.boneName.clear();
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "enabled head look requires a configured bone");
+    definition.headLook.boneName = "Head";
+    definition.hostile = true;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "hostile NPC definitions reject enabled friendly head look");
+    definition.hostile = false;
+    definition.headLook.maxYawDegrees = 90.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "head-look yaw beyond the anatomical editor limit is rejected");
+    definition.headLook.maxYawDegrees = 45.0f;
+    definition.headLook.maxPitchDegrees = 60.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "head-look pitch beyond the anatomical editor limit is rejected");
+
+    Json unknownHeadLookField = Json::parse(json);
+    unknownHeadLookField["headLook"]["rollDegrees"] = 5.0f;
+    Check(!game::ParseNpcDefinitionJson(
+                  unknownHeadLookField.dump(), parsed, error),
+          "unknown NPC head-look JSON fields are rejected");
 }
 
 void TestValidation()
@@ -595,6 +642,21 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
     service.SetSelectedAnimationBlendSeconds(0.45f);
     Check(Near(service.SelectedDraft()->definition.animationBlendSeconds, 0.45f),
           "NPC editor service updates animation blending through its draft API");
+    service.SetSelectedHostile(false);
+    game::NpcHeadLookDefinition headLook;
+    headLook.enabled = true;
+    headLook.boneName = "Head";
+    headLook.rangeWorld = 6.0f;
+    service.SetSelectedHeadLook(headLook);
+    Check(service.SelectedDraft()->definition.headLook.enabled
+                  && service.SelectedDraft()->definition.headLook.boneName
+                          == "Head",
+          "NPC editor service updates friendly head-look settings");
+    service.SetSelectedHostile(true);
+    Check(!service.SelectedDraft()->definition.headLook.enabled
+                  && service.SelectedDraft()->definition.headLook.boneName
+                          == "Head",
+          "making an NPC hostile disables head look without erasing its tuning");
     service.SetSelectedCanOpenDoors(false);
     Check(!service.SelectedDraft()->definition.canOpenDoors,
           "NPC editor service updates door-opening capability through its draft API");
@@ -741,6 +803,7 @@ void TestCatalogErrorsBlockEditorSave()
 int main()
 {
     TestRoundTripDefaultsAndSharedClips();
+    TestHeadLookDefinitionRoundTripAndValidation();
     TestValidation();
     TestSeekAndDestroyPluginBoundary();
     TestDiscoveryErrorsAreRetained();

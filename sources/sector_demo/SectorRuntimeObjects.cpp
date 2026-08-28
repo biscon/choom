@@ -46,7 +46,7 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(30);
+    world.ReserveComponentTypes(31);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -58,6 +58,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<NpcPatrolState>(objectCapacity);
     world.ReserveComponent<NpcAiState>(objectCapacity);
     world.ReserveComponent<NpcAnimationState>(objectCapacity);
+    world.ReserveComponent<NpcHeadLookState>(objectCapacity);
     world.ReserveComponent<Health>(objectCapacity);
     world.ReserveComponent<NpcCombatState>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
@@ -1381,6 +1382,16 @@ void SpawnPlacedRuntimeObjects(
                         GetNpcAction(*definition, metadata.action).animationSpeed;
             }
             world.Add(entity, npcAnimation);
+            if (!definition->hostile && definition->headLook.enabled) {
+                NpcHeadLookState headLook;
+                headLook.boneName = definition->headLook.boneName;
+                headLook.rangeWorld = definition->headLook.rangeWorld;
+                headLook.maxYawDegrees =
+                        definition->headLook.maxYawDegrees;
+                headLook.maxPitchDegrees =
+                        definition->headLook.maxPitchDegrees;
+                world.Add(entity, std::move(headLook));
+            }
             world.Add(entity, SectorObjectVisualOffset{});
             world.Add(entity, SectorDynamicModel{
                     placedObject.id,

@@ -7,6 +7,7 @@
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcCombatSystem.h"
+#include "game/npc/NpcHeadLookSystem.h"
 #include "game/npc/ai/NpcAiSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorAudioOcclusion.h"
