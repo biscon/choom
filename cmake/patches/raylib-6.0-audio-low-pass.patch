@@ -1,0 +1,113 @@
+diff --git a/src/raylib.h b/src/raylib.h
+--- a/src/raylib.h
++++ b/src/raylib.h
+@@ -1729,4 +1729,5 @@ RLAPI void SetAudioStreamPitch(AudioStream stream, float pitch);      // Set pit
+ RLAPI void SetAudioStreamPan(AudioStream stream, float pan);          // Set pan for audio stream (-1.0 to 1.0 range, 0.0 is centered)
++RLAPI void SetAudioStreamLowPassFilter(AudioStream stream, float cutoffFrequency); // Set one-pole low-pass cutoff in Hz (device Nyquist disables it)
+ RLAPI void SetAudioStreamBufferSizeDefault(int size);                 // Default size for new audio streams
+ RLAPI void SetAudioStreamCallback(AudioStream stream, AudioCallback callback); // Audio thread callback to request new data
+ 
+diff --git a/src/raudio.c b/src/raudio.c
+--- a/src/raudio.c
++++ b/src/raudio.c
+@@ -179,4 +179,5 @@ typedef struct tagBITMAPINFOHEADER {
+ #include <stdlib.h>                     // Required for: malloc(), free()
+ #include <stdio.h>                      // Required for: FILE, fopen(), fclose(), fread()
+ #include <string.h>                     // Required for: strcmp() [Used in IsFileExtension(), LoadWaveFromMemory(), LoadMusicStreamFromMemory()]
++#include <math.h>                       // Required for: expf(), isfinite()
+ 
+@@ -356,6 +356,10 @@ struct rAudioBuffer {
+     float pitch;                    // Audio buffer pitch
+     float pan;                      // Audio buffer pan (-1.0f to 1.0f)
+ 
++    float lowPassAlpha;             // One-pole low-pass coefficient, 1.0f bypasses
++    float lowPassLeft;              // Previous filtered left sample
++    float lowPassRight;             // Previous filtered right sample
++
+     bool playing;                   // Audio buffer state: AUDIO_PLAYING
+     bool paused;                    // Audio buffer state: AUDIO_PAUSED
+     bool looping;                   // Audio buffer looping, default to true for AudioStreams
+@@ -453,6 +457,7 @@ void StopAudioBuffer(AudioBuffer *buffer);
+ void PauseAudioBuffer(AudioBuffer *buffer);
+ void ResumeAudioBuffer(AudioBuffer *buffer);
+ void SetAudioBufferVolume(AudioBuffer *buffer, float volume);
++void SetAudioBufferLowPassFilter(AudioBuffer *buffer, float cutoffFrequency);
+ void SetAudioBufferPitch(AudioBuffer *buffer, float pitch);
+ void SetAudioBufferPan(AudioBuffer *buffer, float pan);
+ void TrackAudioBuffer(AudioBuffer *buffer);
+@@ -608,6 +613,7 @@ AudioBuffer *LoadAudioBuffer(ma_format format, ma_uint32 channels, ma_uint32 sam
+     audioBuffer->volume = 1.0f;
+     audioBuffer->pitch = 1.0f;
+     audioBuffer->pan = 0.0f; // Center
++    audioBuffer->lowPassAlpha = 1.0f;
+ 
+     audioBuffer->callback = NULL;
+     audioBuffer->processor = NULL;
+@@ -665,6 +671,8 @@ void PlayAudioBuffer(AudioBuffer *buffer)
+     {
+         ma_mutex_lock(&AUDIO.System.lock);
+         buffer->playing = true;
++        buffer->lowPassLeft = 0.0f;
++        buffer->lowPassRight = 0.0f;
+         buffer->paused = false;
+         buffer->frameCursorPos = 0;
+         buffer->framesProcessed = 0;
+@@ -714,6 +720,25 @@ void SetAudioBufferVolume(AudioBuffer *buffer, float volume)
+     }
+ }
+ 
++// Set one-pole low-pass cutoff for an audio buffer
++void SetAudioBufferLowPassFilter(AudioBuffer *buffer, float cutoffFrequency)
++{
++    if (buffer != NULL)
++    {
++        ma_mutex_lock(&AUDIO.System.lock);
++        float nyquist = (float)AUDIO.System.device.sampleRate*0.5f;
++        if (!isfinite(cutoffFrequency) || cutoffFrequency >= nyquist) buffer->lowPassAlpha = 1.0f;
++        else
++        {
++            if (cutoffFrequency < 20.0f) cutoffFrequency = 20.0f;
++            buffer->lowPassAlpha = 1.0f - expf(-6.283185307179586f*cutoffFrequency/(float)AUDIO.System.device.sampleRate);
++            if (buffer->lowPassAlpha < 0.0f) buffer->lowPassAlpha = 0.0f;
++            else if (buffer->lowPassAlpha > 1.0f) buffer->lowPassAlpha = 1.0f;
++        }
++        ma_mutex_unlock(&AUDIO.System.lock);
++    }
++}
++
+ // Set pitch for an audio buffer
+ void SetAudioBufferPitch(AudioBuffer *buffer, float pitch)
+ {
+@@ -2249,6 +2274,12 @@ void SetAudioStreamPan(AudioStream stream, float pan)
+     SetAudioBufferPan(stream.buffer, pan);
+ }
+ 
++// Set one-pole low-pass cutoff for audio stream
++void SetAudioStreamLowPassFilter(AudioStream stream, float cutoffFrequency)
++{
++    SetAudioBufferLowPassFilter(stream.buffer, cutoffFrequency);
++}
++
+ // Default size for new audio streams
+ void SetAudioStreamBufferSizeDefault(int size)
+ {
+@@ -2601,6 +2632,19 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const
+                         float *framesOut = (float *)pFramesOut + (framesRead*AUDIO.System.device.playback.channels);
+                         float *framesIn = tempBuffer;
+ 
++                        if (audioBuffer->lowPassAlpha < 1.0f)
++                        {
++                            for (ma_uint32 frame = 0; frame < framesJustRead; frame++)
++                            {
++                                float *sample = framesIn + frame*AUDIO_DEVICE_CHANNELS;
++                                audioBuffer->lowPassLeft += audioBuffer->lowPassAlpha*(sample[0] - audioBuffer->lowPassLeft);
++                                audioBuffer->lowPassRight += audioBuffer->lowPassAlpha*(sample[1] - audioBuffer->lowPassRight);
++                                sample[0] = audioBuffer->lowPassLeft;
++                                sample[1] = audioBuffer->lowPassRight;
++                            }
++                        }
++                        else audioBuffer->lowPassLeft = audioBuffer->lowPassRight = 0.0f;
++
+                         // Apply processors chain if defined
+                         rAudioProcessor *processor = audioBuffer->processor;
+                         while (processor)

@@ -926,12 +926,24 @@ game::SectorTopologyMap MakeDoorPortalMap()
     return map;
 }
 
+game::SectorTopologyMap MakeTwoWallSoundMap()
+{
+    game::SectorTopologyMap map;
+    map.sectors.push_back(Sector(10));
+    map.sectors.push_back(Sector(20));
+    AddSectorLoop(map, 10, {{0, 0}, {64, 0}, {64, 64}, {0, 64}});
+    AddSectorLoop(map, 20, {{96, 0}, {160, 0}, {160, 64}, {96, 64}});
+    return map;
+}
+
 void TestSectorSpatialSoundOcclusion()
 {
     const std::vector<game::SectorDynamicDoorCollider> noDoors;
+    const std::vector<game::RuntimePortalDynamicBlocker> noPortalBlockers;
+    const game::SectorTopologyMap squareMap = MakeSquareMap();
     game::SectorCollisionWorld squareCollision;
     std::string error;
-    Check(squareCollision.BuildFromTopology(MakeSquareMap(), &error),
+    Check(squareCollision.BuildFromTopology(squareMap, &error),
           "sound occlusion wall fixture builds");
     Check(Near(
                   game::ComputeSectorSoundOcclusion(
@@ -941,6 +953,44 @@ void TestSectorSpatialSoundOcclusion()
                           Vector3{0.75f, 1.0f, 0.25f}),
                   game::SectorOccludedSoundVolumeScale),
           "sector wall attenuates a spatial sound");
+
+    game::SectorSoundPropagationWorld squarePropagation;
+    Check(squarePropagation.Build(squareMap, &error),
+          "sound propagation wall fixture builds");
+    const game::SectorSoundPropagationResult wallPropagation =
+            squarePropagation.Evaluate(
+                    &squareCollision,
+                    noDoors,
+                    noPortalBlockers,
+                    Vector3{0.25f, 1.0f, 0.25f},
+                    Vector3{0.75f, 1.0f, 0.25f});
+    Check(wallPropagation.transmission.barrierCount == 1
+                  && Near(
+                          wallPropagation.transmission.volumeScale,
+                          game::SectorOccludedSoundVolumeScale)
+                  && Near(
+                          wallPropagation.transmission.lowPassCutoffHz,
+                          game::SectorFirstBarrierSoundCutoffHz),
+          "one solid wall applies one transmission loss and low-pass step");
+
+    const game::SectorTopologyMap twoWallMap = MakeTwoWallSoundMap();
+    game::SectorCollisionWorld twoWallCollision;
+    Check(twoWallCollision.BuildFromTopology(twoWallMap, &error),
+          "two-wall sound fixture builds");
+    game::SectorSoundPropagationWorld twoWallPropagation;
+    Check(twoWallPropagation.Build(twoWallMap, &error),
+          "two-wall sound propagation fixture builds");
+    const game::SectorSoundPropagationResult twoWallResult =
+            twoWallPropagation.Evaluate(
+                    &twoWallCollision,
+                    noDoors,
+                    noPortalBlockers,
+                    Vector3{0.25f, 1.0f, 0.25f},
+                    Vector3{1.0f, 1.0f, 0.25f});
+    Check(twoWallResult.transmission.barrierCount == 2
+                  && Near(twoWallResult.transmission.volumeScale, 0.04f)
+                  && Near(twoWallResult.transmission.lowPassCutoffHz, 1000.0f),
+          "two topology walls compound transmission volume and filtering");
 
     game::SectorCollisionWorld portalCollision;
     Check(portalCollision.BuildFromTopology(MakeDoorPortalMap(), &error),
@@ -974,6 +1024,55 @@ void TestSectorSpatialSoundOcclusion()
                           &portalCollision, doors, listener, source),
                   game::SectorOccludedSoundVolumeScale),
           "closed door slab attenuates a spatial sound through a portal");
+
+    game::SectorSoundPropagationWorld portalPropagation;
+    Check(portalPropagation.Build(MakeDoorPortalMap(), &error),
+          "sound propagation portal graph builds");
+    const Vector3 lowListener{0.25f, 0.2f, 0.25f};
+    const Vector3 lowSource{0.75f, 0.2f, 0.25f};
+    const game::SectorSoundPropagationResult openPortalPropagation =
+            portalPropagation.Evaluate(
+                    &portalCollision,
+                    noDoors,
+                    noPortalBlockers,
+                    lowListener,
+                    lowSource);
+    Check(openPortalPropagation.transmission.barrierCount == 1
+                  && openPortalPropagation.portal.valid
+                  && openPortalPropagation.portal.portalCount == 1
+                  && Near(openPortalPropagation.portal.apparentPosition.x, 0.5f),
+          "open portal produces an alternate path located at the opening");
+    game::SectorAudioOcclusionContext propagationContext;
+    propagationContext.collisionWorld = &portalCollision;
+    propagationContext.doorColliders = &noDoors;
+    propagationContext.portalBlockers = &noPortalBlockers;
+    propagationContext.propagationWorld = &portalPropagation;
+    engine::PositionalSoundSettings positionalSource;
+    positionalSource.position = lowSource;
+    positionalSource.minimumDistanceWorld = 0.1f;
+    positionalSource.maximumDistanceWorld = 10.0f;
+    const engine::PositionalSoundPropagation selectedPortal =
+            game::QuerySectorSoundPropagation(
+                    &propagationContext, lowListener, positionalSource);
+    Check(Near(selectedPortal.apparentPosition.x, 0.5f)
+                  && selectedPortal.volumeScale
+                          > game::SectorOccludedSoundVolumeScale
+                  && selectedPortal.lowPassCutoffHz
+                          > game::SectorFirstBarrierSoundCutoffHz,
+          "spatial audio selects the stronger open-portal route");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> portalBlockers{
+            {2, 2, 10, 20, true},
+            {2, 8, 20, 10, true}};
+    const game::SectorSoundPropagationResult blockedPortalPropagation =
+            portalPropagation.Evaluate(
+                    &portalCollision,
+                    noDoors,
+                    portalBlockers,
+                    lowListener,
+                    lowSource);
+    Check(!blockedPortalPropagation.portal.valid,
+          "a closed dynamic portal blocker removes the alternate sound path");
     doors.front().center.y = 1.0f;
     Check(Near(
                   game::ComputeSectorSoundOcclusion(
@@ -6012,6 +6111,92 @@ void TestNpcPlayerDetectedAudioTransitionPolicy()
     navigation.Shutdown();
 }
 
+void TestNpcHearingUsesSectorSoundPropagation()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string error;
+    Check(collisionWorld.BuildFromTopology(map, &error),
+          "NPC hearing collision fixture builds");
+    game::SectorSoundPropagationWorld soundPropagation;
+    Check(soundPropagation.Build(map, &error),
+          "NPC hearing propagation fixture builds");
+
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "NPC hearing navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity entity = SpawnNavigationTestNpc(
+            world, "propagated_hearing", 979, {4.0f, 0.0f, 4.0f}, 10);
+    game::NpcRuntimeInstance& npc =
+            world.Get<game::NpcRuntimeInstance>(entity);
+    npc.hostile = true;
+    game::NpcAiState ai;
+    ai.aiType = game::kSeekAndDestroyNpcAiType;
+    ai.perception.visionRangeWorld = 0.0f;
+    ai.perception.hearingRangeWorld = 20.0f;
+    world.Add(entity, ai);
+    world.Add(entity, game::MakeHealth(100));
+    world.Add(entity, game::NpcCombatState{});
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    game::NpcAiRuntime aiRuntime;
+    game::InitializeNpcAiRuntime(
+            aiRuntime, 4, navigation.Capacities().agentCapacity);
+    engine::AssetManager assets;
+    engine::AudioSystem audio;
+    game::Health playerHealth = game::MakeHealth(100);
+    game::NpcAiGameplayContext gameplay;
+    gameplay.playerFeetPosition = {100.0f, 0.0f, 100.0f};
+    gameplay.playerEyePosition = {100.0f, 1.4f, 100.0f};
+    gameplay.playerHealth = &playerHealth;
+
+    game::SectorDynamicDoorCollider door;
+    door.center = {6.0f, 4.0f};
+    door.tangent = {0.0f, 1.0f};
+    door.normal = {1.0f, 0.0f};
+    door.halfExtents = {2.0f, 0.05f};
+    door.bottom = 0.0f;
+    door.top = 3.0f;
+    const std::vector<game::SectorDynamicDoorCollider> doors{door};
+    const std::vector<game::SectorStaticModelCollider> staticColliders;
+    const std::vector<game::RuntimePortalDynamicBlocker> portalBlockers;
+    const Vector3 soundPosition{8.0f, 1.4f, 4.0f};
+
+    game::EmitNpcPlayerSound(aiRuntime, soundPosition, 10.0f);
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f,
+            &soundPropagation, &portalBlockers);
+    Check(world.Get<game::NpcAiState>(entity).awareness
+                          == game::NpcAwarenessState::Unaware
+                  && world.Get<game::NpcAiState>(entity)
+                          .lastHeardSoundSequence == 0,
+          "wall transmission loss can put an otherwise in-range sound below NPC hearing");
+
+    game::EmitNpcPlayerSound(aiRuntime, soundPosition, 25.0f);
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f,
+            &soundPropagation, &portalBlockers);
+    Check(world.Get<game::NpcAiState>(entity).awareness
+                          == game::NpcAwarenessState::InvestigatingTravel
+                  && world.Get<game::NpcAiState>(entity)
+                          .lastHeardSoundSequence == 2,
+          "a louder sound remains audible to NPCs after the same wall loss");
+
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
+}
+
 void TestNpcInvestigationArrivalSearchesThenResumesPatrol()
 {
     game::SectorTopologyMap map = MakeNavigationSquareMap();
@@ -10358,6 +10543,7 @@ int main()
     TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
     TestNpcCommittedAttackAdvanceUsesRunSpeedAndCollision();
     TestNpcPlayerDetectedAudioTransitionPolicy();
+    TestNpcHearingUsesSectorSoundPropagation();
     TestNpcInvestigationArrivalSearchesThenResumesPatrol();
     TestNpcSneakDetectionOnlyAppliesWhileCrouching();
     TestNpcAiPursuitSlotsRouteAroundSupportingProp();

@@ -23,6 +23,8 @@ class SectorNavigationWorld;
 struct Health;
 struct NpcNavigationRuntime;
 struct SectorDynamicDoorCollider;
+struct RuntimePortalDynamicBlocker;
+class SectorSoundPropagationWorld;
 struct SectorStaticModelCollider;
 
 struct NpcSoundEvent {
@@ -145,6 +147,8 @@ void UpdateNpcAiSystem(
         const std::vector<SectorStaticModelCollider>& staticColliders,
         NpcAiRuntime& runtime,
         const NpcAiGameplayContext& gameplay,
-        float dt);
+        float dt,
+        const SectorSoundPropagationWorld* soundPropagation = nullptr,
+        const std::vector<RuntimePortalDynamicBlocker>* portalBlockers = nullptr);
 
 } // namespace game

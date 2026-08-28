@@ -10,6 +10,7 @@
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/ai/NpcAiTypes.h"
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorAudioOcclusion.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorStaticModelCollision.h"
@@ -765,7 +766,9 @@ void UpdateNpcAiSystem(
         const std::vector<SectorStaticModelCollider>& staticColliders,
         NpcAiRuntime& runtime,
         const NpcAiGameplayContext& gameplay,
-        float dt)
+        float dt,
+        const SectorSoundPropagationWorld* soundPropagation,
+        const std::vector<RuntimePortalDynamicBlocker>* portalBlockers)
 {
     const float safeDt = std::max(0.0f, dt);
     const bool useSneakDetection = gameplay.playerSneaking
@@ -951,8 +954,37 @@ void UpdateNpcAiSystem(
                         sound->positionWorld.x - transform.position.x,
                         sound->positionWorld.z - transform.position.z};
                 const float distance = Vector2Length(delta);
-                if (distance <= sound->radiusWorld
-                        && distance <= ai.perception.hearingRangeWorld) {
+                bool audible = distance <= sound->radiusWorld
+                        && distance <= ai.perception.hearingRangeWorld;
+                if (soundPropagation != nullptr) {
+                    static const std::vector<RuntimePortalDynamicBlocker>
+                            noPortalBlockers;
+                    const Vector3 npcEar{
+                            transform.position.x,
+                            transform.position.y + 1.4f,
+                            transform.position.z};
+                    const SectorSoundPropagationResult propagation =
+                            soundPropagation->Evaluate(
+                                    &collisionWorld,
+                                    doorColliders,
+                                    portalBlockers != nullptr
+                                            ? *portalBlockers
+                                            : noPortalBlockers,
+                                    npcEar,
+                                    sound->positionWorld);
+                    const auto pathAudible = [&](
+                            const SectorSoundPropagationPath& path) {
+                        return path.valid
+                                && path.distanceWorld
+                                        <= ai.perception.hearingRangeWorld
+                                && path.distanceWorld
+                                        <= sound->radiusWorld
+                                                * path.volumeScale;
+                    };
+                    audible = pathAudible(propagation.transmission)
+                            || pathAudible(propagation.portal);
+                }
+                if (audible) {
                     ai.lastHeardSoundSequence = sound->sequence;
                     ai.lastKnownPlayerPosition = sound->positionWorld;
                     ai.awareness = NpcAwarenessState::InvestigatingTravel;

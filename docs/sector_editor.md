@@ -517,6 +517,16 @@ and other emitters using the same map audio entry. The emitter inspector accepts
 an exact ID or opens a picker containing all registered entries; invalid text is
 not committed and is restored to the authored value.
 
+Game-runtime positional audio propagates through the topology rather than
+ignoring it. A direct path loses 80 percent of its remaining volume for every
+solid wall or closed-door slab it crosses and receives an increasingly low
+low-pass cutoff, so multiple barriers matter cumulatively. Open two-sided
+linedefs also form a cached portal graph. When the route through openings is
+stronger than direct wall transmission, distance attenuation follows that route,
+panning points toward its first opening, and turns add diffraction volume and
+low-pass loss. Propagation is sampled at 10 Hz and smoothly blended over half a
+second to avoid abrupt changes as doors move or the listener crosses a portal.
+
 IDs used by sector roomtones, Sound Emitters, or door open/close sounds cannot
 be renamed, retyped, or removed. The details pane reports those known level
 references in a word-wrapped usage box. Replacing the audio file remains
@@ -960,6 +970,12 @@ the NPC Editor. Hostile/friendly remains faction and collision data. The AI Type
 dropdown filters registered AI descriptors by that alignment and also permits
 `None`. Per-definition perception fields author vision range, the full
 horizontal vision-cone angle, hearing range, and investigation duration.
+NPC hearing uses the same wall, closed-door, and open-portal propagation routes
+as positional audio. The route length must fit the NPC hearing range and the
+sound event radius is reduced by that route's transmission or diffraction gain.
+Consequently, one wall makes a sound substantially harder to hear and additional
+walls compound that loss; an open doorway can preserve a stronger but longer
+route around the obstruction.
 Hostile definitions may also assign an optional Player detected sound
 (`playerDetectedSound` in JSON). It plays spatially from the NPC whenever the
 NPC newly enters the Detected state, whether through sight or a direct alert,

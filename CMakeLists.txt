@@ -169,6 +169,16 @@ execute_process(
 if(NOT RAYLIB_SOUND_LOOP_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to apply the raylib sound-looping patch")
 endif()
+execute_process(
+        COMMAND ${CMAKE_COMMAND}
+                "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
+                "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-audio-low-pass.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibAudioLowPassPatch.cmake"
+        RESULT_VARIABLE RAYLIB_AUDIO_LOW_PASS_PATCH_RESULT
+)
+if(NOT RAYLIB_AUDIO_LOW_PASS_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to apply the raylib audio low-pass patch")
+endif()
 target_compile_definitions(raylib PRIVATE
     SUPPORT_FILEFORMAT_JPG=1
     SUPPORT_GPU_SKINNING=1
@@ -643,6 +653,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorStaticModelShadow.cpp
             sources/sector_demo/SectorDynamicModelShadowCasters.cpp

@@ -50,12 +50,20 @@ bool SectorSceneRuntime::Rebuild(
     ClearNpcPatrolRuntime(npcPatrol);
     navigation.Shutdown();
     StopLevelAudio(context);
+    soundPropagation.Clear();
     if (!renderer.RebuildRendererResources(
                 context.assets,
                 map,
                 assetScopeName,
                 error)) {
         return false;
+    }
+    std::string soundPropagationError;
+    if (!soundPropagation.Build(map, &soundPropagationError)) {
+        TraceLog(
+                LOG_WARNING,
+                "Sound propagation graph build failed: %s",
+                soundPropagationError.c_str());
     }
     if (!navigation.Initialize(BuildSectorNavigationSettingsForMap(map))) {
         TraceLog(LOG_WARNING, "Navigation service initialization failed");
@@ -123,6 +131,7 @@ void SectorSceneRuntime::Shutdown(engine::EngineContext& context)
     ClearNpcPatrolRuntime(npcPatrol);
     ClearNpcCombatRuntime(npcCombat);
     ClearNpcAiRuntime(npcAi);
+    soundPropagation.Clear();
     impactParticles.Clear();
     navigation.Shutdown();
     StopLevelAudio(context);
@@ -271,7 +280,9 @@ void SectorSceneRuntime::Update(
                 runtimeObjects.staticModelColliders,
                 npcAi,
                 *npcGameplay,
-                dt);
+                dt,
+                &soundPropagation,
+                &runtimeObjects.dynamicPortalBlockers);
         UpdateNpcPatrolSystem(
                 context.world,
                 navigation,
@@ -311,10 +322,12 @@ void SectorSceneRuntime::Update(
                 &runtimeObjects.objectSectorLookupWorld;
     }
     audioOcclusion.doorColliders = &runtimeObjects.dynamicDoorColliders;
-    context.audio.UpdatePositionalSoundOcclusion(
+    audioOcclusion.portalBlockers = &runtimeObjects.dynamicPortalBlockers;
+    audioOcclusion.propagationWorld = &soundPropagation;
+    context.audio.UpdatePositionalSoundPropagation(
             dt,
             &audioOcclusion,
-            QuerySectorSoundOcclusion);
+            QuerySectorSoundPropagation);
     engine::AnimatedModelSystem(context.world, context.assets, dt);
     impactParticles.Update(context.world, &context.assets, dt);
     renderer.AdvanceRuntime(dt);

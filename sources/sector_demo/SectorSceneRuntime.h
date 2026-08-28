@@ -9,6 +9,7 @@
 #include "game/npc/NpcCombatSystem.h"
 #include "game/npc/ai/NpcAiSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorAudioOcclusion.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 #include "sector_demo/renderer/SectorImpactParticleSystem.h"
@@ -178,6 +179,7 @@ private:
     NpcNavigationRuntime npcNavigation;
     NpcCombatRuntime npcCombat;
     NpcAiRuntime npcAi;
+    SectorSoundPropagationWorld soundPropagation;
     NpcPatrolRuntime npcPatrol;
     NpcAudioRuntime npcAudio;
     SectorImpactParticleSystem impactParticles;
