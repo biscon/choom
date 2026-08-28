@@ -11,7 +11,7 @@
     },
     "walk": {
       "animation": "Standard Walk",
-      "movementSpeed": 1.5
+      "movementSpeed": 2.5
     },
     "run": {
       "movementSpeed": 3.0

@@ -2812,9 +2812,9 @@
         "randomPatrolStart": true
       },
       "position": [
-        -72.0,
+        -81.0,
         0.0,
-        72.0
+        60.0
       ],
       "yawDegrees": 180.0
     }
@@ -23771,7 +23771,7 @@
         "x": -656,
         "y": 0.0,
         "z": 1072,
-        "orientationDegrees": 0.0
+        "orientationDegrees": 90.0
       },
       {
         "editorId": 17,
@@ -23779,7 +23779,7 @@
         "x": -1024,
         "y": 0.0,
         "z": 576,
-        "orientationDegrees": -90.0
+        "orientationDegrees": 180.0
       },
       {
         "editorId": 18,
@@ -23787,15 +23787,15 @@
         "x": -1616,
         "y": 0.0,
         "z": 832,
-        "orientationDegrees": 180.0
+        "orientationDegrees": -90.0
       },
       {
         "editorId": 19,
         "id": "wp4",
-        "x": -1104,
+        "x": -1152,
         "y": 0.0,
-        "z": 1120,
-        "orientationDegrees": 0.0
+        "z": 1008,
+        "orientationDegrees": 180.0
       }
     ],
     "patrols": [

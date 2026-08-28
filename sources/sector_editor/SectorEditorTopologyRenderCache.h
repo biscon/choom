@@ -13,6 +13,8 @@
 
 namespace game {
 
+Vector2 SectorEditorLevelMarkerOrientationDirection(float orientationDegrees);
+
 void UpdateCachedSectorEditorRuntimeObjectDraw(
         SectorEditorTopologyRenderCache& cache,
         const SectorPlacedRuntimeObject& object);

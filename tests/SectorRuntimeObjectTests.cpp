@@ -10314,6 +10314,124 @@ void TestWeaponPelletVolleyDamageAndPretrace()
           "pellet collisions are traced before lethal damage and do not pass through the killed target");
 }
 
+void TestNpcPatrolWaypointFacing()
+{
+    constexpr float Pi = 3.14159265358979323846f;
+    game::SectorTopologyMap map;
+    map.levelMarkers.push_back({41, "patrol_facing", {64.0f, 0.0f, 64.0f}, Pi});
+    game::SectorCompiledPatrol patrol;
+    patrol.sourceAuthoringPatrolId = 7;
+    patrol.id = "facing_route";
+    patrol.mode = game::SectorPatrolMode::Once;
+    patrol.waypoints.push_back({41, 1000, game::SectorPatrolGait::Walk, true, 90.0f});
+    map.patrols.push_back(patrol);
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity entity = SpawnNavigationTestNpc(
+            world, "patrol_facing_npc", 991, {4.0f, 0.0f, 4.0f}, 1);
+    game::NpcPatrolState patrolState;
+    patrolState.patrolEditorId = 7;
+    patrolState.requestId = 99;
+    world.Add(entity, patrolState);
+
+    game::NpcNavigationRuntime navigationRuntime;
+    game::NpcNavigationRecord navigationRecord;
+    navigationRecord.instanceId = "patrol_facing_npc";
+    navigationRecord.placedObjectId = 991;
+    navigationRecord.entity = entity;
+    navigationRecord.phase = game::NpcMovePhase::Arrived;
+    navigationRecord.authority = game::NpcMoveAuthority::Patrol;
+    navigationRecord.requestId = 99;
+    navigationRecord.occupied = true;
+    navigationRuntime.records.push_back(navigationRecord);
+    game::NpcPatrolRuntime patrolRuntime;
+    game::InitializeNpcPatrolRuntime(patrolRuntime, 1);
+    game::SectorNavigationWorld navigation;
+    game::SectorCollisionWorld collisionWorld;
+
+    game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    transform.yawRadians = 0.0f;
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.1f, false);
+    game::NpcPatrolState& state = world.Get<game::NpcPatrolState>(entity);
+    const bool startedTurn = state.phase == game::NpcPatrolPhase::Turning
+            && Near(transform.yawRadians, 0.0f)
+            && Near(state.waitRemainingSeconds, 1.0f);
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.25f, false);
+    const bool halfTurn = state.phase == game::NpcPatrolPhase::Turning
+            && Near(transform.yawRadians, Pi * 0.5f);
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.25f, false);
+    const bool completedTurn = state.phase == game::NpcPatrolPhase::Waiting
+            && Near(transform.yawRadians, Pi)
+            && Near(state.waitRemainingSeconds, 1.0f);
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.1f, false);
+    Check(startedTurn && halfTurn && completedTurn
+                  && Near(state.waitRemainingSeconds, 0.9f)
+                  && Near(transform.yawRadians, Pi + 0.14f),
+          "patrol arrival turns at 360 degrees per second before delay and look-around");
+
+    state = game::NpcPatrolState{};
+    state.patrolEditorId = 7;
+    state.requestId = 99;
+    transform.yawRadians = 170.0f * Pi / 180.0f;
+    map.levelMarkers[0].yawRadians = -170.0f * Pi / 180.0f;
+    map.patrols[0].waypoints[0].lookAround = false;
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.1f, false);
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.02f, false);
+    Check(state.phase == game::NpcPatrolPhase::Turning
+                  && Near(transform.yawRadians, 177.2f * Pi / 180.0f),
+          "patrol arrival rotation takes the shortest path across the yaw wrap");
+
+    state = game::NpcPatrolState{};
+    state.patrolEditorId = 7;
+    state.requestId = 99;
+    transform.yawRadians = 0.7f;
+    map.patrols[0].faceWaypointOrientation = false;
+    map.patrols[0].waypoints[0].lookAround = true;
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.1f, false);
+    const bool preservedArrival = state.phase == game::NpcPatrolPhase::Waiting
+            && Near(transform.yawRadians, 0.7f)
+            && Near(state.waypointBaseYawRadians, 0.7f);
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.1f, false);
+    Check(preservedArrival && Near(transform.yawRadians, 0.84f),
+          "disabled waypoint facing preserves arrival yaw and anchors look-around there");
+
+    state = game::NpcPatrolState{};
+    state.patrolEditorId = 7;
+    state.requestId = 99;
+    transform.yawRadians = 0.0f;
+    map.levelMarkers[0].yawRadians = Pi;
+    map.patrols[0].faceWaypointOrientation = true;
+    map.patrols[0].waypoints[0].delayMilliseconds = 0;
+    map.patrols[0].waypoints[0].lookAround = false;
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.1f, false);
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, navigationRuntime,
+            patrolRuntime, map, 0.5f, false);
+    Check(state.phase == game::NpcPatrolPhase::Complete
+                  && Near(transform.yawRadians, Pi),
+          "zero-delay patrol waypoints advance immediately after completing their turn");
+}
+
 void TestNpcPatrolPlaybackModes()
 {
     game::SectorCompiledPatrol patrol;
@@ -10441,6 +10559,7 @@ int main()
 {
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
+    TestNpcPatrolWaypointFacing();
     TestNpcPatrolPlaybackModes();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
     TestSectorItemUseTargetFallbackAndPendingGate();

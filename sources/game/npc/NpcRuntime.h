@@ -132,6 +132,7 @@ enum class NpcMoveAuthority : uint8_t {
 
 enum class NpcPatrolPhase : uint8_t {
     Moving,
+    Turning,
     Waiting,
     SuspendedAi,
     SuspendedScript,
@@ -150,6 +151,7 @@ struct NpcPatrolState {
     NpcPatrolPhase phase = NpcPatrolPhase::Moving;
     NpcPatrolPhase resumePhase = NpcPatrolPhase::Moving;
     float waitRemainingSeconds = 0.0f;
+    float waypointBaseYawRadians = 0.0f;
     float lookOffsetRadians = 0.0f;
     float lookDirection = 1.0f;
     float retryRemainingSeconds = 0.0f;

@@ -550,6 +550,11 @@ Loop playback; enabling shuffle changes Ping-pong playback to Loop and keeps
 Ping-pong unavailable until shuffle is disabled. Reverse is disabled for NPCs
 assigned to a shuffled patrol because shuffled routes have no direction.
 
+`Face Waypoint Orientation` is enabled by default. On arrival the NPC stops and
+turns toward the Level Marker orientation by the shortest direction before the
+waypoint delay and optional Look around begin. Disabling it preserves the NPC's
+arrival heading; Look around then uses that arrival heading as its center.
+
 Patrols execute only in game sessions. AI detection and script movement take
 locomotion authority temporarily, after which a resumable patrol continues at
 its interrupted waypoint. NPCs moving toward the same patrol waypoint receive

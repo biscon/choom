@@ -22,6 +22,7 @@ namespace {
 constexpr float Pi = 3.14159265358979323846f;
 constexpr float TwoPi = Pi * 2.0f;
 constexpr float LookTurnRate = 1.4f;
+constexpr float WaypointTurnRate = TwoPi;
 constexpr float DestinationEpsilon = 0.02f;
 constexpr float RetryDelaySeconds = 0.5f;
 
@@ -39,6 +40,26 @@ bool SameGroup(const NpcPatrolParticipant& a, const NpcPatrolParticipant& b)
 {
     return a.patrolEditorId == b.patrolEditorId
             && a.waypointIndex == b.waypointIndex;
+}
+
+float ShortestAngleDelta(float from, float to)
+{
+    float delta = std::fmod(to - from, TwoPi);
+    if (delta > Pi) delta -= TwoPi;
+    if (delta < -Pi) delta += TwoPi;
+    return delta;
+}
+
+bool TurnTowardWaypointYaw(float& yawRadians, float targetYawRadians, float dt)
+{
+    const float delta = ShortestAngleDelta(yawRadians, targetYawRadians);
+    const float maximumTurn = WaypointTurnRate * dt;
+    if (std::abs(delta) <= maximumTurn) {
+        yawRadians += delta;
+        return true;
+    }
+    yawRadians += std::clamp(delta, -maximumTurn, maximumTurn);
+    return false;
 }
 
 Vector2 ResolveDestination(
@@ -246,6 +267,21 @@ void UpdateNpcPatrolSystem(
                 continue;
             }
 
+            if (state.phase == NpcPatrolPhase::Turning) {
+                npc.action = NpcAction::Idle;
+                if (TurnTowardWaypointYaw(
+                            transform.yawRadians,
+                            state.waypointBaseYawRadians,
+                            dt)) {
+                    state.waypointBaseYawRadians = transform.yawRadians;
+                    state.phase = NpcPatrolPhase::Waiting;
+                    if (state.waitRemainingSeconds <= 0.0f) {
+                        AdvanceNpcPatrolWaypoint(state, *patrol);
+                    }
+                }
+                continue;
+            }
+
             if (state.phase == NpcPatrolPhase::Waiting) {
                 npc.action = NpcAction::Idle;
                 state.waitRemainingSeconds = std::max(
@@ -260,7 +296,7 @@ void UpdateNpcPatrolSystem(
                         state.lookOffsetRadians = -halfArc;
                         state.lookDirection = 1.0f;
                     }
-                    transform.yawRadians = marker->yawRadians
+                    transform.yawRadians = state.waypointBaseYawRadians
                             + state.lookOffsetRadians;
                 }
                 if (state.waitRemainingSeconds <= 0.0f) {
@@ -302,11 +338,27 @@ void UpdateNpcPatrolSystem(
             if (current.found && current.authority == NpcMoveAuthority::Patrol
                     && current.requestId == state.requestId
                     && current.phase == NpcMovePhase::Arrived) {
-                state.phase = NpcPatrolPhase::Waiting;
                 state.waitRemainingSeconds =
                         static_cast<float>(waypoint.delayMilliseconds) / 1000.0f;
-                transform.yawRadians = marker->yawRadians;
-                if (state.waitRemainingSeconds <= 0.0f) {
+                state.waypointBaseYawRadians = patrol->faceWaypointOrientation
+                        ? marker->yawRadians : transform.yawRadians;
+                state.lookOffsetRadians = 0.0f;
+                state.lookDirection = 1.0f;
+                if (patrol->faceWaypointOrientation) {
+                    state.phase = TurnTowardWaypointYaw(
+                            transform.yawRadians,
+                            state.waypointBaseYawRadians,
+                            0.0f)
+                            ? NpcPatrolPhase::Waiting
+                            : NpcPatrolPhase::Turning;
+                    if (state.phase == NpcPatrolPhase::Waiting) {
+                        state.waypointBaseYawRadians = transform.yawRadians;
+                    }
+                } else {
+                    state.phase = NpcPatrolPhase::Waiting;
+                }
+                if (state.phase == NpcPatrolPhase::Waiting
+                        && state.waitRemainingSeconds <= 0.0f) {
                     AdvanceNpcPatrolWaypoint(state, *patrol);
                 }
                 continue;

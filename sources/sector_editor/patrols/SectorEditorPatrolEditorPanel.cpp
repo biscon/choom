@@ -150,7 +150,7 @@ SectorEditorPatrolEditorPanelResult DrawSectorEditorPatrolEditorPanel(
     } else {
         const float contentWidth = ScrollContentWidth(layout.formBounds.width, config);
         const std::string usage = editor.SelectedUsageText();
-        const float contentHeight = 264.0f
+        const float contentHeight = 316.0f
                 + (usage.empty() ? 0.0f : 40.0f)
                 + static_cast<float>(patrol->waypoints.size()) * 188.0f;
         engine::UIScrollAreaResult formScroll = engine::BeginScrollArea(
@@ -196,6 +196,15 @@ SectorEditorPatrolEditorPanelResult DrawSectorEditorPatrolEditorPanel(
                     {0.0f, y, formScroll.viewport.width, RowHeight},
                     font, "Shuffle Waypoints", shuffleWaypoints)) {
             editor.SetShuffleWaypoints(shuffleWaypoints);
+        }
+        y += RowHeight + Gap;
+
+        bool faceWaypointOrientation = patrol->faceWaypointOrientation;
+        if (engine::Checkbox(ui, config, input, assets,
+                    "sector_editor_patrol_face_waypoint_orientation",
+                    {0.0f, y, formScroll.viewport.width, RowHeight},
+                    font, "Face Waypoint Orientation", faceWaypointOrientation)) {
+            editor.SetFaceWaypointOrientation(faceWaypointOrientation);
         }
         y += RowHeight + Gap;
 

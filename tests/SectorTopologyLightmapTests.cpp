@@ -1436,8 +1436,9 @@ void TestSourceHashChanges()
             12, "guard_route", game::SectorPatrolMode::Loop,
             {{1, 500, game::SectorPatrolGait::Walk, true, 90.0f}}});
     markerMap.patrols[0].shuffleWaypoints = true;
+    markerMap.patrols[0].faceWaypointOrientation = false;
     Check(game::ComputeSectorLightmapSourceHash(markerMap) == hash,
-          "hash excludes patrol routes because they do not affect baked geometry or lighting");
+          "hash excludes patrol routes and facing because they do not affect baked geometry or lighting");
 
     game::SectorTopologyMap reflectionProbeMap = base;
     reflectionProbeMap.compiledReflectionProbes.push_back(

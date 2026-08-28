@@ -4235,6 +4235,8 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
                     : SectorPatrolMode::Loop;
             patrol.shuffleWaypoints = ReadOptionalBool(
                     patrolJson, "shuffleWaypoints", context, false);
+            patrol.faceWaypointOrientation = ReadOptionalBool(
+                    patrolJson, "faceWaypointOrientation", context, true);
             const Json& waypoints = RequireArrayField(
                     patrolJson, "waypoints", context);
             patrol.waypoints.reserve(waypoints.size());
@@ -4734,6 +4736,9 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             }
             if (patrol->shuffleWaypoints) {
                 patrolJson["shuffleWaypoints"] = true;
+            }
+            if (!patrol->faceWaypointOrientation) {
+                patrolJson["faceWaypointOrientation"] = false;
             }
             for (const SectorAuthoringPatrolWaypoint& waypoint : patrol->waypoints) {
                 Json waypointJson{{"levelMarkerEditorId", waypoint.levelMarkerId}};

@@ -166,6 +166,7 @@ struct SectorCompiledPatrol {
     SectorPatrolMode mode = SectorPatrolMode::Loop;
     std::vector<SectorCompiledPatrolWaypoint> waypoints;
     bool shuffleWaypoints = false;
+    bool faceWaypointOrientation = true;
 };
 
 struct SectorCompiledSoundEmitter {

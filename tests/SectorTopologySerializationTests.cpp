@@ -4920,6 +4920,7 @@ void TestPatrolRoundTripDefaultsAndValidation()
     shuffled.waypoints.push_back(game::SectorAuthoringPatrolWaypoint{31});
     shuffled.waypoints.push_back(game::SectorAuthoringPatrolWaypoint{32});
     shuffled.shuffleWaypoints = true;
+    shuffled.faceWaypointOrientation = false;
     document.graph.patrols.push_back(shuffled);
 
     game::SectorPlacedRuntimeObject npc;
@@ -4945,8 +4946,11 @@ void TestPatrolRoundTripDefaultsAndValidation()
                   && savedPatrol["waypoints"][1]["lookArcDegrees"] == 120.0f,
           "patrols serialize stable IDs, modes, waypoint settings, and omit defaults");
     Check(saved["authoringGraph"]["patrols"][1]["shuffleWaypoints"] == true
-                  && !savedPatrol.contains("shuffleWaypoints"),
-          "patrol shuffle serializes true and omits its false default");
+                  && saved["authoringGraph"]["patrols"][1]
+                             ["faceWaypointOrientation"] == false
+                  && !savedPatrol.contains("shuffleWaypoints")
+                  && !savedPatrol.contains("faceWaypointOrientation"),
+          "patrol route options serialize non-defaults and omit defaults");
     Check(saved["runtimeObjects"][0]["npc"]["patrolEditorId"] == 7
                   && saved["runtimeObjects"][0]["npc"]["randomPatrolStart"] == true
                   && saved["runtimeObjects"][0]["npc"]["reversePatrol"] == true
@@ -4961,8 +4965,11 @@ void TestPatrolRoundTripDefaultsAndValidation()
                   && loaded.graph.patrols[0].mode
                              == game::SectorPatrolMode::PingPong
                   && loaded.graph.patrols[1].shuffleWaypoints
+                  && !loaded.graph.patrols[1].faceWaypointOrientation
                   && loaded.derivation.topology.patrols.size() == 2
                   && loaded.derivation.topology.patrols[1].shuffleWaypoints
+                  && !loaded.derivation.topology.patrols[1]
+                             .faceWaypointOrientation
                   && loaded.derivation.topology.patrols[0].waypoints[1].gait
                              == game::SectorPatrolGait::Run
                   && loaded.mapData.runtimeObjects[0].npc.randomPatrolStart
@@ -4971,13 +4978,16 @@ void TestPatrolRoundTripDefaultsAndValidation()
 
     Json legacyDefaults = saved;
     legacyDefaults["authoringGraph"]["patrols"][1].erase("shuffleWaypoints");
+    legacyDefaults["authoringGraph"]["patrols"][1]
+            .erase("faceWaypointOrientation");
     legacyDefaults["runtimeObjects"][0]["npc"].erase("randomPatrolStart");
     legacyDefaults["runtimeObjects"][0]["npc"].erase("reversePatrol");
     Check(LoadAuthoringText(legacyDefaults.dump(), loaded, error)
                   && !loaded.graph.patrols[1].shuffleWaypoints
+                  && loaded.graph.patrols[1].faceWaypointOrientation
                   && !loaded.mapData.runtimeObjects[0].npc.randomPatrolStart
                   && !loaded.mapData.runtimeObjects[0].npc.reversePatrol,
-          "legacy patrol files default new route and NPC options off");
+          "legacy patrol files preserve facing and default other route and NPC options off");
 
     Json shuffledPingPong = saved;
     shuffledPingPong["authoringGraph"]["patrols"][0]["shuffleWaypoints"] = true;

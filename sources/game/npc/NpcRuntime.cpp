@@ -50,6 +50,7 @@ void InitializeNpcPatrolTraversal(
     state.resumePhase = state.phase;
     state.requestId = 0;
     state.destinationInitialized = false;
+    state.waypointBaseYawRadians = 0.0f;
     state.lookOffsetRadians = 0.0f;
     state.lookDirection = 1.0f;
     state.retryRemainingSeconds = 0.0f;
@@ -75,6 +76,7 @@ void AdvanceNpcPatrolWaypoint(
     const size_t count = patrol.waypoints.size();
     state.requestId = 0;
     state.destinationInitialized = false;
+    state.waypointBaseYawRadians = 0.0f;
     state.lookOffsetRadians = 0.0f;
     state.lookDirection = 1.0f;
     if (count == 0) {

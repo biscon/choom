@@ -538,6 +538,13 @@ void PopulateCachedDoorDraw(
 
 } // namespace
 
+Vector2 SectorEditorLevelMarkerOrientationDirection(float orientationDegrees)
+{
+    constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
+    const float radians = orientationDegrees * DegreesToRadians;
+    return Vector2{std::sin(radians), std::cos(radians)};
+}
+
 void UpdateCachedSectorEditorRuntimeObjectDraw(
         SectorEditorTopologyRenderCache& cache,
         const SectorPlacedRuntimeObject& object)
@@ -1827,7 +1834,6 @@ void DrawCachedLevelMarkers(
         const SectorEditorTopologyDrawContext& context,
         const LevelMarkerDragState* drag)
 {
-    constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
     const Color outline{28, 18, 40, 255};
     const Color normal{196, 104, 244, 255};
     const Color selectedColor{92, 224, 244, 255};
@@ -1858,8 +1864,8 @@ void DrawCachedLevelMarkers(
         DrawLineEx(left, top, 2.0f, outline);
         DrawEditorMarkerDisc(center, selected ? 2.8f : 2.2f, outline);
 
-        const float radians = marker.orientationDegrees * DegreesToRadians;
-        const Vector2 direction{std::cos(radians), std::sin(radians)};
+        const Vector2 direction = SectorEditorLevelMarkerOrientationDirection(
+                marker.orientationDegrees);
         const Vector2 tip{center.x + direction.x * 22.0f, center.y + direction.y * 22.0f};
         DrawLineEx(center, tip, selected ? 3.0f : 2.0f, color);
         DrawEditorMarkerDisc(tip, selected ? 3.5f : 3.0f, color);

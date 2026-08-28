@@ -3302,6 +3302,7 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
                     waypoint.lookArcDegrees});
         }
         compiled.shuffleWaypoints = patrol.shuffleWaypoints;
+        compiled.faceWaypointOrientation = patrol.faceWaypointOrientation;
         result.topology.patrols.push_back(std::move(compiled));
     }
 

@@ -132,6 +132,7 @@ struct SectorAuthoringPatrol {
     SectorPatrolMode mode = SectorPatrolMode::Loop;
     std::vector<SectorAuthoringPatrolWaypoint> waypoints;
     bool shuffleWaypoints = false;
+    bool faceWaypointOrientation = true;
 };
 
 struct SectorAuthoringSoundEmitter {

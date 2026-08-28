@@ -33,6 +33,7 @@ bool SamePatrols(
         const SectorAuthoringPatrol& b = right[index];
         if (a.editorId != b.editorId || a.id != b.id || a.mode != b.mode
                 || a.shuffleWaypoints != b.shuffleWaypoints
+                || a.faceWaypointOrientation != b.faceWaypointOrientation
                 || a.waypoints.size() != b.waypoints.size()) {
             return false;
         }
@@ -260,6 +261,15 @@ bool SectorEditorPatrolEditorService::SetShuffleWaypoints(bool enabled)
         patrol->mode = SectorPatrolMode::Loop;
     }
     RebuildListLabels();
+    return true;
+}
+
+bool SectorEditorPatrolEditorService::SetFaceWaypointOrientation(bool enabled)
+{
+    SectorAuthoringPatrol* patrol = Selected();
+    if (patrol == nullptr
+            || patrol->faceWaypointOrientation == enabled) return false;
+    patrol->faceWaypointOrientation = enabled;
     return true;
 }
 

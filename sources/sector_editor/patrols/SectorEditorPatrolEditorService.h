@@ -34,6 +34,7 @@ public:
     bool ApplyIdBuffer();
     bool SetMode(SectorPatrolMode mode);
     bool SetShuffleWaypoints(bool enabled);
+    bool SetFaceWaypointOrientation(bool enabled);
     bool AddWaypoint();
     bool RemoveWaypoint(size_t index);
     bool MoveWaypoint(size_t index, int direction);
