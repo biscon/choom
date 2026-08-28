@@ -976,17 +976,37 @@ void UpdateNpcAiSystem(
         if (ai.awareness == NpcAwarenessState::InvestigatingTravel) {
             ai.previousIntent = NpcAiIntent::Idle;
             npc.actionLockedByAi = false;
-            RequestAiMove(
-                    world, navigation, collisionWorld, npcNavigation, npc,
-                    {ai.lastKnownPlayerPosition.x,
-                            ai.lastKnownPlayerPosition.z},
-                    NpcMoveGait::Run);
-            const NpcMoveStatus move = GetNpcMoveStatus(
-                    npcNavigation, npc.instanceId);
-            if (!move.found || move.phase == NpcMovePhase::Arrived
-                    || move.phase == NpcMovePhase::Failed) {
+            const Vector2 investigationDestination{
+                    ai.lastKnownPlayerPosition.x,
+                    ai.lastKnownPlayerPosition.z};
+            const auto beginSearch = [&]() {
                 ai.awareness = NpcAwarenessState::InvestigatingSearch;
                 CancelAiMove(world, navigation, npcNavigation, npc);
+            };
+            NpcMoveStatus move = GetNpcMoveStatus(
+                    npcNavigation, npc.instanceId);
+            const bool terminalInvestigationMove = move.found
+                    && move.authority == NpcMoveAuthority::Ai
+                    && (move.phase == NpcMovePhase::Arrived
+                        || move.phase == NpcMovePhase::Failed)
+                    && Vector2Distance(
+                            move.requestedDestinationXZ,
+                            investigationDestination)
+                            <= ChaseRetargetDistanceWorld;
+            if (terminalInvestigationMove) {
+                beginSearch();
+                return;
+            }
+            RequestAiMove(
+                    world, navigation, collisionWorld, npcNavigation, npc,
+                    investigationDestination,
+                    NpcMoveGait::Run);
+            move = GetNpcMoveStatus(
+                    npcNavigation, npc.instanceId);
+            if (!move.found
+                    || move.phase != NpcMovePhase::FollowingPath
+                    || move.authority != NpcMoveAuthority::Ai) {
+                beginSearch();
             }
             return;
         }

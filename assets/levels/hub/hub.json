@@ -584,6 +584,7 @@
         "definitionId": "Zombie1",
         "instanceId": "zombie01",
         "patrolEditorId": 1,
+        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -600,6 +601,7 @@
         "definitionId": "Zombie1",
         "instanceId": "zombie02",
         "patrolEditorId": 1,
+        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -616,6 +618,7 @@
         "definitionId": "Zombie1",
         "instanceId": "zombie03",
         "patrolEditorId": 1,
+        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -23860,7 +23863,8 @@
             "delayMilliseconds": 3000,
             "lookAround": true
           }
-        ]
+        ],
+        "shuffleWaypoints": true
       }
     ],
     "soundEmitters": [

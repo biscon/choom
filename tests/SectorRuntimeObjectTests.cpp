@@ -6012,6 +6012,120 @@ void TestNpcPlayerDetectedAudioTransitionPolicy()
     navigation.Shutdown();
 }
 
+void TestNpcInvestigationArrivalSearchesThenResumesPatrol()
+{
+    game::SectorTopologyMap map = MakeNavigationSquareMap();
+    map.levelMarkers.push_back({41, "patrol_resume", {64.0f, 0.0f, 32.0f}, 0.0f});
+    game::SectorCompiledPatrol patrol;
+    patrol.sourceAuthoringPatrolId = 7;
+    patrol.id = "resume_route";
+    patrol.waypoints.push_back({41});
+    map.patrols.push_back(patrol);
+
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "investigation patrol-resume collision fixture builds");
+
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "investigation patrol-resume navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity entity = SpawnNavigationTestNpc(
+            world, "investigation_patrol", 782,
+            {4.0f, 0.0f, 4.0f}, 10);
+    game::NpcRuntimeInstance& npc =
+            world.Get<game::NpcRuntimeInstance>(entity);
+    npc.hostile = true;
+    game::NpcAiState ai;
+    ai.aiType = game::kSeekAndDestroyNpcAiType;
+    ai.awareness = game::NpcAwarenessState::InvestigatingTravel;
+    ai.lastKnownPlayerPosition = {4.0f, 0.0f, 4.0f};
+    ai.searchRemainingSeconds = 0.1f;
+    ai.perception.visionRangeWorld = 1.0f;
+    world.Add(entity, ai);
+    world.Add(entity, game::MakeHealth(100));
+    world.Add(entity, game::NpcCombatState{});
+    game::NpcPatrolState patrolState;
+    patrolState.patrolEditorId = 7;
+    world.Add(entity, patrolState);
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    game::NpcAiRuntime aiRuntime;
+    game::InitializeNpcAiRuntime(
+            aiRuntime, 4, navigation.Capacities().agentCapacity);
+    game::NpcPatrolRuntime patrolRuntime;
+    game::InitializeNpcPatrolRuntime(patrolRuntime, 1);
+    engine::AssetManager assets;
+    engine::AudioSystem audio;
+    game::Health playerHealth = game::MakeHealth(100);
+    game::NpcAiGameplayContext gameplay;
+    gameplay.playerFeetPosition = {40.0f, 0.0f, 40.0f};
+    gameplay.playerEyePosition = {40.0f, 1.2f, 40.0f};
+    gameplay.playerHealth = &playerHealth;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> staticColliders;
+
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, npcNavigation,
+            patrolRuntime, map, 0.016f, false);
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, staticColliders, probes, map, 0.016f);
+    const game::NpcMoveStatus arrived = game::GetNpcMoveStatusForEntity(
+            npcNavigation, entity);
+    Check(arrived.phase == game::NpcMovePhase::Arrived
+                  && arrived.authority == game::NpcMoveAuthority::Ai
+                  && world.Get<game::NpcPatrolState>(entity).phase
+                          == game::NpcPatrolPhase::SuspendedAi,
+          "arriving at the last-known position leaves the patrol suspended by AI");
+
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    const game::NpcMoveStatus search = game::GetNpcMoveStatusForEntity(
+            npcNavigation, entity);
+    Check(world.Get<game::NpcAiState>(entity).awareness
+                          == game::NpcAwarenessState::InvestigatingSearch
+                  && search.requestId == arrived.requestId
+                  && npcNavigation.counters.requests == 1,
+          "investigation consumes arrival instead of requesting the same route again");
+
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.2f);
+    game::UpdateNpcPatrolSystem(
+            world, navigation, collisionWorld, npcNavigation,
+            patrolRuntime, map, 0.2f, false);
+    const game::NpcMoveStatus resumed = game::GetNpcMoveStatusForEntity(
+            npcNavigation, entity);
+    Check(world.Get<game::NpcAiState>(entity).awareness
+                          == game::NpcAwarenessState::Unaware
+                  && world.Get<game::NpcPatrolState>(entity).phase
+                          == game::NpcPatrolPhase::Moving
+                  && world.Get<game::NpcPatrolState>(entity).waypointIndex == 0
+                  && resumed.phase == game::NpcMovePhase::FollowingPath
+                  && resumed.authority == game::NpcMoveAuthority::Patrol,
+          "search timeout resumes the interrupted patrol waypoint");
+
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
+}
+
 void TestNpcSneakDetectionOnlyAppliesWhileCrouching()
 {
     const game::SectorTopologyMap map = MakeNavigationSquareMap();
@@ -10244,6 +10358,7 @@ int main()
     TestNpcAiPlayerDamageDispatchesEveryAppliedHit();
     TestNpcCommittedAttackAdvanceUsesRunSpeedAndCollision();
     TestNpcPlayerDetectedAudioTransitionPolicy();
+    TestNpcInvestigationArrivalSearchesThenResumesPatrol();
     TestNpcSneakDetectionOnlyAppliesWhileCrouching();
     TestNpcAiPursuitSlotsRouteAroundSupportingProp();
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
