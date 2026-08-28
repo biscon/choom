@@ -323,6 +323,7 @@ void BuildPlayerPursuitSlots(
         const NpcCombatState& combat = world.Get<NpcCombatState>(record.entity);
         const Health& health = world.Get<Health>(record.entity);
         const bool eligible = npc.hostile
+                && !gameplay.playerInvisible
                 && ai.aiType == kSeekAndDestroyNpcAiType
                 && ai.awareness == NpcAwarenessState::Detected
                 && !combat.dead && !IsDepleted(health);
@@ -847,6 +848,23 @@ void UpdateNpcAiSystem(
                 || combat.hurtAnimationPlaying) {
             ai.previousIntent = NpcAiIntent::Idle;
             if (ai.attackCommitted) FinishAttack(npc, ai);
+            return;
+        }
+        if (npc.hostile && gameplay.playerInvisible) {
+            ai.awareness = NpcAwarenessState::Unaware;
+            ai.previousIntent = NpcAiIntent::Idle;
+            ai.directAlertPending = false;
+            ai.scriptTakeoverPending = false;
+            ai.playerInGeometricSight = false;
+            ai.playerDetectionAudioPending = false;
+            ai.visualDetectionProgress = 0.0f;
+            ai.visualLightDetectionFactor = 0.0f;
+            ai.visualProximityDetectionFactor = 0.0f;
+            ai.visualDetectionRateFactor = 0.0f;
+            ai.visualDetectionReason = NpcVisualDetectionReason::NoPlayer;
+            CancelAiMove(world, navigation, npcNavigation, npc);
+            FinishAttack(npc, ai);
+            ResetPursuitAssignment(ai);
             return;
         }
         if (gameplay.frozen) return;

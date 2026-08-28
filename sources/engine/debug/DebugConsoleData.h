@@ -73,6 +73,7 @@ enum class DeferredDebugActionType {
     None,
     ReloadCurrentMap,
     SetGodMode,
+    SetInvisible,
     SetFreezeAi,
     SetDebugAi,
     QuitApplication

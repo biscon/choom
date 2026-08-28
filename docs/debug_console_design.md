@@ -555,10 +555,12 @@ This prevents confusion when a Lua line is entered from a menu or during a defer
 ## 13. Slash-command architecture
 
 The current game also uses the deferred boolean-command path for
-`/god [on|off]`, `/freezeai [on|off]`, and `/debugai [on|off]`. Bare forms
-toggle the active campaign-session value; explicit forms are idempotent. These
-commands require an active game map and retain its ID in the deferred action so
-a map change cancels a stale request safely.
+`/god [on|off]`, `/invisible [on|off]`, `/freezeai [on|off]`, and
+`/debugai [on|off]`. Bare forms toggle the active campaign-session value;
+explicit forms are idempotent. Invisibility clears hostile NPC player alerts
+and suppresses their visual and hearing detection while active. These commands
+require an active game map and retain its ID in the deferred action so a map
+change cancels a stale request safely.
 
 ### 13.1 Command registry
 

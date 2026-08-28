@@ -998,6 +998,7 @@ bool SectorGameSession::StartNew(
     playerKnockbackVelocity = {};
     playerStunRemainingSeconds = 0.0f;
     godMode = false;
+    invisible = false;
     aiFrozen = false;
     aiDebugVisible = false;
     gameOver = false;
@@ -1174,6 +1175,7 @@ void SectorGameSession::Shutdown(
     playerKnockbackVelocity = {};
     playerStunRemainingSeconds = 0.0f;
     godMode = false;
+    invisible = false;
     aiFrozen = false;
     aiDebugVisible = false;
     gameOver = false;
@@ -1426,6 +1428,7 @@ void SectorGameSession::Update(
                 damage->controller->yawRadians);
     };
     npcGameplay.godMode = godMode;
+    npcGameplay.playerInvisible = invisible;
     npcGameplay.frozen = aiFrozen;
     npcGameplay.playerGrounded = controller.fpsControllerState.grounded;
     npcGameplay.playerSneaking = playerSneaking;

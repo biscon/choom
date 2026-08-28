@@ -1033,9 +1033,11 @@ player who moves beyond that margin, leaves the committed hit arc, or moves
 behind cover still avoids the hit. AI
 never runs in either editor 3D preview control mode. Footstep and landing noise
 radii are exposed under `Settings -> Player -> Audio`. Runtime testing exposes
-`/god [on|off]`, `/freezeai [on|off]`, and
+`/god [on|off]`, `/invisible [on|off]`, `/freezeai [on|off]`, and
 `/debugai [on|off]`; omitting the argument toggles the current campaign-session
-value. `/debugai` is game-mode only and draws fixed-size projected state labels
+value. `/invisible` makes hostile NPCs drop existing player alerts and ignore
+player sight and sound detection, allowing their normal patrols to resume.
+`/debugai` is game-mode only and draws fixed-size projected state labels
 above AI NPCs plus depth-tested vision, hearing, melee-range,
 last-known-player, active-sound-event, path, active patrol-route, and patrol-slot
 diagnostics. Patrol routes also appear for non-hostile NPCs. It is independent

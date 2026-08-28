@@ -6231,6 +6231,87 @@ void TestNpcHearingUsesSectorSoundPropagation()
     navigation.Shutdown();
 }
 
+void TestInvisiblePlayerDoesNotAlertHostileNpc()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "invisible-player collision fixture builds");
+
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity entity = SpawnNavigationTestNpc(
+            world, "invisible_player_guard", 980,
+            {4.0f, 0.0f, 4.0f}, 10);
+    game::NpcRuntimeInstance& npc =
+            world.Get<game::NpcRuntimeInstance>(entity);
+    npc.hostile = true;
+    game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    transform.yawRadians = 0.0f;
+    game::NpcAiState ai;
+    ai.aiType = game::kSeekAndDestroyNpcAiType;
+    ai.perception.visionRangeWorld = 12.0f;
+    ai.perception.visionAngleDegrees = 120.0f;
+    ai.perception.hearingRangeWorld = 12.0f;
+    ai.awareness = game::NpcAwarenessState::Detected;
+    ai.directAlertPending = true;
+    ai.playerDetectionAudioPending = true;
+    ai.visualDetectionProgress = 1.0f;
+    world.Add(entity, ai);
+    world.Add(entity, game::MakeHealth(100));
+    world.Add(entity, game::NpcCombatState{});
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    game::NpcAiRuntime aiRuntime;
+    game::InitializeNpcAiRuntime(
+            aiRuntime, 4, navigation.Capacities().agentCapacity);
+    engine::AssetManager assets;
+    engine::AudioSystem audio;
+    game::Health playerHealth = game::MakeHealth(100);
+    game::NpcAiGameplayContext gameplay;
+    gameplay.playerFeetPosition = {4.0f, 0.0f, 6.0f};
+    gameplay.playerEyePosition = {4.0f, 1.2f, 6.0f};
+    gameplay.playerHealth = &playerHealth;
+    gameplay.playerInvisible = true;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> staticColliders;
+    game::EmitNpcPlayerSound(aiRuntime, gameplay.playerFeetPosition, 12.0f);
+
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    game::NpcAiState& state = world.Get<game::NpcAiState>(entity);
+    Check(state.awareness == game::NpcAwarenessState::Unaware
+                  && !state.playerInGeometricSight
+                  && !state.playerDetectionAudioPending
+                  && Near(state.visualDetectionProgress, 0.0f)
+                  && state.lastHeardSoundSequence == 0
+                  && aiRuntime.pursuitSlots.empty(),
+          "invisibility clears an existing hostile alert and suppresses sight, hearing, and pursuit");
+
+    gameplay.playerInvisible = false;
+    game::UpdateNpcAiSystem(
+            world, assets, audio, navigation, npcNavigation,
+            collisionWorld, doors, staticColliders,
+            aiRuntime, gameplay, 0.016f);
+    Check(state.awareness == game::NpcAwarenessState::Detected
+                  && state.playerInGeometricSight
+                  && state.playerDetectionAudioPending,
+          "disabling invisibility restores hostile player detection");
+
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
+}
+
 void TestNpcInvestigationArrivalSearchesThenResumesPatrol()
 {
     game::SectorTopologyMap map = MakeNavigationSquareMap();
@@ -10710,6 +10791,7 @@ int main()
     TestNpcCommittedAttackAdvanceUsesRunSpeedAndCollision();
     TestNpcPlayerDetectedAudioTransitionPolicy();
     TestNpcHearingUsesSectorSoundPropagation();
+    TestInvisiblePlayerDoesNotAlertHostileNpc();
     TestNpcInvestigationArrivalSearchesThenResumesPatrol();
     TestNpcSneakDetectionOnlyAppliesWhileCrouching();
     TestNpcAiPursuitSlotsRouteAroundSupportingProp();

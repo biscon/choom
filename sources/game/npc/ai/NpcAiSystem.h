@@ -92,6 +92,7 @@ struct NpcAiGameplayContext {
     void* playerAttackHitUserData = nullptr;
     NpcAiPlayerAttackHitFn playerAttackHit = nullptr;
     bool godMode = false;
+    bool playerInvisible = false;
     bool frozen = false;
     bool playerGrounded = false;
     bool playerSneaking = false;

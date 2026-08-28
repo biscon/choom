@@ -197,6 +197,7 @@ void GameApplication::ProcessDeferredDebugActions(
         return;
     }
     if (action.type == engine::DeferredDebugActionType::SetGodMode
+            || action.type == engine::DeferredDebugActionType::SetInvisible
             || action.type == engine::DeferredDebugActionType::SetFreezeAi
             || action.type == engine::DeferredDebugActionType::SetDebugAi) {
         if (!gameSession.IsRunning()
@@ -211,6 +212,9 @@ void GameApplication::ProcessDeferredDebugActions(
                         == engine::DeferredDebugActionType::SetGodMode
                 ? gameSession.GodMode()
                 : action.type
+                        == engine::DeferredDebugActionType::SetInvisible
+                ? gameSession.Invisible()
+                : action.type
                         == engine::DeferredDebugActionType::SetFreezeAi
                 ? gameSession.AiFrozen()
                 : gameSession.AiDebugVisible();
@@ -222,6 +226,9 @@ void GameApplication::ProcessDeferredDebugActions(
         if (action.type == engine::DeferredDebugActionType::SetGodMode) {
             gameSession.SetGodMode(enabled);
         } else if (action.type
+                == engine::DeferredDebugActionType::SetInvisible) {
+            gameSession.SetInvisible(enabled);
+        } else if (action.type
                 == engine::DeferredDebugActionType::SetFreezeAi) {
             gameSession.SetAiFrozen(enabled);
         } else {
@@ -232,6 +239,9 @@ void GameApplication::ProcessDeferredDebugActions(
                 std::string{action.type
                                 == engine::DeferredDebugActionType::SetGodMode
                             ? "god mode "
+                            : action.type
+                                    == engine::DeferredDebugActionType::SetInvisible
+                            ? "invisibility "
                             : action.type
                                     == engine::DeferredDebugActionType::SetFreezeAi
                             ? "AI freeze " : "AI diagnostics "}

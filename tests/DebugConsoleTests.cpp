@@ -182,6 +182,42 @@ void DebugAiCommandSupportsToggleModesAndHelp()
             != std::string::npos);
 }
 
+void InvisibleCommandSupportsToggleModesAndHelp()
+{
+    engine::DebugConsoleData console;
+    engine::DebugConsoleInitialize(console, engine::NullFontHandle());
+    console.open = true;
+
+    SubmitConsoleCommand(console, "/invisible");
+    engine::DeferredDebugAction action =
+            engine::DebugConsoleTakeDeferredAction(console);
+    assert(action.type == engine::DeferredDebugActionType::SetInvisible);
+    assert(action.mapId == "hub");
+    assert(action.booleanMode == engine::DeferredDebugBooleanMode::Toggle);
+
+    SubmitConsoleCommand(console, "/invisible on");
+    action = engine::DebugConsoleTakeDeferredAction(console);
+    assert(action.type == engine::DeferredDebugActionType::SetInvisible);
+    assert(action.booleanMode == engine::DeferredDebugBooleanMode::Enable);
+
+    SubmitConsoleCommand(console, "/invisible off");
+    action = engine::DebugConsoleTakeDeferredAction(console);
+    assert(action.type == engine::DeferredDebugActionType::SetInvisible);
+    assert(action.booleanMode == engine::DeferredDebugBooleanMode::Disable);
+
+    SubmitConsoleCommand(console, "/invisible maybe");
+    assert(engine::DebugConsoleTakeDeferredAction(console).type
+            == engine::DeferredDebugActionType::None);
+    assert(!console.lines.empty());
+    assert(console.lines.back().text.find("usage: /invisible [on|off]")
+            != std::string::npos);
+
+    SubmitConsoleCommand(console, "/help invisible");
+    assert(!console.lines.empty());
+    assert(console.lines.back().text.find("/invisible [on|off]")
+            != std::string::npos);
+}
+
 void TraceLogsFlushThroughTheThreadSafeInbox()
 {
     engine::DebugConsoleData console;
@@ -213,6 +249,7 @@ int main()
     CommandTokenizerHandlesQuotesAndErrors();
     SubmissionQueuesDeferredActionsAndHistory();
     DebugAiCommandSupportsToggleModesAndHelp();
+    InvisibleCommandSupportsToggleModesAndHelp();
     TraceLogsFlushThroughTheThreadSafeInbox();
     return 0;
 }

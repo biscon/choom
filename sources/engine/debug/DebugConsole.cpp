@@ -181,6 +181,10 @@ void HandleGodMode(
         DebugConsoleData& console,
         const std::vector<std::string>& tokens,
         std::string_view currentMapId);
+void HandleInvisible(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId);
 void HandleFreezeAi(
         DebugConsoleData& console,
         const std::vector<std::string>& tokens,
@@ -207,6 +211,8 @@ constexpr CommandDefinition Commands[] = {
                 HandleHelp},
         {"god", "/god [on|off]", "toggle player invulnerability",
                 HandleGodMode},
+        {"invisible", "/invisible [on|off]", "toggle hostile NPC detection",
+                HandleInvisible},
         {"freezeai", "/freezeai [on|off]", "toggle NPC AI simulation",
                 HandleFreezeAi},
         {"quit", "/quit", "quit through normal application shutdown",
@@ -402,6 +408,17 @@ void HandleGodMode(
             console, tokens, currentMapId,
             DeferredDebugActionType::SetGodMode,
             "/god [on|off]", "god mode");
+}
+
+void HandleInvisible(
+        DebugConsoleData& console,
+        const std::vector<std::string>& tokens,
+        std::string_view currentMapId)
+{
+    QueueBooleanAction(
+            console, tokens, currentMapId,
+            DeferredDebugActionType::SetInvisible,
+            "/invisible [on|off]", "invisibility");
 }
 
 void HandleFreezeAi(

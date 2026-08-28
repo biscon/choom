@@ -2817,6 +2817,23 @@
         60.0
       ],
       "yawDegrees": 180.0
+    },
+    {
+      "id": 171,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_171",
+        "modelPath": "assets/models/dynamic/ceiling_fan.glb",
+        "heightOffsetWorld": 3.4000000953674316,
+        "scale": 0.6499999761581421,
+        "animationSpeed": 2.0
+      },
+      "position": [
+        -84.0,
+        0.0,
+        52.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -23839,7 +23856,8 @@
             "lookAround": true
           }
         ],
-        "shuffleWaypoints": true
+        "shuffleWaypoints": true,
+        "faceWaypointOrientation": false
       },
       {
         "editorId": 2,

@@ -132,9 +132,11 @@ public:
     const Health& PlayerHealth() const { return playerHealth; }
     const PlayerStamina& PlayerStaminaState() const { return playerStamina; }
     void SetGodMode(bool enabled);
+    void SetInvisible(bool enabled) { invisible = enabled; }
     void SetAiFrozen(bool frozen) { aiFrozen = frozen; }
     void SetAiDebugVisible(bool visible) { aiDebugVisible = visible; }
     bool GodMode() const { return godMode; }
+    bool Invisible() const { return invisible; }
     bool AiFrozen() const { return aiFrozen; }
     bool AiDebugVisible() const { return aiDebugVisible; }
     bool HasWorldDebugOverlays() const {
@@ -235,6 +237,7 @@ private:
     Vector2 playerKnockbackVelocity{};
     float playerStunRemainingSeconds = 0.0f;
     bool godMode = false;
+    bool invisible = false;
     bool aiFrozen = false;
     bool aiDebugVisible = false;
     bool gameOver = false;
