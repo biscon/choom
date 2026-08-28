@@ -179,7 +179,10 @@ local cancelled, reason = cancelOperation(movement)
 
 Persistent values survive map VM replacement and participate in save/load.
 Keys must be non-empty strings. Bool, integer, and string values use separate
-typed stores.
+typed stores. Their scope is the running campaign/save rather than the current
+level: a value written in one map is visible in another map and is restored
+before the loaded map's fresh `init()` hook runs. Lua VM state, coroutine
+stacks, tasks, and pending operations are not saved.
 
 ### `setPersistentBool(key, value)` / `getPersistentBool(key [, default]) -> boolean`
 

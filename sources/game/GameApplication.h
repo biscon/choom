@@ -13,11 +13,15 @@
 #include "game/GameMainMenu.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorGameSession.h"
+#include "game/save/GameSaveData.h"
+#include "game/save/GameSaveMenu.h"
 #include "sector_editor/SectorEditor.h"
 #include "sector_demo/SectorMaterialRegistry.h"
 
+#include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -98,11 +102,18 @@ public:
             Rectangle presentationViewport,
             int outputWidth,
             int outputHeight) const;
+    void ProcessPendingGameSave(
+            engine::EngineContext& context,
+            const Texture2D& scenePresentationTexture);
 
 private:
     void HandleMenuAction(
             engine::EngineContext& context,
             MainMenuAction action);
+    void HandleSaveMenuAction(
+            engine::EngineContext& context,
+            const GameSaveMenuAction& action);
+    void LoadGameFromSlot(engine::EngineContext& context, int slot);
     void StartNewGame(engine::EngineContext& context);
     void ResumeGame(engine::EngineContext& context);
     void ClearGameSession(engine::EngineContext& context);
@@ -124,6 +135,15 @@ private:
     FpsWeaponRegistry weaponRegistry;
     PlayerAudioRuntime playerAudio;
     engine::PersistentScriptStore persistentScripts;
+    std::vector<GameSaveLevelState> levelSaveStates;
+    std::filesystem::path saveRoot;
+    GameSaveMenuState saveMenu;
+    std::optional<GameSaveMenuAction> pendingSaveMenuAction;
+    struct PendingGameSave {
+        int slot = 0;
+        std::string name;
+    };
+    std::optional<PendingGameSave> pendingGameSave;
     engine::DebugConsoleData debugConsole;
     std::string menuStatus;
     std::optional<MainMenuAction> pendingMenuAction;

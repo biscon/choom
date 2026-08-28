@@ -262,6 +262,15 @@ if(BUILD_TESTING)
     target_include_directories(application_flow_tests PRIVATE sources)
     add_test(NAME application_flow COMMAND application_flow_tests)
 
+    add_executable(game_save_tests
+            tests/GameSaveTests.cpp
+            sources/game/save/GameSaveSerialization.cpp
+            sources/game/save/GameSaveStorage.cpp
+    )
+    target_include_directories(game_save_tests PRIVATE sources)
+    target_link_libraries(game_save_tests PRIVATE raylib)
+    add_test(NAME game_save COMMAND game_save_tests)
+
     add_executable(audio_system_tests
             tests/AudioSystemTests.cpp
             sources/engine/assets/AssetManager.cpp

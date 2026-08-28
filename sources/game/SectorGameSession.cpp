@@ -4,6 +4,7 @@
 #include "game/items/ItemDropPlacement.h"
 #include "game/items/ItemPresentation.h"
 #include "game/npc/ai/NpcAiDebugDraw.h"
+#include "game/save/GameSaveRuntime.h"
 #include "engine/components/AnimatedModel.h"
 #include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
@@ -990,7 +991,10 @@ bool SectorGameSession::StartNew(
         const FpsApplicationSettings& settings,
         PlayerAudioRuntime& playerAudioRuntime,
         engine::PersistentScriptStore& persistentStore,
+        std::vector<GameSaveLevelState>& savedLevels,
         bool loadingSave,
+        const GameSavePlayerState* playerRestore,
+        bool restoreVisitedLevel,
         std::string& error)
 {
     failureError.clear();
@@ -1019,6 +1023,17 @@ bool SectorGameSession::StartNew(
     if (!LoadSectorRuntimeLevel(path, materials, loaded, error)) {
         return false;
     }
+    pendingLevelRestore.reset();
+    if (restoreVisitedLevel) {
+        if (const GameSaveLevelState* saved = FindGameSaveLevelState(
+                    savedLevels, requestedLevelName)) {
+            pendingLevelRestore = *saved;
+            ApplyGameSaveLevelMapState(loaded, *pendingLevelRestore);
+        }
+    }
+    pendingPlayerRestore = playerRestore != nullptr
+            ? std::optional<GameSavePlayerState>{*playerRestore}
+            : std::optional<GameSavePlayerState>{};
     ReconcileItemCampaignLevel(campaign, requestedLevelName, loaded);
     ItemLevelCampaignState& campaignLevel = FindOrCreateItemLevelCampaignState(
             campaign, requestedLevelName, loaded.runtimeObjects.size());
@@ -1101,6 +1116,7 @@ bool SectorGameSession::StartNew(
     applicationSettings = &settings;
     playerAudio = &playerAudioRuntime;
     persistentScripts = &persistentStore;
+    levelSaveStates = &savedLevels;
     fpsPlayer.Begin(
             context.assets,
             scene.Renderer(),
@@ -1137,6 +1153,8 @@ bool SectorGameSession::StartNew(
             MakeSectorScriptAudioApi(scene),
             &playerHealth);
     pendingLoadingSave = loadingSave;
+    saveGameBlocked = false;
+    saveGameBlockedReason.clear();
     BeginGameLevelLoading(loading);
     error.clear();
     return true;
@@ -1189,6 +1207,8 @@ void SectorGameSession::Shutdown(
     paused = false;
     consoleInputCaptured = false;
     pendingLoadingSave = false;
+    pendingLevelRestore.reset();
+    pendingPlayerRestore.reset();
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
@@ -1208,10 +1228,25 @@ void SectorGameSession::Shutdown(
     applicationSettings = nullptr;
     playerAudio = nullptr;
     persistentScripts = nullptr;
+    levelSaveStates = nullptr;
+    saveGameBlocked = false;
+    saveGameBlockedReason.clear();
 }
 
 void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
 {
+    if (levelSaveStates != nullptr && running
+            && scriptHost.runtimeObjects != nullptr) {
+        UpsertGameSaveLevelState(
+                *levelSaveStates,
+                CaptureGameSaveLevelState(
+                        context.world,
+                        context.assets,
+                        topologyMap,
+                        *scriptHost.runtimeObjects,
+                        scriptHost,
+                        levelName));
+    }
     Pause();
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
@@ -1259,6 +1294,44 @@ void SectorGameSession::SetGodMode(bool enabled)
         playerKnockbackVelocity = {};
         playerStunRemainingSeconds = 0.0f;
     }
+}
+
+void SectorGameSession::SetSaveGameBlocked(bool blocked, std::string reason)
+{
+    saveGameBlocked = blocked;
+    saveGameBlockedReason = blocked
+            ? (reason.empty() ? std::string{"Saving is currently unavailable"}
+                              : std::move(reason))
+            : std::string{};
+}
+
+bool SectorGameSession::CaptureCurrentLevelSaveState(
+        engine::EngineContext& context,
+        const SectorSceneRuntime& scene)
+{
+    if (!running || levelSaveStates == nullptr
+            || scriptHost.runtimeObjects == nullptr) return false;
+    UpsertGameSaveLevelState(
+            *levelSaveStates,
+            CaptureGameSaveLevelState(
+                    context.world,
+                    context.assets,
+                    topologyMap,
+                    scene.RuntimeObjects(),
+                    scriptHost,
+                    levelName));
+    return true;
+}
+
+GameSavePlayerState SectorGameSession::CapturePlayerSaveState() const
+{
+    GameSavePlayerState result;
+    result.feetPosition = controller.fpsControllerState.feetPosition;
+    result.yawRadians = controller.fpsControllerState.yawRadians;
+    result.pitchRadians = controller.fpsControllerState.pitchRadians;
+    result.health = playerHealth;
+    result.stamina = playerStamina;
+    return result;
 }
 
 void SectorGameSession::Update(
@@ -1849,7 +1922,7 @@ void SectorGameSession::UpdateLoading(
     if (loading.phase == GameLevelLoadPhase::Fading) {
         if (!AdvanceGameLevelLoadingFade(loading, dt)) return;
         std::string error;
-        if (!ActivateLoadedMap(context, error)) {
+        if (!ActivateLoadedMap(context, scene, error)) {
             const std::string reason = error.empty()
                     ? "Map script activation failed" : error;
             Shutdown(context, scene);
@@ -1934,12 +2007,37 @@ void SectorGameSession::UpdateLoading(
 
 bool SectorGameSession::ActivateLoadedMap(
         engine::EngineContext& context,
+        SectorSceneRuntime& scene,
         std::string& error)
 {
     if (persistentScripts == nullptr) {
         error = "Persistent script store is unavailable";
         return false;
     }
+    if (pendingLevelRestore.has_value()) {
+        ApplyGameSaveLevelRuntimeState(
+                context.world,
+                context.assets,
+                scene,
+                scriptHost,
+                *pendingLevelRestore);
+    }
+    if (pendingPlayerRestore.has_value()) {
+        controller.fpsControllerState.feetPosition =
+                pendingPlayerRestore->feetPosition;
+        controller.fpsControllerState.yawRadians =
+                pendingPlayerRestore->yawRadians;
+        controller.fpsControllerState.pitchRadians =
+                pendingPlayerRestore->pitchRadians;
+        playerHealth = pendingPlayerRestore->health;
+        playerStamina = pendingPlayerRestore->stamina;
+        if (!BuildCollisionAndPlayer(scene, false, nullptr, &error)) {
+            return false;
+        }
+        ApplyPlayerPose(scene);
+    }
+    pendingLevelRestore.reset();
+    pendingPlayerRestore.reset();
     if (!engine::ScriptSystemCreateForMap(
                 context,
                 scripts,
@@ -2094,6 +2192,14 @@ bool SectorGameSession::RebuildFromMap(
     inventoryUi.open = false;
     const SectorFpsControllerState savedPlayer = controller.fpsControllerState;
     SectorTopologyMap reconciledMap = map;
+    pendingLevelRestore.reset();
+    if (levelSaveStates != nullptr) {
+        if (const GameSaveLevelState* saved = FindGameSaveLevelState(
+                    *levelSaveStates, levelName)) {
+            pendingLevelRestore = *saved;
+            ApplyGameSaveLevelMapState(reconciledMap, *pendingLevelRestore);
+        }
+    }
     if (itemCampaign != nullptr) {
         ReconcileItemCampaignLevel(
                 *itemCampaign, levelName, reconciledMap);
@@ -2182,13 +2288,15 @@ bool SectorGameSession::ReloadCurrentMap(
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
+    std::vector<GameSaveLevelState>* savedLevelStates = levelSaveStates;
     const Health savedHealth = playerHealth;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
             || savedItemModelAssets == nullptr
             || savedItemCampaign == nullptr || savedMaterialRegistry == nullptr
             || savedSettings == nullptr
-            || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
+            || savedPlayerAudio == nullptr || savedPersistent == nullptr
+            || savedLevelStates == nullptr) {
         error = "Game services became unavailable during reload";
         return false;
     }
@@ -2204,6 +2312,9 @@ bool SectorGameSession::ReloadCurrentMap(
                 *savedSettings,
                 *savedPlayerAudio,
                 *savedPersistent,
+                *savedLevelStates,
+                false,
+                nullptr,
                 false,
                 error)) {
         return false;
@@ -2240,6 +2351,18 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     scripts.requestedMapId.clear();
     scripts.requestedSpawnId.clear();
 
+    if (levelSaveStates != nullptr && scriptHost.runtimeObjects != nullptr) {
+        UpsertGameSaveLevelState(
+                *levelSaveStates,
+                CaptureGameSaveLevelState(
+                        context.world,
+                        context.assets,
+                        topologyMap,
+                        *scriptHost.runtimeObjects,
+                        scriptHost,
+                        levelName));
+    }
+
     const FpsWeaponRegistry* savedWeaponRegistry = weaponRegistry;
     const ItemRegistry* savedItemRegistry = itemRegistry;
     const ItemModelAssetState* savedItemModelAssets = itemModelAssets;
@@ -2248,6 +2371,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
+    std::vector<GameSaveLevelState>* savedLevelStates = levelSaveStates;
     const Health savedHealth = playerHealth;
     const PlayerStamina savedStamina = playerStamina;
     Shutdown(context, scene);
@@ -2255,7 +2379,8 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
             || savedItemModelAssets == nullptr
             || savedItemCampaign == nullptr || savedMaterialRegistry == nullptr
             || savedSettings == nullptr
-            || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
+            || savedPlayerAudio == nullptr || savedPersistent == nullptr
+            || savedLevelStates == nullptr) {
         failureError = "Map change failed because session services are unavailable";
         return;
     }
@@ -2278,7 +2403,10 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
                 *savedSettings,
                 *savedPlayerAudio,
                 *savedPersistent,
+                *savedLevelStates,
                 false,
+                nullptr,
+                true,
                 error)) {
         failureError = "Map change to '" + requestedMap + "' failed: "
                 + (error.empty() ? "unknown error" : error);

@@ -13,6 +13,7 @@
 #include "game/PlayerLightLevel.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
+#include "game/save/GameSaveData.h"
 #include "engine/scripting/ScriptSystem.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_demo/SectorSceneRuntime.h"
@@ -20,6 +21,7 @@
 
 #include <string>
 #include <array>
+#include <optional>
 #include <vector>
 
 namespace game {
@@ -38,7 +40,10 @@ public:
             const FpsApplicationSettings& applicationSettings,
             PlayerAudioRuntime& playerAudioRuntime,
             engine::PersistentScriptStore& persistentScripts,
+            std::vector<GameSaveLevelState>& levelSaveStates,
             bool loadingSave,
+            const GameSavePlayerState* playerRestore,
+            bool restoreVisitedLevel,
             std::string& error);
     void Shutdown(engine::EngineContext& context, SectorSceneRuntime& scene);
     void SuspendForEditor(engine::EngineContext& context);
@@ -143,6 +148,17 @@ public:
         return IsActive() && (navigationDebug.visible || aiDebugVisible);
     }
     bool IsGameOver() const { return gameOver; }
+    bool CanSaveGame() const {
+        return IsActive() && !gameOver && !saveGameBlocked;
+    }
+    const std::string& SaveGameBlockedReason() const {
+        return saveGameBlockedReason;
+    }
+    void SetSaveGameBlocked(bool blocked, std::string reason = {});
+    bool CaptureCurrentLevelSaveState(
+            engine::EngineContext& context,
+            const SectorSceneRuntime& scene);
+    GameSavePlayerState CapturePlayerSaveState() const;
 
 private:
     struct PendingItemTake {
@@ -209,6 +225,7 @@ private:
             float dt);
     bool ActivateLoadedMap(
             engine::EngineContext& context,
+            SectorSceneRuntime& scene,
             std::string& error);
 
     SectorTopologyMap topologyMap;
@@ -230,6 +247,9 @@ private:
     const FpsApplicationSettings* applicationSettings = nullptr;
     PlayerAudioRuntime* playerAudio = nullptr;
     engine::PersistentScriptStore* persistentScripts = nullptr;
+    std::vector<GameSaveLevelState>* levelSaveStates = nullptr;
+    std::optional<GameSaveLevelState> pendingLevelRestore;
+    std::optional<GameSavePlayerState> pendingPlayerRestore;
     engine::ScriptRuntime scripts;
     SectorScriptHost scriptHost;
     SectorGameNavigationDebugState navigationDebug;
@@ -241,6 +261,8 @@ private:
     bool aiFrozen = false;
     bool aiDebugVisible = false;
     bool gameOver = false;
+    bool saveGameBlocked = false;
+    std::string saveGameBlockedReason;
     PlayerStamina playerStamina;
     PlayerWindedCameraState windedCamera;
     PlayerLowHealthCameraState lowHealthCamera;

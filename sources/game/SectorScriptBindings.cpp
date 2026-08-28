@@ -228,19 +228,6 @@ void RestoreDoorSpeed(
     }
 }
 
-void RefreshDoorSpatialCaches(
-        engine::World& world,
-        SectorRuntimeObjectState& objects)
-{
-    UpdateSectorDoorDerivedStateSystem(world);
-    objects.dynamicDoorColliders.clear();
-    CollectSectorDoorDynamicColliders(world, objects.dynamicDoorColliders);
-    objects.dynamicPortalBlockers.clear();
-    CollectSectorDoorDynamicPortalBlockers(world, objects.dynamicPortalBlockers);
-    objects.doorSpatialStateChanged = true;
-    objects.doorCollisionCacheInitialized = true;
-}
-
 void CancelDoorMove(
         engine::EngineContext& context,
         void* hostContext,
@@ -256,7 +243,7 @@ void CancelDoorMove(
         motion.openFraction = std::clamp(motion.openFraction, 0.0f, 1.0f);
         motion.targetOpenFraction = motion.openFraction;
         motion.travelSpeed = move->savedTravelSpeed;
-        RefreshDoorSpatialCaches(context.world, *host->runtimeObjects);
+        RefreshSectorDoorSpatialCaches(context.world, *host->runtimeObjects);
     }
     move->active = false;
 }
@@ -571,7 +558,7 @@ BeginDoorMoveResult BeginDoorMove(
     if (durationMs == 0.0f) {
         motion.openFraction = targetFraction;
         motion.targetOpenFraction = targetFraction;
-        RefreshDoorSpatialCaches(context.world, *host.runtimeObjects);
+        RefreshSectorDoorSpatialCaches(context.world, *host.runtimeObjects);
         result.started = true;
         result.completedImmediately = true;
         return result;

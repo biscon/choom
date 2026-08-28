@@ -2020,20 +2020,30 @@ bool Button(
         Rectangle bounds,
         FontHandle font,
         const char* text,
-        UITextJustify justify)
+        UITextJustify justify,
+        bool enabled)
 {
     const uint32_t widgetId = HashId(id);
     if (ContainsWidget(ui, bounds, ui.mousePosition)) {
-        ui.hotId = widgetId;
-        if (ui.mouseDown) {
-            ui.activeId = widgetId;
+        if (enabled) {
+            ui.hotId = widgetId;
+            if (ui.mouseDown) {
+                ui.activeId = widgetId;
+            }
+            ConsumeMousePresses(ui, input, bounds);
         }
-        ConsumeMousePresses(ui, input, bounds);
     }
 
-    const bool clicked = ConsumeMouseClick(ui, input, bounds);
-    DrawWidgetBackground(ui, config, bounds, InteractiveFill(config, ui, widgetId), config.borderColor);
-    Text(ui, config, assets, bounds, font, text, justify, config.textColor);
+    const bool clicked = enabled && ConsumeMouseClick(ui, input, bounds);
+    DrawWidgetBackground(
+            ui,
+            config,
+            bounds,
+            enabled ? InteractiveFill(config, ui, widgetId)
+                    : config.disabledColor,
+            enabled ? config.borderColor : config.disabledColor);
+    Text(ui, config, assets, bounds, font, text, justify,
+            enabled ? config.textColor : config.mutedTextColor);
     return clicked;
 }
 
