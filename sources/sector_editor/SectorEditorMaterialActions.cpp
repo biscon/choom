@@ -258,13 +258,18 @@ SectorEditorMaterialActionResult ApplySurfaceUvValueToSettings(
         return {};
     }
 
+    float* editedValue = nullptr;
     switch (component) {
-        case 0: uv.scale.x = value; break;
-        case 1: uv.scale.y = value; break;
-        case 2: uv.offset.x = value; break;
-        case 3: uv.offset.y = value; break;
+        case 0: editedValue = &uv.scale.x; break;
+        case 1: editedValue = &uv.scale.y; break;
+        case 2: editedValue = &uv.offset.x; break;
+        case 3: editedValue = &uv.offset.y; break;
         default: return {};
     }
+    if (*editedValue == value) {
+        return {};
+    }
+    *editedValue = value;
 
     return Changed(TextFormat(
             "Updated 3D %s %s UV",

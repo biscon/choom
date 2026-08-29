@@ -79,6 +79,10 @@ public:
             const SectorTopologyMap& map,
             const char* scopeName,
             std::string& error);
+    bool RefreshSurfaceMaterials(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            std::string& error);
     void Shutdown(engine::AssetManager& assets);
     void ShutdownRendererResources(engine::AssetManager& assets);
 
@@ -298,7 +302,14 @@ private:
             bool end) const;
     void RefreshAtmosphereDiagnostics(
             const SectorBillboardDynamicLightContext& dynamicLights);
+    void EnsureSurfaceMaterialResources(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            const SectorGeneratedGeometry& geometry);
     void RefreshBakedDataStatus(const SectorTopologyMap& map);
+    void RefreshBakedDataStatus(
+            const SectorTopologyMap& map,
+            const std::string& currentSourceHash);
     engine::TextureHandle TextureForId(const std::string& materialId) const;
     engine::TextureHandle NormalTextureForId(const std::string& materialId) const;
     void UpdateCamera();
@@ -398,6 +409,7 @@ private:
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
     bool localReflectionProbesCurrent = true;
+    std::string localReflectionProbeSurfaceHash;
     bool staticObjectAdjustmentBakedDataActive = false;
     int staticObjectAdjustmentOriginalLightmapStatus = 0;
     bool staticObjectAdjustmentOriginalSurfaceLightmapCurrent = false;

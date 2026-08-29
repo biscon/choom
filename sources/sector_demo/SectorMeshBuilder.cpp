@@ -405,6 +405,20 @@ SectorMeshBuildResult BuildSectorMeshes(
         return result;
     }
 
+    return BuildSectorMeshesFromGeneratedGeometry(
+            geometry, lightmapLayout, outError);
+}
+
+SectorMeshBuildResult BuildSectorMeshesFromGeneratedGeometry(
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout* lightmapLayout,
+        std::string* outError)
+{
+    if (outError != nullptr) {
+        outError->clear();
+    }
+
+    SectorMeshBuildResult result;
     const SectorMeshBatchDataResult batchData = BuildSectorMeshBatchData(geometry, lightmapLayout);
     result.batches.reserve(batchData.batches.size());
     for (const SectorMeshBatchData& builder : batchData.batches) {
@@ -426,12 +440,22 @@ SectorMeshBuildResult BuildSectorMeshes(
     }
 
     const SectorMeshBatchDataResult drawRecordData = BuildSectorMeshDrawRecordData(geometry, lightmapLayout);
+    if (drawRecordData.batches.empty()) {
+        if (outError != nullptr) {
+            *outError = "Topology mesh builder produced no sector draw records";
+        }
+        return result;
+    }
     result.sectorDrawRecords.reserve(drawRecordData.batches.size());
     result.sectorReceiverBounds = BuildSectorReceiverBounds(drawRecordData);
     for (const SectorMeshBatchData& builder : drawRecordData.batches) {
         Mesh mesh = CreateMeshFromBatch(builder);
         if (mesh.vertexCount <= 0) {
-            continue;
+            if (outError != nullptr) {
+                *outError = "Could not upload a sector surface mesh";
+            }
+            UnloadSectorMeshes(result);
+            return result;
         }
 
         SectorMeshBatch batch = MakeUploadedBatch(builder, mesh);

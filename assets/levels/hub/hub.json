@@ -6473,8 +6473,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -6574,7 +6573,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "d1278f788a10d339",
+    "sourceHash": "da4fb8361fb05379",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6582,19 +6581,19 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.666015625,
-        1.666015625
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 1379
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 839
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "d1278f788a10d339",
+      "sourceHash": "da4fb8361fb05379",
       "count": 2671,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -6607,31 +6606,24 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.192941665649414,
+          1.9389466047286987,
+          1.8518656492233276
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 16026,
-        "rgbChannelsAboveOne": 32
+        "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "d1278f788a10d339",
+      "sourceHash": "da4fb8361fb05379",
       "modelCount": 51,
       "objectCount": 131,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
@@ -17447,7 +17439,7 @@
           }
         },
         "lower": {
-          "materialId": "painted_plaster_wall",
+          "materialId": "worn_gray_metal_step_512",
           "uv": {
             "scale": [
               1.0,

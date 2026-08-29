@@ -5906,6 +5906,14 @@ SectorLightmapStatus GetSectorLightmapStatus(
 
 SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMap& map)
 {
+    return GetSectorBakedObjectLightProbeStatus(
+            map, ComputeSectorLightmapSourceHash(map));
+}
+
+SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(
+        const SectorTopologyMap& map,
+        const std::string& currentSourceHash)
+{
     const SectorBakedObjectLightProbeMetadata& metadata = map.bakedLightmap.objectProbes;
     if (metadata.path.empty()) {
         return SectorLightmapStatus::None;
@@ -5922,7 +5930,7 @@ SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMa
         return SectorLightmapStatus::Stale;
     }
 
-    if (metadata.sourceHash != ComputeSectorLightmapSourceHash(map)) {
+    if (metadata.sourceHash != currentSourceHash) {
         return SectorLightmapStatus::Stale;
     }
 

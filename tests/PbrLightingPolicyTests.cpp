@@ -435,7 +435,7 @@ void TestSectorRuntimeNormalMappingPolicy()
           "sector runtime normal-mapping policy can read the active renderer");
     Check(source.find("engine::TextureColorUsage::LinearData")
                     != std::string::npos
-                    && source.find("normalTextureHandlesById.emplace(")
+                    && source.find("normalTextureHandlesById.insert_or_assign(")
                             != std::string::npos,
           "automatic sector normal maps load as linear texture data");
     Check(source.find(
@@ -489,8 +489,8 @@ void TestSectorRuntimeNormalMappingPolicy()
                     && source.find("staticSpecularLightCount")
                             != std::string::npos,
           "sector dynamic and bounded authored-static lights use GGX specular");
-    Check(source.find("metallicFactorById.emplace") != std::string::npos
-                    && source.find("roughnessFactorById.emplace")
+    Check(source.find("metallicFactorById.insert_or_assign") != std::string::npos
+                    && source.find("roughnessFactorById.insert_or_assign")
                             != std::string::npos
                     && source.find("mix(vec3(0.04), surfaceRgb, metallic)")
                             != std::string::npos
@@ -545,7 +545,7 @@ void TestSectorRuntimeNormalMappingPolicy()
                       "        outputRgb = ApplySectorFog(")
                     != std::string::npos,
           "door PBR diagnostics bypass fog while full rendering retains it");
-    Check(source.find("NormalMappedRendererMaterialIds(map, generatedGeometry)")
+    Check(source.find("NormalMappedRendererMaterialIds(map, geometry)")
                             != std::string::npos
                     && source.find("ResolveDoorMaterial(") != std::string::npos
                     && source.find("normalTextureHandlesById.find(materialId)")

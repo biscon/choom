@@ -6279,9 +6279,16 @@ void TestEditorAuthoringFlatSurfaceFloorUvWritesThroughFaceAnchor()
 
     game::SectorEditorUiState uiState;
     std::string statusText;
+    bool previewRefreshRequested = false;
     engine::AssetManager assets;
     game::SectorEditorMaterialEditingService service =
-            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+            MakeMaterialEditingService(
+                    state,
+                    documentState,
+                    authoringGraph,
+                    uiState,
+                    statusText,
+                    &previewRefreshRequested);
 
     Check(service.ApplySurfaceUvValue(
                   target,
@@ -6305,6 +6312,20 @@ void TestEditorAuthoringFlatSurfaceFloorUvWritesThroughFaceAnchor()
     Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
                   && !documentState.derivation.authoringDerivedTopologyStale,
           "service 3D floor UV edit leaves refreshed authoring derivation current");
+    Check(previewRefreshRequested,
+          "service 3D floor UV edit requests a preview material refresh");
+
+    previewRefreshRequested = false;
+    Check(!service.ApplySurfaceUvValue(
+                  target,
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  2.5f,
+                  game::SectorSurfaceKind::Floor,
+                  assets),
+          "service 3D floor UV no-op reports no change");
+    Check(!previewRefreshRequested,
+          "service 3D floor UV no-op does not request a preview refresh");
 }
 
 void TestEditorAuthoringFlatSurfaceCeilingUvWritesThroughFaceAnchor()
@@ -6381,6 +6402,7 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
 
     game::SectorEditorUiState uiState;
     std::string statusText;
+    bool previewRefreshRequested = false;
     game::SectorEditorMaterialEditingService service =
             MakeMaterialEditingService(
                     state,
@@ -6388,7 +6410,7 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
                     authoringGraph,
                     uiState,
                     statusText,
-                    nullptr,
+                    &previewRefreshRequested,
                     &materialRegistry);
 
     Check(service.OpenMaterialPickerForDerivedSector(
@@ -6396,6 +6418,7 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
           "service flat texture picker opens for graph-authored flat target");
+    state.texturePicker.rebuildPreviewOnApply = true;
     Check(documentState.map.topologyMap.resolvedMaterialsById.find("floor_tiles")
                     == documentState.map.topologyMap.resolvedMaterialsById.end()
                   && state.texturePicker.materialIds
@@ -6419,6 +6442,8 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
           "service flat texture picker writes to face anchor floor texture");
     Check(sector != nullptr && sector->floorMaterialId == "floor_tiles",
           "service flat texture picker refreshes derived sector projection");
+    Check(previewRefreshRequested,
+          "service 3D flat texture picker requests a preview material refresh");
 }
 
 void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()

@@ -8919,7 +8919,7 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
                         if (state.mode == SectorEditorMode::Preview3D
                                 && sceneRuntime.Renderer().IsRendererReady()
                                 && engineContext != nullptr) {
-                            return RebuildPreviewMeshesPreservingView(*engineContext);
+                            return RefreshPreviewSurfaceMaterials(*engineContext);
                         }
                         return true;
                     }}};
@@ -9108,6 +9108,36 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                             },
                     },
                     statusText}};
+}
+
+bool SectorEditor::RefreshPreviewSurfaceMaterials(engine::EngineContext& context)
+{
+    if (!sceneRuntime.Renderer().IsRendererReady()) {
+        return false;
+    }
+
+    std::string gateMessage;
+    if (!CanUseCurrentAuthoringDerivedTopologyForPreview(
+                MakeLiveConstDerivationAccess(documentState.derivation),
+                &gateMessage)) {
+        statusText = gateMessage.empty()
+                ? "3D material refresh failed: derived topology is not current"
+                : gateMessage;
+        return false;
+    }
+
+    RefreshResolvedMaterials();
+    std::string error;
+    if (sceneRuntime.Renderer().RefreshSurfaceMaterials(
+                context.assets, TopologyMap(), error)) {
+        return true;
+    }
+
+    TraceLog(
+            LOG_WARNING,
+            "Incremental 3D material refresh failed; falling back to full preview rebuild: %s",
+            error.empty() ? "unknown error" : error.c_str());
+    return RebuildPreviewMeshesPreservingView(context);
 }
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& context)

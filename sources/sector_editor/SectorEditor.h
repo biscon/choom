@@ -561,6 +561,7 @@ private:
     bool HasAuthoringGraphData() const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
+    bool RefreshPreviewSurfaceMaterials(engine::EngineContext& context);
     bool RebuildPreviewMeshesPreservingView(engine::EngineContext& context);
     void ClearTransientTopologyEditStateAfterGeometryChange();
     void ClearTopologySelectionOnly();

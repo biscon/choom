@@ -1052,6 +1052,156 @@ bool SectorMeshRenderer::Rebuild(
     return RebuildRendererResources(assets, map, scopeName, error);
 }
 
+void SectorMeshRenderer::EnsureSurfaceMaterialResources(
+        engine::AssetManager& assets,
+        const SectorTopologyMap& map,
+        const SectorGeneratedGeometry& geometry)
+{
+    if (engine::IsNull(assetScope)) return;
+
+    const std::unordered_set<std::string> normalMappedMaterialIds =
+            NormalMappedRendererMaterialIds(map, geometry);
+    for (const std::string& materialId :
+            SortedRendererMaterialIds(map, geometry)) {
+        const auto it = map.resolvedMaterialsById.find(materialId);
+        if (it == map.resolvedMaterialsById.end()) {
+            std::fprintf(
+                    stderr,
+                    "[SectorMeshRenderer WARNING] Missing global material '%s'; using fallback texture\n",
+                    materialId.c_str());
+            continue;
+        }
+
+        const SectorMaterialDefinition& texture = it->second;
+        const std::string resolvedPath = ResolveSectorAssetPath(texture.path);
+        const std::string albedoRequestKey = resolvedPath + "|srgb|"
+                + std::to_string(static_cast<int>(texture.filter));
+        const engine::TextureHandle handle = assets.RequestTexture(
+                assetScope,
+                albedoRequestKey.c_str(),
+                resolvedPath.c_str(),
+                engine::TextureColorUsage::SceneSrgb,
+                SectorMaterialTextureLoadFlags(texture.filter));
+        textureHandlesById.insert_or_assign(texture.id, handle);
+        metallicFactorById.insert_or_assign(
+                texture.id, texture.metallicFactor);
+        roughnessFactorById.insert_or_assign(
+                texture.id, texture.roughnessFactor);
+
+        if (normalMappedMaterialIds.find(materialId)
+                == normalMappedMaterialIds.end()) {
+            normalTextureHandlesById.erase(texture.id);
+            normalStrengthById.erase(texture.id);
+            continue;
+        }
+        normalStrengthById.insert_or_assign(
+                texture.id, texture.normalStrength);
+
+        const std::string normalMapPath =
+                SectorMaterialNormalMapPath(texture.path);
+        const std::string resolvedNormalMapPath =
+                ResolveSectorAssetPath(normalMapPath);
+        std::error_code normalMapError;
+        if (normalMapPath.empty()
+                || !std::filesystem::is_regular_file(
+                        resolvedNormalMapPath, normalMapError)
+                || normalMapError) {
+            normalTextureHandlesById.erase(texture.id);
+            continue;
+        }
+        const std::string normalMapKey = resolvedNormalMapPath + "|linear|"
+                + std::to_string(static_cast<int>(texture.filter));
+        normalTextureHandlesById.insert_or_assign(
+                texture.id,
+                assets.RequestTexture(
+                        assetScope,
+                        normalMapKey.c_str(),
+                        resolvedNormalMapPath.c_str(),
+                        engine::TextureColorUsage::LinearData,
+                        SectorMaterialTextureLoadFlags(texture.filter)));
+    }
+}
+
+bool SectorMeshRenderer::RefreshSurfaceMaterials(
+        engine::AssetManager& assets,
+        const SectorTopologyMap& map,
+        std::string& error)
+{
+    error.clear();
+    if (!initialized || engine::IsNull(assetScope)) {
+        error = "Preview material refresh requires an initialized renderer";
+        return false;
+    }
+    if (map.sectors.empty()) {
+        error = "Preview material refresh requires topology sectors";
+        return false;
+    }
+
+    SectorGeneratedGeometry candidateGeometry;
+    if (!BuildSectorGeneratedGeometry(map, candidateGeometry, &error)) {
+        if (error.empty()) {
+            error = "Topology generated no surface geometry";
+        }
+        return false;
+    }
+
+    EnsureSurfaceMaterialResources(assets, map, candidateGeometry);
+
+    SectorLightmapLayout lightmapLayout;
+    const std::string currentSurfaceHash =
+            ComputeSectorLightmapSourceHash(map);
+    const SectorLightmapStatus currentLightmapStatus =
+            GetSectorLightmapStatus(map, currentSurfaceHash);
+    std::string layoutError;
+    const bool useLightmapLayout =
+            currentLightmapStatus == SectorLightmapStatus::Valid
+            && !lightmapTextures.empty()
+            && lightmapTextures.size() == directionalLightmapTextures.size()
+            && BuildSectorLightmapLayout(map, lightmapLayout, layoutError)
+            && lightmapLayout.atlasCount
+                    <= static_cast<int>(lightmapTextures.size());
+
+    SectorMeshBuildResult candidateMeshes =
+            BuildSectorMeshesFromGeneratedGeometry(
+                    candidateGeometry,
+                    useLightmapLayout ? &lightmapLayout : nullptr,
+                    &error);
+    if (candidateMeshes.sectorDrawRecords.empty()) {
+        if (error.empty()) {
+            error = "Topology mesh builder produced no sector draw records";
+        }
+        return false;
+    }
+
+    UnloadSectorMeshes(meshes);
+    meshes = std::move(candidateMeshes);
+    generatedGeometry = std::move(candidateGeometry);
+    sectorCount = map.sectors.size();
+
+    RefreshBakedDataStatus(map, currentSurfaceHash);
+    surfaceLightmapBakeCurrent = surfaceLightmapBakeCurrent
+            && useLightmapLayout;
+    localReflectionProbesCurrent = !staticObjectAdjustmentBakedDataActive
+            && localReflectionProbeSurfaceHash
+                    == currentSurfaceHash;
+    if (staticObjectAdjustmentBakedDataActive) {
+        surfaceLightmapBakeCurrent = false;
+        objectProbeBakeCurrent = false;
+    }
+
+    RebuildSectorStaticSpecularLights(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            meshes.sectorReceiverBounds,
+            staticSpecularLightState);
+    dynamicLightState.ReserveReceiverBoundsCapacity(
+            meshes.sectorReceiverBounds.size(),
+            std::max(kSectorRuntimeObjectInitialCapacity,
+                    map.runtimeObjects.size()));
+    UpdateVisibilityDebug();
+    return true;
+}
+
 bool SectorMeshRenderer::RebuildRendererResources(
         engine::AssetManager& assets,
         const SectorTopologyMap& map,
@@ -1094,67 +1244,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
 
-    std::unordered_map<std::string, engine::TextureHandle> sharedAlbedoHandles;
-    std::unordered_map<std::string, engine::TextureHandle> sharedNormalHandles;
-    const std::unordered_set<std::string> normalMappedMaterialIds =
-            NormalMappedRendererMaterialIds(map, generatedGeometry);
-    for (const std::string& materialId :
-            SortedRendererMaterialIds(map, generatedGeometry)) {
-        const auto it = map.resolvedMaterialsById.find(materialId);
-        if (it == map.resolvedMaterialsById.end()) {
-            std::fprintf(
-                    stderr,
-                    "[SectorMeshRenderer WARNING] Missing global material '%s'; using fallback texture\n",
-                    materialId.c_str());
-            continue;
-        }
-
-        const SectorMaterialDefinition& texture = it->second;
-        const std::string resolvedPath = ResolveSectorAssetPath(texture.path);
-        const std::string albedoRequestKey = resolvedPath + "|srgb|"
-                + std::to_string(static_cast<int>(texture.filter));
-        const auto sharedAlbedo = sharedAlbedoHandles.find(albedoRequestKey);
-        const engine::TextureHandle handle = sharedAlbedo == sharedAlbedoHandles.end()
-                ? assets.RequestTexture(
-                        assetScope,
-                        albedoRequestKey.c_str(),
-                        resolvedPath.c_str(),
-                        engine::TextureColorUsage::SceneSrgb,
-                        SectorMaterialTextureLoadFlags(texture.filter))
-                : sharedAlbedo->second;
-        sharedAlbedoHandles.emplace(albedoRequestKey, handle);
-        textureHandlesById.emplace(texture.id, handle);
-        metallicFactorById.emplace(texture.id, texture.metallicFactor);
-        roughnessFactorById.emplace(texture.id, texture.roughnessFactor);
-        if (normalMappedMaterialIds.find(materialId)
-                == normalMappedMaterialIds.end()) {
-            continue;
-        }
-        normalStrengthById.emplace(texture.id, texture.normalStrength);
-
-        const std::string normalMapPath = SectorMaterialNormalMapPath(texture.path);
-        const std::string resolvedNormalMapPath = ResolveSectorAssetPath(normalMapPath);
-        std::error_code normalMapError;
-        if (!normalMapPath.empty()
-                && std::filesystem::is_regular_file(resolvedNormalMapPath, normalMapError)
-                && !normalMapError) {
-            const std::string normalMapKey = resolvedNormalMapPath + "|linear|"
-                    + std::to_string(static_cast<int>(texture.filter));
-            const auto sharedNormal = sharedNormalHandles.find(normalMapKey);
-            const engine::TextureHandle normalHandle = sharedNormal == sharedNormalHandles.end()
-                    ? assets.RequestTexture(
-                            assetScope,
-                            normalMapKey.c_str(),
-                            resolvedNormalMapPath.c_str(),
-                            engine::TextureColorUsage::LinearData,
-                            SectorMaterialTextureLoadFlags(texture.filter))
-                    : sharedNormal->second;
-            sharedNormalHandles.emplace(normalMapKey, normalHandle);
-            normalTextureHandlesById.emplace(
-                    texture.id,
-                    normalHandle);
-        }
-    }
+    EnsureSurfaceMaterialResources(assets, map, generatedGeometry);
 
     if (ShouldRenderSkyCylinder(map)) {
         const SectorMaterialDefinition* skyTexture = FindSkyTexture(map);
@@ -1168,6 +1258,8 @@ bool SectorMeshRenderer::RebuildRendererResources(
             assetScope,
             map,
             pbrEnvironment);
+    localReflectionProbeSurfaceHash =
+            ComputeSectorLightmapSourceHash(map);
 
     SectorLightmapLayout lightmapLayout;
     const std::vector<SectorLightmapAtlasMetadata> lightmapAtlases =
@@ -1541,6 +1633,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     skyRenderer.Shutdown();
     pbrEnvironment = {};
     localReflectionProbesCurrent = true;
+    localReflectionProbeSurfaceHash.clear();
     staticObjectAdjustmentBakedDataActive = false;
     doorRenderer.UnloadDoorMeshes();
     UnloadSectorMeshes(meshes);
@@ -2717,14 +2810,21 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
 
 void SectorMeshRenderer::RefreshBakedDataStatus(const SectorTopologyMap& map)
 {
+    RefreshBakedDataStatus(map, ComputeSectorLightmapSourceHash(map));
+}
+
+void SectorMeshRenderer::RefreshBakedDataStatus(
+        const SectorTopologyMap& map,
+        const std::string& currentSourceHash)
+{
     const SectorLightmapStatus currentLightmapStatus =
-            GetSectorLightmapStatus(map);
+            GetSectorLightmapStatus(map, currentSourceHash);
     lightmapStatus = static_cast<int>(currentLightmapStatus);
     surfaceLightmapBakeCurrent =
             currentLightmapStatus == SectorLightmapStatus::Valid
             && !lightmapTextures.empty();
     objectProbeBakeCurrent =
-            GetSectorBakedObjectLightProbeStatus(map)
+            GetSectorBakedObjectLightProbeStatus(map, currentSourceHash)
                     == SectorLightmapStatus::Valid;
 }
 
