@@ -358,8 +358,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 514,
-          "backSideDefId": 515,
+          "frontSideDefId": 540,
+          "backSideDefId": 541,
           "endpointA": [
             -704,
             1296
@@ -398,8 +398,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 484,
-          "backSideDefId": 504,
+          "frontSideDefId": 510,
+          "backSideDefId": 530,
           "endpointA": [
             -992,
             1456
@@ -469,8 +469,8 @@
           "lineDefId": 127,
           "frontSectorId": 33,
           "backSectorId": 26,
-          "frontSideDefId": 224,
-          "backSideDefId": 251,
+          "frontSideDefId": 232,
+          "backSideDefId": 259,
           "endpointA": [
             -2560,
             1376
@@ -1499,8 +1499,8 @@
           "lineDefId": 234,
           "frontSectorId": 50,
           "backSectorId": 43,
-          "frontSideDefId": 196,
-          "backSideDefId": 209,
+          "frontSideDefId": 200,
+          "backSideDefId": 213,
           "endpointA": [
             -2944,
             592
@@ -2181,8 +2181,8 @@
           "lineDefId": 269,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 355,
-          "backSideDefId": 334,
+          "frontSideDefId": 381,
+          "backSideDefId": 360,
           "endpointA": [
             -2048,
             -720
@@ -2420,8 +2420,8 @@
           "lineDefId": 255,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 349,
-          "backSideDefId": 304,
+          "frontSideDefId": 375,
+          "backSideDefId": 322,
           "endpointA": [
             -2432,
             -560
@@ -8204,6 +8204,56 @@
         "id": 329,
         "x": -1536,
         "y": -4288
+      },
+      {
+        "id": 330,
+        "x": -2400,
+        "y": -3424
+      },
+      {
+        "id": 331,
+        "x": -2272,
+        "y": -3552
+      },
+      {
+        "id": 332,
+        "x": -2176,
+        "y": -4256
+      },
+      {
+        "id": 333,
+        "x": -2128,
+        "y": -4256
+      },
+      {
+        "id": 334,
+        "x": -2128,
+        "y": -4064
+      },
+      {
+        "id": 335,
+        "x": -2176,
+        "y": -4064
+      },
+      {
+        "id": 336,
+        "x": -2912,
+        "y": -3328
+      },
+      {
+        "id": 337,
+        "x": -2912,
+        "y": -3280
+      },
+      {
+        "id": 338,
+        "x": -3104,
+        "y": -3280
+      },
+      {
+        "id": 339,
+        "x": -3104,
+        "y": -3328
       }
     ],
     "lines": [
@@ -9914,11 +9964,6 @@
         "endVertexId": 290
       },
       {
-        "id": 486,
-        "startVertexId": 299,
-        "endVertexId": 300
-      },
-      {
         "id": 488,
         "startVertexId": 301,
         "endVertexId": 302
@@ -9931,11 +9976,6 @@
       {
         "id": 491,
         "startVertexId": 290,
-        "endVertexId": 305
-      },
-      {
-        "id": 493,
-        "startVertexId": 304,
         "endVertexId": 305
       },
       {
@@ -10117,6 +10157,81 @@
         "id": 535,
         "startVertexId": 329,
         "endVertexId": 326
+      },
+      {
+        "id": 536,
+        "startVertexId": 301,
+        "endVertexId": 330
+      },
+      {
+        "id": 537,
+        "startVertexId": 330,
+        "endVertexId": 331
+      },
+      {
+        "id": 538,
+        "startVertexId": 331,
+        "endVertexId": 302
+      },
+      {
+        "id": 540,
+        "startVertexId": 332,
+        "endVertexId": 305
+      },
+      {
+        "id": 541,
+        "startVertexId": 332,
+        "endVertexId": 333
+      },
+      {
+        "id": 542,
+        "startVertexId": 333,
+        "endVertexId": 334
+      },
+      {
+        "id": 543,
+        "startVertexId": 304,
+        "endVertexId": 335
+      },
+      {
+        "id": 544,
+        "startVertexId": 335,
+        "endVertexId": 332
+      },
+      {
+        "id": 545,
+        "startVertexId": 334,
+        "endVertexId": 335
+      },
+      {
+        "id": 547,
+        "startVertexId": 336,
+        "endVertexId": 300
+      },
+      {
+        "id": 548,
+        "startVertexId": 336,
+        "endVertexId": 337
+      },
+      {
+        "id": 549,
+        "startVertexId": 337,
+        "endVertexId": 338
+      },
+      {
+        "id": 550,
+        "startVertexId": 299,
+        "endVertexId": 339
+      },
+      {
+        "id": 551,
+        "startVertexId": 339,
+        "endVertexId": 336
+      },
+      {
+        "id": 552,
+        "startVertexId": 338,
+        "endVertexId": 339
       }
     ],
     "lineSides": [
@@ -19568,6 +19683,92 @@
         }
       },
       {
+        "lineId": 425,
+        "side": "front",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 426,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_white_ceiling_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
         "lineId": 427,
         "side": "front",
         "wall": {
@@ -19619,6 +19820,221 @@
             "scale": [
               1.0,
               0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 429,
+        "side": "front",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 430,
+        "side": "front",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 431,
+        "side": "front",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 433,
+        "side": "front",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 434,
+        "side": "front",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
             ],
             "offset": [
               0.0,
@@ -20453,6 +20869,2156 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 477,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 481,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 483,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 488,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 489,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 502,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 503,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 504,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 505,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 507,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 509,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 511,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 512,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.703125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 513,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.703125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 514,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 515,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 516,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.703125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 517,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.8125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 518,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.8125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 519,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.8125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 520,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.90625
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 521,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.90625
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 522,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.90625
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 523,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 525,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.703125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 526,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.703125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 527,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 528,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 529,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.703125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 530,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.8125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 531,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.8125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 532,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.8125
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 533,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.90625
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 534,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.90625
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 535,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.90625
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 536,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.921875
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 537,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.921875
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 538,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.921875
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 540,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 541,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.921875
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 542,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.921875
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 543,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 544,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 545,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 547,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 548,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.921875
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 549,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.921875
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 550,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 551,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 552,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.921875
             ]
           }
         },
@@ -25616,7 +28182,7 @@
         "y": -3098,
         "floorZ": -16.0,
         "ceilingZ": 18.0,
-        "floorMaterialId": "dark_wooden_planks",
+        "floorMaterialId": "interior_tiles",
         "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
@@ -25922,7 +28488,7 @@
         "y": -3906,
         "floorZ": -13.5,
         "ceilingZ": 16.0,
-        "floorMaterialId": "worn_dark_red_carpet_512",
+        "floorMaterialId": "dark_wooden_planks",
         "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
@@ -25998,8 +28564,8 @@
         "y": -3199,
         "floorZ": -11.25,
         "ceilingZ": 18.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
             1.0,
@@ -26074,8 +28640,8 @@
         "y": -3167,
         "floorZ": -13.0,
         "ceilingZ": 18.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
             1.0,
@@ -26150,8 +28716,8 @@
         "y": -3135,
         "floorZ": -14.5,
         "ceilingZ": 18.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
             1.0,
@@ -26226,8 +28792,8 @@
         "y": -4319,
         "floorZ": -11.25,
         "ceilingZ": 18.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
             1.0,
@@ -26302,8 +28868,8 @@
         "y": -4351,
         "floorZ": -13.0,
         "ceilingZ": 18.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
             1.0,
@@ -26378,8 +28944,236 @@
         "y": -4383,
         "floorZ": -14.5,
         "ceilingZ": 18.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 78,
+        "name": "Sector 78",
+        "x": -2308,
+        "y": -3551,
+        "floorZ": -14.75,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 79,
+        "name": "Sector 79",
+        "x": -2153,
+        "y": -4234,
+        "floorZ": -14.75,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 80,
+        "name": "Sector 80",
+        "x": -3081,
+        "y": -3306,
+        "floorZ": -14.75,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
             1.0,
