@@ -23921,7 +23921,6 @@
             "z": 512
           }
         ],
-        "repeat": true,
         "script": "trigger_1"
       },
       {

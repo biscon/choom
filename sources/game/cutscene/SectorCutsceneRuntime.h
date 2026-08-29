@@ -128,6 +128,7 @@ struct SectorCutsceneRuntime {
     SectorCutsceneLookState look;
     SectorCutsceneCaptionState caption;
     SectorCutsceneFadeState fade;
+    engine::ScriptTaskHandle controlsOwnerTask{};
     uint64_t nextToken = 1;
     bool controlsEnabled = true;
 };

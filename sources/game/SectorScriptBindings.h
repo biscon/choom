@@ -131,6 +131,10 @@ void UpdateSectorScriptOperations(
         engine::EngineContext& context,
         SectorScriptHost& host);
 
+void UpdateSectorScriptCutsceneControlOwnership(
+        engine::EngineContext& context,
+        SectorScriptHost& host);
+
 void InterruptSectorScriptNpcMoveForAi(
         engine::EngineContext& context,
         SectorScriptHost& host,

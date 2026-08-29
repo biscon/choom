@@ -41,6 +41,13 @@ command `enableControls(false)` disables gameplay input and engages this gate
 with a cutscene-specific reason. `enableControls(true)` restores controls and
 clears the cutscene save block. Map teardown/reset also clears it.
 
+The control/save lock is owned by the managed Lua task that called
+`enableControls(false)`. When that task completes, fails, or is cancelled, the
+runtime automatically restores controls and clears the save block. Another
+task cannot replace the owner, and disabling controls from a non-managed debug
+console chunk is rejected. This prevents script errors and stopped cutscenes
+from leaving saving or gameplay input disabled indefinitely.
+
 Saving must remain blocked for the complete interval in which a cutscene owns
 player/camera control. Player move/look operations, caption/fade timelines,
 Lua coroutine state, and world-fade opacity are transient and are not added to

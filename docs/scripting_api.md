@@ -542,6 +542,13 @@ running. It also engages the save gate. `true` restores gameplay input and
 clears that save gate. Restoring controls cancels any active scripted player
 move or look and releases its navigation door hold.
 
+The disabled state belongs to the managed Lua task that requested it. Controls
+and the save gate are restored automatically when that task completes, fails,
+or is cancelled, so a script error cannot strand gameplay input. A different
+task cannot take over an existing control lock. Disabling controls directly
+from the debug console is rejected because console chunks are not managed
+tasks; `enableControls(true)` remains available there as an emergency recovery.
+
 ### Player movement
 
 Player movement uses the navigation map, pathfinding, door traversal, and the
@@ -585,10 +592,18 @@ instance-ID namespace. Only one scripted look may be active.
 
 ```text
 say(message [, holdMs]) -> true | false, reason
+startSay(message [, holdMs]) -> operation | nil, reason
 text(message, TOP|CENTER|BOTTOM [, holdMs]) -> true | false, reason
+startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 ```
 
-Both block until presentation finishes. `say` is bottom-centered and reveals
+`say` and `text` block until presentation finishes. Their `startSay` and
+`startText` forms return immediately with operations compatible with `await`,
+`operationStatus`, and `cancelOperation`. The async forms can be entered
+directly in the non-yielding debug console to preview captions; direct console
+calls to the blocking forms are rejected before changing caption state.
+
+`say` is bottom-centered and reveals
 text at 40 Unicode codepoints per second. `text` displays the whole message
 and fades in over 250 ms at the selected vertical position. Both word-wrap
 within 80% of the viewport, use the game's 48-pixel bold font, and fade out

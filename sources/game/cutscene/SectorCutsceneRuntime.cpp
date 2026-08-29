@@ -535,6 +535,11 @@ void FinishSectorCutscenePlayerMoveFrame(
         const float dx = target.x - player.feetPosition.x;
         const float dz = target.z - player.feetPosition.z;
         if (std::sqrt(dx * dx + dz * dz) > ArrivalTolerance) break;
+        if (move.doorPhase == NpcDoorTraversalPhase::Approaching
+                || move.doorPhase
+                        == NpcDoorTraversalPhase::WaitingForClearance) {
+            break;
+        }
         ++move.nextCorner;
         if (move.doorPhase == NpcDoorTraversalPhase::Crossing) {
             move.doorPhase = NpcDoorTraversalPhase::None;

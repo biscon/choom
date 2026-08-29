@@ -1588,6 +1588,13 @@ bool ScriptSystemIsFunctionRunning(
             || HasQueuedName(runtime, functionName);
 }
 
+bool ScriptSystemIsTaskActive(
+        const ScriptRuntime& runtime,
+        ScriptTaskHandle task)
+{
+    return ResolveTask(runtime, task) != nullptr;
+}
+
 ScriptOperationHandle ScriptSystemCreateOperation(
         ScriptRuntime& runtime,
         ScriptOperationLaunchStyle launchStyle,

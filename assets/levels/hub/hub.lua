@@ -14,6 +14,11 @@ end
 
 function trigger_1()
     log("trigger_1")
+    assert(enableControls(false))
+    say("Follow me this way...")
+    movePlayer("wp2", "walk", 2.0)
+    lookAtNpc("test_npc", 750, 0.7)
+    assert(enableControls(true))
 end
 
 function trigger_2()

@@ -1880,6 +1880,7 @@ void SectorGameSession::Update(
                 if (handled) engine::ConsumeEvent(event);
             });
     engine::ScriptSystemUpdate(context, scripts, dt);
+    UpdateSectorScriptCutsceneControlOwnership(context, scriptHost);
     UpdatePendingItemTake(context, scene);
     UpdatePendingHeldObjectUse();
     UpdateItemPresentations(context, scene, dt);

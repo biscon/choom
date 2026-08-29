@@ -2,6 +2,8 @@
 #include "engine/systems/AnimatedModelRaycast.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "engine/audio/AudioSystem.h"
+#include "engine/scripting/ScriptSystem.h"
+#include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
@@ -4345,6 +4347,245 @@ void TestNpcDoorTraversalStagesWaitsCrossesAndReleases()
     } else {
         Check(false, "door-hold deletion fixture move is accepted");
     }
+}
+
+void TestCutscenePlayerDoorTraversalHoldsOpensCrossesAndReleases()
+{
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    for (game::SectorTopologyVertex& vertex : map.vertices) {
+        vertex.x *= 2;
+        vertex.y *= 2;
+    }
+    map.sectors[0].floorZ = 1.0f;
+    map.sectors[1].floorZ = 1.0f;
+    map.sectors[0].ceilingZ = 32.0f;
+    map.sectors[1].ceilingZ = 32.0f;
+    game::SectorPlacedDoor placedDoor = MakeDoorOnPortal();
+    placedDoor.anchor.endpointAX = 128;
+    placedDoor.anchor.endpointBX = 128;
+    placedDoor.anchor.endpointBY = 128;
+    placedDoor.speed = 2.0f;
+    map.runtimeObjects.push_back(MakePlacedDoor(79, placedDoor));
+
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "cutscene player door collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "cutscene player door navigation fixture builds");
+
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RefreshSectorRuntimeObjectMapData(runtimeObjects, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, runtimeObjects, map);
+    runtimeObjects.dynamicDoorColliders.clear();
+    game::CollectSectorDoorDynamicColliders(
+            world, runtimeObjects.dynamicDoorColliders);
+    game::SynchronizeSectorNavigationDoorLinksSystem(
+            world, navigation, runtimeObjects.dynamicDoorColliders);
+
+    game::SectorCutsceneRuntime cutscene;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    game::SectorFpsControllerState player;
+    player.feetPosition = {0.5f, 0.125f, 0.5f};
+    player.currentSectorId = 10;
+    player.grounded = true;
+    uint64_t token = 0;
+    std::string moveError;
+    const bool began = game::BeginSectorCutscenePlayerMove(
+            cutscene,
+            navigation,
+            collisionWorld,
+            player,
+            {1.5f, 0.5f},
+            game::NpcMoveGait::Walk,
+            2.0f,
+            token,
+            moveError);
+    if (!began) {
+        std::fprintf(stderr, "cutscene player door move failed: %s\n",
+                moveError.c_str());
+    }
+    Check(began, "cutscene player accepts path through typed door link");
+
+    game::NpcNavigationRuntime emptyNpcNavigation;
+    engine::ScriptRuntime scripts;
+    const game::SectorCollisionMoveConfig moveConfig{
+            navigation.Settings().agentRadius,
+            navigation.Settings().agentHeight,
+            navigation.Settings().agentMaximumClimb,
+            4,
+            false};
+    bool observedWaiting = false;
+    bool observedCrossing = false;
+    bool observedHold = false;
+    bool observedOpening = false;
+    for (int frame = 0; frame < 400 && cutscene.playerMove.active; ++frame) {
+        constexpr float Dt = 0.05f;
+        game::PrepareSectorCutscenePlayerDoorTraversal(
+                cutscene,
+                navigation,
+                runtimeObjects.dynamicDoorColliders,
+                player.feetPosition,
+                Dt);
+        observedWaiting = observedWaiting
+                || cutscene.playerMove.doorPhase
+                        == game::NpcDoorTraversalPhase::WaitingForClearance;
+        observedCrossing = observedCrossing
+                || cutscene.playerMove.doorPhase
+                        == game::NpcDoorTraversalPhase::Crossing;
+        game::PrepareNpcDoorTraversalAndHoldsSystem(
+                world,
+                navigation,
+                emptyNpcNavigation,
+                runtimeObjects.dynamicDoorColliders,
+                Dt,
+                false,
+                game::SectorCutscenePlayerDoorHoldId(cutscene));
+        world.ForEach<game::SectorDoorOpenControl>(
+                [&observedHold](engine::Entity,
+                        game::SectorDoorOpenControl& control) {
+                    observedHold = observedHold
+                            || control.navigationHolderCount > 0;
+                });
+        const bool doorChanged = game::AdvanceSectorDoorMotionSystem(
+                world, Dt, nullptr, 0);
+        if (doorChanged) game::UpdateSectorDoorDerivedStateSystem(world);
+        world.ForEach<game::SectorDoorMotion>(
+                [&observedOpening](engine::Entity,
+                        game::SectorDoorMotion& motion) {
+                    observedOpening = observedOpening
+                            || motion.openFraction > 0.0f;
+                });
+        runtimeObjects.dynamicDoorColliders.clear();
+        game::CollectSectorDoorDynamicColliders(
+                world, runtimeObjects.dynamicDoorColliders);
+        game::SynchronizeSectorNavigationDoorLinksSystem(
+                world, navigation, runtimeObjects.dynamicDoorColliders);
+
+        const Vector2 previous{
+                player.feetPosition.x, player.feetPosition.z};
+        const Vector2 desired = game::BuildSectorCutscenePlayerMoveDelta(
+                cutscene, player, Dt, nullptr);
+        const game::SectorCollisionMoveState moveState{
+                previous,
+                player.feetPosition.y,
+                player.currentSectorId,
+                player.grounded};
+        const game::SectorCollisionMoveResult staticResult =
+                collisionWorld.ResolveMovement(
+                        moveState, desired, moveConfig);
+        const game::SectorCollisionMoveResult result =
+                game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                        moveState,
+                        staticResult,
+                        moveConfig,
+                        runtimeObjects.dynamicDoorColliders);
+        player.feetPosition.x = result.positionXZ.x;
+        player.feetPosition.z = result.positionXZ.y;
+        player.currentSectorId = result.currentSectorId;
+        game::FinishSectorCutscenePlayerMoveFrame(
+                cutscene,
+                navigation,
+                collisionWorld,
+                player,
+                previous,
+                scripts,
+                Dt);
+    }
+
+    game::PrepareNpcDoorTraversalAndHoldsSystem(
+            world,
+            navigation,
+            emptyNpcNavigation,
+            runtimeObjects.dynamicDoorColliders,
+            0.05f,
+            false,
+            game::SectorCutscenePlayerDoorHoldId(cutscene));
+    uint32_t finalHolders = 0;
+    world.ForEach<game::SectorDoorOpenControl>(
+            [&finalHolders](engine::Entity,
+                    game::SectorDoorOpenControl& control) {
+                finalHolders += control.navigationHolderCount;
+            });
+    Check(!cutscene.playerMove.active
+                  && observedWaiting
+                  && observedCrossing
+                  && observedHold
+                  && observedOpening
+                  && finalHolders == 0
+                  && std::fabs(player.feetPosition.x - 1.5f) < 0.11f
+                  && std::fabs(player.feetPosition.z - 0.5f) < 0.11f,
+          "cutscene player stages, holds, opens, crosses, and releases the door");
+
+    uint64_t cancellationToken = 0;
+    const bool cancellationBegan = game::BeginSectorCutscenePlayerMove(
+            cutscene,
+            navigation,
+            collisionWorld,
+            player,
+            {0.5f, 0.5f},
+            game::NpcMoveGait::Walk,
+            2.0f,
+            cancellationToken,
+            moveError);
+    bool heldBeforeCancellation = false;
+    for (int frame = 0; frame < 100 && cancellationBegan; ++frame) {
+        constexpr float Dt = 0.05f;
+        game::PrepareSectorCutscenePlayerDoorTraversal(
+                cutscene,
+                navigation,
+                runtimeObjects.dynamicDoorColliders,
+                player.feetPosition,
+                Dt);
+        if (game::SectorCutscenePlayerDoorHoldId(cutscene) == 79) {
+            heldBeforeCancellation = true;
+            break;
+        }
+        const Vector2 previous{
+                player.feetPosition.x, player.feetPosition.z};
+        const Vector2 desired = game::BuildSectorCutscenePlayerMoveDelta(
+                cutscene, player, Dt, nullptr);
+        player.feetPosition.x += desired.x;
+        player.feetPosition.z += desired.y;
+        game::FinishSectorCutscenePlayerMoveFrame(
+                cutscene,
+                navigation,
+                collisionWorld,
+                player,
+                previous,
+                scripts,
+                Dt);
+    }
+    game::CancelSectorCutscenePlayerMove(
+            cutscene, &navigation, cancellationToken);
+    game::PrepareNpcDoorTraversalAndHoldsSystem(
+            world,
+            navigation,
+            emptyNpcNavigation,
+            runtimeObjects.dynamicDoorColliders,
+            0.05f,
+            false,
+            game::SectorCutscenePlayerDoorHoldId(cutscene));
+    uint32_t holdersAfterCancellation = 0;
+    world.ForEach<game::SectorDoorOpenControl>(
+            [&holdersAfterCancellation](engine::Entity,
+                    game::SectorDoorOpenControl& control) {
+                holdersAfterCancellation += control.navigationHolderCount;
+            });
+    Check(cancellationBegan
+                  && heldBeforeCancellation
+                  && !cutscene.playerMove.active
+                  && holdersAfterCancellation == 0,
+          "cancelled cutscene player movement releases its door hold");
+
+    game::ResetSectorCutsceneRuntime(cutscene, &navigation);
+    navigation.Shutdown();
 }
 
 void TestCrowdQueuesNpcAgentsThroughDoor()
@@ -10939,6 +11180,7 @@ int main()
     TestSectorSwingDoorClosingSweepReopensWithoutTunneling();
     TestSectorDoorNavigationHoldsAndSlidingObstruction();
     TestNpcDoorTraversalStagesWaitsCrossesAndReleases();
+    TestCutscenePlayerDoorTraversalHoldsOpensCrossesAndReleases();
     TestCrowdQueuesNpcAgentsThroughDoor();
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();

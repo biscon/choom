@@ -651,6 +651,7 @@ if(BUILD_TESTING)
             sources/game/npc/NpcNavigationSystem.cpp
             sources/game/npc/NpcPatrolSystem.cpp
             sources/game/npc/NpcRuntime.cpp
+            sources/engine/scripting/ScriptConsole.cpp
             sources/engine/scripting/ScriptSystem.cpp
             sources/engine/scripting/ScriptPersistence.cpp
             sources/game/SectorScriptBindings.cpp

@@ -695,6 +695,9 @@ int StartPlayerMove(lua_State* state, bool async)
         return PushCutsceneStartError(
                 state, true, "script runtime is shutting down");
     }
+    const engine::ScriptTaskHandle ownerTask = async
+            ? engine::ScriptSystemTryCurrentTaskFromLua(state)
+            : engine::ScriptSystemCurrentTaskFromLua(state);
     SectorScriptHost& host = HostFromLua(state);
     if (host.cutscene == nullptr || host.navigation == nullptr
             || host.runtimeObjects == nullptr || host.playerState == nullptr
@@ -729,8 +732,7 @@ int StartPlayerMove(lua_State* state, bool async)
                     scripts,
                     async ? engine::ScriptOperationLaunchStyle::Async
                           : engine::ScriptOperationLaunchStyle::Blocking,
-                    async ? engine::ScriptSystemTryCurrentTaskFromLua(state)
-                          : engine::ScriptSystemCurrentTaskFromLua(state),
+                    ownerTask,
                     "movePlayer",
                     token,
                     CancelScriptPlayerMove);
@@ -760,6 +762,9 @@ int StartLook(lua_State* state, SectorCutsceneLookTargetKind kind, bool async)
         return PushCutsceneStartError(
                 state, true, "script runtime is shutting down");
     }
+    const engine::ScriptTaskHandle ownerTask = async
+            ? engine::ScriptSystemTryCurrentTaskFromLua(state)
+            : engine::ScriptSystemCurrentTaskFromLua(state);
     SectorScriptHost& host = HostFromLua(state);
     if (host.cutscene == nullptr || host.playerState == nullptr) {
         return PushCutsceneStartError(
@@ -808,8 +813,7 @@ int StartLook(lua_State* state, SectorCutsceneLookTargetKind kind, bool async)
                     scripts,
                     async ? engine::ScriptOperationLaunchStyle::Async
                           : engine::ScriptOperationLaunchStyle::Blocking,
-                    async ? engine::ScriptSystemTryCurrentTaskFromLua(state)
-                          : engine::ScriptSystemCurrentTaskFromLua(state),
+                    ownerTask,
                     kind == SectorCutsceneLookTargetKind::Npc
                             ? "lookAtNpc" : "lookAtProp",
                     token,
@@ -846,13 +850,23 @@ int LuaStartLookAtProp(lua_State* state)
 
 int StartCaption(
         lua_State* state,
-        SectorCutsceneCaptionKind kind)
+        SectorCutsceneCaptionKind kind,
+        bool async)
 {
     const int originalTop = lua_gettop(state);
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    if (async && scripts.phase != engine::ScriptRuntimePhase::Loading
+            && scripts.phase != engine::ScriptRuntimePhase::Active) {
+        return PushCutsceneStartError(
+                state, true, "script runtime is shutting down");
+    }
+    const engine::ScriptTaskHandle ownerTask = async
+            ? engine::ScriptSystemTryCurrentTaskFromLua(state)
+            : engine::ScriptSystemCurrentTaskFromLua(state);
     SectorScriptHost& host = HostFromLua(state);
     if (host.cutscene == nullptr) {
         return PushCutsceneStartError(
-                state, false, "cutscene caption runtime is unavailable");
+                state, async, "cutscene caption runtime is unavailable");
     }
     size_t textLength = 0;
     const char* rawText = luaL_checklstring(state, 1, &textLength);
@@ -863,7 +877,7 @@ int StartCaption(
         if (rawPosition < static_cast<int>(SectorCutsceneTextPosition::Top)
                 || rawPosition > static_cast<int>(SectorCutsceneTextPosition::Bottom)) {
             return PushCutsceneStartError(
-                    state, false, "text position must be TOP, CENTER, or BOTTOM");
+                    state, async, "text position must be TOP, CENTER, or BOTTOM");
         }
         position = static_cast<SectorCutsceneTextPosition>(rawPosition);
         holdArgument = 3;
@@ -874,12 +888,11 @@ int StartCaption(
         const lua_Number holdMs = luaL_checknumber(state, holdArgument);
         if (!std::isfinite(static_cast<double>(holdMs)) || holdMs < 0.0) {
             return PushCutsceneStartError(
-                    state, false, "caption duration must be a finite non-negative number");
+                    state, async, "caption duration must be a finite non-negative number");
         }
         holdSeconds = static_cast<double>(holdMs) / 1000.0;
         hold = &holdSeconds;
     }
-    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     const engine::ScriptOperationHandle replacedOperation =
             host.cutscene->caption.operation;
@@ -893,7 +906,7 @@ int StartCaption(
             hold,
             token,
             error)) {
-        return PushCutsceneStartError(state, false, error);
+        return PushCutsceneStartError(state, async, error);
     }
     if (engine::IsValid(replacedOperation)) {
         engine::ScriptSystemCancelOperation(
@@ -905,26 +918,48 @@ int StartCaption(
     const engine::ScriptOperationHandle operation =
             engine::ScriptSystemCreateOperation(
                     scripts,
-                    engine::ScriptOperationLaunchStyle::Blocking,
-                    engine::ScriptSystemCurrentTaskFromLua(state),
+                    async ? engine::ScriptOperationLaunchStyle::Async
+                          : engine::ScriptOperationLaunchStyle::Blocking,
+                    ownerTask,
                     kind == SectorCutsceneCaptionKind::Say ? "say" : "text",
                     token,
                     CancelScriptCaption);
     if (!engine::IsValid(operation)) {
         CancelSectorCutsceneCaption(*host.cutscene, token);
         return PushCutsceneStartError(
-                state, false, "could not allocate caption operation");
+                state, async, "could not allocate caption operation");
     }
     BindSectorCutsceneCaptionOperation(*host.cutscene, token, operation);
+    if (async) {
+        engine::ScriptSystemPushOperationUserdata(state, operation);
+        return 1;
+    }
     return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
 }
 
-int LuaSay(lua_State* state) { return StartCaption(state, SectorCutsceneCaptionKind::Say); }
-int LuaText(lua_State* state) { return StartCaption(state, SectorCutsceneCaptionKind::Text); }
+int LuaSay(lua_State* state)
+{
+    return StartCaption(state, SectorCutsceneCaptionKind::Say, false);
+}
+int LuaStartSay(lua_State* state)
+{
+    return StartCaption(state, SectorCutsceneCaptionKind::Say, true);
+}
+int LuaText(lua_State* state)
+{
+    return StartCaption(state, SectorCutsceneCaptionKind::Text, false);
+}
+int LuaStartText(lua_State* state)
+{
+    return StartCaption(state, SectorCutsceneCaptionKind::Text, true);
+}
 
 int StartFade(lua_State* state, float targetOpacity)
 {
     const int originalTop = lua_gettop(state);
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    const engine::ScriptTaskHandle ownerTask =
+            engine::ScriptSystemCurrentTaskFromLua(state);
     SectorScriptHost& host = HostFromLua(state);
     if (host.cutscene == nullptr) {
         return PushCutsceneStartError(state, false, "cutscene fade runtime is unavailable");
@@ -934,7 +969,6 @@ int StartFade(lua_State* state, float targetOpacity)
         return PushCutsceneStartError(
                 state, false, "fade duration must be a finite non-negative number");
     }
-    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     if (engine::IsValid(host.cutscene->fade.operation)) {
         engine::ScriptSystemCancelOperation(
@@ -954,7 +988,7 @@ int StartFade(lua_State* state, float targetOpacity)
             engine::ScriptSystemCreateOperation(
                     scripts,
                     engine::ScriptOperationLaunchStyle::Blocking,
-                    engine::ScriptSystemCurrentTaskFromLua(state),
+                    ownerTask,
                     targetOpacity > 0.5f ? "fadeOut" : "fadeIn",
                     token,
                     CancelScriptFade);
@@ -970,17 +1004,18 @@ int StartFade(lua_State* state, float targetOpacity)
 int LuaFadeOut(lua_State* state) { return StartFade(state, 1.0f); }
 int LuaFadeIn(lua_State* state) { return StartFade(state, 0.0f); }
 
-int LuaEnableControls(lua_State* state)
+bool ApplyCutsceneControlsEnabled(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        bool enabled,
+        engine::ScriptTaskHandle ownerTask,
+        std::string& error)
 {
-    luaL_checktype(state, 1, LUA_TBOOLEAN);
-    SectorScriptHost& host = HostFromLua(state);
-    if (host.cutscene == nullptr || host.controls.setControlsEnabled == nullptr) {
-        lua_pushboolean(state, 0);
-        lua_pushliteral(state, "cutscene control runtime is unavailable");
-        return 2;
+    if (host.cutscene == nullptr || host.controls.setControlsEnabled == nullptr
+            || host.scripts == nullptr) {
+        error = "cutscene control runtime is unavailable";
+        return false;
     }
-    const bool enabled = lua_toboolean(state, 1) != 0;
-    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     if (enabled) {
         if (host.cutscene->playerMove.active
                 && engine::IsValid(host.cutscene->playerMove.operation)) {
@@ -999,14 +1034,53 @@ int LuaEnableControls(lua_State* state)
                     "controls re-enabled");
         }
     }
-    std::string error;
     if (!host.controls.setControlsEnabled(
             host.controls.userData, context, enabled, error)) {
+        return false;
+    }
+    host.cutscene->controlsEnabled = enabled;
+    host.cutscene->controlsOwnerTask = enabled
+            ? engine::ScriptTaskHandle{} : ownerTask;
+    error.clear();
+    return true;
+}
+
+int LuaEnableControls(lua_State* state)
+{
+    luaL_checktype(state, 1, LUA_TBOOLEAN);
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.cutscene == nullptr || host.controls.setControlsEnabled == nullptr) {
+        lua_pushboolean(state, 0);
+        lua_pushliteral(state, "cutscene control runtime is unavailable");
+        return 2;
+    }
+    const bool enabled = lua_toboolean(state, 1) != 0;
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    engine::ScriptTaskHandle ownerTask{};
+    if (!enabled) {
+        ownerTask = engine::ScriptSystemTryCurrentTaskFromLua(state);
+        if (!engine::IsValid(ownerTask)) {
+            lua_pushboolean(state, 0);
+            lua_pushliteral(state,
+                    "disabling controls requires a managed Lua task");
+            return 2;
+        }
+        if (!host.cutscene->controlsEnabled
+                && engine::IsValid(host.cutscene->controlsOwnerTask)
+                && !(host.cutscene->controlsOwnerTask == ownerTask)) {
+            lua_pushboolean(state, 0);
+            lua_pushliteral(state,
+                    "controls are already owned by another Lua task");
+            return 2;
+        }
+    }
+    std::string error;
+    if (!ApplyCutsceneControlsEnabled(
+            context, host, enabled, ownerTask, error)) {
         lua_pushboolean(state, 0);
         lua_pushlstring(state, error.data(), error.size());
         return 2;
     }
-    host.cutscene->controlsEnabled = enabled;
     lua_pushboolean(state, 1);
     return 1;
 }
@@ -1876,7 +1950,9 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "lookAtProp", LuaLookAtProp);
     Register(state, "startLookAtProp", LuaStartLookAtProp);
     Register(state, "say", LuaSay);
+    Register(state, "startSay", LuaStartSay);
     Register(state, "text", LuaText);
+    Register(state, "startText", LuaStartText);
     Register(state, "fadeOut", LuaFadeOut);
     Register(state, "fadeIn", LuaFadeIn);
     Register(state, "changeMap", LuaChangeMap);
@@ -2089,6 +2165,27 @@ void UpdateSectorScriptOperations(
                         return !move.active;
                     }),
             host.npcMoves.end());
+}
+
+void UpdateSectorScriptCutsceneControlOwnership(
+        engine::EngineContext& context,
+        SectorScriptHost& host)
+{
+    if (host.scripts == nullptr || host.cutscene == nullptr
+            || host.cutscene->controlsEnabled
+            || !engine::IsValid(host.cutscene->controlsOwnerTask)
+            || engine::ScriptSystemIsTaskActive(
+                    *host.scripts, host.cutscene->controlsOwnerTask)) {
+        return;
+    }
+    std::string error;
+    if (!ApplyCutsceneControlsEnabled(
+            context, host, true, {}, error)) {
+        TraceLog(
+                LOG_ERROR,
+                "[Lua ERROR] could not restore controls after cutscene task ended: %s",
+                error.c_str());
+    }
 }
 
 void InterruptSectorScriptNpcMoveForAi(
