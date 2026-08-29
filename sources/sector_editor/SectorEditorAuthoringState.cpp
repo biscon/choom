@@ -1373,6 +1373,13 @@ bool ReconcileMissingDerivedFaceAnchors(
 
 } // namespace
 
+void CopySectorEditorMapLevelFields(
+        SectorTopologyMap& target,
+        const SectorTopologyMap& source)
+{
+    CopyEditorMapLevelFields(target, source);
+}
+
 std::string BuildSectorEditorAuthoringDerivationDisplayStatus(
         SectorEditorConstDerivationDocumentAccess derivation,
         const char* fallbackStatus)

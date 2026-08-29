@@ -312,7 +312,7 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
             activeTab == PreviewDebugOverlayTab::None ? collapsedHeight : expandedHeight};
 }
 
-Rectangle BuildSectorEditorPreviewObjectAdjustmentPanelRect()
+Rectangle BuildSectorEditorPreviewAdjustmentPanelRect()
 {
     return Rectangle{EditorWidth - 392.0f, EditorMainMenuHeight + 18.0f,
             360.0f, 244.0f};
@@ -663,7 +663,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     SectorEditorPreviewOverlayResult result;
 
     const bool adjustmentActive =
-            context.runtimeObjectEditingState.previewAdjustment.active;
+            context.runtimeObjectEditingState.previewAdjustment.active
+            || context.surfaceHeightAdjustmentState.active;
     const bool adjustmentMouseInteractive =
             IsPreviewOverlayMouseInteractive(controllerState);
     const bool mouseInteractive =
@@ -2506,7 +2507,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             context.runtimeObjectEditingState.previewAdjustment;
     if (adjustment.active) {
         const Rectangle adjustmentPanel =
-                BuildSectorEditorPreviewObjectAdjustmentPanelRect();
+                BuildSectorEditorPreviewAdjustmentPanelRect();
         DrawRectangleRec(adjustmentPanel, Color{12, 15, 20, 225});
         DrawRectangleLinesEx(
                 adjustmentPanel,
@@ -2610,7 +2611,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     Rectangle{textX, adjustmentY, actionWidth, rowH},
                     smallFont, "Apply", engine::UITextJustify::Center,
                     adjustmentMouseInteractive)) {
-            result.requestApplyObjectAdjustment = true;
+            result.requestApplyAdjustment = true;
         }
         if (engine::Button(
                     ui, smallConfig, input, assets,
@@ -2619,7 +2620,121 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             actionWidth, rowH},
                     smallFont, "Cancel", engine::UITextJustify::Center,
                     adjustmentMouseInteractive)) {
-            result.requestCancelObjectAdjustment = true;
+            result.requestCancelAdjustment = true;
+        }
+    } else if (context.surfaceHeightAdjustmentState.active) {
+        PreviewSurfaceHeightAdjustmentState& heightAdjustment =
+                context.surfaceHeightAdjustmentState;
+        const Rectangle adjustmentPanel =
+                BuildSectorEditorPreviewAdjustmentPanelRect();
+        DrawRectangleRec(adjustmentPanel, Color{12, 15, 20, 225});
+        DrawRectangleLinesEx(
+                adjustmentPanel,
+                config.borderThickness,
+                Color{84, 204, 255, 255});
+        const float textX = adjustmentPanel.x + 14.0f;
+        float adjustmentY = adjustmentPanel.y + 12.0f;
+        const float adjustmentWidth = adjustmentPanel.width - 28.0f;
+        const char* targetName =
+                heightAdjustment.target == PreviewSurfaceHeightTarget::Floor
+                ? "Floor"
+                : "Ceiling";
+        const SectorAuthoringFaceAnchor* anchor = FindSectorAuthoringFaceAnchor(
+                heightAdjustment.stagedGraph,
+                heightAdjustment.faceAnchorId);
+        const float currentHeight = anchor == nullptr
+                ? 0.0f
+                : (heightAdjustment.target == PreviewSurfaceHeightTarget::Floor
+                        ? anchor->floorZ
+                        : anchor->ceilingZ);
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
+                smallFont,
+                TextFormat("Adjust %s | sector %d",
+                        targetName,
+                        heightAdjustment.topologySectorId),
+                engine::UITextJustify::Left,
+                Color{84, 204, 255, 255});
+        adjustmentY += rowH + 4.0f;
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
+                smallFont,
+                anchor != nullptr
+                        ? TextFormat("Height %.2f authored units", currentHeight)
+                        : "Adjustment target missing",
+                engine::UITextJustify::Left);
+        adjustmentY += rowH + 8.0f;
+
+        constexpr float presetGap = 6.0f;
+        const float presetWidth =
+                (adjustmentWidth - presetGap * 2.0f) / 3.0f;
+        const auto presetButton = [&](const char* id, const char* label,
+                                      PreviewSurfaceHeightNudgePreset preset,
+                                      int index) {
+            const Rectangle bounds{
+                    textX + static_cast<float>(index)
+                                    * (presetWidth + presetGap),
+                    adjustmentY,
+                    presetWidth,
+                    rowH};
+            const bool selected = heightAdjustment.preset == preset;
+            if (engine::Button(
+                        ui, smallConfig, input, assets, id, bounds, smallFont,
+                        selected ? TextFormat("%s *", label) : label,
+                        engine::UITextJustify::Center,
+                        adjustmentMouseInteractive)) {
+                heightAdjustment.preset = preset;
+            }
+        };
+        presetButton("sector_editor_height_nudge_fine", "Fine",
+                PreviewSurfaceHeightNudgePreset::Fine, 0);
+        presetButton("sector_editor_height_nudge_normal", "Normal",
+                PreviewSurfaceHeightNudgePreset::Normal, 1);
+        presetButton("sector_editor_height_nudge_coarse", "Coarse",
+                PreviewSurfaceHeightNudgePreset::Coarse, 2);
+        adjustmentY += rowH + 7.0f;
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
+                smallFont,
+                TextFormat("Step %.2f authored units",
+                        SectorEditorPreviewSurfaceHeightStepAuthored(
+                                heightAdjustment.preset)),
+                engine::UITextJustify::Left,
+                smallConfig.mutedTextColor);
+        adjustmentY += rowH + 2.0f;
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH * 2.0f},
+                smallFont,
+                "PgUp/PgDn: height\nEnter: apply   Esc: cancel   F11: unlock cursor",
+                engine::UITextJustify::Left,
+                smallConfig.mutedTextColor,
+                true);
+        adjustmentY += rowH * 2.0f + 7.0f;
+        const float actionWidth = (adjustmentWidth - presetGap) * 0.5f;
+        if (engine::Button(
+                    ui, smallConfig, input, assets,
+                    "sector_editor_height_nudge_apply",
+                    Rectangle{textX, adjustmentY, actionWidth, rowH},
+                    smallFont, "Apply", engine::UITextJustify::Center,
+                    adjustmentMouseInteractive)) {
+            result.requestApplyAdjustment = true;
+        }
+        if (engine::Button(
+                    ui, smallConfig, input, assets,
+                    "sector_editor_height_nudge_cancel",
+                    Rectangle{textX + actionWidth + presetGap, adjustmentY,
+                            actionWidth, rowH},
+                    smallFont, "Cancel", engine::UITextJustify::Center,
+                    adjustmentMouseInteractive)) {
+            result.requestCancelAdjustment = true;
         }
     }
 

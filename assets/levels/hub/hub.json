@@ -358,8 +358,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 382,
-          "backSideDefId": 383,
+          "frontSideDefId": 514,
+          "backSideDefId": 515,
           "endpointA": [
             -704,
             1296
@@ -398,8 +398,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 352,
-          "backSideDefId": 372,
+          "frontSideDefId": 484,
+          "backSideDefId": 504,
           "endpointA": [
             -992,
             1456
@@ -469,8 +469,8 @@
           "lineDefId": 127,
           "frontSectorId": 33,
           "backSectorId": 26,
-          "frontSideDefId": 214,
-          "backSideDefId": 237,
+          "frontSideDefId": 224,
+          "backSideDefId": 251,
           "endpointA": [
             -2560,
             1376
@@ -1499,8 +1499,8 @@
           "lineDefId": 234,
           "frontSectorId": 50,
           "backSectorId": 43,
-          "frontSideDefId": 186,
-          "backSideDefId": 199,
+          "frontSideDefId": 196,
+          "backSideDefId": 209,
           "endpointA": [
             -2944,
             592
@@ -2178,11 +2178,11 @@
       "door": {
         "instanceId": "door_132",
         "anchor": {
-          "lineDefId": 270,
+          "lineDefId": 269,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 279,
-          "backSideDefId": 260,
+          "frontSideDefId": 355,
+          "backSideDefId": 334,
           "endpointA": [
             -2048,
             -720
@@ -2417,11 +2417,11 @@
       "door": {
         "instanceId": "door_146",
         "anchor": {
-          "lineDefId": 256,
+          "lineDefId": 255,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 275,
-          "backSideDefId": 244,
+          "frontSideDefId": 349,
+          "backSideDefId": 304,
           "endpointA": [
             -2432,
             -560
@@ -6573,7 +6573,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "da4fb8361fb05379",
+    "sourceHash": "88acf0a6631f2e78",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6593,8 +6593,8 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "da4fb8361fb05379",
-      "count": 2671,
+      "sourceHash": "88acf0a6631f2e78",
+      "count": 3297,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -6612,24 +6612,18 @@
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 16026,
+        "sampleCount": 19782,
         "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "da4fb8361fb05379",
+      "sourceHash": "88acf0a6631f2e78",
       "modelCount": 51,
       "objectCount": 131,
       "format": "staticModelUvRemapF32LE"
     }
-  },
-  "bakedReflectionProbes": {
-    "path": "assets/levels/hub/hub.reflection-probes.bin",
-    "version": 1,
-    "count": 8,
-    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
@@ -7865,6 +7859,351 @@
         "id": 259,
         "x": -4992,
         "y": -576
+      },
+      {
+        "id": 260,
+        "x": -2320,
+        "y": -1920
+      },
+      {
+        "id": 261,
+        "x": -2320,
+        "y": -1952
+      },
+      {
+        "id": 262,
+        "x": -2160,
+        "y": -1952
+      },
+      {
+        "id": 263,
+        "x": -2160,
+        "y": -1920
+      },
+      {
+        "id": 264,
+        "x": -2368,
+        "y": -1952
+      },
+      {
+        "id": 265,
+        "x": -2560,
+        "y": -2304
+      },
+      {
+        "id": 266,
+        "x": -1920,
+        "y": -2304
+      },
+      {
+        "id": 267,
+        "x": -2112,
+        "y": -1952
+      },
+      {
+        "id": 268,
+        "x": -2752,
+        "y": -2368
+      },
+      {
+        "id": 269,
+        "x": -2816,
+        "y": -2432
+      },
+      {
+        "id": 270,
+        "x": -2816,
+        "y": -2688
+      },
+      {
+        "id": 271,
+        "x": -1664,
+        "y": -2688
+      },
+      {
+        "id": 273,
+        "x": -1664,
+        "y": -2432
+      },
+      {
+        "id": 274,
+        "x": -1728,
+        "y": -2368
+      },
+      {
+        "id": 275,
+        "x": -1808,
+        "y": -2320
+      },
+      {
+        "id": 276,
+        "x": -2672,
+        "y": -2320
+      },
+      {
+        "id": 277,
+        "x": -2704,
+        "y": -2688
+      },
+      {
+        "id": 278,
+        "x": -2704,
+        "y": -2720
+      },
+      {
+        "id": 279,
+        "x": -2544,
+        "y": -2720
+      },
+      {
+        "id": 280,
+        "x": -2544,
+        "y": -2688
+      },
+      {
+        "id": 281,
+        "x": -1776,
+        "y": -2688
+      },
+      {
+        "id": 282,
+        "x": -1776,
+        "y": -2720
+      },
+      {
+        "id": 283,
+        "x": -1936,
+        "y": -2720
+      },
+      {
+        "id": 284,
+        "x": -1936,
+        "y": -2688
+      },
+      {
+        "id": 285,
+        "x": -2432,
+        "y": -2688
+      },
+      {
+        "id": 286,
+        "x": -2432,
+        "y": -2720
+      },
+      {
+        "id": 287,
+        "x": -2048,
+        "y": -2720
+      },
+      {
+        "id": 288,
+        "x": -2048,
+        "y": -2688
+      },
+      {
+        "id": 289,
+        "x": -3456,
+        "y": -2720
+      },
+      {
+        "id": 290,
+        "x": -3456,
+        "y": -4352
+      },
+      {
+        "id": 291,
+        "x": -896,
+        "y": -4736
+      },
+      {
+        "id": 292,
+        "x": -896,
+        "y": -2720
+      },
+      {
+        "id": 293,
+        "x": -896,
+        "y": -4352
+      },
+      {
+        "id": 294,
+        "x": -1280,
+        "y": -4352
+      },
+      {
+        "id": 295,
+        "x": -1536,
+        "y": -3968
+      },
+      {
+        "id": 296,
+        "x": -896,
+        "y": -3072
+      },
+      {
+        "id": 297,
+        "x": -1280,
+        "y": -3072
+      },
+      {
+        "id": 298,
+        "x": -1536,
+        "y": -3456
+      },
+      {
+        "id": 299,
+        "x": -3456,
+        "y": -3328
+      },
+      {
+        "id": 300,
+        "x": -2688,
+        "y": -3328
+      },
+      {
+        "id": 301,
+        "x": -2432,
+        "y": -3456
+      },
+      {
+        "id": 302,
+        "x": -2304,
+        "y": -3584
+      },
+      {
+        "id": 303,
+        "x": -2240,
+        "y": -3712
+      },
+      {
+        "id": 304,
+        "x": -2176,
+        "y": -3968
+      },
+      {
+        "id": 305,
+        "x": -2176,
+        "y": -4352
+      },
+      {
+        "id": 306,
+        "x": -3520,
+        "y": -2816
+      },
+      {
+        "id": 307,
+        "x": -2176,
+        "y": -4736
+      },
+      {
+        "id": 308,
+        "x": -3456,
+        "y": -3296
+      },
+      {
+        "id": 309,
+        "x": -3520,
+        "y": -3200
+      },
+      {
+        "id": 310,
+        "x": -2544,
+        "y": -3376
+      },
+      {
+        "id": 311,
+        "x": -2192,
+        "y": -3840
+      },
+      {
+        "id": 312,
+        "x": -1472,
+        "y": -4160
+      },
+      {
+        "id": 313,
+        "x": -1472,
+        "y": -3264
+      },
+      {
+        "id": 314,
+        "x": -1440,
+        "y": -3232
+      },
+      {
+        "id": 315,
+        "x": -1472,
+        "y": -3200
+      },
+      {
+        "id": 316,
+        "x": -1344,
+        "y": -3072
+      },
+      {
+        "id": 317,
+        "x": -1312,
+        "y": -3104
+      },
+      {
+        "id": 318,
+        "x": -1504,
+        "y": -3168
+      },
+      {
+        "id": 319,
+        "x": -1376,
+        "y": -3040
+      },
+      {
+        "id": 320,
+        "x": -1536,
+        "y": -3136
+      },
+      {
+        "id": 321,
+        "x": -1408,
+        "y": -3008
+      },
+      {
+        "id": 322,
+        "x": -1312,
+        "y": -4320
+      },
+      {
+        "id": 323,
+        "x": -1344,
+        "y": -4352
+      },
+      {
+        "id": 324,
+        "x": -1472,
+        "y": -4224
+      },
+      {
+        "id": 325,
+        "x": -1440,
+        "y": -4192
+      },
+      {
+        "id": 326,
+        "x": -1504,
+        "y": -4256
+      },
+      {
+        "id": 327,
+        "x": -1376,
+        "y": -4384
+      },
+      {
+        "id": 328,
+        "x": -1408,
+        "y": -4416
+      },
+      {
+        "id": 329,
+        "x": -1536,
+        "y": -4288
       }
     ],
     "lines": [
@@ -9060,11 +9399,6 @@
         "endVertexId": 213
       },
       {
-        "id": 357,
-        "startVertexId": 214,
-        "endVertexId": 215
-      },
-      {
         "id": 358,
         "startVertexId": 206,
         "endVertexId": 216
@@ -9348,6 +9682,441 @@
         "id": 422,
         "startVertexId": 258,
         "endVertexId": 259
+      },
+      {
+        "id": 423,
+        "startVertexId": 214,
+        "endVertexId": 260
+      },
+      {
+        "id": 425,
+        "startVertexId": 260,
+        "endVertexId": 261
+      },
+      {
+        "id": 426,
+        "startVertexId": 261,
+        "endVertexId": 262
+      },
+      {
+        "id": 427,
+        "startVertexId": 260,
+        "endVertexId": 263
+      },
+      {
+        "id": 428,
+        "startVertexId": 263,
+        "endVertexId": 215
+      },
+      {
+        "id": 429,
+        "startVertexId": 262,
+        "endVertexId": 263
+      },
+      {
+        "id": 430,
+        "startVertexId": 261,
+        "endVertexId": 264
+      },
+      {
+        "id": 431,
+        "startVertexId": 264,
+        "endVertexId": 265
+      },
+      {
+        "id": 432,
+        "startVertexId": 265,
+        "endVertexId": 266
+      },
+      {
+        "id": 433,
+        "startVertexId": 266,
+        "endVertexId": 267
+      },
+      {
+        "id": 434,
+        "startVertexId": 267,
+        "endVertexId": 262
+      },
+      {
+        "id": 436,
+        "startVertexId": 268,
+        "endVertexId": 269
+      },
+      {
+        "id": 437,
+        "startVertexId": 269,
+        "endVertexId": 270
+      },
+      {
+        "id": 439,
+        "startVertexId": 271,
+        "endVertexId": 273
+      },
+      {
+        "id": 441,
+        "startVertexId": 273,
+        "endVertexId": 274
+      },
+      {
+        "id": 443,
+        "startVertexId": 274,
+        "endVertexId": 275
+      },
+      {
+        "id": 444,
+        "startVertexId": 275,
+        "endVertexId": 266
+      },
+      {
+        "id": 445,
+        "startVertexId": 265,
+        "endVertexId": 276
+      },
+      {
+        "id": 446,
+        "startVertexId": 276,
+        "endVertexId": 268
+      },
+      {
+        "id": 447,
+        "startVertexId": 270,
+        "endVertexId": 277
+      },
+      {
+        "id": 449,
+        "startVertexId": 277,
+        "endVertexId": 278
+      },
+      {
+        "id": 450,
+        "startVertexId": 278,
+        "endVertexId": 279
+      },
+      {
+        "id": 451,
+        "startVertexId": 277,
+        "endVertexId": 280
+      },
+      {
+        "id": 453,
+        "startVertexId": 279,
+        "endVertexId": 280
+      },
+      {
+        "id": 455,
+        "startVertexId": 281,
+        "endVertexId": 271
+      },
+      {
+        "id": 456,
+        "startVertexId": 281,
+        "endVertexId": 282
+      },
+      {
+        "id": 457,
+        "startVertexId": 282,
+        "endVertexId": 283
+      },
+      {
+        "id": 459,
+        "startVertexId": 284,
+        "endVertexId": 281
+      },
+      {
+        "id": 460,
+        "startVertexId": 283,
+        "endVertexId": 284
+      },
+      {
+        "id": 461,
+        "startVertexId": 280,
+        "endVertexId": 285
+      },
+      {
+        "id": 463,
+        "startVertexId": 285,
+        "endVertexId": 286
+      },
+      {
+        "id": 464,
+        "startVertexId": 286,
+        "endVertexId": 287
+      },
+      {
+        "id": 465,
+        "startVertexId": 285,
+        "endVertexId": 288
+      },
+      {
+        "id": 466,
+        "startVertexId": 288,
+        "endVertexId": 284
+      },
+      {
+        "id": 467,
+        "startVertexId": 287,
+        "endVertexId": 288
+      },
+      {
+        "id": 468,
+        "startVertexId": 278,
+        "endVertexId": 289
+      },
+      {
+        "id": 472,
+        "startVertexId": 292,
+        "endVertexId": 282
+      },
+      {
+        "id": 473,
+        "startVertexId": 279,
+        "endVertexId": 286
+      },
+      {
+        "id": 474,
+        "startVertexId": 287,
+        "endVertexId": 283
+      },
+      {
+        "id": 475,
+        "startVertexId": 291,
+        "endVertexId": 293
+      },
+      {
+        "id": 477,
+        "startVertexId": 293,
+        "endVertexId": 294
+      },
+      {
+        "id": 479,
+        "startVertexId": 293,
+        "endVertexId": 296
+      },
+      {
+        "id": 480,
+        "startVertexId": 296,
+        "endVertexId": 292
+      },
+      {
+        "id": 481,
+        "startVertexId": 296,
+        "endVertexId": 297
+      },
+      {
+        "id": 483,
+        "startVertexId": 298,
+        "endVertexId": 295
+      },
+      {
+        "id": 485,
+        "startVertexId": 299,
+        "endVertexId": 290
+      },
+      {
+        "id": 486,
+        "startVertexId": 299,
+        "endVertexId": 300
+      },
+      {
+        "id": 488,
+        "startVertexId": 301,
+        "endVertexId": 302
+      },
+      {
+        "id": 489,
+        "startVertexId": 302,
+        "endVertexId": 303
+      },
+      {
+        "id": 491,
+        "startVertexId": 290,
+        "endVertexId": 305
+      },
+      {
+        "id": 493,
+        "startVertexId": 304,
+        "endVertexId": 305
+      },
+      {
+        "id": 494,
+        "startVertexId": 289,
+        "endVertexId": 306
+      },
+      {
+        "id": 496,
+        "startVertexId": 305,
+        "endVertexId": 307
+      },
+      {
+        "id": 497,
+        "startVertexId": 307,
+        "endVertexId": 291
+      },
+      {
+        "id": 499,
+        "startVertexId": 308,
+        "endVertexId": 299
+      },
+      {
+        "id": 500,
+        "startVertexId": 306,
+        "endVertexId": 309
+      },
+      {
+        "id": 501,
+        "startVertexId": 309,
+        "endVertexId": 308
+      },
+      {
+        "id": 502,
+        "startVertexId": 300,
+        "endVertexId": 310
+      },
+      {
+        "id": 503,
+        "startVertexId": 310,
+        "endVertexId": 301
+      },
+      {
+        "id": 504,
+        "startVertexId": 303,
+        "endVertexId": 311
+      },
+      {
+        "id": 505,
+        "startVertexId": 311,
+        "endVertexId": 304
+      },
+      {
+        "id": 507,
+        "startVertexId": 312,
+        "endVertexId": 295
+      },
+      {
+        "id": 509,
+        "startVertexId": 313,
+        "endVertexId": 298
+      },
+      {
+        "id": 511,
+        "startVertexId": 314,
+        "endVertexId": 313
+      },
+      {
+        "id": 512,
+        "startVertexId": 314,
+        "endVertexId": 315
+      },
+      {
+        "id": 513,
+        "startVertexId": 315,
+        "endVertexId": 316
+      },
+      {
+        "id": 514,
+        "startVertexId": 297,
+        "endVertexId": 317
+      },
+      {
+        "id": 515,
+        "startVertexId": 317,
+        "endVertexId": 314
+      },
+      {
+        "id": 516,
+        "startVertexId": 316,
+        "endVertexId": 317
+      },
+      {
+        "id": 517,
+        "startVertexId": 315,
+        "endVertexId": 318
+      },
+      {
+        "id": 518,
+        "startVertexId": 318,
+        "endVertexId": 319
+      },
+      {
+        "id": 519,
+        "startVertexId": 319,
+        "endVertexId": 316
+      },
+      {
+        "id": 520,
+        "startVertexId": 318,
+        "endVertexId": 320
+      },
+      {
+        "id": 521,
+        "startVertexId": 320,
+        "endVertexId": 321
+      },
+      {
+        "id": 522,
+        "startVertexId": 321,
+        "endVertexId": 319
+      },
+      {
+        "id": 523,
+        "startVertexId": 294,
+        "endVertexId": 322
+      },
+      {
+        "id": 525,
+        "startVertexId": 322,
+        "endVertexId": 323
+      },
+      {
+        "id": 526,
+        "startVertexId": 323,
+        "endVertexId": 324
+      },
+      {
+        "id": 527,
+        "startVertexId": 322,
+        "endVertexId": 325
+      },
+      {
+        "id": 528,
+        "startVertexId": 325,
+        "endVertexId": 312
+      },
+      {
+        "id": 529,
+        "startVertexId": 324,
+        "endVertexId": 325
+      },
+      {
+        "id": 530,
+        "startVertexId": 324,
+        "endVertexId": 326
+      },
+      {
+        "id": 531,
+        "startVertexId": 326,
+        "endVertexId": 327
+      },
+      {
+        "id": 532,
+        "startVertexId": 327,
+        "endVertexId": 323
+      },
+      {
+        "id": 533,
+        "startVertexId": 327,
+        "endVertexId": 328
+      },
+      {
+        "id": 534,
+        "startVertexId": 328,
+        "endVertexId": 329
+      },
+      {
+        "id": 535,
+        "startVertexId": 329,
+        "endVertexId": 326
       }
     ],
     "lineSides": [
@@ -16477,49 +17246,6 @@
         }
       },
       {
-        "lineId": 357,
-        "side": "front",
-        "wall": {
-          "materialId": "dirty_office_wall_baseboard_512",
-          "uv": {
-            "scale": [
-              1.0,
-              0.5333333611488342
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "lower": {
-          "materialId": "dirty_office_wall_baseboard_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "materialId": "dirty_office_wall_baseboard_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 358,
         "side": "front",
         "wall": {
@@ -18768,6 +19494,952 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 423,
+        "side": "front",
+        "wall": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 427,
+        "side": "front",
+        "wall": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 428,
+        "side": "front",
+        "wall": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 439,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 441,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 443,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 444,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 447,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 449,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 450,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 451,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              1.015625
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 455,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 456,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.5
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 457,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.5
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 459,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 460,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.5
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 461,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 463,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.359375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 464,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.359375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 465,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.59375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 466,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 467,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.359375
             ]
           }
         },
@@ -23441,6 +25113,1300 @@
           "a": 255
         },
         "ambientIntensity": 0.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 61,
+        "name": "Sector 61",
+        "x": -2301,
+        "y": -1938,
+        "floorZ": -14.5,
+        "ceilingZ": 6.199999809265137,
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "painted_plaster_wall",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.5,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 62,
+        "name": "Sector 62",
+        "x": -2301,
+        "y": -2066,
+        "floorZ": -15.0,
+        "ceilingZ": 12.0,
+        "floorMaterialId": "worn_dark_red_carpet_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.5,
+        "defaultWall": {
+          "materialId": "worn_white_ceiling_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 63,
+        "name": "Sector 63",
+        "x": -2605,
+        "y": -2498,
+        "floorZ": -17.0,
+        "ceilingZ": 15.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 64,
+        "name": "Sector 64",
+        "x": -2685,
+        "y": -2706,
+        "floorZ": -16.25,
+        "ceilingZ": 6.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 65,
+        "name": "Sector 65",
+        "x": -1917,
+        "y": -2706,
+        "floorZ": -16.25,
+        "ceilingZ": 6.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 66,
+        "name": "Sector 66",
+        "x": -2417,
+        "y": -2706,
+        "floorZ": -9.5,
+        "ceilingZ": 5.75,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 67,
+        "name": "Sector 67",
+        "x": -2921,
+        "y": -3098,
+        "floorZ": -16.0,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "dark_wooden_planks",
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 68,
+        "name": "Sector 68",
+        "x": -2528,
+        "y": -2706,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "isVoid": true
+      },
+      {
+        "id": 69,
+        "name": "Sector 69",
+        "x": -2032,
+        "y": -2706,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "isVoid": true
+      },
+      {
+        "id": 70,
+        "name": "Sector 70",
+        "x": -1217,
+        "y": -3586,
+        "floorZ": -9.75,
+        "ceilingZ": 24.5,
+        "floorMaterialId": "old_wooden_floor_03",
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 71,
+        "name": "Sector 71",
+        "x": -2653,
+        "y": -3906,
+        "floorZ": -13.5,
+        "ceilingZ": 16.0,
+        "floorMaterialId": "worn_dark_red_carpet_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 72,
+        "name": "Sector 72",
+        "x": -1438,
+        "y": -3199,
+        "floorZ": -11.25,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 73,
+        "name": "Sector 73",
+        "x": -1470,
+        "y": -3167,
+        "floorZ": -13.0,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 74,
+        "name": "Sector 74",
+        "x": -1502,
+        "y": -3135,
+        "floorZ": -14.5,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 75,
+        "name": "Sector 75",
+        "x": -1348,
+        "y": -4319,
+        "floorZ": -11.25,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 76,
+        "name": "Sector 76",
+        "x": -1380,
+        "y": -4351,
+        "floorZ": -13.0,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 77,
+        "name": "Sector 77",
+        "x": -1412,
+        "y": -4383,
+        "floorZ": -14.5,
+        "ceilingZ": 18.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
         "defaultWall": {
           "materialId": "wall",
           "uv": {

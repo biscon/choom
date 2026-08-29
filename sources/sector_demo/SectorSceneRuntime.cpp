@@ -175,6 +175,53 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
     BindRuntimeObjectAudio(context.world);
 }
 
+bool SectorSceneRuntime::RefreshTopologyRuntimeData(
+        engine::EngineContext& context,
+        const SectorTopologyMap& map,
+        std::string& error)
+{
+    error.clear();
+    soundPropagation.Clear();
+    std::string soundPropagationError;
+    const bool soundPropagationReady =
+            soundPropagation.Build(map, &soundPropagationError);
+    if (!soundPropagationReady) {
+        TraceLog(
+                LOG_WARNING,
+                "Sound propagation graph refresh failed: %s",
+                soundPropagationError.c_str());
+    }
+
+    ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
+    ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcPatrolRuntime(npcPatrol);
+    ResetSectorRuntimeObjectsForMap(
+            context.world,
+            context.assets,
+            runtimeObjects,
+            map,
+            itemRegistry,
+            itemModelAssets);
+    InitializeNpcAudioRuntime(
+            context.world,
+            context.assets,
+            runtimeObjects.runtimeObjectAssetScope,
+            runtimeObjects.npcDefinitionCatalog,
+            npcAudio,
+            map.runtimeObjects.size());
+    const bool navigationReady = RebuildNavigationForMap(context, map);
+    BindRuntimeObjectAudio(context.world);
+    if (!soundPropagationReady || !navigationReady) {
+        error = !soundPropagationReady
+                ? (soundPropagationError.empty()
+                        ? "Sound propagation refresh failed"
+                        : soundPropagationError)
+                : "Navigation refresh failed";
+        return false;
+    }
+    return true;
+}
+
 bool SectorSceneRuntime::SpawnItemRuntimeObject(
         engine::EngineContext& context,
         const SectorTopologyMap& map,

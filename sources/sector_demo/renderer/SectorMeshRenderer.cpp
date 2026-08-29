@@ -1127,13 +1127,30 @@ bool SectorMeshRenderer::RefreshSurfaceMaterials(
         const SectorTopologyMap& map,
         std::string& error)
 {
+    return RefreshSurfaceGeometryInternal(assets, map, false, error);
+}
+
+bool SectorMeshRenderer::RefreshSurfaceGeometry(
+        engine::AssetManager& assets,
+        const SectorTopologyMap& map,
+        std::string& error)
+{
+    return RefreshSurfaceGeometryInternal(assets, map, true, error);
+}
+
+bool SectorMeshRenderer::RefreshSurfaceGeometryInternal(
+        engine::AssetManager& assets,
+        const SectorTopologyMap& map,
+        bool refreshVisibilityData,
+        std::string& error)
+{
     error.clear();
     if (!initialized || engine::IsNull(assetScope)) {
-        error = "Preview material refresh requires an initialized renderer";
+        error = "Preview surface refresh requires an initialized renderer";
         return false;
     }
     if (map.sectors.empty()) {
-        error = "Preview material refresh requires topology sectors";
+        error = "Preview surface refresh requires topology sectors";
         return false;
     }
 
@@ -1173,10 +1190,53 @@ bool SectorMeshRenderer::RefreshSurfaceMaterials(
         return false;
     }
 
+    RuntimeSectorVisibilityGraph candidateVisibilityGraph;
+    SectorCollisionWorld candidateVisibilityLookupWorld;
+    bool candidateVisibilityGraphValid = visibilityGraphValid;
+    bool candidateVisibilityLookupWorldValid = visibilityLookupWorldValid;
+    if (refreshVisibilityData) {
+        std::string visibilityError;
+        candidateVisibilityGraphValid = BuildRuntimeSectorVisibilityGraph(
+                map, candidateVisibilityGraph, &visibilityError);
+        if (!candidateVisibilityGraphValid) {
+            std::fprintf(
+                    stderr,
+                    "[SectorDemo WARNING] Visibility graph refresh failed: %s\n",
+                    visibilityError.c_str());
+            candidateVisibilityGraph = {};
+        }
+        visibilityError.clear();
+        candidateVisibilityLookupWorldValid =
+                candidateVisibilityLookupWorld.BuildFromTopology(
+                        map, &visibilityError);
+        if (!candidateVisibilityLookupWorldValid) {
+            std::fprintf(
+                    stderr,
+                    "[SectorDemo WARNING] Visibility sector lookup refresh failed: %s\n",
+                    visibilityError.c_str());
+        }
+    }
+
     UnloadSectorMeshes(meshes);
     meshes = std::move(candidateMeshes);
     generatedGeometry = std::move(candidateGeometry);
     sectorCount = map.sectors.size();
+    if (refreshVisibilityData) {
+        visibilityGraph = std::move(candidateVisibilityGraph);
+        visibilityGraphValid = candidateVisibilityGraphValid;
+        visibilityLookupWorld = std::move(candidateVisibilityLookupWorld);
+        visibilityLookupWorldValid = candidateVisibilityLookupWorldValid;
+        dynamicLightState.RebuildSources(
+                map,
+                visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+        BuildSectorLightAtmosphereSources(
+                map,
+                visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+                lightAtmosphereSources);
+        analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
+        analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
+        lightProxyRenderer.Reserve(lightAtmosphereSources.size());
+    }
 
     RefreshBakedDataStatus(map, currentSurfaceHash);
     surfaceLightmapBakeCurrent = surfaceLightmapBakeCurrent

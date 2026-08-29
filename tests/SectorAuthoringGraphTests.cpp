@@ -19,6 +19,7 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
+#include "sector_editor/services/authoring_faces/SectorEditorSurfaceHeightEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
@@ -5927,6 +5928,40 @@ void TestDeriveGeneratedFallbackLabelsSkipExistingNames()
     }
     Check(foundSkippedFallback,
           "generated fallback labels skip existing generated/default names");
+}
+
+void TestDeriveDuplicateGeneratedLabelsDoNotDisplaceReservedNames()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(5);
+    AddFaceAnchor(graph, 200, 16, 16, "Sector 70");
+    AddFaceAnchor(graph, 201, 48, 48, "Sector 70");
+    AddFaceAnchor(graph, 202, 80, 80, "Sector 3");
+    AddFaceAnchor(graph, 203, 112, 112, "Sector 4");
+    AddFaceAnchor(graph, 204, 144, 144, "Sector 5");
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(
+            result,
+            "reserved generated label derivation is valid");
+    const game::SectorTopologySector* duplicate =
+            game::FindSectorTopologySector(result.topology, 201);
+    const game::SectorTopologySector* sector3 =
+            game::FindSectorTopologySector(result.topology, 202);
+    const game::SectorTopologySector* sector4 =
+            game::FindSectorTopologySector(result.topology, 203);
+    const game::SectorTopologySector* sector5 =
+            game::FindSectorTopologySector(result.topology, 204);
+    Check(duplicate != nullptr
+                  && duplicate->name != "Sector 3"
+                  && duplicate->name != "Sector 4"
+                  && duplicate->name != "Sector 5",
+          "duplicate generated label fallback skips all reserved anchor names");
+    Check(sector3 != nullptr && sector3->name == "Sector 3"
+                  && sector4 != nullptr && sector4->name == "Sector 4"
+                  && sector5 != nullptr && sector5->name == "Sector 5",
+          "duplicate generated label does not displace later reserved names");
 }
 
 void TestEditorAuthoringRefreshPreservesCustomAndImportedLabels()
@@ -12726,6 +12761,162 @@ void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
             movableRuntimeObjects);
 }
 
+void TestPreviewSurfaceHeightAdjustmentStagesCancelsAndCommits()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeSingleSectorSquareMap();
+    game::SectorAuthoringGraph& graph =
+            documentState.authoring.authoringGraph;
+    game::InitializeSectorEditorAuthoringStateFromTopology(
+            graph,
+            game::MakeSectorEditorDerivationDocumentAccess(
+                    documentState.derivation),
+            documentState.map.topologyMap);
+    Check(game::IsSectorEditorAuthoringDerivationCurrent(
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation)),
+          "surface-height adjustment fixture has current authoring derivation");
+    if (documentState.map.topologyMap.sectors.empty()
+            || graph.faceAnchors.empty()) {
+        return;
+    }
+
+    const int sectorId = documentState.map.topologyMap.sectors.front().id;
+    const int faceAnchorId = graph.faceAnchors.front().id;
+    const float originalFloor = graph.faceAnchors.front().floorZ;
+    const float originalCeiling = graph.faceAnchors.front().ceilingZ;
+    game::SelectionState selectionState;
+    game::SectorEditorPreviewSelectionState previewSelection;
+    previewSelection.selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    previewSelection.selectedSurface3D.topologySectorId = sectorId;
+    previewSelection.selectedTopologySurface3D.kind =
+            game::TopologySurfaceEditTargetKind::SectorFloor;
+    previewSelection.selectedTopologySurface3D.sectorId = sectorId;
+    game::PreviewSurfaceHeightAdjustmentState adjustmentState;
+    state.topologyRenderRevision = 77;
+    state.topologyRenderCache.valid = true;
+    std::string statusText;
+
+    auto makeService = [&]() {
+        return game::SectorEditorSurfaceHeightEditingService{
+                game::SectorEditorSurfaceHeightEditingServiceContext{
+                        state,
+                        game::MakeSectorEditorDocumentLifecycleAccess(
+                                documentState.lifecycle),
+                        documentState.map.topologyMap,
+                        graph,
+                        game::MakeSectorEditorDerivationDocumentAccess(
+                                documentState.derivation),
+                        selectionState,
+                        previewSelection,
+                        adjustmentState,
+                        statusText}};
+    };
+
+    Check(Near(game::SectorEditorPreviewSurfaceHeightStepAuthored(
+                       game::PreviewSurfaceHeightNudgePreset::Fine), 0.25f)
+                  && Near(game::SectorEditorPreviewSurfaceHeightStepAuthored(
+                                  game::PreviewSurfaceHeightNudgePreset::Normal),
+                          1.0f)
+                  && Near(game::SectorEditorPreviewSurfaceHeightStepAuthored(
+                                  game::PreviewSurfaceHeightNudgePreset::Coarse),
+                          5.0f),
+          "surface-height presets use 0.25, 1, and 5 authored units");
+    Check(game::IsSectorEditorPreviewSurfaceHeightAdjustable(
+                  documentState.map.topologyMap,
+                  graph,
+                  documentState.derivation.authoringDerivation,
+                  true,
+                  previewSelection.selectedSurface3D),
+          "mapped 3D floor is height-adjustable");
+
+    auto editing = makeService();
+    Check(editing.BeginPreviewAdjustment() && adjustmentState.active,
+          "selected floor begins a staged height adjustment");
+    game::PreviewSurfaceHeightNudgeCandidate floorCandidate;
+    Check(editing.BuildPreviewNudge(1.0f, floorCandidate)
+                  && floorCandidate.valid,
+          "floor Page Up builds a valid authored-unit candidate");
+    const game::SectorAuthoringFaceAnchor* stagedFloor =
+            game::FindSectorAuthoringFaceAnchor(
+                    floorCandidate.graph, faceAnchorId);
+    const game::SectorTopologySector* stagedFloorSector =
+            game::FindSectorTopologySector(
+                    floorCandidate.derivation.topology, sectorId);
+    Check(stagedFloor != nullptr
+                  && Near(stagedFloor->floorZ, originalFloor + 1.0f)
+                  && stagedFloorSector != nullptr
+                  && Near(stagedFloorSector->floorZ, originalFloor + 1.0f),
+          "floor nudge derives matching staged authoring and topology heights");
+    Check(Near(graph.faceAnchors.front().floorZ, originalFloor)
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && !documentState.lifecycle.hasUnsavedChanges
+                  && state.topologyRenderRevision == 77
+                  && state.topologyRenderCache.valid,
+          "surface-height staging leaves live document and 2D cache untouched");
+    editing.AcceptPreviewNudge(std::move(floorCandidate));
+    const auto cancelled = editing.CancelPreviewAdjustment(
+            "surface height cancelled");
+    Check(cancelled.changed
+                  && !adjustmentState.active
+                  && Near(graph.faceAnchors.front().floorZ, originalFloor)
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && state.topologyRenderRevision == 77
+                  && state.topologyRenderCache.valid,
+          "surface-height Cancel discards staging without dirtying");
+
+    previewSelection.selectedSurface3D.kind = game::SectorSurfaceKind::Ceiling;
+    previewSelection.selectedTopologySurface3D.kind =
+            game::TopologySurfaceEditTargetKind::SectorCeiling;
+    auto ceilingEditing = makeService();
+    Check(ceilingEditing.BeginPreviewAdjustment(),
+          "selected ceiling begins a staged height adjustment");
+    game::PreviewSurfaceHeightNudgeCandidate ceilingCandidate;
+    Check(ceilingEditing.BuildPreviewNudge(-5.0f, ceilingCandidate),
+          "ceiling Page Down builds a valid coarse candidate");
+    ceilingEditing.AcceptPreviewNudge(std::move(ceilingCandidate));
+    const auto applied = ceilingEditing.ApplyPreviewAdjustment();
+    const game::SectorAuthoringFaceAnchor* committedAnchor =
+            game::FindSectorAuthoringFaceAnchor(graph, faceAnchorId);
+    Check(applied.changed && applied.committed
+                  && !adjustmentState.active
+                  && committedAnchor != nullptr
+                  && Near(committedAnchor->floorZ, originalFloor)
+                  && Near(committedAnchor->ceilingZ, originalCeiling - 5.0f)
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && state.topologyRenderRevision == 78
+                  && !state.topologyRenderCache.valid
+                  && game::IsSectorEditorAuthoringDerivationCurrent(
+                          game::MakeSectorEditorDerivationDocumentAccess(
+                                  documentState.derivation)),
+          "surface-height Apply commits once and invalidates the 2D cache");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    previewSelection.selectedSurface3D.kind = game::SectorSurfaceKind::Wall;
+    Check(!game::IsSectorEditorPreviewSurfaceHeightAdjustable(
+                  documentState.map.topologyMap,
+                  graph,
+                  documentState.derivation.authoringDerivation,
+                  true,
+                  previewSelection.selectedSurface3D),
+          "3D wall selection is not height-adjustable");
+
+    previewSelection.selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    auto invalidEditing = makeService();
+    Check(invalidEditing.BeginPreviewAdjustment(),
+          "floor adjustment restarts for invalid-height test");
+    game::PreviewSurfaceHeightNudgeCandidate invalidCandidate;
+    Check(!invalidEditing.BuildPreviewNudge(512.0f, invalidCandidate)
+                  && !invalidCandidate.valid
+                  && statusText.find("ceiling must remain above floor")
+                          != std::string::npos,
+          "floor nudge cannot cross the ceiling");
+    invalidEditing.CancelPreviewAdjustment(nullptr);
+}
+
 void TestDynamicPropConfigClipboardPreservesPlacementAndIdentity()
 {
     game::SectorTopologyMap map = MakeAdjacentSectorMap();
@@ -12955,16 +13146,17 @@ void TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor()
 
     game::SectorAuthoringFaceAnchor destination;
     destination.id = 99;
+    destination.name = "destination sector";
     destination.x = 1600;
     destination.y = 3200;
     Check(game::ApplySectorEditorSectorConfig(destination, source),
           "sector config application changes a different destination");
     Check(destination.id == 99
+                  && destination.name == "destination sector"
                   && destination.x == 1600
                   && destination.y == 3200,
-          "sector config application preserves destination ID and anchor coordinates");
-    Check(destination.name == "copied sector"
-                  && destination.isVoid
+          "sector config application preserves destination identity and anchor coordinates");
+    Check(destination.isVoid
                   && Near(destination.floorZ, -4.0f)
                   && Near(destination.ceilingZ, 18.0f)
                   && destination.floorMaterialId == "floor_a"
@@ -14752,6 +14944,7 @@ int main()
     TestEditorAuthoringRefreshPreservesUnresolvedExistingAnchors();
     TestDeriveGeneratedFaceLabelsAreUnique();
     TestDeriveGeneratedFallbackLabelsSkipExistingNames();
+    TestDeriveDuplicateGeneratedLabelsDoNotDisplaceReservedNames();
     TestEditorAuthoringRefreshPreservesCustomAndImportedLabels();
     TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailable();
     TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor();
@@ -14866,6 +15059,7 @@ int main()
     TestDoorConfigClipboardPreservesAnchorAndInstanceId();
     TestStaticPropConfigClipboardPreservesPlacementAndIdentity();
     TestPreviewObjectAdjustmentStagesAndCommitsInPlace();
+    TestPreviewSurfaceHeightAdjustmentStagesCancelsAndCommits();
     TestDynamicPropConfigClipboardPreservesPlacementAndIdentity();
     TestConfigClipboardTargetResolutionPrefersPreviewSurface();
     TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor();

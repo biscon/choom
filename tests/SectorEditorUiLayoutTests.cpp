@@ -1,4 +1,5 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/SectorEditorMainMenu.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
@@ -56,6 +57,21 @@ void TestMainMenuShortcutMatching()
     Check(!engine::MatchesUIMenuShortcut(
                   save, KEY_O, true, false, false),
           "menu shortcut rejects a different key");
+
+    const engine::UIMenuShortcut adjust =
+            game::SectorEditorAdjustSelectedShortcut();
+    Check(engine::MatchesUIMenuShortcut(
+                  adjust, KEY_A, true, false, false),
+          "Adjust selected uses the exact Ctrl+A chord");
+    Check(!game::CanBeginSectorEditorPreviewAdjustment(
+                  game::SectorEditorMode::Edit2D, true, false)
+                  && game::CanBeginSectorEditorPreviewAdjustment(
+                          game::SectorEditorMode::Preview3D, true, false)
+                  && !game::CanBeginSectorEditorPreviewAdjustment(
+                          game::SectorEditorMode::Preview3D, true, true)
+                  && !game::CanBeginSectorEditorPreviewAdjustment(
+                          game::SectorEditorMode::Preview3D, false, false),
+          "Adjust selected is disabled in 2D and requires an idle supported 3D selection");
 }
 
 void TestKeyboardPanModifierPolicy()

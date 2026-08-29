@@ -83,6 +83,10 @@ public:
             engine::AssetManager& assets,
             const SectorTopologyMap& map,
             std::string& error);
+    bool RefreshSurfaceGeometry(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            std::string& error);
     void Shutdown(engine::AssetManager& assets);
     void ShutdownRendererResources(engine::AssetManager& assets);
 
@@ -306,6 +310,11 @@ private:
             engine::AssetManager& assets,
             const SectorTopologyMap& map,
             const SectorGeneratedGeometry& geometry);
+    bool RefreshSurfaceGeometryInternal(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            bool refreshVisibilityData,
+            std::string& error);
     void RefreshBakedDataStatus(const SectorTopologyMap& map);
     void RefreshBakedDataStatus(
             const SectorTopologyMap& map,

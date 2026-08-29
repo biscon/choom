@@ -409,6 +409,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     uiState = SectorEditorUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
+    surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     npcEditorState = SectorEditorNpcEditorState{};
     npcEditorSessionState = SectorEditorNpcEditorSessionState{};
     weaponEditorState = SectorEditorWeaponEditorState{};
@@ -619,9 +620,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 [this](engine::InputEvent& event) {
                     if (event.key.key != KEY_F2) return;
                     if (lightEditingState.proxyPlacement.active
-                            || runtimeObjectEditingState.previewAdjustment.active) {
-                        statusText = runtimeObjectEditingState.previewAdjustment.active
-                                ? "Apply or cancel the object adjustment before hiding the 3D UI"
+                            || PreviewAdjustmentActive()) {
+                        statusText = PreviewAdjustmentActive()
+                                ? "Apply or cancel the 3D adjustment before hiding the 3D UI"
                                 : "Finish proxy placement before hiding the 3D UI";
                     } else {
                         previewState.overlay.previewUiHidden = true;
@@ -827,17 +828,25 @@ void SectorEditor::RenderUI(
             configTarget.kind != SectorEditorConfigKind::None,
             configTarget.kind != SectorEditorConfigKind::None
                     && configTarget.kind == configClipboardState.kind,
-            state.mode == SectorEditorMode::Preview3D
-                    && !runtimeObjectEditingState.previewAdjustment.active
-                    && [&]() {
-                        const SectorPlacedRuntimeObject* object =
-                                FindSectorPlacedRuntimeObject(
-                                        TopologyMap(),
-                                        selectionState.selectedRuntimeObjectId);
-                        return object != nullptr
-                                && IsSectorEditorPreviewAdjustableObject(*object);
-                    }(),
-            runtimeObjectEditingState.previewAdjustment.active,
+            [&]() {
+                const SectorPlacedRuntimeObject* object =
+                        FindSectorPlacedRuntimeObject(
+                                TopologyMap(),
+                                selectionState.selectedRuntimeObjectId);
+                if (object != nullptr
+                        && IsSectorEditorPreviewAdjustableObject(*object)) {
+                    return true;
+                }
+                return IsSectorEditorPreviewSurfaceHeightAdjustable(
+                        TopologyMap(),
+                        AuthoringGraph(),
+                        documentState.derivation.authoringDerivation,
+                        IsSectorEditorAuthoringDerivationCurrent(
+                                MakeLiveConstDerivationAccess(
+                                        documentState.derivation)),
+                        previewState.selection.selectedSurface3D);
+            }(),
+            PreviewAdjustmentActive(),
             mainMenuVisible,
             IsMainMenuInteractionEnabled());
     HandleMainMenuCommand(command, ui, assets);
@@ -1453,11 +1462,11 @@ void SectorEditor::HandleMainMenuCommand(
         engine::UIContext& ui,
         engine::AssetManager& assets)
 {
-    if (runtimeObjectEditingState.previewAdjustment.active
-            && command != SectorEditorMainMenuCommand::ApplyPreviewObjectAdjustment
-            && command != SectorEditorMainMenuCommand::CancelPreviewObjectAdjustment
+    if (PreviewAdjustmentActive()
+            && command != SectorEditorMainMenuCommand::ApplyPreviewAdjustment
+            && command != SectorEditorMainMenuCommand::CancelPreviewAdjustment
             && command != SectorEditorMainMenuCommand::None) {
-        statusText = "Apply or cancel the active 3D object adjustment first";
+        statusText = "Apply or cancel the active 3D adjustment first";
         return;
     }
     switch (command) {
@@ -1492,14 +1501,14 @@ void SectorEditor::HandleMainMenuCommand(
         case SectorEditorMainMenuCommand::PasteConfig:
             PasteSelectedConfig(assets);
             break;
-        case SectorEditorMainMenuCommand::BeginPreviewObjectAdjustment:
-            BeginPreviewObjectAdjustment();
+        case SectorEditorMainMenuCommand::BeginPreviewAdjustment:
+            BeginPreviewAdjustment();
             break;
-        case SectorEditorMainMenuCommand::ApplyPreviewObjectAdjustment:
-            ApplyPreviewObjectAdjustment();
+        case SectorEditorMainMenuCommand::ApplyPreviewAdjustment:
+            ApplyPreviewAdjustment();
             break;
-        case SectorEditorMainMenuCommand::CancelPreviewObjectAdjustment:
-            CancelPreviewObjectAdjustment("Object adjustment cancelled");
+        case SectorEditorMainMenuCommand::CancelPreviewAdjustment:
+            CancelPreviewAdjustment("3D adjustment cancelled");
             break;
         case SectorEditorMainMenuCommand::Toggle3DMode:
             if (state.mode == SectorEditorMode::Preview3D) {
@@ -2583,9 +2592,9 @@ void SectorEditor::CancelRuntimeObjectDrag(const char* message)
     editing.CancelDrag(message);
 }
 
-void SectorEditor::UpdatePreviewObjectAdjustmentInput(engine::Input& input)
+void SectorEditor::UpdatePreviewAdjustmentInput(engine::Input& input)
 {
-    if (!runtimeObjectEditingState.previewAdjustment.active) return;
+    if (!PreviewAdjustmentActive()) return;
 
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
@@ -2593,12 +2602,12 @@ void SectorEditor::UpdatePreviewObjectAdjustmentInput(engine::Input& input)
             [this](engine::InputEvent& event) {
                 if (event.key.key == KEY_ENTER
                         || event.key.key == KEY_KP_ENTER) {
-                    ApplyPreviewObjectAdjustment();
+                    ApplyPreviewAdjustment();
                 } else if (event.key.key == KEY_ESCAPE) {
-                    CancelPreviewObjectAdjustment("Object adjustment cancelled");
+                    CancelPreviewAdjustment("3D adjustment cancelled");
                 } else if (event.key.key == KEY_TAB) {
-                    CancelPreviewObjectAdjustment(
-                            "Object adjustment cancelled on return to 2D");
+                    CancelPreviewAdjustment(
+                            "3D adjustment cancelled on return to 2D");
                     LeavePreview3D();
                 } else {
                     return;
@@ -2607,31 +2616,57 @@ void SectorEditor::UpdatePreviewObjectAdjustmentInput(engine::Input& input)
             });
 
     const auto handleNudge = [this](engine::InputEvent& event) {
-        if (!runtimeObjectEditingState.previewAdjustment.active) return;
-        const PreviewObjectNudgePreset preset =
-                runtimeObjectEditingState.previewAdjustment.preset;
-        const float moveStep =
-                SectorEditorPreviewObjectTranslationStepWorld(preset);
-        const float yawStep =
-                SectorEditorPreviewObjectYawStepDegrees(preset);
-        float dx = 0.0f;
-        float dz = 0.0f;
-        float dh = 0.0f;
-        float dyaw = 0.0f;
-        if (event.key.key == KEY_LEFT) dx = -moveStep;
-        else if (event.key.key == KEY_RIGHT) dx = moveStep;
-        else if (event.key.key == KEY_UP) dz = moveStep;
-        else if (event.key.key == KEY_DOWN) dz = -moveStep;
-        else if (event.key.key == KEY_PAGE_UP) dh = moveStep;
-        else if (event.key.key == KEY_PAGE_DOWN) dh = -moveStep;
-        else if (event.key.key == KEY_Q) dyaw = -yawStep;
-        else if (event.key.key == KEY_E) dyaw = yawStep;
-        else return;
+        if (runtimeObjectEditingState.previewAdjustment.active) {
+            const PreviewObjectNudgePreset preset =
+                    runtimeObjectEditingState.previewAdjustment.preset;
+            const float moveStep =
+                    SectorEditorPreviewObjectTranslationStepWorld(preset);
+            const float yawStep =
+                    SectorEditorPreviewObjectYawStepDegrees(preset);
+            float dx = 0.0f;
+            float dz = 0.0f;
+            float dh = 0.0f;
+            float dyaw = 0.0f;
+            if (event.key.key == KEY_LEFT) dx = -moveStep;
+            else if (event.key.key == KEY_RIGHT) dx = moveStep;
+            else if (event.key.key == KEY_UP) dz = moveStep;
+            else if (event.key.key == KEY_DOWN) dz = -moveStep;
+            else if (event.key.key == KEY_PAGE_UP) dh = moveStep;
+            else if (event.key.key == KEY_PAGE_DOWN) dh = -moveStep;
+            else if (event.key.key == KEY_Q) dyaw = -yawStep;
+            else if (event.key.key == KEY_E) dyaw = yawStep;
+            else return;
 
-        SectorEditorRuntimeObjectEditingService editing =
-                BuildRuntimeObjectEditingService();
-        FinishPreviewObjectAdjustmentResult(
-                editing.PreviewNudge(dx, dz, dh, dyaw));
+            SectorEditorRuntimeObjectEditingService editing =
+                    BuildRuntimeObjectEditingService();
+            FinishPreviewObjectAdjustmentResult(
+                    editing.PreviewNudge(dx, dz, dh, dyaw));
+            engine::ConsumeEvent(event);
+            return;
+        }
+
+        if (!surfaceHeightAdjustmentState.active
+                || (event.key.key != KEY_PAGE_UP
+                    && event.key.key != KEY_PAGE_DOWN)) {
+            return;
+        }
+        const float step = SectorEditorPreviewSurfaceHeightStepAuthored(
+                surfaceHeightAdjustmentState.preset);
+        const float delta = event.key.key == KEY_PAGE_UP ? step : -step;
+        SectorEditorSurfaceHeightEditingService editing =
+                BuildSurfaceHeightEditingService();
+        PreviewSurfaceHeightNudgeCandidate candidate;
+        if (editing.BuildPreviewNudge(delta, candidate)) {
+            std::string refreshError;
+            if (RefreshPreviewSurfaceGeometry(
+                        candidate.derivation.topology, &refreshError)) {
+                editing.AcceptPreviewNudge(std::move(candidate));
+            } else {
+                statusText = refreshError.empty()
+                        ? "Height nudge failed: preview geometry refresh failed"
+                        : refreshError;
+            }
+        }
         engine::ConsumeEvent(event);
     };
     input.ForEachEvent(
@@ -2642,7 +2677,7 @@ void SectorEditor::UpdatePreviewObjectAdjustmentInput(engine::Input& input)
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
 {
-    UpdatePreviewObjectAdjustmentInput(input);
+    UpdatePreviewAdjustmentInput(input);
     bool controlModeToggled = false;
     const bool gameplayWeaponInput = state.mode == SectorEditorMode::Preview3D
             && previewState.controller.previewControlMode
@@ -2675,9 +2710,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
 
                 if (event.key.key == KEY_F2) {
                     if (lightEditingState.proxyPlacement.active
-                            || runtimeObjectEditingState.previewAdjustment.active) {
-                        statusText = runtimeObjectEditingState.previewAdjustment.active
-                                ? "Apply or cancel the object adjustment before hiding the 3D UI"
+                            || PreviewAdjustmentActive()) {
+                        statusText = PreviewAdjustmentActive()
+                                ? "Apply or cancel the 3D adjustment before hiding the 3D UI"
                                 : "Finish proxy placement before hiding the 3D UI";
                         engine::ConsumeEvent(event);
                         return;
@@ -2697,9 +2732,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 if (event.key.key == KEY_F3) {
                     if (lightEditingState.lightPilot.active
                             || lightEditingState.proxyPlacement.active
-                            || runtimeObjectEditingState.previewAdjustment.active) {
-                        statusText = runtimeObjectEditingState.previewAdjustment.active
-                                ? "Apply or cancel the object adjustment before changing 3D control mode"
+                            || PreviewAdjustmentActive()) {
+                        statusText = PreviewAdjustmentActive()
+                                ? "Apply or cancel the 3D adjustment before changing 3D control mode"
                                 : "Finish light editing before changing 3D control mode";
                         engine::ConsumeEvent(event);
                         return;
@@ -2884,7 +2919,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || state.soundPicker.open
             || lightEditingState.lightPilot.active
             || lightEditingState.proxyPlacement.active
-            || runtimeObjectEditingState.previewAdjustment.active) {
+            || PreviewAdjustmentActive()) {
         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -3812,20 +3847,51 @@ SectorEditor::BuildRuntimeObjectEditingService(
             &itemRegistry}};
 }
 
-bool SectorEditor::BeginPreviewObjectAdjustment()
+SectorEditorSurfaceHeightEditingService
+SectorEditor::BuildSurfaceHeightEditingService()
+{
+    return SectorEditorSurfaceHeightEditingService{
+        SectorEditorSurfaceHeightEditingServiceContext{
+            state,
+            Lifecycle(),
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveDerivationAccess(documentState.derivation),
+            selectionState,
+            previewState.selection,
+            surfaceHeightAdjustmentState,
+            statusText}};
+}
+
+bool SectorEditor::PreviewAdjustmentActive() const
+{
+    return runtimeObjectEditingState.previewAdjustment.active
+            || surfaceHeightAdjustmentState.active;
+}
+
+bool SectorEditor::BeginPreviewAdjustment()
 {
     if (state.mode != SectorEditorMode::Preview3D
             || !sceneRuntime.Renderer().IsRendererReady()) {
-        statusText = "Enter 3D mode before adjusting an object";
+        statusText = "Enter 3D mode before adjusting the selection";
         return false;
     }
     if (lightEditingState.lightPilot.active
             || lightEditingState.proxyPlacement.active) {
-        statusText = "Finish light editing before adjusting an object";
+        statusText = "Finish light editing before adjusting the selection";
+        return false;
+    }
+    if (PreviewAdjustmentActive()) {
+        statusText = "Apply or cancel the active 3D adjustment first";
         return false;
     }
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
-    return BuildRuntimeObjectEditingService().BeginPreviewAdjustment();
+    const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
+            TopologyMap(), selectionState.selectedRuntimeObjectId);
+    if (object != nullptr && IsSectorEditorPreviewAdjustableObject(*object)) {
+        return BuildRuntimeObjectEditingService().BeginPreviewAdjustment();
+    }
+    return BuildSurfaceHeightEditingService().BeginPreviewAdjustment();
 }
 
 void SectorEditor::FinishPreviewObjectAdjustmentResult(
@@ -3848,23 +3914,62 @@ void SectorEditor::FinishPreviewObjectAdjustmentResult(
     }
 }
 
-bool SectorEditor::ApplyPreviewObjectAdjustment()
+bool SectorEditor::ApplyPreviewAdjustment()
 {
-    SectorEditorRuntimeObjectEditingService editing =
-            BuildRuntimeObjectEditingService();
-    const SectorEditorPreviewObjectAdjustmentResult result =
-            editing.ApplyPreviewAdjustment();
-    FinishPreviewObjectAdjustmentResult(result);
+    if (runtimeObjectEditingState.previewAdjustment.active) {
+        SectorEditorRuntimeObjectEditingService editing =
+                BuildRuntimeObjectEditingService();
+        const SectorEditorPreviewObjectAdjustmentResult result =
+                editing.ApplyPreviewAdjustment();
+        FinishPreviewObjectAdjustmentResult(result);
+        return result.changed;
+    }
+    if (!surfaceHeightAdjustmentState.active) return false;
+
+    const PreviewSurfaceHeightAdjustmentResult result =
+            BuildSurfaceHeightEditingService().ApplyPreviewAdjustment();
+    if (!result.committed) return result.changed;
+
+    if (engineContext != nullptr) {
+        std::string refreshError;
+        if (!sceneRuntime.RefreshTopologyRuntimeData(
+                    *engineContext, TopologyMap(), refreshError)) {
+            TraceLog(
+                    LOG_WARNING,
+                    "3D height adjustment runtime refresh warning: %s",
+                    refreshError.empty() ? "unknown error" : refreshError.c_str());
+        }
+        RebuildSectorCollisionWorld();
+        RefreshPreviewObjectProbeDebugData();
+    }
     return result.changed;
 }
 
-bool SectorEditor::CancelPreviewObjectAdjustment(const char* message)
+bool SectorEditor::CancelPreviewAdjustment(const char* message)
 {
-    SectorEditorRuntimeObjectEditingService editing =
-            BuildRuntimeObjectEditingService();
-    const SectorEditorPreviewObjectAdjustmentResult result =
-            editing.CancelPreviewAdjustment(message);
-    FinishPreviewObjectAdjustmentResult(result);
+    if (runtimeObjectEditingState.previewAdjustment.active) {
+        SectorEditorRuntimeObjectEditingService editing =
+                BuildRuntimeObjectEditingService();
+        const SectorEditorPreviewObjectAdjustmentResult result =
+                editing.CancelPreviewAdjustment(message);
+        FinishPreviewObjectAdjustmentResult(result);
+        return result.changed;
+    }
+    if (!surfaceHeightAdjustmentState.active) return false;
+
+    const bool changed = surfaceHeightAdjustmentState.changed;
+    std::string refreshError;
+    const bool restored = !changed
+            || RefreshPreviewSurfaceGeometry(TopologyMap(), &refreshError);
+    const PreviewSurfaceHeightAdjustmentResult result =
+            BuildSurfaceHeightEditingService().CancelPreviewAdjustment(message);
+    if (!restored && engineContext != nullptr) {
+        TraceLog(
+                LOG_WARNING,
+                "Incremental height-adjustment restore failed; rebuilding preview: %s",
+                refreshError.empty() ? "unknown error" : refreshError.c_str());
+        RebuildPreviewMeshesPreservingView(*engineContext);
+    }
     return result.changed;
 }
 
@@ -4803,6 +4908,7 @@ void SectorEditor::DrawPreviewOverlay(
             Lifecycle().topologyDocumentDirty,
             runtimeObjectEditingState.drag,
             runtimeObjectEditingState,
+            surfaceHeightAdjustmentState,
             previewState,
             sceneRuntime.RuntimeObjects(),
             sceneRuntime.Navigation(),
@@ -4870,11 +4976,11 @@ void SectorEditor::DrawPreviewOverlay(
         reflectionProbeBakeSelectedId = -1;
         reflectionProbeBakePending = true;
     }
-    if (result.requestApplyObjectAdjustment) {
-        ApplyPreviewObjectAdjustment();
+    if (result.requestApplyAdjustment) {
+        ApplyPreviewAdjustment();
     }
-    if (result.requestCancelObjectAdjustment) {
-        CancelPreviewObjectAdjustment("Object adjustment cancelled");
+    if (result.requestCancelAdjustment) {
+        CancelPreviewAdjustment("3D adjustment cancelled");
     }
     if (result.markTopologyDocumentEdited) {
         MarkTopologyDocumentEdited(result.topologyDocumentEditStatus);
@@ -7186,6 +7292,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     uiState = SectorEditorUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
+    surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
     lightEditingState = LightEditingState{};
@@ -7349,6 +7456,7 @@ bool SectorEditor::LoadLevel(
     triggerEditingUiState = TriggerEditingUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
+    surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     lightEditingState = LightEditingState{};
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     textureCatalog.RefreshDefaultTextureIds();
@@ -7638,9 +7746,9 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
 void SectorEditor::LeavePreview3D()
 {
-    if (runtimeObjectEditingState.previewAdjustment.active) {
-        CancelPreviewObjectAdjustment(
-                "Object adjustment cancelled on return to 2D");
+    if (PreviewAdjustmentActive()) {
+        CancelPreviewAdjustment(
+                "3D adjustment cancelled on return to 2D");
     }
     engine::CloseMainMenu(uiState.mainMenu);
     CancelLightProxyPlacement(nullptr);
@@ -9138,6 +9246,30 @@ bool SectorEditor::RefreshPreviewSurfaceMaterials(engine::EngineContext& context
             "Incremental 3D material refresh failed; falling back to full preview rebuild: %s",
             error.empty() ? "unknown error" : error.c_str());
     return RebuildPreviewMeshesPreservingView(context);
+}
+
+bool SectorEditor::RefreshPreviewSurfaceGeometry(
+        const SectorTopologyMap& topologyMap,
+        std::string* outError)
+{
+    if (outError != nullptr) outError->clear();
+    if (engineContext == nullptr
+            || !sceneRuntime.Renderer().IsRendererReady()) {
+        if (outError != nullptr) {
+            *outError = "3D surface geometry refresh requires an active preview";
+        }
+        return false;
+    }
+
+    std::string error;
+    const bool refreshed = sceneRuntime.Renderer().RefreshSurfaceGeometry(
+            engineContext->assets, topologyMap, error);
+    if (!refreshed && outError != nullptr) {
+        *outError = error.empty()
+                ? "3D surface geometry refresh failed"
+                : error;
+    }
+    return refreshed;
 }
 
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& context)

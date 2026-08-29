@@ -5,6 +5,21 @@
 
 namespace game {
 
+constexpr engine::UIMenuShortcut SectorEditorAdjustSelectedShortcut()
+{
+    return engine::UIMenuShortcut{KEY_A, true};
+}
+
+constexpr bool CanBeginSectorEditorPreviewAdjustment(
+        SectorEditorMode mode,
+        bool hasAdjustableSelection,
+        bool adjustmentActive)
+{
+    return mode == SectorEditorMode::Preview3D
+            && hasAdjustableSelection
+            && !adjustmentActive;
+}
+
 enum class SectorEditorMainMenuCommand : uint32_t {
     None = 0,
     NewLevel,
@@ -15,9 +30,9 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     ClearGameSession,
     CopyConfig,
     PasteConfig,
-    BeginPreviewObjectAdjustment,
-    ApplyPreviewObjectAdjustment,
-    CancelPreviewObjectAdjustment,
+    BeginPreviewAdjustment,
+    ApplyPreviewAdjustment,
+    CancelPreviewAdjustment,
     Toggle3DMode,
     OpenMaterialEditor,
     OpenSoundEditor,
@@ -46,8 +61,8 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         bool gameSessionExists,
         bool canCopyConfig,
         bool canPasteConfig,
-        bool canBeginPreviewObjectAdjustment,
-        bool previewObjectAdjustmentActive,
+        bool hasAdjustablePreviewSelection,
+        bool previewAdjustmentActive,
         bool visible,
         bool enabled);
 
