@@ -62,6 +62,16 @@ bool ReturnFromApplicationMenu(ApplicationFlowState& state)
     return true;
 }
 
+bool ShouldRebuildGameFromEditorOnResume(
+        const ApplicationFlowState& state,
+        bool editorAttachedToGame)
+{
+    return editorAttachedToGame
+            && state.gameRunning
+            && state.screen == ApplicationScreen::MainMenu
+            && state.menuReturnScreen == ApplicationScreen::Editor;
+}
+
 void MarkApplicationGameStarted(ApplicationFlowState& state)
 {
     state.gameRunning = true;

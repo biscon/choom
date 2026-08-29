@@ -24,6 +24,8 @@ in vec2 fragTexCoord;
 in vec4 fragColor;
 
 uniform sampler2D texture0;
+uniform int presentationToneMapper;
+uniform float presentationExposureEv;
 uniform float presentationDesaturation;
 uniform float presentationVignetteOpacity;
 uniform vec3 presentationVignetteColorLinear;
@@ -38,7 +40,9 @@ out vec4 finalColor;
 void main()
 {
     vec4 scene = texture(texture0, fragTexCoord);
-    vec3 mapped = ToneMapNeutralMaxChannel(scene.rgb);
+    vec3 exposed = max(scene.rgb, vec3(0.0))
+            * exp2(clamp(presentationExposureEv, -8.0, 8.0));
+    vec3 mapped = ApplyToneMapping(exposed, presentationToneMapper);
     float luminance = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
     mapped = mix(
             mapped,

@@ -129,6 +129,8 @@ std::string FormatColorPipelineDiagnostics(
         const GraphicsContextDiagnostics& graphics,
         const ColorPipelineRuntimeState& pipeline)
 {
+    const ToneMappingSettings toneMapping = NormalizeToneMappingSettings(
+            pipeline.toneMapping);
     std::ostringstream output;
     output << "COLOR PIPELINE slice-3 (active=linear-HDR, no legacy mode)\n"
            << "  platform=" << graphics.platform
@@ -153,7 +155,10 @@ std::string FormatColorPipelineDiagnostics(
            << "  resolve=2880x1620 linear RGBA16F -> 1920x1080 linear RGBA16F\n"
            << "  stages=bloom/fog/haze/dust bounded-linear RGBA8 accumulators -> linear HDR scene composites\n"
            << "  baked=CPU F32 linear -> disk RGBA16F-LE RGB+AO / probe F32-LE -> GPU linear RGBA16F\n"
-           << "  tone/output=neutral max-channel curve exposure=1.0 -> exact sRGB RGBA8 -> FXAA/final scale\n"
+           << "  tone/output="
+           << ToneMappingOperatorDisplayName(toneMapping.toneMapper)
+           << " exposure=" << toneMapping.exposureCompensationEv
+           << " EV -> exact sRGB RGBA8 -> FXAA/final scale\n"
            << "  models=linear HDR output; glTF color textures manually decoded; no local tone map or encoding";
     return output.str();
 }

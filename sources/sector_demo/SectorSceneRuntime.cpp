@@ -3,6 +3,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorAudioOcclusion.h"
 #include "engine/systems/AnimatedModelSystem.h"
+#include "game/npc/NpcBoneImpactSystem.h"
 
 #include <raylib.h>
 
@@ -199,7 +200,8 @@ void SectorSceneRuntime::Update(
         const Vector3* playerPosition,
         int playerSectorId,
         const SectorDoorPlayerObstacle* playerObstacle,
-        const NpcAiGameplayContext* npcGameplay)
+        const NpcAiGameplayContext* npcGameplay,
+        int externalDoorHoldId)
 {
     UpdateLevelAudio(context, map, dt, playerSectorId);
     PrepareNpcDoorTraversalAndHoldsSystem(
@@ -208,7 +210,8 @@ void SectorSceneRuntime::Update(
             npcNavigation,
             runtimeObjects.dynamicDoorColliders,
             dt,
-            npcGameplay != nullptr && npcGameplay->frozen);
+            npcGameplay != nullptr && npcGameplay->frozen,
+            externalDoorHoldId);
     CollectNpcDoorObstacles(
             context.world,
             npcNavigation,
@@ -310,6 +313,21 @@ void SectorSceneRuntime::Update(
                 npcGameplay != nullptr && npcGameplay->frozen);
     }
     engine::AnimatedModelSystem(context.world, context.assets, dt);
+    if (runtimeObjects.objectSectorLookupWorldValid) {
+        const Vector3* headLookTarget = npcGameplay != nullptr
+                        && !npcGameplay->playerInvisible
+                ? &npcGameplay->playerEyePosition
+                : nullptr;
+        UpdateNpcHeadLookSystem(
+                context.world,
+                context.assets,
+                runtimeObjects.objectSectorLookupWorld,
+                runtimeObjects.dynamicDoorColliders,
+                runtimeObjects.staticModelColliders,
+                headLookTarget,
+                dt);
+    }
+    UpdateNpcBoneImpactSystem(context.world, context.assets, dt);
     if (runtimeObjects.objectSectorLookupWorldValid) {
         UpdateNpcFootstepEventsSystem(
                 context.world,

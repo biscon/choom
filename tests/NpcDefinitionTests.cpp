@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 
 namespace {
@@ -256,6 +257,9 @@ void TestRoundTripDefaultsAndSharedClips()
                   && !Json::parse(json).contains("corpseDespawnDelaySeconds")
                   && !Json::parse(json).contains("corpseFadeDurationSeconds")
                   && !Json::parse(json).contains("playerDetectedSound")
+                  && !Json::parse(json).contains("headLook")
+                  && !Json::parse(json).contains("bodyPartDamage")
+                  && !Json::parse(json).contains("boneImpact")
                   && !Json::parse(json).contains("ambientVocalizations")
                   && !Json::parse(json)["actions"]["attack"]
                           .contains("cameraImpact")
@@ -316,6 +320,151 @@ void TestRoundTripDefaultsAndSharedClips()
                   && game::GetNpcAction(parsed, game::NpcAction::Idle).animation.empty()
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation.empty(),
           "unassigned actions remain valid and default safely");
+}
+
+void TestHeadLookDefinitionRoundTripAndValidation()
+{
+    game::NpcDefinition definition = MakeDefinition("friendly_look");
+    definition.hostile = false;
+    definition.headLook.enabled = true;
+    definition.headLook.boneName = "Head";
+    definition.headLook.rangeWorld = 7.5f;
+    definition.headLook.maxYawDegrees = 55.0f;
+    definition.headLook.maxPitchDegrees = 25.0f;
+    std::string json;
+    std::string error;
+    game::NpcDefinition parsed;
+    Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                  && Json::parse(json)["headLook"]["enabled"] == true
+                  && Json::parse(json)["headLook"]["boneName"] == "Head"
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.headLook.enabled
+                  && parsed.headLook.boneName == "Head"
+                  && Near(parsed.headLook.rangeWorld, 7.5f)
+                  && Near(parsed.headLook.maxYawDegrees, 55.0f)
+                  && Near(parsed.headLook.maxPitchDegrees, 25.0f),
+          "friendly NPC head-look settings round-trip through optional JSON");
+
+    definition.headLook.boneName.clear();
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "enabled head look requires a configured bone");
+    definition.headLook.boneName = "Head";
+    definition.hostile = true;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "hostile NPC definitions reject enabled friendly head look");
+    definition.hostile = false;
+    definition.headLook.maxYawDegrees = 90.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "head-look yaw beyond the anatomical editor limit is rejected");
+    definition.headLook.maxYawDegrees = 45.0f;
+    definition.headLook.maxPitchDegrees = 60.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "head-look pitch beyond the anatomical editor limit is rejected");
+
+    Json unknownHeadLookField = Json::parse(json);
+    unknownHeadLookField["headLook"]["rollDegrees"] = 5.0f;
+    Check(!game::ParseNpcDefinitionJson(
+                  unknownHeadLookField.dump(), parsed, error),
+          "unknown NPC head-look JSON fields are rejected");
+}
+
+void TestBodyPartDamageRoundTripAndValidation()
+{
+    game::NpcDefinition definition = MakeDefinition("body_parts");
+    definition.bodyPartDamage = {
+            {"mixamorig:Head", 2.0f},
+            {"mixamorig:LeftArm", 0.5f},
+            {"mixamorig:RightLeg", 0.0f}};
+    std::string json;
+    std::string error;
+    game::NpcDefinition parsed;
+    Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                  && Json::parse(json)["bodyPartDamage"].size() == 3
+                  && Json::parse(json)["bodyPartDamage"][0]["boneName"]
+                          == "mixamorig:Head"
+                  && Near(Json::parse(json)["bodyPartDamage"][1]
+                                  ["damageMultiplier"].get<float>(),
+                          0.5f)
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.bodyPartDamage.size() == 3
+                  && parsed.bodyPartDamage[0].boneName == "mixamorig:Head"
+                  && Near(parsed.bodyPartDamage[0].damageMultiplier, 2.0f)
+                  && Near(parsed.bodyPartDamage[2].damageMultiplier, 0.0f),
+          "generic NPC body-part damage rows round-trip through optional JSON");
+
+    definition.bodyPartDamage[0].boneName.clear();
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "body-part damage rows require a bone");
+    definition.bodyPartDamage[0].boneName = "mixamorig:LeftArm";
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "body-part damage rows reject duplicate bones");
+    definition.bodyPartDamage[0].boneName = "mixamorig:Head";
+    definition.bodyPartDamage[0].damageMultiplier = -0.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "body-part damage rows reject negative multipliers");
+    definition.bodyPartDamage[0].damageMultiplier =
+            std::numeric_limits<float>::infinity();
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "body-part damage rows reject non-finite multipliers");
+    definition.bodyPartDamage.assign(
+            game::kMaximumNpcBodyPartDamageRows + 1,
+            game::NpcBodyPartDamageDefinition{"Bone", 1.0f});
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "body-part damage row count is bounded");
+
+    Json unknownField = Json::parse(json);
+    unknownField["bodyPartDamage"][0]["radius"] = 1.0f;
+    Check(!game::ParseNpcDefinitionJson(
+                  unknownField.dump(), parsed, error),
+          "unknown NPC body-part damage fields are rejected");
+}
+
+void TestBoneImpactRoundTripAndValidation()
+{
+    game::NpcDefinition definition = MakeDefinition("bone_impact");
+    definition.boneImpact.enabled = true;
+    definition.boneImpact.impulseDegreesPerSecond = 425.0f;
+    definition.boneImpact.springFrequencyHz = 8.5f;
+    definition.boneImpact.springDampingRatio = 0.9f;
+    definition.boneImpact.maxAngleDegrees = 24.0f;
+    std::string json;
+    std::string error;
+    game::NpcDefinition parsed;
+    Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                  && Json::parse(json)["boneImpact"]["enabled"] == true
+                  && Near(Json::parse(json)["boneImpact"]
+                                  ["impulseDegreesPerSecond"].get<float>(),
+                          425.0f)
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.boneImpact.enabled
+                  && Near(parsed.boneImpact.impulseDegreesPerSecond, 425.0f)
+                  && Near(parsed.boneImpact.springFrequencyHz, 8.5f)
+                  && Near(parsed.boneImpact.springDampingRatio, 0.9f)
+                  && Near(parsed.boneImpact.maxAngleDegrees, 24.0f),
+          "NPC procedural bone-impact tuning round-trips through optional JSON");
+
+    definition.boneImpact.impulseDegreesPerSecond = -0.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "bone-impact reaction rejects negative impulse strength");
+    definition.boneImpact.impulseDegreesPerSecond = 425.0f;
+    definition.boneImpact.springFrequencyHz = 0.49f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "bone-impact reaction rejects unstable spring frequencies");
+    definition.boneImpact.springFrequencyHz = 8.5f;
+    definition.boneImpact.springDampingRatio =
+            std::numeric_limits<float>::infinity();
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "bone-impact reaction rejects non-finite damping");
+    definition.boneImpact.springDampingRatio = 0.9f;
+    definition.boneImpact.maxAngleDegrees = 90.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "bone-impact reaction rejects excessive angular displacement");
+
+    Json unknownField = Json::parse(json);
+    unknownField["boneImpact"]["affectedBones"] = "all";
+    Check(!game::ParseNpcDefinitionJson(
+                  unknownField.dump(), parsed, error),
+          "unknown NPC bone-impact JSON fields are rejected");
 }
 
 void TestValidation()
@@ -595,6 +744,59 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
     service.SetSelectedAnimationBlendSeconds(0.45f);
     Check(Near(service.SelectedDraft()->definition.animationBlendSeconds, 0.45f),
           "NPC editor service updates animation blending through its draft API");
+    service.SetSelectedHostile(false);
+    game::NpcHeadLookDefinition headLook;
+    headLook.enabled = true;
+    headLook.boneName = "Head";
+    headLook.rangeWorld = 6.0f;
+    service.SetSelectedHeadLook(headLook);
+    Check(service.SelectedDraft()->definition.headLook.enabled
+                  && service.SelectedDraft()->definition.headLook.boneName
+                          == "Head",
+          "NPC editor service updates friendly head-look settings");
+    service.SetSelectedHostile(true);
+    Check(!service.SelectedDraft()->definition.headLook.enabled
+                  && service.SelectedDraft()->definition.headLook.boneName
+                          == "Head",
+          "making an NPC hostile disables head look without erasing its tuning");
+    Check(service.AddSelectedBodyPartDamage()
+                  && service.SetSelectedBodyPartDamageBone(
+                          0, "mixamorig:Head")
+                  && service.SetSelectedBodyPartDamageMultiplier(0, 2.0f)
+                  && service.AddSelectedBodyPartDamage()
+                  && service.SetSelectedBodyPartDamageBone(
+                          1, "mixamorig:LeftArm")
+                  && service.SetSelectedBodyPartDamageMultiplier(1, 0.5f)
+                  && service.SelectedDraft()->definition.bodyPartDamage.size()
+                          == 2
+                  && Near(service.SelectedDraft()->definition
+                                  .bodyPartDamage[1].damageMultiplier,
+                          0.5f)
+                  && service.RemoveSelectedBodyPartDamage(0)
+                  && service.SelectedDraft()->definition.bodyPartDamage.size()
+                          == 1
+                  && service.SelectedDraft()->definition
+                                  .bodyPartDamage[0].boneName
+                          == "mixamorig:LeftArm",
+          "NPC editor service adds, edits, and removes body-part damage rows");
+    game::NpcBoneImpactDefinition boneImpact;
+    boneImpact.enabled = true;
+    boneImpact.impulseDegreesPerSecond = 480.0f;
+    boneImpact.springFrequencyHz = 9.0f;
+    boneImpact.springDampingRatio = 0.85f;
+    boneImpact.maxAngleDegrees = 16.0f;
+    service.SetSelectedBoneImpact(boneImpact);
+    Check(service.SelectedDraft()->definition.boneImpact.enabled
+                  && Near(service.SelectedDraft()->definition.boneImpact
+                                  .impulseDegreesPerSecond,
+                          480.0f)
+                  && Near(service.SelectedDraft()->definition.boneImpact
+                                  .springFrequencyHz,
+                          9.0f)
+                  && Near(service.SelectedDraft()->definition.boneImpact
+                                  .maxAngleDegrees,
+                          16.0f),
+          "NPC editor service updates procedural bone-impact tuning");
     service.SetSelectedCanOpenDoors(false);
     Check(!service.SelectedDraft()->definition.canOpenDoors,
           "NPC editor service updates door-opening capability through its draft API");
@@ -741,6 +943,9 @@ void TestCatalogErrorsBlockEditorSave()
 int main()
 {
     TestRoundTripDefaultsAndSharedClips();
+    TestHeadLookDefinitionRoundTripAndValidation();
+    TestBodyPartDamageRoundTripAndValidation();
+    TestBoneImpactRoundTripAndValidation();
     TestValidation();
     TestSeekAndDestroyPluginBoundary();
     TestDiscoveryErrorsAreRetained();

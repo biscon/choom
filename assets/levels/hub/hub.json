@@ -583,8 +583,6 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie02",
-        "patrolEditorId": 1,
-        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -2808,8 +2806,7 @@
       "npc": {
         "definitionId": "TestCharacter",
         "instanceId": "test_npc",
-        "patrolEditorId": 2,
-        "randomPatrolStart": true
+        "patrolEditorId": 2
       },
       "position": [
         -81.0,
@@ -6523,6 +6520,7 @@
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.0,
     "endDistanceWorld": 15.0,
+    "falloffExponent": 0.5,
     "brightness": 0.75
   },
   "audio": {
@@ -6576,7 +6574,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "b7cff0fdbcf94036",
+    "sourceHash": "d1278f788a10d339",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6596,7 +6594,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "b7cff0fdbcf94036",
+      "sourceHash": "d1278f788a10d339",
       "count": 2671,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -6622,7 +6620,7 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "b7cff0fdbcf94036",
+      "sourceHash": "d1278f788a10d339",
       "modelCount": 51,
       "objectCount": 131,
       "format": "staticModelUvRemapF32LE"
@@ -23221,7 +23219,7 @@
           "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.014999999664723873,
+        "ambientIntensity": 0.029999999329447746,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -23297,7 +23295,7 @@
           "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.014999999664723873,
+        "ambientIntensity": 0.029999999329447746,
         "defaultWall": {
           "materialId": "plastered_wall_02",
           "uv": {
@@ -23374,7 +23372,7 @@
           "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.014999999664723873,
+        "ambientIntensity": 0.029999999329447746,
         "defaultWall": {
           "materialId": "plastered_wall_02",
           "uv": {
@@ -23921,7 +23919,7 @@
             "z": 512
           }
         ],
-        "repeat": true,
+        "enabled": false,
         "script": "trigger_1"
       },
       {

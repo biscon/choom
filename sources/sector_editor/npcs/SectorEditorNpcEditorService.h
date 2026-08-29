@@ -39,6 +39,12 @@ public:
             float visionAngleDegrees,
             float hearingRangeWorld,
             int investigationDurationMilliseconds);
+    void SetSelectedHeadLook(const NpcHeadLookDefinition& headLook);
+    void SetSelectedBoneImpact(const NpcBoneImpactDefinition& boneImpact);
+    bool AddSelectedBodyPartDamage();
+    bool SetSelectedBodyPartDamageBone(size_t index, const std::string& boneName);
+    bool SetSelectedBodyPartDamageMultiplier(size_t index, float multiplier);
+    bool RemoveSelectedBodyPartDamage(size_t index);
     void SetSelectedCanOpenDoors(bool canOpenDoors);
     void SetSelectedBaseHealth(int health);
     void SetSelectedDespawnOnDeath(bool despawn);
@@ -82,6 +88,9 @@ public:
     bool SelectedAnimationExists(
             const engine::AssetManager& assets,
             std::string_view animation) const;
+    bool SelectedBoneExists(
+            const engine::AssetManager& assets,
+            std::string_view boneName) const;
 
     SectorEditorNpcEditorState& State() { return state_; }
     const SectorEditorNpcEditorState& State() const { return state_; }

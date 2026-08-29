@@ -642,3 +642,19 @@ run and are not inferred from compile/test results.
 - This reuses existing authored static-light data. It adds no static shadow map,
   runtime occlusion ray, topology/schema field, bake artifact, bake version, or
   source-hash input.
+
+### Configurable tone-mapping follow-up
+
+- The fixed custom max-channel curve described in the Slice 2 completion
+  record has been superseded by selectable Khronos PBR Neutral and ACES Filmic
+  fitted operators in the same global presentation pass. Khronos PBR Neutral
+  is the backward-compatible settings default for files without the optional
+  `toneMapping` object.
+- Project-authored exposure compensation is applied in linear EV before the
+  selected operator. Low-health presentation effects and the exact sRGB
+  transfer retain their existing post-tone-map order.
+- `Settings -> Color` is the only UI for these project settings. The
+  player-facing graphics menu does not expose or reset them.
+- The setting is post-bake and application-wide. It changes no topology,
+  lightmap source hash, cached 2D editor data, collision, sector lookup,
+  physics, or camera behavior.

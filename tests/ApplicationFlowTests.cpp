@@ -71,6 +71,20 @@ void FlowPreservesReturnTargets()
     assert(state.menuReturnScreen == game::ApplicationScreen::MainMenu);
 }
 
+void ResumeOnlyRebuildsWhenReturningFromEditor()
+{
+    game::ApplicationFlowState state;
+    game::MarkApplicationGameStarted(state);
+
+    game::OpenApplicationMenu(state, game::ApplicationScreen::Game);
+    assert(!game::ShouldRebuildGameFromEditorOnResume(state, true));
+
+    game::ShowApplicationEditor(state);
+    game::OpenApplicationMenu(state, game::ApplicationScreen::Editor);
+    assert(game::ShouldRebuildGameFromEditorOnResume(state, true));
+    assert(!game::ShouldRebuildGameFromEditorOnResume(state, false));
+}
+
 void DebugConsoleAvailabilityFollowsLiveGameOnly()
 {
     game::ApplicationFlowState state;
@@ -158,6 +172,7 @@ int main()
 {
     MenuItemsFollowSessionState();
     FlowPreservesReturnTargets();
+    ResumeOnlyRebuildsWhenReturningFromEditor();
     DebugConsoleAvailabilityFollowsLiveGameOnly();
     ClearedGameStateKeepsEditorOpen();
     LevelLoadingProgressAndFadeAreDeterministic();

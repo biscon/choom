@@ -7,6 +7,7 @@
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcCombatSystem.h"
+#include "game/npc/NpcHeadLookSystem.h"
 #include "game/npc/ai/NpcAiSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorAudioOcclusion.h"
@@ -60,7 +61,8 @@ public:
             const Vector3* playerPosition,
             int playerSectorId,
             const SectorDoorPlayerObstacle* playerObstacle = nullptr,
-            const NpcAiGameplayContext* npcGameplay = nullptr);
+            const NpcAiGameplayContext* npcGameplay = nullptr,
+            int externalDoorHoldId = 0);
     void UpdateLoadPreparation(
             engine::EngineContext& context,
             const SectorTopologyMap& map);

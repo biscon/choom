@@ -1,11 +1,14 @@
 #include "engine/EngineContext.h"
+#include "engine/scripting/ScriptConsole.h"
 #include "engine/scripting/ScriptSystem.h"
 #include "game/Health.h"
 #include "game/SectorScriptBindings.h"
+#include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcCombatSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "sector_demo/SectorDoorRuntime.h"
+#include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorStaticModelCollision.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -184,6 +187,9 @@ struct NpcScriptFixture {
     game::SectorTopologyMap map = MakeNpcNavigationMap();
     game::SectorNavigationWorld navigation;
     game::NpcNavigationRuntime npcNavigation;
+    game::SectorCutsceneRuntime cutscene;
+    game::SectorFpsControllerState playerState;
+    game::SectorFpsControllerConfig playerConfig;
     game::Health playerHealth = game::MakeHealth(100);
     game::SectorScriptHost host;
     ScriptFiles files;
@@ -203,6 +209,10 @@ struct NpcScriptFixture {
         npc = SpawnScriptNpc(context.world);
         game::InitializeNpcNavigationRuntime(
                 context.world, navigation, npcNavigation);
+        game::InitializeSectorCutsceneRuntime(cutscene);
+        playerState.feetPosition = {2.0f, 0.0f, 8.0f};
+        playerState.currentSectorId = 10;
+        playerState.grounded = true;
         game::InitializeSectorScriptHost(
                 host,
                 objects,
@@ -211,7 +221,10 @@ struct NpcScriptFixture {
                 &navigation,
                 &npcNavigation,
                 {},
-                &playerHealth);
+                &playerHealth,
+                &cutscene,
+                &playerState,
+                &playerConfig);
     }
 
     ~NpcScriptFixture()
@@ -220,6 +233,7 @@ struct NpcScriptFixture {
             engine::ScriptSystemShutdownForMap(context, runtime);
         }
         game::ResetSectorScriptHost(host);
+        game::ResetSectorCutsceneRuntime(cutscene, &navigation);
         game::ShutdownNpcNavigationRuntime(
                 context.world, navigation, npcNavigation);
         navigation.Shutdown();
@@ -243,7 +257,22 @@ struct NpcScriptFixture {
                 map,
                 dt);
         game::UpdateSectorScriptOperations(context, host);
+        game::UpdateSectorCutsceneTimelines(cutscene, runtime, dt);
+        const Vector2 previous{playerState.feetPosition.x, playerState.feetPosition.z};
+        const Vector2 delta = game::BuildSectorCutscenePlayerMoveDelta(
+                cutscene, playerState, dt, nullptr);
+        playerState.feetPosition.x += delta.x;
+        playerState.feetPosition.z += delta.y;
+        game::FinishSectorCutscenePlayerMoveFrame(
+                cutscene,
+                navigation,
+                objects.objectSectorLookupWorld,
+                playerState,
+                previous,
+                runtime,
+                dt);
         engine::ScriptSystemUpdate(context, runtime, dt);
+        game::UpdateSectorScriptCutsceneControlOwnership(context, host);
     }
 };
 
@@ -307,7 +336,7 @@ void BlockingNpcMoveCompletesAfterPhysicalArrival()
     NpcScriptFixture fixture;
     fixture.files.Write(R"(
 function init()
-    local ok, reason = moveNpc("script_guard", 14.0, 8.0, "run")
+    local ok, reason = moveNpc("script_guard", 14.0, 8.0, "run", 8.0)
     setPersistentBool("move_ok", ok)
     setPersistentString("move_reason", reason or "")
 end
@@ -332,6 +361,8 @@ end
             fixture.npcNavigation, "script_guard");
     assert(status.phase == game::NpcMovePhase::Arrived);
     assert(status.authority == game::NpcMoveAuthority::Script);
+    assert(std::fabs(fixture.npcNavigation.records.front()
+            .movementSpeedOverride - 8.0f) < 0.001f);
     assert(status.requestId != 0);
     assert(std::fabs(
             fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc)
@@ -373,6 +404,40 @@ end
     assert(patrol != tasks.end());
     assert(patrol->state == engine::ScriptTaskState::Waiting);
     assert(patrol->operationLabel == "moveNpc:script_guard");
+}
+
+void AsyncPlayerMoveUsesNavigationMarkerAndSpeedOverride()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+function init()
+    local movement, reason = startMovePlayer("run_target", "walk", 1.25)
+    assert(movement ~= nil, reason)
+    setPersistentString("player_move_pending", operationStatus(movement))
+    local ok, failure = await(movement)
+    setPersistentBool("player_move_ok", ok)
+    setPersistentString("player_move_reason", failure or "")
+end
+)");
+    assert(Create(
+            fixture.context,
+            fixture.runtime,
+            fixture.persistent,
+            fixture.host,
+            fixture.files));
+    assert(!fixture.runtime.initFinished);
+    assert(fixture.cutscene.playerMove.active);
+    assert(std::fabs(fixture.cutscene.playerMove.movementSpeed - 1.25f)
+            < 0.001f);
+    for (int frame = 0; frame < 1000 && !fixture.runtime.initFinished; ++frame) {
+        fixture.Update(0.025f);
+    }
+    assert(fixture.runtime.initFinished);
+    assert(fixture.persistent.strings.at("player_move_pending") == "pending");
+    assert(fixture.persistent.bools.at("player_move_ok"));
+    assert(fixture.persistent.strings.at("player_move_reason").empty());
+    assert(std::fabs(fixture.playerState.feetPosition.x - 14.0f) < 0.11f);
+    assert(std::fabs(fixture.playerState.feetPosition.z - 8.0f) < 0.11f);
 }
 
 void KillingMovingNpcStopsRunawayPatrolWithoutFreezing()
@@ -1147,6 +1212,328 @@ end
     game::ResetSectorScriptHost(host);
 }
 
+void CutsceneBindingsControlFadeAndCaptionTimelines()
+{
+    struct ControlCapture {
+        bool enabled = true;
+        int calls = 0;
+    } capture;
+    game::SectorScriptControlApi controlApi;
+    controlApi.userData = &capture;
+    controlApi.setControlsEnabled = [](
+            void* userData,
+            engine::EngineContext&,
+            bool enabled,
+            std::string&) {
+        auto& value = *static_cast<ControlCapture*>(userData);
+        value.enabled = enabled;
+        ++value.calls;
+        return true;
+    };
+
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    game::SectorCutsceneRuntime cutscene;
+    game::SectorFpsControllerState player;
+    game::SectorFpsControllerConfig config;
+    ScriptFiles files;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    game::InitializeSectorScriptHost(
+            host,
+            objects,
+            map,
+            runtime,
+            nullptr,
+            nullptr,
+            {},
+            nullptr,
+            &cutscene,
+            &player,
+            &config,
+            controlApi);
+    files.Write(R"(
+function init()
+    assert(TOP == 1 and CENTER == 2 and BOTTOM == 3)
+    assert(enableControls(false))
+    fadeOut(100)
+    setPersistentBool("faded_out", true)
+    text("A centered cutscene card", CENTER, 100)
+    setPersistentBool("text_done", true)
+    say("Follow me this way.", 100)
+    setPersistentBool("say_done", true)
+    fadeIn(100)
+    assert(enableControls(true))
+    setPersistentBool("sequence_done", true)
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(!runtime.initFinished);
+    assert(!capture.enabled && capture.calls == 1);
+    assert(!cutscene.controlsEnabled);
+
+    bool sawPartialTypewriterText = false;
+    for (int frame = 0; frame < 300 && !runtime.initFinished; ++frame) {
+        game::UpdateSectorCutsceneTimelines(cutscene, runtime, 0.025f);
+        if (cutscene.caption.active
+                && cutscene.caption.kind == game::SectorCutsceneCaptionKind::Say
+                && cutscene.caption.visibleByteCount > 0
+                && cutscene.caption.visibleByteCount
+                        < cutscene.caption.text.size()) {
+            sawPartialTypewriterText = true;
+        }
+        engine::ScriptSystemUpdate(context, runtime, 0.025f);
+    }
+    assert(runtime.initFinished);
+    assert(persistent.bools.at("faded_out"));
+    assert(persistent.bools.at("text_done"));
+    assert(persistent.bools.at("say_done"));
+    assert(persistent.bools.at("sequence_done"));
+    assert(sawPartialTypewriterText);
+    assert(capture.enabled && capture.calls == 2);
+    assert(cutscene.controlsEnabled);
+    assert(std::fabs(cutscene.fade.opacity) < 0.001f);
+
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+    game::ResetSectorCutsceneRuntime(cutscene);
+}
+
+void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    game::SectorCutsceneRuntime cutscene;
+    game::SectorFpsControllerState player;
+    game::SectorFpsControllerConfig config;
+    ScriptFiles files;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    game::InitializeSectorScriptHost(
+            host,
+            objects,
+            map,
+            runtime,
+            nullptr,
+            nullptr,
+            {},
+            nullptr,
+            &cutscene,
+            &player,
+            &config);
+    files.Write("function init() end\n");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(runtime.initFinished);
+
+    const engine::ScriptConsoleResult blocking =
+            engine::ScriptSystemExecuteConsole(
+                    runtime, "say('must not start', 100)");
+    assert(!blocking.success);
+    assert(!cutscene.caption.active);
+    const engine::ScriptConsoleResult blockingFade =
+            engine::ScriptSystemExecuteConsole(runtime, "fadeOut(100)");
+    assert(!blockingFade.success);
+    assert(!cutscene.fade.active);
+
+    const engine::ScriptConsoleResult say =
+            engine::ScriptSystemExecuteConsole(
+                    runtime, "startSay('console bark', 100)");
+    assert(say.success);
+    assert(cutscene.caption.active);
+    assert(cutscene.caption.kind == game::SectorCutsceneCaptionKind::Say);
+    const std::vector<engine::ScriptOperationSnapshot> sayOperations =
+            engine::ScriptSystemOperationSnapshot(runtime);
+    const auto sayOperation = std::find_if(
+            sayOperations.begin(),
+            sayOperations.end(),
+            [](const engine::ScriptOperationSnapshot& operation) {
+                return operation.debugLabel == "say"
+                        && operation.state
+                                == engine::ScriptOperationState::Pending;
+            });
+    assert(sayOperation != sayOperations.end());
+
+    const engine::ScriptConsoleResult text =
+            engine::ScriptSystemExecuteConsole(
+                    runtime, "startText('console card', CENTER, 100)");
+    assert(text.success);
+    assert(cutscene.caption.active);
+    assert(cutscene.caption.kind == game::SectorCutsceneCaptionKind::Text);
+    assert(cutscene.caption.position
+            == game::SectorCutsceneTextPosition::Center);
+    const std::vector<engine::ScriptOperationSnapshot> textOperations =
+            engine::ScriptSystemOperationSnapshot(runtime);
+    const auto replacedSay = std::find_if(
+            textOperations.begin(),
+            textOperations.end(),
+            [&sayOperation](const engine::ScriptOperationSnapshot& operation) {
+                return operation.handle == sayOperation->handle;
+            });
+    const auto textOperation = std::find_if(
+            textOperations.begin(),
+            textOperations.end(),
+            [](const engine::ScriptOperationSnapshot& operation) {
+                return operation.debugLabel == "text"
+                        && operation.state
+                                == engine::ScriptOperationState::Pending;
+            });
+    assert(replacedSay != textOperations.end());
+    assert(replacedSay->state == engine::ScriptOperationState::Cancelled);
+    assert(textOperation != textOperations.end());
+    assert(engine::ScriptSystemCancelOperation(
+            context,
+            runtime,
+            textOperation->handle,
+            "caption console cancellation test"));
+    assert(!cutscene.caption.active);
+
+    const engine::ScriptConsoleResult finalText =
+            engine::ScriptSystemExecuteConsole(
+                    runtime, "startText('final card', CENTER, 100)");
+    assert(finalText.success);
+    for (int frame = 0; frame < 100 && cutscene.caption.active; ++frame) {
+        game::UpdateSectorCutsceneTimelines(cutscene, runtime, 0.025f);
+        engine::ScriptSystemUpdate(context, runtime, 0.025f);
+    }
+    assert(!cutscene.caption.active);
+
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+    game::ResetSectorCutsceneRuntime(cutscene);
+}
+
+void CutsceneControlOwnershipRecoversAndRejectsCompetingTasks()
+{
+    struct ControlCapture {
+        bool enabled = true;
+        int disabledCalls = 0;
+        int enabledCalls = 0;
+    } capture;
+    game::SectorScriptControlApi controlApi;
+    controlApi.userData = &capture;
+    controlApi.setControlsEnabled = [](
+            void* userData,
+            engine::EngineContext&,
+            bool enabled,
+            std::string&) {
+        auto& value = *static_cast<ControlCapture*>(userData);
+        value.enabled = enabled;
+        if (enabled) ++value.enabledCalls;
+        else ++value.disabledCalls;
+        return true;
+    };
+
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    game::SectorCutsceneRuntime cutscene;
+    game::SectorFpsControllerState player;
+    game::SectorFpsControllerConfig config;
+    ScriptFiles files;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    game::InitializeSectorScriptHost(
+            host,
+            objects,
+            map,
+            runtime,
+            nullptr,
+            nullptr,
+            {},
+            nullptr,
+            &cutscene,
+            &player,
+            &config,
+            controlApi);
+    files.Write(R"(
+function init() end
+
+function controls_complete()
+    assert(enableControls(false))
+end
+
+function controls_fail()
+    assert(enableControls(false))
+    error("intentional control owner failure")
+end
+
+function controls_wait()
+    assert(enableControls(false))
+    delay(10000)
+end
+
+function controls_compete()
+    local ok, reason = enableControls(false)
+    setPersistentBool("competing_controls_rejected", not ok)
+    setPersistentString("competing_controls_reason", reason or "")
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+
+    std::string queueError;
+    assert(engine::ScriptSystemQueueBackground(
+            runtime, "controls_complete", queueError));
+    engine::ScriptSystemUpdate(context, runtime, 0.025f);
+    game::UpdateSectorScriptCutsceneControlOwnership(context, host);
+    assert(capture.enabled);
+    assert(cutscene.controlsEnabled);
+    assert(capture.disabledCalls == 1 && capture.enabledCalls == 1);
+
+    assert(engine::ScriptSystemQueueBackground(
+            runtime, "controls_fail", queueError));
+    engine::ScriptSystemUpdate(context, runtime, 0.025f);
+    game::UpdateSectorScriptCutsceneControlOwnership(context, host);
+    assert(capture.enabled);
+    assert(cutscene.controlsEnabled);
+    assert(capture.disabledCalls == 2 && capture.enabledCalls == 2);
+
+    assert(engine::ScriptSystemQueueBackground(
+            runtime, "controls_wait", queueError));
+    engine::ScriptSystemUpdate(context, runtime, 0.025f);
+    game::UpdateSectorScriptCutsceneControlOwnership(context, host);
+    assert(!capture.enabled);
+    assert(!cutscene.controlsEnabled);
+    assert(engine::IsValid(cutscene.controlsOwnerTask));
+
+    assert(engine::ScriptSystemQueueBackground(
+            runtime, "controls_compete", queueError));
+    engine::ScriptSystemUpdate(context, runtime, 0.025f);
+    game::UpdateSectorScriptCutsceneControlOwnership(context, host);
+    assert(!capture.enabled);
+    assert(persistent.bools.at("competing_controls_rejected"));
+    assert(!persistent.strings.at("competing_controls_reason").empty());
+
+    std::string stopError;
+    assert(engine::ScriptSystemStopFunction(
+            context, runtime, "controls_wait", stopError));
+    engine::ScriptSystemUpdate(context, runtime, 0.025f);
+    game::UpdateSectorScriptCutsceneControlOwnership(context, host);
+    assert(capture.enabled);
+    assert(cutscene.controlsEnabled);
+    assert(!engine::IsValid(cutscene.controlsOwnerTask));
+    assert(capture.enabledCalls == 3);
+
+    const engine::ScriptConsoleResult consoleDisable =
+            engine::ScriptSystemExecuteConsole(
+                    runtime, "enableControls(false)");
+    assert(consoleDisable.success);
+    assert(capture.enabled);
+    assert(cutscene.controlsEnabled);
+    assert(capture.disabledCalls == 3);
+
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+    game::ResetSectorCutsceneRuntime(cutscene);
+}
+
 } // namespace
 
 void RunSectorScriptBindingTests()
@@ -1158,6 +1545,7 @@ void RunSectorScriptBindingTests()
     SettingNpcHealthToZeroUsesNpcDeathState();
     BlockingNpcMoveCompletesAfterPhysicalArrival();
     BackgroundNpcPatrolYieldsWhenNavigationIsPrepared();
+    AsyncPlayerMoveUsesNavigationMarkerAndSpeedOverride();
     KillingMovingNpcStopsRunawayPatrolWithoutFreezing();
     BlockingNpcMoveReplansAfterDynamicObstacleChange();
     NpcMoveLevelMarkerOverloadsResolvePositionOnly();
@@ -1168,5 +1556,8 @@ void RunSectorScriptBindingTests()
     TravelPreservesFirstRequest();
     TriggerContainmentUsesExplicitCoordinateSpaces();
     MapAudioBindingsForwardOptionalPlaybackSettings();
+    CutsceneBindingsControlFadeAndCaptionTimelines();
+    AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();
+    CutsceneControlOwnershipRecoversAndRejectsCompetingTasks();
     TriggerDispatchDelayRepeatAndEnableControls();
 }

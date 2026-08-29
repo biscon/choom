@@ -22,6 +22,9 @@ struct SectorRuntimeObjectState;
 class SectorNavigationWorld;
 struct Health;
 struct NpcNavigationRuntime;
+struct SectorCutsceneRuntime;
+struct SectorFpsControllerConfig;
+struct SectorFpsControllerState;
 struct SectorTopologyMap;
 
 struct SectorScriptDoorMove {
@@ -78,13 +81,23 @@ struct SectorScriptAudioApi {
             std::string&) = nullptr;
 };
 
+struct SectorScriptControlApi {
+    void* userData = nullptr;
+    bool (*setControlsEnabled)(void*, engine::EngineContext&, bool,
+            std::string&) = nullptr;
+};
+
 struct SectorScriptHost {
     SectorRuntimeObjectState* runtimeObjects = nullptr;
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;
+    SectorCutsceneRuntime* cutscene = nullptr;
+    SectorFpsControllerState* playerState = nullptr;
+    const SectorFpsControllerConfig* playerConfig = nullptr;
     Health* playerHealth = nullptr;
     SectorTopologyMap* map = nullptr;
     SectorScriptAudioApi audio;
+    SectorScriptControlApi controls;
     engine::ScriptRuntime* scripts = nullptr;
     std::vector<SectorScriptDoorMove> doorMoves;
     std::vector<SectorScriptNpcMove> npcMoves;
@@ -104,13 +117,21 @@ void InitializeSectorScriptHost(
         SectorNavigationWorld* navigation = nullptr,
         NpcNavigationRuntime* npcNavigation = nullptr,
         SectorScriptAudioApi audio = {},
-        Health* playerHealth = nullptr);
+        Health* playerHealth = nullptr,
+        SectorCutsceneRuntime* cutscene = nullptr,
+        SectorFpsControllerState* playerState = nullptr,
+        const SectorFpsControllerConfig* playerConfig = nullptr,
+        SectorScriptControlApi controls = {});
 
 void ResetSectorScriptHost(SectorScriptHost& host);
 
 void RegisterSectorScriptBindings(lua_State* state);
 
 void UpdateSectorScriptOperations(
+        engine::EngineContext& context,
+        SectorScriptHost& host);
+
+void UpdateSectorScriptCutsceneControlOwnership(
         engine::EngineContext& context,
         SectorScriptHost& host);
 

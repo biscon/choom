@@ -415,6 +415,8 @@ int main(int argc, char** argv)
     }
     startupSettings.graphics = game::NormalizeFpsGraphicsSettings(
             startupSettings.graphics);
+    startupSettings.toneMapping = engine::NormalizeToneMappingSettings(
+            startupSettings.toneMapping);
     unsigned int flags = 0;
     if (startupSettings.graphics.vsync) {
         flags |= FLAG_VSYNC_HINT;
@@ -584,6 +586,10 @@ int main(int argc, char** argv)
     Shader scenePresentationShader = LoadShaderFromMemory(
             nullptr,
             scenePresentationFragmentShader.c_str());
+    const int presentationToneMapperLoc = GetShaderLocation(
+            scenePresentationShader, "presentationToneMapper");
+    const int presentationExposureLoc = GetShaderLocation(
+            scenePresentationShader, "presentationExposureEv");
     const int presentationDesaturationLoc = GetShaderLocation(
             scenePresentationShader, "presentationDesaturation");
     const int presentationVignetteOpacityLoc = GetShaderLocation(
@@ -595,7 +601,7 @@ int main(int argc, char** argv)
     const int presentationVignetteOuterRadiusLoc = GetShaderLocation(
             scenePresentationShader, "presentationVignetteOuterRadius");
     if (!IsShaderValid(scenePresentationShader)) {
-        TraceLog(LOG_ERROR, "RENDER: required neutral tone-map/sRGB presentation shader unavailable");
+        TraceLog(LOG_ERROR, "RENDER: required tone-map/sRGB presentation shader unavailable");
         if (IsShaderValid(fxaaShader)) UnloadShader(fxaaShader);
         unloadViewmodelTarget(viewmodelTarget);
         engine::UnloadRenderTarget(worldTargetResource);
@@ -720,7 +726,8 @@ int main(int argc, char** argv)
             currentWorldRenderScale,
             application.ApplicationSettings().graphics.fxaa,
             application.ApplicationSettings().graphics.fxaa
-                    && IsShaderValid(fxaaShader)});
+                    && IsShaderValid(fxaaShader),
+            application.ApplicationSettings().toneMapping});
 
     while (!WindowShouldClose()
             && (!assets.IsScopeFinished(assets.GlobalScope())
@@ -965,13 +972,27 @@ int main(int argc, char** argv)
                     ? hdrDebugSource->native.texture
                     : worldTarget.texture;
             // Bilinear supersample resolve happens in the same texture sample
-            // as the neutral tone-map and display encoding.
+            // as tone mapping and display encoding.
             performanceProfiler.Begin(RenderProfilePass::Presentation);
             BeginTextureMode(scenePresentationTarget);
             ClearBackground(BLANK);
             rlDisableColorBlend();
             const engine::ScenePresentationEffectParameters presentationEffects =
                     application.ScenePresentationEffects();
+            const engine::ToneMappingSettings toneMapping =
+                    engine::NormalizeToneMappingSettings(
+                            application.ApplicationSettings().toneMapping);
+            const int toneMapper = static_cast<int>(toneMapping.toneMapper);
+            SetShaderValue(
+                    scenePresentationShader,
+                    presentationToneMapperLoc,
+                    &toneMapper,
+                    SHADER_UNIFORM_INT);
+            SetShaderValue(
+                    scenePresentationShader,
+                    presentationExposureLoc,
+                    &toneMapping.exposureCompensationEv,
+                    SHADER_UNIFORM_FLOAT);
             SetShaderValue(
                     scenePresentationShader,
                     presentationDesaturationLoc,
@@ -1037,6 +1058,12 @@ int main(int argc, char** argv)
                 DrawTexturePro(finalSceneTexture, worldSrc, dst, {0,0}, 0.0f, WHITE);
                 if (useWorldFxaa) {
                     EndShaderMode();
+                }
+                const float worldFadeOpacity = application.WorldFadeOpacity();
+                if (worldFadeOpacity > 0.0f) {
+                    DrawRectangleRec(
+                            dst,
+                            Fade(BLACK, std::clamp(worldFadeOpacity, 0.0f, 1.0f)));
                 }
             } else if (contentKind == game::ApplicationContentKind::Editor2D) {
                 Rectangle editorSrc = GetFullscreenSrcRect(editorTarget.texture);

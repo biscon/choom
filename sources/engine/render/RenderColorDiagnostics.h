@@ -1,5 +1,7 @@
 #pragma once
 
+#include "engine/render/ToneMapping.h"
+
 #include <string>
 
 namespace engine {
@@ -31,6 +33,7 @@ struct ColorPipelineRuntimeState {
     float supersampleScale = 1.0f;
     bool fxaaRequested = false;
     bool fxaaActive = false;
+    ToneMappingSettings toneMapping;
 };
 
 GraphicsContextDiagnostics CaptureGraphicsContextDiagnostics();

@@ -88,6 +88,21 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
                     != right.perception.hearingRangeWorld
             || left.perception.investigationDurationMilliseconds
                     != right.perception.investigationDurationMilliseconds
+            || left.headLook.enabled != right.headLook.enabled
+            || left.headLook.boneName != right.headLook.boneName
+            || left.headLook.rangeWorld != right.headLook.rangeWorld
+            || left.headLook.maxYawDegrees != right.headLook.maxYawDegrees
+            || left.headLook.maxPitchDegrees != right.headLook.maxPitchDegrees
+            || left.boneImpact.enabled != right.boneImpact.enabled
+            || left.boneImpact.impulseDegreesPerSecond
+                    != right.boneImpact.impulseDegreesPerSecond
+            || left.boneImpact.springFrequencyHz
+                    != right.boneImpact.springFrequencyHz
+            || left.boneImpact.springDampingRatio
+                    != right.boneImpact.springDampingRatio
+            || left.boneImpact.maxAngleDegrees
+                    != right.boneImpact.maxAngleDegrees
+            || left.bodyPartDamage.size() != right.bodyPartDamage.size()
             || left.ambientVocalizations.soundPaths
                     != right.ambientVocalizations.soundPaths
             || left.ambientVocalizations.minimumDelaySeconds
@@ -95,6 +110,14 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
             || left.ambientVocalizations.maximumDelaySeconds
                     != right.ambientVocalizations.maximumDelaySeconds) {
         return false;
+    }
+    for (size_t index = 0; index < left.bodyPartDamage.size(); ++index) {
+        if (left.bodyPartDamage[index].boneName
+                        != right.bodyPartDamage[index].boneName
+                || left.bodyPartDamage[index].damageMultiplier
+                        != right.bodyPartDamage[index].damageMultiplier) {
+            return false;
+        }
     }
     for (size_t i = 0; i < kNpcActionCount; ++i) {
         if (!SameAction(left.actions[i], right.actions[i])) return false;
@@ -280,6 +303,9 @@ bool SectorEditorNpcEditorService::SelectIndex(int index)
     state_.selectedModelPath.clear();
     state_.animationOptionStorage.clear();
     state_.animationOptions.clear();
+    state_.boneOptionStorage.clear();
+    state_.boneOptionLabelStorage.clear();
+    state_.boneOptions.clear();
     SyncBuffersFromSelection();
     return true;
 }
@@ -305,6 +331,9 @@ void SectorEditorNpcEditorService::AddDefinition()
     state_.selectedModelPath.clear();
     state_.animationOptionStorage.clear();
     state_.animationOptions.clear();
+    state_.boneOptionStorage.clear();
+    state_.boneOptionLabelStorage.clear();
+    state_.boneOptions.clear();
     state_.validationMessage.clear();
     state_.warningMessage.clear();
     SyncBuffersFromSelection();
@@ -347,6 +376,9 @@ void SectorEditorNpcEditorService::ConfirmDeleteSelected()
     state_.selectedModelPath.clear();
     state_.animationOptionStorage.clear();
     state_.animationOptions.clear();
+    state_.boneOptionStorage.clear();
+    state_.boneOptionLabelStorage.clear();
+    state_.boneOptions.clear();
     state_.validationMessage.clear();
     state_.warningMessage.clear();
     CancelDelete();
@@ -377,6 +409,7 @@ void SectorEditorNpcEditorService::SetSelectedHostile(bool hostile)
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
     if (draft == nullptr) return;
     draft->definition.hostile = hostile;
+    if (hostile) draft->definition.headLook.enabled = false;
     state_.validationMessage.clear();
 }
 
@@ -402,6 +435,85 @@ void SectorEditorNpcEditorService::SetSelectedPerception(
             hearingRangeWorld,
             investigationDurationMilliseconds};
     state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedHeadLook(
+        const NpcHeadLookDefinition& headLook)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.headLook = headLook;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedBoneImpact(
+        const NpcBoneImpactDefinition& boneImpact)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.boneImpact = boneImpact;
+    state_.validationMessage.clear();
+}
+
+bool SectorEditorNpcEditorService::AddSelectedBodyPartDamage()
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr
+            || draft->definition.bodyPartDamage.size()
+                    >= kMaximumNpcBodyPartDamageRows) {
+        return false;
+    }
+    draft->definition.bodyPartDamage.push_back({});
+    state_.bodyPartDamageMultiplierInputs[
+            draft->definition.bodyPartDamage.size() - 1] = {};
+    state_.validationMessage.clear();
+    return true;
+}
+
+bool SectorEditorNpcEditorService::SetSelectedBodyPartDamageBone(
+        size_t index,
+        const std::string& boneName)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr || index >= draft->definition.bodyPartDamage.size()) {
+        return false;
+    }
+    draft->definition.bodyPartDamage[index].boneName = boneName;
+    state_.validationMessage.clear();
+    return true;
+}
+
+bool SectorEditorNpcEditorService::SetSelectedBodyPartDamageMultiplier(
+        size_t index,
+        float multiplier)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr || index >= draft->definition.bodyPartDamage.size()) {
+        return false;
+    }
+    draft->definition.bodyPartDamage[index].damageMultiplier = multiplier;
+    state_.validationMessage.clear();
+    return true;
+}
+
+bool SectorEditorNpcEditorService::RemoveSelectedBodyPartDamage(size_t index)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr || index >= draft->definition.bodyPartDamage.size()) {
+        return false;
+    }
+    draft->definition.bodyPartDamage.erase(
+            draft->definition.bodyPartDamage.begin()
+                    + static_cast<std::ptrdiff_t>(index));
+    for (size_t inputIndex = index;
+            inputIndex + 1 < state_.bodyPartDamageMultiplierInputs.size();
+            ++inputIndex) {
+        state_.bodyPartDamageMultiplierInputs[inputIndex] =
+                state_.bodyPartDamageMultiplierInputs[inputIndex + 1];
+    }
+    state_.bodyPartDamageMultiplierInputs.back() = {};
+    state_.validationMessage.clear();
+    return true;
 }
 
 void SectorEditorNpcEditorService::SetSelectedCanOpenDoors(bool canOpenDoors)
@@ -467,6 +579,9 @@ void SectorEditorNpcEditorService::SetSelectedModelPath(
     state_.selectedModelPath.clear();
     state_.animationOptionStorage.clear();
     state_.animationOptions.clear();
+    state_.boneOptionStorage.clear();
+    state_.boneOptionLabelStorage.clear();
+    state_.boneOptions.clear();
     state_.validationMessage.clear();
     EnsureSelectedModelRequested(assets);
 }
@@ -679,6 +794,9 @@ void SectorEditorNpcEditorService::EnsureSelectedModelRequested(
             : std::string{};
     state_.animationOptionStorage.clear();
     state_.animationOptions.clear();
+    state_.boneOptionStorage.clear();
+    state_.boneOptionLabelStorage.clear();
+    state_.boneOptions.clear();
 }
 
 void SectorEditorNpcEditorService::RefreshAnimationOptions(
@@ -686,16 +804,58 @@ void SectorEditorNpcEditorService::RefreshAnimationOptions(
 {
     EnsureSelectedModelRequested(assets);
     const engine::ModelAsset* asset = assets.GetModelAsset(state_.selectedModel);
-    if (asset == nullptr || !state_.animationOptionStorage.empty()) return;
-    state_.animationOptionStorage.reserve(
-            static_cast<size_t>(std::max(0, asset->animationCount)) + 1);
-    state_.animationOptionStorage.emplace_back("<Unassigned>");
-    for (int index = 0; index < asset->animationCount; ++index) {
-        state_.animationOptionStorage.emplace_back(asset->animations[index].name);
+    if (asset == nullptr) return;
+    if (state_.animationOptionStorage.empty()) {
+        state_.animationOptionStorage.reserve(
+                static_cast<size_t>(std::max(0, asset->animationCount)) + 1);
+        state_.animationOptionStorage.emplace_back("<Unassigned>");
+        for (int index = 0; index < asset->animationCount; ++index) {
+            state_.animationOptionStorage.emplace_back(
+                    asset->animations[index].name);
+        }
+        state_.animationOptions.reserve(state_.animationOptionStorage.size());
+        for (const std::string& option : state_.animationOptionStorage) {
+            state_.animationOptions.push_back(option.c_str());
+        }
     }
-    state_.animationOptions.reserve(state_.animationOptionStorage.size());
-    for (const std::string& option : state_.animationOptionStorage) {
-        state_.animationOptions.push_back(option.c_str());
+    if (state_.boneOptionStorage.empty()) {
+        const int boneCount = asset->model.skeleton.bones == nullptr
+                ? 0 : std::max(0, asset->model.skeleton.boneCount);
+        state_.boneOptionStorage.reserve(static_cast<size_t>(boneCount) + 2);
+        state_.boneOptionLabelStorage.reserve(
+                static_cast<size_t>(boneCount) + 2);
+        state_.boneOptionStorage.emplace_back();
+        state_.boneOptionLabelStorage.emplace_back("<Unassigned>");
+        for (int index = 0; index < boneCount; ++index) {
+            const char* name = asset->model.skeleton.bones[index].name;
+            state_.boneOptionStorage.emplace_back(name);
+            state_.boneOptionLabelStorage.emplace_back(name);
+        }
+        const SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+        const auto addMissingConfiguredBone = [this](
+                                                       const std::string& configured) {
+            if (configured.empty()
+                    || std::find(
+                               state_.boneOptionStorage.begin(),
+                               state_.boneOptionStorage.end(),
+                               configured) != state_.boneOptionStorage.end()) {
+                return;
+            }
+            state_.boneOptionStorage.push_back(configured);
+            state_.boneOptionLabelStorage.push_back(
+                    "<Missing: " + configured + ">");
+        };
+        if (draft != nullptr) {
+            addMissingConfiguredBone(draft->definition.headLook.boneName);
+            for (const NpcBodyPartDamageDefinition& row
+                    : draft->definition.bodyPartDamage) {
+                addMissingConfiguredBone(row.boneName);
+            }
+        }
+        state_.boneOptions.reserve(state_.boneOptionLabelStorage.size());
+        for (const std::string& label : state_.boneOptionLabelStorage) {
+            state_.boneOptions.push_back(label.c_str());
+        }
     }
 }
 
@@ -722,6 +882,19 @@ bool SectorEditorNpcEditorService::SelectedAnimationExists(
     if (asset == nullptr || asset->animations == nullptr) return false;
     for (int index = 0; index < asset->animationCount; ++index) {
         if (animation == asset->animations[index].name) return true;
+    }
+    return false;
+}
+
+bool SectorEditorNpcEditorService::SelectedBoneExists(
+        const engine::AssetManager& assets,
+        std::string_view boneName) const
+{
+    if (boneName.empty()) return false;
+    const engine::ModelAsset* asset = assets.GetModelAsset(state_.selectedModel);
+    if (asset == nullptr || asset->model.skeleton.bones == nullptr) return false;
+    for (int index = 0; index < asset->model.skeleton.boneCount; ++index) {
+        if (boneName == asset->model.skeleton.bones[index].name) return true;
     }
     return false;
 }
@@ -757,6 +930,17 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.visionRangeWorldInput = {};
     state_.visionAngleDegreesInput = {};
     state_.hearingRangeWorldInput = {};
+    state_.headLookRangeWorldInput = {};
+    state_.headLookMaxYawDegreesInput = {};
+    state_.headLookMaxPitchDegreesInput = {};
+    state_.boneImpactImpulseInput = {};
+    state_.boneImpactSpringFrequencyInput = {};
+    state_.boneImpactSpringDampingInput = {};
+    state_.boneImpactMaxAngleInput = {};
+    for (engine::UIFloatInputState& input
+            : state_.bodyPartDamageMultiplierInputs) {
+        input = {};
+    }
     state_.investigationDurationMillisecondsInput = {};
     state_.attackHitPhaseInput = {};
     state_.attackRangeWorldInput = {};

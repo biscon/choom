@@ -46,7 +46,7 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(30);
+    world.ReserveComponentTypes(33);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -58,8 +58,11 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<NpcPatrolState>(objectCapacity);
     world.ReserveComponent<NpcAiState>(objectCapacity);
     world.ReserveComponent<NpcAnimationState>(objectCapacity);
+    world.ReserveComponent<NpcHeadLookState>(objectCapacity);
     world.ReserveComponent<Health>(objectCapacity);
     world.ReserveComponent<NpcCombatState>(objectCapacity);
+    world.ReserveComponent<NpcBodyPartDamageState>(objectCapacity);
+    world.ReserveComponent<NpcBoneImpactState>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
     world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
@@ -1374,6 +1377,31 @@ void SpawnPlacedRuntimeObjects(
             npcCombat.corpseFadeDurationSeconds =
                     definition->corpseFadeDurationSeconds;
             world.Add(entity, npcCombat);
+            if (!definition->bodyPartDamage.empty()) {
+                NpcBodyPartDamageState bodyPartDamage;
+                bodyPartDamage.rows.reserve(definition->bodyPartDamage.size());
+                for (const NpcBodyPartDamageDefinition& authoredRow
+                        : definition->bodyPartDamage) {
+                    NpcBodyPartDamageRuntimeRow runtimeRow;
+                    runtimeRow.boneName = authoredRow.boneName;
+                    runtimeRow.damageMultiplier =
+                            authoredRow.damageMultiplier;
+                    bodyPartDamage.rows.push_back(std::move(runtimeRow));
+                }
+                world.Add(entity, std::move(bodyPartDamage));
+            }
+            if (definition->boneImpact.enabled) {
+                NpcBoneImpactState boneImpact;
+                boneImpact.impulseDegreesPerSecond =
+                        definition->boneImpact.impulseDegreesPerSecond;
+                boneImpact.springFrequencyHz =
+                        definition->boneImpact.springFrequencyHz;
+                boneImpact.springDampingRatio =
+                        definition->boneImpact.springDampingRatio;
+                boneImpact.maxAngleDegrees =
+                        definition->boneImpact.maxAngleDegrees;
+                world.Add(entity, std::move(boneImpact));
+            }
             NpcAnimationState npcAnimation;
             npcAnimation.blendSeconds = definition->animationBlendSeconds;
             for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
@@ -1381,6 +1409,16 @@ void SpawnPlacedRuntimeObjects(
                         GetNpcAction(*definition, metadata.action).animationSpeed;
             }
             world.Add(entity, npcAnimation);
+            if (!definition->hostile && definition->headLook.enabled) {
+                NpcHeadLookState headLook;
+                headLook.boneName = definition->headLook.boneName;
+                headLook.rangeWorld = definition->headLook.rangeWorld;
+                headLook.maxYawDegrees =
+                        definition->headLook.maxYawDegrees;
+                headLook.maxPitchDegrees =
+                        definition->headLook.maxPitchDegrees;
+                world.Add(entity, std::move(headLook));
+            }
             world.Add(entity, SectorObjectVisualOffset{});
             world.Add(entity, SectorDynamicModel{
                     placedObject.id,

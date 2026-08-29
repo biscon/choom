@@ -75,6 +75,10 @@ bool ScriptSystemIsFunctionRunning(
         const ScriptRuntime& runtime,
         const std::string& functionName);
 
+bool ScriptSystemIsTaskActive(
+        const ScriptRuntime& runtime,
+        ScriptTaskHandle task);
+
 ScriptOperationHandle ScriptSystemCreateOperation(
         ScriptRuntime& runtime,
         ScriptOperationLaunchStyle launchStyle,

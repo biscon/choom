@@ -277,6 +277,16 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
         const float contentHeight = 21.0f * (RowHeight + RowGap)
+                + 3.0f * (RowHeight + RowGap) + 4.0f
+                + (selected->definition.boneImpact.enabled
+                                ? 6.0f * (RowHeight + RowGap)
+                                : 2.0f * (RowHeight + RowGap))
+                + static_cast<float>(
+                        selected->definition.bodyPartDamage.size())
+                        * (RowHeight + RowGap + 30.0f)
+                + (!selected->definition.hostile
+                                ? 7.0f * (RowHeight + RowGap)
+                                : 0.0f)
                 + static_cast<float>(
                         selected->definition.ambientVocalizations.soundPaths.size())
                         * (RowHeight + RowGap)
@@ -620,6 +630,417 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                         ? config.invalidColor
                         : config.mutedTextColor);
         y += RowHeight + RowGap;
+
+        engine::Separator(
+                config,
+                Rectangle{
+                        formScroll.viewport.x,
+                        formScroll.viewport.y
+                                - editor.Session().formScroll.offset.y + y,
+                        formScroll.viewport.width,
+                        12.0f});
+        y += 18.0f;
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, y, formScroll.viewport.width, 34.0f},
+                font, "Bone impact reaction",
+                engine::UITextJustify::Left,
+                config.accentColor);
+        y += 38.0f;
+
+        NpcBoneImpactDefinition boneImpact =
+                selected->definition.boneImpact;
+        bool boneImpactEnabled = boneImpact.enabled;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_enabled",
+                    Rectangle{fieldX, y, 300.0f, RowHeight},
+                    font, "Procedural bone impact", boneImpactEnabled)) {
+            boneImpact.enabled = boneImpactEnabled;
+            editor.SetSelectedBoneImpact(boneImpact);
+        }
+        y += RowHeight + RowGap;
+
+        if (selected->definition.boneImpact.enabled) {
+            boneImpact = selected->definition.boneImpact;
+            drawLabel("Impulse (deg/s)");
+            float impulse = boneImpact.impulseDegreesPerSecond;
+            engine::UINumericInputResult impactInput = engine::FloatInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_impulse",
+                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                    font, impulse,
+                    state.boneImpactImpulseInput,
+                    0.0f,
+                    kMaximumNpcBoneImpactImpulseDegreesPerSecond,
+                    1);
+            if (impactInput.changed) {
+                boneImpact.impulseDegreesPerSecond = impulse;
+                editor.SetSelectedBoneImpact(boneImpact);
+            }
+            y += RowHeight + RowGap;
+
+            boneImpact = selected->definition.boneImpact;
+            drawLabel("Spring frequency (Hz)");
+            float frequency = boneImpact.springFrequencyHz;
+            impactInput = engine::FloatInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_frequency",
+                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                    font, frequency,
+                    state.boneImpactSpringFrequencyInput,
+                    kMinimumNpcBoneImpactSpringFrequencyHz,
+                    kMaximumNpcBoneImpactSpringFrequencyHz,
+                    2);
+            if (impactInput.changed) {
+                boneImpact.springFrequencyHz = frequency;
+                editor.SetSelectedBoneImpact(boneImpact);
+            }
+            y += RowHeight + RowGap;
+
+            boneImpact = selected->definition.boneImpact;
+            drawLabel("Damping ratio");
+            float damping = boneImpact.springDampingRatio;
+            impactInput = engine::FloatInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_damping",
+                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                    font, damping,
+                    state.boneImpactSpringDampingInput,
+                    kMinimumNpcBoneImpactSpringDampingRatio,
+                    kMaximumNpcBoneImpactSpringDampingRatio,
+                    2);
+            if (impactInput.changed) {
+                boneImpact.springDampingRatio = damping;
+                editor.SetSelectedBoneImpact(boneImpact);
+            }
+            y += RowHeight + RowGap;
+
+            boneImpact = selected->definition.boneImpact;
+            drawLabel("Maximum angle");
+            float maxAngle = boneImpact.maxAngleDegrees;
+            impactInput = engine::FloatInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_max_angle",
+                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                    font, maxAngle,
+                    state.boneImpactMaxAngleInput,
+                    0.0f,
+                    kMaximumNpcBoneImpactAngleDegrees,
+                    1);
+            if (impactInput.changed) {
+                boneImpact.maxAngleDegrees = maxAngle;
+                editor.SetSelectedBoneImpact(boneImpact);
+            }
+            y += RowHeight + RowGap;
+        }
+
+        engine::Separator(
+                config,
+                Rectangle{
+                        formScroll.viewport.x,
+                        formScroll.viewport.y
+                                - editor.Session().formScroll.offset.y + y,
+                        formScroll.viewport.width,
+                        12.0f});
+        y += 18.0f;
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, y, formScroll.viewport.width, 34.0f},
+                font, "Bodypart damage",
+                engine::UITextJustify::Left,
+                config.accentColor);
+        y += 38.0f;
+
+        if (selected->definition.bodyPartDamage.empty()) {
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{fieldX, y, fieldW, RowHeight},
+                    smallFont,
+                    "No rows: all exact mesh hits use weapon base damage",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor,
+                    true);
+            y += RowHeight + RowGap;
+        } else {
+            size_t removeBodyPartIndex = kMaximumNpcBodyPartDamageRows;
+            for (size_t rowIndex = 0;
+                    rowIndex < selected->definition.bodyPartDamage.size();
+                    ++rowIndex) {
+                NpcBodyPartDamageDefinition row =
+                        selected->definition.bodyPartDamage[rowIndex];
+                const std::string rowLabel = "Body part "
+                        + std::to_string(rowIndex + 1);
+                drawLabel(rowLabel.c_str());
+
+                const float removeWidth = 92.0f;
+                const float multiplierWidth = 104.0f;
+                const float controlGap = 8.0f;
+                const float boneWidth = std::max(
+                        120.0f,
+                        fieldW - removeWidth - multiplierWidth
+                                - controlGap * 2.0f);
+                int selectedBone = 0;
+                for (size_t boneIndex = 1;
+                        boneIndex < state.boneOptionStorage.size();
+                        ++boneIndex) {
+                    if (state.boneOptionStorage[boneIndex] == row.boneName) {
+                        selectedBone = static_cast<int>(boneIndex);
+                        break;
+                    }
+                }
+                const std::string boneWidgetId =
+                        "sector_editor_npc_body_part_bone_"
+                        + std::to_string(rowIndex);
+                if (!state.boneOptions.empty()
+                        && engine::Option(
+                                ui, config, input, assets,
+                                boneWidgetId.c_str(),
+                                Rectangle{fieldX, y, boneWidth, RowHeight},
+                                font,
+                                state.boneOptions.data(),
+                                state.boneOptions.size(),
+                                selectedBone)) {
+                    const std::string boneName = selectedBone >= 0
+                                    && selectedBone < static_cast<int>(
+                                            state.boneOptionStorage.size())
+                            ? state.boneOptionStorage[
+                                      static_cast<size_t>(selectedBone)]
+                            : std::string{};
+                    editor.SetSelectedBodyPartDamageBone(
+                            rowIndex, boneName);
+                    row.boneName = boneName;
+                }
+                if (state.boneOptions.empty()) {
+                    engine::Text(
+                            ui, config, assets,
+                            Rectangle{fieldX, y, boneWidth, RowHeight},
+                            smallFont,
+                            row.boneName.empty()
+                                    ? "<No skeletal bones loaded>"
+                                    : row.boneName.c_str(),
+                            engine::UITextJustify::Left,
+                            config.invalidColor);
+                }
+
+                float multiplier = row.damageMultiplier;
+                const std::string multiplierWidgetId =
+                        "sector_editor_npc_body_part_multiplier_"
+                        + std::to_string(rowIndex);
+                const engine::UINumericInputResult multiplierResult =
+                        engine::FloatInput(
+                                ui, config, input, assets,
+                                multiplierWidgetId.c_str(),
+                                Rectangle{
+                                        fieldX + boneWidth + controlGap,
+                                        y,
+                                        multiplierWidth,
+                                        RowHeight},
+                                font,
+                                multiplier,
+                                state.bodyPartDamageMultiplierInputs[rowIndex],
+                                0.0f,
+                                kMaximumNpcBodyPartDamageMultiplier,
+                                2);
+                if (multiplierResult.changed) {
+                    editor.SetSelectedBodyPartDamageMultiplier(
+                            rowIndex, multiplier);
+                }
+                const std::string removeWidgetId =
+                        "sector_editor_npc_body_part_remove_"
+                        + std::to_string(rowIndex);
+                if (engine::Button(
+                            ui, config, input, assets,
+                            removeWidgetId.c_str(),
+                            Rectangle{
+                                    fieldX + boneWidth + controlGap
+                                            + multiplierWidth + controlGap,
+                                    y,
+                                    removeWidth,
+                                    RowHeight},
+                            smallFont,
+                            "Remove")) {
+                    removeBodyPartIndex = rowIndex;
+                }
+                y += RowHeight + 2.0f;
+
+                const bool missingBone = !row.boneName.empty()
+                        && editor.SelectedModelReady(assets)
+                        && !editor.SelectedBoneExists(assets, row.boneName);
+                const char* rowMessage = row.boneName.empty()
+                        ? "Select a bone; descendants are included"
+                        : (missingBone
+                                ? "Saved bone is missing from this model"
+                                : "Selected bone and descendants use this multiplier");
+                engine::Text(
+                        ui, config, assets,
+                        Rectangle{fieldX, y, fieldW, 28.0f},
+                        smallFont,
+                        rowMessage,
+                        engine::UITextJustify::Left,
+                        row.boneName.empty() || missingBone
+                                ? config.invalidColor
+                                : config.mutedTextColor);
+                y += 28.0f + RowGap;
+            }
+            if (removeBodyPartIndex
+                    < selected->definition.bodyPartDamage.size()) {
+                editor.RemoveSelectedBodyPartDamage(removeBodyPartIndex);
+            }
+        }
+
+        if (selected->definition.bodyPartDamage.size()
+                < kMaximumNpcBodyPartDamageRows) {
+            if (engine::Button(
+                        ui, config, input, assets,
+                        "sector_editor_npc_body_part_add",
+                        Rectangle{fieldX, y, 170.0f, RowHeight},
+                        font,
+                        "Add body part")) {
+                editor.AddSelectedBodyPartDamage();
+            }
+            y += RowHeight + RowGap;
+        }
+
+        if (!selected->definition.hostile) {
+            engine::Separator(
+                    config,
+                    Rectangle{
+                            formScroll.viewport.x,
+                            formScroll.viewport.y
+                                    - editor.Session().formScroll.offset.y + y,
+                            formScroll.viewport.width,
+                            12.0f});
+            y += 18.0f;
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{0.0f, y, formScroll.viewport.width, 34.0f},
+                    font, "Head look",
+                    engine::UITextJustify::Left,
+                    config.accentColor);
+            y += 38.0f;
+
+            NpcHeadLookDefinition headLook = selected->definition.headLook;
+            bool headLookEnabled = headLook.enabled;
+            if (engine::Checkbox(
+                        ui, config, input, assets,
+                        "sector_editor_npc_head_look_enabled",
+                        Rectangle{fieldX, y, 300.0f, RowHeight},
+                        font, "Look toward player", headLookEnabled)) {
+                headLook.enabled = headLookEnabled;
+                editor.SetSelectedHeadLook(headLook);
+            }
+            y += RowHeight + RowGap;
+
+            if (selected->definition.headLook.enabled) {
+                headLook = selected->definition.headLook;
+                drawLabel("Head bone");
+                if (!state.boneOptions.empty()) {
+                    int selectedBone = 0;
+                    for (size_t index = 1;
+                            index < state.boneOptionStorage.size(); ++index) {
+                        if (state.boneOptionStorage[index]
+                                == headLook.boneName) {
+                            selectedBone = static_cast<int>(index);
+                            break;
+                        }
+                    }
+                    if (engine::Option(
+                                ui, config, input, assets,
+                                "sector_editor_npc_head_look_bone",
+                                Rectangle{fieldX, y, fieldW, RowHeight},
+                                font,
+                                state.boneOptions.data(),
+                                state.boneOptions.size(),
+                                selectedBone)) {
+                        headLook.boneName = selectedBone >= 0
+                                        && selectedBone < static_cast<int>(
+                                                state.boneOptionStorage.size())
+                                ? state.boneOptionStorage[
+                                          static_cast<size_t>(selectedBone)]
+                                : std::string{};
+                        editor.SetSelectedHeadLook(headLook);
+                    }
+                } else {
+                    engine::Text(
+                            ui, config, assets,
+                            Rectangle{fieldX, y, fieldW, RowHeight},
+                            smallFont,
+                            headLook.boneName.empty()
+                                    ? "<No skeletal bones loaded>"
+                                    : headLook.boneName.c_str(),
+                            engine::UITextJustify::Left,
+                            config.invalidColor);
+                }
+                y += RowHeight + 2.0f;
+
+                const bool missingBone = !headLook.boneName.empty()
+                        && editor.SelectedModelReady(assets)
+                        && !editor.SelectedBoneExists(
+                                assets, headLook.boneName);
+                const char* boneMessage = headLook.boneName.empty()
+                        ? "Select a skeletal head bone"
+                        : (missingBone
+                                ? "Saved bone is missing from this model"
+                                : "Rotation also affects descendant bones");
+                engine::Text(
+                        ui, config, assets,
+                        Rectangle{fieldX, y, fieldW, 28.0f},
+                        smallFont, boneMessage,
+                        engine::UITextJustify::Left,
+                        headLook.boneName.empty() || missingBone
+                                ? config.invalidColor
+                                : config.mutedTextColor);
+                y += 30.0f;
+
+                drawLabel("Look range world");
+                float rangeWorld = headLook.rangeWorld;
+                engine::UINumericInputResult headLookInput = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_head_look_range",
+                        Rectangle{fieldX, y, 190.0f, RowHeight},
+                        font, rangeWorld,
+                        state.headLookRangeWorldInput,
+                        0.0f, 10000.0f, 2);
+                if (headLookInput.changed) {
+                    headLook.rangeWorld = rangeWorld;
+                    editor.SetSelectedHeadLook(headLook);
+                }
+                y += RowHeight + RowGap;
+
+                headLook = selected->definition.headLook;
+                drawLabel("Max yaw per side");
+                float maxYawDegrees = headLook.maxYawDegrees;
+                headLookInput = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_head_look_max_yaw",
+                        Rectangle{fieldX, y, 190.0f, RowHeight},
+                        font, maxYawDegrees,
+                        state.headLookMaxYawDegreesInput,
+                        0.0f, kMaximumNpcHeadLookYawDegrees, 2);
+                if (headLookInput.changed) {
+                    headLook.maxYawDegrees = maxYawDegrees;
+                    editor.SetSelectedHeadLook(headLook);
+                }
+                y += RowHeight + RowGap;
+
+                headLook = selected->definition.headLook;
+                drawLabel("Max pitch");
+                float maxPitchDegrees = headLook.maxPitchDegrees;
+                headLookInput = engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_head_look_max_pitch",
+                        Rectangle{fieldX, y, 190.0f, RowHeight},
+                        font, maxPitchDegrees,
+                        state.headLookMaxPitchDegreesInput,
+                        0.0f, kMaximumNpcHeadLookPitchDegrees, 2);
+                if (headLookInput.changed) {
+                    headLook.maxPitchDegrees = maxPitchDegrees;
+                    editor.SetSelectedHeadLook(headLook);
+                }
+                y += RowHeight + RowGap;
+            }
+        }
 
         engine::Separator(
                 config,

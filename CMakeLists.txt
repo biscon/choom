@@ -292,6 +292,7 @@ if(BUILD_TESTING)
             sources/game/FpsViewmodel.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/PlayerStamina.cpp
@@ -387,6 +388,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -461,6 +463,7 @@ if(BUILD_TESTING)
             tests/SectorTopologySerializationTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -626,6 +629,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemIconLayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -640,14 +644,19 @@ if(BUILD_TESTING)
             sources/game/npc/ai/NpcAiDebugData.cpp
             sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcCombatSystem.cpp
+            sources/game/npc/NpcBoneImpactSystem.cpp
+            sources/game/npc/NpcHeadLookSystem.cpp
+            sources/game/npc/NpcLineOfSight.cpp
             sources/game/npc/ai/NpcAiSystem.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/npc/NpcNavigationSystem.cpp
             sources/game/npc/NpcPatrolSystem.cpp
             sources/game/npc/NpcRuntime.cpp
+            sources/engine/scripting/ScriptConsole.cpp
             sources/engine/scripting/ScriptSystem.cpp
             sources/engine/scripting/ScriptPersistence.cpp
             sources/game/SectorScriptBindings.cpp
+            sources/game/cutscene/SectorCutsceneRuntime.cpp
             sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
             sources/engine/systems/AnimatedModelRaycast.cpp
@@ -728,6 +737,7 @@ if(BUILD_TESTING)
             tests/WeaponEditorServiceTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/FpsWeaponAudio.cpp
             sources/game/PlayerStamina.cpp
@@ -755,6 +765,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemInventoryUILayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -771,6 +782,7 @@ if(BUILD_TESTING)
     add_executable(player_sneak_tests
             tests/PlayerSneakTests.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
             sources/engine/render/HdrEffectPolicy.cpp

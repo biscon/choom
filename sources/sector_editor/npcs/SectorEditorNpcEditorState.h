@@ -61,6 +61,15 @@ struct SectorEditorNpcEditorState {
     engine::UIFloatInputState visionRangeWorldInput;
     engine::UIFloatInputState visionAngleDegreesInput;
     engine::UIFloatInputState hearingRangeWorldInput;
+    engine::UIFloatInputState headLookRangeWorldInput;
+    engine::UIFloatInputState headLookMaxYawDegreesInput;
+    engine::UIFloatInputState headLookMaxPitchDegreesInput;
+    engine::UIFloatInputState boneImpactImpulseInput;
+    engine::UIFloatInputState boneImpactSpringFrequencyInput;
+    engine::UIFloatInputState boneImpactSpringDampingInput;
+    engine::UIFloatInputState boneImpactMaxAngleInput;
+    std::array<engine::UIFloatInputState, kMaximumNpcBodyPartDamageRows>
+            bodyPartDamageMultiplierInputs;
     engine::UIIntInputState investigationDurationMillisecondsInput;
     engine::UIFloatInputState attackHitPhaseInput;
     engine::UIFloatInputState attackRangeWorldInput;
@@ -93,6 +102,9 @@ struct SectorEditorNpcEditorState {
     std::string selectedModelPath;
     std::vector<std::string> animationOptionStorage;
     std::vector<const char*> animationOptions;
+    std::vector<std::string> boneOptionStorage;
+    std::vector<std::string> boneOptionLabelStorage;
+    std::vector<const char*> boneOptions;
     SectorEditorNpcAudioPickerState audioPicker;
 };
 

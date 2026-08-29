@@ -2,11 +2,15 @@
 #include "engine/systems/AnimatedModelRaycast.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "engine/audio/AudioSystem.h"
+#include "engine/scripting/ScriptSystem.h"
+#include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcCombatSystem.h"
+#include "game/npc/NpcBoneImpactSystem.h"
+#include "game/npc/NpcHeadLookSystem.h"
 #include "game/npc/NpcRuntime.h"
 #include "game/npc/ai/NpcAiSystem.h"
 #include "game/npc/ai/NpcAiDebugData.h"
@@ -4346,6 +4350,245 @@ void TestNpcDoorTraversalStagesWaitsCrossesAndReleases()
     }
 }
 
+void TestCutscenePlayerDoorTraversalHoldsOpensCrossesAndReleases()
+{
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    for (game::SectorTopologyVertex& vertex : map.vertices) {
+        vertex.x *= 2;
+        vertex.y *= 2;
+    }
+    map.sectors[0].floorZ = 1.0f;
+    map.sectors[1].floorZ = 1.0f;
+    map.sectors[0].ceilingZ = 32.0f;
+    map.sectors[1].ceilingZ = 32.0f;
+    game::SectorPlacedDoor placedDoor = MakeDoorOnPortal();
+    placedDoor.anchor.endpointAX = 128;
+    placedDoor.anchor.endpointBX = 128;
+    placedDoor.anchor.endpointBY = 128;
+    placedDoor.speed = 2.0f;
+    map.runtimeObjects.push_back(MakePlacedDoor(79, placedDoor));
+
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "cutscene player door collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "cutscene player door navigation fixture builds");
+
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RefreshSectorRuntimeObjectMapData(runtimeObjects, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, runtimeObjects, map);
+    runtimeObjects.dynamicDoorColliders.clear();
+    game::CollectSectorDoorDynamicColliders(
+            world, runtimeObjects.dynamicDoorColliders);
+    game::SynchronizeSectorNavigationDoorLinksSystem(
+            world, navigation, runtimeObjects.dynamicDoorColliders);
+
+    game::SectorCutsceneRuntime cutscene;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    game::SectorFpsControllerState player;
+    player.feetPosition = {0.5f, 0.125f, 0.5f};
+    player.currentSectorId = 10;
+    player.grounded = true;
+    uint64_t token = 0;
+    std::string moveError;
+    const bool began = game::BeginSectorCutscenePlayerMove(
+            cutscene,
+            navigation,
+            collisionWorld,
+            player,
+            {1.5f, 0.5f},
+            game::NpcMoveGait::Walk,
+            2.0f,
+            token,
+            moveError);
+    if (!began) {
+        std::fprintf(stderr, "cutscene player door move failed: %s\n",
+                moveError.c_str());
+    }
+    Check(began, "cutscene player accepts path through typed door link");
+
+    game::NpcNavigationRuntime emptyNpcNavigation;
+    engine::ScriptRuntime scripts;
+    const game::SectorCollisionMoveConfig moveConfig{
+            navigation.Settings().agentRadius,
+            navigation.Settings().agentHeight,
+            navigation.Settings().agentMaximumClimb,
+            4,
+            false};
+    bool observedWaiting = false;
+    bool observedCrossing = false;
+    bool observedHold = false;
+    bool observedOpening = false;
+    for (int frame = 0; frame < 400 && cutscene.playerMove.active; ++frame) {
+        constexpr float Dt = 0.05f;
+        game::PrepareSectorCutscenePlayerDoorTraversal(
+                cutscene,
+                navigation,
+                runtimeObjects.dynamicDoorColliders,
+                player.feetPosition,
+                Dt);
+        observedWaiting = observedWaiting
+                || cutscene.playerMove.doorPhase
+                        == game::NpcDoorTraversalPhase::WaitingForClearance;
+        observedCrossing = observedCrossing
+                || cutscene.playerMove.doorPhase
+                        == game::NpcDoorTraversalPhase::Crossing;
+        game::PrepareNpcDoorTraversalAndHoldsSystem(
+                world,
+                navigation,
+                emptyNpcNavigation,
+                runtimeObjects.dynamicDoorColliders,
+                Dt,
+                false,
+                game::SectorCutscenePlayerDoorHoldId(cutscene));
+        world.ForEach<game::SectorDoorOpenControl>(
+                [&observedHold](engine::Entity,
+                        game::SectorDoorOpenControl& control) {
+                    observedHold = observedHold
+                            || control.navigationHolderCount > 0;
+                });
+        const bool doorChanged = game::AdvanceSectorDoorMotionSystem(
+                world, Dt, nullptr, 0);
+        if (doorChanged) game::UpdateSectorDoorDerivedStateSystem(world);
+        world.ForEach<game::SectorDoorMotion>(
+                [&observedOpening](engine::Entity,
+                        game::SectorDoorMotion& motion) {
+                    observedOpening = observedOpening
+                            || motion.openFraction > 0.0f;
+                });
+        runtimeObjects.dynamicDoorColliders.clear();
+        game::CollectSectorDoorDynamicColliders(
+                world, runtimeObjects.dynamicDoorColliders);
+        game::SynchronizeSectorNavigationDoorLinksSystem(
+                world, navigation, runtimeObjects.dynamicDoorColliders);
+
+        const Vector2 previous{
+                player.feetPosition.x, player.feetPosition.z};
+        const Vector2 desired = game::BuildSectorCutscenePlayerMoveDelta(
+                cutscene, player, Dt, nullptr);
+        const game::SectorCollisionMoveState moveState{
+                previous,
+                player.feetPosition.y,
+                player.currentSectorId,
+                player.grounded};
+        const game::SectorCollisionMoveResult staticResult =
+                collisionWorld.ResolveMovement(
+                        moveState, desired, moveConfig);
+        const game::SectorCollisionMoveResult result =
+                game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                        moveState,
+                        staticResult,
+                        moveConfig,
+                        runtimeObjects.dynamicDoorColliders);
+        player.feetPosition.x = result.positionXZ.x;
+        player.feetPosition.z = result.positionXZ.y;
+        player.currentSectorId = result.currentSectorId;
+        game::FinishSectorCutscenePlayerMoveFrame(
+                cutscene,
+                navigation,
+                collisionWorld,
+                player,
+                previous,
+                scripts,
+                Dt);
+    }
+
+    game::PrepareNpcDoorTraversalAndHoldsSystem(
+            world,
+            navigation,
+            emptyNpcNavigation,
+            runtimeObjects.dynamicDoorColliders,
+            0.05f,
+            false,
+            game::SectorCutscenePlayerDoorHoldId(cutscene));
+    uint32_t finalHolders = 0;
+    world.ForEach<game::SectorDoorOpenControl>(
+            [&finalHolders](engine::Entity,
+                    game::SectorDoorOpenControl& control) {
+                finalHolders += control.navigationHolderCount;
+            });
+    Check(!cutscene.playerMove.active
+                  && observedWaiting
+                  && observedCrossing
+                  && observedHold
+                  && observedOpening
+                  && finalHolders == 0
+                  && std::fabs(player.feetPosition.x - 1.5f) < 0.11f
+                  && std::fabs(player.feetPosition.z - 0.5f) < 0.11f,
+          "cutscene player stages, holds, opens, crosses, and releases the door");
+
+    uint64_t cancellationToken = 0;
+    const bool cancellationBegan = game::BeginSectorCutscenePlayerMove(
+            cutscene,
+            navigation,
+            collisionWorld,
+            player,
+            {0.5f, 0.5f},
+            game::NpcMoveGait::Walk,
+            2.0f,
+            cancellationToken,
+            moveError);
+    bool heldBeforeCancellation = false;
+    for (int frame = 0; frame < 100 && cancellationBegan; ++frame) {
+        constexpr float Dt = 0.05f;
+        game::PrepareSectorCutscenePlayerDoorTraversal(
+                cutscene,
+                navigation,
+                runtimeObjects.dynamicDoorColliders,
+                player.feetPosition,
+                Dt);
+        if (game::SectorCutscenePlayerDoorHoldId(cutscene) == 79) {
+            heldBeforeCancellation = true;
+            break;
+        }
+        const Vector2 previous{
+                player.feetPosition.x, player.feetPosition.z};
+        const Vector2 desired = game::BuildSectorCutscenePlayerMoveDelta(
+                cutscene, player, Dt, nullptr);
+        player.feetPosition.x += desired.x;
+        player.feetPosition.z += desired.y;
+        game::FinishSectorCutscenePlayerMoveFrame(
+                cutscene,
+                navigation,
+                collisionWorld,
+                player,
+                previous,
+                scripts,
+                Dt);
+    }
+    game::CancelSectorCutscenePlayerMove(
+            cutscene, &navigation, cancellationToken);
+    game::PrepareNpcDoorTraversalAndHoldsSystem(
+            world,
+            navigation,
+            emptyNpcNavigation,
+            runtimeObjects.dynamicDoorColliders,
+            0.05f,
+            false,
+            game::SectorCutscenePlayerDoorHoldId(cutscene));
+    uint32_t holdersAfterCancellation = 0;
+    world.ForEach<game::SectorDoorOpenControl>(
+            [&holdersAfterCancellation](engine::Entity,
+                    game::SectorDoorOpenControl& control) {
+                holdersAfterCancellation += control.navigationHolderCount;
+            });
+    Check(cancellationBegan
+                  && heldBeforeCancellation
+                  && !cutscene.playerMove.active
+                  && holdersAfterCancellation == 0,
+          "cancelled cutscene player movement releases its door hold");
+
+    game::ResetSectorCutsceneRuntime(cutscene, &navigation);
+    navigation.Shutdown();
+}
+
 void TestCrowdQueuesNpcAgentsThroughDoor()
 {
     game::SectorTopologyMap map = MakeDoorPortalMap();
@@ -5667,6 +5910,14 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     game::GetNpcAction(definition, game::NpcAction::Walk).movementSpeed = 2.0f;
     game::GetNpcAction(definition, game::NpcAction::Run).movementSpeed = 4.5f;
     definition.animationBlendSeconds = 0.35f;
+    definition.bodyPartDamage = {
+            {"mixamorig:Head", 2.0f},
+            {"mixamorig:LeftArm", 0.5f}};
+    definition.boneImpact.enabled = true;
+    definition.boneImpact.impulseDegreesPerSecond = 420.0f;
+    definition.boneImpact.springFrequencyHz = 8.0f;
+    definition.boneImpact.springDampingRatio = 0.85f;
+    definition.boneImpact.maxAngleDegrees = 18.0f;
     state.npcDefinitionCatalog = game::NpcDefinitionCatalog{};
     state.npcDefinitionCatalog.definitions.push_back(definition);
 
@@ -5679,6 +5930,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && world.Has<game::NpcAnimationState>(entity)
                   && world.Has<game::Health>(entity)
                   && world.Has<game::NpcCombatState>(entity)
+                  && world.Has<game::NpcBodyPartDamageState>(entity)
+                  && world.Has<game::NpcBoneImpactState>(entity)
                   && world.Has<game::SectorObjectVisualOffset>(entity)
                   && world.Has<game::SectorDynamicModel>(entity)
                   && world.Has<engine::AnimatedModelInstance>(entity)
@@ -5691,6 +5944,10 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     const game::Health& health = world.Get<game::Health>(entity);
     const game::NpcCombatState& combat =
             world.Get<game::NpcCombatState>(entity);
+    const game::NpcBodyPartDamageState& bodyPartDamage =
+            world.Get<game::NpcBodyPartDamageState>(entity);
+    const game::NpcBoneImpactState& boneImpact =
+            world.Get<game::NpcBoneImpactState>(entity);
     const game::SectorDynamicModel& dynamic =
             world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
@@ -5716,6 +5973,19 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && Near(npcAnimation.animationSpeeds[
                                   static_cast<size_t>(game::NpcAction::Idle)], 1.25f),
           "NPC runtime component copies resolved identity and gameplay definition fields");
+    Check(bodyPartDamage.rows.size() == 2
+                  && bodyPartDamage.rows[0].boneName == "mixamorig:Head"
+                  && Near(bodyPartDamage.rows[0].damageMultiplier, 2.0f)
+                  && bodyPartDamage.rows[0].boneIndex == -1
+                  && !bodyPartDamage.rows[0].boneResolutionAttempted,
+          "NPC runtime copies body-part rows for lazy allocation-free bone resolution");
+    Check(Near(boneImpact.impulseDegreesPerSecond, 420.0f)
+                  && Near(boneImpact.springFrequencyHz, 8.0f)
+                  && Near(boneImpact.springDampingRatio, 0.85f)
+                  && Near(boneImpact.maxAngleDegrees, 18.0f)
+                  && boneImpact.resolvedBoneCount == 0
+                  && !boneImpact.skeletonResolutionAttempted,
+          "enabled NPC bone-impact tuning spawns fixed unresolved runtime state");
     Check(dynamic.requestedAnimation == "Idle"
                   && Near(dynamic.scale, 1.4f)
                   && dynamic.shadowMode
@@ -5731,6 +6001,109 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     Check(animatedModel.poseSource
                     == engine::AnimatedModelPoseSource::RaylibSkeletal,
           "NPCs retain raylib skeletal evaluation and transition blending");
+    Check(!world.Has<game::NpcHeadLookState>(entity),
+          "hostile NPCs omit the friendly head-look runtime component");
+}
+
+void TestSpawnFriendlyNpcCopiesHeadLookDefinition()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 32;
+    object.kind = "npc";
+    object.position = Vector3{2.0f, 8.0f, 2.0f};
+    object.npc.definitionId = "friendly_head_look";
+    object.npc.instanceId = "friendly_one";
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::NpcDefinition definition = game::MakeDefaultNpcDefinition();
+    definition.id = "friendly_head_look";
+    definition.modelPath = "assets/models/characters/TestCharacter.glb";
+    definition.headLook.enabled = true;
+    definition.headLook.boneName = "Head";
+    definition.headLook.rangeWorld = 8.0f;
+    definition.headLook.maxYawDegrees = 50.0f;
+    definition.headLook.maxPitchDegrees = 20.0f;
+    game::GetNpcAction(
+            definition, game::NpcAction::Idle).animation = "Idle";
+    state.npcDefinitionCatalog.definitions.push_back(definition);
+
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.placedObjectEntities.size() == 1,
+          "friendly NPC with head look spawns one runtime entity");
+    if (state.placedObjectEntities.empty()) return;
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Has<game::NpcHeadLookState>(entity)
+                  && !world.Has<game::NpcBoneImpactState>(entity),
+          "enabled friendly NPC receives head-look state while disabled bone impact stays absent");
+    if (!world.Has<game::NpcHeadLookState>(entity)) return;
+    const game::NpcHeadLookState& headLook =
+            world.Get<game::NpcHeadLookState>(entity);
+    Check(headLook.boneName == "Head"
+                  && Near(headLook.rangeWorld, 8.0f)
+                  && Near(headLook.maxYawDegrees, 50.0f)
+                  && Near(headLook.maxPitchDegrees, 20.0f)
+                  && headLook.boneIndex == -1
+                  && !headLook.boneResolutionAttempted,
+          "friendly NPC copies authored head-look tuning for deferred bone resolution");
+}
+
+void TestNpcHeadLookTargetLimitsAndSmoothing()
+{
+    game::NpcHeadLookDefinition definition;
+    definition.enabled = true;
+    definition.boneName = "Head";
+    definition.rangeWorld = 10.0f;
+    definition.maxYawDegrees = 45.0f;
+    definition.maxPitchDegrees = 30.0f;
+    const Vector3 npcPosition{};
+    const Vector3 headPosition{0.0f, 1.0f, 0.0f};
+
+    const game::NpcHeadLookTargetAngles visible =
+            game::EvaluateNpcHeadLookTargetAngles(
+                    npcPosition,
+                    0.0f,
+                    headPosition,
+                    Vector3{1.0f, 1.5f, 1.7320508f},
+                    definition,
+                    true);
+    Check(visible.active
+                  && Near(visible.yawRadians, 30.0f * DEG2RAD, 0.0001f)
+                  && Near(visible.pitchRadians,
+                          std::atan2(0.5f, 2.0f), 0.0001f),
+          "head look evaluates player yaw and pitch inside its configured cone");
+    Check(!game::EvaluateNpcHeadLookTargetAngles(
+                          npcPosition, 0.0f, headPosition,
+                          Vector3{11.0f, 1.0f, 0.0f}, definition, true)
+                          .active,
+          "head look rejects players outside its horizontal range");
+    Check(!game::EvaluateNpcHeadLookTargetAngles(
+                          npcPosition, 0.0f, headPosition,
+                          Vector3{2.0f, 1.0f, 0.0f}, definition, true)
+                          .active,
+          "head look rejects players beyond its per-side yaw limit");
+    Check(!game::EvaluateNpcHeadLookTargetAngles(
+                          npcPosition, 0.0f, headPosition,
+                          Vector3{0.0f, 3.0f, 1.0f}, definition, true)
+                          .active,
+          "head look rejects players beyond its pitch limit");
+    Check(!game::EvaluateNpcHeadLookTargetAngles(
+                          npcPosition, 0.0f, headPosition,
+                          Vector3{0.0f, 1.0f, 2.0f}, definition, false)
+                          .active,
+          "head look rejects occluded players");
+
+    const float turned = game::MoveNpcHeadLookAngleToward(
+            0.0f, 90.0f * DEG2RAD, 0.25f);
+    Check(Near(turned, 45.0f * DEG2RAD, 0.0001f)
+                  && Near(game::MoveNpcHeadLookAngleToward(
+                                  turned, 0.0f, 0.25f),
+                          0.0f, 0.0001f),
+          "head look turns and returns at the fixed 180-degree-per-second speed");
 }
 
 void TestNpcFootstepCadenceUsesResolvedTravel()
@@ -8242,6 +8615,215 @@ void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
           "blood surface anchors follow subsequent skeletal pose movement");
 }
 
+void TestNpcBodyPartDamageUsesSkinWeightsAndSpecificOverrides()
+{
+    std::array<unsigned char, 12> boneIndices{};
+    std::array<float, 12> boneWeights{};
+    Mesh mesh{};
+    mesh.vertexCount = 3;
+    mesh.triangleCount = 1;
+    mesh.boneIndices = boneIndices.data();
+    mesh.boneWeights = boneWeights.data();
+
+    std::array<BoneInfo, 4> bones{};
+    std::strncpy(bones[0].name, "Root", sizeof(bones[0].name) - 1);
+    std::strncpy(bones[1].name, "Arm", sizeof(bones[1].name) - 1);
+    std::strncpy(bones[2].name, "Hand", sizeof(bones[2].name) - 1);
+    std::strncpy(bones[3].name, "Head", sizeof(bones[3].name) - 1);
+    bones[0].parent = -1;
+    bones[1].parent = 0;
+    bones[2].parent = 1;
+    bones[3].parent = 0;
+
+    engine::ModelAsset asset;
+    asset.model.meshCount = 1;
+    asset.model.meshes = &mesh;
+    asset.model.skeleton.boneCount = static_cast<int>(bones.size());
+    asset.model.skeleton.bones = bones.data();
+    engine::AnimatedModelSurfaceAnchor anchor;
+    anchor.valid = true;
+    anchor.meshIndex = 0;
+    anchor.vertexIndices = {0, 1, 2};
+    anchor.barycentric = {0.2f, 0.3f, 0.5f};
+
+    const auto setInfluences = [&](unsigned char firstBone, float firstWeight,
+                                       unsigned char secondBone,
+                                       float secondWeight) {
+        for (size_t vertex = 0; vertex < 3; ++vertex) {
+            boneIndices[vertex * 4] = firstBone;
+            boneIndices[vertex * 4 + 1] = secondBone;
+            boneIndices[vertex * 4 + 2] = 255;
+            boneIndices[vertex * 4 + 3] = 255;
+            boneWeights[vertex * 4] = firstWeight;
+            boneWeights[vertex * 4 + 1] = secondWeight;
+            boneWeights[vertex * 4 + 2] = 0.0f;
+            boneWeights[vertex * 4 + 3] = 0.0f;
+        }
+    };
+
+    game::NpcBodyPartDamageState overlapping;
+    overlapping.rows.push_back({"Arm", 0.5f});
+    overlapping.rows.push_back({"Hand", 0.25f});
+    setInfluences(2, 0.6f, 1, 0.4f);
+    const game::NpcBodyPartDamageMatch hand =
+            game::ClassifyNpcBodyPartDamage(asset, anchor, overlapping);
+    Check(hand.matched && hand.rowIndex == 1 && Near(hand.multiplier, 0.25f),
+          "a majority-weighted selected descendant overrides its selected ancestor");
+
+    game::NpcBodyPartDamageState boundary;
+    boundary.rows.push_back({"Head", 2.0f});
+    setInfluences(3, 0.49f, 0, 0.51f);
+    Check(!game::ClassifyNpcBodyPartDamage(asset, anchor, boundary).matched,
+          "body-part classification requires at least half of interpolated skin influence");
+    setInfluences(3, 0.5f, 0, 0.5f);
+    Check(game::ClassifyNpcBodyPartDamage(asset, anchor, boundary).matched,
+          "body-part classification includes the exact majority threshold");
+
+    game::NpcBodyPartDamageState unrelatedTie;
+    unrelatedTie.rows.push_back({"Head", 2.0f});
+    unrelatedTie.rows.push_back({"Arm", 0.5f});
+    setInfluences(3, 0.5f, 1, 0.5f);
+    const game::NpcBodyPartDamageMatch tie =
+            game::ClassifyNpcBodyPartDamage(asset, anchor, unrelatedTie);
+    Check(tie.matched && tie.rowIndex == 0,
+          "unrelated equal-influence body parts retain authored row order");
+
+    Check(game::ScaleNpcBodyPartDamage(25, 0.5f) == 13
+                  && game::ScaleNpcBodyPartDamage(25, 1.5f) == 38
+                  && game::ScaleNpcBodyPartDamage(25, 0.0f) == 0
+                  && game::ScaleNpcBodyPartDamage(1000000, 100.0f)
+                          == 1000000,
+          "body-part damage rounds to nearest integer and clamps to weapon limits");
+
+    mesh.boneWeights = nullptr;
+    Check(!game::ClassifyNpcBodyPartDamage(
+                  asset, anchor, unrelatedTie).matched,
+          "unskinned exact-hit meshes safely fall back to base damage");
+}
+
+void TestNpcBoneImpactUsesDominantWeightsAndSpringPose()
+{
+    std::array<unsigned char, 12> boneIndices{};
+    std::array<float, 12> boneWeights{};
+    for (size_t vertex = 0; vertex < 3; ++vertex) {
+        boneIndices[vertex * 4] = 2;
+        boneIndices[vertex * 4 + 1] = 1;
+        boneIndices[vertex * 4 + 2] = 255;
+        boneIndices[vertex * 4 + 3] = 255;
+        boneWeights[vertex * 4] = 0.6f;
+        boneWeights[vertex * 4 + 1] = 0.4f;
+    }
+    Mesh mesh{};
+    mesh.vertexCount = 3;
+    mesh.triangleCount = 1;
+    mesh.boneIndices = boneIndices.data();
+    mesh.boneWeights = boneWeights.data();
+
+    std::array<BoneInfo, 4> bones{};
+    std::strncpy(bones[0].name, "Root", sizeof(bones[0].name) - 1);
+    std::strncpy(bones[1].name, "Arm", sizeof(bones[1].name) - 1);
+    std::strncpy(bones[2].name, "Hand", sizeof(bones[2].name) - 1);
+    std::strncpy(bones[3].name, "Sibling", sizeof(bones[3].name) - 1);
+    bones[0].parent = -1;
+    bones[1].parent = 0;
+    bones[2].parent = 1;
+    bones[3].parent = 0;
+
+    const auto pose = [](Vector3 translation) {
+        Transform result{};
+        result.translation = translation;
+        result.rotation = QuaternionIdentity();
+        result.scale = Vector3{1.0f, 1.0f, 1.0f};
+        return result;
+    };
+    std::array<Transform, 4> bindPose{
+            pose(Vector3{0.0f, 0.0f, 0.0f}),
+            pose(Vector3{0.0f, 1.0f, 0.0f}),
+            pose(Vector3{0.0f, 2.0f, 0.0f}),
+            pose(Vector3{1.0f, 1.0f, 0.0f})};
+
+    engine::ModelAsset asset;
+    asset.model.transform = MatrixIdentity();
+    asset.model.meshCount = 1;
+    asset.model.meshes = &mesh;
+    asset.model.skeleton.boneCount = static_cast<int>(bones.size());
+    asset.model.skeleton.bones = bones.data();
+    asset.model.skeleton.bindPose = bindPose.data();
+
+    engine::AnimatedModelSurfaceAnchor anchor;
+    anchor.valid = true;
+    anchor.meshIndex = 0;
+    anchor.vertexIndices = {0, 1, 2};
+    anchor.barycentric = {0.2f, 0.3f, 0.5f};
+    float influence = 0.0f;
+    Check(game::FindNpcBoneImpactDominantBone(
+                  asset, anchor, &influence) == 2
+                  && Near(influence, 0.6f),
+          "bone-impact classification selects the strongest interpolated skin influence");
+
+    for (size_t vertex = 0; vertex < 3; ++vertex) {
+        boneWeights[vertex * 4] = 0.5f;
+        boneWeights[vertex * 4 + 1] = 0.5f;
+        boneIndices[vertex * 4] = 1;
+        boneIndices[vertex * 4 + 1] = 2;
+    }
+    Check(game::FindNpcBoneImpactDominantBone(asset, anchor) == 1,
+          "equal dominant bone influences resolve deterministically by skeleton order");
+
+    engine::AnimatedModelInstance instance;
+    instance.model = engine::ModelHandle{51, 1};
+    instance.poseReady = true;
+    instance.currentPose.assign(bindPose.begin(), bindPose.end());
+    instance.boneMatrices.assign(bones.size(), MatrixIdentity());
+    game::NpcBoneImpactState state;
+    state.impulseDegreesPerSecond = 360.0f;
+    state.springFrequencyHz = 7.0f;
+    state.springDampingRatio = 0.75f;
+    state.maxAngleDegrees = 20.0f;
+    Check(game::AddNpcBoneImpactImpulse(
+                  state,
+                  asset,
+                  instance,
+                  MatrixIdentity(),
+                  1,
+                  Vector3{0.0f, 2.0f, 0.0f},
+                  Vector3{0.0f, 0.0f, 1.0f})
+                  && state.activeBones[1] != 0
+                  && state.angularVelocities[1].x > 0.0f,
+          "weapon direction and bone-to-impact lever produce an immediate angular impulse");
+    Check(game::AdvanceNpcBoneImpactSpring(state, 1.0f / 60.0f)
+                  && state.angularOffsets[1].x > 0.0f,
+          "bone-impact spring advances the queued impulse without allocation");
+    const Vector3 siblingBefore = instance.currentPose[3].translation;
+    Check(game::ApplyNpcBoneImpactPose(asset, instance, state)
+                  && !Near(instance.currentPose[2].translation,
+                          bindPose[2].translation)
+                  && Near(instance.currentPose[3].translation, siblingBefore),
+          "procedural rotation affects the struck bone subtree while preserving siblings");
+
+    state.maxAngleDegrees = 5.0f;
+    state.angularOffsets[1] = {};
+    state.angularVelocities[1] = Vector3{5000.0f, 0.0f, 0.0f};
+    state.activeBones[1] = 1;
+    game::AdvanceNpcBoneImpactSpring(state, 0.1f);
+    Check(Vector3Length(state.angularOffsets[1])
+                    <= 5.0f * DEG2RAD + 0.00001f,
+          "bone-impact displacement remains within its configured angular limit");
+
+    state.maxAngleDegrees = 20.0f;
+    for (int frame = 0; frame < 900; ++frame) {
+        game::AdvanceNpcBoneImpactSpring(state, 1.0f / 60.0f);
+    }
+    Check(state.activeBones[1] == 0
+                  && Near(Vector3Length(state.angularOffsets[1]), 0.0f)
+                  && Near(Vector3Length(state.angularVelocities[1]), 0.0f),
+          "damped bone-impact motion converges exactly back to the animation pose");
+
+    mesh.boneWeights = nullptr;
+    Check(game::FindNpcBoneImpactDominantBone(asset, anchor) == -1,
+          "unskinned exact hits cannot queue a procedural bone impulse");
+}
+
 void TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint()
 {
     const std::filesystem::path root =
@@ -10314,6 +10896,7 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
     world.Add(npc, game::SectorObjectTransform{{0.0f, 0.0f, 0.0f}});
     world.Add(npc, game::SectorObject{1, true});
     world.Add(npc, game::SectorDynamicModel{});
+    world.Add(npc, game::NpcBoneImpactState{});
 
     game::SectorNavigationWorld navigation;
     game::NpcNavigationRuntime npcNavigation;
@@ -10354,8 +10937,14 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
                           0.18f)
                   && npcAudio.records.front().pendingEvent
                           == game::NpcVocalEvent::Hurt
+                  && std::all_of(
+                          world.Get<game::NpcBoneImpactState>(npc)
+                                  .activeBones.begin(),
+                          world.Get<game::NpcBoneImpactState>(npc)
+                                  .activeBones.end(),
+                          [](uint8_t active) { return active == 0; })
                   && event.kind == game::WeaponImpactKind::Blood,
-          "weapon shot requests hurt animation, vocal, stagger, and blood");
+          "capsule fallback requests normal hurt effects without a bone impulse");
 
     game::SectorImpactParticleSystem particles;
     particles.Spawn(event);
@@ -10836,6 +11425,7 @@ int main()
     TestSectorSwingDoorClosingSweepReopensWithoutTunneling();
     TestSectorDoorNavigationHoldsAndSlidingObstruction();
     TestNpcDoorTraversalStagesWaitsCrossesAndReleases();
+    TestCutscenePlayerDoorTraversalHoldsOpensCrossesAndReleases();
     TestCrowdQueuesNpcAgentsThroughDoor();
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();
@@ -10880,6 +11470,8 @@ int main()
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
     TestDynamicModelColliderCollectionIsSeparatedForNavigation();
     TestSpawnNpcResolvesDefinitionAndIdlePlayback();
+    TestSpawnFriendlyNpcCopiesHeadLookDefinition();
+    TestNpcHeadLookTargetLimitsAndSmoothing();
     TestNpcFootstepCadenceUsesResolvedTravel();
     TestNpcFootstepAnimationPhaseCrossings();
     TestNpcAiDebugGeometryAndLabelsExposeRuntimeState();
@@ -10911,6 +11503,8 @@ int main()
     TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose();
     TestAnimatedModelGltfSkinPreparationBuildsBindPose();
     TestAnimatedModelRaycastUsesCurrentSkinnedGeometry();
+    TestNpcBodyPartDamageUsesSkinWeightsAndSpecificOverrides();
+    TestNpcBoneImpactUsesDominantWeightsAndSpringPose();
     TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();

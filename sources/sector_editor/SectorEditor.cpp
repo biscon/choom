@@ -2,6 +2,7 @@
 
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
+#include "sector_editor/SectorEditorColorSettingsModal.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
@@ -838,6 +839,13 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
+        if (state.colorSettingsModal.open) {
+            DrawColorSettingsModal(
+                    ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         if (playerSettingsState.open) {
             DrawPlayerSettingsModal(
                     ui, config, input, assets, font, smallFont);
@@ -956,6 +964,13 @@ void SectorEditor::RenderUI(
     }
     if (state.lightmapBakeSetupModal.open) {
         DrawLightmapBakeSetupModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.colorSettingsModal.open) {
+        DrawColorSettingsModal(
+                ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -1490,6 +1505,9 @@ void SectorEditor::HandleMainMenuCommand(
             break;
         case SectorEditorMainMenuCommand::OpenLevelSettings:
             OpenPreviewSettingsModal();
+            break;
+        case SectorEditorMainMenuCommand::OpenColorSettings:
+            OpenColorSettingsModal();
             break;
         case SectorEditorMainMenuCommand::OpenPlayerSettings:
             if (engineContext != nullptr) {
@@ -6673,6 +6691,35 @@ void SectorEditor::DrawPreviewSettingsModal(
             callbacks);
 }
 
+void SectorEditor::DrawColorSettingsModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    const SectorEditorColorSettingsModalAction action =
+            DrawSectorEditorColorSettingsModal(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    smallFont,
+                    state.colorSettingsModal);
+    switch (action) {
+        case SectorEditorColorSettingsModalAction::Cancel:
+            state.colorSettingsModal = {};
+            break;
+        case SectorEditorColorSettingsModalAction::Apply:
+            ApplyColorSettingsModal();
+            break;
+        case SectorEditorColorSettingsModalAction::None:
+            break;
+    }
+}
+
 void SectorEditor::DrawPlayerSettingsModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -7203,6 +7250,7 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.doorTextureSettingsModal.open
             || state.lightmapBakeSetupModal.open
             || state.previewSettingsModal.open
+            || state.colorSettingsModal.open
             || playerSettingsState.open;
 }
 
@@ -7705,6 +7753,37 @@ void SectorEditor::OpenPreviewSettingsModal()
             NormalizeSectorLevelLightmapSettings(TopologyMap().lightmapSettings);
     state.previewSettingsModal.draftHdrBloom =
             engine::NormalizeHdrBloomSettings(applicationSettings.hdrBloom);
+}
+
+void SectorEditor::OpenColorSettingsModal()
+{
+    state.colorSettingsModal = {};
+    state.colorSettingsModal.open = true;
+    state.colorSettingsModal.draft = engine::NormalizeToneMappingSettings(
+            applicationSettings.toneMapping);
+}
+
+void SectorEditor::ApplyColorSettingsModal()
+{
+    if (!state.colorSettingsModal.open) return;
+
+    FpsApplicationSettings candidate = applicationSettings;
+    candidate.toneMapping = engine::NormalizeToneMappingSettings(
+            state.colorSettingsModal.draft);
+    std::string saveError;
+    if (!SaveFpsApplicationSettings(
+                applicationSettingsPath,
+                candidate,
+                &saveError)) {
+        state.colorSettingsModal.errorMessage = saveError.empty()
+                ? "Could not save color settings"
+                : saveError;
+        return;
+    }
+
+    applicationSettings = std::move(candidate);
+    statusText = "Color settings saved";
+    state.colorSettingsModal = {};
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)

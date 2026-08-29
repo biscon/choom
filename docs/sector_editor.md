@@ -975,6 +975,47 @@ the NPC Editor. Hostile/friendly remains faction and collision data. The AI Type
 dropdown filters registered AI descriptors by that alignment and also permits
 `None`. Per-definition perception fields author vision range, the full
 horizontal vision-cone angle, hearing range, and investigation duration.
+Non-hostile definitions may also enable procedural Head look. The editor reads
+the selected character model's skeleton for an exact head-bone dropdown and
+authors a horizontal activation range plus separate per-side yaw and pitch
+limits. At runtime the selected bone and its descendants smoothly turn toward
+the player's eye position at 180 degrees per second after the current idle,
+walk, or other skeletal animation has been sampled. Walls, closed doors, and
+solid static props block the look; leaving the range or angle limits smoothly
+returns the pose to its animation. Hostile, dead, disabled, missing-model, and
+missing-bone NPCs do not track. The optional `headLook` JSON object defaults to
+disabled, so existing definitions are unchanged.
+
+NPC definitions may also author zero or more Bodypart damage rows. Each row
+selects a skeletal bone and a damage multiplier; the selected bone includes all
+of its descendants. Player weapon shots continue to intersect the current
+animated mesh exactly. At the resulting surface point, the runtime interpolates
+the triangle vertices' skin weights and applies a row when at least half of the
+influence belongs to its bone subtree. A selected descendant overrides an
+eligible selected ancestor, allowing a hand row to override an arm row. Between
+unrelated matches the strongest influence wins, with authored order breaking an
+exact tie. Damage is rounded to the nearest health point after scaling. Areas
+without a matching row use the weapon's base damage, and an empty or omitted
+`bodyPartDamage` array preserves the previous behavior. Capsule fallback hits,
+unskinned meshes, and missing bones also use base damage. Bone masks are cached;
+classification runs only after an exact NPC mesh hit and allocates no memory in
+the shooting path.
+
+NPC definitions may independently enable Procedural bone impact reactions.
+An exact animated-mesh hit interpolates the triangle's skin weights and chooses
+the strongest bone influence at the impact point. The shot adds an angular
+impulse derived from the bullet direction and the lever from that bone's
+animated pivot to the surface hit. After the normal animation and optional head
+look have been evaluated, a damped spring rotates that bone and its descendants;
+hurt and death animations therefore remain the base pose instead of being
+replaced. The NPC editor exposes impulse strength, spring frequency, damping,
+and a maximum angle. Repeated shots and pellet hits accumulate up to that angle.
+The optional `boneImpact` JSON object defaults to disabled. Enabled NPCs use
+fixed-capacity per-bone state allocated when the NPC spawns, while inactive
+springs are skipped and the update/shot paths allocate no memory. Unskinned
+meshes, invalid skeletons, and capsule fallback hits retain the normal damage
+and hurt behavior without a procedural reaction.
+
 NPC hearing uses the same wall, closed-door, and open-portal propagation routes
 as positional audio. The route length must fit the NPC hearing range and the
 sound event radius is reduced by that route's transmission or diffraction gain.
@@ -1044,6 +1085,17 @@ diagnostics. Patrol routes also appear for non-hostile NPCs. It is independent
 from the F8 navigation diagnostics and remains enabled across `/reload` until
 the campaign session ends or the command disables it.
 
+The global HDR presentation uses the project-authored tone mapping selected
+under `Settings -> Color`. `Khronos PBR Neutral` is the default and follows the
+Khronos reference operator; `ACES Filmic (fitted)` provides the lightweight
+Narkowicz real-time fit rather than a full ACES output transform. Shared
+exposure compensation is expressed in EV, defaults to `0`, and is applied to
+the combined linear HDR scene before the selected operator. These values are
+stored in application settings and affect both editor 3D preview and gameplay,
+but are intentionally absent from the player-facing graphics menu. They are
+post-processing settings and do not affect level data or lightmap source
+hashes.
+
 The game presentation shader also provides a configurable low-health screen
 effect under `Settings -> Player -> Health`. It starts below the authored health
 ratio (default `0.5`) and uses a smooth progression toward its configured
@@ -1051,7 +1103,7 @@ maximum vignette opacity and desaturation as health approaches zero. The
 vignette is a soft rounded-screen mask tinted with the authored dark red color;
 its artist-facing opacity uses a quadratic ease-out so injuries become readable
 earlier and high opacity values appear substantially less transparent. It is
-applied after neutral tone mapping but before the final sRGB transfer, so
+applied after the selected tone mapping but before the final sRGB transfer, so
 it composes with the existing HDR presentation without another fullscreen pass.
 The effect is game-runtime-only: the editor 3D preview always supplies neutral
 presentation parameters, regardless of the settings.

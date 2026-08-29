@@ -10,6 +10,35 @@
   "perception": {
     "hearingRangeWorld": 20.0
   },
+  "bodyPartDamage": [
+    {
+      "boneName": "mixamorig:Head",
+      "damageMultiplier": 4.0
+    },
+    {
+      "boneName": "mixamorig:LeftLeg",
+      "damageMultiplier": 0.5
+    },
+    {
+      "boneName": "mixamorig:RightLeg",
+      "damageMultiplier": 0.5
+    },
+    {
+      "boneName": "mixamorig:LeftArm",
+      "damageMultiplier": 0.5
+    },
+    {
+      "boneName": "mixamorig:RightArm",
+      "damageMultiplier": 0.5
+    }
+  ],
+  "boneImpact": {
+    "enabled": true,
+    "impulseDegreesPerSecond": 1200.0,
+    "springFrequencyHz": 3.5,
+    "springDampingRatio": 0.4000000059604645,
+    "maxAngleDegrees": 40.0
+  },
   "ambientVocalizations": {
     "sounds": [
       "npc/zombie/Zombie_Growl_01.wav",
@@ -26,13 +55,19 @@
       "animation": "Walk",
       "animationSpeed": 2.0,
       "movementSpeed": 0.75,
-      "footstepPhases": [0.12, 0.60]
+      "footstepPhases": [
+        0.11999999731779099,
+        0.6000000238418579
+      ]
     },
     "run": {
       "animation": "Running",
       "animationSpeed": 1.100000023841858,
       "movementSpeed": 4.0,
-      "footstepPhases": [0.42, 0.95]
+      "footstepPhases": [
+        0.41999998688697815,
+        0.949999988079071
+      ]
     },
     "attack": {
       "animation": "Attack",

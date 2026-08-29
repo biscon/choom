@@ -40,6 +40,9 @@ void OpenApplicationMenu(
         ApplicationFlowState& state,
         ApplicationScreen returnScreen);
 bool ReturnFromApplicationMenu(ApplicationFlowState& state);
+bool ShouldRebuildGameFromEditorOnResume(
+        const ApplicationFlowState& state,
+        bool editorAttachedToGame);
 void MarkApplicationGameStarted(ApplicationFlowState& state);
 void MarkApplicationGameStopped(ApplicationFlowState& state);
 void ShowApplicationEditor(ApplicationFlowState& state);

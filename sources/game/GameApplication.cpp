@@ -41,6 +41,8 @@ bool GameApplication::Init(
     menuStatus = std::move(settingsLoadError);
     applicationSettings.graphics =
             NormalizeFpsGraphicsSettings(applicationSettings.graphics);
+    applicationSettings.toneMapping = engine::NormalizeToneMappingSettings(
+            applicationSettings.toneMapping);
     engine::SetDebugConsoleLogCaptureEnabled(
             applicationSettings.consoleEnabled);
     const engine::FontHandle consoleFont = context.assets.RequestFont(
@@ -735,6 +737,12 @@ const engine::RenderTarget* GameApplication::HdrDebugPresentationSource() const
     return editor.Preview3DHdrDebugPresentationSource();
 }
 
+float GameApplication::WorldFadeOpacity() const
+{
+    return BackgroundScreen() == ApplicationScreen::Game
+            ? gameSession.WorldFadeOpacity() : 0.0f;
+}
+
 void GameApplication::Render3DHud(
         const engine::World& world,
         engine::AssetManager& assets,
@@ -1120,7 +1128,7 @@ void GameApplication::ResumeGame(engine::EngineContext& context)
     if (!gameSession.IsRunning()) {
         return;
     }
-    if (editorAttachedToGame) {
+    if (ShouldRebuildGameFromEditorOnResume(flow, editorAttachedToGame)) {
         const SectorTopologyMap editedMap = editor.CurrentTopologyMap();
         editor.SuspendRuntime(context);
         std::string error;
