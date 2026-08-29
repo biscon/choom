@@ -36,6 +36,8 @@ inline constexpr float kDefaultNpcHeadLookMaxPitchDegrees = 30.0f;
 inline constexpr float kMaximumNpcHeadLookYawDegrees = 90.0f;
 inline constexpr float kMaximumNpcHeadLookPitchDegrees = 60.0f;
 inline constexpr size_t kMaximumNpcBoneNameLength = 31;
+inline constexpr size_t kMaximumNpcBodyPartDamageRows = 32;
+inline constexpr float kMaximumNpcBodyPartDamageMultiplier = 100.0f;
 inline constexpr float kDefaultNpcAttackHitPhase = 0.55f;
 inline constexpr float kDefaultNpcAttackRangeWorld = 1.0f;
 inline constexpr float kDefaultNpcAttackAdvanceSpeedMultiplier = 1.0f;
@@ -137,6 +139,11 @@ struct NpcHeadLookDefinition {
     float maxPitchDegrees = kDefaultNpcHeadLookMaxPitchDegrees;
 };
 
+struct NpcBodyPartDamageDefinition {
+    std::string boneName;
+    float damageMultiplier = 1.0f;
+};
+
 struct NpcDefinition {
     std::string id;
     std::string name;
@@ -152,6 +159,7 @@ struct NpcDefinition {
     std::string playerDetectedSoundPath;
     NpcPerceptionDefinition perception;
     NpcHeadLookDefinition headLook;
+    std::vector<NpcBodyPartDamageDefinition> bodyPartDamage;
     NpcAmbientVocalizationDefinition ambientVocalizations;
     std::array<NpcActionDefinition, kNpcActionCount> actions;
 };

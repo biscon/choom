@@ -362,6 +362,34 @@ bool ValidateNpcDefinition(
         outError = "NPC head-look range must be between 0 and 10000 world units, yaw between 0 and 90 degrees, and pitch between 0 and 60 degrees";
         return false;
     }
+    if (definition.bodyPartDamage.size()
+            > kMaximumNpcBodyPartDamageRows) {
+        outError = "NPC body-part damage supports at most 32 rows";
+        return false;
+    }
+    std::unordered_set<std::string> bodyPartBones;
+    for (const NpcBodyPartDamageDefinition& bodyPart
+            : definition.bodyPartDamage) {
+        if (bodyPart.boneName.empty()) {
+            outError = "NPC body-part damage rows require a bone name";
+            return false;
+        }
+        if (bodyPart.boneName.size() > kMaximumNpcBoneNameLength) {
+            outError = "NPC body-part damage bone name must fit the model bone-name limit";
+            return false;
+        }
+        if (!bodyPartBones.insert(bodyPart.boneName).second) {
+            outError = "NPC body-part damage bone names must be unique";
+            return false;
+        }
+        if (!std::isfinite(bodyPart.damageMultiplier)
+                || bodyPart.damageMultiplier < 0.0f
+                || bodyPart.damageMultiplier
+                        > kMaximumNpcBodyPartDamageMultiplier) {
+            outError = "NPC body-part damage multipliers must be between 0 and 100";
+            return false;
+        }
+    }
     if (definition.baseHealth < kMinimumNpcBaseHealth
             || definition.baseHealth > kMaximumNpcBaseHealth) {
         outError = "NPC base health must be between 1 and 1000000";
@@ -536,7 +564,7 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "headLook", "canOpenDoors",
+                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "headLook", "bodyPartDamage", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
                  "animationBlendSeconds", "playerDetectedSound",
@@ -627,6 +655,34 @@ bool ParseNpcDefinitionJson(
             parsed.headLook.maxPitchDegrees = OptionalFloat(
                     *headLook, "maxPitchDegrees",
                     kDefaultNpcHeadLookMaxPitchDegrees, context);
+        }
+
+        const auto bodyPartDamage = root.find("bodyPartDamage");
+        if (bodyPartDamage != root.end()) {
+            const std::string context = "NPC definition.bodyPartDamage";
+            if (!bodyPartDamage->is_array()) {
+                Fail(context + " must be an array");
+            }
+            if (bodyPartDamage->size() > kMaximumNpcBodyPartDamageRows) {
+                Fail(context + " supports at most 32 rows");
+            }
+            parsed.bodyPartDamage.reserve(bodyPartDamage->size());
+            for (size_t index = 0; index < bodyPartDamage->size(); ++index) {
+                const Json& row = (*bodyPartDamage)[index];
+                const std::string rowContext = context + "["
+                        + std::to_string(index) + "]";
+                if (!row.is_object()) Fail(rowContext + " must be an object");
+                RejectUnknownFields(
+                        row,
+                        {"boneName", "damageMultiplier"},
+                        rowContext);
+                NpcBodyPartDamageDefinition parsedRow;
+                parsedRow.boneName = RequireString(
+                        row, "boneName", rowContext);
+                parsedRow.damageMultiplier = OptionalFloat(
+                        row, "damageMultiplier", 1.0f, rowContext);
+                parsed.bodyPartDamage.push_back(std::move(parsedRow));
+            }
         }
 
         const auto ambient = root.find("ambientVocalizations");
@@ -873,6 +929,17 @@ bool SerializeNpcDefinitionJson(
                 headLookJson["maxPitchDegrees"] = headLook.maxPitchDegrees;
             }
             root["headLook"] = std::move(headLookJson);
+        }
+
+        if (!definition.bodyPartDamage.empty()) {
+            Json bodyPartDamageJson = Json::array();
+            for (const NpcBodyPartDamageDefinition& row
+                    : definition.bodyPartDamage) {
+                bodyPartDamageJson.push_back({
+                        {"boneName", row.boneName},
+                        {"damageMultiplier", row.damageMultiplier}});
+            }
+            root["bodyPartDamage"] = std::move(bodyPartDamageJson);
         }
 
         const NpcAmbientVocalizationDefinition& ambient =

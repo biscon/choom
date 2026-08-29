@@ -22,6 +22,7 @@ class SectorNavigationWorld;
 struct NpcNavigationRuntime;
 struct NpcAudioRuntime;
 struct NpcAiRuntime;
+struct NpcBodyPartDamageState;
 struct SectorDynamicDoorCollider;
 struct SectorStaticModelCollider;
 struct SectorTopologyMap;
@@ -53,6 +54,19 @@ struct WeaponPelletVolleyResult {
 struct NpcCombatRuntime {
     std::vector<engine::Entity> deferredDestroy;
 };
+
+struct NpcBodyPartDamageMatch {
+    float multiplier = 1.0f;
+    int rowIndex = -1;
+    bool matched = false;
+};
+
+NpcBodyPartDamageMatch ClassifyNpcBodyPartDamage(
+        const engine::ModelAsset& asset,
+        const engine::AnimatedModelSurfaceAnchor& anchor,
+        NpcBodyPartDamageState& state);
+
+int ScaleNpcBodyPartDamage(int baseDamage, float multiplier);
 
 void InitializeNpcCombatRuntime(NpcCombatRuntime& runtime, size_t npcCapacity);
 void ClearNpcCombatRuntime(NpcCombatRuntime& runtime);

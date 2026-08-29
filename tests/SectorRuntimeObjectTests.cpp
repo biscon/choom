@@ -5909,6 +5909,9 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     game::GetNpcAction(definition, game::NpcAction::Walk).movementSpeed = 2.0f;
     game::GetNpcAction(definition, game::NpcAction::Run).movementSpeed = 4.5f;
     definition.animationBlendSeconds = 0.35f;
+    definition.bodyPartDamage = {
+            {"mixamorig:Head", 2.0f},
+            {"mixamorig:LeftArm", 0.5f}};
     state.npcDefinitionCatalog = game::NpcDefinitionCatalog{};
     state.npcDefinitionCatalog.definitions.push_back(definition);
 
@@ -5921,6 +5924,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && world.Has<game::NpcAnimationState>(entity)
                   && world.Has<game::Health>(entity)
                   && world.Has<game::NpcCombatState>(entity)
+                  && world.Has<game::NpcBodyPartDamageState>(entity)
                   && world.Has<game::SectorObjectVisualOffset>(entity)
                   && world.Has<game::SectorDynamicModel>(entity)
                   && world.Has<engine::AnimatedModelInstance>(entity)
@@ -5933,6 +5937,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     const game::Health& health = world.Get<game::Health>(entity);
     const game::NpcCombatState& combat =
             world.Get<game::NpcCombatState>(entity);
+    const game::NpcBodyPartDamageState& bodyPartDamage =
+            world.Get<game::NpcBodyPartDamageState>(entity);
     const game::SectorDynamicModel& dynamic =
             world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
@@ -5958,6 +5964,12 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && Near(npcAnimation.animationSpeeds[
                                   static_cast<size_t>(game::NpcAction::Idle)], 1.25f),
           "NPC runtime component copies resolved identity and gameplay definition fields");
+    Check(bodyPartDamage.rows.size() == 2
+                  && bodyPartDamage.rows[0].boneName == "mixamorig:Head"
+                  && Near(bodyPartDamage.rows[0].damageMultiplier, 2.0f)
+                  && bodyPartDamage.rows[0].boneIndex == -1
+                  && !bodyPartDamage.rows[0].boneResolutionAttempted,
+          "NPC runtime copies body-part rows for lazy allocation-free bone resolution");
     Check(dynamic.requestedAnimation == "Idle"
                   && Near(dynamic.scale, 1.4f)
                   && dynamic.shadowMode
@@ -8584,6 +8596,92 @@ void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
                                   authored),
                           0.0001f),
           "blood surface anchors follow subsequent skeletal pose movement");
+}
+
+void TestNpcBodyPartDamageUsesSkinWeightsAndSpecificOverrides()
+{
+    std::array<unsigned char, 12> boneIndices{};
+    std::array<float, 12> boneWeights{};
+    Mesh mesh{};
+    mesh.vertexCount = 3;
+    mesh.triangleCount = 1;
+    mesh.boneIndices = boneIndices.data();
+    mesh.boneWeights = boneWeights.data();
+
+    std::array<BoneInfo, 4> bones{};
+    std::strncpy(bones[0].name, "Root", sizeof(bones[0].name) - 1);
+    std::strncpy(bones[1].name, "Arm", sizeof(bones[1].name) - 1);
+    std::strncpy(bones[2].name, "Hand", sizeof(bones[2].name) - 1);
+    std::strncpy(bones[3].name, "Head", sizeof(bones[3].name) - 1);
+    bones[0].parent = -1;
+    bones[1].parent = 0;
+    bones[2].parent = 1;
+    bones[3].parent = 0;
+
+    engine::ModelAsset asset;
+    asset.model.meshCount = 1;
+    asset.model.meshes = &mesh;
+    asset.model.skeleton.boneCount = static_cast<int>(bones.size());
+    asset.model.skeleton.bones = bones.data();
+    engine::AnimatedModelSurfaceAnchor anchor;
+    anchor.valid = true;
+    anchor.meshIndex = 0;
+    anchor.vertexIndices = {0, 1, 2};
+    anchor.barycentric = {0.2f, 0.3f, 0.5f};
+
+    const auto setInfluences = [&](unsigned char firstBone, float firstWeight,
+                                       unsigned char secondBone,
+                                       float secondWeight) {
+        for (size_t vertex = 0; vertex < 3; ++vertex) {
+            boneIndices[vertex * 4] = firstBone;
+            boneIndices[vertex * 4 + 1] = secondBone;
+            boneIndices[vertex * 4 + 2] = 255;
+            boneIndices[vertex * 4 + 3] = 255;
+            boneWeights[vertex * 4] = firstWeight;
+            boneWeights[vertex * 4 + 1] = secondWeight;
+            boneWeights[vertex * 4 + 2] = 0.0f;
+            boneWeights[vertex * 4 + 3] = 0.0f;
+        }
+    };
+
+    game::NpcBodyPartDamageState overlapping;
+    overlapping.rows.push_back({"Arm", 0.5f});
+    overlapping.rows.push_back({"Hand", 0.25f});
+    setInfluences(2, 0.6f, 1, 0.4f);
+    const game::NpcBodyPartDamageMatch hand =
+            game::ClassifyNpcBodyPartDamage(asset, anchor, overlapping);
+    Check(hand.matched && hand.rowIndex == 1 && Near(hand.multiplier, 0.25f),
+          "a majority-weighted selected descendant overrides its selected ancestor");
+
+    game::NpcBodyPartDamageState boundary;
+    boundary.rows.push_back({"Head", 2.0f});
+    setInfluences(3, 0.49f, 0, 0.51f);
+    Check(!game::ClassifyNpcBodyPartDamage(asset, anchor, boundary).matched,
+          "body-part classification requires at least half of interpolated skin influence");
+    setInfluences(3, 0.5f, 0, 0.5f);
+    Check(game::ClassifyNpcBodyPartDamage(asset, anchor, boundary).matched,
+          "body-part classification includes the exact majority threshold");
+
+    game::NpcBodyPartDamageState unrelatedTie;
+    unrelatedTie.rows.push_back({"Head", 2.0f});
+    unrelatedTie.rows.push_back({"Arm", 0.5f});
+    setInfluences(3, 0.5f, 1, 0.5f);
+    const game::NpcBodyPartDamageMatch tie =
+            game::ClassifyNpcBodyPartDamage(asset, anchor, unrelatedTie);
+    Check(tie.matched && tie.rowIndex == 0,
+          "unrelated equal-influence body parts retain authored row order");
+
+    Check(game::ScaleNpcBodyPartDamage(25, 0.5f) == 13
+                  && game::ScaleNpcBodyPartDamage(25, 1.5f) == 38
+                  && game::ScaleNpcBodyPartDamage(25, 0.0f) == 0
+                  && game::ScaleNpcBodyPartDamage(1000000, 100.0f)
+                          == 1000000,
+          "body-part damage rounds to nearest integer and clamps to weapon limits");
+
+    mesh.boneWeights = nullptr;
+    Check(!game::ClassifyNpcBodyPartDamage(
+                  asset, anchor, unrelatedTie).matched,
+          "unskinned exact-hit meshes safely fall back to base damage");
 }
 
 void TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint()
@@ -11258,6 +11356,7 @@ int main()
     TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose();
     TestAnimatedModelGltfSkinPreparationBuildsBindPose();
     TestAnimatedModelRaycastUsesCurrentSkinnedGeometry();
+    TestNpcBodyPartDamageUsesSkinWeightsAndSpecificOverrides();
     TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();

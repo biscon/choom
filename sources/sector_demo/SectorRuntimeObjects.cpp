@@ -46,7 +46,7 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(31);
+    world.ReserveComponentTypes(32);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -61,6 +61,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<NpcHeadLookState>(objectCapacity);
     world.ReserveComponent<Health>(objectCapacity);
     world.ReserveComponent<NpcCombatState>(objectCapacity);
+    world.ReserveComponent<NpcBodyPartDamageState>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
     world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
@@ -1375,6 +1376,19 @@ void SpawnPlacedRuntimeObjects(
             npcCombat.corpseFadeDurationSeconds =
                     definition->corpseFadeDurationSeconds;
             world.Add(entity, npcCombat);
+            if (!definition->bodyPartDamage.empty()) {
+                NpcBodyPartDamageState bodyPartDamage;
+                bodyPartDamage.rows.reserve(definition->bodyPartDamage.size());
+                for (const NpcBodyPartDamageDefinition& authoredRow
+                        : definition->bodyPartDamage) {
+                    NpcBodyPartDamageRuntimeRow runtimeRow;
+                    runtimeRow.boneName = authoredRow.boneName;
+                    runtimeRow.damageMultiplier =
+                            authoredRow.damageMultiplier;
+                    bodyPartDamage.rows.push_back(std::move(runtimeRow));
+                }
+                world.Add(entity, std::move(bodyPartDamage));
+            }
             NpcAnimationState npcAnimation;
             npcAnimation.blendSeconds = definition->animationBlendSeconds;
             for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {

@@ -277,6 +277,10 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
         const float contentHeight = 21.0f * (RowHeight + RowGap)
+                + 3.0f * (RowHeight + RowGap) + 4.0f
+                + static_cast<float>(
+                        selected->definition.bodyPartDamage.size())
+                        * (RowHeight + RowGap + 30.0f)
                 + (!selected->definition.hostile
                                 ? 7.0f * (RowHeight + RowGap)
                                 : 0.0f)
@@ -623,6 +627,173 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                         ? config.invalidColor
                         : config.mutedTextColor);
         y += RowHeight + RowGap;
+
+        engine::Separator(
+                config,
+                Rectangle{
+                        formScroll.viewport.x,
+                        formScroll.viewport.y
+                                - editor.Session().formScroll.offset.y + y,
+                        formScroll.viewport.width,
+                        12.0f});
+        y += 18.0f;
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, y, formScroll.viewport.width, 34.0f},
+                font, "Bodypart damage",
+                engine::UITextJustify::Left,
+                config.accentColor);
+        y += 38.0f;
+
+        if (selected->definition.bodyPartDamage.empty()) {
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{fieldX, y, fieldW, RowHeight},
+                    smallFont,
+                    "No rows: all exact mesh hits use weapon base damage",
+                    engine::UITextJustify::Left,
+                    config.mutedTextColor,
+                    true);
+            y += RowHeight + RowGap;
+        } else {
+            size_t removeBodyPartIndex = kMaximumNpcBodyPartDamageRows;
+            for (size_t rowIndex = 0;
+                    rowIndex < selected->definition.bodyPartDamage.size();
+                    ++rowIndex) {
+                NpcBodyPartDamageDefinition row =
+                        selected->definition.bodyPartDamage[rowIndex];
+                const std::string rowLabel = "Body part "
+                        + std::to_string(rowIndex + 1);
+                drawLabel(rowLabel.c_str());
+
+                const float removeWidth = 92.0f;
+                const float multiplierWidth = 104.0f;
+                const float controlGap = 8.0f;
+                const float boneWidth = std::max(
+                        120.0f,
+                        fieldW - removeWidth - multiplierWidth
+                                - controlGap * 2.0f);
+                int selectedBone = 0;
+                for (size_t boneIndex = 1;
+                        boneIndex < state.boneOptionStorage.size();
+                        ++boneIndex) {
+                    if (state.boneOptionStorage[boneIndex] == row.boneName) {
+                        selectedBone = static_cast<int>(boneIndex);
+                        break;
+                    }
+                }
+                const std::string boneWidgetId =
+                        "sector_editor_npc_body_part_bone_"
+                        + std::to_string(rowIndex);
+                if (!state.boneOptions.empty()
+                        && engine::Option(
+                                ui, config, input, assets,
+                                boneWidgetId.c_str(),
+                                Rectangle{fieldX, y, boneWidth, RowHeight},
+                                font,
+                                state.boneOptions.data(),
+                                state.boneOptions.size(),
+                                selectedBone)) {
+                    const std::string boneName = selectedBone >= 0
+                                    && selectedBone < static_cast<int>(
+                                            state.boneOptionStorage.size())
+                            ? state.boneOptionStorage[
+                                      static_cast<size_t>(selectedBone)]
+                            : std::string{};
+                    editor.SetSelectedBodyPartDamageBone(
+                            rowIndex, boneName);
+                    row.boneName = boneName;
+                }
+                if (state.boneOptions.empty()) {
+                    engine::Text(
+                            ui, config, assets,
+                            Rectangle{fieldX, y, boneWidth, RowHeight},
+                            smallFont,
+                            row.boneName.empty()
+                                    ? "<No skeletal bones loaded>"
+                                    : row.boneName.c_str(),
+                            engine::UITextJustify::Left,
+                            config.invalidColor);
+                }
+
+                float multiplier = row.damageMultiplier;
+                const std::string multiplierWidgetId =
+                        "sector_editor_npc_body_part_multiplier_"
+                        + std::to_string(rowIndex);
+                const engine::UINumericInputResult multiplierResult =
+                        engine::FloatInput(
+                                ui, config, input, assets,
+                                multiplierWidgetId.c_str(),
+                                Rectangle{
+                                        fieldX + boneWidth + controlGap,
+                                        y,
+                                        multiplierWidth,
+                                        RowHeight},
+                                font,
+                                multiplier,
+                                state.bodyPartDamageMultiplierInputs[rowIndex],
+                                0.0f,
+                                kMaximumNpcBodyPartDamageMultiplier,
+                                2);
+                if (multiplierResult.changed) {
+                    editor.SetSelectedBodyPartDamageMultiplier(
+                            rowIndex, multiplier);
+                }
+                const std::string removeWidgetId =
+                        "sector_editor_npc_body_part_remove_"
+                        + std::to_string(rowIndex);
+                if (engine::Button(
+                            ui, config, input, assets,
+                            removeWidgetId.c_str(),
+                            Rectangle{
+                                    fieldX + boneWidth + controlGap
+                                            + multiplierWidth + controlGap,
+                                    y,
+                                    removeWidth,
+                                    RowHeight},
+                            smallFont,
+                            "Remove")) {
+                    removeBodyPartIndex = rowIndex;
+                }
+                y += RowHeight + 2.0f;
+
+                const bool missingBone = !row.boneName.empty()
+                        && editor.SelectedModelReady(assets)
+                        && !editor.SelectedBoneExists(assets, row.boneName);
+                const char* rowMessage = row.boneName.empty()
+                        ? "Select a bone; descendants are included"
+                        : (missingBone
+                                ? "Saved bone is missing from this model"
+                                : "Selected bone and descendants use this multiplier");
+                engine::Text(
+                        ui, config, assets,
+                        Rectangle{fieldX, y, fieldW, 28.0f},
+                        smallFont,
+                        rowMessage,
+                        engine::UITextJustify::Left,
+                        row.boneName.empty() || missingBone
+                                ? config.invalidColor
+                                : config.mutedTextColor);
+                y += 28.0f + RowGap;
+            }
+            if (removeBodyPartIndex
+                    < selected->definition.bodyPartDamage.size()) {
+                editor.RemoveSelectedBodyPartDamage(removeBodyPartIndex);
+            }
+        }
+
+        if (selected->definition.bodyPartDamage.size()
+                < kMaximumNpcBodyPartDamageRows) {
+            if (engine::Button(
+                        ui, config, input, assets,
+                        "sector_editor_npc_body_part_add",
+                        Rectangle{fieldX, y, 170.0f, RowHeight},
+                        font,
+                        "Add body part")) {
+                editor.AddSelectedBodyPartDamage();
+            }
+            y += RowHeight + RowGap;
+        }
 
         if (!selected->definition.hostile) {
             engine::Separator(

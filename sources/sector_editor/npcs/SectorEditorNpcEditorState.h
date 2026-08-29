@@ -64,6 +64,8 @@ struct SectorEditorNpcEditorState {
     engine::UIFloatInputState headLookRangeWorldInput;
     engine::UIFloatInputState headLookMaxYawDegreesInput;
     engine::UIFloatInputState headLookMaxPitchDegreesInput;
+    std::array<engine::UIFloatInputState, kMaximumNpcBodyPartDamageRows>
+            bodyPartDamageMultiplierInputs;
     engine::UIIntInputState investigationDurationMillisecondsInput;
     engine::UIFloatInputState attackHitPhaseInput;
     engine::UIFloatInputState attackRangeWorldInput;

@@ -100,6 +100,20 @@ struct NpcCombatState {
     bool deathAnimationComplete = false;
 };
 
+struct NpcBodyPartDamageRuntimeRow {
+    std::string boneName;
+    float damageMultiplier = 1.0f;
+    int boneIndex = -1;
+    std::array<uint8_t, engine::MaxAnimatedModelBones> affectedBones{};
+    bool boneResolutionAttempted = false;
+    bool warningPrinted = false;
+};
+
+struct NpcBodyPartDamageState {
+    std::vector<NpcBodyPartDamageRuntimeRow> rows;
+    bool classificationWarningPrinted = false;
+};
+
 struct NpcAnimationState {
     std::array<uint32_t, kNpcActionCount> animationIndices{
             UINT32_MAX,

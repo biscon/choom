@@ -93,6 +93,7 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
             || left.headLook.rangeWorld != right.headLook.rangeWorld
             || left.headLook.maxYawDegrees != right.headLook.maxYawDegrees
             || left.headLook.maxPitchDegrees != right.headLook.maxPitchDegrees
+            || left.bodyPartDamage.size() != right.bodyPartDamage.size()
             || left.ambientVocalizations.soundPaths
                     != right.ambientVocalizations.soundPaths
             || left.ambientVocalizations.minimumDelaySeconds
@@ -100,6 +101,14 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
             || left.ambientVocalizations.maximumDelaySeconds
                     != right.ambientVocalizations.maximumDelaySeconds) {
         return false;
+    }
+    for (size_t index = 0; index < left.bodyPartDamage.size(); ++index) {
+        if (left.bodyPartDamage[index].boneName
+                        != right.bodyPartDamage[index].boneName
+                || left.bodyPartDamage[index].damageMultiplier
+                        != right.bodyPartDamage[index].damageMultiplier) {
+            return false;
+        }
     }
     for (size_t i = 0; i < kNpcActionCount; ++i) {
         if (!SameAction(left.actions[i], right.actions[i])) return false;
@@ -428,6 +437,67 @@ void SectorEditorNpcEditorService::SetSelectedHeadLook(
     state_.validationMessage.clear();
 }
 
+bool SectorEditorNpcEditorService::AddSelectedBodyPartDamage()
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr
+            || draft->definition.bodyPartDamage.size()
+                    >= kMaximumNpcBodyPartDamageRows) {
+        return false;
+    }
+    draft->definition.bodyPartDamage.push_back({});
+    state_.bodyPartDamageMultiplierInputs[
+            draft->definition.bodyPartDamage.size() - 1] = {};
+    state_.validationMessage.clear();
+    return true;
+}
+
+bool SectorEditorNpcEditorService::SetSelectedBodyPartDamageBone(
+        size_t index,
+        const std::string& boneName)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr || index >= draft->definition.bodyPartDamage.size()) {
+        return false;
+    }
+    draft->definition.bodyPartDamage[index].boneName = boneName;
+    state_.validationMessage.clear();
+    return true;
+}
+
+bool SectorEditorNpcEditorService::SetSelectedBodyPartDamageMultiplier(
+        size_t index,
+        float multiplier)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr || index >= draft->definition.bodyPartDamage.size()) {
+        return false;
+    }
+    draft->definition.bodyPartDamage[index].damageMultiplier = multiplier;
+    state_.validationMessage.clear();
+    return true;
+}
+
+bool SectorEditorNpcEditorService::RemoveSelectedBodyPartDamage(size_t index)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr || index >= draft->definition.bodyPartDamage.size()) {
+        return false;
+    }
+    draft->definition.bodyPartDamage.erase(
+            draft->definition.bodyPartDamage.begin()
+                    + static_cast<std::ptrdiff_t>(index));
+    for (size_t inputIndex = index;
+            inputIndex + 1 < state_.bodyPartDamageMultiplierInputs.size();
+            ++inputIndex) {
+        state_.bodyPartDamageMultiplierInputs[inputIndex] =
+                state_.bodyPartDamageMultiplierInputs[inputIndex + 1];
+    }
+    state_.bodyPartDamageMultiplierInputs.back() = {};
+    state_.validationMessage.clear();
+    return true;
+}
+
 void SectorEditorNpcEditorService::SetSelectedCanOpenDoors(bool canOpenDoors)
 {
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
@@ -744,16 +814,25 @@ void SectorEditorNpcEditorService::RefreshAnimationOptions(
             state_.boneOptionLabelStorage.emplace_back(name);
         }
         const SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
-        const std::string configured = draft == nullptr
-                ? std::string{} : draft->definition.headLook.boneName;
-        if (!configured.empty()
-                && std::find(
-                           state_.boneOptionStorage.begin(),
-                           state_.boneOptionStorage.end(),
-                           configured) == state_.boneOptionStorage.end()) {
+        const auto addMissingConfiguredBone = [this](
+                                                       const std::string& configured) {
+            if (configured.empty()
+                    || std::find(
+                               state_.boneOptionStorage.begin(),
+                               state_.boneOptionStorage.end(),
+                               configured) != state_.boneOptionStorage.end()) {
+                return;
+            }
             state_.boneOptionStorage.push_back(configured);
             state_.boneOptionLabelStorage.push_back(
                     "<Missing: " + configured + ">");
+        };
+        if (draft != nullptr) {
+            addMissingConfiguredBone(draft->definition.headLook.boneName);
+            for (const NpcBodyPartDamageDefinition& row
+                    : draft->definition.bodyPartDamage) {
+                addMissingConfiguredBone(row.boneName);
+            }
         }
         state_.boneOptions.reserve(state_.boneOptionLabelStorage.size());
         for (const std::string& label : state_.boneOptionLabelStorage) {
@@ -836,6 +915,10 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.headLookRangeWorldInput = {};
     state_.headLookMaxYawDegreesInput = {};
     state_.headLookMaxPitchDegreesInput = {};
+    for (engine::UIFloatInputState& input
+            : state_.bodyPartDamageMultiplierInputs) {
+        input = {};
+    }
     state_.investigationDurationMillisecondsInput = {};
     state_.attackHitPhaseInput = {};
     state_.attackRangeWorldInput = {};

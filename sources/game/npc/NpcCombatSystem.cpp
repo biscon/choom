@@ -4,6 +4,7 @@
 #include "game/npc/ai/NpcAiSystem.h"
 
 #include "engine/assets/AssetManager.h"
+#include "engine/assets/ModelAssets.h"
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
 #include "game/Health.h"
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 
 namespace game {
@@ -27,6 +29,8 @@ constexpr float NpcRadius = 0.25f;
 constexpr float NpcHeight = 1.6f;
 constexpr float KnockbackDampingPerSecond = 12.0f;
 constexpr float RayEpsilon = 0.00001f;
+constexpr float BodyPartInfluenceThreshold = 0.5f;
+constexpr int MaximumWeaponDamage = 1000000;
 
 SectorFpsVerticalContext BuildCombatVerticalContext(
         const SectorCollisionWorld& collisionWorld,
@@ -57,7 +61,63 @@ struct RayCandidate {
     int placedObjectId = 0;
     engine::Entity entity = engine::NullEntity();
     engine::AnimatedModelSurfaceAnchor surfaceAnchor;
+    float bodyPartDamageMultiplier = 1.0f;
+    bool bodyPartDamageMatched = false;
 };
+
+bool IsBoneDescendantOf(
+        const BoneInfo* bones,
+        int boneCount,
+        int candidate,
+        int ancestor)
+{
+    int current = candidate;
+    for (int depth = 0; depth < boneCount && current >= 0; ++depth) {
+        if (current == ancestor) return true;
+        if (current >= boneCount) return false;
+        current = bones[current].parent;
+    }
+    return false;
+}
+
+bool ResolveBodyPartDamageRow(
+        const engine::ModelAsset& asset,
+        NpcBodyPartDamageRuntimeRow& row)
+{
+    row.boneResolutionAttempted = true;
+    row.boneIndex = -1;
+    row.affectedBones.fill(0);
+    const int boneCount = asset.model.skeleton.boneCount;
+    const BoneInfo* bones = asset.model.skeleton.bones;
+    if (bones == nullptr || boneCount <= 0
+            || boneCount > engine::MaxAnimatedModelBones) {
+        return false;
+    }
+    for (int index = 0; index < boneCount; ++index) {
+        if (std::strncmp(
+                    bones[index].name,
+                    row.boneName.c_str(),
+                    sizeof(bones[index].name)) == 0) {
+            row.boneIndex = index;
+            break;
+        }
+    }
+    if (row.boneIndex < 0) return false;
+    int current = row.boneIndex;
+    int depth = 0;
+    for (; depth < boneCount && current >= 0; ++depth) {
+        if (current >= boneCount) return false;
+        current = bones[current].parent;
+    }
+    if (current >= 0) return false;
+    for (int index = 0; index < boneCount; ++index) {
+        row.affectedBones[static_cast<size_t>(index)] =
+                IsBoneDescendantOf(
+                        bones, boneCount, index, row.boneIndex)
+                ? 1u : 0u;
+    }
+    return true;
+}
 
 FpsShotSurfaceKind ToFpsSurfaceKind(SectorCollisionRaySurfaceKind kind)
 {
@@ -254,6 +314,144 @@ Vector3 ToNpcLocalPoint(Vector3 worldPoint, Matrix authoredTransform)
 
 } // namespace
 
+NpcBodyPartDamageMatch ClassifyNpcBodyPartDamage(
+        const engine::ModelAsset& asset,
+        const engine::AnimatedModelSurfaceAnchor& anchor,
+        NpcBodyPartDamageState& state)
+{
+    NpcBodyPartDamageMatch result;
+    if (!anchor.valid || state.rows.empty()
+            || state.rows.size() > kMaximumNpcBodyPartDamageRows) {
+        return result;
+    }
+    const int boneCount = asset.model.skeleton.boneCount;
+    const BoneInfo* bones = asset.model.skeleton.bones;
+    if (bones == nullptr || boneCount <= 0
+            || boneCount > engine::MaxAnimatedModelBones) {
+        return result;
+    }
+    for (NpcBodyPartDamageRuntimeRow& row : state.rows) {
+        if (!row.boneResolutionAttempted
+                && !ResolveBodyPartDamageRow(asset, row)
+                && !row.warningPrinted) {
+            std::fprintf(
+                    stderr,
+                    "[NPC Body-Part Damage WARNING] Bone '%s' was not found or has an invalid hierarchy.\n",
+                    row.boneName.c_str());
+            row.warningPrinted = true;
+        }
+    }
+    if (anchor.meshIndex >= static_cast<uint32_t>(asset.model.meshCount)
+            || asset.model.meshes == nullptr) {
+        return result;
+    }
+    const Mesh& mesh = asset.model.meshes[anchor.meshIndex];
+    if (mesh.boneIndices == nullptr || mesh.boneWeights == nullptr) {
+        if (!state.classificationWarningPrinted) {
+            std::fprintf(
+                    stderr,
+                    "[NPC Body-Part Damage WARNING] Exact hit mesh has no skin weights; base damage will be used.\n");
+            state.classificationWarningPrinted = true;
+        }
+        return result;
+    }
+    const float barycentric[3] = {
+            anchor.barycentric.x,
+            anchor.barycentric.y,
+            anchor.barycentric.z};
+    std::array<float, kMaximumNpcBodyPartDamageRows> influences{};
+    float totalInfluence = 0.0f;
+    for (size_t corner = 0; corner < anchor.vertexIndices.size(); ++corner) {
+        const uint32_t vertexIndex = anchor.vertexIndices[corner];
+        const float barycentricWeight = barycentric[corner];
+        if (vertexIndex >= static_cast<uint32_t>(mesh.vertexCount)
+                || !std::isfinite(barycentricWeight)
+                || barycentricWeight < 0.0f) {
+            return result;
+        }
+        for (int influenceIndex = 0; influenceIndex < 4; ++influenceIndex) {
+            const size_t sourceIndex = static_cast<size_t>(vertexIndex) * 4u
+                    + static_cast<size_t>(influenceIndex);
+            const float weight = mesh.boneWeights[sourceIndex];
+            if (!std::isfinite(weight) || weight < 0.0f) {
+                return result;
+            }
+            if (weight <= 0.0f || barycentricWeight <= 0.0f) continue;
+            const uint32_t boneIndex = mesh.boneIndices[sourceIndex];
+            if (boneIndex >= static_cast<uint32_t>(boneCount)) return result;
+            const float weightedInfluence = barycentricWeight * weight;
+            totalInfluence += weightedInfluence;
+            for (size_t rowIndex = 0; rowIndex < state.rows.size(); ++rowIndex) {
+                const NpcBodyPartDamageRuntimeRow& row = state.rows[rowIndex];
+                if (row.boneIndex >= 0
+                        && row.affectedBones[static_cast<size_t>(boneIndex)] != 0) {
+                    influences[rowIndex] += weightedInfluence;
+                }
+            }
+        }
+    }
+    if (!std::isfinite(totalInfluence) || totalInfluence <= RayEpsilon) {
+        return result;
+    }
+
+    int bestRow = -1;
+    float bestInfluence = 0.0f;
+    for (size_t rowIndex = 0; rowIndex < state.rows.size(); ++rowIndex) {
+        const NpcBodyPartDamageRuntimeRow& row = state.rows[rowIndex];
+        if (row.boneIndex < 0
+                || !std::isfinite(row.damageMultiplier)
+                || row.damageMultiplier < 0.0f
+                || row.damageMultiplier > kMaximumNpcBodyPartDamageMultiplier) {
+            continue;
+        }
+        const float normalizedInfluence = influences[rowIndex] / totalInfluence;
+        if (normalizedInfluence < BodyPartInfluenceThreshold) continue;
+        bool replace = bestRow < 0;
+        if (bestRow >= 0) {
+            const NpcBodyPartDamageRuntimeRow& best =
+                    state.rows[static_cast<size_t>(bestRow)];
+            const bool rowIsDescendant = row.boneIndex != best.boneIndex
+                    && IsBoneDescendantOf(
+                            bones, boneCount, row.boneIndex, best.boneIndex);
+            const bool bestIsDescendant = row.boneIndex != best.boneIndex
+                    && IsBoneDescendantOf(
+                            bones, boneCount, best.boneIndex, row.boneIndex);
+            if (rowIsDescendant) {
+                replace = true;
+            } else if (!bestIsDescendant
+                    && normalizedInfluence > bestInfluence + RayEpsilon) {
+                replace = true;
+            }
+        }
+        if (replace) {
+            bestRow = static_cast<int>(rowIndex);
+            bestInfluence = normalizedInfluence;
+        }
+    }
+    if (bestRow >= 0) {
+        result.multiplier = state.rows[static_cast<size_t>(bestRow)]
+                .damageMultiplier;
+        result.rowIndex = bestRow;
+        result.matched = true;
+    }
+    return result;
+}
+
+int ScaleNpcBodyPartDamage(int baseDamage, float multiplier)
+{
+    const int normalizedBase = std::clamp(
+            baseDamage, 0, MaximumWeaponDamage);
+    if (!std::isfinite(multiplier) || multiplier < 0.0f) {
+        return normalizedBase;
+    }
+    const double scaled = std::clamp(
+            static_cast<double>(normalizedBase)
+                    * static_cast<double>(multiplier),
+            0.0,
+            static_cast<double>(MaximumWeaponDamage));
+    return static_cast<int>(std::floor(scaled + 0.5));
+}
+
 void InitializeNpcCombatRuntime(NpcCombatRuntime& runtime, size_t npcCapacity)
 {
     runtime.deferredDestroy.clear();
@@ -384,6 +582,17 @@ static bool TracePlayerWeaponShot(
                                     0,
                                     entity,
                                     modelHit.anchor};
+                            if (world.Has<NpcBodyPartDamageState>(entity)) {
+                                const NpcBodyPartDamageMatch bodyPart =
+                                        ClassifyNpcBodyPartDamage(
+                                                *modelAsset,
+                                                modelHit.anchor,
+                                                world.Get<NpcBodyPartDamageState>(
+                                                        entity));
+                                best.bodyPartDamageMultiplier =
+                                        bodyPart.multiplier;
+                                best.bodyPartDamageMatched = bodyPart.matched;
+                            }
                             return;
                         }
                         if (modelStatus
@@ -422,6 +631,8 @@ static bool TracePlayerWeaponShot(
     outShot.neighborSectorId = best.neighborSectorId;
     outShot.placedObjectId = best.placedObjectId;
     outShot.targetEntity = best.entity;
+    outShot.bodyPartDamageMultiplier = best.bodyPartDamageMultiplier;
+    outShot.bodyPartDamageMatched = best.bodyPartDamageMatched;
 
     outCandidate = best;
     return true;
@@ -446,7 +657,12 @@ static void ApplyPlayerWeaponImpact(
             && world.Has<SectorObjectTransform>(best.entity)) {
         Health& health = world.Get<Health>(best.entity);
         NpcCombatState& combat = world.Get<NpcCombatState>(best.entity);
-        const int appliedDamage = ApplyDamage(health, impact.damage);
+        const int damage = best.bodyPartDamageMatched
+                ? ScaleNpcBodyPartDamage(
+                        impact.damage,
+                        best.bodyPartDamageMultiplier)
+                : impact.damage;
+        const int appliedDamage = ApplyDamage(health, damage);
         if (appliedDamage > 0) {
             if (npcAi != nullptr) {
                 AlertNpcToPlayerPosition(world, best.entity, outShot.rayOrigin);

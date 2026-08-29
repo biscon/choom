@@ -40,6 +40,10 @@ public:
             float hearingRangeWorld,
             int investigationDurationMilliseconds);
     void SetSelectedHeadLook(const NpcHeadLookDefinition& headLook);
+    bool AddSelectedBodyPartDamage();
+    bool SetSelectedBodyPartDamageBone(size_t index, const std::string& boneName);
+    bool SetSelectedBodyPartDamageMultiplier(size_t index, float multiplier);
+    bool RemoveSelectedBodyPartDamage(size_t index);
     void SetSelectedCanOpenDoors(bool canOpenDoors);
     void SetSelectedBaseHealth(int health);
     void SetSelectedDespawnOnDeath(bool despawn);

@@ -62,6 +62,8 @@ struct FpsShotResult {
     int neighborSectorId = 0;
     int placedObjectId = 0;
     engine::Entity targetEntity = engine::NullEntity();
+    float bodyPartDamageMultiplier = 1.0f;
+    bool bodyPartDamageMatched = false;
 };
 
 struct FpsRecoilRuntimeState {

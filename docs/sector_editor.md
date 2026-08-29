@@ -985,6 +985,22 @@ solid static props block the look; leaving the range or angle limits smoothly
 returns the pose to its animation. Hostile, dead, disabled, missing-model, and
 missing-bone NPCs do not track. The optional `headLook` JSON object defaults to
 disabled, so existing definitions are unchanged.
+
+NPC definitions may also author zero or more Bodypart damage rows. Each row
+selects a skeletal bone and a damage multiplier; the selected bone includes all
+of its descendants. Player weapon shots continue to intersect the current
+animated mesh exactly. At the resulting surface point, the runtime interpolates
+the triangle vertices' skin weights and applies a row when at least half of the
+influence belongs to its bone subtree. A selected descendant overrides an
+eligible selected ancestor, allowing a hand row to override an arm row. Between
+unrelated matches the strongest influence wins, with authored order breaking an
+exact tie. Damage is rounded to the nearest health point after scaling. Areas
+without a matching row use the weapon's base damage, and an empty or omitted
+`bodyPartDamage` array preserves the previous behavior. Capsule fallback hits,
+unskinned meshes, and missing bones also use base damage. Bone masks are cached;
+classification runs only after an exact NPC mesh hit and allocates no memory in
+the shooting path.
+
 NPC hearing uses the same wall, closed-door, and open-portal propagation routes
 as positional audio. The route length must fit the NPC hearing range and the
 sound event radius is reduced by that route's transmission or diffraction gain.
