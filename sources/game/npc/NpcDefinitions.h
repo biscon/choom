@@ -38,6 +38,16 @@ inline constexpr float kMaximumNpcHeadLookPitchDegrees = 60.0f;
 inline constexpr size_t kMaximumNpcBoneNameLength = 31;
 inline constexpr size_t kMaximumNpcBodyPartDamageRows = 32;
 inline constexpr float kMaximumNpcBodyPartDamageMultiplier = 100.0f;
+inline constexpr float kDefaultNpcBoneImpactImpulseDegreesPerSecond = 360.0f;
+inline constexpr float kDefaultNpcBoneImpactSpringFrequencyHz = 7.0f;
+inline constexpr float kDefaultNpcBoneImpactSpringDampingRatio = 0.75f;
+inline constexpr float kDefaultNpcBoneImpactMaxAngleDegrees = 20.0f;
+inline constexpr float kMaximumNpcBoneImpactImpulseDegreesPerSecond = 5000.0f;
+inline constexpr float kMinimumNpcBoneImpactSpringFrequencyHz = 0.5f;
+inline constexpr float kMaximumNpcBoneImpactSpringFrequencyHz = 40.0f;
+inline constexpr float kMinimumNpcBoneImpactSpringDampingRatio = 0.1f;
+inline constexpr float kMaximumNpcBoneImpactSpringDampingRatio = 3.0f;
+inline constexpr float kMaximumNpcBoneImpactAngleDegrees = 90.0f;
 inline constexpr float kDefaultNpcAttackHitPhase = 0.55f;
 inline constexpr float kDefaultNpcAttackRangeWorld = 1.0f;
 inline constexpr float kDefaultNpcAttackAdvanceSpeedMultiplier = 1.0f;
@@ -144,6 +154,15 @@ struct NpcBodyPartDamageDefinition {
     float damageMultiplier = 1.0f;
 };
 
+struct NpcBoneImpactDefinition {
+    bool enabled = false;
+    float impulseDegreesPerSecond =
+            kDefaultNpcBoneImpactImpulseDegreesPerSecond;
+    float springFrequencyHz = kDefaultNpcBoneImpactSpringFrequencyHz;
+    float springDampingRatio = kDefaultNpcBoneImpactSpringDampingRatio;
+    float maxAngleDegrees = kDefaultNpcBoneImpactMaxAngleDegrees;
+};
+
 struct NpcDefinition {
     std::string id;
     std::string name;
@@ -160,6 +179,7 @@ struct NpcDefinition {
     NpcPerceptionDefinition perception;
     NpcHeadLookDefinition headLook;
     std::vector<NpcBodyPartDamageDefinition> bodyPartDamage;
+    NpcBoneImpactDefinition boneImpact;
     NpcAmbientVocalizationDefinition ambientVocalizations;
     std::array<NpcActionDefinition, kNpcActionCount> actions;
 };

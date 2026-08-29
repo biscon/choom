@@ -1001,6 +1001,21 @@ unskinned meshes, and missing bones also use base damage. Bone masks are cached;
 classification runs only after an exact NPC mesh hit and allocates no memory in
 the shooting path.
 
+NPC definitions may independently enable Procedural bone impact reactions.
+An exact animated-mesh hit interpolates the triangle's skin weights and chooses
+the strongest bone influence at the impact point. The shot adds an angular
+impulse derived from the bullet direction and the lever from that bone's
+animated pivot to the surface hit. After the normal animation and optional head
+look have been evaluated, a damped spring rotates that bone and its descendants;
+hurt and death animations therefore remain the base pose instead of being
+replaced. The NPC editor exposes impulse strength, spring frequency, damping,
+and a maximum angle. Repeated shots and pellet hits accumulate up to that angle.
+The optional `boneImpact` JSON object defaults to disabled. Enabled NPCs use
+fixed-capacity per-bone state allocated when the NPC spawns, while inactive
+springs are skipped and the update/shot paths allocate no memory. Unskinned
+meshes, invalid skeletons, and capsule fallback hits retain the normal damage
+and hurt behavior without a procedural reaction.
+
 NPC hearing uses the same wall, closed-door, and open-portal propagation routes
 as positional audio. The route length must fit the NPC hearing range and the
 sound event radius is reduced by that route's transmission or diffraction gain.

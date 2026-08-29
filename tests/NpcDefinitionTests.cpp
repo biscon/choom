@@ -259,6 +259,7 @@ void TestRoundTripDefaultsAndSharedClips()
                   && !Json::parse(json).contains("playerDetectedSound")
                   && !Json::parse(json).contains("headLook")
                   && !Json::parse(json).contains("bodyPartDamage")
+                  && !Json::parse(json).contains("boneImpact")
                   && !Json::parse(json).contains("ambientVocalizations")
                   && !Json::parse(json)["actions"]["attack"]
                           .contains("cameraImpact")
@@ -416,6 +417,54 @@ void TestBodyPartDamageRoundTripAndValidation()
     Check(!game::ParseNpcDefinitionJson(
                   unknownField.dump(), parsed, error),
           "unknown NPC body-part damage fields are rejected");
+}
+
+void TestBoneImpactRoundTripAndValidation()
+{
+    game::NpcDefinition definition = MakeDefinition("bone_impact");
+    definition.boneImpact.enabled = true;
+    definition.boneImpact.impulseDegreesPerSecond = 425.0f;
+    definition.boneImpact.springFrequencyHz = 8.5f;
+    definition.boneImpact.springDampingRatio = 0.9f;
+    definition.boneImpact.maxAngleDegrees = 24.0f;
+    std::string json;
+    std::string error;
+    game::NpcDefinition parsed;
+    Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                  && Json::parse(json)["boneImpact"]["enabled"] == true
+                  && Near(Json::parse(json)["boneImpact"]
+                                  ["impulseDegreesPerSecond"].get<float>(),
+                          425.0f)
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.boneImpact.enabled
+                  && Near(parsed.boneImpact.impulseDegreesPerSecond, 425.0f)
+                  && Near(parsed.boneImpact.springFrequencyHz, 8.5f)
+                  && Near(parsed.boneImpact.springDampingRatio, 0.9f)
+                  && Near(parsed.boneImpact.maxAngleDegrees, 24.0f),
+          "NPC procedural bone-impact tuning round-trips through optional JSON");
+
+    definition.boneImpact.impulseDegreesPerSecond = -0.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "bone-impact reaction rejects negative impulse strength");
+    definition.boneImpact.impulseDegreesPerSecond = 425.0f;
+    definition.boneImpact.springFrequencyHz = 0.49f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "bone-impact reaction rejects unstable spring frequencies");
+    definition.boneImpact.springFrequencyHz = 8.5f;
+    definition.boneImpact.springDampingRatio =
+            std::numeric_limits<float>::infinity();
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "bone-impact reaction rejects non-finite damping");
+    definition.boneImpact.springDampingRatio = 0.9f;
+    definition.boneImpact.maxAngleDegrees = 90.01f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "bone-impact reaction rejects excessive angular displacement");
+
+    Json unknownField = Json::parse(json);
+    unknownField["boneImpact"]["affectedBones"] = "all";
+    Check(!game::ParseNpcDefinitionJson(
+                  unknownField.dump(), parsed, error),
+          "unknown NPC bone-impact JSON fields are rejected");
 }
 
 void TestValidation()
@@ -730,6 +779,24 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                                   .bodyPartDamage[0].boneName
                           == "mixamorig:LeftArm",
           "NPC editor service adds, edits, and removes body-part damage rows");
+    game::NpcBoneImpactDefinition boneImpact;
+    boneImpact.enabled = true;
+    boneImpact.impulseDegreesPerSecond = 480.0f;
+    boneImpact.springFrequencyHz = 9.0f;
+    boneImpact.springDampingRatio = 0.85f;
+    boneImpact.maxAngleDegrees = 16.0f;
+    service.SetSelectedBoneImpact(boneImpact);
+    Check(service.SelectedDraft()->definition.boneImpact.enabled
+                  && Near(service.SelectedDraft()->definition.boneImpact
+                                  .impulseDegreesPerSecond,
+                          480.0f)
+                  && Near(service.SelectedDraft()->definition.boneImpact
+                                  .springFrequencyHz,
+                          9.0f)
+                  && Near(service.SelectedDraft()->definition.boneImpact
+                                  .maxAngleDegrees,
+                          16.0f),
+          "NPC editor service updates procedural bone-impact tuning");
     service.SetSelectedCanOpenDoors(false);
     Check(!service.SelectedDraft()->definition.canOpenDoors,
           "NPC editor service updates door-opening capability through its draft API");
@@ -878,6 +945,7 @@ int main()
     TestRoundTripDefaultsAndSharedClips();
     TestHeadLookDefinitionRoundTripAndValidation();
     TestBodyPartDamageRoundTripAndValidation();
+    TestBoneImpactRoundTripAndValidation();
     TestValidation();
     TestSeekAndDestroyPluginBoundary();
     TestDiscoveryErrorsAreRetained();

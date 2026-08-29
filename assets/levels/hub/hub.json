@@ -583,8 +583,6 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie02",
-        "patrolEditorId": 1,
-        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [

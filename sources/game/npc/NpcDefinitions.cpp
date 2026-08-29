@@ -390,6 +390,28 @@ bool ValidateNpcDefinition(
             return false;
         }
     }
+    const NpcBoneImpactDefinition& boneImpact = definition.boneImpact;
+    if (!std::isfinite(boneImpact.impulseDegreesPerSecond)
+            || boneImpact.impulseDegreesPerSecond < 0.0f
+            || boneImpact.impulseDegreesPerSecond
+                    > kMaximumNpcBoneImpactImpulseDegreesPerSecond
+            || !std::isfinite(boneImpact.springFrequencyHz)
+            || boneImpact.springFrequencyHz
+                    < kMinimumNpcBoneImpactSpringFrequencyHz
+            || boneImpact.springFrequencyHz
+                    > kMaximumNpcBoneImpactSpringFrequencyHz
+            || !std::isfinite(boneImpact.springDampingRatio)
+            || boneImpact.springDampingRatio
+                    < kMinimumNpcBoneImpactSpringDampingRatio
+            || boneImpact.springDampingRatio
+                    > kMaximumNpcBoneImpactSpringDampingRatio
+            || !std::isfinite(boneImpact.maxAngleDegrees)
+            || boneImpact.maxAngleDegrees < 0.0f
+            || boneImpact.maxAngleDegrees
+                    > kMaximumNpcBoneImpactAngleDegrees) {
+        outError = "NPC bone-impact impulse must be between 0 and 5000 degrees/second, spring frequency between 0.5 and 40 Hz, damping ratio between 0.1 and 3, and maximum angle between 0 and 90 degrees";
+        return false;
+    }
     if (definition.baseHealth < kMinimumNpcBaseHealth
             || definition.baseHealth > kMaximumNpcBaseHealth) {
         outError = "NPC base health must be between 1 and 1000000";
@@ -564,7 +586,7 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "headLook", "bodyPartDamage", "canOpenDoors",
+                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "headLook", "bodyPartDamage", "boneImpact", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
                  "animationBlendSeconds", "playerDetectedSound",
@@ -683,6 +705,31 @@ bool ParseNpcDefinitionJson(
                         row, "damageMultiplier", 1.0f, rowContext);
                 parsed.bodyPartDamage.push_back(std::move(parsedRow));
             }
+        }
+
+        const auto boneImpact = root.find("boneImpact");
+        if (boneImpact != root.end()) {
+            const std::string context = "NPC definition.boneImpact";
+            if (!boneImpact->is_object()) Fail(context + " must be an object");
+            RejectUnknownFields(
+                    *boneImpact,
+                    {"enabled", "impulseDegreesPerSecond", "springFrequencyHz",
+                     "springDampingRatio", "maxAngleDegrees"},
+                    context);
+            parsed.boneImpact.enabled = OptionalBool(
+                    *boneImpact, "enabled", false, context);
+            parsed.boneImpact.impulseDegreesPerSecond = OptionalFloat(
+                    *boneImpact, "impulseDegreesPerSecond",
+                    kDefaultNpcBoneImpactImpulseDegreesPerSecond, context);
+            parsed.boneImpact.springFrequencyHz = OptionalFloat(
+                    *boneImpact, "springFrequencyHz",
+                    kDefaultNpcBoneImpactSpringFrequencyHz, context);
+            parsed.boneImpact.springDampingRatio = OptionalFloat(
+                    *boneImpact, "springDampingRatio",
+                    kDefaultNpcBoneImpactSpringDampingRatio, context);
+            parsed.boneImpact.maxAngleDegrees = OptionalFloat(
+                    *boneImpact, "maxAngleDegrees",
+                    kDefaultNpcBoneImpactMaxAngleDegrees, context);
         }
 
         const auto ambient = root.find("ambientVocalizations");
@@ -940,6 +987,41 @@ bool SerializeNpcDefinitionJson(
                         {"damageMultiplier", row.damageMultiplier}});
             }
             root["bodyPartDamage"] = std::move(bodyPartDamageJson);
+        }
+
+        const NpcBoneImpactDefinition& boneImpact = definition.boneImpact;
+        if (boneImpact.enabled
+                || boneImpact.impulseDegreesPerSecond
+                        != kDefaultNpcBoneImpactImpulseDegreesPerSecond
+                || boneImpact.springFrequencyHz
+                        != kDefaultNpcBoneImpactSpringFrequencyHz
+                || boneImpact.springDampingRatio
+                        != kDefaultNpcBoneImpactSpringDampingRatio
+                || boneImpact.maxAngleDegrees
+                        != kDefaultNpcBoneImpactMaxAngleDegrees) {
+            Json boneImpactJson = Json::object();
+            if (boneImpact.enabled) boneImpactJson["enabled"] = true;
+            if (boneImpact.impulseDegreesPerSecond
+                    != kDefaultNpcBoneImpactImpulseDegreesPerSecond) {
+                boneImpactJson["impulseDegreesPerSecond"] =
+                        boneImpact.impulseDegreesPerSecond;
+            }
+            if (boneImpact.springFrequencyHz
+                    != kDefaultNpcBoneImpactSpringFrequencyHz) {
+                boneImpactJson["springFrequencyHz"] =
+                        boneImpact.springFrequencyHz;
+            }
+            if (boneImpact.springDampingRatio
+                    != kDefaultNpcBoneImpactSpringDampingRatio) {
+                boneImpactJson["springDampingRatio"] =
+                        boneImpact.springDampingRatio;
+            }
+            if (boneImpact.maxAngleDegrees
+                    != kDefaultNpcBoneImpactMaxAngleDegrees) {
+                boneImpactJson["maxAngleDegrees"] =
+                        boneImpact.maxAngleDegrees;
+            }
+            root["boneImpact"] = std::move(boneImpactJson);
         }
 
         const NpcAmbientVocalizationDefinition& ambient =

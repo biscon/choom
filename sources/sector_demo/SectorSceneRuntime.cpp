@@ -3,6 +3,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorAudioOcclusion.h"
 #include "engine/systems/AnimatedModelSystem.h"
+#include "game/npc/NpcBoneImpactSystem.h"
 
 #include <raylib.h>
 
@@ -326,6 +327,7 @@ void SectorSceneRuntime::Update(
                 headLookTarget,
                 dt);
     }
+    UpdateNpcBoneImpactSystem(context.world, context.assets, dt);
     if (runtimeObjects.objectSectorLookupWorldValid) {
         UpdateNpcFootstepEventsSystem(
                 context.world,

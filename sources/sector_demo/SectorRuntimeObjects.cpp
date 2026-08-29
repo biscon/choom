@@ -46,7 +46,7 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(32);
+    world.ReserveComponentTypes(33);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -62,6 +62,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<Health>(objectCapacity);
     world.ReserveComponent<NpcCombatState>(objectCapacity);
     world.ReserveComponent<NpcBodyPartDamageState>(objectCapacity);
+    world.ReserveComponent<NpcBoneImpactState>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
     world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
@@ -1388,6 +1389,18 @@ void SpawnPlacedRuntimeObjects(
                     bodyPartDamage.rows.push_back(std::move(runtimeRow));
                 }
                 world.Add(entity, std::move(bodyPartDamage));
+            }
+            if (definition->boneImpact.enabled) {
+                NpcBoneImpactState boneImpact;
+                boneImpact.impulseDegreesPerSecond =
+                        definition->boneImpact.impulseDegreesPerSecond;
+                boneImpact.springFrequencyHz =
+                        definition->boneImpact.springFrequencyHz;
+                boneImpact.springDampingRatio =
+                        definition->boneImpact.springDampingRatio;
+                boneImpact.maxAngleDegrees =
+                        definition->boneImpact.maxAngleDegrees;
+                world.Add(entity, std::move(boneImpact));
             }
             NpcAnimationState npcAnimation;
             npcAnimation.blendSeconds = definition->animationBlendSeconds;

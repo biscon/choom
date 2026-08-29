@@ -93,6 +93,15 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
             || left.headLook.rangeWorld != right.headLook.rangeWorld
             || left.headLook.maxYawDegrees != right.headLook.maxYawDegrees
             || left.headLook.maxPitchDegrees != right.headLook.maxPitchDegrees
+            || left.boneImpact.enabled != right.boneImpact.enabled
+            || left.boneImpact.impulseDegreesPerSecond
+                    != right.boneImpact.impulseDegreesPerSecond
+            || left.boneImpact.springFrequencyHz
+                    != right.boneImpact.springFrequencyHz
+            || left.boneImpact.springDampingRatio
+                    != right.boneImpact.springDampingRatio
+            || left.boneImpact.maxAngleDegrees
+                    != right.boneImpact.maxAngleDegrees
             || left.bodyPartDamage.size() != right.bodyPartDamage.size()
             || left.ambientVocalizations.soundPaths
                     != right.ambientVocalizations.soundPaths
@@ -434,6 +443,15 @@ void SectorEditorNpcEditorService::SetSelectedHeadLook(
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
     if (draft == nullptr) return;
     draft->definition.headLook = headLook;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedBoneImpact(
+        const NpcBoneImpactDefinition& boneImpact)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.boneImpact = boneImpact;
     state_.validationMessage.clear();
 }
 
@@ -915,6 +933,10 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.headLookRangeWorldInput = {};
     state_.headLookMaxYawDegreesInput = {};
     state_.headLookMaxPitchDegreesInput = {};
+    state_.boneImpactImpulseInput = {};
+    state_.boneImpactSpringFrequencyInput = {};
+    state_.boneImpactSpringDampingInput = {};
+    state_.boneImpactMaxAngleInput = {};
     for (engine::UIFloatInputState& input
             : state_.bodyPartDamageMultiplierInputs) {
         input = {};

@@ -32,6 +32,13 @@
       "damageMultiplier": 0.5
     }
   ],
+  "boneImpact": {
+    "enabled": true,
+    "impulseDegreesPerSecond": 1200.0,
+    "springFrequencyHz": 3.5,
+    "springDampingRatio": 0.4000000059604645,
+    "maxAngleDegrees": 40.0
+  },
   "ambientVocalizations": {
     "sounds": [
       "npc/zombie/Zombie_Growl_01.wav",

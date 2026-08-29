@@ -9,6 +9,7 @@
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
 #include "game/npc/NpcCombatSystem.h"
+#include "game/npc/NpcBoneImpactSystem.h"
 #include "game/npc/NpcHeadLookSystem.h"
 #include "game/npc/NpcRuntime.h"
 #include "game/npc/ai/NpcAiSystem.h"
@@ -5912,6 +5913,11 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     definition.bodyPartDamage = {
             {"mixamorig:Head", 2.0f},
             {"mixamorig:LeftArm", 0.5f}};
+    definition.boneImpact.enabled = true;
+    definition.boneImpact.impulseDegreesPerSecond = 420.0f;
+    definition.boneImpact.springFrequencyHz = 8.0f;
+    definition.boneImpact.springDampingRatio = 0.85f;
+    definition.boneImpact.maxAngleDegrees = 18.0f;
     state.npcDefinitionCatalog = game::NpcDefinitionCatalog{};
     state.npcDefinitionCatalog.definitions.push_back(definition);
 
@@ -5925,6 +5931,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && world.Has<game::Health>(entity)
                   && world.Has<game::NpcCombatState>(entity)
                   && world.Has<game::NpcBodyPartDamageState>(entity)
+                  && world.Has<game::NpcBoneImpactState>(entity)
                   && world.Has<game::SectorObjectVisualOffset>(entity)
                   && world.Has<game::SectorDynamicModel>(entity)
                   && world.Has<engine::AnimatedModelInstance>(entity)
@@ -5939,6 +5946,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
             world.Get<game::NpcCombatState>(entity);
     const game::NpcBodyPartDamageState& bodyPartDamage =
             world.Get<game::NpcBodyPartDamageState>(entity);
+    const game::NpcBoneImpactState& boneImpact =
+            world.Get<game::NpcBoneImpactState>(entity);
     const game::SectorDynamicModel& dynamic =
             world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
@@ -5970,6 +5979,13 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && bodyPartDamage.rows[0].boneIndex == -1
                   && !bodyPartDamage.rows[0].boneResolutionAttempted,
           "NPC runtime copies body-part rows for lazy allocation-free bone resolution");
+    Check(Near(boneImpact.impulseDegreesPerSecond, 420.0f)
+                  && Near(boneImpact.springFrequencyHz, 8.0f)
+                  && Near(boneImpact.springDampingRatio, 0.85f)
+                  && Near(boneImpact.maxAngleDegrees, 18.0f)
+                  && boneImpact.resolvedBoneCount == 0
+                  && !boneImpact.skeletonResolutionAttempted,
+          "enabled NPC bone-impact tuning spawns fixed unresolved runtime state");
     Check(dynamic.requestedAnimation == "Idle"
                   && Near(dynamic.scale, 1.4f)
                   && dynamic.shadowMode
@@ -6021,8 +6037,9 @@ void TestSpawnFriendlyNpcCopiesHeadLookDefinition()
           "friendly NPC with head look spawns one runtime entity");
     if (state.placedObjectEntities.empty()) return;
     const engine::Entity entity = state.placedObjectEntities[0].entity;
-    Check(world.Has<game::NpcHeadLookState>(entity),
-          "enabled friendly NPC receives pre-reserved head-look state");
+    Check(world.Has<game::NpcHeadLookState>(entity)
+                  && !world.Has<game::NpcBoneImpactState>(entity),
+          "enabled friendly NPC receives head-look state while disabled bone impact stays absent");
     if (!world.Has<game::NpcHeadLookState>(entity)) return;
     const game::NpcHeadLookState& headLook =
             world.Get<game::NpcHeadLookState>(entity);
@@ -8684,6 +8701,129 @@ void TestNpcBodyPartDamageUsesSkinWeightsAndSpecificOverrides()
           "unskinned exact-hit meshes safely fall back to base damage");
 }
 
+void TestNpcBoneImpactUsesDominantWeightsAndSpringPose()
+{
+    std::array<unsigned char, 12> boneIndices{};
+    std::array<float, 12> boneWeights{};
+    for (size_t vertex = 0; vertex < 3; ++vertex) {
+        boneIndices[vertex * 4] = 2;
+        boneIndices[vertex * 4 + 1] = 1;
+        boneIndices[vertex * 4 + 2] = 255;
+        boneIndices[vertex * 4 + 3] = 255;
+        boneWeights[vertex * 4] = 0.6f;
+        boneWeights[vertex * 4 + 1] = 0.4f;
+    }
+    Mesh mesh{};
+    mesh.vertexCount = 3;
+    mesh.triangleCount = 1;
+    mesh.boneIndices = boneIndices.data();
+    mesh.boneWeights = boneWeights.data();
+
+    std::array<BoneInfo, 4> bones{};
+    std::strncpy(bones[0].name, "Root", sizeof(bones[0].name) - 1);
+    std::strncpy(bones[1].name, "Arm", sizeof(bones[1].name) - 1);
+    std::strncpy(bones[2].name, "Hand", sizeof(bones[2].name) - 1);
+    std::strncpy(bones[3].name, "Sibling", sizeof(bones[3].name) - 1);
+    bones[0].parent = -1;
+    bones[1].parent = 0;
+    bones[2].parent = 1;
+    bones[3].parent = 0;
+
+    const auto pose = [](Vector3 translation) {
+        Transform result{};
+        result.translation = translation;
+        result.rotation = QuaternionIdentity();
+        result.scale = Vector3{1.0f, 1.0f, 1.0f};
+        return result;
+    };
+    std::array<Transform, 4> bindPose{
+            pose(Vector3{0.0f, 0.0f, 0.0f}),
+            pose(Vector3{0.0f, 1.0f, 0.0f}),
+            pose(Vector3{0.0f, 2.0f, 0.0f}),
+            pose(Vector3{1.0f, 1.0f, 0.0f})};
+
+    engine::ModelAsset asset;
+    asset.model.transform = MatrixIdentity();
+    asset.model.meshCount = 1;
+    asset.model.meshes = &mesh;
+    asset.model.skeleton.boneCount = static_cast<int>(bones.size());
+    asset.model.skeleton.bones = bones.data();
+    asset.model.skeleton.bindPose = bindPose.data();
+
+    engine::AnimatedModelSurfaceAnchor anchor;
+    anchor.valid = true;
+    anchor.meshIndex = 0;
+    anchor.vertexIndices = {0, 1, 2};
+    anchor.barycentric = {0.2f, 0.3f, 0.5f};
+    float influence = 0.0f;
+    Check(game::FindNpcBoneImpactDominantBone(
+                  asset, anchor, &influence) == 2
+                  && Near(influence, 0.6f),
+          "bone-impact classification selects the strongest interpolated skin influence");
+
+    for (size_t vertex = 0; vertex < 3; ++vertex) {
+        boneWeights[vertex * 4] = 0.5f;
+        boneWeights[vertex * 4 + 1] = 0.5f;
+        boneIndices[vertex * 4] = 1;
+        boneIndices[vertex * 4 + 1] = 2;
+    }
+    Check(game::FindNpcBoneImpactDominantBone(asset, anchor) == 1,
+          "equal dominant bone influences resolve deterministically by skeleton order");
+
+    engine::AnimatedModelInstance instance;
+    instance.model = engine::ModelHandle{51, 1};
+    instance.poseReady = true;
+    instance.currentPose.assign(bindPose.begin(), bindPose.end());
+    instance.boneMatrices.assign(bones.size(), MatrixIdentity());
+    game::NpcBoneImpactState state;
+    state.impulseDegreesPerSecond = 360.0f;
+    state.springFrequencyHz = 7.0f;
+    state.springDampingRatio = 0.75f;
+    state.maxAngleDegrees = 20.0f;
+    Check(game::AddNpcBoneImpactImpulse(
+                  state,
+                  asset,
+                  instance,
+                  MatrixIdentity(),
+                  1,
+                  Vector3{0.0f, 2.0f, 0.0f},
+                  Vector3{0.0f, 0.0f, 1.0f})
+                  && state.activeBones[1] != 0
+                  && state.angularVelocities[1].x > 0.0f,
+          "weapon direction and bone-to-impact lever produce an immediate angular impulse");
+    Check(game::AdvanceNpcBoneImpactSpring(state, 1.0f / 60.0f)
+                  && state.angularOffsets[1].x > 0.0f,
+          "bone-impact spring advances the queued impulse without allocation");
+    const Vector3 siblingBefore = instance.currentPose[3].translation;
+    Check(game::ApplyNpcBoneImpactPose(asset, instance, state)
+                  && !Near(instance.currentPose[2].translation,
+                          bindPose[2].translation)
+                  && Near(instance.currentPose[3].translation, siblingBefore),
+          "procedural rotation affects the struck bone subtree while preserving siblings");
+
+    state.maxAngleDegrees = 5.0f;
+    state.angularOffsets[1] = {};
+    state.angularVelocities[1] = Vector3{5000.0f, 0.0f, 0.0f};
+    state.activeBones[1] = 1;
+    game::AdvanceNpcBoneImpactSpring(state, 0.1f);
+    Check(Vector3Length(state.angularOffsets[1])
+                    <= 5.0f * DEG2RAD + 0.00001f,
+          "bone-impact displacement remains within its configured angular limit");
+
+    state.maxAngleDegrees = 20.0f;
+    for (int frame = 0; frame < 900; ++frame) {
+        game::AdvanceNpcBoneImpactSpring(state, 1.0f / 60.0f);
+    }
+    Check(state.activeBones[1] == 0
+                  && Near(Vector3Length(state.angularOffsets[1]), 0.0f)
+                  && Near(Vector3Length(state.angularVelocities[1]), 0.0f),
+          "damped bone-impact motion converges exactly back to the animation pose");
+
+    mesh.boneWeights = nullptr;
+    Check(game::FindNpcBoneImpactDominantBone(asset, anchor) == -1,
+          "unskinned exact hits cannot queue a procedural bone impulse");
+}
+
 void TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint()
 {
     const std::filesystem::path root =
@@ -10756,6 +10896,7 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
     world.Add(npc, game::SectorObjectTransform{{0.0f, 0.0f, 0.0f}});
     world.Add(npc, game::SectorObject{1, true});
     world.Add(npc, game::SectorDynamicModel{});
+    world.Add(npc, game::NpcBoneImpactState{});
 
     game::SectorNavigationWorld navigation;
     game::NpcNavigationRuntime npcNavigation;
@@ -10796,8 +10937,14 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
                           0.18f)
                   && npcAudio.records.front().pendingEvent
                           == game::NpcVocalEvent::Hurt
+                  && std::all_of(
+                          world.Get<game::NpcBoneImpactState>(npc)
+                                  .activeBones.begin(),
+                          world.Get<game::NpcBoneImpactState>(npc)
+                                  .activeBones.end(),
+                          [](uint8_t active) { return active == 0; })
                   && event.kind == game::WeaponImpactKind::Blood,
-          "weapon shot requests hurt animation, vocal, stagger, and blood");
+          "capsule fallback requests normal hurt effects without a bone impulse");
 
     game::SectorImpactParticleSystem particles;
     particles.Spawn(event);
@@ -11357,6 +11504,7 @@ int main()
     TestAnimatedModelGltfSkinPreparationBuildsBindPose();
     TestAnimatedModelRaycastUsesCurrentSkinnedGeometry();
     TestNpcBodyPartDamageUsesSkinWeightsAndSpecificOverrides();
+    TestNpcBoneImpactUsesDominantWeightsAndSpringPose();
     TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();

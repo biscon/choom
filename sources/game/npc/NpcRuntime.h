@@ -114,6 +114,25 @@ struct NpcBodyPartDamageState {
     bool classificationWarningPrinted = false;
 };
 
+struct NpcBoneImpactState {
+    float impulseDegreesPerSecond =
+            kDefaultNpcBoneImpactImpulseDegreesPerSecond;
+    float springFrequencyHz = kDefaultNpcBoneImpactSpringFrequencyHz;
+    float springDampingRatio = kDefaultNpcBoneImpactSpringDampingRatio;
+    float maxAngleDegrees = kDefaultNpcBoneImpactMaxAngleDegrees;
+    std::array<Vector3, engine::MaxAnimatedModelBones> angularOffsets{};
+    std::array<Vector3, engine::MaxAnimatedModelBones> angularVelocities{};
+    std::array<uint8_t, engine::MaxAnimatedModelBones> activeBones{};
+    std::array<uint8_t, engine::MaxAnimatedModelBones> boneOrder{};
+    engine::ModelHandle resolvedModel = engine::NullModelHandle();
+    int resolvedBoneCount = 0;
+    bool hasActiveMotion = false;
+    bool skeletonResolutionAttempted = false;
+    bool skeletonValid = false;
+    bool warningPrinted = false;
+    bool classificationWarningPrinted = false;
+};
+
 struct NpcAnimationState {
     std::array<uint32_t, kNpcActionCount> animationIndices{
             UINT32_MAX,

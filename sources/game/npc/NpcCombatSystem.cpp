@@ -9,6 +9,7 @@
 #include "engine/ecs/World.h"
 #include "game/Health.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcBoneImpactSystem.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorStaticModelCollision.h"
@@ -61,6 +62,7 @@ struct RayCandidate {
     int placedObjectId = 0;
     engine::Entity entity = engine::NullEntity();
     engine::AnimatedModelSurfaceAnchor surfaceAnchor;
+    int boneImpactBoneIndex = -1;
     float bodyPartDamageMultiplier = 1.0f;
     bool bodyPartDamageMatched = false;
 };
@@ -534,7 +536,7 @@ static bool TracePlayerWeaponShot(
     world.ForEach<NpcRuntimeInstance, Health, NpcCombatState,
             SectorObjectTransform, SectorObject>(
             [&](engine::Entity entity,
-                    NpcRuntimeInstance&,
+                    NpcRuntimeInstance& npc,
                     Health& health,
                     NpcCombatState& combat,
                     SectorObjectTransform& transform,
@@ -582,6 +584,23 @@ static bool TracePlayerWeaponShot(
                                     0,
                                     entity,
                                     modelHit.anchor};
+                            if (world.Has<NpcBoneImpactState>(entity)) {
+                                NpcBoneImpactState& boneImpact =
+                                        world.Get<NpcBoneImpactState>(entity);
+                                best.boneImpactBoneIndex =
+                                        FindNpcBoneImpactDominantBone(
+                                                *modelAsset,
+                                                modelHit.anchor);
+                                if (best.boneImpactBoneIndex < 0
+                                        && !boneImpact
+                                                    .classificationWarningPrinted) {
+                                    std::fprintf(
+                                            stderr,
+                                            "[NPC Bone Impact WARNING] Exact hit on NPC '%s' has no usable skin weights.\n",
+                                            npc.definitionId.c_str());
+                                    boneImpact.classificationWarningPrinted = true;
+                                }
+                            }
                             if (world.Has<NpcBodyPartDamageState>(entity)) {
                                 const NpcBodyPartDamageMatch bodyPart =
                                         ClassifyNpcBodyPartDamage(
@@ -640,6 +659,7 @@ static bool TracePlayerWeaponShot(
 
 static void ApplyPlayerWeaponImpact(
         engine::World& world,
+        const engine::AssetManager* assets,
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& npcNavigation,
         const FpsWeaponImpactDefinition& impact,
@@ -664,6 +684,30 @@ static void ApplyPlayerWeaponImpact(
                 : impact.damage;
         const int appliedDamage = ApplyDamage(health, damage);
         if (appliedDamage > 0) {
+            if (assets != nullptr
+                    && best.boneImpactBoneIndex >= 0
+                    && world.Has<NpcBoneImpactState>(best.entity)
+                    && world.Has<engine::AnimatedModelInstance>(best.entity)
+                    && world.Has<SectorDynamicModel>(best.entity)) {
+                engine::AnimatedModelInstance& instance =
+                        world.Get<engine::AnimatedModelInstance>(best.entity);
+                const engine::ModelAsset* asset =
+                        assets->GetModelAsset(instance.model);
+                if (asset != nullptr) {
+                    AddNpcBoneImpactImpulse(
+                            world.Get<NpcBoneImpactState>(best.entity),
+                            *asset,
+                            instance,
+                            NpcAuthoredTransform(
+                                    world,
+                                    best.entity,
+                                    world.Get<SectorObjectTransform>(best.entity),
+                                    world.Get<SectorDynamicModel>(best.entity)),
+                            best.boneImpactBoneIndex,
+                            best.position,
+                            outShot.rayDirection);
+                }
+            }
             if (npcAi != nullptr) {
                 AlertNpcToPlayerPosition(world, best.entity, outShot.rayOrigin);
             }
@@ -767,6 +811,7 @@ bool ResolvePlayerWeaponShot(
     if (hit) {
         ApplyPlayerWeaponImpact(
                 world,
+                assets,
                 navigation,
                 npcNavigation,
                 impact,
@@ -836,6 +881,7 @@ bool ResolvePlayerWeaponPelletVolley(
         if (!outVolley.shots[index].hit) continue;
         ApplyPlayerWeaponImpact(
                 world,
+                assets,
                 navigation,
                 npcNavigation,
                 rawFiring.impact,

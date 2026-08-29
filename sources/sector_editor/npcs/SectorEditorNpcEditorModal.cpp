@@ -278,6 +278,9 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
         const float contentHeight = 21.0f * (RowHeight + RowGap)
                 + 3.0f * (RowHeight + RowGap) + 4.0f
+                + (selected->definition.boneImpact.enabled
+                                ? 6.0f * (RowHeight + RowGap)
+                                : 2.0f * (RowHeight + RowGap))
                 + static_cast<float>(
                         selected->definition.bodyPartDamage.size())
                         * (RowHeight + RowGap + 30.0f)
@@ -627,6 +630,110 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                         ? config.invalidColor
                         : config.mutedTextColor);
         y += RowHeight + RowGap;
+
+        engine::Separator(
+                config,
+                Rectangle{
+                        formScroll.viewport.x,
+                        formScroll.viewport.y
+                                - editor.Session().formScroll.offset.y + y,
+                        formScroll.viewport.width,
+                        12.0f});
+        y += 18.0f;
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, y, formScroll.viewport.width, 34.0f},
+                font, "Bone impact reaction",
+                engine::UITextJustify::Left,
+                config.accentColor);
+        y += 38.0f;
+
+        NpcBoneImpactDefinition boneImpact =
+                selected->definition.boneImpact;
+        bool boneImpactEnabled = boneImpact.enabled;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_enabled",
+                    Rectangle{fieldX, y, 300.0f, RowHeight},
+                    font, "Procedural bone impact", boneImpactEnabled)) {
+            boneImpact.enabled = boneImpactEnabled;
+            editor.SetSelectedBoneImpact(boneImpact);
+        }
+        y += RowHeight + RowGap;
+
+        if (selected->definition.boneImpact.enabled) {
+            boneImpact = selected->definition.boneImpact;
+            drawLabel("Impulse (deg/s)");
+            float impulse = boneImpact.impulseDegreesPerSecond;
+            engine::UINumericInputResult impactInput = engine::FloatInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_impulse",
+                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                    font, impulse,
+                    state.boneImpactImpulseInput,
+                    0.0f,
+                    kMaximumNpcBoneImpactImpulseDegreesPerSecond,
+                    1);
+            if (impactInput.changed) {
+                boneImpact.impulseDegreesPerSecond = impulse;
+                editor.SetSelectedBoneImpact(boneImpact);
+            }
+            y += RowHeight + RowGap;
+
+            boneImpact = selected->definition.boneImpact;
+            drawLabel("Spring frequency (Hz)");
+            float frequency = boneImpact.springFrequencyHz;
+            impactInput = engine::FloatInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_frequency",
+                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                    font, frequency,
+                    state.boneImpactSpringFrequencyInput,
+                    kMinimumNpcBoneImpactSpringFrequencyHz,
+                    kMaximumNpcBoneImpactSpringFrequencyHz,
+                    2);
+            if (impactInput.changed) {
+                boneImpact.springFrequencyHz = frequency;
+                editor.SetSelectedBoneImpact(boneImpact);
+            }
+            y += RowHeight + RowGap;
+
+            boneImpact = selected->definition.boneImpact;
+            drawLabel("Damping ratio");
+            float damping = boneImpact.springDampingRatio;
+            impactInput = engine::FloatInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_damping",
+                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                    font, damping,
+                    state.boneImpactSpringDampingInput,
+                    kMinimumNpcBoneImpactSpringDampingRatio,
+                    kMaximumNpcBoneImpactSpringDampingRatio,
+                    2);
+            if (impactInput.changed) {
+                boneImpact.springDampingRatio = damping;
+                editor.SetSelectedBoneImpact(boneImpact);
+            }
+            y += RowHeight + RowGap;
+
+            boneImpact = selected->definition.boneImpact;
+            drawLabel("Maximum angle");
+            float maxAngle = boneImpact.maxAngleDegrees;
+            impactInput = engine::FloatInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_bone_impact_max_angle",
+                    Rectangle{fieldX, y, 190.0f, RowHeight},
+                    font, maxAngle,
+                    state.boneImpactMaxAngleInput,
+                    0.0f,
+                    kMaximumNpcBoneImpactAngleDegrees,
+                    1);
+            if (impactInput.changed) {
+                boneImpact.maxAngleDegrees = maxAngle;
+                editor.SetSelectedBoneImpact(boneImpact);
+            }
+            y += RowHeight + RowGap;
+        }
 
         engine::Separator(
                 config,
