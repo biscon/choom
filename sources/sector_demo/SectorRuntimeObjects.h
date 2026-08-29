@@ -269,4 +269,13 @@ void UpdateSectorObjectBakedLightingSystem(
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap* mapForFallback);
 
+// Synchronizes one already-spawned authored prop/item after an editor-only
+// transform change. This performs no ECS structural changes or asset requests.
+bool SynchronizeSectorPlacedRuntimeObjectTransform(
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& placedObject);
+
 } // namespace game

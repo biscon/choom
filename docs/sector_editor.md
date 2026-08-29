@@ -478,6 +478,10 @@ target surface; it does not edit the opposite sidedef, sector defaults, ambient
 lighting, or geometry. `Ctrl+C` and `Ctrl+V` invoke the same enabled copy/paste
 commands as the inspector and 3D panel buttons.
 
+Sector config paste preserves the destination sector's stable ID, name, and
+face-anchor position. It copies the editable sector settings without changing
+the destination sector's identity or map label.
+
 Selected 3D Props and Dynamic Props also support `Copy config` / `Paste config`.
 Each copied prop config pastes only to the same prop type. Paste copies the
 model, orientation, height offset, scale, collision, and shadow settings; a

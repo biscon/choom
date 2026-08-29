@@ -12,6 +12,8 @@
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingState.h"
+#include "sector_editor/services/authoring_faces/SectorEditorSurfaceHeightEditingService.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include <raylib.h>
@@ -36,6 +38,8 @@ struct SectorEditorPreviewOverlayContext {
     bool authoringDerivationCurrent = false;
     bool topologyDocumentDirty = false;
     RuntimeObjectDragState& runtimeObjectDrag;
+    RuntimeObjectEditingState& runtimeObjectEditingState;
+    PreviewSurfaceHeightAdjustmentState& surfaceHeightAdjustmentState;
     SectorEditorPreviewState& previewState;
     SectorRuntimeObjectState& runtimeObjects;
     SectorNavigationWorld& navigation;
@@ -66,10 +70,13 @@ struct SectorEditorPreviewOverlayResult {
     bool requestNavigationRebuild = false;
     bool requestBakeSelectedReflectionProbe = false;
     bool requestBakeAllReflectionProbes = false;
+    bool requestApplyAdjustment = false;
+    bool requestCancelAdjustment = false;
     const char* topologyDocumentEditStatus = nullptr;
 };
 
 Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab activeTab);
+Rectangle BuildSectorEditorPreviewAdjustmentPanelRect();
 
 void DrawSectorEditorPreviewSurfaceHighlights(
         SectorTopologyMap& topologyMap,

@@ -5,12 +5,36 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <cmath>
 #include <utility>
 
 namespace game {
 namespace {
+
+float* PreviewObjectHeightOffset(SectorPlacedRuntimeObject& object)
+{
+    if (object.kind == "static_model") {
+        return &object.staticModel.heightOffsetWorld;
+    }
+    if (object.kind == "dynamic_model") {
+        return &object.dynamicModel.heightOffsetWorld;
+    }
+    if (object.kind == "item") {
+        return &object.item.heightOffsetWorld;
+    }
+    return nullptr;
+}
+
+float WrapPreviewObjectYaw(float radians)
+{
+    constexpr float fullTurn = 2.0f * PI;
+    radians = std::fmod(radians, fullTurn);
+    if (radians <= -PI) radians += fullTurn;
+    if (radians > PI) radians -= fullTurn;
+    return radians;
+}
 
 float TriangleCross(Vector2 a, Vector2 b, Vector2 point)
 {
@@ -109,6 +133,58 @@ bool SameDynamicModelConfig(
 }
 
 } // namespace
+
+bool IsSectorEditorPreviewAdjustableObject(
+        const SectorPlacedRuntimeObject& object)
+{
+    return object.kind == "static_model"
+            || object.kind == "dynamic_model"
+            || object.kind == "item";
+}
+
+const char* SectorEditorPreviewObjectKindName(
+        const SectorPlacedRuntimeObject& object)
+{
+    if (object.kind == "static_model") return "3D prop";
+    if (object.kind == "dynamic_model") return "dynamic prop";
+    if (object.kind == "item") return "item";
+    return "object";
+}
+
+float SectorEditorPreviewObjectHeightOffsetWorld(
+        const SectorPlacedRuntimeObject& object)
+{
+    if (object.kind == "static_model") {
+        return object.staticModel.heightOffsetWorld;
+    }
+    if (object.kind == "dynamic_model") {
+        return object.dynamicModel.heightOffsetWorld;
+    }
+    if (object.kind == "item") return object.item.heightOffsetWorld;
+    return 0.0f;
+}
+
+float SectorEditorPreviewObjectTranslationStepWorld(
+        PreviewObjectNudgePreset preset)
+{
+    switch (preset) {
+        case PreviewObjectNudgePreset::Fine: return 0.01f;
+        case PreviewObjectNudgePreset::Normal: return 0.05f;
+        case PreviewObjectNudgePreset::Coarse: return 0.25f;
+    }
+    return 0.05f;
+}
+
+float SectorEditorPreviewObjectYawStepDegrees(
+        PreviewObjectNudgePreset preset)
+{
+    switch (preset) {
+        case PreviewObjectNudgePreset::Fine: return 0.25f;
+        case PreviewObjectNudgePreset::Normal: return 1.0f;
+        case PreviewObjectNudgePreset::Coarse: return 5.0f;
+    }
+    return 1.0f;
+}
 
 SectorEditorRuntimeObjectEditingService::SectorEditorRuntimeObjectEditingService(
         SectorEditorRuntimeObjectEditingServiceContext context)
@@ -837,6 +913,200 @@ bool SectorEditorRuntimeObjectEditingService::SetSelectedDoorRuntimeTargetOpen(
         return true;
     }
     return false;
+}
+
+bool SectorEditorRuntimeObjectEditingService::BeginPreviewAdjustment()
+{
+    PreviewObjectAdjustmentState& adjustment =
+            context_.editingState.previewAdjustment;
+    if (adjustment.active) return false;
+    SectorPlacedRuntimeObject* object = SelectedObject();
+    if (object == nullptr || !IsSectorEditorPreviewAdjustableObject(*object)) {
+        context_.statusText =
+                "Select a 3D prop, dynamic prop, or item before adjusting it";
+        return false;
+    }
+    if (context_.engineContext == nullptr
+            || !SynchronizeSectorPlacedRuntimeObjectTransform(
+                    context_.engineContext->world,
+                    context_.engineContext->assets,
+                    context_.runtimeObjects,
+                    context_.map,
+                    *object)) {
+        context_.statusText = "Selected object is not available in the 3D preview";
+        return false;
+    }
+
+    const PreviewObjectNudgePreset preset = adjustment.preset;
+    adjustment = PreviewObjectAdjustmentState{};
+    adjustment.active = true;
+    adjustment.objectId = object->id;
+    adjustment.objectKind = object->kind;
+    adjustment.originalPosition = object->position;
+    adjustment.originalYawRadians = object->yawRadians;
+    adjustment.originalHeightOffsetWorld =
+            SectorEditorPreviewObjectHeightOffsetWorld(*object);
+    adjustment.preset = preset;
+    context_.statusText = TextFormat(
+            "Adjusting %s %d",
+            SectorEditorPreviewObjectKindName(*object),
+            object->id);
+    return true;
+}
+
+SectorEditorPreviewObjectAdjustmentResult
+SectorEditorRuntimeObjectEditingService::PreviewNudge(
+        float deltaXWorld,
+        float deltaZWorld,
+        float deltaHeightWorld,
+        float deltaYawDegrees)
+{
+    SectorEditorPreviewObjectAdjustmentResult result;
+    PreviewObjectAdjustmentState& adjustment =
+            context_.editingState.previewAdjustment;
+    if (!adjustment.active || context_.engineContext == nullptr) return result;
+    SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
+            context_.map, adjustment.objectId);
+    if (object == nullptr || object->kind != adjustment.objectKind) {
+        return CancelPreviewAdjustment(
+                "Object adjustment cancelled: target missing");
+    }
+
+    const Vector3 previousPosition = object->position;
+    const float previousYaw = object->yawRadians;
+    float* heightOffset = PreviewObjectHeightOffset(*object);
+    if (heightOffset == nullptr) return result;
+    const float previousHeight = *heightOffset;
+
+    object->position.x += SectorWorldToAuthoringDistance(deltaXWorld);
+    object->position.z += SectorWorldToAuthoringDistance(deltaZWorld);
+    *heightOffset += deltaHeightWorld;
+    object->yawRadians = WrapPreviewObjectYaw(
+            object->yawRadians + deltaYawDegrees * DEG2RAD);
+
+    if ((deltaXWorld != 0.0f || deltaZWorld != 0.0f)
+            && context_.topologyRenderCache.valid) {
+        const int sectorId = FindCachedSectorAt(
+                Vector2{object->position.x, object->position.z});
+        if (const SectorTopologySector* sector =
+                    FindSectorTopologySector(context_.map, sectorId)) {
+            object->position.y = sector->floorZ;
+        }
+    }
+
+    if (!SynchronizeSectorPlacedRuntimeObjectTransform(
+                context_.engineContext->world,
+                context_.engineContext->assets,
+                context_.runtimeObjects,
+                context_.map,
+                *object)) {
+        object->position = previousPosition;
+        object->yawRadians = previousYaw;
+        *heightOffset = previousHeight;
+        context_.statusText = "Object adjustment failed: preview entity missing";
+        return result;
+    }
+
+    adjustment.changed = object->position.x != adjustment.originalPosition.x
+            || object->position.y != adjustment.originalPosition.y
+            || object->position.z != adjustment.originalPosition.z
+            || object->yawRadians != adjustment.originalYawRadians
+            || *heightOffset != adjustment.originalHeightOffsetWorld;
+    result.changed = true;
+    if (object->kind == "static_model"
+            && !adjustment.bakedStatusRefreshed) {
+        adjustment.bakedStatusRefreshed = true;
+        result.bakedStatusRefreshNeeded = true;
+    }
+    context_.statusText = TextFormat(
+            "Adjusting %s %d: X %.2f m Z %.2f m height %.2f m yaw %.2f deg",
+            SectorEditorPreviewObjectKindName(*object),
+            object->id,
+            SectorAuthoringToWorldDistance(object->position.x),
+            SectorAuthoringToWorldDistance(object->position.z),
+            *heightOffset,
+            object->yawRadians * RAD2DEG);
+    return result;
+}
+
+SectorEditorPreviewObjectAdjustmentResult
+SectorEditorRuntimeObjectEditingService::ApplyPreviewAdjustment()
+{
+    SectorEditorPreviewObjectAdjustmentResult result;
+    PreviewObjectAdjustmentState& adjustment =
+            context_.editingState.previewAdjustment;
+    if (!adjustment.active) return result;
+    const PreviewObjectAdjustmentState finished = adjustment;
+    const PreviewObjectNudgePreset preset = adjustment.preset;
+    adjustment = PreviewObjectAdjustmentState{};
+    adjustment.preset = preset;
+    SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
+            context_.map, finished.objectId);
+    if (object == nullptr || object->kind != finished.objectKind) {
+        context_.statusText = "Object adjustment cancelled: target missing";
+        return result;
+    }
+    if (!finished.changed) {
+        result.bakedStatusRefreshNeeded = finished.bakedStatusRefreshed;
+        result.restoreBakedStatus = finished.bakedStatusRefreshed;
+        context_.statusText = TextFormat("%s %d unchanged",
+                SectorEditorPreviewObjectKindName(*object), object->id);
+        return result;
+    }
+    MarkEdited(TextFormat(
+            "Adjusted %s %d in 3D",
+            SectorEditorPreviewObjectKindName(*object),
+            object->id));
+    ResetInspectorUi();
+    result.changed = true;
+    result.commitBakedStatus = finished.bakedStatusRefreshed;
+    result.staticNavigationRebuildNeeded = object->kind == "static_model"
+            && object->staticModel.collision;
+    return result;
+}
+
+SectorEditorPreviewObjectAdjustmentResult
+SectorEditorRuntimeObjectEditingService::CancelPreviewAdjustment(
+        const char* message)
+{
+    SectorEditorPreviewObjectAdjustmentResult result;
+    PreviewObjectAdjustmentState& adjustment =
+            context_.editingState.previewAdjustment;
+    if (!adjustment.active) return result;
+    const PreviewObjectAdjustmentState cancelled = adjustment;
+    const PreviewObjectNudgePreset preset = adjustment.preset;
+    adjustment = PreviewObjectAdjustmentState{};
+    adjustment.preset = preset;
+    SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
+            context_.map, cancelled.objectId);
+    if (object != nullptr && object->kind == cancelled.objectKind) {
+        object->position = cancelled.originalPosition;
+        object->yawRadians = cancelled.originalYawRadians;
+        if (float* heightOffset = PreviewObjectHeightOffset(*object)) {
+            *heightOffset = cancelled.originalHeightOffsetWorld;
+        }
+        if (context_.engineContext != nullptr) {
+            SynchronizeSectorPlacedRuntimeObjectTransform(
+                    context_.engineContext->world,
+                    context_.engineContext->assets,
+                    context_.runtimeObjects,
+                    context_.map,
+                    *object);
+        }
+        result.changed = cancelled.changed;
+    }
+    result.bakedStatusRefreshNeeded = cancelled.bakedStatusRefreshed;
+    result.restoreBakedStatus = cancelled.bakedStatusRefreshed;
+    context_.statusText = message != nullptr && message[0] != '\0'
+            ? message
+            : "Object adjustment cancelled";
+    return result;
+}
+
+void SectorEditorRuntimeObjectEditingService::SetPreviewAdjustmentPreset(
+        PreviewObjectNudgePreset preset)
+{
+    context_.editingState.previewAdjustment.preset = preset;
 }
 
 bool SectorEditorRuntimeObjectEditingService::BeginDrag(int objectId)

@@ -45,6 +45,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
 #include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
+#include "sector_editor/services/authoring_faces/SectorEditorSurfaceHeightEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
@@ -189,6 +190,7 @@ private:
     void FinishRuntimeObjectDrag();
     void CancelRuntimeObjectDrag(const char* message);
     void UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt);
+    void UpdatePreviewAdjustmentInput(engine::Input& input);
     void BeginFpsViewmodel(engine::AssetManager& assets);
     void EndFpsViewmodel(engine::AssetManager& assets);
     void UpdateFpsViewmodel(engine::AssetManager& assets, float dt);
@@ -224,6 +226,7 @@ private:
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
+    void DrawPreviewObjectAdjustmentGizmo() const;
     void DrawPreviewSpotLightOverlay() const;
     void DrawPreviewObjectProbeOverlay() const;
     void DrawPreviewReflectionProbeOverlay() const;
@@ -455,6 +458,11 @@ private:
     bool HasDocumentModalOpen() const;
     bool TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui);
     void LeavePreview3D();
+    bool BeginPreviewAdjustment();
+    bool ApplyPreviewAdjustment();
+    bool CancelPreviewAdjustment(const char* message);
+    void FinishPreviewObjectAdjustmentResult(
+            const SectorEditorPreviewObjectAdjustmentResult& result);
     SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
@@ -528,6 +536,7 @@ private:
     SectorEditorLightEditingService BuildLightEditingService();
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
             SectorEditorSelectionServiceContext* selectionService = nullptr);
+    SectorEditorSurfaceHeightEditingService BuildSurfaceHeightEditingService();
     SectorEditorSoundService BuildSoundService(
             SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr,
             SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr);
@@ -554,6 +563,11 @@ private:
     bool HasAuthoringGraphData() const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
+    bool PreviewAdjustmentActive() const;
+    bool RefreshPreviewSurfaceGeometry(
+            const SectorTopologyMap& topologyMap,
+            std::string* outError = nullptr);
+    bool RefreshPreviewSurfaceMaterials(engine::EngineContext& context);
     bool RebuildPreviewMeshesPreservingView(engine::EngineContext& context);
     void ClearTransientTopologyEditStateAfterGeometryChange();
     void ClearTopologySelectionOnly();
@@ -597,6 +611,7 @@ private:
     SectorEditorUiState uiState;
     RuntimeObjectEditingState runtimeObjectEditingState;
     RuntimeObjectEditingUiState runtimeObjectEditingUiState;
+    PreviewSurfaceHeightAdjustmentState surfaceHeightAdjustmentState;
     SectorEditorNpcEditorState npcEditorState;
     SectorEditorNpcEditorSessionState npcEditorSessionState;
     SectorEditorWeaponEditorState weaponEditorState;

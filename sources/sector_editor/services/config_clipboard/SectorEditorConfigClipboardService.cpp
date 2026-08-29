@@ -54,8 +54,7 @@ bool SameSectorConfig(
         const SectorAuthoringFaceAnchor& a,
         const SectorAuthoringFaceAnchor& b)
 {
-    return a.name == b.name
-            && a.isVoid == b.isVoid
+    return a.isVoid == b.isVoid
             && a.floorZ == b.floorZ
             && a.ceilingZ == b.ceilingZ
             && a.floorMaterialId == b.floorMaterialId
@@ -235,6 +234,7 @@ bool ApplySectorEditorSectorConfig(
 {
     SectorAuthoringFaceAnchor candidate = source;
     candidate.id = destination.id;
+    candidate.name = destination.name;
     candidate.x = destination.x;
     candidate.y = destination.y;
     if (SameSectorConfig(destination, candidate)) {

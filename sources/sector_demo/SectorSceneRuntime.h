@@ -46,6 +46,10 @@ public:
     void RefreshMapRuntimeObjects(
             engine::EngineContext& context,
             const SectorTopologyMap& map);
+    bool RefreshTopologyRuntimeData(
+            engine::EngineContext& context,
+            const SectorTopologyMap& map,
+            std::string& error);
     bool SpawnItemRuntimeObject(
             engine::EngineContext& context,
             const SectorTopologyMap& map,

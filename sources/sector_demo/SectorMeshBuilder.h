@@ -64,6 +64,10 @@ SectorMeshBuildResult BuildSectorMeshes(
         const SectorTopologyMap& map,
         const SectorLightmapLayout* lightmapLayout = nullptr,
         std::string* outError = nullptr);
+SectorMeshBuildResult BuildSectorMeshesFromGeneratedGeometry(
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout* lightmapLayout = nullptr,
+        std::string* outError = nullptr);
 bool ShouldDrawSectorMeshRecordForVisibility(
         const SectorMeshBatch& record,
         const RuntimePortalVisibilityResult& visibility);

@@ -248,6 +248,9 @@ bool CommitSectorEditorAuthoringGraphCandidate(
         SectorAuthoringDerivationResult candidateDerivation,
         const SectorTopologyMap& candidateMapData,
         const char* status);
+void CopySectorEditorMapLevelFields(
+        SectorTopologyMap& target,
+        const SectorTopologyMap& source);
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,

@@ -580,6 +580,65 @@ void TestSquareTopologyMeshBatchData()
     Check(HasBatchTexture(result, "square-wall"), "square topology batch data contains wall texture");
 }
 
+void TestSurfaceMaterialRefreshDataPreservesGeometryIdentity()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    const game::SectorGeneratedGeometry before =
+            BuildGeometryOrFail(map, "material refresh baseline geometry builds");
+
+    game::SectorTopologySector& sector = map.sectors.front();
+    sector.floorMaterialId = "polished-floor";
+    sector.floorUv.scale = Vector2{2.0f, 0.5f};
+    sector.floorUv.offset = Vector2{0.25f, -0.75f};
+    sector.floorDecal.materialId = "floor-marking";
+    sector.floorDecal.opacity = 0.65f;
+    sector.floorDecal.uv.scale = Vector2{0.5f, 0.5f};
+
+    const game::SectorGeneratedGeometry after =
+            BuildGeometryOrFail(map, "material refresh candidate geometry builds");
+    const game::SectorGeneratedSurface* beforeFloor = nullptr;
+    const game::SectorGeneratedSurface* afterFloor = nullptr;
+    for (const game::SectorGeneratedSurface& surface : before.surfaces) {
+        if (surface.ref.kind == game::SectorGeneratedSurfaceKind::Floor) {
+            beforeFloor = &surface;
+            break;
+        }
+    }
+    for (const game::SectorGeneratedSurface& surface : after.surfaces) {
+        if (surface.ref.kind == game::SectorGeneratedSurfaceKind::Floor) {
+            afterFloor = &surface;
+            break;
+        }
+    }
+
+    Check(beforeFloor != nullptr && afterFloor != nullptr,
+          "material refresh keeps the authored floor surface");
+    if (beforeFloor != nullptr && afterFloor != nullptr) {
+        Check(beforeFloor->ref.topologySectorId == afterFloor->ref.topologySectorId,
+              "material refresh preserves floor topology identity for selection");
+        Check(beforeFloor->vertices.size() == afterFloor->vertices.size(),
+              "material refresh preserves floor triangle layout");
+        Check(!beforeFloor->vertices.empty()
+                      && Near(beforeFloor->vertices.front().position,
+                              afterFloor->vertices.front().position),
+              "material refresh preserves floor world geometry");
+        Check(!beforeFloor->vertices.empty()
+                      && !Near(beforeFloor->vertices.front().uv,
+                               afterFloor->vertices.front().uv),
+              "material refresh regenerates edited base UVs");
+    }
+
+    const game::SectorMeshBatchDataResult records =
+            game::BuildSectorMeshDrawRecordData(after);
+    const game::SectorMeshBatchData* floorRecord =
+            FindSectorRecord(
+                    records, sector.id, "polished-floor", "floor-marking");
+    Check(floorRecord != nullptr,
+          "material refresh candidate batches use the new base and decal materials");
+    Check(floorRecord != nullptr && Near(floorRecord->decalOpacity, 0.65f),
+          "material refresh candidate batches preserve edited decal settings");
+}
+
 void TestOneSectorMeshDrawRecords()
 {
     const game::SectorGeneratedGeometry geometry = BuildGeometryOrFail(MakeSquare(), "square topology geometry builds");
@@ -2926,6 +2985,7 @@ void TestDynamicRectLightPackingAndShadow()
 int main()
 {
     TestSquareTopologyMeshBatchData();
+    TestSurfaceMaterialRefreshDataPreservesGeometryIdentity();
     TestOneSectorMeshDrawRecords();
     TestTwoSectorsWithSameMaterialKeepSeparateDrawRecords();
     TestDecalMeshBatchData();

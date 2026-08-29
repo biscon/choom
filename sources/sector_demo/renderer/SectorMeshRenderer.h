@@ -79,6 +79,14 @@ public:
             const SectorTopologyMap& map,
             const char* scopeName,
             std::string& error);
+    bool RefreshSurfaceMaterials(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            std::string& error);
+    bool RefreshSurfaceGeometry(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            std::string& error);
     void Shutdown(engine::AssetManager& assets);
     void ShutdownRendererResources(engine::AssetManager& assets);
 
@@ -158,6 +166,8 @@ public:
             const SectorViewPose& pose,
             bool refreshVisibility = true);
     void SetVerticalFovDegrees(float value);
+    void BeginStaticObjectAdjustmentBakedDataStale();
+    void FinishStaticObjectAdjustmentBakedData(bool restore);
     void RefreshDynamicLightSources(const SectorTopologyMap& map);
     void SetRuntimePointLight(
             const SectorPreviewDynamicPointLightSource* light)
@@ -296,6 +306,19 @@ private:
             bool end) const;
     void RefreshAtmosphereDiagnostics(
             const SectorBillboardDynamicLightContext& dynamicLights);
+    void EnsureSurfaceMaterialResources(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            const SectorGeneratedGeometry& geometry);
+    bool RefreshSurfaceGeometryInternal(
+            engine::AssetManager& assets,
+            const SectorTopologyMap& map,
+            bool refreshVisibilityData,
+            std::string& error);
+    void RefreshBakedDataStatus(const SectorTopologyMap& map);
+    void RefreshBakedDataStatus(
+            const SectorTopologyMap& map,
+            const std::string& currentSourceHash);
     engine::TextureHandle TextureForId(const std::string& materialId) const;
     engine::TextureHandle NormalTextureForId(const std::string& materialId) const;
     void UpdateCamera();
@@ -394,6 +417,13 @@ private:
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
+    bool localReflectionProbesCurrent = true;
+    std::string localReflectionProbeSurfaceHash;
+    bool staticObjectAdjustmentBakedDataActive = false;
+    int staticObjectAdjustmentOriginalLightmapStatus = 0;
+    bool staticObjectAdjustmentOriginalSurfaceLightmapCurrent = false;
+    bool staticObjectAdjustmentOriginalObjectProbeCurrent = false;
+    bool staticObjectAdjustmentOriginalLocalReflectionProbesCurrent = true;
     SectorBloomRenderer bloomRenderer;
     engine::RenderTarget hdrSceneScratch;
     RenderTexture2D hdrSceneColorView = {};

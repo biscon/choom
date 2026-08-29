@@ -263,6 +263,9 @@ SectorLightmapStatus GetSectorLightmapStatus(
         const SectorTopologyMap& map,
         const std::string& currentSourceHash);
 SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMap& map);
+SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(
+        const SectorTopologyMap& map,
+        const std::string& currentSourceHash);
 const char* SectorLightmapStatusText(SectorLightmapStatus status);
 bool IsSameLogicalSectorLightmapSurface(
         const SectorGeneratedSurfaceRef& a,

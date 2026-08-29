@@ -1790,5 +1790,112 @@ void UpdateSectorObjectBakedLightingSystem(
             });
 }
 
+bool SynchronizeSectorPlacedRuntimeObjectTransform(
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& placedObject)
+{
+    if (placedObject.kind != "static_model"
+            && placedObject.kind != "dynamic_model"
+            && placedObject.kind != "item") {
+        return false;
+    }
+    const auto entry = std::find_if(
+            state.placedObjectEntities.begin(),
+            state.placedObjectEntities.end(),
+            [&placedObject](const SectorPlacedRuntimeObjectEntity& value) {
+                return value.placedObjectId == placedObject.id;
+            });
+    if (entry == state.placedObjectEntities.end()
+            || !world.IsAlive(entry->entity)
+            || !world.Has<SectorObjectTransform>(entry->entity)
+            || !world.Has<SectorObject>(entry->entity)) {
+        return false;
+    }
+
+    float heightOffsetWorld = 0.0f;
+    float rotationXRadians = 0.0f;
+    float rotationZRadians = 0.0f;
+    if (placedObject.kind == "static_model") {
+        heightOffsetWorld = placedObject.staticModel.heightOffsetWorld;
+        rotationXRadians = placedObject.staticModel.rotationXRadians;
+        rotationZRadians = placedObject.staticModel.rotationZRadians;
+    } else if (placedObject.kind == "dynamic_model") {
+        heightOffsetWorld = placedObject.dynamicModel.heightOffsetWorld;
+        rotationXRadians = placedObject.dynamicModel.rotationXRadians;
+        rotationZRadians = placedObject.dynamicModel.rotationZRadians;
+    } else {
+        heightOffsetWorld = placedObject.item.heightOffsetWorld;
+        rotationXRadians = placedObject.item.rotationXRadians;
+        rotationZRadians = placedObject.item.rotationZRadians;
+    }
+
+    Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
+            placedObject.position);
+    worldPosition.y += heightOffsetWorld;
+    SectorObjectTransform& transform =
+            world.Get<SectorObjectTransform>(entry->entity);
+    const bool transformChanged = transform.position.x != worldPosition.x
+            || transform.position.y != worldPosition.y
+            || transform.position.z != worldPosition.z
+            || transform.yawRadians != placedObject.yawRadians
+            || transform.rotationXRadians != rotationXRadians
+            || transform.rotationZRadians != rotationZRadians;
+    transform = SectorObjectTransform{
+            worldPosition,
+            placedObject.yawRadians,
+            rotationXRadians,
+            rotationZRadians};
+
+    SectorObject& object = world.Get<SectorObject>(entry->entity);
+    if (state.objectSectorLookupWorldValid) {
+        const int foundSectorId =
+                state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                        Vector2{worldPosition.x, worldPosition.z},
+                        object.currentSectorId);
+        object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+    }
+    if (world.Has<SectorObjectLighting>(entry->entity)) {
+        world.Get<SectorObjectLighting>(entry->entity) = SampleSectorObjectLighting(
+                state.objectLightProbes,
+                worldPosition,
+                object.currentSectorId,
+                &map);
+    }
+
+    const Vector3 ambient = StaticModelSectorAmbient(map, object.currentSectorId);
+    const float exposure = StaticModelEnvironmentExposure(
+            map, object.currentSectorId, ambient);
+    if (world.Has<SectorStaticModel>(entry->entity)) {
+        SectorStaticModel& model = world.Get<SectorStaticModel>(entry->entity);
+        model.containingSectorAmbient = ambient;
+        model.environmentExposure = exposure;
+    }
+    if (world.Has<SectorDynamicModel>(entry->entity)) {
+        SectorDynamicModel& model = world.Get<SectorDynamicModel>(entry->entity);
+        model.containingSectorAmbient = ambient;
+        model.environmentExposure = exposure;
+    }
+    if (world.Has<SectorItem>(entry->entity)) {
+        SectorItem& item = world.Get<SectorItem>(entry->entity);
+        item.containingSectorAmbient = ambient;
+        item.environmentExposure = exposure;
+    }
+
+    if (transformChanged
+            && world.Has<SectorStaticModelCollider>(entry->entity)) {
+        SectorStaticModelCollider& collider =
+                world.Get<SectorStaticModelCollider>(entry->entity);
+        collider.resolved = false;
+        collider.failed = false;
+        UpdateSectorStaticModelColliderSystem(world, assets);
+        CollectSectorStaticModelColliders(world, state.staticModelColliders);
+        CollectSectorDynamicModelColliders(world, state.dynamicModelColliders);
+    }
+    return true;
+}
+
 
 } // namespace game

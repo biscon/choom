@@ -27,6 +27,8 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         bool gameSessionExists,
         bool canCopyConfig,
         bool canPasteConfig,
+        bool hasAdjustablePreviewSelection,
+        bool previewAdjustmentActive,
         bool visible,
         bool enabled)
 {
@@ -53,13 +55,31 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Clear", CommandId(SectorEditorMainMenuCommand::ClearGameSession),
                     engine::UIMenuItemKind::Action, gameSessionExists}
     }};
-    const std::array<engine::UIMenuItem, 2> editItems{{
+    const std::array<engine::UIMenuItem, 5> editItems{{
             {"Copy config", CommandId(SectorEditorMainMenuCommand::CopyConfig),
                     engine::UIMenuItemKind::Action, canCopyConfig, false, "CTRL-C",
                     engine::UIMenuShortcut{KEY_C, true}},
             {"Paste config", CommandId(SectorEditorMainMenuCommand::PasteConfig),
                     engine::UIMenuItemKind::Action, canPasteConfig, false, "CTRL-V",
-                    engine::UIMenuShortcut{KEY_V, true}}
+                    engine::UIMenuShortcut{KEY_V, true}},
+            {"Adjust selected",
+                    CommandId(SectorEditorMainMenuCommand::BeginPreviewAdjustment),
+                    engine::UIMenuItemKind::Action,
+                    CanBeginSectorEditorPreviewAdjustment(
+                            editorState.mode,
+                            hasAdjustablePreviewSelection,
+                            previewAdjustmentActive),
+                    false,
+                    "CTRL-A",
+                    SectorEditorAdjustSelectedShortcut()},
+            {"Apply 3D adjustment",
+                    CommandId(SectorEditorMainMenuCommand::ApplyPreviewAdjustment),
+                    engine::UIMenuItemKind::Action,
+                    previewAdjustmentActive},
+            {"Cancel 3D adjustment",
+                    CommandId(SectorEditorMainMenuCommand::CancelPreviewAdjustment),
+                    engine::UIMenuItemKind::Action,
+                    previewAdjustmentActive}
     }};
     const std::array<engine::UIMenuItem, 4> viewItems{{
             {"3D Mode", CommandId(SectorEditorMainMenuCommand::Toggle3DMode),

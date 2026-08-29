@@ -11,6 +11,24 @@
 
 namespace game {
 
+enum class PreviewObjectNudgePreset {
+    Fine,
+    Normal,
+    Coarse
+};
+
+struct PreviewObjectAdjustmentState {
+    bool active = false;
+    bool changed = false;
+    bool bakedStatusRefreshed = false;
+    int objectId = -1;
+    std::string objectKind;
+    Vector3 originalPosition = {};
+    float originalYawRadians = 0.0f;
+    float originalHeightOffsetWorld = 0.0f;
+    PreviewObjectNudgePreset preset = PreviewObjectNudgePreset::Normal;
+};
+
 enum class ModelPickerTarget {
     StaticModel,
     DynamicModel,
@@ -41,6 +59,7 @@ struct RuntimeObjectEditingState {
         std::vector<std::string> labelStorage;
         std::vector<const char*> labels;
     } itemPlacement;
+    PreviewObjectAdjustmentState previewAdjustment;
     RuntimeObjectDragState drag;
     SectorEditorNpcPlacementState npcPlacement;
     SectorSpriteMetadataCatalog spriteMetadataCatalog;

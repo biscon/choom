@@ -286,11 +286,13 @@ bool BuildSectorPbrEnvironment(
 SectorPbrEnvironmentSelection SelectSectorPbrEnvironment(
         const SectorPbrEnvironment& environment,
         Vector3 receiverPosition,
-        int receiverSectorId)
+        int receiverSectorId,
+        bool includeLocalProbes)
 {
     const SectorPbrEnvironment::LocalProbe* best = nullptr;
     float bestDistanceSquared = 0.0f;
     for (const SectorPbrEnvironment::LocalProbe& candidate : environment.localProbes) {
+        if (!includeLocalProbes) break;
         const SectorCompiledReflectionProbe& probe = candidate.definition;
         if (!probe.enabled || engine::IsNull(candidate.cubemap)) continue;
         const Vector3 local = ToProbeLocal(receiverPosition, probe);

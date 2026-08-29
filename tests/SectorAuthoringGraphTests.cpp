@@ -19,6 +19,7 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
+#include "sector_editor/services/authoring_faces/SectorEditorSurfaceHeightEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
@@ -5929,6 +5930,40 @@ void TestDeriveGeneratedFallbackLabelsSkipExistingNames()
           "generated fallback labels skip existing generated/default names");
 }
 
+void TestDeriveDuplicateGeneratedLabelsDoNotDisplaceReservedNames()
+{
+    game::SectorAuthoringGraph graph = MakeNestedRectangleGraph(5);
+    AddFaceAnchor(graph, 200, 16, 16, "Sector 70");
+    AddFaceAnchor(graph, 201, 48, 48, "Sector 70");
+    AddFaceAnchor(graph, 202, 80, 80, "Sector 3");
+    AddFaceAnchor(graph, 203, 112, 112, "Sector 4");
+    AddFaceAnchor(graph, 204, 144, 144, "Sector 5");
+
+    const game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+
+    CheckDerivedTopologyIsValid(
+            result,
+            "reserved generated label derivation is valid");
+    const game::SectorTopologySector* duplicate =
+            game::FindSectorTopologySector(result.topology, 201);
+    const game::SectorTopologySector* sector3 =
+            game::FindSectorTopologySector(result.topology, 202);
+    const game::SectorTopologySector* sector4 =
+            game::FindSectorTopologySector(result.topology, 203);
+    const game::SectorTopologySector* sector5 =
+            game::FindSectorTopologySector(result.topology, 204);
+    Check(duplicate != nullptr
+                  && duplicate->name != "Sector 3"
+                  && duplicate->name != "Sector 4"
+                  && duplicate->name != "Sector 5",
+          "duplicate generated label fallback skips all reserved anchor names");
+    Check(sector3 != nullptr && sector3->name == "Sector 3"
+                  && sector4 != nullptr && sector4->name == "Sector 4"
+                  && sector5 != nullptr && sector5->name == "Sector 5",
+          "duplicate generated label does not displace later reserved names");
+}
+
 void TestEditorAuthoringRefreshPreservesCustomAndImportedLabels()
 {
     game::SectorEditorState state;
@@ -6279,9 +6314,16 @@ void TestEditorAuthoringFlatSurfaceFloorUvWritesThroughFaceAnchor()
 
     game::SectorEditorUiState uiState;
     std::string statusText;
+    bool previewRefreshRequested = false;
     engine::AssetManager assets;
     game::SectorEditorMaterialEditingService service =
-            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+            MakeMaterialEditingService(
+                    state,
+                    documentState,
+                    authoringGraph,
+                    uiState,
+                    statusText,
+                    &previewRefreshRequested);
 
     Check(service.ApplySurfaceUvValue(
                   target,
@@ -6305,6 +6347,20 @@ void TestEditorAuthoringFlatSurfaceFloorUvWritesThroughFaceAnchor()
     Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
                   && !documentState.derivation.authoringDerivedTopologyStale,
           "service 3D floor UV edit leaves refreshed authoring derivation current");
+    Check(previewRefreshRequested,
+          "service 3D floor UV edit requests a preview material refresh");
+
+    previewRefreshRequested = false;
+    Check(!service.ApplySurfaceUvValue(
+                  target,
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  2.5f,
+                  game::SectorSurfaceKind::Floor,
+                  assets),
+          "service 3D floor UV no-op reports no change");
+    Check(!previewRefreshRequested,
+          "service 3D floor UV no-op does not request a preview refresh");
 }
 
 void TestEditorAuthoringFlatSurfaceCeilingUvWritesThroughFaceAnchor()
@@ -6381,6 +6437,7 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
 
     game::SectorEditorUiState uiState;
     std::string statusText;
+    bool previewRefreshRequested = false;
     game::SectorEditorMaterialEditingService service =
             MakeMaterialEditingService(
                     state,
@@ -6388,7 +6445,7 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
                     authoringGraph,
                     uiState,
                     statusText,
-                    nullptr,
+                    &previewRefreshRequested,
                     &materialRegistry);
 
     Check(service.OpenMaterialPickerForDerivedSector(
@@ -6396,6 +6453,7 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
           "service flat texture picker opens for graph-authored flat target");
+    state.texturePicker.rebuildPreviewOnApply = true;
     Check(documentState.map.topologyMap.resolvedMaterialsById.find("floor_tiles")
                     == documentState.map.topologyMap.resolvedMaterialsById.end()
                   && state.texturePicker.materialIds
@@ -6419,6 +6477,8 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
           "service flat texture picker writes to face anchor floor texture");
     Check(sector != nullptr && sector->floorMaterialId == "floor_tiles",
           "service flat texture picker refreshes derived sector projection");
+    Check(previewRefreshRequested,
+          "service 3D flat texture picker requests a preview material refresh");
 }
 
 void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
@@ -12477,6 +12537,386 @@ void TestStaticPropConfigClipboardPreservesPlacementAndIdentity()
           "repeating an identical 3D prop config paste is a clean no-op");
 }
 
+void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 640;
+    object.kind = "static_model";
+    object.position = Vector3{16.0f, 0.0f, 16.0f};
+    object.staticModel.instanceId = "adjusted_prop";
+    object.staticModel.collision = true;
+    map.runtimeObjects.push_back(object);
+
+    engine::EngineContext engineContext;
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::SpawnPlacedRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            runtimeObjects,
+            map);
+    Check(runtimeObjects.placedObjectEntities.size() == 1,
+          "preview adjustment fixture spawns one stable runtime entity");
+    if (runtimeObjects.placedObjectEntities.empty()) return;
+    const engine::Entity originalEntity =
+            runtimeObjects.placedObjectEntities.front().entity;
+
+    game::RuntimeObjectEditingState editingState;
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    selectionState.selectedRuntimeObjectId = object.id;
+    game::SectorEditorDocumentState documentState;
+    uint64_t renderRevision = 120;
+    game::SectorEditorTopologyRenderCache renderCache;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    std::string statusText;
+    game::SectorEditorRuntimeObjectEditingService editing{
+            game::SectorEditorRuntimeObjectEditingServiceContext{
+                    map,
+                    runtimeObjects,
+                    editingState,
+                    uiState,
+                    selectionState,
+                    nullptr,
+                    game::MakeSectorEditorDocumentLifecycleAccess(
+                            documentState.lifecycle),
+                    renderRevision,
+                    renderCache,
+                    statusText,
+                    &engineContext,
+                    true}};
+
+    Check(Near(game::SectorEditorPreviewObjectTranslationStepWorld(
+                       game::PreviewObjectNudgePreset::Fine), 0.01f)
+                  && Near(game::SectorEditorPreviewObjectTranslationStepWorld(
+                                  game::PreviewObjectNudgePreset::Normal),
+                          0.05f)
+                  && Near(game::SectorEditorPreviewObjectTranslationStepWorld(
+                                  game::PreviewObjectNudgePreset::Coarse),
+                          0.25f)
+                  && Near(game::SectorEditorPreviewObjectYawStepDegrees(
+                                  game::PreviewObjectNudgePreset::Fine),
+                          0.25f)
+                  && Near(game::SectorEditorPreviewObjectYawStepDegrees(
+                                  game::PreviewObjectNudgePreset::Coarse),
+                          5.0f),
+          "preview adjustment presets expose the agreed translation and yaw increments");
+    Check(editing.BeginPreviewAdjustment()
+                  && editingState.previewAdjustment.active,
+          "selected static prop begins a preview adjustment transaction");
+    const auto preview = editing.PreviewNudge(0.05f, 0.0f, 0.05f, 1.0f);
+    const game::SectorPlacedRuntimeObject& staged = map.runtimeObjects.front();
+    Check(preview.changed && preview.bakedStatusRefreshNeeded
+                  && Near(game::SectorAuthoringToWorldDistance(staged.position.x),
+                          2.05f)
+                  && Near(staged.staticModel.heightOffsetWorld, 0.05f)
+                  && Near(staged.yawRadians * RAD2DEG, 1.0f),
+          "static prop nudge stages exact world X, height-offset, and yaw increments");
+    Check(!documentState.lifecycle.topologyDocumentDirty
+                  && renderRevision == 120
+                  && renderCache.valid,
+          "preview staging remains clean and preserves the 2D cache until Apply");
+    Check(runtimeObjects.placedObjectEntities.front().entity == originalEntity
+                  && engineContext.world.IsAlive(originalEntity)
+                  && Near(engineContext.world
+                                  .Get<game::SectorObjectTransform>(originalEntity)
+                                  .position.x,
+                          2.05f),
+          "preview staging updates the existing ECS entity without respawning it");
+
+    const auto staticCancel = editing.CancelPreviewAdjustment(
+            "static adjustment cancelled");
+    Check(staticCancel.changed && staticCancel.bakedStatusRefreshNeeded
+                  && staticCancel.restoreBakedStatus
+                  && Near(map.runtimeObjects.front().position, object.position)
+                  && Near(map.runtimeObjects.front().yawRadians, object.yawRadians)
+                  && Near(map.runtimeObjects.front()
+                                  .staticModel.heightOffsetWorld,
+                          object.staticModel.heightOffsetWorld)
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && renderRevision == 120
+                  && renderCache.valid,
+          "Cancel restores a static prop and requests baked-status restoration without dirtying");
+    Check(editing.BeginPreviewAdjustment(),
+          "static prop adjustment can restart after cancellation");
+    const auto committedPreview = editing.PreviewNudge(
+            0.05f, 0.0f, 0.05f, 1.0f);
+    Check(committedPreview.changed && committedPreview.bakedStatusRefreshNeeded,
+          "restarted static prop adjustment stages the committed transform");
+
+    const auto applied = editing.ApplyPreviewAdjustment();
+    Check(applied.changed && applied.commitBakedStatus
+                  && applied.staticNavigationRebuildNeeded
+                  && !editingState.previewAdjustment.active
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == 121
+                  && !renderCache.valid,
+          "Apply commits once, invalidates the 2D cache, and requests static navigation rebuild");
+    Check(runtimeObjects.placedObjectEntities.front().entity == originalEntity
+                  && engineContext.world.IsAlive(originalEntity),
+          "Apply preserves the adjusted runtime entity handle");
+
+    game::ClearSectorRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            runtimeObjects);
+
+    game::SectorTopologyMap movableMap = MakeAdjacentSectorMap();
+    game::SectorPlacedRuntimeObject dynamic;
+    dynamic.id = 641;
+    dynamic.kind = "dynamic_model";
+    dynamic.position = Vector3{24.0f, 0.0f, 24.0f};
+    dynamic.dynamicModel.instanceId = "adjusted_dynamic";
+    game::SectorPlacedRuntimeObject item;
+    item.id = 642;
+    item.kind = "item";
+    item.position = Vector3{32.0f, 0.0f, 32.0f};
+    item.item.definitionId = "adjusted_item";
+    item.item.instanceId = "adjusted_item_instance";
+    movableMap.runtimeObjects = {dynamic, item};
+    game::ItemRegistry itemRegistry;
+    game::ItemDefinition itemDefinition;
+    itemDefinition.id = item.item.definitionId;
+    itemDefinition.title = "Adjusted Item";
+    itemRegistry.items.push_back(itemDefinition);
+    game::ItemModelAssetState itemAssets;
+    game::SectorRuntimeObjectState movableRuntimeObjects;
+    game::SpawnPlacedRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            movableRuntimeObjects,
+            movableMap,
+            &itemRegistry,
+            &itemAssets);
+    Check(movableRuntimeObjects.placedObjectEntities.size() == 2,
+          "dynamic prop and item adjustment fixtures both spawn");
+
+    game::RuntimeObjectEditingState movableEditingState;
+    game::RuntimeObjectEditingUiState movableUiState;
+    game::SelectionState movableSelection;
+    movableSelection.selectedRuntimeObjectId = dynamic.id;
+    game::SectorEditorDocumentState movableDocument;
+    uint64_t movableRevision = 200;
+    game::SectorEditorTopologyRenderCache movableCache;
+    FillRuntimeObjectTestSectorCache(movableCache, movableMap);
+    std::string movableStatus;
+    game::SectorEditorRuntimeObjectEditingService movableEditing{
+            game::SectorEditorRuntimeObjectEditingServiceContext{
+                    movableMap,
+                    movableRuntimeObjects,
+                    movableEditingState,
+                    movableUiState,
+                    movableSelection,
+                    nullptr,
+                    game::MakeSectorEditorDocumentLifecycleAccess(
+                            movableDocument.lifecycle),
+                    movableRevision,
+                    movableCache,
+                    movableStatus,
+                    &engineContext,
+                    true,
+                    &itemRegistry}};
+    Check(movableEditing.BeginPreviewAdjustment(),
+          "dynamic prop begins a preview adjustment");
+    const auto dynamicPreview = movableEditing.PreviewNudge(
+            0.0f, -0.25f, 0.25f, -5.0f);
+    Check(dynamicPreview.changed && !dynamicPreview.bakedStatusRefreshNeeded,
+          "dynamic prop adjustment does not request baked-lighting invalidation");
+    const auto dynamicCancel = movableEditing.CancelPreviewAdjustment(
+            "dynamic adjustment cancelled");
+    Check(dynamicCancel.changed && !dynamicCancel.bakedStatusRefreshNeeded
+                  && Near(movableMap.runtimeObjects[0].position,
+                          dynamic.position)
+                  && Near(movableMap.runtimeObjects[0].yawRadians,
+                          dynamic.yawRadians)
+                  && Near(movableMap.runtimeObjects[0]
+                                  .dynamicModel.heightOffsetWorld,
+                          dynamic.dynamicModel.heightOffsetWorld)
+                  && !movableDocument.lifecycle.topologyDocumentDirty
+                  && movableRevision == 200
+                  && movableCache.valid,
+          "Cancel restores a dynamic prop without dirtying or invalidating the document");
+
+    movableSelection.selectedRuntimeObjectId = item.id;
+    Check(movableEditing.BeginPreviewAdjustment(),
+          "item begins a preview adjustment");
+    const auto itemPreview = movableEditing.PreviewNudge(
+            -0.01f, 0.01f, 0.01f, 0.25f);
+    const auto itemApply = movableEditing.ApplyPreviewAdjustment();
+    Check(itemPreview.changed && !itemPreview.bakedStatusRefreshNeeded
+                  && itemApply.changed
+                  && !itemApply.staticNavigationRebuildNeeded
+                  && Near(movableMap.runtimeObjects[1].item.heightOffsetWorld,
+                          0.01f)
+                  && movableDocument.lifecycle.topologyDocumentDirty
+                  && movableRevision == 201
+                  && !movableCache.valid,
+          "item adjustment commits in place without baked-lighting or navigation work");
+    Check(movableRuntimeObjects.placedObjectEntities.size() == 2,
+          "dynamic prop and item adjustments do not respawn unrelated objects");
+    game::ClearSectorRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            movableRuntimeObjects);
+}
+
+void TestPreviewSurfaceHeightAdjustmentStagesCancelsAndCommits()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeSingleSectorSquareMap();
+    game::SectorAuthoringGraph& graph =
+            documentState.authoring.authoringGraph;
+    game::InitializeSectorEditorAuthoringStateFromTopology(
+            graph,
+            game::MakeSectorEditorDerivationDocumentAccess(
+                    documentState.derivation),
+            documentState.map.topologyMap);
+    Check(game::IsSectorEditorAuthoringDerivationCurrent(
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation)),
+          "surface-height adjustment fixture has current authoring derivation");
+    if (documentState.map.topologyMap.sectors.empty()
+            || graph.faceAnchors.empty()) {
+        return;
+    }
+
+    const int sectorId = documentState.map.topologyMap.sectors.front().id;
+    const int faceAnchorId = graph.faceAnchors.front().id;
+    const float originalFloor = graph.faceAnchors.front().floorZ;
+    const float originalCeiling = graph.faceAnchors.front().ceilingZ;
+    game::SelectionState selectionState;
+    game::SectorEditorPreviewSelectionState previewSelection;
+    previewSelection.selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    previewSelection.selectedSurface3D.topologySectorId = sectorId;
+    previewSelection.selectedTopologySurface3D.kind =
+            game::TopologySurfaceEditTargetKind::SectorFloor;
+    previewSelection.selectedTopologySurface3D.sectorId = sectorId;
+    game::PreviewSurfaceHeightAdjustmentState adjustmentState;
+    state.topologyRenderRevision = 77;
+    state.topologyRenderCache.valid = true;
+    std::string statusText;
+
+    auto makeService = [&]() {
+        return game::SectorEditorSurfaceHeightEditingService{
+                game::SectorEditorSurfaceHeightEditingServiceContext{
+                        state,
+                        game::MakeSectorEditorDocumentLifecycleAccess(
+                                documentState.lifecycle),
+                        documentState.map.topologyMap,
+                        graph,
+                        game::MakeSectorEditorDerivationDocumentAccess(
+                                documentState.derivation),
+                        selectionState,
+                        previewSelection,
+                        adjustmentState,
+                        statusText}};
+    };
+
+    Check(Near(game::SectorEditorPreviewSurfaceHeightStepAuthored(
+                       game::PreviewSurfaceHeightNudgePreset::Fine), 0.25f)
+                  && Near(game::SectorEditorPreviewSurfaceHeightStepAuthored(
+                                  game::PreviewSurfaceHeightNudgePreset::Normal),
+                          1.0f)
+                  && Near(game::SectorEditorPreviewSurfaceHeightStepAuthored(
+                                  game::PreviewSurfaceHeightNudgePreset::Coarse),
+                          5.0f),
+          "surface-height presets use 0.25, 1, and 5 authored units");
+    Check(game::IsSectorEditorPreviewSurfaceHeightAdjustable(
+                  documentState.map.topologyMap,
+                  graph,
+                  documentState.derivation.authoringDerivation,
+                  true,
+                  previewSelection.selectedSurface3D),
+          "mapped 3D floor is height-adjustable");
+
+    auto editing = makeService();
+    Check(editing.BeginPreviewAdjustment() && adjustmentState.active,
+          "selected floor begins a staged height adjustment");
+    game::PreviewSurfaceHeightNudgeCandidate floorCandidate;
+    Check(editing.BuildPreviewNudge(1.0f, floorCandidate)
+                  && floorCandidate.valid,
+          "floor Page Up builds a valid authored-unit candidate");
+    const game::SectorAuthoringFaceAnchor* stagedFloor =
+            game::FindSectorAuthoringFaceAnchor(
+                    floorCandidate.graph, faceAnchorId);
+    const game::SectorTopologySector* stagedFloorSector =
+            game::FindSectorTopologySector(
+                    floorCandidate.derivation.topology, sectorId);
+    Check(stagedFloor != nullptr
+                  && Near(stagedFloor->floorZ, originalFloor + 1.0f)
+                  && stagedFloorSector != nullptr
+                  && Near(stagedFloorSector->floorZ, originalFloor + 1.0f),
+          "floor nudge derives matching staged authoring and topology heights");
+    Check(Near(graph.faceAnchors.front().floorZ, originalFloor)
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && !documentState.lifecycle.hasUnsavedChanges
+                  && state.topologyRenderRevision == 77
+                  && state.topologyRenderCache.valid,
+          "surface-height staging leaves live document and 2D cache untouched");
+    editing.AcceptPreviewNudge(std::move(floorCandidate));
+    const auto cancelled = editing.CancelPreviewAdjustment(
+            "surface height cancelled");
+    Check(cancelled.changed
+                  && !adjustmentState.active
+                  && Near(graph.faceAnchors.front().floorZ, originalFloor)
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && state.topologyRenderRevision == 77
+                  && state.topologyRenderCache.valid,
+          "surface-height Cancel discards staging without dirtying");
+
+    previewSelection.selectedSurface3D.kind = game::SectorSurfaceKind::Ceiling;
+    previewSelection.selectedTopologySurface3D.kind =
+            game::TopologySurfaceEditTargetKind::SectorCeiling;
+    auto ceilingEditing = makeService();
+    Check(ceilingEditing.BeginPreviewAdjustment(),
+          "selected ceiling begins a staged height adjustment");
+    game::PreviewSurfaceHeightNudgeCandidate ceilingCandidate;
+    Check(ceilingEditing.BuildPreviewNudge(-5.0f, ceilingCandidate),
+          "ceiling Page Down builds a valid coarse candidate");
+    ceilingEditing.AcceptPreviewNudge(std::move(ceilingCandidate));
+    const auto applied = ceilingEditing.ApplyPreviewAdjustment();
+    const game::SectorAuthoringFaceAnchor* committedAnchor =
+            game::FindSectorAuthoringFaceAnchor(graph, faceAnchorId);
+    Check(applied.changed && applied.committed
+                  && !adjustmentState.active
+                  && committedAnchor != nullptr
+                  && Near(committedAnchor->floorZ, originalFloor)
+                  && Near(committedAnchor->ceilingZ, originalCeiling - 5.0f)
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && state.topologyRenderRevision == 78
+                  && !state.topologyRenderCache.valid
+                  && game::IsSectorEditorAuthoringDerivationCurrent(
+                          game::MakeSectorEditorDerivationDocumentAccess(
+                                  documentState.derivation)),
+          "surface-height Apply commits once and invalidates the 2D cache");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    previewSelection.selectedSurface3D.kind = game::SectorSurfaceKind::Wall;
+    Check(!game::IsSectorEditorPreviewSurfaceHeightAdjustable(
+                  documentState.map.topologyMap,
+                  graph,
+                  documentState.derivation.authoringDerivation,
+                  true,
+                  previewSelection.selectedSurface3D),
+          "3D wall selection is not height-adjustable");
+
+    previewSelection.selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    auto invalidEditing = makeService();
+    Check(invalidEditing.BeginPreviewAdjustment(),
+          "floor adjustment restarts for invalid-height test");
+    game::PreviewSurfaceHeightNudgeCandidate invalidCandidate;
+    Check(!invalidEditing.BuildPreviewNudge(512.0f, invalidCandidate)
+                  && !invalidCandidate.valid
+                  && statusText.find("ceiling must remain above floor")
+                          != std::string::npos,
+          "floor nudge cannot cross the ceiling");
+    invalidEditing.CancelPreviewAdjustment(nullptr);
+}
+
 void TestDynamicPropConfigClipboardPreservesPlacementAndIdentity()
 {
     game::SectorTopologyMap map = MakeAdjacentSectorMap();
@@ -12706,16 +13146,17 @@ void TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor()
 
     game::SectorAuthoringFaceAnchor destination;
     destination.id = 99;
+    destination.name = "destination sector";
     destination.x = 1600;
     destination.y = 3200;
     Check(game::ApplySectorEditorSectorConfig(destination, source),
           "sector config application changes a different destination");
     Check(destination.id == 99
+                  && destination.name == "destination sector"
                   && destination.x == 1600
                   && destination.y == 3200,
-          "sector config application preserves destination ID and anchor coordinates");
-    Check(destination.name == "copied sector"
-                  && destination.isVoid
+          "sector config application preserves destination identity and anchor coordinates");
+    Check(destination.isVoid
                   && Near(destination.floorZ, -4.0f)
                   && Near(destination.ceilingZ, 18.0f)
                   && destination.floorMaterialId == "floor_a"
@@ -14503,6 +14944,7 @@ int main()
     TestEditorAuthoringRefreshPreservesUnresolvedExistingAnchors();
     TestDeriveGeneratedFaceLabelsAreUnique();
     TestDeriveGeneratedFallbackLabelsSkipExistingNames();
+    TestDeriveDuplicateGeneratedLabelsDoNotDisplaceReservedNames();
     TestEditorAuthoringRefreshPreservesCustomAndImportedLabels();
     TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailable();
     TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor();
@@ -14616,6 +15058,8 @@ int main()
     TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
     TestDoorConfigClipboardPreservesAnchorAndInstanceId();
     TestStaticPropConfigClipboardPreservesPlacementAndIdentity();
+    TestPreviewObjectAdjustmentStagesAndCommitsInPlace();
+    TestPreviewSurfaceHeightAdjustmentStagesCancelsAndCommits();
     TestDynamicPropConfigClipboardPreservesPlacementAndIdentity();
     TestConfigClipboardTargetResolutionPrefersPreviewSurface();
     TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor();

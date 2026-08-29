@@ -406,6 +406,7 @@ if(BUILD_TESTING)
             sources/sector_editor/selection/SectorEditorSelectionService.cpp
             sources/sector_editor/services/config_clipboard/SectorEditorConfigClipboardService.cpp
             sources/sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.cpp
+            sources/sector_editor/services/authoring_faces/SectorEditorSurfaceHeightEditingService.cpp
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.cpp

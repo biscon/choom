@@ -114,7 +114,8 @@ std::string NextGeneratedSectorName(const std::set<std::string>& usedNames)
 
 std::string ResolveDerivedSectorName(
         const std::string& requestedName,
-        std::set<std::string>& usedNames)
+        std::set<std::string>& usedNames,
+        const std::set<std::string>& reservedNames)
 {
     if (!requestedName.empty()
             && !IsGeneratedSectorName(requestedName)) {
@@ -127,7 +128,9 @@ std::string ResolveDerivedSectorName(
         return requestedName;
     }
 
-    const std::string generatedName = NextGeneratedSectorName(usedNames);
+    std::set<std::string> unavailableNames = usedNames;
+    unavailableNames.insert(reservedNames.begin(), reservedNames.end());
+    const std::string generatedName = NextGeneratedSectorName(unavailableNames);
     usedNames.insert(generatedName);
     return generatedName;
 }
@@ -1576,7 +1579,10 @@ void BuildDerivedTopologyFacesAndLines(
             CopyFaceAnchorPropertiesToTopologySector(*anchor, sector);
         }
         if (anchor != nullptr) {
-            sector.name = ResolveDerivedSectorName(sector.name, usedSectorNames);
+            sector.name = ResolveDerivedSectorName(
+                    sector.name,
+                    usedSectorNames,
+                    reservedFaceAnchorNames);
         } else {
             std::set<std::string> unavailableNames = usedSectorNames;
             unavailableNames.insert(reservedFaceAnchorNames.begin(), reservedFaceAnchorNames.end());
