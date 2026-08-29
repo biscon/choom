@@ -189,6 +189,7 @@ private:
     void FinishRuntimeObjectDrag();
     void CancelRuntimeObjectDrag(const char* message);
     void UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt);
+    void UpdatePreviewObjectAdjustmentInput(engine::Input& input);
     void BeginFpsViewmodel(engine::AssetManager& assets);
     void EndFpsViewmodel(engine::AssetManager& assets);
     void UpdateFpsViewmodel(engine::AssetManager& assets, float dt);
@@ -224,6 +225,7 @@ private:
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
     void DrawPreviewSurfaceHighlights() const;
+    void DrawPreviewObjectAdjustmentGizmo() const;
     void DrawPreviewSpotLightOverlay() const;
     void DrawPreviewObjectProbeOverlay() const;
     void DrawPreviewReflectionProbeOverlay() const;
@@ -455,6 +457,11 @@ private:
     bool HasDocumentModalOpen() const;
     bool TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui);
     void LeavePreview3D();
+    bool BeginPreviewObjectAdjustment();
+    bool ApplyPreviewObjectAdjustment();
+    bool CancelPreviewObjectAdjustment(const char* message);
+    void FinishPreviewObjectAdjustmentResult(
+            const SectorEditorPreviewObjectAdjustmentResult& result);
     SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();

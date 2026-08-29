@@ -27,6 +27,8 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         bool gameSessionExists,
         bool canCopyConfig,
         bool canPasteConfig,
+        bool canBeginPreviewObjectAdjustment,
+        bool previewObjectAdjustmentActive,
         bool visible,
         bool enabled)
 {
@@ -53,13 +55,25 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Clear", CommandId(SectorEditorMainMenuCommand::ClearGameSession),
                     engine::UIMenuItemKind::Action, gameSessionExists}
     }};
-    const std::array<engine::UIMenuItem, 2> editItems{{
+    const std::array<engine::UIMenuItem, 5> editItems{{
             {"Copy config", CommandId(SectorEditorMainMenuCommand::CopyConfig),
                     engine::UIMenuItemKind::Action, canCopyConfig, false, "CTRL-C",
                     engine::UIMenuShortcut{KEY_C, true}},
             {"Paste config", CommandId(SectorEditorMainMenuCommand::PasteConfig),
                     engine::UIMenuItemKind::Action, canPasteConfig, false, "CTRL-V",
-                    engine::UIMenuShortcut{KEY_V, true}}
+                    engine::UIMenuShortcut{KEY_V, true}},
+            {"Adjust selected in 3D",
+                    CommandId(SectorEditorMainMenuCommand::BeginPreviewObjectAdjustment),
+                    engine::UIMenuItemKind::Action,
+                    canBeginPreviewObjectAdjustment && !previewObjectAdjustmentActive},
+            {"Apply 3D adjustment",
+                    CommandId(SectorEditorMainMenuCommand::ApplyPreviewObjectAdjustment),
+                    engine::UIMenuItemKind::Action,
+                    previewObjectAdjustmentActive},
+            {"Cancel 3D adjustment",
+                    CommandId(SectorEditorMainMenuCommand::CancelPreviewObjectAdjustment),
+                    engine::UIMenuItemKind::Action,
+                    previewObjectAdjustmentActive}
     }};
     const std::array<engine::UIMenuItem, 4> viewItems{{
             {"3D Mode", CommandId(SectorEditorMainMenuCommand::Toggle3DMode),

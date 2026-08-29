@@ -39,6 +39,25 @@ struct SectorEditorRuntimeObjectDeleteRequest {
     std::string message;
 };
 
+struct SectorEditorPreviewObjectAdjustmentResult {
+    bool changed = false;
+    bool bakedStatusRefreshNeeded = false;
+    bool restoreBakedStatus = false;
+    bool commitBakedStatus = false;
+    bool staticNavigationRebuildNeeded = false;
+};
+
+bool IsSectorEditorPreviewAdjustableObject(
+        const SectorPlacedRuntimeObject& object);
+const char* SectorEditorPreviewObjectKindName(
+        const SectorPlacedRuntimeObject& object);
+float SectorEditorPreviewObjectHeightOffsetWorld(
+        const SectorPlacedRuntimeObject& object);
+float SectorEditorPreviewObjectTranslationStepWorld(
+        PreviewObjectNudgePreset preset);
+float SectorEditorPreviewObjectYawStepDegrees(
+        PreviewObjectNudgePreset preset);
+
 class SectorEditorRuntimeObjectEditingService {
 public:
     explicit SectorEditorRuntimeObjectEditingService(
@@ -86,6 +105,17 @@ public:
             std::string& outError);
     bool SelectedDoorRuntimeTargetOpen(bool& outOpen) const;
     bool SetSelectedDoorRuntimeTargetOpen(bool open);
+
+    bool BeginPreviewAdjustment();
+    SectorEditorPreviewObjectAdjustmentResult PreviewNudge(
+            float deltaXWorld,
+            float deltaZWorld,
+            float deltaHeightWorld,
+            float deltaYawDegrees);
+    SectorEditorPreviewObjectAdjustmentResult ApplyPreviewAdjustment();
+    SectorEditorPreviewObjectAdjustmentResult CancelPreviewAdjustment(
+            const char* message);
+    void SetPreviewAdjustmentPreset(PreviewObjectNudgePreset preset);
 
     bool BeginDrag(int objectId);
     void UpdateDrag(Vector2 snappedMapPoint);

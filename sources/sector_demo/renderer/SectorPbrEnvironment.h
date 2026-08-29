@@ -58,6 +58,7 @@ bool BuildSectorPbrEnvironment(
 SectorPbrEnvironmentSelection SelectSectorPbrEnvironment(
         const SectorPbrEnvironment& environment,
         Vector3 receiverPosition,
-        int receiverSectorId = -1);
+        int receiverSectorId = -1,
+        bool includeLocalProbes = true);
 
 } // namespace game

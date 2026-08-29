@@ -158,6 +158,8 @@ public:
             const SectorViewPose& pose,
             bool refreshVisibility = true);
     void SetVerticalFovDegrees(float value);
+    void BeginStaticObjectAdjustmentBakedDataStale();
+    void FinishStaticObjectAdjustmentBakedData(bool restore);
     void RefreshDynamicLightSources(const SectorTopologyMap& map);
     void SetRuntimePointLight(
             const SectorPreviewDynamicPointLightSource* light)
@@ -296,6 +298,7 @@ private:
             bool end) const;
     void RefreshAtmosphereDiagnostics(
             const SectorBillboardDynamicLightContext& dynamicLights);
+    void RefreshBakedDataStatus(const SectorTopologyMap& map);
     engine::TextureHandle TextureForId(const std::string& materialId) const;
     engine::TextureHandle NormalTextureForId(const std::string& materialId) const;
     void UpdateCamera();
@@ -394,6 +397,12 @@ private:
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
+    bool localReflectionProbesCurrent = true;
+    bool staticObjectAdjustmentBakedDataActive = false;
+    int staticObjectAdjustmentOriginalLightmapStatus = 0;
+    bool staticObjectAdjustmentOriginalSurfaceLightmapCurrent = false;
+    bool staticObjectAdjustmentOriginalObjectProbeCurrent = false;
+    bool staticObjectAdjustmentOriginalLocalReflectionProbesCurrent = true;
     SectorBloomRenderer bloomRenderer;
     engine::RenderTarget hdrSceneScratch;
     RenderTexture2D hdrSceneColorView = {};

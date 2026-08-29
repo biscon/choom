@@ -1540,6 +1540,8 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicModelShadowRenderer.Shutdown();
     skyRenderer.Shutdown();
     pbrEnvironment = {};
+    localReflectionProbesCurrent = true;
+    staticObjectAdjustmentBakedDataActive = false;
     doorRenderer.UnloadDoorMeshes();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
@@ -1740,7 +1742,10 @@ void SectorMeshRenderer::DrawScene(
                     0.5f);
             const SectorPbrEnvironmentSelection environmentSelection =
                     SelectSectorPbrEnvironment(
-                            pbrEnvironment, environmentReceiver, batch.sectorId);
+                            pbrEnvironment,
+                            environmentReceiver,
+                            batch.sectorId,
+                            localReflectionProbesCurrent);
             const TextureCubemap* selectedEnvironment = assets.GetCubemap(
                     environmentSelection.cubemap);
             const int hasEnvironment = selectedEnvironment != nullptr
@@ -1918,7 +1923,11 @@ void SectorMeshRenderer::DrawScene(
     }
     if (runtimeObjectWorld != nullptr) {
         const SectorPbrEnvironmentSelection objectEnvironmentSelection =
-                SelectSectorPbrEnvironment(pbrEnvironment, camera.position);
+                SelectSectorPbrEnvironment(
+                        pbrEnvironment,
+                        camera.position,
+                        -1,
+                        localReflectionProbesCurrent);
         const TextureCubemap* environmentTexture = assets.GetCubemap(
                 objectEnvironmentSelection.cubemap);
         const bool environmentReady = environmentTexture != nullptr
@@ -2181,7 +2190,10 @@ void SectorMeshRenderer::DrawViewmodel(
     BeginMode3D(viewmodelCamera);
     const SectorPbrEnvironmentSelection viewmodelEnvironment =
             SelectSectorPbrEnvironment(
-                    pbrEnvironment, viewmodelCamera.position, receiverSectorId);
+                    pbrEnvironment,
+                    viewmodelCamera.position,
+                    receiverSectorId,
+                    localReflectionProbesCurrent);
     const TextureCubemap* pbrEnvironmentTexture = assets.GetCubemap(
             viewmodelEnvironment.cubemap);
     if (pbrEnvironmentTexture != nullptr && pbrEnvironmentTexture->id == 0) {
@@ -2692,6 +2704,19 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             meshes.sectorReceiverBounds,
             staticSpecularLightState);
+    RefreshBakedDataStatus(map);
+    BuildSectorLightAtmosphereSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            lightAtmosphereSources);
+    analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
+    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
+    lightProxyRenderer.Reserve(lightAtmosphereSources.size());
+    UpdateVisibilityDebug();
+}
+
+void SectorMeshRenderer::RefreshBakedDataStatus(const SectorTopologyMap& map)
+{
     const SectorLightmapStatus currentLightmapStatus =
             GetSectorLightmapStatus(map);
     lightmapStatus = static_cast<int>(currentLightmapStatus);
@@ -2701,14 +2726,42 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
     objectProbeBakeCurrent =
             GetSectorBakedObjectLightProbeStatus(map)
                     == SectorLightmapStatus::Valid;
-    BuildSectorLightAtmosphereSources(
-            map,
-            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
-            lightAtmosphereSources);
-    analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
-    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
-    lightProxyRenderer.Reserve(lightAtmosphereSources.size());
-    UpdateVisibilityDebug();
+}
+
+void SectorMeshRenderer::BeginStaticObjectAdjustmentBakedDataStale()
+{
+    if (!staticObjectAdjustmentBakedDataActive) {
+        staticObjectAdjustmentOriginalLightmapStatus = lightmapStatus;
+        staticObjectAdjustmentOriginalSurfaceLightmapCurrent =
+                surfaceLightmapBakeCurrent;
+        staticObjectAdjustmentOriginalObjectProbeCurrent =
+                objectProbeBakeCurrent;
+        staticObjectAdjustmentOriginalLocalReflectionProbesCurrent =
+                localReflectionProbesCurrent;
+        staticObjectAdjustmentBakedDataActive = true;
+    }
+    if (static_cast<SectorLightmapStatus>(lightmapStatus)
+            == SectorLightmapStatus::Valid) {
+        lightmapStatus = static_cast<int>(SectorLightmapStatus::Stale);
+    }
+    surfaceLightmapBakeCurrent = false;
+    objectProbeBakeCurrent = false;
+    localReflectionProbesCurrent = false;
+}
+
+void SectorMeshRenderer::FinishStaticObjectAdjustmentBakedData(bool restore)
+{
+    if (!staticObjectAdjustmentBakedDataActive) return;
+    if (restore) {
+        lightmapStatus = staticObjectAdjustmentOriginalLightmapStatus;
+        surfaceLightmapBakeCurrent =
+                staticObjectAdjustmentOriginalSurfaceLightmapCurrent;
+        objectProbeBakeCurrent =
+                staticObjectAdjustmentOriginalObjectProbeCurrent;
+        localReflectionProbesCurrent =
+                staticObjectAdjustmentOriginalLocalReflectionProbesCurrent;
+    }
+    staticObjectAdjustmentBakedDataActive = false;
 }
 
 void SectorMeshRenderer::UpdateVisibilityDebug(

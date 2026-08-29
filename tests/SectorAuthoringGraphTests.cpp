@@ -12477,6 +12477,230 @@ void TestStaticPropConfigClipboardPreservesPlacementAndIdentity()
           "repeating an identical 3D prop config paste is a clean no-op");
 }
 
+void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 640;
+    object.kind = "static_model";
+    object.position = Vector3{16.0f, 0.0f, 16.0f};
+    object.staticModel.instanceId = "adjusted_prop";
+    object.staticModel.collision = true;
+    map.runtimeObjects.push_back(object);
+
+    engine::EngineContext engineContext;
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::SpawnPlacedRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            runtimeObjects,
+            map);
+    Check(runtimeObjects.placedObjectEntities.size() == 1,
+          "preview adjustment fixture spawns one stable runtime entity");
+    if (runtimeObjects.placedObjectEntities.empty()) return;
+    const engine::Entity originalEntity =
+            runtimeObjects.placedObjectEntities.front().entity;
+
+    game::RuntimeObjectEditingState editingState;
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    selectionState.selectedRuntimeObjectId = object.id;
+    game::SectorEditorDocumentState documentState;
+    uint64_t renderRevision = 120;
+    game::SectorEditorTopologyRenderCache renderCache;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    std::string statusText;
+    game::SectorEditorRuntimeObjectEditingService editing{
+            game::SectorEditorRuntimeObjectEditingServiceContext{
+                    map,
+                    runtimeObjects,
+                    editingState,
+                    uiState,
+                    selectionState,
+                    nullptr,
+                    game::MakeSectorEditorDocumentLifecycleAccess(
+                            documentState.lifecycle),
+                    renderRevision,
+                    renderCache,
+                    statusText,
+                    &engineContext,
+                    true}};
+
+    Check(Near(game::SectorEditorPreviewObjectTranslationStepWorld(
+                       game::PreviewObjectNudgePreset::Fine), 0.01f)
+                  && Near(game::SectorEditorPreviewObjectTranslationStepWorld(
+                                  game::PreviewObjectNudgePreset::Normal),
+                          0.05f)
+                  && Near(game::SectorEditorPreviewObjectTranslationStepWorld(
+                                  game::PreviewObjectNudgePreset::Coarse),
+                          0.25f)
+                  && Near(game::SectorEditorPreviewObjectYawStepDegrees(
+                                  game::PreviewObjectNudgePreset::Fine),
+                          0.25f)
+                  && Near(game::SectorEditorPreviewObjectYawStepDegrees(
+                                  game::PreviewObjectNudgePreset::Coarse),
+                          5.0f),
+          "preview adjustment presets expose the agreed translation and yaw increments");
+    Check(editing.BeginPreviewAdjustment()
+                  && editingState.previewAdjustment.active,
+          "selected static prop begins a preview adjustment transaction");
+    const auto preview = editing.PreviewNudge(0.05f, 0.0f, 0.05f, 1.0f);
+    const game::SectorPlacedRuntimeObject& staged = map.runtimeObjects.front();
+    Check(preview.changed && preview.bakedStatusRefreshNeeded
+                  && Near(game::SectorAuthoringToWorldDistance(staged.position.x),
+                          2.05f)
+                  && Near(staged.staticModel.heightOffsetWorld, 0.05f)
+                  && Near(staged.yawRadians * RAD2DEG, 1.0f),
+          "static prop nudge stages exact world X, height-offset, and yaw increments");
+    Check(!documentState.lifecycle.topologyDocumentDirty
+                  && renderRevision == 120
+                  && renderCache.valid,
+          "preview staging remains clean and preserves the 2D cache until Apply");
+    Check(runtimeObjects.placedObjectEntities.front().entity == originalEntity
+                  && engineContext.world.IsAlive(originalEntity)
+                  && Near(engineContext.world
+                                  .Get<game::SectorObjectTransform>(originalEntity)
+                                  .position.x,
+                          2.05f),
+          "preview staging updates the existing ECS entity without respawning it");
+
+    const auto staticCancel = editing.CancelPreviewAdjustment(
+            "static adjustment cancelled");
+    Check(staticCancel.changed && staticCancel.bakedStatusRefreshNeeded
+                  && staticCancel.restoreBakedStatus
+                  && Near(map.runtimeObjects.front().position, object.position)
+                  && Near(map.runtimeObjects.front().yawRadians, object.yawRadians)
+                  && Near(map.runtimeObjects.front()
+                                  .staticModel.heightOffsetWorld,
+                          object.staticModel.heightOffsetWorld)
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && renderRevision == 120
+                  && renderCache.valid,
+          "Cancel restores a static prop and requests baked-status restoration without dirtying");
+    Check(editing.BeginPreviewAdjustment(),
+          "static prop adjustment can restart after cancellation");
+    const auto committedPreview = editing.PreviewNudge(
+            0.05f, 0.0f, 0.05f, 1.0f);
+    Check(committedPreview.changed && committedPreview.bakedStatusRefreshNeeded,
+          "restarted static prop adjustment stages the committed transform");
+
+    const auto applied = editing.ApplyPreviewAdjustment();
+    Check(applied.changed && applied.commitBakedStatus
+                  && applied.staticNavigationRebuildNeeded
+                  && !editingState.previewAdjustment.active
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == 121
+                  && !renderCache.valid,
+          "Apply commits once, invalidates the 2D cache, and requests static navigation rebuild");
+    Check(runtimeObjects.placedObjectEntities.front().entity == originalEntity
+                  && engineContext.world.IsAlive(originalEntity),
+          "Apply preserves the adjusted runtime entity handle");
+
+    game::ClearSectorRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            runtimeObjects);
+
+    game::SectorTopologyMap movableMap = MakeAdjacentSectorMap();
+    game::SectorPlacedRuntimeObject dynamic;
+    dynamic.id = 641;
+    dynamic.kind = "dynamic_model";
+    dynamic.position = Vector3{24.0f, 0.0f, 24.0f};
+    dynamic.dynamicModel.instanceId = "adjusted_dynamic";
+    game::SectorPlacedRuntimeObject item;
+    item.id = 642;
+    item.kind = "item";
+    item.position = Vector3{32.0f, 0.0f, 32.0f};
+    item.item.definitionId = "adjusted_item";
+    item.item.instanceId = "adjusted_item_instance";
+    movableMap.runtimeObjects = {dynamic, item};
+    game::ItemRegistry itemRegistry;
+    game::ItemDefinition itemDefinition;
+    itemDefinition.id = item.item.definitionId;
+    itemDefinition.title = "Adjusted Item";
+    itemRegistry.items.push_back(itemDefinition);
+    game::ItemModelAssetState itemAssets;
+    game::SectorRuntimeObjectState movableRuntimeObjects;
+    game::SpawnPlacedRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            movableRuntimeObjects,
+            movableMap,
+            &itemRegistry,
+            &itemAssets);
+    Check(movableRuntimeObjects.placedObjectEntities.size() == 2,
+          "dynamic prop and item adjustment fixtures both spawn");
+
+    game::RuntimeObjectEditingState movableEditingState;
+    game::RuntimeObjectEditingUiState movableUiState;
+    game::SelectionState movableSelection;
+    movableSelection.selectedRuntimeObjectId = dynamic.id;
+    game::SectorEditorDocumentState movableDocument;
+    uint64_t movableRevision = 200;
+    game::SectorEditorTopologyRenderCache movableCache;
+    FillRuntimeObjectTestSectorCache(movableCache, movableMap);
+    std::string movableStatus;
+    game::SectorEditorRuntimeObjectEditingService movableEditing{
+            game::SectorEditorRuntimeObjectEditingServiceContext{
+                    movableMap,
+                    movableRuntimeObjects,
+                    movableEditingState,
+                    movableUiState,
+                    movableSelection,
+                    nullptr,
+                    game::MakeSectorEditorDocumentLifecycleAccess(
+                            movableDocument.lifecycle),
+                    movableRevision,
+                    movableCache,
+                    movableStatus,
+                    &engineContext,
+                    true,
+                    &itemRegistry}};
+    Check(movableEditing.BeginPreviewAdjustment(),
+          "dynamic prop begins a preview adjustment");
+    const auto dynamicPreview = movableEditing.PreviewNudge(
+            0.0f, -0.25f, 0.25f, -5.0f);
+    Check(dynamicPreview.changed && !dynamicPreview.bakedStatusRefreshNeeded,
+          "dynamic prop adjustment does not request baked-lighting invalidation");
+    const auto dynamicCancel = movableEditing.CancelPreviewAdjustment(
+            "dynamic adjustment cancelled");
+    Check(dynamicCancel.changed && !dynamicCancel.bakedStatusRefreshNeeded
+                  && Near(movableMap.runtimeObjects[0].position,
+                          dynamic.position)
+                  && Near(movableMap.runtimeObjects[0].yawRadians,
+                          dynamic.yawRadians)
+                  && Near(movableMap.runtimeObjects[0]
+                                  .dynamicModel.heightOffsetWorld,
+                          dynamic.dynamicModel.heightOffsetWorld)
+                  && !movableDocument.lifecycle.topologyDocumentDirty
+                  && movableRevision == 200
+                  && movableCache.valid,
+          "Cancel restores a dynamic prop without dirtying or invalidating the document");
+
+    movableSelection.selectedRuntimeObjectId = item.id;
+    Check(movableEditing.BeginPreviewAdjustment(),
+          "item begins a preview adjustment");
+    const auto itemPreview = movableEditing.PreviewNudge(
+            -0.01f, 0.01f, 0.01f, 0.25f);
+    const auto itemApply = movableEditing.ApplyPreviewAdjustment();
+    Check(itemPreview.changed && !itemPreview.bakedStatusRefreshNeeded
+                  && itemApply.changed
+                  && !itemApply.staticNavigationRebuildNeeded
+                  && Near(movableMap.runtimeObjects[1].item.heightOffsetWorld,
+                          0.01f)
+                  && movableDocument.lifecycle.topologyDocumentDirty
+                  && movableRevision == 201
+                  && !movableCache.valid,
+          "item adjustment commits in place without baked-lighting or navigation work");
+    Check(movableRuntimeObjects.placedObjectEntities.size() == 2,
+          "dynamic prop and item adjustments do not respawn unrelated objects");
+    game::ClearSectorRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            movableRuntimeObjects);
+}
+
 void TestDynamicPropConfigClipboardPreservesPlacementAndIdentity()
 {
     game::SectorTopologyMap map = MakeAdjacentSectorMap();
@@ -14616,6 +14840,7 @@ int main()
     TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
     TestDoorConfigClipboardPreservesAnchorAndInstanceId();
     TestStaticPropConfigClipboardPreservesPlacementAndIdentity();
+    TestPreviewObjectAdjustmentStagesAndCommitsInPlace();
     TestDynamicPropConfigClipboardPreservesPlacementAndIdentity();
     TestConfigClipboardTargetResolutionPrefersPreviewSurface();
     TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor();

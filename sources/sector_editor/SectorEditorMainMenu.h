@@ -15,6 +15,9 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     ClearGameSession,
     CopyConfig,
     PasteConfig,
+    BeginPreviewObjectAdjustment,
+    ApplyPreviewObjectAdjustment,
+    CancelPreviewObjectAdjustment,
     Toggle3DMode,
     OpenMaterialEditor,
     OpenSoundEditor,
@@ -43,6 +46,8 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         bool gameSessionExists,
         bool canCopyConfig,
         bool canPasteConfig,
+        bool canBeginPreviewObjectAdjustment,
+        bool previewObjectAdjustmentActive,
         bool visible,
         bool enabled);
 

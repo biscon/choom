@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -309,6 +310,12 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
             y,
             width,
             activeTab == PreviewDebugOverlayTab::None ? collapsedHeight : expandedHeight};
+}
+
+Rectangle BuildSectorEditorPreviewObjectAdjustmentPanelRect()
+{
+    return Rectangle{EditorWidth - 392.0f, EditorMainMenuHeight + 18.0f,
+            360.0f, 244.0f};
 }
 
 void DrawSectorEditorPreviewSurfaceHighlights(
@@ -655,7 +662,12 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     SectorMeshRenderer& preview = context.preview;
     SectorEditorPreviewOverlayResult result;
 
-    const bool mouseInteractive = IsPreviewOverlayMouseInteractive(controllerState);
+    const bool adjustmentActive =
+            context.runtimeObjectEditingState.previewAdjustment.active;
+    const bool adjustmentMouseInteractive =
+            IsPreviewOverlayMouseInteractive(controllerState);
+    const bool mouseInteractive =
+            adjustmentMouseInteractive && !adjustmentActive;
     const bool drawExpanded = overlayState.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::None;
     const float panelW = 700.0f;
     const float padding = 10.0f;
@@ -2488,6 +2500,127 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 line.color,
                 line.wrap);
         y += lineH + 4.0f;
+    }
+
+    PreviewObjectAdjustmentState& adjustment =
+            context.runtimeObjectEditingState.previewAdjustment;
+    if (adjustment.active) {
+        const Rectangle adjustmentPanel =
+                BuildSectorEditorPreviewObjectAdjustmentPanelRect();
+        DrawRectangleRec(adjustmentPanel, Color{12, 15, 20, 225});
+        DrawRectangleLinesEx(
+                adjustmentPanel,
+                config.borderThickness,
+                Color{84, 204, 255, 255});
+        const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
+                topologyMap, adjustment.objectId);
+        const float textX = adjustmentPanel.x + 14.0f;
+        float adjustmentY = adjustmentPanel.y + 12.0f;
+        const float adjustmentWidth = adjustmentPanel.width - 28.0f;
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
+                smallFont,
+                object != nullptr
+                        ? TextFormat("Adjust %s %d",
+                                SectorEditorPreviewObjectKindName(*object),
+                                object->id)
+                        : "Adjustment target missing",
+                engine::UITextJustify::Left,
+                Color{84, 204, 255, 255});
+        adjustmentY += rowH + 4.0f;
+        if (object != nullptr) {
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
+                    smallFont,
+                    TextFormat("X %.2f m   Z %.2f m   Height %+.2f m",
+                            SectorAuthoringToWorldDistance(object->position.x),
+                            SectorAuthoringToWorldDistance(object->position.z),
+                            SectorEditorPreviewObjectHeightOffsetWorld(*object)),
+                    engine::UITextJustify::Left);
+            adjustmentY += rowH + 2.0f;
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
+                    smallFont,
+                    TextFormat("Yaw %.2f deg", object->yawRadians * RAD2DEG),
+                    engine::UITextJustify::Left);
+            adjustmentY += rowH + 8.0f;
+        }
+
+        constexpr float presetGap = 6.0f;
+        const float presetWidth =
+                (adjustmentWidth - presetGap * 2.0f) / 3.0f;
+        const auto presetButton = [&](const char* id, const char* label,
+                                      PreviewObjectNudgePreset preset,
+                                      int index) {
+            const Rectangle bounds{
+                    textX + static_cast<float>(index)
+                                    * (presetWidth + presetGap),
+                    adjustmentY,
+                    presetWidth,
+                    rowH};
+            const bool selected = adjustment.preset == preset;
+            if (engine::Button(
+                        ui, smallConfig, input, assets, id, bounds, smallFont,
+                        selected ? TextFormat("%s *", label) : label,
+                        engine::UITextJustify::Center,
+                        adjustmentMouseInteractive)) {
+                adjustment.preset = preset;
+            }
+        };
+        presetButton("sector_editor_object_nudge_fine", "Fine",
+                PreviewObjectNudgePreset::Fine, 0);
+        presetButton("sector_editor_object_nudge_normal", "Normal",
+                PreviewObjectNudgePreset::Normal, 1);
+        presetButton("sector_editor_object_nudge_coarse", "Coarse",
+                PreviewObjectNudgePreset::Coarse, 2);
+        adjustmentY += rowH + 7.0f;
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
+                smallFont,
+                TextFormat("Step %.2f m / %.2f deg",
+                        SectorEditorPreviewObjectTranslationStepWorld(
+                                adjustment.preset),
+                        SectorEditorPreviewObjectYawStepDegrees(
+                                adjustment.preset)),
+                engine::UITextJustify::Left,
+                smallConfig.mutedTextColor);
+        adjustmentY += rowH + 2.0f;
+        engine::Text(
+                smallConfig,
+                assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH * 2.0f},
+                smallFont,
+                "Arrows: world X/Z   PgUp/PgDn: height   Q/E: yaw\nEnter: apply   Esc: cancel   F11: unlock cursor",
+                engine::UITextJustify::Left,
+                smallConfig.mutedTextColor,
+                true);
+        adjustmentY += rowH * 2.0f + 7.0f;
+        const float actionWidth = (adjustmentWidth - presetGap) * 0.5f;
+        if (engine::Button(
+                    ui, smallConfig, input, assets,
+                    "sector_editor_object_nudge_apply",
+                    Rectangle{textX, adjustmentY, actionWidth, rowH},
+                    smallFont, "Apply", engine::UITextJustify::Center,
+                    adjustmentMouseInteractive)) {
+            result.requestApplyObjectAdjustment = true;
+        }
+        if (engine::Button(
+                    ui, smallConfig, input, assets,
+                    "sector_editor_object_nudge_cancel",
+                    Rectangle{textX + actionWidth + presetGap, adjustmentY,
+                            actionWidth, rowH},
+                    smallFont, "Cancel", engine::UITextJustify::Center,
+                    adjustmentMouseInteractive)) {
+            result.requestCancelObjectAdjustment = true;
+        }
     }
 
     (void)context.font;
