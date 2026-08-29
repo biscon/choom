@@ -358,8 +358,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 540,
-          "backSideDefId": 541,
+          "frontSideDefId": 547,
+          "backSideDefId": 548,
           "endpointA": [
             -704,
             1296
@@ -398,8 +398,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 510,
-          "backSideDefId": 530,
+          "frontSideDefId": 517,
+          "backSideDefId": 537,
           "endpointA": [
             -992,
             1456
@@ -2181,8 +2181,8 @@
           "lineDefId": 269,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 381,
-          "backSideDefId": 360,
+          "frontSideDefId": 385,
+          "backSideDefId": 364,
           "endpointA": [
             -2048,
             -720
@@ -2420,8 +2420,8 @@
           "lineDefId": 255,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 375,
-          "backSideDefId": 322,
+          "frontSideDefId": 379,
+          "backSideDefId": 325,
           "endpointA": [
             -2432,
             -560
@@ -8254,6 +8254,26 @@
         "id": 339,
         "x": -3104,
         "y": -3328
+      },
+      {
+        "id": 340,
+        "x": -2320,
+        "y": -1936
+      },
+      {
+        "id": 341,
+        "x": -1568,
+        "y": -3840
+      },
+      {
+        "id": 342,
+        "x": -1568,
+        "y": -3584
+      },
+      {
+        "id": 343,
+        "x": -1584,
+        "y": -3712
       }
     ],
     "lines": [
@@ -9739,11 +9759,6 @@
         "endVertexId": 260
       },
       {
-        "id": 425,
-        "startVertexId": 260,
-        "endVertexId": 261
-      },
-      {
         "id": 426,
         "startVertexId": 261,
         "endVertexId": 262
@@ -9952,11 +9967,6 @@
         "id": 481,
         "startVertexId": 296,
         "endVertexId": 297
-      },
-      {
-        "id": 483,
-        "startVertexId": 298,
-        "endVertexId": 295
       },
       {
         "id": 485,
@@ -10232,6 +10242,36 @@
         "id": 552,
         "startVertexId": 338,
         "endVertexId": 339
+      },
+      {
+        "id": 553,
+        "startVertexId": 260,
+        "endVertexId": 340
+      },
+      {
+        "id": 554,
+        "startVertexId": 340,
+        "endVertexId": 261
+      },
+      {
+        "id": 556,
+        "startVertexId": 341,
+        "endVertexId": 295
+      },
+      {
+        "id": 557,
+        "startVertexId": 298,
+        "endVertexId": 342
+      },
+      {
+        "id": 559,
+        "startVertexId": 342,
+        "endVertexId": 343
+      },
+      {
+        "id": 560,
+        "startVertexId": 343,
+        "endVertexId": 341
       }
     ],
     "lineSides": [
@@ -19683,49 +19723,6 @@
         }
       },
       {
-        "lineId": 425,
-        "side": "front",
-        "wall": {
-          "materialId": "painted_plaster_wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "lower": {
-          "materialId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "materialId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 426,
         "side": "back",
         "wall": {
@@ -20931,49 +20928,6 @@
       },
       {
         "lineId": 481,
-        "side": "back",
-        "wall": {
-          "materialId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "lower": {
-          "materialId": "dirty_gray_concrete_wall_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.609375
-            ]
-          }
-        },
-        "upper": {
-          "materialId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
-        "lineId": 483,
         "side": "back",
         "wall": {
           "materialId": "wall",
@@ -23019,6 +22973,264 @@
             "offset": [
               0.0,
               0.921875
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 553,
+        "side": "front",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 554,
+        "side": "front",
+        "wall": {
+          "materialId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 556,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 557,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 559,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 560,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.609375
             ]
           }
         },
@@ -28487,7 +28699,7 @@
         "x": -2653,
         "y": -3906,
         "floorZ": -13.5,
-        "ceilingZ": 16.0,
+        "ceilingZ": 15.0,
         "floorMaterialId": "dark_wooden_planks",
         "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
