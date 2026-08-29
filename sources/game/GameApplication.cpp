@@ -1128,7 +1128,7 @@ void GameApplication::ResumeGame(engine::EngineContext& context)
     if (!gameSession.IsRunning()) {
         return;
     }
-    if (editorAttachedToGame) {
+    if (ShouldRebuildGameFromEditorOnResume(flow, editorAttachedToGame)) {
         const SectorTopologyMap editedMap = editor.CurrentTopologyMap();
         editor.SuspendRuntime(context);
         std::string error;
