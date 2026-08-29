@@ -4,6 +4,72 @@ This is the compact reference for globals added by the engine and sector game.
 The VM also opens the standard Lua 5.5 libraries. Scripts are trusted game
 content, not sandboxed code.
 
+## Cheat sheet
+
+Square brackets mark optional arguments. See the linked sections for argument
+ranges, return values, behavior, and failure details.
+
+- **[Lifecycle](#script-files-and-lifecycle):** `init()`, `shutdown()`;
+  `FrameDelta` is the read-only frame delta in seconds.
+- **[Audio](#level-audio):** `playMapSound(soundId [, volume [, pitch]])`,
+  `playSoundEmitter(emitterId [, volume [, pitch]])`,
+  `stopSoundEmitter(emitterId)`.
+- **[Tasks](#tasks-and-timing):** `delay(milliseconds)`,
+  `startScript(functionName)`, `stopScript(functionName)`, `stopAllScripts()`,
+  `isScriptRunning(functionName)`, `isLoadingSave()`.
+- **[Operations](#operations):** `await(operation)`,
+  `operationStatus(operation)`, `cancelOperation(operation)`.
+- **[Persistent values](#persistent-values):** `setPersistentBool(key, value)`,
+  `getPersistentBool(key [, default])`, `setPersistentInt(key, value)`,
+  `getPersistentInt(key [, default])`, `setPersistentString(key, value)`,
+  `getPersistentString(key [, default])`.
+- **[Logging](#logging):** `log(...)`, `print(...)`.
+- **[Doors](#doors):** `moveDoor(doorId, targetFraction, durationMs)`,
+  `startMoveDoor(doorId, targetFraction, durationMs)`, `openDoor(doorId)`,
+  `closeDoor(doorId)`, `toggleDoor(doorId)`.
+- **[Prop animation](#dynamic-props-and-animation):**
+  `playPropAnimation(propId [, animationName [, mode]])`,
+  `pausePropAnimation(propId)`, `resumePropAnimation(propId)`,
+  `stopPropAnimation(propId)`,
+  `setPropAnimationProgress(propId, progress [, animationName])`.
+- **[Prop emission](#3d-prop-emission):**
+  `setPropEmissiveScale(propId, scale)`.
+- **[Dynamic lights](#dynamic-lights):**
+  `setDynamicLightEnabled(lightId, enabled)`,
+  `setDynamicLightIntensity(lightId, intensity)`,
+  `setDynamicLightColor(lightId, red, green, blue)`.
+- **[Actor health](#actor-health):** `setPlayerHealth(health)`,
+  `setNpcHealth(instanceId, health)`.
+- **[NPC movement](#npc-movement):**
+  `moveNpc(instanceId, x, z [, gait [, movementSpeed]])`,
+  `moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]])`,
+  `startMoveNpc(instanceId, x, z [, gait [, movementSpeed]])`,
+  `startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]])`.
+- **[Player controls and movement](#cutscenes-and-player-camera):**
+  `enableControls(enabled)`,
+  `movePlayer(x, z [, gait [, movementSpeed]])`,
+  `movePlayer(levelMarkerId [, gait [, movementSpeed]])`,
+  `startMovePlayer(x, z [, gait [, movementSpeed]])`,
+  `startMovePlayer(levelMarkerId [, gait [, movementSpeed]])`.
+- **[Camera looks](#animated-camera-looks):**
+  `lookAtNpc(instanceId, durationMs [, targetHeight])`,
+  `startLookAtNpc(instanceId, durationMs [, targetHeight])`,
+  `lookAtProp(instanceId, durationMs [, targetHeight])`,
+  `startLookAtProp(instanceId, durationMs [, targetHeight])`.
+- **[Captions](#captions):** `say(message [, holdMs])`,
+  `startSay(message [, holdMs])`,
+  `text(message, TOP|CENTER|BOTTOM [, holdMs])`,
+  `startText(message, TOP|CENTER|BOTTOM [, holdMs])`.
+- **[World fades](#world-fades):** `fadeOut(durationMs)`,
+  `fadeIn(durationMs)`.
+- **[Map travel](#map-travel):** `changeMap(mapId [, spawnId])`.
+- **[Triggers](#triggers):** `enableTrigger(triggerId)`,
+  `disableTrigger(triggerId)`.
+
+Engine-called authored trigger functions, door permission callbacks, item
+`onTakeScript`, and dynamic-prop `onUseScript` functions take no arguments. A
+carried Object's `onUseScript` function receives `targetInstanceId`.
+
 ## Script files and lifecycle
 
 A runtime level finishes its asset/runtime-object/navigation loading gate and
