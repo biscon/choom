@@ -1156,6 +1156,25 @@ SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
     return resolved;
 }
 
+SectorResolvedWindowAnchor ResolveSectorWindowAnchor(
+        const SectorTopologyMap& map,
+        const SectorPlacedWindow& window)
+{
+    SectorPlacedDoor portalObject;
+    portalObject.anchor = window.anchor;
+    portalObject.width = window.width;
+    portalObject.height = window.height;
+    SectorResolvedWindowAnchor resolved = ResolveSectorDoorAnchor(
+            map, portalObject);
+    if (!resolved.valid && !resolved.diagnostic.empty()) {
+        const std::string prefix = "door anchor";
+        if (resolved.diagnostic.compare(0, prefix.size(), prefix) == 0) {
+            resolved.diagnostic.replace(0, prefix.size(), "window anchor");
+        }
+    }
+    return resolved;
+}
+
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(
         const SectorTopologyMap& map,
         int sideDefId)

@@ -1371,6 +1371,33 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
           "hash excludes dynamic prop ID, transform, playback, and runtime shadow changes");
 
+    game::SectorTopologyMap windowMap = base;
+    game::SectorPlacedRuntimeObject window;
+    window.id = 76;
+    window.kind = "window";
+    window.window.anchor.lineDefId = 1;
+    window.window.anchor.frontSectorId = 10;
+    window.window.anchor.backSectorId = 11;
+    window.window.anchor.frontSideDefId = 1;
+    window.window.anchor.backSideDefId = 2;
+    window.window.anchor.endpointAX = 0;
+    window.window.anchor.endpointAY = 0;
+    window.window.anchor.endpointBX = 64;
+    window.window.anchor.endpointBY = 0;
+    windowMap.runtimeObjects.push_back(window);
+    Check(game::ComputeSectorLightmapSourceHash(windowMap) == hash,
+          "hash excludes transparent windows because they are not baked occluders or receivers");
+    windowMap.runtimeObjects[0].window.tint = Color{40, 120, 220, 255};
+    windowMap.runtimeObjects[0].window.opacity = 0.65f;
+    windowMap.runtimeObjects[0].window.roughness = 0.4f;
+    windowMap.runtimeObjects[0].window.indexOfRefraction = 1.7f;
+    windowMap.runtimeObjects[0].window.width = 2.0f;
+    windowMap.runtimeObjects[0].window.height = 1.0f;
+    windowMap.runtimeObjects[0].window.thickness = 0.12f;
+    windowMap.runtimeObjects[0].window.collision = false;
+    Check(game::ComputeSectorLightmapSourceHash(windowMap) == hash,
+          "window appearance and physical settings do not stale baked lightmaps");
+
     game::SectorTopologyMap itemMap = base;
     game::SectorPlacedRuntimeObject item;
     item.id = 79;

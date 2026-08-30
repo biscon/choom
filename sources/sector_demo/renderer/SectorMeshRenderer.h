@@ -21,6 +21,7 @@
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
+#include "sector_demo/renderer/SectorWindowRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 #include "sector_demo/SectorUseInteraction.h"
@@ -244,6 +245,8 @@ public:
     size_t DoorConsideredCount() const { return doorRenderer.RenderStats().considered; }
     size_t DoorDrawnCount() const { return doorRenderer.RenderStats().drawn; }
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
+    size_t WindowConsideredCount() const { return windowRenderer.ConsideredCount(); }
+    size_t WindowDrawnCount() const { return windowRenderer.DrawnCount(); }
     SectorPbrContributionSettings PbrContributionSettings() const
     {
         return pbrContributionSettings;
@@ -453,6 +456,7 @@ private:
     SectorStaticSpecularShaderLocations staticSpecularLocations;
     SectorPbrContributionSettings pbrContributionSettings;
     SectorDoorRenderer doorRenderer;
+    SectorWindowRenderer windowRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;

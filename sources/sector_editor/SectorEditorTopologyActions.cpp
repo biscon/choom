@@ -357,6 +357,70 @@ SectorEditorAddDoorResult AddDoorToPortal(
             TextFormat("Added door %d", objectId)};
 }
 
+SectorEditorAddWindowResult AddWindowToPortal(
+        SectorTopologyMap& map,
+        int lineDefId)
+{
+    const SectorTopologyLineDef* lineDef =
+            FindSectorTopologyLineDef(map, lineDefId);
+    if (lineDef == nullptr) {
+        return {false, -1,
+                "Window placement failed: click a two-sided portal"};
+    }
+    const SectorTopologySideDef* frontSideDef =
+            FindSectorTopologySideDef(map, lineDef->frontSideDefId);
+    const SectorTopologySideDef* backSideDef =
+            FindSectorTopologySideDef(map, lineDef->backSideDefId);
+    if (frontSideDef == nullptr || backSideDef == nullptr) {
+        return {false, -1,
+                "Window placement failed: clicked line is not a two-sided portal"};
+    }
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *lineDef, start, end)) {
+        return {false, -1,
+                "Window placement failed: portal endpoints are invalid"};
+    }
+    const int objectId = AllocateSectorPlacedRuntimeObjectId(map);
+    if (!IsValidSectorTopologyId(objectId)) {
+        return {false, -1,
+                "Window placement failed: no runtime object IDs available"};
+    }
+
+    SectorPlacedRuntimeObject object;
+    object.id = objectId;
+    object.kind = "window";
+    object.window = SectorPlacedWindow{};
+    object.window.anchor.lineDefId = lineDef->id;
+    object.window.anchor.frontSectorId = frontSideDef->sectorId;
+    object.window.anchor.backSectorId = backSideDef->sectorId;
+    object.window.anchor.frontSideDefId = frontSideDef->id;
+    object.window.anchor.backSideDefId = backSideDef->id;
+    object.window.anchor.endpointAX = start->x;
+    object.window.anchor.endpointAY = start->y;
+    object.window.anchor.endpointBX = end->x;
+    object.window.anchor.endpointBY = end->y;
+
+    const SectorResolvedWindowAnchor resolved =
+            ResolveSectorWindowAnchor(map, object.window);
+    if (!resolved.valid) {
+        return {false, -1,
+                resolved.diagnostic.empty()
+                        ? "Window placement failed: portal cannot resolve a valid anchor"
+                        : std::string{"Window placement failed: "}
+                                + resolved.diagnostic};
+    }
+    object.window.width = resolved.width;
+    object.window.height = resolved.height;
+    object.position = Vector3{
+            SectorWorldToAuthoringDistance(resolved.midpoint.x),
+            SectorWorldToAuthoringDistance(
+                    resolved.openBottom + resolved.height * 0.5f),
+            SectorWorldToAuthoringDistance(resolved.midpoint.y)};
+    map.runtimeObjects.push_back(std::move(object));
+    return {true, objectId, TextFormat("Added window %d", objectId)};
+}
+
 SectorEditorTopologyActionResult DeleteStaticLight(
         SectorTopologyMap& map,
         int lightId)

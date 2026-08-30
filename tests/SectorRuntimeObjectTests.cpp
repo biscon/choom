@@ -1628,6 +1628,16 @@ int CountDoorObjects(engine::World& world)
     return count;
 }
 
+int CountWindowObjects(engine::World& world)
+{
+    int count = 0;
+    world.ForEach<game::SectorObject, game::SectorWindow>(
+            [&count](engine::Entity, game::SectorObject&, game::SectorWindow&) {
+                ++count;
+            });
+    return count;
+}
+
 engine::Entity FindPlacedObjectEntity(
         const game::SectorRuntimeObjectState& state,
         int placedObjectId)
@@ -1674,6 +1684,189 @@ game::SectorPlacedRuntimeObject MakePlacedDoor(int id, game::SectorPlacedDoor do
     object.kind = "door";
     object.door = std::move(door);
     return object;
+}
+
+game::SectorPlacedRuntimeObject MakePlacedWindow(
+        int id,
+        game::SectorPlacedWindow window)
+{
+    game::SectorPlacedRuntimeObject object;
+    object.id = id;
+    object.kind = "window";
+    object.window = std::move(window);
+    return object;
+}
+
+void TestSpawnPlacedWindowBuildsGlassAndPhysicalCollider()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedWindow window;
+    window.anchor = MakeDoorOnPortal().anchor;
+    window.width = 0.4f;
+    window.height = 1.25f;
+    window.thickness = 0.08f;
+    window.horizontalOffsetWorld = 0.1f;
+    window.verticalOffsetWorld = 0.3f;
+    window.normalOffset = 0.2f;
+    window.tint = Color{80, 170, 230, 255};
+    window.opacity = 0.28f;
+    window.roughness = 0.16f;
+    window.indexOfRefraction = 1.45f;
+    map.runtimeObjects.push_back(MakePlacedWindow(38, window));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountSectorObjects(world) == 1 && CountWindowObjects(world) == 1,
+          "valid placed window spawns one sector window entity");
+    Check(state.placedObjectEntities.size() == 1
+                  && state.spawnedObjectCount == 1
+                  && state.skippedObjectCount == 0,
+          "valid window spawn records stable object mapping and counts");
+    Check(state.staticModelColliders.empty()
+                  && state.windowColliders.size() == 1
+                  && state.physicalModelColliders.size() == 1,
+          "window collider stays transparent to perception but joins physical collision");
+
+    const engine::Entity entity = state.placedObjectEntities.front().entity;
+    Check(world.Has<game::SectorWindow>(entity)
+                  && world.Has<game::SectorStaticModelCollider>(entity)
+                  && world.Has<game::SectorObjectLighting>(entity),
+          "window entity carries glass, analytic collider, and lighting data");
+    const game::SectorResolvedWindowAnchor resolved =
+            game::ResolveSectorWindowAnchor(map, window);
+    const Vector3 expectedPosition{
+            resolved.midpoint.x
+                    + resolved.tangent.x * window.horizontalOffsetWorld
+                    + resolved.normal.x * window.normalOffset,
+            resolved.openBottom + resolved.portalHeight * 0.5f
+                    + window.verticalOffsetWorld,
+            resolved.midpoint.y
+                    + resolved.tangent.y * window.horizontalOffsetWorld
+                    + resolved.normal.y * window.normalOffset};
+    const game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    const game::SectorWindow& glass = world.Get<game::SectorWindow>(entity);
+    const game::SectorStaticModelCollider& collider =
+            world.Get<game::SectorStaticModelCollider>(entity);
+    Check(Near(transform.position, expectedPosition)
+                  && Near(glass.width, 0.4f)
+                  && Near(glass.height, 1.25f)
+                  && Near(glass.thickness, 0.08f)
+                  && glass.tint.r == 80
+                  && glass.tint.g == 170
+                  && glass.tint.b == 230
+                  && Near(glass.opacity, 0.28f)
+                  && Near(glass.roughness, 0.16f)
+                  && Near(glass.indexOfRefraction, 1.45f),
+          "spawned glass copies resolved geometry and authored PBR controls");
+    Check(collider.placedObjectId == 38
+                  && collider.entity == entity
+                  && Near(collider.center,
+                          Vector2{expectedPosition.x, expectedPosition.z})
+                  && Near(collider.axisX, resolved.tangent)
+                  && Near(collider.axisZ, resolved.normal)
+                  && Near(collider.halfExtents, Vector2{0.2f, 0.04f})
+                  && Near(collider.bottom, expectedPosition.y - 0.625f)
+                  && Near(collider.top, expectedPosition.y + 0.625f),
+          "window collision is a thin oriented prism matching the visible slab");
+
+    game::SectorNavigationWorld navigation;
+    game::NpcNavigationRuntime npcNavigation;
+    game::FpsWeaponImpactDefinition impact;
+    impact.surfaceDebris.enabled = true;
+    game::FpsShotResult shot;
+    game::WeaponImpactEvent impactEvent;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> opaqueProps;
+    const Vector3 rayOrigin{
+            expectedPosition.x - resolved.normal.x * 2.0f,
+            expectedPosition.y,
+            expectedPosition.z - resolved.normal.y * 2.0f};
+    const Vector3 rayDirection{resolved.normal.x, 0.0f, resolved.normal.y};
+    Check(game::ResolvePlayerWeaponShot(
+                  world,
+                  nullptr,
+                  navigation,
+                  npcNavigation,
+                  nullptr,
+                  doors,
+                  opaqueProps,
+                  rayOrigin,
+                  rayDirection,
+                  5.0f,
+                  impact,
+                  shot,
+                  impactEvent,
+                  nullptr,
+                  nullptr,
+                  &state.windowColliders)
+                  && shot.hitKind == game::FpsShotHitKind::Window
+                  && shot.placedObjectId == 38
+                  && shot.targetEntity == entity
+                  && impactEvent.kind == game::WeaponImpactKind::SurfaceDebris,
+          "weapon raycasts identify physical glass before geometry behind it");
+}
+
+void TestSectorWindowModelMatrixPreservesVolumeAndFaceOrientation()
+{
+    const game::SectorObjectTransform transform{
+            Vector3{3.0f, 4.0f, 5.0f}};
+    game::SectorWindow window;
+    window.tangent = Vector2{0.6f, 0.8f};
+    window.normal = Vector2{0.8f, -0.6f};
+    window.width = 3.0f;
+    window.height = 1.5f;
+    window.thickness = 0.08f;
+
+    const Matrix model = game::BuildSectorWindowModelMatrix(transform, window);
+    const Vector3 origin = Vector3Transform(Vector3{}, model);
+    const Vector3 localX = Vector3Subtract(
+            Vector3Transform(Vector3{1.0f, 0.0f, 0.0f}, model), origin);
+    const Vector3 localY = Vector3Subtract(
+            Vector3Transform(Vector3{0.0f, 1.0f, 0.0f}, model), origin);
+    const Vector3 localZ = Vector3Subtract(
+            Vector3Transform(Vector3{0.0f, 0.0f, 1.0f}, model), origin);
+    const Vector3 expectedDepthAxis{
+            -window.normal.x * window.thickness,
+            0.0f,
+            -window.normal.y * window.thickness};
+
+    Check(Near(origin, transform.position)
+                  && Near(localX, Vector3{
+                          window.tangent.x * window.width,
+                          0.0f,
+                          window.tangent.y * window.width})
+                  && Near(localY, Vector3{0.0f, window.height, 0.0f})
+                  && Near(localZ, expectedDepthAxis),
+          "window model matrix preserves center dimensions and slab volume");
+    Check(MatrixDeterminant(model) > 0.0f,
+          "window model matrix is right-handed for stable backface culling");
+
+    const Vector3 frontFaceCenter = Vector3Transform(
+            Vector3{0.0f, 0.0f, 0.5f}, model);
+    const Vector3 backFaceCenter = Vector3Transform(
+            Vector3{0.0f, 0.0f, -0.5f}, model);
+    const Vector3 frontCamera{
+            transform.position.x - window.normal.x * 2.0f,
+            transform.position.y,
+            transform.position.z - window.normal.y * 2.0f};
+    const Vector3 backCamera{
+            transform.position.x + window.normal.x * 2.0f,
+            transform.position.y,
+            transform.position.z + window.normal.y * 2.0f};
+    const Vector3 frontOutwardNormal = Vector3Normalize(localZ);
+    const Vector3 backOutwardNormal = Vector3Negate(frontOutwardNormal);
+    Check(Vector3DotProduct(frontOutwardNormal,
+                          Vector3Normalize(Vector3Subtract(
+                                  frontCamera, frontFaceCenter))) > 0.99f
+                  && Vector3DotProduct(backOutwardNormal,
+                          Vector3Normalize(Vector3Subtract(
+                                  backCamera, backFaceCenter))) > 0.99f,
+          "window slab exposes outward-facing normals from both portal sectors");
 }
 
 void TestSpawnPlacedDoorPositiveNormalOffsetMovesTowardBackSector()
@@ -11396,6 +11589,8 @@ int main()
     TestSpawnPlacedRuntimeObjectSkipsInvalidDoorAnchorWithDiagnostics();
     TestSpawnPlacedDoorCopiesResolvedPayloadToEcs();
     TestSpawnPlacedDoorRefreshDoesNotDuplicate();
+    TestSpawnPlacedWindowBuildsGlassAndPhysicalCollider();
+    TestSectorWindowModelMatrixPreservesVolumeAndFaceOrientation();
     TestUnknownModelSwingDoorUsesAnimatedProceduralFallback();
     TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions();
     TestRetainedCatalogFailureDoesNotBlockOtherDoors();

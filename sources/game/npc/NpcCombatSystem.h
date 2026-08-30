@@ -86,7 +86,8 @@ bool ResolvePlayerWeaponShot(
         FpsShotResult& outShot,
         WeaponImpactEvent& outImpact,
         NpcAudioRuntime* npcAudio = nullptr,
-        NpcAiRuntime* npcAi = nullptr);
+        NpcAiRuntime* npcAi = nullptr,
+        const std::vector<SectorStaticModelCollider>* windowColliders = nullptr);
 
 bool ResolvePlayerWeaponPelletVolley(
         engine::World& world,
@@ -102,7 +103,8 @@ bool ResolvePlayerWeaponPelletVolley(
         const FpsWeaponFiringDefinition& firing,
         WeaponPelletVolleyResult& outVolley,
         NpcAudioRuntime* npcAudio = nullptr,
-        NpcAiRuntime* npcAi = nullptr);
+        NpcAiRuntime* npcAi = nullptr,
+        const std::vector<SectorStaticModelCollider>* windowColliders = nullptr);
 
 bool UpdateNpcCombatSystem(
         engine::World& world,

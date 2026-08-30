@@ -2831,6 +2831,42 @@
         52.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 172,
+      "kind": "window",
+      "window": {
+        "anchor": {
+          "lineDefId": 326,
+          "frontSectorId": 63,
+          "backSectorId": 66,
+          "frontSideDefId": 405,
+          "backSideDefId": 341,
+          "endpointA": [
+            -2432,
+            -2688
+          ],
+          "endpointB": [
+            -2048,
+            -2688
+          ]
+        },
+        "width": 3.0,
+        "height": 1.90625,
+        "normalOffset": 0.125,
+        "tint": {
+          "r": 255,
+          "g": 0,
+          "b": 0,
+          "a": 255
+        }
+      },
+      "position": [
+        -140.0,
+        -1.875,
+        -168.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [

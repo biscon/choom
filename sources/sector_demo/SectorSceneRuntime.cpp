@@ -295,7 +295,7 @@ void SectorSceneRuntime::Update(
                 context.world,
                 runtimeObjects.objectSectorLookupWorld,
                 runtimeObjects.dynamicDoorColliders,
-                runtimeObjects.staticModelColliders,
+                runtimeObjects.physicalModelColliders,
                 &map,
                 npcCombat,
                 dt);
@@ -308,7 +308,7 @@ void SectorSceneRuntime::Update(
     }
     navigation.UpdateBuild(
             map,
-            runtimeObjects.staticModelColliders,
+            runtimeObjects.physicalModelColliders,
             runtimeObjects.staticModelPendingCount);
     navigation.UpdateDynamicObstacles(
             runtimeObjects.dynamicModelColliders,
@@ -352,7 +352,7 @@ void SectorSceneRuntime::Update(
                 runtimeObjects.npcDefinitionCatalog,
                 runtimeObjects.objectSectorLookupWorld,
                 runtimeObjects.dynamicDoorColliders,
-                runtimeObjects.staticModelColliders,
+                runtimeObjects.physicalModelColliders,
                 runtimeObjects.objectLightProbes,
                 map,
                 dt,
@@ -430,7 +430,8 @@ bool SectorSceneRuntime::ResolvePlayerWeaponShot(
             firing,
             volley,
             &npcAudio,
-            &npcAi);
+            &npcAi,
+            &runtimeObjects.windowColliders);
     outShot = volley.shots[0];
     for (int pelletIndex = 0;
             pelletIndex < volley.pelletCount;
@@ -469,7 +470,7 @@ void SectorSceneRuntime::UpdateLoadPreparation(
     }
     navigation.UpdateBuild(
             map,
-            runtimeObjects.staticModelColliders,
+            runtimeObjects.physicalModelColliders,
             runtimeObjects.staticModelPendingCount);
     navigation.UpdateDynamicObstacles(
             runtimeObjects.dynamicModelColliders,
@@ -487,7 +488,7 @@ void SectorSceneRuntime::UpdateLoadPreparation(
                 runtimeObjects.npcDefinitionCatalog,
                 runtimeObjects.objectSectorLookupWorld,
                 runtimeObjects.dynamicDoorColliders,
-                runtimeObjects.staticModelColliders,
+                runtimeObjects.physicalModelColliders,
                 runtimeObjects.objectLightProbes,
                 map,
                 0.0f,

@@ -2,6 +2,7 @@
 
 #include "sector_editor/tools/billboards/SectorEditorBillboardInspector.h"
 #include "sector_editor/tools/doors/SectorEditorDoorInspector.h"
+#include "sector_editor/tools/windows/SectorEditorWindowInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorStaticModelInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorDynamicModelInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorNpcInspector.h"
@@ -23,6 +24,9 @@ float MeasureSectorEditorPlacedObjectInspectorContentHeight(
 
   if (object->kind == "door") {
     return MeasureSectorEditorDoorInspectorContentHeight(context, *object);
+  }
+  if (object->kind == "window") {
+    return MeasureSectorEditorWindowInspectorContentHeight(context, *object);
   }
   if (object->kind == "billboard") {
     return MeasureSectorEditorBillboardInspectorContentHeight(context, *object);
@@ -65,6 +69,7 @@ void DrawSectorEditorPlacedObjectInspector(
 
   const bool isBillboard = selectedObject->kind == "billboard";
   const bool isDoor = selectedObject->kind == "door";
+  const bool isWindow = selectedObject->kind == "window";
   const bool isStaticModel = selectedObject->kind == "static_model";
   const bool isDynamicModel = selectedObject->kind == "dynamic_model";
   const bool isNpc = selectedObject->kind == "npc";
@@ -75,15 +80,20 @@ void DrawSectorEditorPlacedObjectInspector(
                : isDynamicModel ? "Type: Dynamic Prop"
                : isNpc ? "Type: NPC"
                : isItem ? "Type: Item"
+               : isWindow ? "Type: Window"
                : isDoor    ? "Type: Door"
                            : "Type: Unsupported object",
                engine::UITextJustify::Left,
-               isBillboard || isStaticModel || isDynamicModel || isNpc || isItem || isDoor ? config.mutedTextColor
+               isBillboard || isStaticModel || isDynamicModel || isNpc || isItem || isDoor || isWindow ? config.mutedTextColor
                                      : config.invalidColor);
   y += 34.0f;
 
   if (isDoor) {
     DrawSectorEditorDoorInspector(context, y);
+    return;
+  }
+  if (isWindow) {
+    DrawSectorEditorWindowInspector(context, y);
     return;
   }
   if (isBillboard) {

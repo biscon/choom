@@ -590,6 +590,7 @@ private:
     void AddItemAt(Vector2 mapPoint);
     void AddNpcAt(Vector2 mapPoint);
     void AddDoorAtPortal(Vector2 screenPoint);
+    void AddWindowAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();
     bool DeleteRuntimeObjectById(int objectId);
     bool MutateSelectedRuntimeObject(

@@ -117,27 +117,39 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
     std::vector<SectorPlacedRuntimeObject> reconciled;
     reconciled.reserve(candidateMapData.runtimeObjects.size());
     for (SectorPlacedRuntimeObject object : candidateMapData.runtimeObjects) {
-        if (object.kind != "door") {
+        const bool isDoor = object.kind == "door";
+        const bool isWindow = object.kind == "window";
+        if (!isDoor && !isWindow) {
             reconciled.push_back(std::move(object));
             continue;
         }
 
+        const char* objectName = isWindow ? "window" : "door";
+        const SectorDoorAnchor& currentAnchor = isWindow
+                ? object.window.anchor : object.door.anchor;
+
         const SectorResolvedDoorAnchor currentResolved =
-                ResolveSectorDoorAnchor(currentMap, object.door);
+                isWindow
+                ? ResolveSectorWindowAnchor(currentMap, object.window)
+                : ResolveSectorDoorAnchor(currentMap, object.door);
         const SectorAuthoringDerivedLineMapping* currentLineMapping =
                 currentResolved.valid
                 ? FindLineMappingForTopologyLine(
                         currentDerivation,
-                        object.door.anchor.lineDefId)
+                        currentAnchor.lineDefId)
                 : nullptr;
         const int authoringLineId = currentLineMapping == nullptr
                 ? -1
                 : currentLineMapping->authoringLineId;
         if (rejectDoorAuthoringLineIds.find(authoringLineId)
                 != rejectDoorAuthoringLineIds.end()) {
-            outError = TextFormat(
-                    "Cannot dissolve vertex: door %d is attached to an incident portal; remove the door first",
-                    object.id);
+            outError = isWindow
+                    ? TextFormat(
+                            "Cannot dissolve vertex: window %d is attached to an incident portal; remove the window first",
+                            object.id)
+                    : TextFormat(
+                            "Cannot dissolve vertex: door %d is attached to an incident portal; remove the door first",
+                            object.id);
             return false;
         }
         if (removedAuthoringLineIds.find(authoringLineId)
@@ -147,20 +159,20 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
         }
 
         SectorTopologyCoordPoint oldA{
-                object.door.anchor.endpointAX,
-                object.door.anchor.endpointAY};
+                currentAnchor.endpointAX,
+                currentAnchor.endpointAY};
         SectorTopologyCoordPoint oldB{
-                object.door.anchor.endpointBX,
-                object.door.anchor.endpointBY};
+                currentAnchor.endpointBX,
+                currentAnchor.endpointBY};
         if (currentResolved.valid
                 && !TopologyLineEndpoints(
                         currentMap,
-                        object.door.anchor.lineDefId,
+                        currentAnchor.lineDefId,
                         oldA,
                         oldB)) {
             outError = TextFormat(
-                    "Authoring edit unavailable: door %d portal endpoints are invalid",
-                    object.id);
+                    "Authoring edit unavailable: %s %d portal endpoints are invalid",
+                    objectName, object.id);
             return false;
         }
 
@@ -193,15 +205,15 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
                 continue;
             }
             outError = TextFormat(
-                    "Authoring edit unavailable: door %d cannot be mapped to its surviving portal",
-                    object.id);
+                    "Authoring edit unavailable: %s %d cannot be mapped to its surviving portal",
+                    objectName, object.id);
             return false;
         }
         if (!IsValidSectorTopologyId(candidateLine->frontSideDefId)
                 || !IsValidSectorTopologyId(candidateLine->backSideDefId)) {
             outError = TextFormat(
-                    "Authoring edit unavailable: door %d surviving line is no longer a portal",
-                    object.id);
+                    "Authoring edit unavailable: %s %d surviving line is no longer a portal",
+                    objectName, object.id);
             return false;
         }
         const SectorTopologySideDef* front = FindSectorTopologySideDef(
@@ -219,32 +231,42 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
                         start,
                         end)) {
             outError = TextFormat(
-                    "Authoring edit unavailable: door %d surviving portal is invalid",
-                    object.id);
+                    "Authoring edit unavailable: %s %d surviving portal is invalid",
+                    objectName, object.id);
             return false;
         }
 
-        object.door.anchor.lineDefId = candidateLine->id;
-        object.door.anchor.frontSideDefId = front->id;
-        object.door.anchor.backSideDefId = back->id;
-        object.door.anchor.frontSectorId = front->sectorId;
-        object.door.anchor.backSectorId = back->sectorId;
-        object.door.anchor.endpointAX = start->x;
-        object.door.anchor.endpointAY = start->y;
-        object.door.anchor.endpointBX = end->x;
-        object.door.anchor.endpointBY = end->y;
+        SectorDoorAnchor& candidateAnchor = isWindow
+                ? object.window.anchor : object.door.anchor;
+        candidateAnchor.lineDefId = candidateLine->id;
+        candidateAnchor.frontSideDefId = front->id;
+        candidateAnchor.backSideDefId = back->id;
+        candidateAnchor.frontSectorId = front->sectorId;
+        candidateAnchor.backSectorId = back->sectorId;
+        candidateAnchor.endpointAX = start->x;
+        candidateAnchor.endpointAY = start->y;
+        candidateAnchor.endpointBX = end->x;
+        candidateAnchor.endpointBY = end->y;
 
         const SectorResolvedDoorAnchor candidateResolved =
-                ResolveSectorDoorAnchor(candidateDerivation.topology, object.door);
+                isWindow
+                ? ResolveSectorWindowAnchor(
+                        candidateDerivation.topology, object.window)
+                : ResolveSectorDoorAnchor(
+                        candidateDerivation.topology, object.door);
         if (!candidateResolved.valid) {
             outError = TextFormat(
-                    "Authoring edit unavailable: door %d cannot be rebound to its surviving portal",
-                    object.id);
+                    "Authoring edit unavailable: %s %d cannot be rebound to its surviving portal",
+                    objectName, object.id);
             return false;
         }
         object.position = Vector3{
                 SectorWorldToAuthoringDistance(candidateResolved.midpoint.x),
-                SectorWorldToAuthoringDistance(candidateResolved.openBottom),
+                SectorWorldToAuthoringDistance(isWindow
+                        ? candidateResolved.openBottom
+                                + candidateResolved.portalHeight * 0.5f
+                                + object.window.verticalOffsetWorld
+                        : candidateResolved.openBottom),
                 SectorWorldToAuthoringDistance(candidateResolved.midpoint.y)};
         reconciled.push_back(std::move(object));
     }
@@ -261,12 +283,20 @@ bool ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
 {
     outError.clear();
     for (const SectorPlacedRuntimeObject& object : currentMap.runtimeObjects) {
-        if (object.kind != "door") {
+        const bool isDoor = object.kind == "door";
+        const bool isWindow = object.kind == "window";
+        if (!isDoor && !isWindow) {
             continue;
         }
 
+        const char* objectName = isWindow ? "window" : "door";
+        const SectorDoorAnchor& anchor = isWindow
+                ? object.window.anchor : object.door.anchor;
+
         const SectorResolvedDoorAnchor resolved =
-                ResolveSectorDoorAnchor(currentMap, object.door);
+                isWindow
+                ? ResolveSectorWindowAnchor(currentMap, object.window)
+                : ResolveSectorDoorAnchor(currentMap, object.door);
         if (!resolved.valid) {
             continue;
         }
@@ -275,19 +305,19 @@ bool ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
         SectorTopologyCoordPoint oldB{};
         if (!TopologyLineEndpoints(
                     currentMap,
-                    object.door.anchor.lineDefId,
+                    anchor.lineDefId,
                     oldA,
                     oldB)) {
             outError = TextFormat(
-                    "Authoring edit unavailable: door %d portal endpoints are invalid",
-                    object.id);
+                    "Authoring edit unavailable: %s %d portal endpoints are invalid",
+                    objectName, object.id);
             return false;
         }
 
         const SectorAuthoringDerivedLineMapping* currentLineMapping =
                 FindLineMappingForTopologyLine(
                         currentDerivation,
-                        object.door.anchor.lineDefId);
+                        anchor.lineDefId);
         bool spanSurvives = false;
         for (const SectorAuthoringLine& line : candidateGraph.lines) {
             if (currentLineMapping != nullptr
@@ -332,9 +362,13 @@ bool ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
             }
         }
         if (!spanSurvives) {
-            outError = TextFormat(
-                    "Cannot split portal containing door %d; remove the door first",
-                    object.id);
+            outError = isWindow
+                    ? TextFormat(
+                            "Cannot split portal containing window %d; remove the window first",
+                            object.id)
+                    : TextFormat(
+                            "Cannot split portal containing door %d; remove the door first",
+                            object.id);
             return false;
         }
     }

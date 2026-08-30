@@ -110,6 +110,14 @@ struct RuntimeObjectEditingUiState {
     engine::UIFloatInputState heightInput;
     engine::UIFloatInputState thicknessInput;
     engine::UIFloatInputState normalOffsetInput;
+    engine::UIFloatInputState horizontalOffsetInput;
+    engine::UIFloatInputState verticalOffsetInput;
+    engine::UIFloatInputState opacityInput;
+    engine::UIFloatInputState roughnessInput;
+    engine::UIFloatInputState indexOfRefractionInput;
+    engine::UIIntInputState windowTintRedInput;
+    engine::UIIntInputState windowTintGreenInput;
+    engine::UIIntInputState windowTintBlueInput;
     engine::UIFloatInputState openDistanceInput;
     engine::UIFloatInputState speedInput;
     engine::UIFloatInputState modelScaleInput;

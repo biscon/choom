@@ -636,6 +636,44 @@ void TestBuildInputAndSourceHash()
                   != doorBase,
           "navigation source hash includes door geometry that changes link staging");
 
+    game::SectorTopologyMap windowMap = MakeAdjacentMap();
+    game::SectorPlacedRuntimeObject window;
+    window.id = 78;
+    window.kind = "window";
+    window.window.anchor.lineDefId = 2;
+    window.window.anchor.frontSectorId = 10;
+    window.window.anchor.backSectorId = 20;
+    window.window.anchor.frontSideDefId = 2;
+    window.window.anchor.backSideDefId = 8;
+    window.window.width = 1.0f;
+    windowMap.runtimeObjects.push_back(window);
+    game::SectorStaticModelCollider windowCollider;
+    windowCollider.placedObjectId = 78;
+    windowCollider.center = {4.0f, 2.0f};
+    windowCollider.halfExtents = {0.5f, 0.02f};
+    windowCollider.bottom = 0.0f;
+    windowCollider.top = 2.0f;
+    windowCollider.resolved = true;
+    const std::vector<game::SectorStaticModelCollider> windowColliders{
+            windowCollider};
+    const uint64_t windowBase = game::ComputeSectorNavigationSourceHash(
+            windowMap, windowColliders, {});
+    windowMap.runtimeObjects.front().window.tint = Color{50, 140, 220, 255};
+    windowMap.runtimeObjects.front().window.opacity = 0.6f;
+    windowMap.runtimeObjects.front().window.roughness = 0.4f;
+    windowMap.runtimeObjects.front().window.indexOfRefraction = 1.7f;
+    Check(game::ComputeSectorNavigationSourceHash(
+                  windowMap, windowColliders, {}) == windowBase,
+          "navigation source hash excludes window appearance fields");
+    windowMap.runtimeObjects.front().window.horizontalOffsetWorld += 0.25f;
+    Check(game::ComputeSectorNavigationSourceHash(
+                  windowMap, windowColliders, {}) != windowBase,
+          "navigation source hash includes collision-enabled window geometry");
+    windowMap.runtimeObjects.front().window.collision = false;
+    Check(game::ComputeSectorNavigationSourceHash(
+                  windowMap, windowColliders, {}) != windowBase,
+          "navigation source hash includes whether a window is physically solid");
+
     game::SectorNavigationBuildInput input;
     std::vector<std::string> warnings;
     std::string error;

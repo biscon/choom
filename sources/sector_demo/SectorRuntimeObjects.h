@@ -116,6 +116,27 @@ struct SectorItem {
     ItemPresentationState presentation;
 };
 
+struct SectorWindow {
+    int placedObjectId = 0;
+    int lineDefId = 0;
+    int frontSectorId = 0;
+    int backSectorId = 0;
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 normal = {0.0f, -1.0f};
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.04f;
+    Color tint = WHITE;
+    float opacity = 0.18f;
+    float roughness = 0.08f;
+    float indexOfRefraction = 1.5f;
+    bool visible = true;
+};
+
+Matrix BuildSectorWindowModelMatrix(
+        const SectorObjectTransform& transform,
+        const SectorWindow& window);
+
 } // namespace game
 
 #include "sector_demo/SectorDoorRuntime.h"
@@ -146,6 +167,10 @@ struct SectorRuntimeObjectState {
     std::vector<SectorDoorPlayerObstacle> doorObstacles;
     std::vector<SectorStaticModelCollider> staticModelColliders;
     std::vector<SectorStaticModelCollider> dynamicModelColliders;
+    // Kept separate so physical glass can block movement and weapons without
+    // becoming opaque to perception, audio, or light queries.
+    std::vector<SectorStaticModelCollider> windowColliders;
+    std::vector<SectorStaticModelCollider> physicalModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
     size_t placedObjectCount = 0;
     size_t spawnedObjectCount = 0;
@@ -249,6 +274,10 @@ bool QueueRemoveSectorRuntimeObjectByEntity(
 void RefreshSectorDoorSpatialCaches(
         engine::World& world,
         SectorRuntimeObjectState& state);
+
+void CollectSectorWindowColliders(
+        engine::World& world,
+        std::vector<SectorStaticModelCollider>& colliders);
 
 void UpdateSectorRuntimeObjects(
         engine::World& world,

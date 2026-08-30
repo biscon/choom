@@ -95,6 +95,8 @@ views and maps to world Z for generated 3D geometry.
 - Billboard tool: place a generic authored billboard marker inside a sector.
 - Door tool: place a portal-attached procedural door on a valid two-sided
   linedef.
+- Window tool: place portal-attached procedural glass on a valid two-sided
+  linedef.
 - `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
 - `3D Mode` (`Ctrl+D`, under `View`): rebuild the 3D preview from the current
   in-memory topology map, or return to 2D from preview mode.
@@ -749,7 +751,7 @@ linedef/sidedef inspector. `Blocks Player` is available in the selected
 sidedef/linedef inspector for two-sided portals even when no middle texture is
 assigned.
 
-## Runtime ECS Objects, Billboards, And Doors
+## Runtime ECS Objects, Billboards, Doors, And Windows
 
 Sector topology remains purpose-built non-ECS data. Vertices, linedefs,
 sidedefs, sectors, generated geometry, lightmap atlas data, static draw records,
@@ -769,9 +771,9 @@ Billboards render as alpha-tested cutout camera-facing quads in the 3D preview
 after static sector geometry has populated world depth. The cutout shader
 samples the current Aseprite atlas texture using the frame source rectangle UVs,
 discards pixels below the sprite alpha cutoff, and writes surviving pixels as
-opaque depth-writing pixels. Transparent particles, smoke, glass, spell effects,
-and sorting remain deferred to a later transparent render pass. Missing,
-failed, or not-ready assets are skipped safely.
+opaque depth-writing pixels. Portal windows use the dedicated transparent pass
+described below; general transparent particles, smoke, and spell effects remain
+deferred. Missing, failed, or not-ready assets are skipped safely.
 
 Doors are authored runtime objects with `kind: "door"` and a portal anchor to a
 two-sided linedef. The Door tool places a door only on a valid two-sided portal;
@@ -788,6 +790,35 @@ physical leaf around the portal plane. Implemented motion values are
 including current and target open fractions, transform, collider, and portal
 visibility blocker state, lives in ECS. Authored `initialOpenFraction` remains a
 level default and is not rewritten by preview interaction.
+
+Windows are authored runtime objects with `kind: "window"` and use the same
+stable two-sided portal anchor identity as doors. The Window tool rejects
+one-sided walls. Each window is a real thin box rather than a zero-thickness
+quad. Width and height default to the portal opening and may be overridden;
+thickness, horizontal offset, vertical offset, and front-to-back depth offset
+are authored in runtime/world units. The inspector also exposes tint RGB,
+opacity, roughness, dielectric index of refraction (IOR), Fit to opening, a
+Solid gameplay toggle, and Delete.
+
+Procedural glass uses a dedicated late transparent render pass after opaque
+sector geometry, doors, props, and alpha-tested billboards. Visible windows are
+collected into a pre-reserved queue, sorted far-to-near by camera distance with
+a stable object-ID tie break, and drawn with depth testing enabled but depth
+writes disabled. The pass shares one cube mesh, shader, and material, uses
+premultiplied alpha blending, and restores normal blend/depth state afterward.
+Its dielectric shading uses IOR-based Schlick Fresnel, authored roughness,
+environment reflection probes, baked object-probe ambient, eligible static and
+dynamic specular lights, tint, and fog. Windows are omitted from reflection
+probe capture to avoid recursive glass capture.
+
+Solid windows contribute a thin analytic oriented-prism collider to player,
+item-drop, NPC locomotion/knockback, weapon-ray, and navigation queries. They do
+not become opaque perception, audio-propagation, or light-sampling blockers, and
+they do not close the underlying portal visibility connection. Windows are
+neither static-lightmap receivers nor baked occluders, so all window appearance,
+offset, dimension, and collision fields are intentionally excluded from the
+lightmap source hash. Changing physical window geometry does change the
+navigation source hash.
 
 The default `visual` is `procedural`, preserving older map JSON. Procedural doors
 render as opaque box/slab geometry and may use any motion type. Their map texture
@@ -931,6 +962,13 @@ update height from the selected sprite's aspect ratio, and committed height edit
 update width. If sprite metadata is not ready, the edited dimension is kept and
 the paired dimension is left unchanged. With keep-aspect disabled, width and
 height edit independently. Origin X/Y are normalized and clamped to `0..1`.
+
+Selecting a window exposes its resolved portal/opening status and the geometry,
+glass, and gameplay controls described above. Window edits use the normal
+runtime-object document-edited path, invalidating the derived 2D topology render
+cache and refreshing preview ECS objects. The cached thin-slab footprint is a
+normal runtime-object pick candidate, so repeated clicks cycle from the window
+to an overlapping line or primitive beneath it.
 
 The sprite picker scans `assets/sprites` recursively for Aseprite JSON files,
 uses each file's `meta.image` atlas for preview through `AssetManager`, and
@@ -1247,9 +1285,10 @@ deferred.
 - No entity-attached gameplay lights or unrestricted general-purpose dynamic
   shadow system; preview dynamic lights use the documented bounded renderer
   paths.
-- No alpha-based middle texture collision, translucent glass, depth sorting,
-  middle texture decals, middle emissive/tint/bloom controls, or middle
-  Copy/Paste Material controls.
+- No alpha-based middle texture collision, general-purpose transparent-material
+  pipeline, scene-color glass refraction, middle texture decals, middle
+  emissive/tint/bloom controls, or middle Copy/Paste Material controls. Portal
+  windows are the supported bounded sorted-transparency path.
 - Split/double-leaf doors, dynamic sector-height doors, transparent/glass model
   doors, frame collision, locks, keys, and save-game door state are deferred.
   NPC pathfinding supports current portal-attached doors through typed links.

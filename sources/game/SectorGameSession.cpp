@@ -571,7 +571,7 @@ bool SectorGameSession::DropInventoryEntry(
         }
         if (blocked
                 || ItemDropBoundsOverlapAnyPropCollider(
-                        sweptCandidate.worldBounds, objects.staticModelColliders)
+                        sweptCandidate.worldBounds, objects.physicalModelColliders)
                 || ItemDropBoundsOverlapAnyPropCollider(
                         sweptCandidate.worldBounds, objects.dynamicModelColliders)
                 || ItemDropBoundsOverlapPlayer(
@@ -1661,7 +1661,7 @@ void SectorGameSession::Update(
     }
     UpdateSectorEditorGameplayPreview(
             objects.dynamicDoorColliders,
-            objects.staticModelColliders,
+            objects.physicalModelColliders,
             collision,
             controller,
             false,
@@ -2530,7 +2530,7 @@ bool SectorGameSession::BuildCollisionAndPlayer(
                 topologyMap,
                 collision,
                 controller,
-                objects.staticModelColliders)) {
+                objects.physicalModelColliders)) {
         return false;
     }
     if (initializePlayer) {
@@ -2550,7 +2550,7 @@ bool SectorGameSession::BuildCollisionAndPlayer(
     InitializeSectorEditorGameplayVerticalState(
             collision,
             controller,
-            objects.staticModelColliders);
+            objects.physicalModelColliders);
     if (entryMarker != nullptr
             && (controller.fpsControllerState.currentSectorId == 0
                     || !collision.previewVerticalResult.hasSector

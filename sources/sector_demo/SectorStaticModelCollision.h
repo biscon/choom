@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/ecs/Entity.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorFpsController.h"
 
@@ -33,6 +34,7 @@ struct SectorStaticModelCollider {
     float resolvedScale = 0.0f;
     bool resolved = false;
     bool failed = false;
+    engine::Entity entity = engine::NullEntity();
 };
 
 bool BuildSectorStaticModelCollider(

@@ -1482,6 +1482,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
     doorRenderer.ReserveRuntimeDoorCapacity(runtimeObjectCapacity);
+    windowRenderer.Reserve(runtimeObjectCapacity);
     runtimeSeconds = 0.0f;
     distanceFogRenderer.Shutdown();
     analyticFogRenderer.Shutdown();
@@ -1525,6 +1526,12 @@ bool SectorMeshRenderer::RebuildRendererResources(
     if (!doorRenderer.LoadOpaqueResources()) {
         Shutdown(assets);
         error = "Preview failed: could not load door opaque shader";
+        return false;
+    }
+
+    if (!windowRenderer.Initialize(runtimeObjectCapacity)) {
+        Shutdown(assets);
+        error = "Preview failed: could not load window transparency shader";
         return false;
     }
 
@@ -1668,6 +1675,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
             && !staticModelRenderer.IsLoaded()
             && !doorRenderer.HasOpaqueResources()
             && !doorRenderer.HasCachedDoorMeshes()
+            && !windowRenderer.IsLoaded()
             && !dynamicLightState.HasShadowMapResources()
             && !dynamicLightState.HasShadowMaterial()
             && !dynamicModelShadowRenderer.IsLoaded()
@@ -1733,6 +1741,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     billboardRenderer.Shutdown();
     staticModelRenderer.Shutdown();
     doorRenderer.ShutdownOpaqueResources();
+    windowRenderer.Shutdown();
 
     if (!engine::IsNull(assetScope)) {
         assets.UnloadScope(assetScope);
@@ -2159,6 +2168,23 @@ void SectorMeshRenderer::DrawScene(
                     billboardLightContext,
                     fogContext,
                     renderDebugText);
+            SectorWindowDrawContext windowContext;
+            windowContext.assets = &assets;
+            windowContext.world = runtimeObjectWorld;
+            windowContext.camera = camera;
+            windowContext.visibility = &visibilityResult;
+            windowContext.environment = &pbrEnvironment;
+            windowContext.localReflectionProbesCurrent =
+                    localReflectionProbesCurrent;
+            windowContext.pbr = pbrContributionSettings;
+            windowContext.dynamicLights = billboardLightContext;
+            windowContext.staticSpecularLights = &staticSpecularLightState;
+            windowContext.staticSpecularEligible = objectProbeBakeCurrent
+                    && doorLighting.objectLightProbes != nullptr
+                    && !doorLighting.objectLightProbes->probes.empty();
+            windowContext.fog = fogContext;
+            windowContext.renderDebugText = &renderDebugText;
+            windowRenderer.Draw(windowContext);
         }
     }
     EndMode3D();
