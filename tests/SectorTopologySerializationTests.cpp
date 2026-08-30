@@ -228,6 +228,8 @@ SectorPlacedRuntimeObject MakeWindowRuntimeObject(int id)
     object.window.tint = Color{72, 164, 220, 255};
     object.window.opacity = 0.3f;
     object.window.roughness = 0.22f;
+    object.window.surfaceHaze = 0.35f;
+    object.window.imperfectionStrength = 0.42f;
     object.window.indexOfRefraction = 1.42f;
     object.window.collision = false;
     return object;
@@ -1628,6 +1630,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && savedWindow["tint"]["b"] == 220
                   && Near(savedWindow["opacity"].get<float>(), 0.3f)
                   && Near(savedWindow["roughness"].get<float>(), 0.22f)
+                  && Near(savedWindow["surfaceHaze"].get<float>(), 0.35f)
+                  && Near(savedWindow["imperfectionStrength"].get<float>(), 0.42f)
                   && Near(savedWindow["indexOfRefraction"].get<float>(), 1.42f)
                   && !savedWindow["collision"].get<bool>(),
           "window payload writes portal geometry, tint, PBR, and collision fields");
@@ -1652,12 +1656,34 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && loadedWindow->window.tint.a == 255
                   && Near(loadedWindow->window.opacity, 0.3f)
                   && Near(loadedWindow->window.roughness, 0.22f)
+                  && Near(loadedWindow->window.surfaceHaze, 0.35f)
+                  && Near(loadedWindow->window.imperfectionStrength, 0.42f)
                   && Near(loadedWindow->window.indexOfRefraction, 1.42f)
                   && !loadedWindow->window.collision,
           "window payload round-trips authored glass fields");
+    Json windowWithoutSurfaceDetail = windowSaved;
+    windowWithoutSurfaceDetail["runtimeObjects"][0]["window"].erase(
+            "surfaceHaze");
+    windowWithoutSurfaceDetail["runtimeObjects"][0]["window"].erase(
+            "imperfectionStrength");
+    SectorTopologyMap windowDefaultsLoaded;
+    Check(LoadText(windowWithoutSurfaceDetail.dump(), windowDefaultsLoaded, error),
+          "window payload without surface-detail fields remains compatible");
+    const SectorPlacedRuntimeObject* defaultedWindow =
+            game::FindSectorPlacedRuntimeObject(windowDefaultsLoaded, 29);
+    Check(defaultedWindow != nullptr
+                  && Near(defaultedWindow->window.surfaceHaze, 0.08f)
+                  && Near(defaultedWindow->window.imperfectionStrength, 0.15f),
+          "omitted window surface-detail fields use subtle lived-in defaults");
     Json invalidWindow = windowSaved;
     invalidWindow["runtimeObjects"][0]["window"]["opacity"] = 1.1f;
     ExpectRejected(invalidWindow, "window opacity outside the unit range is rejected");
+    invalidWindow = windowSaved;
+    invalidWindow["runtimeObjects"][0]["window"]["surfaceHaze"] = 1.1f;
+    ExpectRejected(invalidWindow, "window surface haze outside the unit range is rejected");
+    invalidWindow = windowSaved;
+    invalidWindow["runtimeObjects"][0]["window"]["imperfectionStrength"] = -0.1f;
+    ExpectRejected(invalidWindow, "window imperfections outside the unit range are rejected");
     invalidWindow = windowSaved;
     invalidWindow["runtimeObjects"][0]["window"]["thickness"] = 0.0f;
     ExpectRejected(invalidWindow, "zero-thickness window data is rejected");

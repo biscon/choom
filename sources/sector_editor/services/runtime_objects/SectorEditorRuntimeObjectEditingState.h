@@ -114,6 +114,8 @@ struct RuntimeObjectEditingUiState {
     engine::UIFloatInputState verticalOffsetInput;
     engine::UIFloatInputState opacityInput;
     engine::UIFloatInputState roughnessInput;
+    engine::UIFloatInputState surfaceHazeInput;
+    engine::UIFloatInputState imperfectionStrengthInput;
     engine::UIIntInputState windowTintRedInput;
     engine::UIIntInputState windowTintGreenInput;
     engine::UIIntInputState windowTintBlueInput;

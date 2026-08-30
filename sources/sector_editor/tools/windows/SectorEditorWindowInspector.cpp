@@ -47,10 +47,10 @@ float MeasureSectorEditorWindowInspectorContentHeight(
             status.c_str(),
             context.contentW,
             3);
-    // Shared object ID/type rows, anchor text, 12 controls, section labels,
+    // Shared object ID/type rows, anchor text, 14 controls, section labels,
     // fit action, and delete action.
     return 38.0f + 34.0f + statusHeight + context.gap
-            + 52.0f + (context.rowH + context.gap) * 12.0f
+            + 52.0f + (context.rowH + context.gap) * 14.0f
             + 52.0f + (context.rowH + context.gap) * 5.0f
             + 52.0f + (context.rowH + context.gap) * 2.0f;
 }
@@ -259,6 +259,24 @@ void DrawSectorEditorWindowInspector(
                 value = std::clamp(value, 0.0f, 1.0f);
                 if (window.roughness == value) return false;
                 window.roughness = value; return true;
+            });
+    selected = refresh(); if (selected == nullptr) return;
+    drawFloat("sector_editor_window_surface_haze", "Surface haze",
+            selected->window.surfaceHaze, context.uiState.surfaceHazeInput,
+            0.0f, 1.0f,
+            [](SectorPlacedWindow& window, float value) {
+                value = std::clamp(value, 0.0f, 1.0f);
+                if (window.surfaceHaze == value) return false;
+                window.surfaceHaze = value; return true;
+            });
+    selected = refresh(); if (selected == nullptr) return;
+    drawFloat("sector_editor_window_imperfections", "Imperfections",
+            selected->window.imperfectionStrength,
+            context.uiState.imperfectionStrengthInput, 0.0f, 1.0f,
+            [](SectorPlacedWindow& window, float value) {
+                value = std::clamp(value, 0.0f, 1.0f);
+                if (window.imperfectionStrength == value) return false;
+                window.imperfectionStrength = value; return true;
             });
     selected = refresh(); if (selected == nullptr) return;
     section("Gameplay");

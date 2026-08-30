@@ -1714,6 +1714,8 @@ void TestSpawnPlacedWindowBuildsGlassAndPhysicalCollider()
     window.tint = Color{80, 170, 230, 255};
     window.opacity = 0.28f;
     window.roughness = 0.16f;
+    window.surfaceHaze = 0.34f;
+    window.imperfectionStrength = 0.27f;
     window.indexOfRefraction = 1.45f;
     map.runtimeObjects.push_back(MakePlacedWindow(38, window));
 
@@ -1761,6 +1763,8 @@ void TestSpawnPlacedWindowBuildsGlassAndPhysicalCollider()
                   && glass.tint.b == 230
                   && Near(glass.opacity, 0.28f)
                   && Near(glass.roughness, 0.16f)
+                  && Near(glass.surfaceHaze, 0.34f)
+                  && Near(glass.imperfectionStrength, 0.27f)
                   && Near(glass.indexOfRefraction, 1.45f),
           "spawned glass copies resolved geometry and authored PBR controls");
     Check(collider.placedObjectId == 38

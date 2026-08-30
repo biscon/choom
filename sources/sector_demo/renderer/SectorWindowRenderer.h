@@ -69,6 +69,10 @@ private:
     int tintLoc = -1;
     int opacityLoc = -1;
     int roughnessLoc = -1;
+    int surfaceHazeLoc = -1;
+    int imperfectionStrengthLoc = -1;
+    int dimensionsLoc = -1;
+    int patternSeedLoc = -1;
     int iorLoc = -1;
     int thicknessLoc = -1;
     int directionalLightEnabledLoc = -1;

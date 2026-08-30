@@ -1287,6 +1287,8 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.window.tint,
                     placedObject.window.opacity,
                     placedObject.window.roughness,
+                    placedObject.window.surfaceHaze,
+                    placedObject.window.imperfectionStrength,
                     placedObject.window.indexOfRefraction,
                     true});
             if (placedObject.window.collision) {

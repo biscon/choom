@@ -942,7 +942,7 @@ void TestHdrEffectShaderAndPassPolicies()
                             !=std::string::npos
                     &&glassShader.find("(1.0 - blocker) * tintFilter")
                             !=std::string::npos
-                    &&glassShader.find("reflection * fresnel")!=std::string::npos
+                    &&glassShader.find("reflection * shadingFresnel")!=std::string::npos
                     &&glassShader.find("glassTint * opacity")
                             ==std::string::npos
                     &&glassShader.find("RL_ZERO, RL_SRC_COLOR")
@@ -950,6 +950,22 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&glassShader.find("RL_ONE, RL_ONE")
                             !=std::string::npos,
           "flat glass multiplicatively filters transmission before adding clamped-Fresnel reflection");
+    const std::size_t flatTransmissionReturn = glassShader.find(
+            "finalColor = vec4(transmission, 1.0)");
+    const std::size_t surfaceDetailEvaluation = glassShader.find(
+            "GlassSurfaceDetail(normal, shadingNormal, hazeVariation)");
+    Check(glassShader.find("fragLocalPosition")!=std::string::npos
+                    &&glassShader.find("glassDimensions")!=std::string::npos
+                    &&glassShader.find("glassPatternSeed")!=std::string::npos
+                    &&glassShader.find("GlassSurfacePattern")!=std::string::npos
+                    &&glassShader.find("0.069926812 * strength")
+                            !=std::string::npos
+                    &&glassShader.find("hazeVariation")!=std::string::npos
+                    &&glassShader.find("hazeWeight = min(")!=std::string::npos
+                    &&glassShader.find("hazeVariation, 0.20)")
+                            !=std::string::npos
+                    &&flatTransmissionReturn<surfaceDetailEvaluation,
+          "glass surface detail is stable pane-local noise with bounded normal and haze strength, evaluated after cheap flat transmission");
     Check(glassShader.find("DirectionalSpecular")!=std::string::npos
                     &&glassShader.find("ndotl <= 0.0 || ndotv <= 0.0")
                             !=std::string::npos

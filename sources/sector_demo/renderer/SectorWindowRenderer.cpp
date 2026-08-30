@@ -22,10 +22,20 @@ uniform mat4 matModel;
 uniform mat4 matNormal;
 out vec3 fragWorldPosition;
 out vec3 fragWorldNormal;
+out vec3 fragLocalPosition;
+out vec3 fragLocalNormal;
+out vec3 fragWorldAxisX;
+out vec3 fragWorldAxisY;
+out vec3 fragWorldAxisZ;
 void main()
 {
     fragWorldPosition = (matModel * vec4(vertexPosition, 1.0)).xyz;
     fragWorldNormal = normalize((matNormal * vec4(vertexNormal, 0.0)).xyz);
+    fragLocalPosition = vertexPosition;
+    fragLocalNormal = vertexNormal;
+    fragWorldAxisX = normalize((matModel * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
+    fragWorldAxisY = normalize((matModel * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+    fragWorldAxisZ = normalize((matModel * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
 )glsl";
@@ -34,11 +44,20 @@ const char* WindowFs = R"glsl(
 #version 330
 in vec3 fragWorldPosition;
 in vec3 fragWorldNormal;
+in vec3 fragLocalPosition;
+in vec3 fragLocalNormal;
+in vec3 fragWorldAxisX;
+in vec3 fragWorldAxisY;
+in vec3 fragWorldAxisZ;
 
 uniform vec3 cameraPosition;
 uniform vec3 glassTint;
 uniform float glassOpacity;
 uniform float glassRoughness;
+uniform float glassSurfaceHaze;
+uniform float glassImperfectionStrength;
+uniform vec3 glassDimensions;
+uniform float glassPatternSeed;
 uniform float glassIor;
 uniform float glassThickness;
 uniform int advancedTransmission;
@@ -78,6 +97,86 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSquared = dot(value, value);
     return lengthSquared > 0.0000001 ? value * inversesqrt(lengthSquared) : fallback;
+}
+
+float GlassHash(vec2 coordinate)
+{
+    vec3 p = fract(vec3(coordinate.xyx) * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+float GlassValueNoise(vec2 coordinate)
+{
+    vec2 cell = floor(coordinate);
+    vec2 fraction = fract(coordinate);
+    vec2 blend = fraction * fraction * (3.0 - 2.0 * fraction);
+    float a = GlassHash(cell);
+    float b = GlassHash(cell + vec2(1.0, 0.0));
+    float c = GlassHash(cell + vec2(0.0, 1.0));
+    float d = GlassHash(cell + vec2(1.0, 1.0));
+    return mix(mix(a, b, blend.x), mix(c, d, blend.x), blend.y);
+}
+
+float GlassSurfacePattern(vec2 panePosition)
+{
+    vec2 seedOffset = vec2(
+            glassPatternSeed * 0.754877666,
+            glassPatternSeed * 0.569840296);
+    float broad = GlassValueNoise(panePosition * 0.65 + seedOffset);
+    float fine = GlassValueNoise(
+            panePosition * 5.0 + seedOffset * 1.731);
+    return broad * 0.65 + fine * 0.35;
+}
+
+void GlassPaneCoordinates(out vec2 panePosition,
+        out vec3 tangent, out vec3 bitangent)
+{
+    vec3 localNormal = abs(fragLocalNormal);
+    if (localNormal.z >= localNormal.x && localNormal.z >= localNormal.y) {
+        panePosition = fragLocalPosition.xy * glassDimensions.xy;
+        tangent = fragWorldAxisX;
+        bitangent = fragWorldAxisY;
+    } else if (localNormal.x >= localNormal.y) {
+        panePosition = vec2(
+                fragLocalPosition.z * glassDimensions.z,
+                fragLocalPosition.y * glassDimensions.y);
+        tangent = fragWorldAxisZ;
+        bitangent = fragWorldAxisY;
+    } else {
+        panePosition = vec2(
+                fragLocalPosition.x * glassDimensions.x,
+                fragLocalPosition.z * glassDimensions.z);
+        tangent = fragWorldAxisX;
+        bitangent = fragWorldAxisZ;
+    }
+}
+
+void GlassSurfaceDetail(vec3 geometricNormal,
+        out vec3 shadingNormal, out float hazeVariation)
+{
+    vec2 panePosition;
+    vec3 tangent;
+    vec3 bitangent;
+    GlassPaneCoordinates(panePosition, tangent, bitangent);
+    float strength = clamp(glassImperfectionStrength, 0.0, 1.0);
+    const float derivativeStep = 0.025;
+    float center = GlassSurfacePattern(panePosition);
+    vec2 gradient = vec2(
+            GlassSurfacePattern(panePosition + vec2(derivativeStep, 0.0))
+                    - center,
+            GlassSurfacePattern(panePosition + vec2(0.0, derivativeStep))
+                    - center) / derivativeStep;
+    float gradientLength = length(gradient);
+    if (gradientLength > 1.0) gradient /= gradientLength;
+    // tan(4 degrees) bounds the maximum authored normal perturbation.
+    float maximumSlope = 0.069926812 * strength;
+    shadingNormal = SafeNormalize(geometricNormal
+            + tangent * gradient.x * maximumSlope
+            + bitangent * gradient.y * maximumSlope, geometricNormal);
+    // At the default strength, this varies haze by no more than +/-12%.
+    hazeVariation = clamp(1.0 + (center - 0.5) * 1.6 * strength,
+            0.2, 1.8);
 }
 
 vec3 RotateEnvironment(vec3 direction, float radians)
@@ -251,34 +350,45 @@ void main()
         return;
     }
 
+    vec3 shadingNormal;
+    float hazeVariation;
+    GlassSurfaceDetail(normal, shadingNormal, hazeVariation);
+    float shadingNdotV = clamp(dot(shadingNormal, viewDirection), 0.0, 1.0);
+    float shadingFresnel = clamp(0.04 + 0.96
+            * pow(clamp(1.0 - shadingNdotV, 0.0, 1.0), 5.0), 0.0, 1.0);
+    float hazeWeight = min(opacity * clamp(glassSurfaceHaze, 0.0, 1.0)
+            * (1.0 - fresnel) * hazeVariation, 0.20);
+    vec3 haze = clamp(glassTint, 0.0, 1.0) * hazeWeight;
+
     vec3 reflection = vec3(0.0);
     if (hasEnvironment != 0) {
         vec3 reflected = BoxProjectedEnvironmentDirection(
-                reflect(-viewDirection, normal));
+                reflect(-viewDirection, shadingNormal));
         reflection = textureLod(environmentTexture, reflected,
                 roughness * max(environmentMaxLod, 0.0)).rgb
                 * environmentIntensity * environmentSpecularScale;
     }
-    vec3 direct = DirectionalSpecular(normal, viewDirection, roughness);
+    vec3 direct = DirectionalSpecular(
+            shadingNormal, viewDirection, roughness);
     vec3 rgb;
     if (advancedTransmission != 0) {
         float opticalPath = 0.0;
         vec3 sceneTransmission = SampleTransmission(
-                normal, viewDirection, roughness, ior, opticalPath);
+                shadingNormal, viewDirection, roughness, ior, opticalPath);
         float normalizedPath = clamp(opticalPath / 0.04, 0.0, 32.0);
         vec3 absorption = pow(max(glassTint, vec3(0.015)),
                 vec3(normalizedPath * mix(0.12, 0.65, opacity)));
         float neutralTransmission = exp(-opacity * normalizedPath);
         rgb = sceneTransmission * absorption
-                        * neutralTransmission * (1.0 - fresnel)
-                + reflection * fresnel + direct;
+                        * neutralTransmission * (1.0 - shadingFresnel)
+                + reflection * shadingFresnel + direct + haze;
         float fogAmount = GlassFogAmount();
         rgb = mix(rgb, fogColor, fogAmount);
         finalColor = vec4(clamp(rgb, vec3(0.0), vec3(65504.0)), 1.0);
         return;
     } else {
-        rgb = reflection * fresnel
-                + direct;
+        rgb = reflection * shadingFresnel
+                + direct + haze;
         float fogAmount = GlassFogAmount();
         rgb = mix(rgb, fogColor * blocker, fogAmount);
     }
@@ -390,6 +500,11 @@ bool SectorWindowRenderer::Initialize(std::size_t capacity)
     tintLoc = GetShaderLocation(shader, "glassTint");
     opacityLoc = GetShaderLocation(shader, "glassOpacity");
     roughnessLoc = GetShaderLocation(shader, "glassRoughness");
+    surfaceHazeLoc = GetShaderLocation(shader, "glassSurfaceHaze");
+    imperfectionStrengthLoc =
+            GetShaderLocation(shader, "glassImperfectionStrength");
+    dimensionsLoc = GetShaderLocation(shader, "glassDimensions");
+    patternSeedLoc = GetShaderLocation(shader, "glassPatternSeed");
     iorLoc = GetShaderLocation(shader, "glassIor");
     thicknessLoc = GetShaderLocation(shader, "glassThickness");
     advancedTransmissionLoc = GetShaderLocation(shader, "advancedTransmission");
@@ -585,6 +700,21 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
                 shader, opacityLoc, &window.opacity, SHADER_UNIFORM_FLOAT);
         if (roughnessLoc >= 0) SetShaderValue(
                 shader, roughnessLoc, &window.roughness, SHADER_UNIFORM_FLOAT);
+        if (surfaceHazeLoc >= 0) SetShaderValue(
+                shader, surfaceHazeLoc, &window.surfaceHaze,
+                SHADER_UNIFORM_FLOAT);
+        if (imperfectionStrengthLoc >= 0) SetShaderValue(
+                shader, imperfectionStrengthLoc,
+                &window.imperfectionStrength, SHADER_UNIFORM_FLOAT);
+        const Vector3 glassDimensions{
+                window.width, window.height, window.thickness};
+        if (dimensionsLoc >= 0) SetShaderValue(
+                shader, dimensionsLoc, &glassDimensions,
+                SHADER_UNIFORM_VEC3);
+        const float patternSeed = static_cast<float>(window.placedObjectId);
+        if (patternSeedLoc >= 0) SetShaderValue(
+                shader, patternSeedLoc, &patternSeed,
+                SHADER_UNIFORM_FLOAT);
         if (iorLoc >= 0) SetShaderValue(
                 shader, iorLoc, &window.indexOfRefraction,
                 SHADER_UNIFORM_FLOAT);

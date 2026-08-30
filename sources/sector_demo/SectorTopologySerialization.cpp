@@ -797,6 +797,8 @@ void ValidatePlacedWindowForSerialization(
             || !std::isfinite(window.normalOffset)
             || !std::isfinite(window.opacity)
             || !std::isfinite(window.roughness)
+            || !std::isfinite(window.surfaceHaze)
+            || !std::isfinite(window.imperfectionStrength)
             || !std::isfinite(window.indexOfRefraction)) {
         Fail(context + " numeric values must be finite");
     }
@@ -807,8 +809,12 @@ void ValidatePlacedWindowForSerialization(
         Fail(context + ".thickness must be positive");
     }
     if (window.opacity < 0.0f || window.opacity > 1.0f
-            || window.roughness < 0.0f || window.roughness > 1.0f) {
-        Fail(context + ".opacity and .roughness must be between 0 and 1");
+            || window.roughness < 0.0f || window.roughness > 1.0f
+            || window.surfaceHaze < 0.0f || window.surfaceHaze > 1.0f
+            || window.imperfectionStrength < 0.0f
+            || window.imperfectionStrength > 1.0f) {
+        Fail(context + ".opacity, .roughness, .surfaceHaze, and "
+                ".imperfectionStrength must be between 0 and 1");
     }
     if (window.indexOfRefraction < 1.0f
             || window.indexOfRefraction > 2.5f) {
@@ -1095,6 +1101,11 @@ SectorPlacedWindow ReadPlacedWindow(const Json& value, const std::string& contex
             value, "opacity", context, window.opacity);
     window.roughness = ReadOptionalFloat(
             value, "roughness", context, window.roughness);
+    window.surfaceHaze = ReadOptionalFloat(
+            value, "surfaceHaze", context, window.surfaceHaze);
+    window.imperfectionStrength = ReadOptionalFloat(
+            value, "imperfectionStrength", context,
+            window.imperfectionStrength);
     window.indexOfRefraction = ReadOptionalFloat(
             value, "indexOfRefraction", context,
             window.indexOfRefraction);
@@ -2325,6 +2336,12 @@ Json WritePlacedWindow(
     if (window.opacity != defaults.opacity) json["opacity"] = window.opacity;
     if (window.roughness != defaults.roughness) {
         json["roughness"] = window.roughness;
+    }
+    if (window.surfaceHaze != defaults.surfaceHaze) {
+        json["surfaceHaze"] = window.surfaceHaze;
+    }
+    if (window.imperfectionStrength != defaults.imperfectionStrength) {
+        json["imperfectionStrength"] = window.imperfectionStrength;
     }
     if (window.indexOfRefraction != defaults.indexOfRefraction) {
         json["indexOfRefraction"] = window.indexOfRefraction;

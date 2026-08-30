@@ -10838,8 +10838,10 @@ void TestEditorWindowPlacementCreatesSelectablePortalGlass()
     Check(object.window.width > 0.0f
                   && object.window.height > 0.0f
                   && Near(object.window.thickness, 0.04f)
-                  && Near(object.window.opacity, 0.06f)
+                  && Near(object.window.opacity, 0.18f)
                   && Near(object.window.roughness, 0.08f)
+                  && Near(object.window.surfaceHaze, 0.08f)
+                  && Near(object.window.imperfectionStrength, 0.15f)
                   && Near(object.window.indexOfRefraction, 1.5f)
                   && object.window.collision,
           "window placement fits the opening and uses physical glass defaults");
