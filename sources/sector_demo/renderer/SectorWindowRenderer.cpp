@@ -108,6 +108,37 @@ float LightCone(int type, vec3 directionFromLight, vec3 lightDirection,
             : step(innerCos, cone);
 }
 
+float DistributionGgx(vec3 normal, vec3 halfway, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float ndoth = max(dot(normal, halfway), 0.0);
+    float denominator = ndoth * ndoth * (a2 - 1.0) + 1.0;
+    return a2 / max(3.14159265 * denominator * denominator, 0.000001);
+}
+
+float GeometrySchlickGgx(float ndot, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = r * r / 8.0;
+    return ndot / max(ndot * (1.0 - k) + k, 0.000001);
+}
+
+float GeometrySmith(vec3 normal, vec3 viewDirection,
+        vec3 lightDirection, float roughness)
+{
+    return GeometrySchlickGgx(
+            max(dot(normal, viewDirection), 0.0), roughness)
+            * GeometrySchlickGgx(
+                    max(dot(normal, lightDirection), 0.0), roughness);
+}
+
+float FresnelSchlick(float cosTheta, float f0)
+{
+    return f0 + (1.0 - f0)
+            * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
 vec3 SpecularLight(vec3 position, vec3 color, float radius, float intensity,
         int type, vec3 direction, float innerCos, float outerCos,
         vec3 normal, vec3 viewDirection, float roughness, float f0)
@@ -120,22 +151,33 @@ vec3 SpecularLight(vec3 position, vec3 color, float radius, float intensity,
     vec3 lightDirection = distanceToLight > 0.0001
             ? toLight / distanceToLight : normal;
     float ndotl = max(dot(normal, lightDirection), 0.0);
+    float ndotv = max(dot(normal, viewDirection), 0.0);
     float attenuation = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
     attenuation *= attenuation;
-    attenuation *= LightCone(type, -lightDirection, direction, innerCos, outerCos);
+    float coneAttenuation = LightCone(
+            type, -lightDirection, direction, innerCos, outerCos);
+    if (ndotl <= 0.0 || ndotv <= 0.0 || attenuation <= 0.0
+            || coneAttenuation <= 0.0) {
+        return vec3(0.0);
+    }
     vec3 halfway = SafeNormalize(viewDirection + lightDirection, normal);
-    float power = mix(256.0, 4.0, roughness);
-    float highlight = pow(max(dot(normal, halfway), 0.0), power);
-    float fresnel = f0 + (1.0 - f0)
-            * pow(1.0 - max(dot(halfway, viewDirection), 0.0), 5.0);
-    return color * intensity * ndotl * attenuation * highlight * fresnel;
+    float distribution = DistributionGgx(normal, halfway, roughness);
+    float geometry = GeometrySmith(
+            normal, viewDirection, lightDirection, roughness);
+    float fresnel = FresnelSchlick(
+            max(dot(halfway, viewDirection), 0.0), f0);
+    float specular = distribution * geometry * fresnel
+            / max(4.0 * ndotv * ndotl, 0.001);
+    vec3 radiance = color * intensity
+            * attenuation * attenuation * coneAttenuation;
+    return radiance * specular * ndotl;
 }
 
 void main()
 {
     vec3 normal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
     vec3 viewDirection = SafeNormalize(cameraPosition - fragWorldPosition, normal);
-    float roughness = clamp(glassRoughness, 0.0, 1.0);
+    float roughness = clamp(glassRoughness, 0.045, 1.0);
     float ior = clamp(glassIor, 1.0, 2.5);
     float f0 = pow((ior - 1.0) / (ior + 1.0), 2.0);
     float ndotv = max(dot(normal, viewDirection), 0.0);

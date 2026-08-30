@@ -431,6 +431,7 @@ void TestSectorRuntimeNormalMappingPolicy()
 {
     const std::string source = ReadSource(SECTOR_SHADER_SOURCE_PATH);
     const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
+    const std::string window = ReadSource(WINDOW_SHADER_SOURCE_PATH);
     Check(!source.empty(),
           "sector runtime normal-mapping policy can read the active renderer");
     Check(source.find("engine::TextureColorUsage::LinearData")
@@ -545,6 +546,19 @@ void TestSectorRuntimeNormalMappingPolicy()
                       "        outputRgb = ApplySectorFog(")
                     != std::string::npos,
           "door PBR diagnostics bypass fog while full rendering retains it");
+    Check(!window.empty()
+                    && window.find("float DistributionGgx(")
+                            != std::string::npos
+                    && window.find("float GeometrySmith(")
+                            != std::string::npos
+                    && window.find("float FresnelSchlick(")
+                            != std::string::npos
+                    && window.find(
+                               "float specular = distribution * geometry * fresnel")
+                            != std::string::npos
+                    && window.find("mix(256.0, 4.0, roughness)")
+                            == std::string::npos,
+          "procedural windows use normalized GGX direct specular instead of a constant-peak exponent lobe");
     Check(source.find("NormalMappedRendererMaterialIds(map, geometry)")
                             != std::string::npos
                     && source.find("ResolveDoorMaterial(") != std::string::npos

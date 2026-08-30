@@ -2859,7 +2859,8 @@
           "g": 0,
           "b": 0,
           "a": 255
-        }
+        },
+        "roughness": 0.800000011920929
       },
       "position": [
         -140.0,
@@ -5933,6 +5934,41 @@
         "b": 126,
         "a": 255
       }
+    },
+    {
+      "id": 13,
+      "instanceId": "light_point_13",
+      "position": [
+        -160.0,
+        -1.6000003814697266,
+        -200.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    },
+    {
+      "id": 14,
+      "instanceId": "light_point_14",
+      "position": [
+        -72.0,
+        4.649999618530273,
+        -240.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "enabled": false
     }
   ],
   "dynamicSpotLights": [
@@ -6509,7 +6545,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -6609,7 +6646,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "88acf0a6631f2e78",
+    "sourceHash": "5a5603a6bba610d0",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6617,20 +6654,20 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.203125,
+        1.564453125,
+        1.564453125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 839
+      "rgbChannelsAboveOne": 195
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "88acf0a6631f2e78",
-      "count": 3297,
+      "sourceHash": "5a5603a6bba610d0",
+      "count": 3315,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -6642,24 +6679,30 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.204270601272583,
+          1.935850739479065,
+          1.8489267826080322
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 19782,
-        "rgbChannelsAboveOne": 33
+        "sampleCount": 19890,
+        "rgbChannelsAboveOne": 35
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "88acf0a6631f2e78",
+      "sourceHash": "5a5603a6bba610d0",
       "modelCount": 51,
       "objectCount": 131,
       "format": "staticModelUvRemapF32LE"
     }
+  },
+  "bakedReflectionProbes": {
+    "path": "assets/levels/hub/hub.reflection-probes.bin",
+    "version": 1,
+    "count": 9,
+    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
@@ -19788,7 +19831,7 @@
           }
         },
         "upper": {
-          "materialId": "painted_plaster_wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -19934,7 +19977,7 @@
         "lineId": 430,
         "side": "front",
         "wall": {
-          "materialId": "painted_plaster_wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -19942,7 +19985,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.75
             ]
           }
         },
@@ -19977,7 +20020,7 @@
         "lineId": 431,
         "side": "front",
         "wall": {
-          "materialId": "painted_plaster_wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -19985,7 +20028,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.75
             ]
           }
         },
@@ -20017,10 +20060,10 @@
         }
       },
       {
-        "lineId": 433,
-        "side": "front",
+        "lineId": 432,
+        "side": "back",
         "wall": {
-          "materialId": "painted_plaster_wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20029,6 +20072,49 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 433,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.75
             ]
           }
         },
@@ -20063,7 +20149,7 @@
         "lineId": 434,
         "side": "front",
         "wall": {
-          "materialId": "painted_plaster_wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20071,7 +20157,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.75
             ]
           }
         },
@@ -20103,10 +20189,96 @@
         }
       },
       {
+        "lineId": 436,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 437,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
         "lineId": 439,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20149,7 +20321,7 @@
         "lineId": 441,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20192,7 +20364,7 @@
         "lineId": 443,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20235,7 +20407,93 @@
         "lineId": 444,
         "side": "front",
         "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
           "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 445,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 446,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20278,7 +20536,7 @@
         "lineId": 447,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20321,7 +20579,7 @@
         "lineId": 449,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "wood_table_worn",
           "uv": {
             "scale": [
               1.0,
@@ -20404,6 +20662,49 @@
         }
       },
       {
+        "lineId": 450,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        }
+      },
+      {
         "lineId": 451,
         "side": "front",
         "wall": {
@@ -20420,7 +20721,7 @@
           }
         },
         "lower": {
-          "materialId": "wall",
+          "materialId": "worn_gray_metal_step_512",
           "uv": {
             "scale": [
               1.0,
@@ -20428,12 +20729,12 @@
             ],
             "offset": [
               0.0,
-              1.015625
+              -0.0
             ]
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20447,10 +20748,53 @@
         }
       },
       {
+        "lineId": 453,
+        "side": "front",
+        "wall": {
+          "materialId": "wood_table_worn",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
         "lineId": 455,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20493,7 +20837,7 @@
         "lineId": 456,
         "side": "back",
         "wall": {
-          "materialId": "wall",
+          "materialId": "wood_table_worn",
           "uv": {
             "scale": [
               1.0,
@@ -20501,7 +20845,7 @@
             ],
             "offset": [
               0.0,
-              -1.5
+              -0.375
             ]
           }
         },
@@ -20528,6 +20872,49 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 457,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
             ]
           }
         }
@@ -20592,7 +20979,7 @@
           }
         },
         "lower": {
-          "materialId": "wall",
+          "materialId": "worn_gray_metal_step_512",
           "uv": {
             "scale": [
               1.0,
@@ -20605,7 +20992,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20613,7 +21000,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           }
         }
@@ -20622,7 +21009,7 @@
         "lineId": 460,
         "side": "back",
         "wall": {
-          "materialId": "wall",
+          "materialId": "wood_table_worn",
           "uv": {
             "scale": [
               1.0,
@@ -20630,7 +21017,7 @@
             ],
             "offset": [
               0.0,
-              -1.5
+              -0.375
             ]
           }
         },
@@ -20665,7 +21052,7 @@
         "lineId": 461,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20708,7 +21095,7 @@
         "lineId": 463,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20716,7 +21103,7 @@
             ],
             "offset": [
               0.0,
-              -0.359375
+              -0.9375
             ]
           }
         },
@@ -20791,6 +21178,49 @@
         }
       },
       {
+        "lineId": 464,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        }
+      },
+      {
         "lineId": 465,
         "side": "front",
         "wall": {
@@ -20807,7 +21237,7 @@
           }
         },
         "lower": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20820,7 +21250,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20837,7 +21267,7 @@
         "lineId": 466,
         "side": "front",
         "wall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -20880,6 +21310,19 @@
         "lineId": 467,
         "side": "front",
         "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
           "materialId": "wall",
           "uv": {
             "scale": [
@@ -20888,7 +21331,209 @@
             ],
             "offset": [
               0.0,
-              -0.359375
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 468,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 472,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 473,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 474,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 475,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
             ]
           }
         },
@@ -20963,6 +21608,178 @@
         }
       },
       {
+        "lineId": 477,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 479,
+        "side": "front",
+        "wall": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 480,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 481,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
         "lineId": 481,
         "side": "back",
         "wall": {
@@ -20988,6 +21805,49 @@
             "offset": [
               0.0,
               0.609375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 485,
+        "side": "front",
+        "wall": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
             ]
           }
         },
@@ -21035,7 +21895,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -21043,7 +21903,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -21074,6 +21934,307 @@
             "offset": [
               0.0,
               0.84375
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 491,
+        "side": "front",
+        "wall": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 494,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 496,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 497,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 499,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 500,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 501,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_white_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
             ]
           }
         },
@@ -21121,7 +22282,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -21129,7 +22290,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -21164,7 +22325,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -21172,7 +22333,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -21207,7 +22368,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -21215,7 +22376,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -21250,7 +22411,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -21258,7 +22419,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -21307,6 +22468,92 @@
         }
       },
       {
+        "lineId": 507,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 509,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
         "lineId": 509,
         "side": "back",
         "wall": {
@@ -21345,6 +22592,49 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 511,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
             ]
           }
         }
@@ -21480,6 +22770,49 @@
       },
       {
         "lineId": 514,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 514,
         "side": "back",
         "wall": {
           "materialId": "wall",
@@ -21517,6 +22850,49 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 515,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
             ]
           }
         }
@@ -21909,6 +23285,49 @@
         }
       },
       {
+        "lineId": 523,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
         "lineId": 525,
         "side": "front",
         "wall": {
@@ -22038,6 +23457,49 @@
         }
       },
       {
+        "lineId": 527,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
         "lineId": 528,
         "side": "front",
         "wall": {
@@ -22076,6 +23538,49 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 528,
+        "side": "back",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
             ]
           }
         }
@@ -22540,7 +24045,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -22548,7 +24053,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -22669,7 +24174,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -22677,7 +24182,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -22712,7 +24217,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -22720,7 +24225,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -22798,7 +24303,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -22806,7 +24311,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -22927,7 +24432,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -22935,7 +24440,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -22970,7 +24475,7 @@
           }
         },
         "upper": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -22978,7 +24483,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.125
             ]
           }
         }
@@ -23114,6 +24619,49 @@
       },
       {
         "lineId": 556,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 556,
         "side": "back",
         "wall": {
           "materialId": "wall",
@@ -23151,6 +24699,49 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 557,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
             ]
           }
         }
@@ -23200,6 +24791,49 @@
       },
       {
         "lineId": 559,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 559,
         "side": "back",
         "wall": {
           "materialId": "wall",
@@ -23237,6 +24871,49 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 560,
+        "side": "front",
+        "wall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.53125
             ]
           }
         }
@@ -28002,7 +29679,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.5,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28051,7 +29728,7 @@
         "floorZ": -15.0,
         "ceilingZ": 12.0,
         "floorMaterialId": "worn_dark_red_carpet_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -28078,9 +29755,9 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.5,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
-          "materialId": "worn_white_ceiling_512",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -28124,10 +29801,10 @@
         "name": "Sector 63",
         "x": -2605,
         "y": -2498,
-        "floorZ": -17.0,
+        "floorZ": -16.0,
         "ceilingZ": 15.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "dark_wooden_planks",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -28154,9 +29831,9 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
-          "materialId": "wall",
+          "materialId": "worn_white_wall",
           "uv": {
             "scale": [
               1.0,
@@ -28200,10 +29877,10 @@
         "name": "Sector 64",
         "x": -2685,
         "y": -2706,
-        "floorZ": -16.25,
+        "floorZ": -15.5,
         "ceilingZ": 6.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "wood_table_worn",
         "floorUv": {
           "scale": [
             1.0,
@@ -28230,7 +29907,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28276,10 +29953,10 @@
         "name": "Sector 65",
         "x": -1917,
         "y": -2706,
-        "floorZ": -16.25,
+        "floorZ": -15.5,
         "ceilingZ": 6.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "wood_table_worn",
         "floorUv": {
           "scale": [
             1.0,
@@ -28306,7 +29983,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28354,8 +30031,8 @@
         "y": -2706,
         "floorZ": -9.5,
         "ceilingZ": 5.75,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "wood_table_worn",
+        "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
             1.0,
@@ -28382,7 +30059,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28431,7 +30108,7 @@
         "floorZ": -16.0,
         "ceilingZ": 18.0,
         "floorMaterialId": "interior_tiles",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -28458,7 +30135,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28661,7 +30338,7 @@
         "floorZ": -9.75,
         "ceilingZ": 24.5,
         "floorMaterialId": "old_wooden_floor_03",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -28688,7 +30365,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28737,7 +30414,7 @@
         "floorZ": -13.5,
         "ceilingZ": 15.0,
         "floorMaterialId": "dark_wooden_planks",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -28764,7 +30441,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28813,7 +30490,7 @@
         "floorZ": -11.25,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -28840,7 +30517,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28889,7 +30566,7 @@
         "floorZ": -13.0,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -28916,7 +30593,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -28965,7 +30642,7 @@
         "floorZ": -14.5,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -28992,7 +30669,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -29041,7 +30718,7 @@
         "floorZ": -11.25,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -29068,7 +30745,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -29117,7 +30794,7 @@
         "floorZ": -13.0,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -29144,7 +30821,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -29193,7 +30870,7 @@
         "floorZ": -14.5,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -29220,7 +30897,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -29269,7 +30946,7 @@
         "floorZ": -14.75,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -29296,7 +30973,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -29345,7 +31022,7 @@
         "floorZ": -14.75,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -29372,7 +31049,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -29421,7 +31098,7 @@
         "floorZ": -14.75,
         "ceilingZ": 18.0,
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "floorUv": {
           "scale": [
             1.0,
@@ -29448,7 +31125,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -29712,6 +31389,22 @@
           7.0,
           3.3125,
           12.0
+        ]
+      },
+      {
+        "id": 10,
+        "x": -2048,
+        "z": -3584,
+        "yWorld": 0.125,
+        "influenceOffsetWorld": [
+          -1.25,
+          0.0,
+          -1.125
+        ],
+        "halfExtentsWorld": [
+          10.25,
+          2.125,
+          7.875
         ]
       }
     ],

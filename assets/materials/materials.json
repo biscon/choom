@@ -336,6 +336,13 @@
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
       "normalStrength": 1.0
+    },
+    "worn_white_wall": {
+      "albedoTexturePath": "assets/images/walls/worn_white_wall.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0
     }
   }
 }
