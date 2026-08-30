@@ -1693,6 +1693,13 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 }
                 parsed.graphics.depthPrepass = depthPrepass->get<bool>();
             }
+            const auto advancedGlass = graphics->find("advancedGlass");
+            if (advancedGlass != graphics->end()) {
+                if (!advancedGlass->is_boolean()) {
+                    Fail("application settings.graphics.advancedGlass must be a boolean");
+                }
+                parsed.graphics.advancedGlass = advancedGlass->get<bool>();
+            }
             parsed.graphics = NormalizeFpsGraphicsSettings(parsed.graphics);
         }
         const auto toneMapping = root.find("toneMapping");
@@ -2239,6 +2246,7 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"dynamicLightFadeInSeconds",
                     graphics.dynamicLightFadeInSeconds},
             {"depthPrepass", graphics.depthPrepass},
+            {"advancedGlass", graphics.advancedGlass},
             {"showFpsCounter", graphics.showFpsCounter},
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},

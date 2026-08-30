@@ -96,12 +96,13 @@ public:
             int maxDynamicLights,
             int maxShadowLightUpdatesPerFrame,
             bool depthPrepass,
-            float dynamicLightFadeInSeconds)
+            float dynamicLightFadeInSeconds,
+            bool advancedGlass)
     {
         sceneRuntime.Renderer().SetGraphicsQuality(
                 shadowsEnabled, shadowMapResolution,
                 maxDynamicLights, maxShadowLightUpdatesPerFrame, depthPrepass,
-                dynamicLightFadeInSeconds);
+                dynamicLightFadeInSeconds, advancedGlass);
     }
     void SetPreviewVerticalFovDegrees(float value)
     {
@@ -124,6 +125,9 @@ public:
     void ApplyPreview3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             bool collectGpuDiagnostics = false);
+    void ApplyPreview3DGlass(
+            engine::RenderTarget& sceneTarget,
+            engine::EngineContext& context);
     void ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget);
     bool CompositePreview3DViewmodel(
             engine::RenderTarget& sceneTarget,

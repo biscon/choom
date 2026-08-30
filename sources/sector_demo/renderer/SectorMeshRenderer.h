@@ -125,6 +125,12 @@ public:
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
             bool collectGpuDiagnostics = false);
+    bool ApplyAdvancedGlass(
+            engine::RenderTarget& sceneTarget,
+            engine::AssetManager& assets,
+            engine::World* runtimeObjectWorld,
+            SectorRuntimeDoorLightingContext doorLighting,
+            const SectorTopologyFogSettings& fogSettings);
     bool ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
@@ -209,7 +215,8 @@ public:
             int maxDynamicLights = static_cast<int>(MaxDynamicLights),
             int maxShadowLightUpdatesPerFrame = 2,
             bool depthPrepass = false,
-            float dynamicLightFadeInSeconds = DynamicLightDefaultFadeInSeconds)
+            float dynamicLightFadeInSeconds = DynamicLightDefaultFadeInSeconds,
+            bool useAdvancedGlass = true)
     {
         shadowMapsEnabled = shadowsEnabled;
         if (shadowsEnabled) {
@@ -223,6 +230,7 @@ public:
         dynamicLightState.SetSelectionFadeInSeconds(
                 dynamicLightFadeInSeconds);
         depthPrepassEnabled = depthPrepass;
+        advancedGlassEnabled = useAdvancedGlass;
     }
     const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const
     {
@@ -411,6 +419,8 @@ private:
     int shadowSoftnessLoc = -1;
     int shadowAtlasTilesPerRowLoc = -1;
     bool depthPrepassEnabled = false;
+    bool advancedGlassEnabled = true;
+    bool advancedGlassFallbackLogged = false;
     SectorFogShaderLocations fogShaderLocations;
     SectorDistanceFogRenderer distanceFogRenderer;
     SectorAnalyticFogRenderer analyticFogRenderer;

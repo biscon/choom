@@ -32,6 +32,10 @@ struct SectorWindowDrawContext {
     const SectorStaticSpecularLightState* staticSpecularLights = nullptr;
     bool staticSpecularEligible = false;
     SectorFogRenderContext fog;
+    bool advancedTransmission = false;
+    const Texture2D* sceneColor = nullptr;
+    const Texture2D* sceneDepth = nullptr;
+    Vector2 viewportSize = {};
     std::string* renderDebugText = nullptr;
 };
 
@@ -41,6 +45,9 @@ public:
     void Shutdown();
     void Reserve(std::size_t capacity);
     void Draw(const SectorWindowDrawContext& context);
+    bool HasVisibleWindows(
+            engine::World& world,
+            const RuntimePortalVisibilityResult* visibility) const;
 
     bool IsLoaded() const { return materialLoaded && meshLoaded; }
     std::size_t ConsideredCount() const { return consideredCount; }
@@ -68,13 +75,27 @@ private:
     int roughnessLoc = -1;
     int iorLoc = -1;
     int ambientLoc = -1;
+    int thicknessLoc = -1;
+    int advancedTransmissionLoc = -1;
+    int sceneColorLoc = -1;
+    int sceneDepthLoc = -1;
+    int viewportSizeLoc = -1;
+    int viewMatrixLoc = -1;
+    int projectionMatrixLoc = -1;
     int hasEnvironmentLoc = -1;
+    int environmentBoxProjectionLoc = -1;
+    int environmentCapturePositionLoc = -1;
+    int environmentInfluenceCenterLoc = -1;
+    int environmentHalfExtentsLoc = -1;
     int environmentYawLoc = -1;
     int environmentMaxLodLoc = -1;
     int environmentIntensityLoc = -1;
     int environmentSpecularScaleLoc = -1;
     std::size_t consideredCount = 0;
     std::size_t drawnCount = 0;
+    std::size_t localEnvironmentCount = 0;
+    std::size_t globalEnvironmentCount = 0;
+    std::size_t missingEnvironmentCount = 0;
 };
 
 } // namespace game

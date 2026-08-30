@@ -1161,6 +1161,22 @@ void SectorSceneRuntime::ApplyWorldAtmosphere(
             collectGpuDiagnostics);
 }
 
+void SectorSceneRuntime::ApplyAdvancedGlass(
+        engine::RenderTarget& sceneTarget,
+        engine::EngineContext& context,
+        const SectorTopologyMap& map)
+{
+    renderer.ApplyAdvancedGlass(
+            sceneTarget,
+            context.assets,
+            &context.world,
+            SectorRuntimeDoorLightingContext{
+                    &runtimeObjects.objectLightProbes,
+                    &map,
+                    runtimeObjects.staticLightingRevision},
+            map.fogSettings);
+}
+
 void SectorSceneRuntime::ApplyHdrBloom(
         engine::RenderTarget& sceneTarget,
         const engine::HdrBloomSettings& settings,

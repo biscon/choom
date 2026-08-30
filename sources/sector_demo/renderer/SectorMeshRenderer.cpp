@@ -40,6 +40,34 @@ namespace {
 constexpr float DefaultVisibilityDebugAspect = 16.0f / 9.0f;
 constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
 
+bool BlitFramebufferColor(
+        const RenderTexture2D& source,
+        const RenderTexture2D& destination)
+{
+    if (source.id == 0 || destination.id == 0
+            || source.texture.width != destination.texture.width
+            || source.texture.height != destination.texture.height) {
+        return false;
+    }
+    GLint previousReadFramebuffer = 0;
+    GLint previousDrawFramebuffer = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
+    while (glGetError() != GL_NO_ERROR) {}
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, source.id);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, destination.id);
+    glBlitFramebuffer(
+            0, 0, source.texture.width, source.texture.height,
+            0, 0, destination.texture.width, destination.texture.height,
+            GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    const bool copied = glGetError() == GL_NO_ERROR;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER,
+            static_cast<GLuint>(previousReadFramebuffer));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER,
+            static_cast<GLuint>(previousDrawFramebuffer));
+    return copied;
+}
+
 const char* HdrCompositeVs = R"(
 #version 330
 in vec3 vertexPosition;
@@ -1701,6 +1729,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     skyRenderer.Shutdown();
     pbrEnvironment = {};
     localReflectionProbesCurrent = true;
+    advancedGlassFallbackLogged = false;
     localReflectionProbeSurfaceHash.clear();
     staticObjectAdjustmentBakedDataActive = false;
     doorRenderer.UnloadDoorMeshes();
@@ -2168,23 +2197,25 @@ void SectorMeshRenderer::DrawScene(
                     billboardLightContext,
                     fogContext,
                     renderDebugText);
-            SectorWindowDrawContext windowContext;
-            windowContext.assets = &assets;
-            windowContext.world = runtimeObjectWorld;
-            windowContext.camera = camera;
-            windowContext.visibility = &visibilityResult;
-            windowContext.environment = &pbrEnvironment;
-            windowContext.localReflectionProbesCurrent =
-                    localReflectionProbesCurrent;
-            windowContext.pbr = pbrContributionSettings;
-            windowContext.dynamicLights = billboardLightContext;
-            windowContext.staticSpecularLights = &staticSpecularLightState;
-            windowContext.staticSpecularEligible = objectProbeBakeCurrent
-                    && doorLighting.objectLightProbes != nullptr
-                    && !doorLighting.objectLightProbes->probes.empty();
-            windowContext.fog = fogContext;
-            windowContext.renderDebugText = &renderDebugText;
-            windowRenderer.Draw(windowContext);
+            if (!advancedGlassEnabled) {
+                SectorWindowDrawContext windowContext;
+                windowContext.assets = &assets;
+                windowContext.world = runtimeObjectWorld;
+                windowContext.camera = camera;
+                windowContext.visibility = &visibilityResult;
+                windowContext.environment = &pbrEnvironment;
+                windowContext.localReflectionProbesCurrent =
+                        localReflectionProbesCurrent;
+                windowContext.pbr = pbrContributionSettings;
+                windowContext.dynamicLights = billboardLightContext;
+                windowContext.staticSpecularLights = &staticSpecularLightState;
+                windowContext.staticSpecularEligible = objectProbeBakeCurrent
+                        && doorLighting.objectLightProbes != nullptr
+                        && !doorLighting.objectLightProbes->probes.empty();
+                windowContext.fog = fogContext;
+                windowContext.renderDebugText = &renderDebugText;
+                windowRenderer.Draw(windowContext);
+            }
         }
     }
     EndMode3D();
@@ -2717,6 +2748,89 @@ void SectorMeshRenderer::RefreshAtmosphereDiagnostics(
             lightDustRenderer.ActiveEmitterCount();
     atmosphereDiagnostics.dustVisibleParticleCount =
             lightDustRenderer.VisibleParticleCount();
+}
+
+bool SectorMeshRenderer::ApplyAdvancedGlass(
+        engine::RenderTarget& sceneTarget,
+        engine::AssetManager& assets,
+        engine::World* runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting,
+        const SectorTopologyFogSettings& fogSettings)
+{
+    if (!initialized || !advancedGlassEnabled || runtimeObjectWorld == nullptr) {
+        return false;
+    }
+    if (!windowRenderer.HasVisibleWindows(
+                *runtimeObjectWorld, &visibilityResult)) {
+        renderDebugText += " | glass: advanced idle";
+        return false;
+    }
+
+    bool resourcesReady = sceneTarget.actual.depth
+                    == engine::RenderTargetDepthKind::SampleableTexture
+            && sceneTarget.native.depth.id != 0
+            && EnsureHdrSceneScratch(sceneTarget)
+            && EnsureHdrSceneColorView(sceneTarget);
+    if (resourcesReady) {
+        rlDrawRenderBatchActive();
+        resourcesReady = BlitFramebufferColor(
+                sceneTarget.native, hdrSceneScratch.native);
+        if (resourcesReady) SetTextureFilter(
+                hdrSceneScratch.native.texture, TEXTURE_FILTER_BILINEAR);
+    }
+
+    SectorTopologyFogSettings materialFogSettings = fogSettings;
+    if (NormalizeSectorTopologyFogSettings(fogSettings).mode
+            == SectorTopologyFogMode::Distance) {
+        materialFogSettings.enabled = false;
+    }
+    const SectorFogRenderContext fogContext =
+            BuildSectorFogRenderContext(materialFogSettings, camera.position);
+    const SectorBillboardDynamicLightContext lightContext =
+            BuildBillboardDynamicLightContext();
+
+    BeginTextureMode(resourcesReady
+            ? hdrSceneColorView : sceneTarget.native);
+    BeginMode3D(camera);
+    SectorWindowDrawContext windowContext;
+    windowContext.assets = &assets;
+    windowContext.world = runtimeObjectWorld;
+    windowContext.camera = camera;
+    windowContext.visibility = &visibilityResult;
+    windowContext.environment = &pbrEnvironment;
+    windowContext.localReflectionProbesCurrent = localReflectionProbesCurrent;
+    windowContext.pbr = pbrContributionSettings;
+    windowContext.dynamicLights = lightContext;
+    windowContext.staticSpecularLights = &staticSpecularLightState;
+    windowContext.staticSpecularEligible = objectProbeBakeCurrent
+            && doorLighting.objectLightProbes != nullptr
+            && !doorLighting.objectLightProbes->probes.empty();
+    windowContext.fog = fogContext;
+    windowContext.advancedTransmission = resourcesReady;
+    windowContext.sceneColor = resourcesReady
+            ? &hdrSceneScratch.native.texture : nullptr;
+    windowContext.sceneDepth = resourcesReady
+            ? &sceneTarget.native.depth : nullptr;
+    windowContext.viewportSize = Vector2{
+            static_cast<float>(sceneTarget.native.texture.width),
+            static_cast<float>(sceneTarget.native.texture.height)};
+    windowContext.renderDebugText = &renderDebugText;
+    windowRenderer.Draw(windowContext);
+    EndMode3D();
+    EndTextureMode();
+    if (resourcesReady) {
+        SetTextureFilter(hdrSceneScratch.native.texture, TEXTURE_FILTER_POINT);
+    }
+
+    if (!resourcesReady) {
+        if (!advancedGlassFallbackLogged) {
+            TraceLog(LOG_WARNING,
+                    "GLASS: advanced transmission unavailable; using simple glass");
+            advancedGlassFallbackLogged = true;
+        }
+        renderDebugText += " | glass: advanced fallback (sampleable depth or HDR scratch unavailable)";
+    }
+    return resourcesReady;
 }
 
 bool SectorMeshRenderer::ApplyWorldAtmosphere(

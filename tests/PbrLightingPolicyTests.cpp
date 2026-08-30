@@ -898,11 +898,30 @@ void TestHdrEffectShaderAndPassPolicies()
                             !=std::string::npos,
           "decal-only bloom redraw is retired in favor of visible emissive radiance");
     const std::size_t atmosphere=mainGraph.find("Apply3DWorldAtmosphere");
+    const std::size_t glass=mainGraph.find("Apply3DGlass");
     const std::size_t viewmodel=mainGraph.find("Render3DViewmodel");
     const std::size_t sceneBloom=mainGraph.find("Apply3DHdrBloom");
     const std::size_t overlays=mainGraph.find("Render3DOverlays");
-    Check(atmosphere<viewmodel&&viewmodel<sceneBloom&&sceneBloom<overlays,
-          "pass graph orders atmosphere, viewmodel, bloom, then excluded editor overlays");
+    Check(glass<atmosphere&&atmosphere<viewmodel&&viewmodel<sceneBloom&&sceneBloom<overlays,
+          "pass graph orders glass, atmosphere, viewmodel, bloom, then excluded editor overlays");
+    const std::string glassShader=ReadSource(WINDOW_SHADER_SOURCE_PATH);
+    Check(glassShader.find("uniform sampler2D sceneColor")!=std::string::npos
+                    &&glassShader.find("uniform sampler2D sceneDepth")!=std::string::npos
+                    &&glassShader.find("refract(incident, facingNormal, 1.0 / ior)")
+                            !=std::string::npos
+                    &&glassShader.find("environmentBoxProjection")!=std::string::npos
+                    &&glassShader.find("probe.topologySectorId != viewerSectorId")
+                            !=std::string::npos
+                    &&glassShader.find("shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneColorLoc")
+                            !=std::string::npos
+                    &&glassShader.find("shader.locs[SHADER_LOC_MAP_SPECULAR] = sceneDepthLoc")
+                            !=std::string::npos
+                    &&glassShader.find("gl_FragCoord.z > opaqueDepth")
+                            !=std::string::npos
+                    &&glassShader.find("SetShaderValueTexture")
+                            ==std::string::npos
+                    &&glassShader.find("advancedTransmission")!=std::string::npos,
+          "advanced glass uses depth-aware scene transmission and box-projected probes with a simple fallback");
     Check(mainGraph.find("Render3DHud")>sceneBloom,
           "HUD and ordinary UI are downstream of scene-wide bloom");
     Check(mainGraph.find("rlLoadFramebuffer()")!=std::string::npos
@@ -916,6 +935,12 @@ void TestHdrEffectShaderAndPassPolicies()
                             ==std::string::npos,
           "viewmodel keeps private depth while drawing directly into shared HDR color");
     const std::string sectorRenderer=ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    Check(sectorRenderer.find("glBlitFramebuffer")!=std::string::npos
+                    &&sectorRenderer.find("EnsureHdrSceneColorView(sceneTarget)")
+                            !=std::string::npos
+                    &&sectorRenderer.find("? hdrSceneColorView : sceneTarget.native")
+                            !=std::string::npos,
+          "advanced glass snapshots color without flipping and renders through the depth-detached scene color view");
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos

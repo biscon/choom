@@ -184,7 +184,7 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
 
     constexpr float panelWidth = 620.0f;
-    constexpr float panelHeight = 970.0f;
+    constexpr float panelHeight = 1026.0f;
     constexpr float padding = 44.0f;
     constexpr float rowHeight = 48.0f;
     const Rectangle panel{
@@ -317,6 +317,10 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     engine::Checkbox(ui, config, input, assets, "graphics_depth_prepass",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
             smallFont, "Depth pre-pass", draft.graphics.depthPrepass);
+    y += rowHeight + 8.0f;
+    engine::Checkbox(ui, config, input, assets, "graphics_advanced_glass",
+            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
+            smallFont, "Advanced glass (refraction)", draft.graphics.advancedGlass);
     y += rowHeight + 8.0f;
     engine::Checkbox(ui, config, input, assets, "graphics_bloom",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},

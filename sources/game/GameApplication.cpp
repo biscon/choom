@@ -598,7 +598,8 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 applicationSettings.graphics.maxDynamicLights,
                 applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
                 applicationSettings.graphics.depthPrepass,
-                applicationSettings.graphics.dynamicLightFadeInSeconds);
+                applicationSettings.graphics.dynamicLightFadeInSeconds,
+                applicationSettings.graphics.advancedGlass);
         gameScene.RenderShadowMaps(context);
     } else {
         editor.SetPreviewGraphicsQuality(
@@ -607,7 +608,8 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 applicationSettings.graphics.maxDynamicLights,
                 applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
                 applicationSettings.graphics.depthPrepass,
-                applicationSettings.graphics.dynamicLightFadeInSeconds);
+                applicationSettings.graphics.dynamicLightFadeInSeconds,
+                applicationSettings.graphics.advancedGlass);
         editor.RenderPreview3DShadowMaps(context.assets);
     }
 }
@@ -631,6 +633,17 @@ void GameApplication::Render3DViewmodel(engine::AssetManager& assets)
         gameSession.RenderViewmodel(assets, gameScene);
     } else {
         editor.RenderPreview3DViewmodel(assets);
+    }
+}
+
+void GameApplication::Apply3DGlass(
+        engine::RenderTarget& sceneTarget,
+        engine::EngineContext& context)
+{
+    if (BackgroundScreen() == ApplicationScreen::Game) {
+        gameScene.ApplyAdvancedGlass(sceneTarget, context, gameSession.Map());
+    } else {
+        editor.ApplyPreview3DGlass(sceneTarget, context);
     }
 }
 

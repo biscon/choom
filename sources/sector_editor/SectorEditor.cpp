@@ -4650,6 +4650,14 @@ void SectorEditor::ApplyPreview3DWorldAtmosphere(
             collectGpuDiagnostics);
 }
 
+void SectorEditor::ApplyPreview3DGlass(
+        engine::RenderTarget& sceneTarget,
+        engine::EngineContext& context)
+{
+    if (state.mode != SectorEditorMode::Preview3D) return;
+    sceneRuntime.ApplyAdvancedGlass(sceneTarget, context, TopologyMap());
+}
+
 void SectorEditor::ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget)
 {
     if (state.mode != SectorEditorMode::Preview3D) {

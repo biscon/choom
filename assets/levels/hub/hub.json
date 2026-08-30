@@ -2853,14 +2853,7 @@
         },
         "width": 3.0,
         "height": 1.90625,
-        "normalOffset": 0.125,
-        "tint": {
-          "r": 255,
-          "g": 0,
-          "b": 0,
-          "a": 255
-        },
-        "roughness": 0.800000011920929
+        "normalOffset": 0.125
       },
       "position": [
         -140.0,
@@ -5939,18 +5932,19 @@
       "id": 13,
       "instanceId": "light_point_13",
       "position": [
-        -160.0,
+        -152.0,
         -1.6000003814697266,
-        -200.0
+        -192.0
       ],
-      "radius": 64.0,
+      "radius": 48.0,
       "intensity": 1.0,
       "color": {
         "r": 255,
         "g": 255,
         "b": 255,
         "a": 255
-      }
+      },
+      "castsShadow": true
     },
     {
       "id": 14,
@@ -6701,7 +6695,7 @@
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
     "version": 1,
-    "count": 9,
+    "count": 11,
     "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
@@ -31405,6 +31399,33 @@
           10.25,
           2.125,
           7.875
+        ]
+      },
+      {
+        "id": 11,
+        "x": -2240,
+        "z": -2496,
+        "yWorld": -0.0625,
+        "halfExtentsWorld": [
+          4.5,
+          1.9375,
+          1.5
+        ]
+      },
+      {
+        "id": 12,
+        "x": -2240,
+        "z": -2144,
+        "yWorld": -0.1875,
+        "influenceOffsetWorld": [
+          0.0,
+          0.0,
+          0.125
+        ],
+        "halfExtentsWorld": [
+          2.5,
+          1.6875,
+          1.375
         ]
       }
     ],

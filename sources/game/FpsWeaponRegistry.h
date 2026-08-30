@@ -318,6 +318,7 @@ struct FpsGraphicsSettings {
     int maxShadowLightUpdatesPerFrame = DefaultFpsShadowLightUpdatesPerFrame;
     float dynamicLightFadeInSeconds = DefaultFpsDynamicLightFadeInSeconds;
     bool depthPrepass = false;
+    bool advancedGlass = true;
     bool showFpsCounter = false;
     bool performanceOverlay = false;
     bool vsync = true;

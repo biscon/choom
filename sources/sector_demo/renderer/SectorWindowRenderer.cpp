@@ -40,9 +40,20 @@ uniform vec3 glassTint;
 uniform float glassOpacity;
 uniform float glassRoughness;
 uniform float glassIor;
+uniform float glassThickness;
 uniform vec3 glassAmbient;
+uniform int advancedTransmission;
+uniform sampler2D sceneColor;
+uniform sampler2D sceneDepth;
+uniform vec2 viewportSize;
+uniform mat4 matView;
+uniform mat4 matProjection;
 uniform samplerCube environmentTexture;
 uniform int hasEnvironment;
+uniform int environmentBoxProjection;
+uniform vec3 environmentCapturePosition;
+uniform vec3 environmentInfluenceCenter;
+uniform vec3 environmentHalfExtents;
 uniform float environmentYaw;
 uniform float environmentMaxLod;
 uniform float environmentIntensity;
@@ -139,6 +150,71 @@ float FresnelSchlick(float cosTheta, float f0)
             * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+vec3 BoxProjectedEnvironmentDirection(vec3 direction)
+{
+    if (environmentBoxProjection == 0) {
+        return RotateEnvironment(direction, -environmentYaw);
+    }
+    float c = cos(-environmentYaw);
+    float s = sin(-environmentYaw);
+    vec3 origin = fragWorldPosition - environmentInfluenceCenter;
+    vec3 localOrigin = vec3(origin.x*c-origin.z*s, origin.y,
+            origin.x*s+origin.z*c);
+    vec3 localDirection = vec3(direction.x*c-direction.z*s, direction.y,
+            direction.x*s+direction.z*c);
+    vec3 safeDirection = mix(vec3(-1.0), vec3(1.0),
+            step(vec3(0.0), localDirection))
+            * max(abs(localDirection), vec3(0.00001));
+    vec3 exitPlane = mix(-environmentHalfExtents, environmentHalfExtents,
+            step(vec3(0.0), localDirection));
+    vec3 exitDistance = (exitPlane - localOrigin) / safeDirection;
+    float distanceToBox = min(exitDistance.x,
+            min(exitDistance.y, exitDistance.z));
+    vec3 localHit = localOrigin + localDirection * max(distanceToBox, 0.0);
+    vec3 captureOffset = environmentCapturePosition
+            - environmentInfluenceCenter;
+    vec3 localCapture = vec3(captureOffset.x*c-captureOffset.z*s,
+            captureOffset.y, captureOffset.x*s+captureOffset.z*c);
+    vec3 localLookup = localHit - localCapture;
+    c = cos(environmentYaw);
+    s = sin(environmentYaw);
+    return SafeNormalize(vec3(localLookup.x*c-localLookup.z*s,
+            localLookup.y, localLookup.x*s+localLookup.z*c), direction);
+}
+
+vec3 SampleTransmission(vec3 normal, vec3 viewDirection, float roughness,
+        float ior, out float opticalPath)
+{
+    vec2 baseUv = gl_FragCoord.xy / max(viewportSize, vec2(1.0));
+    vec3 incident = -viewDirection;
+    vec3 facingNormal = dot(incident, normal) < 0.0 ? normal : -normal;
+    vec3 transmittedDirection = refract(incident, facingNormal, 1.0 / ior);
+    transmittedDirection = SafeNormalize(
+            transmittedDirection, incident);
+    opticalPath = max(glassThickness, 0.001)
+            / max(abs(dot(transmittedDirection, facingNormal)), 0.08);
+    vec3 exitPosition = fragWorldPosition
+            + transmittedDirection * opticalPath;
+    vec4 exitClip = matProjection * matView * vec4(exitPosition, 1.0);
+    vec2 refractedUv = exitClip.w > 0.00001
+            ? exitClip.xy / exitClip.w * 0.5 + 0.5 : baseUv;
+    refractedUv = clamp(refractedUv, vec2(0.001), vec2(0.999));
+    float roughRadiusPixels = roughness * roughness
+            * mix(1.0, 18.0, clamp(opticalPath / 0.08, 0.0, 1.0));
+    vec2 radiusUv = vec2(roughRadiusPixels) / max(viewportSize, vec2(1.0));
+    const vec2 taps[5] = vec2[5](vec2(0.0), vec2(1.0, 0.0),
+            vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0));
+    vec3 result = vec3(0.0);
+    for (int i = 0; i < 5; ++i) {
+        vec2 sampleUv = clamp(refractedUv + taps[i] * radiusUv,
+                vec2(0.001), vec2(0.999));
+        float sampledDepth = texture(sceneDepth, sampleUv).r;
+        if (sampledDepth + 0.0005 < gl_FragCoord.z) sampleUv = baseUv;
+        result += texture(sceneColor, sampleUv).rgb;
+    }
+    return result * 0.2;
+}
+
 vec3 SpecularLight(vec3 position, vec3 color, float radius, float intensity,
         int type, vec3 direction, float innerCos, float outerCos,
         vec3 normal, vec3 viewDirection, float roughness, float f0)
@@ -177,6 +253,11 @@ void main()
 {
     vec3 normal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
     vec3 viewDirection = SafeNormalize(cameraPosition - fragWorldPosition, normal);
+    if (advancedTransmission != 0) {
+        vec2 baseUv = gl_FragCoord.xy / max(viewportSize, vec2(1.0));
+        float opaqueDepth = texture(sceneDepth, baseUv).r;
+        if (gl_FragCoord.z > opaqueDepth + 0.00001) discard;
+    }
     float roughness = clamp(glassRoughness, 0.045, 1.0);
     float ior = clamp(glassIor, 1.0, 2.5);
     float f0 = pow((ior - 1.0) / (ior + 1.0), 2.0);
@@ -185,8 +266,8 @@ void main()
 
     vec3 reflection = vec3(0.0);
     if (hasEnvironment != 0) {
-        vec3 reflected = RotateEnvironment(reflect(-viewDirection, normal),
-                -environmentYaw);
+        vec3 reflected = BoxProjectedEnvironmentDirection(
+                reflect(-viewDirection, normal));
         reflection = textureLod(environmentTexture, reflected,
                 roughness * max(environmentMaxLod, 0.0)).rgb
                 * environmentIntensity * environmentSpecularScale * fresnel;
@@ -213,8 +294,24 @@ void main()
 
     float opacity = clamp(glassOpacity, 0.0, 1.0);
     float alpha = clamp(opacity + (1.0 - opacity) * fresnel, 0.0, 1.0);
-    vec3 rgb = glassTint * max(glassAmbient, vec3(0.015)) * opacity
-            + reflection + direct;
+    vec3 rgb;
+    if (advancedTransmission != 0) {
+        float opticalPath = 0.0;
+        vec3 sceneTransmission = SampleTransmission(
+                normal, viewDirection, roughness, ior, opticalPath);
+        float normalizedPath = clamp(opticalPath / 0.04, 0.0, 32.0);
+        vec3 absorption = pow(max(glassTint, vec3(0.015)),
+                vec3(normalizedPath * mix(0.12, 0.65, opacity)));
+        float neutralTransmission = exp(-opacity * normalizedPath);
+        rgb = sceneTransmission * absorption
+                        * neutralTransmission * (1.0 - fresnel)
+                + glassTint * max(glassAmbient, vec3(0.015)) * opacity
+                + reflection + direct;
+        alpha = 1.0;
+    } else {
+        rgb = glassTint * max(glassAmbient, vec3(0.015)) * opacity
+                + reflection + direct;
+    }
 
     if (fogEnabled != 0 && fogDensity > 0.0 && fogMaxOpacity > 0.0) {
         float distanceValue = max(length(fragWorldPosition - fogCameraPosition)
@@ -259,6 +356,74 @@ bool WindowVisible(
                     window.backSectorId, *visibility);
 }
 
+SectorPbrEnvironmentSelection SelectWindowEnvironment(
+        const SectorPbrEnvironment& environment,
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorWindow& window,
+        Vector3 cameraPosition,
+        bool includeLocalProbes)
+{
+    const Vector3 portalNormal{window.normal.x, 0.0f, window.normal.y};
+    const float cameraSide = Vector3DotProduct(
+            Vector3Subtract(cameraPosition, transform.position), portalNormal);
+    const float direction = cameraSide > 0.0f ? 1.0f : -1.0f;
+    const int viewerSectorId = cameraSide > 0.0f
+            ? window.backSectorId : window.frontSectorId;
+    const Vector3 receiver = Vector3Add(
+            transform.position, Vector3Scale(portalNormal, direction * 0.25f));
+    SectorPbrEnvironmentSelection selection = SelectSectorPbrEnvironment(
+            environment, receiver, viewerSectorId, includeLocalProbes);
+    if (selection.localProbe) return selection;
+    const SectorPbrEnvironmentSelection centerSelection =
+            SelectSectorPbrEnvironment(
+                    environment,
+                    transform.position,
+                    object.currentSectorId,
+                    includeLocalProbes);
+    if (centerSelection.localProbe) return centerSelection;
+
+    const SectorPbrEnvironment::LocalProbe* nearestSectorProbe = nullptr;
+    float nearestDistanceSquared = 0.0f;
+    if (includeLocalProbes) {
+        for (const SectorPbrEnvironment::LocalProbe& candidate
+                : environment.localProbes) {
+            const SectorCompiledReflectionProbe& probe = candidate.definition;
+            if (!probe.enabled || engine::IsNull(candidate.cubemap)
+                    || probe.topologySectorId != viewerSectorId) continue;
+            const float distanceSquared = Vector3DistanceSqr(
+                    receiver, probe.influenceCenterWorld);
+            if (nearestSectorProbe == nullptr
+                    || probe.priority > nearestSectorProbe->definition.priority
+                    || (probe.priority
+                                    == nearestSectorProbe->definition.priority
+                            && (distanceSquared < nearestDistanceSquared
+                                    || (distanceSquared == nearestDistanceSquared
+                                            && probe.sourceAuthoringProbeId
+                                                    < nearestSectorProbe->definition
+                                                            .sourceAuthoringProbeId)))) {
+                nearestSectorProbe = &candidate;
+                nearestDistanceSquared = distanceSquared;
+            }
+        }
+    }
+    if (nearestSectorProbe != nullptr) {
+        const SectorCompiledReflectionProbe& probe =
+                nearestSectorProbe->definition;
+        return SectorPbrEnvironmentSelection{
+                nearestSectorProbe->cubemap,
+                probe.capturePositionWorld,
+                probe.influenceCenterWorld,
+                probe.halfExtentsWorld,
+                probe.yawRadians,
+                probe.intensity,
+                static_cast<float>(std::max(0, nearestSectorProbe->mipCount - 1)),
+                true,
+                true};
+    }
+    return selection;
+}
+
 } // namespace
 
 bool SectorWindowRenderer::Initialize(std::size_t capacity)
@@ -281,8 +446,25 @@ bool SectorWindowRenderer::Initialize(std::size_t capacity)
     opacityLoc = GetShaderLocation(shader, "glassOpacity");
     roughnessLoc = GetShaderLocation(shader, "glassRoughness");
     iorLoc = GetShaderLocation(shader, "glassIor");
+    thicknessLoc = GetShaderLocation(shader, "glassThickness");
     ambientLoc = GetShaderLocation(shader, "glassAmbient");
+    advancedTransmissionLoc = GetShaderLocation(shader, "advancedTransmission");
+    sceneColorLoc = GetShaderLocation(shader, "sceneColor");
+    sceneDepthLoc = GetShaderLocation(shader, "sceneDepth");
+    shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneColorLoc;
+    shader.locs[SHADER_LOC_MAP_SPECULAR] = sceneDepthLoc;
+    viewportSizeLoc = GetShaderLocation(shader, "viewportSize");
+    viewMatrixLoc = GetShaderLocation(shader, "matView");
+    projectionMatrixLoc = GetShaderLocation(shader, "matProjection");
     hasEnvironmentLoc = GetShaderLocation(shader, "hasEnvironment");
+    environmentBoxProjectionLoc =
+            GetShaderLocation(shader, "environmentBoxProjection");
+    environmentCapturePositionLoc =
+            GetShaderLocation(shader, "environmentCapturePosition");
+    environmentInfluenceCenterLoc =
+            GetShaderLocation(shader, "environmentInfluenceCenter");
+    environmentHalfExtentsLoc =
+            GetShaderLocation(shader, "environmentHalfExtents");
     environmentYawLoc = GetShaderLocation(shader, "environmentYaw");
     environmentMaxLodLoc = GetShaderLocation(shader, "environmentMaxLod");
     environmentIntensityLoc = GetShaderLocation(shader, "environmentIntensity");
@@ -334,6 +516,9 @@ void SectorWindowRenderer::Shutdown()
     materialLoaded = false;
     consideredCount = 0;
     drawnCount = 0;
+    localEnvironmentCount = 0;
+    globalEnvironmentCount = 0;
+    missingEnvironmentCount = 0;
 }
 
 void SectorWindowRenderer::Reserve(std::size_t capacity)
@@ -341,10 +526,26 @@ void SectorWindowRenderer::Reserve(std::size_t capacity)
     drawItems.reserve(capacity);
 }
 
+bool SectorWindowRenderer::HasVisibleWindows(
+        engine::World& world,
+        const RuntimePortalVisibilityResult* visibility) const
+{
+    bool found = false;
+    world.ForEach<SectorObject, SectorWindow>(
+            [&](engine::Entity, SectorObject& object, SectorWindow& window) {
+                if (object.visible && window.visible
+                        && WindowVisible(window, visibility)) found = true;
+            });
+    return found;
+}
+
 void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
 {
     consideredCount = 0;
     drawnCount = 0;
+    localEnvironmentCount = 0;
+    globalEnvironmentCount = 0;
+    missingEnvironmentCount = 0;
     drawItems.clear();
     if (!materialLoaded || !meshLoaded || shader.id == 0
             || context.assets == nullptr || context.world == nullptr) return;
@@ -376,6 +577,30 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
     if (cameraPositionLoc >= 0) SetShaderValue(
             shader, cameraPositionLoc, &context.camera.position,
             SHADER_UNIFORM_VEC3);
+    const int advancedTransmission = context.advancedTransmission
+                    && context.sceneColor != nullptr
+                    && context.sceneDepth != nullptr
+            ? 1 : 0;
+    const Texture2D originalDiffuse =
+            material.maps[MATERIAL_MAP_DIFFUSE].texture;
+    const Texture2D originalSpecular =
+            material.maps[MATERIAL_MAP_SPECULAR].texture;
+    if (advancedTransmission != 0) {
+        material.maps[MATERIAL_MAP_DIFFUSE].texture = *context.sceneColor;
+        material.maps[MATERIAL_MAP_SPECULAR].texture = *context.sceneDepth;
+    }
+    if (advancedTransmissionLoc >= 0) SetShaderValue(
+            shader, advancedTransmissionLoc, &advancedTransmission,
+            SHADER_UNIFORM_INT);
+    if (viewportSizeLoc >= 0) SetShaderValue(
+            shader, viewportSizeLoc, &context.viewportSize,
+            SHADER_UNIFORM_VEC2);
+    const Matrix viewMatrix = GetCameraMatrix(context.camera);
+    const Matrix projectionMatrix = rlGetMatrixProjection();
+    if (viewMatrixLoc >= 0) SetShaderValueMatrix(
+            shader, viewMatrixLoc, viewMatrix);
+    if (projectionMatrixLoc >= 0) SetShaderValueMatrix(
+            shader, projectionMatrixLoc, projectionMatrix);
     const SectorPbrContributionSettings pbr =
             NormalizeSectorPbrContributionSettings(context.pbr);
     if (environmentSpecularScaleLoc >= 0) SetShaderValue(
@@ -388,7 +613,8 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
     rlDrawRenderBatchActive();
     rlEnableColorBlend();
     rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY);
-    rlEnableDepthTest();
+    if (advancedTransmission != 0) rlDisableDepthTest();
+    else rlEnableDepthTest();
     rlDisableDepthMask();
     rlEnableBackfaceCulling();
 
@@ -416,15 +642,20 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
         if (iorLoc >= 0) SetShaderValue(
                 shader, iorLoc, &window.indexOfRefraction,
                 SHADER_UNIFORM_FLOAT);
+        if (thicknessLoc >= 0) SetShaderValue(
+                shader, thicknessLoc, &window.thickness,
+                SHADER_UNIFORM_FLOAT);
         if (ambientLoc >= 0) SetShaderValue(
                 shader, ambientLoc, &ambient, SHADER_UNIFORM_VEC3);
 
         SectorPbrEnvironmentSelection selection;
         if (context.environment != nullptr) {
-            selection = SelectSectorPbrEnvironment(
+            selection = SelectWindowEnvironment(
                     *context.environment,
-                    transform.position,
-                    object.currentSectorId,
+                    transform,
+                    object,
+                    window,
+                    context.camera.position,
                     context.localReflectionProbesCurrent);
         }
         const TextureCubemap* cubemap = context.assets->GetCubemap(
@@ -437,6 +668,19 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
         if (hasEnvironmentLoc >= 0) SetShaderValue(
                 shader, hasEnvironmentLoc, &hasEnvironment,
                 SHADER_UNIFORM_INT);
+        const int boxProjection = selection.boxProjection ? 1 : 0;
+        if (environmentBoxProjectionLoc >= 0) SetShaderValue(
+                shader, environmentBoxProjectionLoc, &boxProjection,
+                SHADER_UNIFORM_INT);
+        if (environmentCapturePositionLoc >= 0) SetShaderValue(
+                shader, environmentCapturePositionLoc,
+                &selection.capturePosition, SHADER_UNIFORM_VEC3);
+        if (environmentInfluenceCenterLoc >= 0) SetShaderValue(
+                shader, environmentInfluenceCenterLoc,
+                &selection.influenceCenter, SHADER_UNIFORM_VEC3);
+        if (environmentHalfExtentsLoc >= 0) SetShaderValue(
+                shader, environmentHalfExtentsLoc,
+                &selection.halfExtents, SHADER_UNIFORM_VEC3);
         if (environmentYawLoc >= 0) SetShaderValue(
                 shader, environmentYawLoc, &selection.yawRadians,
                 SHADER_UNIFORM_FLOAT);
@@ -448,6 +692,9 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
         if (environmentIntensityLoc >= 0) SetShaderValue(
                 shader, environmentIntensityLoc, &environmentIntensity,
                 SHADER_UNIFORM_FLOAT);
+        if (hasEnvironment == 0) ++missingEnvironmentCount;
+        else if (selection.localProbe) ++localEnvironmentCount;
+        else ++globalEnvironmentCount;
 
         SectorStaticSpecularLightContext staticLights;
         if (context.staticSpecularLights != nullptr) {
@@ -483,6 +730,8 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
 
     rlDrawRenderBatchActive();
     material.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
+    material.maps[MATERIAL_MAP_DIFFUSE].texture = originalDiffuse;
+    material.maps[MATERIAL_MAP_SPECULAR].texture = originalSpecular;
     rlSetBlendMode(BLEND_ALPHA);
     rlEnableDepthMask();
     rlEnableDepthTest();
@@ -490,7 +739,11 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
     if (context.renderDebugText != nullptr) {
         *context.renderDebugText += " | windows: "
                 + std::to_string(drawnCount) + " drawn / "
-                + std::to_string(consideredCount) + " considered";
+                + std::to_string(consideredCount) + " considered; env local/global/none "
+                + std::to_string(localEnvironmentCount) + "/"
+                + std::to_string(globalEnvironmentCount) + "/"
+                + std::to_string(missingEnvironmentCount)
+                + (advancedTransmission != 0 ? "; advanced" : "; simple");
     }
 }
 
