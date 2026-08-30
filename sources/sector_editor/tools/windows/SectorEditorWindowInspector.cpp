@@ -261,16 +261,6 @@ void DrawSectorEditorWindowInspector(
                 window.roughness = value; return true;
             });
     selected = refresh(); if (selected == nullptr) return;
-    drawFloat("sector_editor_window_ior", "IOR",
-            selected->window.indexOfRefraction,
-            context.uiState.indexOfRefractionInput, 1.0f, 2.5f,
-            [](SectorPlacedWindow& window, float value) {
-                value = std::clamp(value, 1.0f, 2.5f);
-                if (window.indexOfRefraction == value) return false;
-                window.indexOfRefraction = value; return true;
-            });
-
-    selected = refresh(); if (selected == nullptr) return;
     section("Gameplay");
     bool collision = selected->window.collision;
     if (engine::Checkbox(

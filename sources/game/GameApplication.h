@@ -82,7 +82,8 @@ public:
     void Render3DScene(engine::EngineContext& context);
     void Apply3DGlass(
             engine::RenderTarget& sceneTarget,
-            engine::EngineContext& context);
+            engine::EngineContext& context,
+            bool collectGpuDiagnostics = false);
     void Render3DViewmodel(engine::AssetManager& assets);
     bool Prepare3DOverlayPass(engine::RenderTarget& sceneTarget);
     void Render3DOverlays(const engine::World& world);

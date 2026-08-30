@@ -346,7 +346,7 @@ struct SectorPlacedWindow {
     // Positive values move from the front sector toward the back sector.
     float normalOffset = 0.0f;
     Color tint = WHITE;
-    float opacity = 0.18f;
+    float opacity = 0.06f;
     float roughness = 0.08f;
     float indexOfRefraction = 1.5f;
     bool collision = true;

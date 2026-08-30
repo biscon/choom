@@ -938,7 +938,10 @@ int main(int argc, char** argv)
             ClearLinearSceneBackground(Color{8, 10, 14, 255});
             application.Render3DScene(context);
             EndTextureMode();
-            application.Apply3DGlass(worldTargetResource, context);
+            application.Apply3DGlass(
+                    worldTargetResource,
+                    context,
+                    collectPerformanceDiagnostics);
             performanceProfiler.End(RenderProfilePass::World);
 
             performanceProfiler.Begin(RenderProfilePass::Atmosphere);

@@ -2,10 +2,10 @@
 
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorRuntimeObjects.h"
-#include "sector_demo/renderer/SectorDoorRenderer.h"
+#include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
-#include "sector_demo/renderer/SectorStaticSpecularLighting.h"
+#include "sector_demo/renderer/SectorStaticModelRenderer.h"
 
 #include <raylib.h>
 
@@ -28,9 +28,7 @@ struct SectorWindowDrawContext {
     const SectorPbrEnvironment* environment = nullptr;
     bool localReflectionProbesCurrent = true;
     SectorPbrContributionSettings pbr;
-    SectorBillboardDynamicLightContext dynamicLights;
-    const SectorStaticSpecularLightState* staticSpecularLights = nullptr;
-    bool staticSpecularEligible = false;
+    SectorTopologyDirectionalLightSettings directionalLight;
     SectorFogRenderContext fog;
     bool advancedTransmission = false;
     const Texture2D* sceneColor = nullptr;
@@ -66,17 +64,19 @@ private:
     bool materialLoaded = false;
     bool meshLoaded = false;
     std::vector<DrawItem> drawItems;
-    SectorDynamicLightShaderLocations dynamicLightLocations;
-    SectorStaticSpecularShaderLocations staticSpecularLocations;
     SectorFogShaderLocations fogLocations;
     int cameraPositionLoc = -1;
     int tintLoc = -1;
     int opacityLoc = -1;
     int roughnessLoc = -1;
     int iorLoc = -1;
-    int ambientLoc = -1;
     int thicknessLoc = -1;
+    int directionalLightEnabledLoc = -1;
+    int directionalLightDirectionLoc = -1;
+    int directionalLightColorLoc = -1;
+    int directionalLightIntensityLoc = -1;
     int advancedTransmissionLoc = -1;
+    int flatGlassPassLoc = -1;
     int sceneColorLoc = -1;
     int sceneDepthLoc = -1;
     int viewportSizeLoc = -1;

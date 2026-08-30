@@ -127,7 +127,7 @@ struct SectorWindow {
     float height = 0.0f;
     float thickness = 0.04f;
     Color tint = WHITE;
-    float opacity = 0.18f;
+    float opacity = 0.06f;
     float roughness = 0.08f;
     float indexOfRefraction = 1.5f;
     bool visible = true;

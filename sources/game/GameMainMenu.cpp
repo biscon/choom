@@ -318,10 +318,6 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
             smallFont, "Depth pre-pass", draft.graphics.depthPrepass);
     y += rowHeight + 8.0f;
-    engine::Checkbox(ui, config, input, assets, "graphics_advanced_glass",
-            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
-            smallFont, "Advanced glass (refraction)", draft.graphics.advancedGlass);
-    y += rowHeight + 8.0f;
     engine::Checkbox(ui, config, input, assets, "graphics_bloom",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
             smallFont, "HDR bloom", draft.hdrBloom.enabled);

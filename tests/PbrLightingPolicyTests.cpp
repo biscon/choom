@@ -505,6 +505,16 @@ void TestSectorRuntimeNormalMappingPolicy()
                                "for (int textureUnit = MATERIAL_MAP_ALBEDO;")
                             != std::string::npos,
           "sector material samplers receive deterministic fixed texture units");
+    Check(source.find(
+                      "surfaceLightmapBakeCurrent && !staticCaptureOnly)")
+                            != std::string::npos
+                    && source.find(
+                               "doorDrawContext.staticSpecularEligible = !staticCaptureOnly")
+                            != std::string::npos
+                    && source.find(
+                               "!staticCaptureOnly && objectProbeBakeCurrent")
+                            != std::string::npos,
+          "reflection probe captures exclude view-dependent direct specular from sectors and objects");
 
     const std::string model = ReadSource(PBR_SHADER_SOURCE_PATH);
     Check(source.find("pbrDiagnosticMode == 10") != std::string::npos
@@ -921,7 +931,31 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&glassShader.find("SetShaderValueTexture")
                             ==std::string::npos
                     &&glassShader.find("advancedTransmission")!=std::string::npos,
-          "advanced glass uses depth-aware scene transmission and box-projected probes with a simple fallback");
+          "the retained refraction backend uses depth-aware scene transmission and box-projected probes");
+    Check(glassShader.find("rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY)")
+                            !=std::string::npos
+                    &&glassShader.find("float fresnel = clamp(0.04 + 0.96")
+                            !=std::string::npos
+                    &&glassShader.find("float blocker = clamp(mix(opacity, 1.0, fresnel)")
+                            !=std::string::npos
+                    &&glassShader.find("vec3 tintFilter = mix(vec3(1.0)")
+                            !=std::string::npos
+                    &&glassShader.find("(1.0 - blocker) * tintFilter")
+                            !=std::string::npos
+                    &&glassShader.find("reflection * fresnel")!=std::string::npos
+                    &&glassShader.find("glassTint * opacity")
+                            ==std::string::npos
+                    &&glassShader.find("RL_ZERO, RL_SRC_COLOR")
+                            !=std::string::npos
+                    &&glassShader.find("RL_ONE, RL_ONE")
+                            !=std::string::npos,
+          "flat glass multiplicatively filters transmission before adding clamped-Fresnel reflection");
+    Check(glassShader.find("DirectionalSpecular")!=std::string::npos
+                    &&glassShader.find("ndotl <= 0.0 || ndotv <= 0.0")
+                            !=std::string::npos
+                    &&glassShader.find("dynamicLightCount")==std::string::npos
+                    &&glassShader.find("staticSpecularLightCount")==std::string::npos,
+          "glass only receives front-lit directional direct specular");
     Check(mainGraph.find("Render3DHud")>sceneBloom,
           "HUD and ordinary UI are downstream of scene-wide bloom");
     Check(mainGraph.find("rlLoadFramebuffer()")!=std::string::npos
@@ -941,6 +975,14 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&sectorRenderer.find("? hdrSceneColorView : sceneTarget.native")
                             !=std::string::npos,
           "advanced glass snapshots color without flipping and renders through the depth-detached scene color view");
+    Check(sectorRenderer.find("bool requestRefraction")!=std::string::npos
+                    &&sectorRenderer.find("bool refractionReady = requestRefraction")
+                            !=std::string::npos
+                    &&sectorRenderer.find("preGlassLightEffectsRendered = true")
+                            !=std::string::npos
+                    &&sectorRenderer.find("dynamicLightState.LightingVisibility()")
+                            !=std::string::npos,
+          "flat windows skip refraction snapshots while halos and shafts use stable blocker-aware visibility before glass");
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos

@@ -41,8 +41,8 @@ uniform float glassOpacity;
 uniform float glassRoughness;
 uniform float glassIor;
 uniform float glassThickness;
-uniform vec3 glassAmbient;
 uniform int advancedTransmission;
+uniform int flatGlassPass;
 uniform sampler2D sceneColor;
 uniform sampler2D sceneDepth;
 uniform vec2 viewportSize;
@@ -58,29 +58,10 @@ uniform float environmentYaw;
 uniform float environmentMaxLod;
 uniform float environmentIntensity;
 uniform float environmentSpecularScale;
-
-#define MAX_DYNAMIC_LIGHTS 32
-uniform int dynamicLightCount;
-uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
-uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
-uniform float dynamicLightRadii[MAX_DYNAMIC_LIGHTS];
-uniform float dynamicLightIntensities[MAX_DYNAMIC_LIGHTS];
-uniform int dynamicLightTypes[MAX_DYNAMIC_LIGHTS];
-uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
-uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
-uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
-
-#define MAX_STATIC_SPECULAR_LIGHTS 4
-uniform int staticSpecularLightCount;
-uniform vec3 staticSpecularLightPositions[MAX_STATIC_SPECULAR_LIGHTS];
-uniform vec3 staticSpecularLightColors[MAX_STATIC_SPECULAR_LIGHTS];
-uniform float staticSpecularLightRadii[MAX_STATIC_SPECULAR_LIGHTS];
-uniform float staticSpecularLightIntensities[MAX_STATIC_SPECULAR_LIGHTS];
-uniform int staticSpecularLightTypes[MAX_STATIC_SPECULAR_LIGHTS];
-uniform vec3 staticSpecularLightDirections[MAX_STATIC_SPECULAR_LIGHTS];
-uniform float staticSpecularLightInnerConeCos[MAX_STATIC_SPECULAR_LIGHTS];
-uniform float staticSpecularLightOuterConeCos[MAX_STATIC_SPECULAR_LIGHTS];
-uniform float staticSpecularLightStartFeathers[MAX_STATIC_SPECULAR_LIGHTS];
+uniform int directionalLightEnabled;
+uniform vec3 directionalLightDirection;
+uniform vec3 directionalLightColor;
+uniform float directionalLightIntensity;
 
 uniform int fogEnabled;
 uniform vec3 fogColor;
@@ -106,17 +87,6 @@ vec3 RotateEnvironment(vec3 direction, float radians)
     return vec3(c * direction.x - s * direction.z,
                 direction.y,
                 s * direction.x + c * direction.z);
-}
-
-float LightCone(int type, vec3 directionFromLight, vec3 lightDirection,
-        float innerCos, float outerCos)
-{
-    if (type != 1) return 1.0;
-    float cone = dot(SafeNormalize(lightDirection, vec3(0.0, -1.0, 0.0)),
-            SafeNormalize(directionFromLight, vec3(0.0, -1.0, 0.0)));
-    return abs(innerCos - outerCos) > 0.0001
-            ? smoothstep(outerCos, innerCos, cone)
-            : step(innerCos, cone);
 }
 
 float DistributionGgx(vec3 normal, vec3 halfway, float roughness)
@@ -215,25 +185,17 @@ vec3 SampleTransmission(vec3 normal, vec3 viewDirection, float roughness,
     return result * 0.2;
 }
 
-vec3 SpecularLight(vec3 position, vec3 color, float radius, float intensity,
-        int type, vec3 direction, float innerCos, float outerCos,
-        vec3 normal, vec3 viewDirection, float roughness, float f0)
+vec3 DirectionalSpecular(vec3 normal, vec3 viewDirection, float roughness)
 {
-    vec3 toLight = position - fragWorldPosition;
-    float distanceToLight = length(toLight);
-    if (radius <= 0.0 || distanceToLight >= radius || intensity <= 0.0) {
+    if (directionalLightEnabled == 0 || directionalLightIntensity <= 0.0) {
         return vec3(0.0);
     }
-    vec3 lightDirection = distanceToLight > 0.0001
-            ? toLight / distanceToLight : normal;
-    float ndotl = max(dot(normal, lightDirection), 0.0);
-    float ndotv = max(dot(normal, viewDirection), 0.0);
-    float attenuation = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
-    attenuation *= attenuation;
-    float coneAttenuation = LightCone(
-            type, -lightDirection, direction, innerCos, outerCos);
-    if (ndotl <= 0.0 || ndotv <= 0.0 || attenuation <= 0.0
-            || coneAttenuation <= 0.0) {
+    vec3 lightDirection = SafeNormalize(
+            directionalLightDirection, vec3(0.0, 1.0, 0.0));
+    float ndotl = dot(normal, lightDirection);
+    float ndotv = dot(normal, viewDirection);
+    // Do not mirror the sun/moon highlight onto the unlit interior face.
+    if (ndotl <= 0.0 || ndotv <= 0.0) {
         return vec3(0.0);
     }
     vec3 halfway = SafeNormalize(viewDirection + lightDirection, normal);
@@ -241,12 +203,25 @@ vec3 SpecularLight(vec3 position, vec3 color, float radius, float intensity,
     float geometry = GeometrySmith(
             normal, viewDirection, lightDirection, roughness);
     float fresnel = FresnelSchlick(
-            max(dot(halfway, viewDirection), 0.0), f0);
+            max(dot(halfway, viewDirection), 0.0), 0.04);
     float specular = distribution * geometry * fresnel
             / max(4.0 * ndotv * ndotl, 0.001);
-    vec3 radiance = color * intensity
-            * attenuation * attenuation * coneAttenuation;
-    return radiance * specular * ndotl;
+    return directionalLightColor * directionalLightIntensity
+            * specular * ndotl;
+}
+
+float GlassFogAmount()
+{
+    if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
+        return 0.0;
+    }
+    float distanceValue = max(length(fragWorldPosition - fogCameraPosition)
+            - fogStartDistanceWorld, 0.0);
+    float midpointHeight = (fogCameraPosition.y + fragWorldPosition.y) * 0.5;
+    float heightMultiplier = exp(-max(midpointHeight
+            - fogReferenceHeightWorld, 0.0) * fogHeightFalloff);
+    return min(1.0 - exp(-fogDensity * distanceValue
+            * heightMultiplier), fogMaxOpacity);
 }
 
 void main()
@@ -260,9 +235,21 @@ void main()
     }
     float roughness = clamp(glassRoughness, 0.045, 1.0);
     float ior = clamp(glassIor, 1.0, 2.5);
-    float f0 = pow((ior - 1.0) / (ior + 1.0), 2.0);
-    float ndotv = max(dot(normal, viewDirection), 0.0);
-    float fresnel = f0 + (1.0 - f0) * pow(1.0 - ndotv, 5.0);
+    float ndotv = clamp(dot(normal, viewDirection), 0.0, 1.0);
+    float fresnel = clamp(0.04 + 0.96
+            * pow(clamp(1.0 - ndotv, 0.0, 1.0), 5.0), 0.0, 1.0);
+
+    float opacity = clamp(glassOpacity, 0.0, 1.0);
+    float blocker = clamp(mix(opacity, 1.0, fresnel), 0.0, 1.0);
+    vec3 tintFilter = mix(vec3(1.0), clamp(glassTint, 0.0, 1.0), opacity);
+    vec3 transmission = clamp((1.0 - blocker) * tintFilter, 0.0, 1.0);
+
+    if (advancedTransmission == 0 && flatGlassPass == 1) {
+        // With ZERO/SRC_COLOR blending, this filters the existing opaque scene
+        // and all pre-glass light effects without adding any tint radiance.
+        finalColor = vec4(transmission, 1.0);
+        return;
+    }
 
     vec3 reflection = vec3(0.0);
     if (hasEnvironment != 0) {
@@ -270,30 +257,9 @@ void main()
                 reflect(-viewDirection, normal));
         reflection = textureLod(environmentTexture, reflected,
                 roughness * max(environmentMaxLod, 0.0)).rgb
-                * environmentIntensity * environmentSpecularScale * fresnel;
+                * environmentIntensity * environmentSpecularScale;
     }
-
-    vec3 direct = vec3(0.0);
-    for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
-        direct += SpecularLight(dynamicLightPositions[i], dynamicLightColors[i],
-                dynamicLightRadii[i], dynamicLightIntensities[i],
-                dynamicLightTypes[i], dynamicLightDirections[i],
-                dynamicLightInnerConeCos[i], dynamicLightOuterConeCos[i],
-                normal, viewDirection, roughness, f0);
-    }
-    for (int i = 0; i < staticSpecularLightCount
-            && i < MAX_STATIC_SPECULAR_LIGHTS; ++i) {
-        direct += SpecularLight(staticSpecularLightPositions[i],
-                staticSpecularLightColors[i], staticSpecularLightRadii[i],
-                staticSpecularLightIntensities[i], staticSpecularLightTypes[i],
-                staticSpecularLightDirections[i],
-                staticSpecularLightInnerConeCos[i],
-                staticSpecularLightOuterConeCos[i], normal, viewDirection,
-                roughness, f0);
-    }
-
-    float opacity = clamp(glassOpacity, 0.0, 1.0);
-    float alpha = clamp(opacity + (1.0 - opacity) * fresnel, 0.0, 1.0);
+    vec3 direct = DirectionalSpecular(normal, viewDirection, roughness);
     vec3 rgb;
     if (advancedTransmission != 0) {
         float opticalPath = 0.0;
@@ -305,43 +271,22 @@ void main()
         float neutralTransmission = exp(-opacity * normalizedPath);
         rgb = sceneTransmission * absorption
                         * neutralTransmission * (1.0 - fresnel)
-                + glassTint * max(glassAmbient, vec3(0.015)) * opacity
-                + reflection + direct;
-        alpha = 1.0;
+                + reflection * fresnel + direct;
+        float fogAmount = GlassFogAmount();
+        rgb = mix(rgb, fogColor, fogAmount);
+        finalColor = vec4(clamp(rgb, vec3(0.0), vec3(65504.0)), 1.0);
+        return;
     } else {
-        rgb = glassTint * max(glassAmbient, vec3(0.015)) * opacity
-                + reflection + direct;
-    }
-
-    if (fogEnabled != 0 && fogDensity > 0.0 && fogMaxOpacity > 0.0) {
-        float distanceValue = max(length(fragWorldPosition - fogCameraPosition)
-                - fogStartDistanceWorld, 0.0);
-        float midpointHeight = (fogCameraPosition.y + fragWorldPosition.y) * 0.5;
-        float heightMultiplier = exp(-max(midpointHeight
-                - fogReferenceHeightWorld, 0.0) * fogHeightFalloff);
-        float fogAmount = min(1.0 - exp(-fogDensity * distanceValue
-                * heightMultiplier), fogMaxOpacity);
-        rgb = mix(rgb, fogColor * alpha, fogAmount);
+        rgb = reflection * fresnel
+                + direct;
+        float fogAmount = GlassFogAmount();
+        rgb = mix(rgb, fogColor * blocker, fogAmount);
     }
     rgb = clamp(rgb, vec3(0.0), vec3(65504.0));
-    finalColor = vec4(rgb, alpha);
+    // The additive flat-glass pass preserves the destination alpha.
+    finalColor = vec4(rgb, 0.0);
 }
 )glsl";
-
-Vector3 WindowAmbient(const SectorObjectLighting& lighting)
-{
-    const BakedObjectLightingSample* sample = lighting.baked.valid
-            ? &lighting.baked
-            : lighting.vertical.lower.valid ? &lighting.vertical.lower
-            : lighting.vertical.upper.valid ? &lighting.vertical.upper
-            : nullptr;
-    if (sample == nullptr) return Vector3{0.15f, 0.15f, 0.15f};
-    Vector3 ambient{};
-    for (const Vector3 face : sample->ambientCube) {
-        ambient = Vector3Add(ambient, face);
-    }
-    return Vector3Scale(ambient, 1.0f / 6.0f);
-}
 
 bool WindowVisible(
         const SectorWindow& window,
@@ -447,8 +392,8 @@ bool SectorWindowRenderer::Initialize(std::size_t capacity)
     roughnessLoc = GetShaderLocation(shader, "glassRoughness");
     iorLoc = GetShaderLocation(shader, "glassIor");
     thicknessLoc = GetShaderLocation(shader, "glassThickness");
-    ambientLoc = GetShaderLocation(shader, "glassAmbient");
     advancedTransmissionLoc = GetShaderLocation(shader, "advancedTransmission");
+    flatGlassPassLoc = GetShaderLocation(shader, "flatGlassPass");
     sceneColorLoc = GetShaderLocation(shader, "sceneColor");
     sceneDepthLoc = GetShaderLocation(shader, "sceneDepth");
     shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneColorLoc;
@@ -470,25 +415,14 @@ bool SectorWindowRenderer::Initialize(std::size_t capacity)
     environmentIntensityLoc = GetShaderLocation(shader, "environmentIntensity");
     environmentSpecularScaleLoc =
             GetShaderLocation(shader, "environmentSpecularScale");
-    dynamicLightLocations.dynamicLightCount =
-            GetShaderLocation(shader, "dynamicLightCount");
-    dynamicLightLocations.dynamicLightPositions =
-            GetShaderLocation(shader, "dynamicLightPositions[0]");
-    dynamicLightLocations.dynamicLightColors =
-            GetShaderLocation(shader, "dynamicLightColors[0]");
-    dynamicLightLocations.dynamicLightRadii =
-            GetShaderLocation(shader, "dynamicLightRadii[0]");
-    dynamicLightLocations.dynamicLightIntensities =
-            GetShaderLocation(shader, "dynamicLightIntensities[0]");
-    dynamicLightLocations.dynamicLightTypes =
-            GetShaderLocation(shader, "dynamicLightTypes[0]");
-    dynamicLightLocations.dynamicLightDirections =
-            GetShaderLocation(shader, "dynamicLightDirections[0]");
-    dynamicLightLocations.dynamicLightInnerConeCos =
-            GetShaderLocation(shader, "dynamicLightInnerConeCos[0]");
-    dynamicLightLocations.dynamicLightOuterConeCos =
-            GetShaderLocation(shader, "dynamicLightOuterConeCos[0]");
-    staticSpecularLocations = GetSectorStaticSpecularShaderLocations(shader);
+    directionalLightEnabledLoc =
+            GetShaderLocation(shader, "directionalLightEnabled");
+    directionalLightDirectionLoc =
+            GetShaderLocation(shader, "directionalLightDirection");
+    directionalLightColorLoc =
+            GetShaderLocation(shader, "directionalLightColor");
+    directionalLightIntensityLoc =
+            GetShaderLocation(shader, "directionalLightIntensity");
     fogLocations = GetSectorFogShaderLocations(shader);
 
     material = LoadMaterialDefault();
@@ -550,12 +484,10 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
     if (!materialLoaded || !meshLoaded || shader.id == 0
             || context.assets == nullptr || context.world == nullptr) return;
 
-    context.world->ForEach<SectorObjectTransform, SectorObject,
-            SectorObjectLighting, SectorWindow>(
+    context.world->ForEach<SectorObjectTransform, SectorObject, SectorWindow>(
             [&](engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
-                    SectorObjectLighting&,
                     SectorWindow& window) {
                 ++consideredCount;
                 if (!object.visible || !window.visible
@@ -606,13 +538,31 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
     if (environmentSpecularScaleLoc >= 0) SetShaderValue(
             shader, environmentSpecularScaleLoc,
             &pbr.worldEnvironmentSpecularScale, SHADER_UNIFORM_FLOAT);
-    UploadSectorRendererDynamicPointLights(
-            shader, dynamicLightLocations, context.dynamicLights);
+    const SectorTopologyDirectionalLightSettings directionalLight =
+            NormalizeSectorTopologyDirectionalLightSettings(
+                    context.directionalLight);
+    const int directionalLightEnabled = directionalLight.enabled ? 1 : 0;
+    const Vector3 directionalLightColor =
+            engine::SrgbColorBytesToLinearSceneRgb(directionalLight.color);
+    if (directionalLightEnabledLoc >= 0) SetShaderValue(
+            shader, directionalLightEnabledLoc, &directionalLightEnabled,
+            SHADER_UNIFORM_INT);
+    if (directionalLightDirectionLoc >= 0) SetShaderValue(
+            shader, directionalLightDirectionLoc,
+            &directionalLight.directionToLight, SHADER_UNIFORM_VEC3);
+    if (directionalLightColorLoc >= 0) SetShaderValue(
+            shader, directionalLightColorLoc, &directionalLightColor,
+            SHADER_UNIFORM_VEC3);
+    if (directionalLightIntensityLoc >= 0) SetShaderValue(
+            shader, directionalLightIntensityLoc, &directionalLight.intensity,
+            SHADER_UNIFORM_FLOAT);
     UploadSectorFogShaderValues(shader, fogLocations, context.fog);
 
     rlDrawRenderBatchActive();
     rlEnableColorBlend();
-    rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY);
+    if (advancedTransmission != 0) {
+        rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY);
+    }
     if (advancedTransmission != 0) rlDisableDepthTest();
     else rlEnableDepthTest();
     rlDisableDepthMask();
@@ -622,17 +572,13 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
         if (!context.world->IsAlive(item.entity)
                 || !context.world->Has<SectorObjectTransform>(item.entity)
                 || !context.world->Has<SectorObject>(item.entity)
-                || !context.world->Has<SectorObjectLighting>(item.entity)
                 || !context.world->Has<SectorWindow>(item.entity)) continue;
         const SectorObjectTransform& transform =
                 context.world->Get<SectorObjectTransform>(item.entity);
         const SectorObject& object = context.world->Get<SectorObject>(item.entity);
-        const SectorObjectLighting& lighting =
-                context.world->Get<SectorObjectLighting>(item.entity);
         const SectorWindow& window = context.world->Get<SectorWindow>(item.entity);
 
         const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(window.tint);
-        const Vector3 ambient = WindowAmbient(lighting);
         if (tintLoc >= 0) SetShaderValue(
                 shader, tintLoc, &tint, SHADER_UNIFORM_VEC3);
         if (opacityLoc >= 0) SetShaderValue(
@@ -645,8 +591,6 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
         if (thicknessLoc >= 0) SetShaderValue(
                 shader, thicknessLoc, &window.thickness,
                 SHADER_UNIFORM_FLOAT);
-        if (ambientLoc >= 0) SetShaderValue(
-                shader, ambientLoc, &ambient, SHADER_UNIFORM_VEC3);
 
         SectorPbrEnvironmentSelection selection;
         if (context.environment != nullptr) {
@@ -696,35 +640,37 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
         else if (selection.localProbe) ++localEnvironmentCount;
         else ++globalEnvironmentCount;
 
-        SectorStaticSpecularLightContext staticLights;
-        if (context.staticSpecularLights != nullptr) {
-            const Vector3 half{
-                    window.width * 0.5f,
-                    window.height * 0.5f,
-                    window.thickness * 0.5f};
-            const float horizontalRadius = std::sqrt(
-                    half.x * half.x + half.z * half.z);
-            const SectorReceiverBounds bounds{
-                    object.currentSectorId,
-                    Vector3{transform.position.x - horizontalRadius,
-                            transform.position.y - half.y,
-                            transform.position.z - horizontalRadius},
-                    Vector3{transform.position.x + horizontalRadius,
-                            transform.position.y + half.y,
-                            transform.position.z + horizontalRadius}};
-            const RuntimePortalVisibilityResult emptyVisibility;
-            staticLights = SelectSectorStaticSpecularLights(
-                    *context.staticSpecularLights,
-                    bounds,
-                    object.currentSectorId,
-                    context.visibility != nullptr
-                            ? *context.visibility : emptyVisibility,
-                    context.staticSpecularEligible);
+        const Matrix modelMatrix =
+                BuildSectorWindowModelMatrix(transform, window);
+        if (advancedTransmission != 0) {
+            const int inactiveFlatPass = 0;
+            if (flatGlassPassLoc >= 0) SetShaderValue(
+                    shader, flatGlassPassLoc, &inactiveFlatPass,
+                    SHADER_UNIFORM_INT);
+            DrawMesh(cube, material, modelMatrix);
+        } else {
+            const int transmissionPass = 1;
+            if (flatGlassPassLoc >= 0) SetShaderValue(
+                    shader, flatGlassPassLoc, &transmissionPass,
+                    SHADER_UNIFORM_INT);
+            rlSetBlendFactorsSeparate(
+                    RL_ZERO, RL_SRC_COLOR,
+                    RL_ZERO, RL_ONE,
+                    RL_FUNC_ADD, RL_FUNC_ADD);
+            rlSetBlendMode(BLEND_CUSTOM_SEPARATE);
+            DrawMesh(cube, material, modelMatrix);
+
+            const int reflectionPass = 2;
+            if (flatGlassPassLoc >= 0) SetShaderValue(
+                    shader, flatGlassPassLoc, &reflectionPass,
+                    SHADER_UNIFORM_INT);
+            rlSetBlendFactorsSeparate(
+                    RL_ONE, RL_ONE,
+                    RL_ZERO, RL_ONE,
+                    RL_FUNC_ADD, RL_FUNC_ADD);
+            rlSetBlendMode(BLEND_CUSTOM_SEPARATE);
+            DrawMesh(cube, material, modelMatrix);
         }
-        UploadSectorStaticSpecularLights(
-                shader, staticSpecularLocations, staticLights);
-        DrawMesh(cube, material,
-                BuildSectorWindowModelMatrix(transform, window));
         ++drawnCount;
     }
 
@@ -743,7 +689,8 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
                 + std::to_string(localEnvironmentCount) + "/"
                 + std::to_string(globalEnvironmentCount) + "/"
                 + std::to_string(missingEnvironmentCount)
-                + (advancedTransmission != 0 ? "; advanced" : "; simple");
+                + (advancedTransmission != 0
+                        ? "; advanced" : "; flat two-pass");
     }
 }
 
