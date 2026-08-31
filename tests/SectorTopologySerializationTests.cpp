@@ -205,6 +205,36 @@ SectorPlacedRuntimeObject MakeDoorRuntimeObject(int id)
     return object;
 }
 
+SectorPlacedRuntimeObject MakeWindowRuntimeObject(int id)
+{
+    SectorPlacedRuntimeObject object;
+    object.id = id;
+    object.kind = "window";
+    object.window.anchor.lineDefId = 2;
+    object.window.anchor.frontSectorId = 1;
+    object.window.anchor.backSectorId = 2;
+    object.window.anchor.frontSideDefId = 2;
+    object.window.anchor.backSideDefId = 8;
+    object.window.anchor.endpointAX = 64;
+    object.window.anchor.endpointAY = 0;
+    object.window.anchor.endpointBX = 64;
+    object.window.anchor.endpointBY = 64;
+    object.window.width = 3.5f;
+    object.window.height = 2.25f;
+    object.window.thickness = 0.06f;
+    object.window.horizontalOffsetWorld = -0.2f;
+    object.window.verticalOffsetWorld = 0.35f;
+    object.window.normalOffset = 0.04f;
+    object.window.tint = Color{72, 164, 220, 255};
+    object.window.opacity = 0.3f;
+    object.window.roughness = 0.22f;
+    object.window.surfaceHaze = 0.35f;
+    object.window.imperfectionStrength = 0.42f;
+    object.window.indexOfRefraction = 1.42f;
+    object.window.collision = false;
+    return object;
+}
+
 SectorTopologyMap MakeAdjacentSquares()
 {
     SectorTopologyMap map;
@@ -1581,6 +1611,82 @@ void TestRuntimeObjectsRoundTripAndValidation()
     invalidBillboard = billboardSaved;
     invalidBillboard["runtimeObjects"][0].erase("billboard");
     ExpectRejected(invalidBillboard, "missing billboard payload is rejected");
+
+    SectorTopologyMap windowMap = MakeSquare();
+    windowMap.runtimeObjects.push_back(MakeWindowRuntimeObject(29));
+    const Json windowSaved = Json::parse(SaveText(windowMap));
+    const Json& savedWindow = windowSaved["runtimeObjects"][0]["window"];
+    Check(windowSaved["runtimeObjects"][0]["kind"] == "window"
+                  && savedWindow["anchor"]["lineDefId"] == 2
+                  && savedWindow["anchor"]["endpointA"][0] == 64
+                  && Near(savedWindow["width"].get<float>(), 3.5f)
+                  && Near(savedWindow["height"].get<float>(), 2.25f)
+                  && Near(savedWindow["thickness"].get<float>(), 0.06f)
+                  && Near(savedWindow["horizontalOffsetWorld"].get<float>(), -0.2f)
+                  && Near(savedWindow["verticalOffsetWorld"].get<float>(), 0.35f)
+                  && Near(savedWindow["normalOffset"].get<float>(), 0.04f)
+                  && savedWindow["tint"]["r"] == 72
+                  && savedWindow["tint"]["g"] == 164
+                  && savedWindow["tint"]["b"] == 220
+                  && Near(savedWindow["opacity"].get<float>(), 0.3f)
+                  && Near(savedWindow["roughness"].get<float>(), 0.22f)
+                  && Near(savedWindow["surfaceHaze"].get<float>(), 0.35f)
+                  && Near(savedWindow["imperfectionStrength"].get<float>(), 0.42f)
+                  && Near(savedWindow["indexOfRefraction"].get<float>(), 1.42f)
+                  && !savedWindow["collision"].get<bool>(),
+          "window payload writes portal geometry, tint, PBR, and collision fields");
+    SectorTopologyMap windowLoaded;
+    Check(LoadText(windowSaved.dump(), windowLoaded, error),
+          "window runtime object JSON loads");
+    const SectorPlacedRuntimeObject* loadedWindow =
+            game::FindSectorPlacedRuntimeObject(windowLoaded, 29);
+    Check(loadedWindow != nullptr
+                  && loadedWindow->kind == "window"
+                  && loadedWindow->window.anchor.lineDefId == 2
+                  && loadedWindow->window.anchor.endpointAX == 64
+                  && Near(loadedWindow->window.width, 3.5f)
+                  && Near(loadedWindow->window.height, 2.25f)
+                  && Near(loadedWindow->window.thickness, 0.06f)
+                  && Near(loadedWindow->window.horizontalOffsetWorld, -0.2f)
+                  && Near(loadedWindow->window.verticalOffsetWorld, 0.35f)
+                  && Near(loadedWindow->window.normalOffset, 0.04f)
+                  && loadedWindow->window.tint.r == 72
+                  && loadedWindow->window.tint.g == 164
+                  && loadedWindow->window.tint.b == 220
+                  && loadedWindow->window.tint.a == 255
+                  && Near(loadedWindow->window.opacity, 0.3f)
+                  && Near(loadedWindow->window.roughness, 0.22f)
+                  && Near(loadedWindow->window.surfaceHaze, 0.35f)
+                  && Near(loadedWindow->window.imperfectionStrength, 0.42f)
+                  && Near(loadedWindow->window.indexOfRefraction, 1.42f)
+                  && !loadedWindow->window.collision,
+          "window payload round-trips authored glass fields");
+    Json windowWithoutSurfaceDetail = windowSaved;
+    windowWithoutSurfaceDetail["runtimeObjects"][0]["window"].erase(
+            "surfaceHaze");
+    windowWithoutSurfaceDetail["runtimeObjects"][0]["window"].erase(
+            "imperfectionStrength");
+    SectorTopologyMap windowDefaultsLoaded;
+    Check(LoadText(windowWithoutSurfaceDetail.dump(), windowDefaultsLoaded, error),
+          "window payload without surface-detail fields remains compatible");
+    const SectorPlacedRuntimeObject* defaultedWindow =
+            game::FindSectorPlacedRuntimeObject(windowDefaultsLoaded, 29);
+    Check(defaultedWindow != nullptr
+                  && Near(defaultedWindow->window.surfaceHaze, 0.08f)
+                  && Near(defaultedWindow->window.imperfectionStrength, 0.15f),
+          "omitted window surface-detail fields use subtle lived-in defaults");
+    Json invalidWindow = windowSaved;
+    invalidWindow["runtimeObjects"][0]["window"]["opacity"] = 1.1f;
+    ExpectRejected(invalidWindow, "window opacity outside the unit range is rejected");
+    invalidWindow = windowSaved;
+    invalidWindow["runtimeObjects"][0]["window"]["surfaceHaze"] = 1.1f;
+    ExpectRejected(invalidWindow, "window surface haze outside the unit range is rejected");
+    invalidWindow = windowSaved;
+    invalidWindow["runtimeObjects"][0]["window"]["imperfectionStrength"] = -0.1f;
+    ExpectRejected(invalidWindow, "window imperfections outside the unit range are rejected");
+    invalidWindow = windowSaved;
+    invalidWindow["runtimeObjects"][0]["window"]["thickness"] = 0.0f;
+    ExpectRejected(invalidWindow, "zero-thickness window data is rejected");
 
     SectorTopologyMap doorMap = MakeSquare();
     doorMap.runtimeObjects.push_back(MakeDoorRuntimeObject(30));

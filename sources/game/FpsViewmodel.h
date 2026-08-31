@@ -25,7 +25,7 @@ enum class FpsViewmodelEquipState {
 };
 
 enum class FpsShotSurfaceKind { None, Floor, Ceiling, Wall, LowerWall, UpperWall };
-enum class FpsShotHitKind { None, SectorSurface, Door, SolidProp, Npc };
+enum class FpsShotHitKind { None, SectorSurface, Door, Window, SolidProp, Npc };
 enum class FpsFireRejectReason {
     None,
     NotInGameplay3D,

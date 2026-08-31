@@ -53,7 +53,7 @@ inline float MeasureSectorEditorToolsContentHeight(
     };
     return sectionLabelHeight + rowsHeight(5)
             + separatorHeight + sectionLabelHeight
-            + rowsHeight(17 + (triggerModeRowVisible ? 1 : 0)
+            + rowsHeight(18 + (triggerModeRowVisible ? 1 : 0)
                     + (itemDefinitionRowVisible ? 1 : 0))
             + separatorHeight + rowsHeight(2)
             + separatorHeight + rowsHeight(1)

@@ -21,6 +21,7 @@
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
+#include "sector_demo/renderer/SectorWindowRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 #include "sector_demo/SectorUseInteraction.h"
@@ -124,6 +125,14 @@ public:
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
             bool collectGpuDiagnostics = false);
+    bool ApplyGlass(
+            engine::RenderTarget& sceneTarget,
+            engine::AssetManager& assets,
+            engine::World* runtimeObjectWorld,
+            SectorRuntimeDoorLightingContext doorLighting,
+            const SectorTopologyFogSettings& fogSettings,
+            bool collectGpuDiagnostics = false,
+            bool requestRefraction = false);
     bool ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
@@ -244,6 +253,8 @@ public:
     size_t DoorConsideredCount() const { return doorRenderer.RenderStats().considered; }
     size_t DoorDrawnCount() const { return doorRenderer.RenderStats().drawn; }
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
+    size_t WindowConsideredCount() const { return windowRenderer.ConsideredCount(); }
+    size_t WindowDrawnCount() const { return windowRenderer.DrawnCount(); }
     SectorPbrContributionSettings PbrContributionSettings() const
     {
         return pbrContributionSettings;
@@ -408,6 +419,11 @@ private:
     int shadowSoftnessLoc = -1;
     int shadowAtlasTilesPerRowLoc = -1;
     bool depthPrepassEnabled = false;
+    bool glassRefractionFallbackLogged = false;
+    bool atmosphereGpuFramePrepared = false;
+    bool preGlassLightEffectsRendered = false;
+    bool preGlassShaftApplied = false;
+    bool preGlassHaloApplied = false;
     SectorFogShaderLocations fogShaderLocations;
     SectorDistanceFogRenderer distanceFogRenderer;
     SectorAnalyticFogRenderer analyticFogRenderer;
@@ -453,6 +469,7 @@ private:
     SectorStaticSpecularShaderLocations staticSpecularLocations;
     SectorPbrContributionSettings pbrContributionSettings;
     SectorDoorRenderer doorRenderer;
+    SectorWindowRenderer windowRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;

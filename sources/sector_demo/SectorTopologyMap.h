@@ -331,6 +331,29 @@ struct SectorPlacedDoor {
     SectorDoorFaceUvSet faceUvs;
 };
 
+// Windows share the stable portal-anchor schema with doors, but remain a
+// separate runtime-object kind with no motion or interaction state.
+using SectorWindowAnchor = SectorDoorAnchor;
+
+struct SectorPlacedWindow {
+    SectorWindowAnchor anchor;
+    // Zero width/height resolve to the current portal opening dimensions.
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.04f;
+    float horizontalOffsetWorld = 0.0f;
+    float verticalOffsetWorld = 0.0f;
+    // Positive values move from the front sector toward the back sector.
+    float normalOffset = 0.0f;
+    Color tint = WHITE;
+    float opacity = 0.18f;
+    float roughness = 0.08f;
+    float surfaceHaze = 0.08f;
+    float imperfectionStrength = 0.15f;
+    float indexOfRefraction = 1.5f;
+    bool collision = true;
+};
+
 struct SectorResolvedDoorAnchor {
     bool valid = false;
     std::string diagnostic;
@@ -356,6 +379,8 @@ struct SectorResolvedDoorAnchor {
     float height = 0.0f;
 };
 
+using SectorResolvedWindowAnchor = SectorResolvedDoorAnchor;
+
 struct SectorPlacedRuntimeObject {
     int id = 0;
     std::string definitionId;
@@ -368,6 +393,7 @@ struct SectorPlacedRuntimeObject {
     SectorPlacedItem item;
     SectorPlacedNpc npc;
     SectorPlacedDoor door;
+    SectorPlacedWindow window;
 };
 
 struct SectorTopologyMap {
@@ -526,6 +552,10 @@ const SectorCompiledPatrol* FindSectorCompiledPatrol(
 SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
         const SectorTopologyMap& map,
         const SectorPlacedDoor& door);
+
+SectorResolvedWindowAnchor ResolveSectorWindowAnchor(
+        const SectorTopologyMap& map,
+        const SectorPlacedWindow& window);
 
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(
         const SectorTopologyMap& map,

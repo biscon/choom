@@ -661,6 +661,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::Item: return "Item";
         case SectorEditorTool::Npc: return "NPC";
         case SectorEditorTool::Door: return "Door";
+        case SectorEditorTool::Window: return "Window";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
         case SectorEditorTool::ReflectionProbe: return "Reflection Probe";
         case SectorEditorTool::Trigger: return "Trigger";
@@ -1162,6 +1163,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::DynamicModel: return "Dynamic Prop: click inside a derived sector to place an animated model";
         case SectorEditorTool::Npc: return "NPC: click inside a derived sector to place a character";
         case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
+        case SectorEditorTool::Window: return "Window: click a two-sided portal line to place procedural glass";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume: click strictly inside a sector to place local fog";
         case SectorEditorTool::ReflectionProbe: return "Reflection Probe: click inside a sector to place a local baked reflection capture";
         case SectorEditorTool::Trigger: return "Trigger: choose Rectangle or Polygon, then draw snapped points; right click/Esc cancels";

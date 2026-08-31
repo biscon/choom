@@ -214,6 +214,10 @@ public:
     const std::vector<SectorPreviewDynamicLightKey>& SelectedLightKeys() const {
         return selectedLightKeys;
     }
+    const RuntimePortalVisibilityResult& LightingVisibility() const
+    {
+        return lightingVisibility;
+    }
     const SectorDynamicLightSelectionStats& SelectionStats() const {
         return selectionStats;
     }

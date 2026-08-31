@@ -184,7 +184,7 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
 
     constexpr float panelWidth = 620.0f;
-    constexpr float panelHeight = 970.0f;
+    constexpr float panelHeight = 1026.0f;
     constexpr float padding = 44.0f;
     constexpr float rowHeight = 48.0f;
     const Rectangle panel{

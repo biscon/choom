@@ -10625,6 +10625,12 @@ void TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools()
           "door tool help describes portal placement");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Door),
           "door placement remains available in graph-authoritative mode");
+    Check(TextContains(game::ToolName(game::SectorEditorTool::Window), "Window"),
+          "window tool label is exposed");
+    Check(TextContains(game::ToolHelpText(game::SectorEditorTool::Window), "two-sided portal"),
+          "window tool help describes portal placement");
+    Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::Window),
+          "window placement remains available in graph-authoritative mode");
     Check(game::IsToolAvailableInGraphAuthoritativeMode(game::SectorEditorTool::StaticLight),
           "static light placement remains available in graph-authoritative mode");
     Check(TextContains(game::ToolHelpText(game::SectorEditorTool::StaticLight), "place"),
@@ -10802,6 +10808,104 @@ void TestEditorDoorPlacementRejectsOneSidedWall()
     Check(map.runtimeObjects.empty(), "rejected door placement leaves runtime objects unchanged");
     Check(result.status.find("two-sided portal") != std::string::npos,
           "rejected door placement explains the portal requirement");
+}
+
+void TestEditorWindowPlacementCreatesSelectablePortalGlass()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    const game::SectorEditorAddWindowResult result =
+            game::AddWindowToPortal(map, 11);
+
+    Check(result.changed && result.objectId > 0,
+          "window placement helper reports a new object");
+    Check(map.runtimeObjects.size() == 1,
+          "window placement helper appends one runtime object");
+    if (map.runtimeObjects.empty()) return;
+
+    game::SectorPlacedRuntimeObject& object = map.runtimeObjects.front();
+    Check(object.kind == "window" && object.id == result.objectId,
+          "window placement helper writes stable generic window identity");
+    Check(object.window.anchor.lineDefId == 11
+                  && object.window.anchor.frontSideDefId == 101
+                  && object.window.anchor.backSideDefId == 104
+                  && object.window.anchor.frontSectorId == 200
+                  && object.window.anchor.backSectorId == 201
+                  && object.window.anchor.endpointAX == 64
+                  && object.window.anchor.endpointAY == 0
+                  && object.window.anchor.endpointBX == 64
+                  && object.window.anchor.endpointBY == 64,
+          "window placement stores stable portal IDs and exact endpoints");
+    Check(object.window.width > 0.0f
+                  && object.window.height > 0.0f
+                  && Near(object.window.thickness, 0.04f)
+                  && Near(object.window.opacity, 0.18f)
+                  && Near(object.window.roughness, 0.08f)
+                  && Near(object.window.surfaceHaze, 0.08f)
+                  && Near(object.window.imperfectionStrength, 0.15f)
+                  && Near(object.window.indexOfRefraction, 1.5f)
+                  && object.window.collision,
+          "window placement fits the opening and uses physical glass defaults");
+
+    object.window.horizontalOffsetWorld = 0.25f;
+    object.window.normalOffset = 0.125f;
+    object.position = Vector3{400.0f, 0.0f, 400.0f};
+    const game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    map,
+                    game::SectorAuthoringGraph{},
+                    game::SectorAuthoringDerivationResult{},
+                    1);
+    Check(cache.runtimeObjects.size() == 1
+                  && cache.runtimeObjects[0].definitionKnown
+                  && cache.runtimeObjects[0].isWindow
+                  && !cache.runtimeObjects[0].isDoor
+                  && cache.runtimeObjects[0].doorFootprintValid,
+          "2D render cache builds a distinct window footprint");
+    const Vector2 expectedCenter{
+            game::SectorCoordToVisibleAuthoring(64)
+                    + game::SectorWorldToAuthoringDistance(0.125f),
+            game::SectorCoordToVisibleAuthoring(32)
+                    + game::SectorWorldToAuthoringDistance(0.25f)};
+    Check(Near(cache.runtimeObjects[0].map, expectedCenter),
+          "cached window footprint applies horizontal and portal-normal offsets");
+
+    game::SectorEditorTopologyDrawContext pickContext;
+    pickContext.canvasRect = Rectangle{0.0f, 0.0f, 200.0f, 200.0f};
+    pickContext.viewCenter = game::SectorAuthoringToWorldPosition(expectedCenter);
+    pickContext.viewZoom = 64.0f;
+    std::vector<game::SectorEditorPickCandidate> candidates;
+    game::AppendCachedRuntimeObjectPickCandidates(
+            cache,
+            pickContext,
+            Vector2{100.0f, 100.0f},
+            game::ScreenLightPickPixels,
+            candidates);
+    Check(candidates.size() == 1
+                  && candidates[0].target.kind
+                          == game::SectorEditorPickKind::RuntimeObject
+                  && candidates[0].target.id == object.id,
+          "window slab participates in cached runtime-object picking");
+    candidates.push_back(game::SectorEditorPickCandidate{
+            game::SectorEditorPickTarget{
+                    game::SectorEditorPickKind::AuthoringLine, 11},
+            0.0f});
+    const game::SectorEditorPickTarget beneath =
+            game::ChooseSectorEditorPickTarget(
+                    candidates,
+                    game::SectorEditorPickTarget{
+                            game::SectorEditorPickKind::RuntimeObject,
+                            object.id});
+    Check(beneath.kind == game::SectorEditorPickKind::AuthoringLine
+                  && beneath.id == 11,
+          "repeated window selection cycles to the portal primitive beneath it");
+
+    game::SectorTopologyMap wallMap = MakeSingleSectorSquareMap();
+    const game::SectorEditorAddWindowResult rejected =
+            game::AddWindowToPortal(wallMap, 10);
+    Check(!rejected.changed && wallMap.runtimeObjects.empty()
+                  && rejected.status.find("two-sided portal")
+                          != std::string::npos,
+          "window placement rejects one-sided walls without mutation");
 }
 
 game::SectorSwingDoorCatalog MakeEditorSwingDoorCatalog()
@@ -15036,6 +15140,7 @@ int main()
     TestEditorDoorPlacementCreatesPortalAnchoredObject();
     TestEditorSwingDoorDefaultsCachedFootprintGuidesAndPicking();
     TestEditorDoorPlacementRejectsOneSidedWall();
+    TestEditorWindowPlacementCreatesSelectablePortalGlass();
     TestEditorUnifiedSelectPickOrderingCyclingAndDragGate();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
     TestEditorResetBlankMapClearsLifecyclePathAndDirtyState();

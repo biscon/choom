@@ -36,6 +36,7 @@ enum class SectorEditorTool {
     Item,
     Npc,
     Door,
+    Window,
     AuthoringFogVolume,
     ReflectionProbe,
     Trigger,

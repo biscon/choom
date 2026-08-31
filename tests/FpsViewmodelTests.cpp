@@ -1027,6 +1027,7 @@ void SettingsResolutionAndPersistence()
     assert(loaded.graphics.maxShadowLightUpdatesPerFrame == 7);
     assert(Near(loaded.graphics.dynamicLightFadeInSeconds, 0.35f));
     assert(!loaded.graphics.depthPrepass);
+    assert(savedSettings.find("advancedGlass") == std::string::npos);
     assert(loaded.graphics.showFpsCounter);
     assert(loaded.graphics.performanceOverlay);
     assert(!loaded.graphics.vsync);
@@ -1270,6 +1271,8 @@ void SettingsResolutionAndPersistence()
             R"({"version":1,"graphics":{"dynamicLightFadeInSeconds":"slow"}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"depthPrepass":"yes"}})",loaded,&error));
+    assert(game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"advancedGlass":"yes"}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"showFpsCounter":"yes"}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(

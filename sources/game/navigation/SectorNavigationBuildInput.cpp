@@ -624,10 +624,15 @@ bool BuildSectorNavigationBuildInput(
         }
     }
     for (const SectorPlacedRuntimeObject* object : objects) {
-        if (object->kind != "static_model" || !object->staticModel.collision) continue;
+        const bool staticModel = object->kind == "static_model"
+                && object->staticModel.collision;
+        const bool window = object->kind == "window"
+                && object->window.collision;
+        if (!staticModel && !window) continue;
         const auto found = collidersByObject.find(object->id);
         if (found == collidersByObject.end()) {
-            outWarnings.push_back("Collision-enabled static model "
+            outWarnings.push_back(std::string("Collision-enabled ")
+                    + (window ? "window " : "static model ")
                     + std::to_string(object->id)
                     + " has no resolved collider and was omitted from navigation");
             continue;
@@ -713,6 +718,24 @@ uint64_t ComputeSectorNavigationSourceHash(
                 hash.Float(object->door.heightOffsetWorld);
                 hash.Pod(static_cast<uint8_t>(object->door.motion));
                 hash.Pod(static_cast<uint8_t>(object->door.swingSide));
+            }
+        } else if (object->kind == "window" && object->window.collision) {
+            hash.String("window"); hash.Pod(object->id);
+            const SectorResolvedWindowAnchor window =
+                    ResolveSectorWindowAnchor(map, object->window);
+            hash.Pod(static_cast<uint8_t>(window.valid));
+            hash.Pod(object->window.anchor.lineDefId);
+            const auto found = collidersByObject.find(object->id);
+            hash.Pod(static_cast<uint8_t>(found != collidersByObject.end()));
+            if (window.valid) {
+                hash.Float(window.endpointA.x); hash.Float(window.endpointA.y);
+                hash.Float(window.endpointB.x); hash.Float(window.endpointB.y);
+                hash.Float(window.openBottom); hash.Float(window.openTop);
+                hash.Float(window.width); hash.Float(window.height);
+                hash.Float(object->window.thickness);
+                hash.Float(object->window.horizontalOffsetWorld);
+                hash.Float(object->window.verticalOffsetWorld);
+                hash.Float(object->window.normalOffset);
             }
         }
     }

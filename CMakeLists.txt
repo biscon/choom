@@ -321,6 +321,7 @@ if(BUILD_TESTING)
             MODEL_ASSET_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/engine/assets/ModelAssets.cpp"
             SECTOR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorMeshRenderer.cpp"
             DOOR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDoorRenderer.cpp"
+            WINDOW_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorWindowRenderer.cpp"
             BILLBOARD_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBillboardRenderer.cpp"
             BLOOM_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBloomRenderer.cpp"
             DISTANCE_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDistanceFogRenderer.cpp"

@@ -431,6 +431,7 @@ void TestSectorRuntimeNormalMappingPolicy()
 {
     const std::string source = ReadSource(SECTOR_SHADER_SOURCE_PATH);
     const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
+    const std::string window = ReadSource(WINDOW_SHADER_SOURCE_PATH);
     Check(!source.empty(),
           "sector runtime normal-mapping policy can read the active renderer");
     Check(source.find("engine::TextureColorUsage::LinearData")
@@ -504,6 +505,16 @@ void TestSectorRuntimeNormalMappingPolicy()
                                "for (int textureUnit = MATERIAL_MAP_ALBEDO;")
                             != std::string::npos,
           "sector material samplers receive deterministic fixed texture units");
+    Check(source.find(
+                      "surfaceLightmapBakeCurrent && !staticCaptureOnly)")
+                            != std::string::npos
+                    && source.find(
+                               "doorDrawContext.staticSpecularEligible = !staticCaptureOnly")
+                            != std::string::npos
+                    && source.find(
+                               "!staticCaptureOnly && objectProbeBakeCurrent")
+                            != std::string::npos,
+          "reflection probe captures exclude view-dependent direct specular from sectors and objects");
 
     const std::string model = ReadSource(PBR_SHADER_SOURCE_PATH);
     Check(source.find("pbrDiagnosticMode == 10") != std::string::npos
@@ -545,6 +556,19 @@ void TestSectorRuntimeNormalMappingPolicy()
                       "        outputRgb = ApplySectorFog(")
                     != std::string::npos,
           "door PBR diagnostics bypass fog while full rendering retains it");
+    Check(!window.empty()
+                    && window.find("float DistributionGgx(")
+                            != std::string::npos
+                    && window.find("float GeometrySmith(")
+                            != std::string::npos
+                    && window.find("float FresnelSchlick(")
+                            != std::string::npos
+                    && window.find(
+                               "float specular = distribution * geometry * fresnel")
+                            != std::string::npos
+                    && window.find("mix(256.0, 4.0, roughness)")
+                            == std::string::npos,
+          "procedural windows use normalized GGX direct specular instead of a constant-peak exponent lobe");
     Check(source.find("NormalMappedRendererMaterialIds(map, geometry)")
                             != std::string::npos
                     && source.find("ResolveDoorMaterial(") != std::string::npos
@@ -884,11 +908,70 @@ void TestHdrEffectShaderAndPassPolicies()
                             !=std::string::npos,
           "decal-only bloom redraw is retired in favor of visible emissive radiance");
     const std::size_t atmosphere=mainGraph.find("Apply3DWorldAtmosphere");
+    const std::size_t glass=mainGraph.find("Apply3DGlass");
     const std::size_t viewmodel=mainGraph.find("Render3DViewmodel");
     const std::size_t sceneBloom=mainGraph.find("Apply3DHdrBloom");
     const std::size_t overlays=mainGraph.find("Render3DOverlays");
-    Check(atmosphere<viewmodel&&viewmodel<sceneBloom&&sceneBloom<overlays,
-          "pass graph orders atmosphere, viewmodel, bloom, then excluded editor overlays");
+    Check(glass<atmosphere&&atmosphere<viewmodel&&viewmodel<sceneBloom&&sceneBloom<overlays,
+          "pass graph orders glass, atmosphere, viewmodel, bloom, then excluded editor overlays");
+    const std::string glassShader=ReadSource(WINDOW_SHADER_SOURCE_PATH);
+    Check(glassShader.find("uniform sampler2D sceneColor")!=std::string::npos
+                    &&glassShader.find("uniform sampler2D sceneDepth")!=std::string::npos
+                    &&glassShader.find("refract(incident, facingNormal, 1.0 / ior)")
+                            !=std::string::npos
+                    &&glassShader.find("environmentBoxProjection")!=std::string::npos
+                    &&glassShader.find("probe.topologySectorId != viewerSectorId")
+                            !=std::string::npos
+                    &&glassShader.find("shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneColorLoc")
+                            !=std::string::npos
+                    &&glassShader.find("shader.locs[SHADER_LOC_MAP_SPECULAR] = sceneDepthLoc")
+                            !=std::string::npos
+                    &&glassShader.find("gl_FragCoord.z > opaqueDepth")
+                            !=std::string::npos
+                    &&glassShader.find("SetShaderValueTexture")
+                            ==std::string::npos
+                    &&glassShader.find("advancedTransmission")!=std::string::npos,
+          "the retained refraction backend uses depth-aware scene transmission and box-projected probes");
+    Check(glassShader.find("rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY)")
+                            !=std::string::npos
+                    &&glassShader.find("float fresnel = clamp(0.04 + 0.96")
+                            !=std::string::npos
+                    &&glassShader.find("float blocker = clamp(mix(opacity, 1.0, fresnel)")
+                            !=std::string::npos
+                    &&glassShader.find("vec3 tintFilter = mix(vec3(1.0)")
+                            !=std::string::npos
+                    &&glassShader.find("(1.0 - blocker) * tintFilter")
+                            !=std::string::npos
+                    &&glassShader.find("reflection * shadingFresnel")!=std::string::npos
+                    &&glassShader.find("glassTint * opacity")
+                            ==std::string::npos
+                    &&glassShader.find("RL_ZERO, RL_SRC_COLOR")
+                            !=std::string::npos
+                    &&glassShader.find("RL_ONE, RL_ONE")
+                            !=std::string::npos,
+          "flat glass multiplicatively filters transmission before adding clamped-Fresnel reflection");
+    const std::size_t flatTransmissionReturn = glassShader.find(
+            "finalColor = vec4(transmission, 1.0)");
+    const std::size_t surfaceDetailEvaluation = glassShader.find(
+            "GlassSurfaceDetail(normal, shadingNormal, hazeVariation)");
+    Check(glassShader.find("fragLocalPosition")!=std::string::npos
+                    &&glassShader.find("glassDimensions")!=std::string::npos
+                    &&glassShader.find("glassPatternSeed")!=std::string::npos
+                    &&glassShader.find("GlassSurfacePattern")!=std::string::npos
+                    &&glassShader.find("0.069926812 * strength")
+                            !=std::string::npos
+                    &&glassShader.find("hazeVariation")!=std::string::npos
+                    &&glassShader.find("hazeWeight = min(")!=std::string::npos
+                    &&glassShader.find("hazeVariation, 0.20)")
+                            !=std::string::npos
+                    &&flatTransmissionReturn<surfaceDetailEvaluation,
+          "glass surface detail is stable pane-local noise with bounded normal and haze strength, evaluated after cheap flat transmission");
+    Check(glassShader.find("DirectionalSpecular")!=std::string::npos
+                    &&glassShader.find("ndotl <= 0.0 || ndotv <= 0.0")
+                            !=std::string::npos
+                    &&glassShader.find("dynamicLightCount")==std::string::npos
+                    &&glassShader.find("staticSpecularLightCount")==std::string::npos,
+          "glass only receives front-lit directional direct specular");
     Check(mainGraph.find("Render3DHud")>sceneBloom,
           "HUD and ordinary UI are downstream of scene-wide bloom");
     Check(mainGraph.find("rlLoadFramebuffer()")!=std::string::npos
@@ -902,6 +985,20 @@ void TestHdrEffectShaderAndPassPolicies()
                             ==std::string::npos,
           "viewmodel keeps private depth while drawing directly into shared HDR color");
     const std::string sectorRenderer=ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    Check(sectorRenderer.find("glBlitFramebuffer")!=std::string::npos
+                    &&sectorRenderer.find("EnsureHdrSceneColorView(sceneTarget)")
+                            !=std::string::npos
+                    &&sectorRenderer.find("? hdrSceneColorView : sceneTarget.native")
+                            !=std::string::npos,
+          "advanced glass snapshots color without flipping and renders through the depth-detached scene color view");
+    Check(sectorRenderer.find("bool requestRefraction")!=std::string::npos
+                    &&sectorRenderer.find("bool refractionReady = requestRefraction")
+                            !=std::string::npos
+                    &&sectorRenderer.find("preGlassLightEffectsRendered = true")
+                            !=std::string::npos
+                    &&sectorRenderer.find("dynamicLightState.LightingVisibility()")
+                            !=std::string::npos,
+          "flat windows skip refraction snapshots while halos and shafts use stable blocker-aware visibility before glass");
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos

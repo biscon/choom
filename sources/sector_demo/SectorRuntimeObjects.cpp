@@ -42,11 +42,29 @@ SectorObjectLighting SampleSectorObjectLighting(
 
 } // namespace
 
+Matrix BuildSectorWindowModelMatrix(
+        const SectorObjectTransform& transform,
+        const SectorWindow& window)
+{
+    // Portal normals point from the front sector toward the back sector. With
+    // tangent and world-up, that direction forms a mirrored basis. A centered
+    // cube occupies the same slab volume when its local depth axis is reversed,
+    // while the resulting right-handed transform preserves face winding and
+    // outward normals for backface culling and Fresnel shading.
+    return Matrix{
+            window.tangent.x * window.width, 0.0f,
+                    -window.normal.x * window.thickness, transform.position.x,
+            0.0f, window.height, 0.0f, transform.position.y,
+            window.tangent.y * window.width, 0.0f,
+                    -window.normal.y * window.thickness, transform.position.z,
+            0.0f, 0.0f, 0.0f, 1.0f};
+}
+
 
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(33);
+    world.ReserveComponentTypes(34);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -54,6 +72,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<SectorStaticModel>(objectCapacity);
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
     world.ReserveComponent<SectorItem>(objectCapacity);
+    world.ReserveComponent<SectorWindow>(objectCapacity);
     world.ReserveComponent<NpcRuntimeInstance>(objectCapacity);
     world.ReserveComponent<NpcPatrolState>(objectCapacity);
     world.ReserveComponent<NpcAiState>(objectCapacity);
@@ -87,6 +106,19 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
 namespace {
 
 constexpr const char* SectorRuntimeObjectAssetScopeName = "sector_runtime_objects";
+
+void RefreshPhysicalModelColliders(SectorRuntimeObjectState& state)
+{
+    state.physicalModelColliders.clear();
+    state.physicalModelColliders.insert(
+            state.physicalModelColliders.end(),
+            state.staticModelColliders.begin(),
+            state.staticModelColliders.end());
+    state.physicalModelColliders.insert(
+            state.physicalModelColliders.end(),
+            state.windowColliders.begin(),
+            state.windowColliders.end());
+}
 
 
 Vector3 PlacedRuntimeObjectAuthoringToWorldPosition(Vector3 authoringPosition)
@@ -951,6 +983,10 @@ void SpawnPlacedRuntimeObjects(
     state.staticModelColliders.reserve(map.runtimeObjects.size());
     state.dynamicModelColliders.clear();
     state.dynamicModelColliders.reserve(map.runtimeObjects.size());
+    state.windowColliders.clear();
+    state.windowColliders.reserve(map.runtimeObjects.size());
+    state.physicalModelColliders.clear();
+    state.physicalModelColliders.reserve(map.runtimeObjects.size() * 2u);
     state.placedObjectCount = map.runtimeObjects.size();
     state.spawnedObjectCount = 0;
     state.skippedObjectCount = 0;
@@ -1181,6 +1217,101 @@ void SpawnPlacedRuntimeObjects(
                 world.Add(entity, modelRender);
             }
             state.placedObjectEntities.push_back(SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
+        if (placedObject.kind == "window") {
+            const SectorResolvedWindowAnchor resolved =
+                    ResolveSectorWindowAnchor(map, placedObject.window);
+            if (!resolved.valid) {
+                const std::string warning = TextFormat(
+                        "window object %d anchor on linedef %d is invalid: %s",
+                        placedObject.id,
+                        placedObject.window.anchor.lineDefId,
+                        resolved.diagnostic.empty()
+                                ? "unknown anchor error"
+                                : resolved.diagnostic.c_str());
+                std::fprintf(stderr,
+                        "[SectorRuntimeObjects WARNING] %s\n",
+                        warning.c_str());
+                recordWarning(warning);
+                ++skippedCount;
+                continue;
+            }
+            const Vector2 centerXZ{
+                    resolved.midpoint.x
+                            + resolved.tangent.x
+                                    * placedObject.window.horizontalOffsetWorld
+                            + resolved.normal.x
+                                    * placedObject.window.normalOffset,
+                    resolved.midpoint.y
+                            + resolved.tangent.y
+                                    * placedObject.window.horizontalOffsetWorld
+                            + resolved.normal.y
+                                    * placedObject.window.normalOffset};
+            const Vector3 worldPosition{
+                    centerXZ.x,
+                    resolved.openBottom + resolved.portalHeight * 0.5f
+                            + placedObject.window.verticalOffsetWorld,
+                    centerXZ.y};
+            SectorObject object;
+            if (state.objectSectorLookupWorldValid) {
+                const int found = state.objectSectorLookupWorld
+                        .FindSectorContainingPointPreferCurrent(
+                                centerXZ, resolved.frontSectorId);
+                object.currentSectorId = found != 0
+                        ? found : resolved.frontSectorId;
+            } else {
+                object.currentSectorId = resolved.frontSectorId;
+            }
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{
+                    worldPosition, SectorDoorAnchorYawRadians(resolved)});
+            world.Add(entity, object);
+            world.Add(entity, SampleSectorObjectLighting(
+                    state.objectLightProbes,
+                    worldPosition,
+                    object.currentSectorId,
+                    &map));
+            world.Add(entity, SectorWindow{
+                    placedObject.id,
+                    resolved.lineDefId,
+                    resolved.frontSectorId,
+                    resolved.backSectorId,
+                    resolved.tangent,
+                    resolved.normal,
+                    resolved.width,
+                    resolved.height,
+                    placedObject.window.thickness,
+                    placedObject.window.tint,
+                    placedObject.window.opacity,
+                    placedObject.window.roughness,
+                    placedObject.window.surfaceHaze,
+                    placedObject.window.imperfectionStrength,
+                    placedObject.window.indexOfRefraction,
+                    true});
+            if (placedObject.window.collision) {
+                SectorStaticModelCollider collider;
+                collider.placedObjectId = placedObject.id;
+                collider.center = centerXZ;
+                collider.axisX = resolved.tangent;
+                collider.axisZ = resolved.normal;
+                collider.halfExtents = Vector2{
+                        resolved.width * 0.5f,
+                        placedObject.window.thickness * 0.5f};
+                collider.bottom = worldPosition.y - resolved.height * 0.5f;
+                collider.top = worldPosition.y + resolved.height * 0.5f;
+                collider.resolvedPosition = worldPosition;
+                collider.resolvedYawRadians =
+                        SectorDoorAnchorYawRadians(resolved);
+                collider.resolvedScale = 1.0f;
+                collider.resolved = true;
+                collider.entity = entity;
+                world.Add(entity, collider);
+            }
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
             ++spawnedCount;
             continue;
         }
@@ -1648,7 +1779,25 @@ void SpawnPlacedRuntimeObjects(
     UpdateSectorStaticModelColliderSystem(world, assets);
     CollectSectorStaticModelColliders(world, state.staticModelColliders);
     CollectSectorDynamicModelColliders(world, state.dynamicModelColliders);
+    CollectSectorWindowColliders(world, state.windowColliders);
+    RefreshPhysicalModelColliders(state);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
+}
+
+void CollectSectorWindowColliders(
+        engine::World& world,
+        std::vector<SectorStaticModelCollider>& colliders)
+{
+    colliders.clear();
+    world.ForEach<SectorWindow, SectorStaticModelCollider>(
+            [&colliders](engine::Entity entity,
+                    SectorWindow&,
+                    SectorStaticModelCollider& collider) {
+                if (!collider.resolved || collider.failed) return;
+                SectorStaticModelCollider copy = collider;
+                copy.entity = entity;
+                colliders.push_back(copy);
+            });
 }
 
 void RefreshSectorDoorSpatialCaches(
@@ -1689,6 +1838,7 @@ void UpdateSectorRuntimeObjects(
     if (UpdateSectorStaticModelColliderSystem(world, assets)) {
         CollectSectorStaticModelColliders(world, state.staticModelColliders);
         CollectSectorDynamicModelColliders(world, state.dynamicModelColliders);
+        RefreshPhysicalModelColliders(state);
     }
     const bool doorModelReadinessChanged =
             RefreshSectorDoorModelReadinessSystem(world, assets);

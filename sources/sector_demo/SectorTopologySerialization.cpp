@@ -35,6 +35,7 @@ constexpr const char* RuntimeObjectKindDynamicModel = "dynamic_model";
 constexpr const char* RuntimeObjectKindItem = "item";
 constexpr const char* RuntimeObjectKindNpc = "npc";
 constexpr const char* RuntimeObjectKindDoor = "door";
+constexpr const char* RuntimeObjectKindWindow = "window";
 
 [[noreturn]] void Fail(const std::string& message);
 float ReadOptionalFloat(
@@ -50,6 +51,8 @@ int ReadInt(
         const Json& object,
         const char* field,
         const std::string& context);
+Color ReadColor(const Json& value, const std::string& context);
+Json WriteColor(Color color);
 
 SectorPatrolMode ReadPatrolMode(
         const Json& value,
@@ -774,6 +777,51 @@ void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std:
     }
 }
 
+void ValidatePlacedWindowForSerialization(
+        const SectorPlacedWindow& window,
+        const std::string& context)
+{
+    const SectorDoorAnchor& anchor = window.anchor;
+    if (!IsValidSectorTopologyId(anchor.lineDefId)
+            || !IsValidSectorTopologyId(anchor.frontSectorId)
+            || !IsValidSectorTopologyId(anchor.backSectorId)
+            || !IsValidSectorTopologyId(anchor.frontSideDefId)
+            || !IsValidSectorTopologyId(anchor.backSideDefId)) {
+        Fail(context + ".anchor IDs must be positive integers");
+    }
+    if (!std::isfinite(window.width)
+            || !std::isfinite(window.height)
+            || !std::isfinite(window.thickness)
+            || !std::isfinite(window.horizontalOffsetWorld)
+            || !std::isfinite(window.verticalOffsetWorld)
+            || !std::isfinite(window.normalOffset)
+            || !std::isfinite(window.opacity)
+            || !std::isfinite(window.roughness)
+            || !std::isfinite(window.surfaceHaze)
+            || !std::isfinite(window.imperfectionStrength)
+            || !std::isfinite(window.indexOfRefraction)) {
+        Fail(context + " numeric values must be finite");
+    }
+    if (window.width < 0.0f || window.height < 0.0f) {
+        Fail(context + ".width and .height must be non-negative");
+    }
+    if (window.thickness <= 0.0f) {
+        Fail(context + ".thickness must be positive");
+    }
+    if (window.opacity < 0.0f || window.opacity > 1.0f
+            || window.roughness < 0.0f || window.roughness > 1.0f
+            || window.surfaceHaze < 0.0f || window.surfaceHaze > 1.0f
+            || window.imperfectionStrength < 0.0f
+            || window.imperfectionStrength > 1.0f) {
+        Fail(context + ".opacity, .roughness, .surfaceHaze, and "
+                ".imperfectionStrength must be between 0 and 1");
+    }
+    if (window.indexOfRefraction < 1.0f
+            || window.indexOfRefraction > 2.5f) {
+        Fail(context + ".indexOfRefraction must be between 1 and 2.5");
+    }
+}
+
 float ReadOptionalPositiveFloat(
         const Json& object,
         const char* field,
@@ -1024,6 +1072,49 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
     return door;
 }
 
+SectorPlacedWindow ReadPlacedWindow(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorPlacedWindow window;
+    window.anchor = ReadSectorDoorAnchor(
+            RequireObjectField(value, "anchor", context), context + ".anchor");
+    window.width = ReadOptionalFloat(value, "width", context, window.width);
+    window.height = ReadOptionalFloat(value, "height", context, window.height);
+    window.thickness = ReadOptionalFloat(
+            value, "thickness", context, window.thickness);
+    window.horizontalOffsetWorld = ReadOptionalFloat(
+            value, "horizontalOffsetWorld", context,
+            window.horizontalOffsetWorld);
+    window.verticalOffsetWorld = ReadOptionalFloat(
+            value, "verticalOffsetWorld", context,
+            window.verticalOffsetWorld);
+    window.normalOffset = ReadOptionalFloat(
+            value, "normalOffset", context, window.normalOffset);
+    const auto tintIt = value.find("tint");
+    if (tintIt != value.end()) {
+        window.tint = ReadColor(*tintIt, context + ".tint");
+        window.tint.a = 255;
+    }
+    window.opacity = ReadOptionalFloat(
+            value, "opacity", context, window.opacity);
+    window.roughness = ReadOptionalFloat(
+            value, "roughness", context, window.roughness);
+    window.surfaceHaze = ReadOptionalFloat(
+            value, "surfaceHaze", context, window.surfaceHaze);
+    window.imperfectionStrength = ReadOptionalFloat(
+            value, "imperfectionStrength", context,
+            window.imperfectionStrength);
+    window.indexOfRefraction = ReadOptionalFloat(
+            value, "indexOfRefraction", context,
+            window.indexOfRefraction);
+    window.collision = ReadOptionalBool(
+            value, "collision", context, window.collision);
+    ValidatePlacedWindowForSerialization(window, context);
+    return window;
+}
+
 SectorPlacedBillboard ReadPlacedBillboard(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -1242,14 +1333,18 @@ SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string
         } else if (object.kind == RuntimeObjectKindDoor) {
             object.door = ReadPlacedDoor(RequireObjectField(value, "door", context),
                     context + ".door");
+        } else if (object.kind == RuntimeObjectKindWindow) {
+            object.window = ReadPlacedWindow(
+                    RequireObjectField(value, "window", context),
+                    context + ".window");
         } else {
-            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
         }
     } else {
         if (value.contains("definitionId")) {
             Fail(context + ".definitionId-only runtime objects are legacy unsupported data; use kind 'billboard'");
         }
-        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
     }
     object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
     object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
@@ -2210,6 +2305,53 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
     return json;
 }
 
+Json WritePlacedWindow(
+        const SectorPlacedWindow& window,
+        const std::string& context)
+{
+    ValidatePlacedWindowForSerialization(window, context);
+    const SectorPlacedWindow defaults;
+    Json json{{"anchor", WriteSectorDoorAnchor(window.anchor)}};
+    if (window.width != defaults.width) json["width"] = window.width;
+    if (window.height != defaults.height) json["height"] = window.height;
+    if (window.thickness != defaults.thickness) {
+        json["thickness"] = window.thickness;
+    }
+    if (window.horizontalOffsetWorld != defaults.horizontalOffsetWorld) {
+        json["horizontalOffsetWorld"] = window.horizontalOffsetWorld;
+    }
+    if (window.verticalOffsetWorld != defaults.verticalOffsetWorld) {
+        json["verticalOffsetWorld"] = window.verticalOffsetWorld;
+    }
+    if (window.normalOffset != defaults.normalOffset) {
+        json["normalOffset"] = window.normalOffset;
+    }
+    if (window.tint.r != defaults.tint.r
+            || window.tint.g != defaults.tint.g
+            || window.tint.b != defaults.tint.b) {
+        Color tint = window.tint;
+        tint.a = 255;
+        json["tint"] = WriteColor(tint);
+    }
+    if (window.opacity != defaults.opacity) json["opacity"] = window.opacity;
+    if (window.roughness != defaults.roughness) {
+        json["roughness"] = window.roughness;
+    }
+    if (window.surfaceHaze != defaults.surfaceHaze) {
+        json["surfaceHaze"] = window.surfaceHaze;
+    }
+    if (window.imperfectionStrength != defaults.imperfectionStrength) {
+        json["imperfectionStrength"] = window.imperfectionStrength;
+    }
+    if (window.indexOfRefraction != defaults.indexOfRefraction) {
+        json["indexOfRefraction"] = window.indexOfRefraction;
+    }
+    if (window.collision != defaults.collision) {
+        json["collision"] = window.collision;
+    }
+    return json;
+}
+
 Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::string& context)
 {
     if (!IsValidSectorTopologyId(object.id)) {
@@ -2223,7 +2365,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             {"id", object.id}
     };
     if (object.kind.empty()) {
-        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
     } else {
         if (object.kind == RuntimeObjectKindBillboard) {
             json["kind"] = object.kind;
@@ -2413,8 +2555,12 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
         } else if (object.kind == RuntimeObjectKindDoor) {
             json["kind"] = object.kind;
             json["door"] = WritePlacedDoor(object.door);
+        } else if (object.kind == RuntimeObjectKindWindow) {
+            json["kind"] = object.kind;
+            json["window"] = WritePlacedWindow(
+                    object.window, context + ".window");
         } else {
-            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
         }
     }
     json["position"] = WriteVector3(object.position, context + ".position");
@@ -3233,7 +3379,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             Fail(objectContext + ".id must be a positive integer");
         }
         if (object.kind.empty()) {
-            Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', or 'door'");
+            Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
         } else {
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
@@ -3363,8 +3509,11 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                     Fail(objectContext
                             + ".door.instanceId duplicates another door instance ID");
                 }
+            } else if (object.kind == RuntimeObjectKindWindow) {
+                ValidatePlacedWindowForSerialization(
+                        object.window, objectContext + ".window");
             } else {
-                Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', or 'door'");
+                Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
             }
         }
         if (!std::isfinite(object.position.x)

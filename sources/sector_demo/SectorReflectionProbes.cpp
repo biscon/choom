@@ -21,6 +21,9 @@ namespace {
 constexpr std::array<char, 8> Magic{{'S', 'R', 'P', 'R', 'O', 'B', 'E', '\0'}};
 constexpr std::uint32_t MaximumProbeCount = 4096;
 constexpr std::uint32_t MaximumHashBytes = 1024;
+// Increment when the capture renderer changes in a way that affects probe
+// pixels without changing the artifact file format.
+constexpr std::uint32_t CaptureLightingVersion = 2;
 
 void HashBytes(std::uint64_t& hash, const void* data, std::size_t size)
 {
@@ -236,6 +239,7 @@ std::string ComputeSectorReflectionProbeSourceHash(
 {
     std::uint64_t hash = 1469598103934665603ull;
     HashValue(hash, SectorReflectionProbeBakeVersion);
+    HashValue(hash, CaptureLightingVersion);
     HashValue(hash, probe.sourceAuthoringProbeId);
     HashValue(hash, probe.topologySectorId);
     HashValue(hash, probe.enabled);

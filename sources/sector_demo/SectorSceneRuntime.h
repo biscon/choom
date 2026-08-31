@@ -99,6 +99,11 @@ public:
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
             bool collectGpuDiagnostics = false);
+    void ApplyGlass(
+            engine::RenderTarget& sceneTarget,
+            engine::EngineContext& context,
+            const SectorTopologyMap& map,
+            bool collectGpuDiagnostics = false);
     void ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,

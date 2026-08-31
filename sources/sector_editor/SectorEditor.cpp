@@ -2052,6 +2052,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                if (state.currentTool == SectorEditorTool::Window) {
+                    AddWindowAtPortal(event.mouseClick.releasePosition);
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (state.currentTool == SectorEditorTool::Move) {
                     statusText = "Move: click a topology light";
                     engine::ConsumeEvent(event);
@@ -2859,7 +2865,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             }
             UpdateSectorEditorGameplayPreview(
                     sceneRuntime.RuntimeObjects().dynamicDoorColliders,
-                    sceneRuntime.RuntimeObjects().staticModelColliders,
+                    sceneRuntime.RuntimeObjects().physicalModelColliders,
                     previewState.collision,
                     previewState.controller,
                     state.previewSettingsModal.open,
@@ -4090,6 +4096,29 @@ void SectorEditor::AddDoorAtPortal(Vector2 screenPoint)
     editing.AddDoor(lineDefId);
 }
 
+void SectorEditor::AddWindowAtPortal(Vector2 screenPoint)
+{
+    const Vector2 mapPoint = ScreenToMap(screenPoint);
+    int lineDefId = -1;
+    int sideDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+    bool preferredMissing = false;
+    if (!FindTopologyLineNearScreenPoint(
+                screenPoint,
+                mapPoint,
+                lineDefId,
+                sideDefId,
+                side,
+                preferredMissing)) {
+        statusText = "Window placement failed: click a two-sided portal";
+        return;
+    }
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddWindow(lineDefId);
+}
+
 bool SectorEditor::DeleteSelectedRuntimeObject()
 {
     SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
@@ -4619,6 +4648,16 @@ void SectorEditor::ApplyPreview3DWorldAtmosphere(
             sceneTarget,
             TopologyMap(),
             collectGpuDiagnostics);
+}
+
+void SectorEditor::ApplyPreview3DGlass(
+        engine::RenderTarget& sceneTarget,
+        engine::EngineContext& context,
+        bool collectGpuDiagnostics)
+{
+    if (state.mode != SectorEditorMode::Preview3D) return;
+    sceneRuntime.ApplyGlass(
+            sceneTarget, context, TopologyMap(), collectGpuDiagnostics);
 }
 
 void SectorEditor::ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget)
@@ -6076,6 +6115,8 @@ void SectorEditor::DrawToolsPanel(
                     : "NPC: click inside a derived sector to place a character";
         } else if (tool == SectorEditorTool::Door) {
             statusText = "Door: click a two-sided portal line";
+        } else if (tool == SectorEditorTool::Window) {
+            statusText = "Window: click a two-sided portal line";
         } else if (tool == SectorEditorTool::AuthoringFogVolume) {
             statusText = "Fog Volume: click strictly inside a sector";
         } else if (tool == SectorEditorTool::ReflectionProbe) {
@@ -6128,6 +6169,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::Item,
             SectorEditorTool::Npc,
             SectorEditorTool::Door,
+            SectorEditorTool::Window,
             SectorEditorTool::Trigger,
             SectorEditorTool::LevelMarker,
             SectorEditorTool::SoundEmitter,
@@ -7808,7 +7850,7 @@ void SectorEditor::TogglePreviewControlMode()
                 state.mode == SectorEditorMode::Preview3D,
                 previewState.collision,
                 previewState.controller,
-                sceneRuntime.RuntimeObjects().staticModelColliders,
+                sceneRuntime.RuntimeObjects().physicalModelColliders,
                 sceneRuntime.Renderer())) {
         return;
     }
@@ -8098,7 +8140,7 @@ bool SectorEditor::RebuildSectorCollisionWorld()
             TopologyMap(),
             previewState.collision,
             previewState.controller,
-            sceneRuntime.RuntimeObjects().staticModelColliders);
+            sceneRuntime.RuntimeObjects().physicalModelColliders);
 }
 
 SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
@@ -8106,7 +8148,7 @@ SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
     return BuildSectorEditorGameplayVerticalContext(
             previewState.collision,
             previewState.controller,
-            sceneRuntime.RuntimeObjects().staticModelColliders);
+            sceneRuntime.RuntimeObjects().physicalModelColliders);
 }
 
 void SectorEditor::RefreshGameplaySectorAndVerticalContext()
@@ -8119,7 +8161,7 @@ void SectorEditor::InitializeGameplayVerticalState()
     InitializeSectorEditorGameplayVerticalState(
             previewState.collision,
             previewState.controller,
-            sceneRuntime.RuntimeObjects().staticModelColliders);
+            sceneRuntime.RuntimeObjects().physicalModelColliders);
 }
 
 void SectorEditor::OpenPreviewSettingsModal()

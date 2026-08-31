@@ -249,6 +249,20 @@ bool SectorEditorRuntimeObjectEditingService::AddDoor(int lineDefId)
     return true;
 }
 
+bool SectorEditorRuntimeObjectEditingService::AddWindow(int lineDefId)
+{
+    const SectorEditorAddWindowResult result =
+            AddWindowToPortal(context_.map, lineDefId);
+    if (!result.changed) {
+        context_.statusText = result.status;
+        return false;
+    }
+    SelectObject(result.objectId);
+    MarkEdited(result.status.c_str());
+    RefreshPreviewObjects();
+    return true;
+}
+
 bool SectorEditorRuntimeObjectEditingService::CopySelectedConfig(
         SectorEditorConfigClipboardState& clipboard) const
 {
@@ -1116,9 +1130,11 @@ bool SectorEditorRuntimeObjectEditingService::BeginDrag(int objectId)
     if (object == nullptr) {
         return false;
     }
-    if (object->kind == "door") {
+    if (object->kind == "door" || object->kind == "window") {
         context_.statusText =
-                "Door movement unavailable: doors stay anchored to portal lines";
+                object->kind == "window"
+                ? "Window movement unavailable: windows stay anchored to portal lines"
+                : "Door movement unavailable: doors stay anchored to portal lines";
         return false;
     }
     SelectObject(objectId);

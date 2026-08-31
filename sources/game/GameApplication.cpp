@@ -634,6 +634,20 @@ void GameApplication::Render3DViewmodel(engine::AssetManager& assets)
     }
 }
 
+void GameApplication::Apply3DGlass(
+        engine::RenderTarget& sceneTarget,
+        engine::EngineContext& context,
+        bool collectGpuDiagnostics)
+{
+    if (BackgroundScreen() == ApplicationScreen::Game) {
+        gameScene.ApplyGlass(
+                sceneTarget, context, gameSession.Map(), collectGpuDiagnostics);
+    } else {
+        editor.ApplyPreview3DGlass(
+                sceneTarget, context, collectGpuDiagnostics);
+    }
+}
+
 bool GameApplication::Prepare3DOverlayPass(
         engine::RenderTarget& sceneTarget)
 {

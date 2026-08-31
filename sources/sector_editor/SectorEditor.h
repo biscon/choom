@@ -124,6 +124,10 @@ public:
     void ApplyPreview3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             bool collectGpuDiagnostics = false);
+    void ApplyPreview3DGlass(
+            engine::RenderTarget& sceneTarget,
+            engine::EngineContext& context,
+            bool collectGpuDiagnostics = false);
     void ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget);
     bool CompositePreview3DViewmodel(
             engine::RenderTarget& sceneTarget,
@@ -590,6 +594,7 @@ private:
     void AddItemAt(Vector2 mapPoint);
     void AddNpcAt(Vector2 mapPoint);
     void AddDoorAtPortal(Vector2 screenPoint);
+    void AddWindowAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();
     bool DeleteRuntimeObjectById(int objectId);
     bool MutateSelectedRuntimeObject(

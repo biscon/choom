@@ -69,10 +69,12 @@ struct CachedRuntimeObjectDraw {
     float yawRadians = 0.0f;
     bool definitionKnown = false;
     bool isDoor = false;
+    bool isWindow = false;
     bool isNpc = false;
     bool isItem = false;
     std::string itemLabel;
     bool doorFootprintValid = false;
+    Color windowTint = WHITE;
     Vector2 doorCorners[4] = {};
     Vector2 doorEndpointA = {};
     Vector2 doorEndpointB = {};

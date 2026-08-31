@@ -582,8 +582,10 @@ void CollectSectorStaticModelColliders(
 {
     colliders.clear();
     world.ForEach<SectorStaticModelCollider>(
-            [&colliders](engine::Entity, SectorStaticModelCollider& collider) {
-                if (IsValidCollider(collider)) {
+            [&world, &colliders](engine::Entity entity,
+                    SectorStaticModelCollider& collider) {
+                if (!world.Has<SectorWindow>(entity)
+                        && IsValidCollider(collider)) {
                     colliders.push_back(collider);
                 }
             });

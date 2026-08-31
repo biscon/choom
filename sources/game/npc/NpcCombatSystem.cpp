@@ -471,6 +471,7 @@ static bool TracePlayerWeaponShot(
         const SectorCollisionWorld* collisionWorld,
         const std::vector<SectorDynamicDoorCollider>& doorColliders,
         const std::vector<SectorStaticModelCollider>& staticColliders,
+        const std::vector<SectorStaticModelCollider>* windowColliders,
         Vector3 rayOrigin,
         Vector3 rayDirection,
         float maximumDistance,
@@ -530,6 +531,27 @@ static bool TracePlayerWeaponShot(
                     normal, FpsShotHitKind::SolidProp, FpsShotSurfaceKind::None,
                     0, 0, 0, 0, collider.placedObjectId,
                     engine::NullEntity()};
+        }
+    }
+    if (windowColliders != nullptr) {
+        for (const SectorStaticModelCollider& collider : *windowColliders) {
+            if (!collider.resolved || collider.failed) continue;
+            float distance = 0.0f;
+            Vector3 normal{};
+            if (RayOrientedPrism(
+                        rayOrigin, outShot.rayDirection,
+                        collider.center, collider.axisX, collider.axisZ,
+                        collider.halfExtents, collider.bottom, collider.top,
+                        std::min(maximumDistance, best.distance),
+                        distance, normal)) {
+                best = {true, distance,
+                        Vector3Add(rayOrigin, Vector3Scale(
+                                outShot.rayDirection, distance)),
+                        normal, FpsShotHitKind::Window,
+                        FpsShotSurfaceKind::None,
+                        0, 0, 0, 0, collider.placedObjectId,
+                        collider.entity};
+            }
         }
     }
 
@@ -793,7 +815,8 @@ bool ResolvePlayerWeaponShot(
         FpsShotResult& outShot,
         WeaponImpactEvent& outImpact,
         NpcAudioRuntime* npcAudio,
-        NpcAiRuntime* npcAi)
+        NpcAiRuntime* npcAi,
+        const std::vector<SectorStaticModelCollider>* windowColliders)
 {
     RayCandidate candidate;
     const bool hit = TracePlayerWeaponShot(
@@ -802,6 +825,7 @@ bool ResolvePlayerWeaponShot(
             collisionWorld,
             doorColliders,
             staticColliders,
+            windowColliders,
             rayOrigin,
             rayDirection,
             maximumDistance,
@@ -838,7 +862,8 @@ bool ResolvePlayerWeaponPelletVolley(
         const FpsWeaponFiringDefinition& rawFiring,
         WeaponPelletVolleyResult& outVolley,
         NpcAudioRuntime* npcAudio,
-        NpcAiRuntime* npcAi)
+        NpcAiRuntime* npcAi,
+        const std::vector<SectorStaticModelCollider>* windowColliders)
 {
     outVolley = {};
     const int configuredPelletCount = std::clamp(
@@ -865,6 +890,7 @@ bool ResolvePlayerWeaponPelletVolley(
                     collisionWorld,
                     doorColliders,
                     staticColliders,
+                    windowColliders,
                     rayOrigin,
                     pelletDirection,
                     maximumRange,

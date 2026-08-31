@@ -40,6 +40,34 @@ namespace {
 constexpr float DefaultVisibilityDebugAspect = 16.0f / 9.0f;
 constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
 
+bool BlitFramebufferColor(
+        const RenderTexture2D& source,
+        const RenderTexture2D& destination)
+{
+    if (source.id == 0 || destination.id == 0
+            || source.texture.width != destination.texture.width
+            || source.texture.height != destination.texture.height) {
+        return false;
+    }
+    GLint previousReadFramebuffer = 0;
+    GLint previousDrawFramebuffer = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
+    while (glGetError() != GL_NO_ERROR) {}
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, source.id);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, destination.id);
+    glBlitFramebuffer(
+            0, 0, source.texture.width, source.texture.height,
+            0, 0, destination.texture.width, destination.texture.height,
+            GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    const bool copied = glGetError() == GL_NO_ERROR;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER,
+            static_cast<GLuint>(previousReadFramebuffer));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER,
+            static_cast<GLuint>(previousDrawFramebuffer));
+    return copied;
+}
+
 const char* HdrCompositeVs = R"(
 #version 330
 in vec3 vertexPosition;
@@ -1482,6 +1510,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
     doorRenderer.ReserveRuntimeDoorCapacity(runtimeObjectCapacity);
+    windowRenderer.Reserve(runtimeObjectCapacity);
     runtimeSeconds = 0.0f;
     distanceFogRenderer.Shutdown();
     analyticFogRenderer.Shutdown();
@@ -1525,6 +1554,12 @@ bool SectorMeshRenderer::RebuildRendererResources(
     if (!doorRenderer.LoadOpaqueResources()) {
         Shutdown(assets);
         error = "Preview failed: could not load door opaque shader";
+        return false;
+    }
+
+    if (!windowRenderer.Initialize(runtimeObjectCapacity)) {
+        Shutdown(assets);
+        error = "Preview failed: could not load window transparency shader";
         return false;
     }
 
@@ -1668,6 +1703,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
             && !staticModelRenderer.IsLoaded()
             && !doorRenderer.HasOpaqueResources()
             && !doorRenderer.HasCachedDoorMeshes()
+            && !windowRenderer.IsLoaded()
             && !dynamicLightState.HasShadowMapResources()
             && !dynamicLightState.HasShadowMaterial()
             && !dynamicModelShadowRenderer.IsLoaded()
@@ -1693,6 +1729,11 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     skyRenderer.Shutdown();
     pbrEnvironment = {};
     localReflectionProbesCurrent = true;
+    glassRefractionFallbackLogged = false;
+    atmosphereGpuFramePrepared = false;
+    preGlassLightEffectsRendered = false;
+    preGlassShaftApplied = false;
+    preGlassHaloApplied = false;
     localReflectionProbeSurfaceHash.clear();
     staticObjectAdjustmentBakedDataActive = false;
     doorRenderer.UnloadDoorMeshes();
@@ -1733,6 +1774,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     billboardRenderer.Shutdown();
     staticModelRenderer.Shutdown();
     doorRenderer.ShutdownOpaqueResources();
+    windowRenderer.Shutdown();
 
     if (!engine::IsNull(assetScope)) {
         assets.UnloadScope(assetScope);
@@ -1939,7 +1981,7 @@ void SectorMeshRenderer::DrawScene(
                                     : fallbackBounds,
                             batch.sectorId,
                             visibilityResult,
-                            surfaceLightmapBakeCurrent);
+                            surfaceLightmapBakeCurrent && !staticCaptureOnly);
             UploadSectorStaticSpecularLights(
                     material.shader,
                     staticSpecularLocations,
@@ -2114,7 +2156,8 @@ void SectorMeshRenderer::DrawScene(
         doorDrawContext.environmentYaw = objectEnvironmentSelection.yawRadians;
         doorDrawContext.environmentMaxLod = objectEnvironmentSelection.maxLod;
         doorDrawContext.environmentBoxProjection = objectEnvironmentSelection.boxProjection;
-        doorDrawContext.staticSpecularEligible = objectProbeBakeCurrent
+        doorDrawContext.staticSpecularEligible = !staticCaptureOnly
+                && objectProbeBakeCurrent
                 && doorLighting.objectLightProbes != nullptr
                 && !doorLighting.objectLightProbes->probes.empty();
         doorDrawContext.defaultMaterialTexture = &defaultMaterialTexture;
@@ -2132,7 +2175,7 @@ void SectorMeshRenderer::DrawScene(
                 billboardLightContext,
                 staticSpecularLightState,
                 surfaceLightmapBakeCurrent,
-                objectProbeBakeCurrent
+                !staticCaptureOnly && objectProbeBakeCurrent
                         && doorLighting.objectLightProbes != nullptr
                         && !doorLighting.objectLightProbes->probes.empty(),
                 fogContext,
@@ -2693,20 +2736,154 @@ void SectorMeshRenderer::RefreshAtmosphereDiagnostics(
             lightDustRenderer.VisibleParticleCount();
 }
 
+bool SectorMeshRenderer::ApplyGlass(
+        engine::RenderTarget& sceneTarget,
+        engine::AssetManager& assets,
+        engine::World* runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting,
+        const SectorTopologyFogSettings& fogSettings,
+        bool collectGpuDiagnostics,
+        bool requestRefraction)
+{
+    preGlassLightEffectsRendered = false;
+    preGlassShaftApplied = false;
+    preGlassHaloApplied = false;
+    if (!initialized || runtimeObjectWorld == nullptr) {
+        return false;
+    }
+
+    // Halo and shaft GPU timings remain part of the atmosphere diagnostics even
+    // though these two effects are composited before transparent windows.
+    BeginAtmosphereGpuFrame(collectGpuDiagnostics);
+    atmosphereGpuFramePrepared = true;
+
+    const bool visibleWindows = windowRenderer.HasVisibleWindows(
+            *runtimeObjectWorld, &visibilityResult);
+    const SectorTopologyMap* map = doorLighting.mapForFallback;
+    const SectorBillboardDynamicLightContext lightContext =
+            BuildBillboardDynamicLightContext();
+    const bool canRenderPreGlassEffects = visibleWindows && map != nullptr
+            && sceneTarget.descriptor.colorFormat
+                    == engine::RenderTargetColorFormat::Rgba16Float
+            && sceneTarget.actual.depth
+                    == engine::RenderTargetDepthKind::SampleableTexture
+            && EnsureHdrSceneColorView(sceneTarget);
+    if (canRenderPreGlassEffects) {
+        SectorTopologyFogSettings effectFogSettings = fogSettings;
+        if (NormalizeSectorTopologyFogSettings(fogSettings).mode
+                == SectorTopologyFogMode::Distance) {
+            // The later full-screen distance fog pass sees these pixels and
+            // applies the attenuation once to effects and glass together.
+            effectFogSettings.enabled = false;
+        }
+        const RuntimePortalVisibilityResult& lightingVisibility =
+                dynamicLightState.LightingVisibility();
+        BeginAtmosphereGpuPass(2);
+        preGlassShaftApplied = analyticLightShaftRenderer.Apply(
+                sceneTarget.native, hdrSceneColorView, effectFogSettings,
+                camera, lightContext, lightAtmosphereSources,
+                lightingVisibility, meshes.sectorReceiverBounds);
+        EndAtmosphereGpuPass(2);
+        BeginAtmosphereGpuPass(3);
+        preGlassHaloApplied = lightProxyRenderer.Apply(
+                sceneTarget.native, hdrSceneColorView, effectFogSettings,
+                camera, lightContext, lightAtmosphereSources,
+                lightingVisibility, meshes.sectorReceiverBounds);
+        EndAtmosphereGpuPass(3);
+        preGlassLightEffectsRendered = true;
+    }
+
+    if (!visibleWindows) {
+        renderDebugText += " | glass: idle";
+        return preGlassShaftApplied || preGlassHaloApplied;
+    }
+
+    // Refraction remains available to future non-window transparent materials,
+    // but portal windows deliberately never request the scene-color snapshot.
+    bool refractionReady = requestRefraction
+            && sceneTarget.actual.depth
+                    == engine::RenderTargetDepthKind::SampleableTexture
+            && sceneTarget.native.depth.id != 0
+            && EnsureHdrSceneScratch(sceneTarget)
+            && EnsureHdrSceneColorView(sceneTarget);
+    if (refractionReady) {
+        rlDrawRenderBatchActive();
+        refractionReady = BlitFramebufferColor(
+                sceneTarget.native, hdrSceneScratch.native);
+        if (refractionReady) SetTextureFilter(
+                hdrSceneScratch.native.texture, TEXTURE_FILTER_BILINEAR);
+    }
+
+    SectorTopologyFogSettings materialFogSettings = fogSettings;
+    if (NormalizeSectorTopologyFogSettings(fogSettings).mode
+            == SectorTopologyFogMode::Distance) {
+        materialFogSettings.enabled = false;
+    }
+    const SectorFogRenderContext fogContext =
+            BuildSectorFogRenderContext(materialFogSettings, camera.position);
+    BeginTextureMode(refractionReady
+            ? hdrSceneColorView : sceneTarget.native);
+    BeginMode3D(camera);
+    SectorWindowDrawContext windowContext;
+    windowContext.assets = &assets;
+    windowContext.world = runtimeObjectWorld;
+    windowContext.camera = camera;
+    windowContext.visibility = &visibilityResult;
+    windowContext.environment = &pbrEnvironment;
+    windowContext.localReflectionProbesCurrent = localReflectionProbesCurrent;
+    windowContext.pbr = pbrContributionSettings;
+    if (map != nullptr) windowContext.directionalLight = map->directionalLight;
+    windowContext.fog = fogContext;
+    windowContext.advancedTransmission = refractionReady;
+    windowContext.sceneColor = refractionReady
+            ? &hdrSceneScratch.native.texture : nullptr;
+    windowContext.sceneDepth = refractionReady
+            ? &sceneTarget.native.depth : nullptr;
+    windowContext.viewportSize = Vector2{
+            static_cast<float>(sceneTarget.native.texture.width),
+            static_cast<float>(sceneTarget.native.texture.height)};
+    windowContext.renderDebugText = &renderDebugText;
+    windowRenderer.Draw(windowContext);
+    EndMode3D();
+    EndTextureMode();
+    if (refractionReady) {
+        SetTextureFilter(hdrSceneScratch.native.texture, TEXTURE_FILTER_POINT);
+    }
+
+    if (requestRefraction && !refractionReady) {
+        if (!glassRefractionFallbackLogged) {
+            TraceLog(LOG_WARNING,
+                    "GLASS: requested refraction unavailable; using simple glass");
+            glassRefractionFallbackLogged = true;
+        }
+        renderDebugText += " | glass: refraction fallback (sampleable depth or HDR scratch unavailable)";
+    }
+    return true;
+}
+
 bool SectorMeshRenderer::ApplyWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         bool collectGpuDiagnostics)
 {
-    BeginAtmosphereGpuFrame(collectGpuDiagnostics);
+    if (!atmosphereGpuFramePrepared) {
+        BeginAtmosphereGpuFrame(collectGpuDiagnostics);
+    }
+    atmosphereGpuFramePrepared = false;
+    const bool skipPostGlassLightEffects = preGlassLightEffectsRendered;
+    const bool earlyShaftApplied = preGlassShaftApplied;
+    const bool earlyHaloApplied = preGlassHaloApplied;
+    preGlassLightEffectsRendered = false;
+    preGlassShaftApplied = false;
+    preGlassHaloApplied = false;
     if (sceneTarget.descriptor.colorFormat
                     != engine::RenderTargetColorFormat::Rgba16Float
             || sceneTarget.actual.depth
                     != engine::RenderTargetDepthKind::SampleableTexture
             || !EnsureHdrSceneScratch(sceneTarget)) {
         RefreshAtmosphereDiagnostics(SectorBillboardDynamicLightContext{});
-        return false;
+        return earlyShaftApplied || earlyHaloApplied;
     }
     RenderTexture2D& nativeScene = sceneTarget.native;
     const SectorBillboardDynamicLightContext dynamicLightContext =
@@ -2736,25 +2913,27 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
     }
     EndAtmosphereGpuPass(1);
 
-    BeginAtmosphereGpuPass(2);
-    bool analyticShaftApplied = false;
-    if (EnsureHdrSceneColorView(sceneTarget)) {
+    if (!skipPostGlassLightEffects) BeginAtmosphereGpuPass(2);
+    bool analyticShaftApplied = earlyShaftApplied;
+    if (!skipPostGlassLightEffects && EnsureHdrSceneColorView(sceneTarget)) {
         analyticShaftApplied = analyticLightShaftRenderer.Apply(
                 nativeScene, hdrSceneColorView, map.fogSettings,
                 camera, dynamicLightContext, lightAtmosphereSources,
-                visibilityResult, meshes.sectorReceiverBounds);
+                dynamicLightState.LightingVisibility(),
+                meshes.sectorReceiverBounds);
     }
-    EndAtmosphereGpuPass(2);
+    if (!skipPostGlassLightEffects) EndAtmosphereGpuPass(2);
 
-    BeginAtmosphereGpuPass(3);
-    bool lightHaloApplied = false;
-    if (EnsureHdrSceneColorView(sceneTarget)) {
+    if (!skipPostGlassLightEffects) BeginAtmosphereGpuPass(3);
+    bool lightHaloApplied = earlyHaloApplied;
+    if (!skipPostGlassLightEffects && EnsureHdrSceneColorView(sceneTarget)) {
         lightHaloApplied = lightProxyRenderer.Apply(
                 nativeScene, hdrSceneColorView, map.fogSettings,
                 camera, dynamicLightContext, lightAtmosphereSources,
-                visibilityResult, meshes.sectorReceiverBounds);
+                dynamicLightState.LightingVisibility(),
+                meshes.sectorReceiverBounds);
     }
-    EndAtmosphereGpuPass(3);
+    if (!skipPostGlassLightEffects) EndAtmosphereGpuPass(3);
 
     BeginAtmosphereGpuPass(4);
     const bool lightDustApplied = lightDustRenderer.Apply(
