@@ -8,10 +8,9 @@ The primary uses are bridges, raised platforms, ramps, staircases, beams,
 slabs, smooth pillars, pipes, ceiling ornamentation, and simple decorative
 forms.
 
-This is an engine-facing design document. It defines data ownership and the
-rendering, collision, navigation, visibility, picking, and lightmap contracts.
-The editor workflow and detailed UI are intentionally left for a later design
-pass.
+This document defines both the engine contracts and the editor workflow. The
+feature is implemented in two ordered slices so the editor never authors data
+that the runtime cannot compile, render, or query correctly.
 
 Structural primitives supplement the linedef sector map. They do not create
 vertices, linedefs, sidedefs, sectors, or portal edges, and they do not use a
@@ -42,6 +41,40 @@ boundaries, ordinary floors and ceilings, and horizontal portal connectivity.
 - Runtime deformation, skeletal animation, destructible geometry, or moving
   platforms in the first implementation.
 - Boolean cutting of sector geometry or other primitives.
+
+## Implementation Slices
+
+### Slice 1: engine support
+
+The first slice establishes the complete non-UI contract:
+
+- authoring-graph ownership, stable IDs, serialization, validation, and
+  derivation into runtime data
+- deterministic generated geometry, surface identity, materials, and UVs
+- cached rendering, picking metadata, collision, navigation, and ray queries
+- multi-sector visibility membership
+- baked-light receiver/occluder behavior and source-hash invalidation
+- explicit CPU/GPU cache build, refresh, and teardown behavior
+
+This slice must retain enough primitive and stable face-role identity for the
+editor to select an authored primitive from its compiled representation without
+making generated triangles independently editable.
+
+### Slice 2: editor integration
+
+The second slice exposes the engine support through the existing sector editor:
+
+- one contextual Structure tool and a compact primitive palette
+- accurate top-down footprint drawing and placement previews
+- shared selection-stack participation, move/resize/rotate manipulation, and
+  exact inspector editing
+- semantic material and UV controls
+- selected-object adjustment in 3D preview
+
+Slice 2 depends on Slice 1's schema, derivation, surface identity, and cache
+contracts. Editor actions always mutate the authoring graph and then derive the
+compiled topology/runtime representation; they must not edit
+`SectorTopologyMap` directly.
 
 ## Initial Primitive Catalog
 
@@ -322,6 +355,222 @@ order must not depend on unordered container iteration. Invalid generated
 geometry must fail lightmap preparation clearly rather than producing a bake
 whose render mesh differs from its occluders.
 
+## Editor Integration
+
+### Tool and contextual primitive palette
+
+The left tool pane adds one map-object tool named **Structure**. Individual
+primitive kinds do not become separate left-pane buttons. Selecting Structure
+shows a compact horizontal palette over the top-left of the 2D canvas, adjacent
+to the tool pane. The palette contains icon buttons with text tooltips for:
+
+- Box
+- Ramp
+- Stairs
+- Cylinder
+- Sphere
+
+The selected kind is visually active. The editor remembers the last selected
+kind for the session and initially selects Box. The palette is visible only
+while Structure is the active tool, is drawn above the map, and consumes mouse
+input within its bounds so a palette click cannot also place a primitive.
+
+The palette is an immediate UI overlay, not part of the topology render cache.
+It may cover the map because the user can pan the view, and it must not resize
+or otherwise change the canvas coordinate system when shown.
+
+### Placement gesture
+
+Placement uses a snapped click-drag gesture in the 2D canvas. The drag renders
+an immediate pending outline and dimension feedback without changing the live
+authoring graph.
+
+- A Box uses the press and release points as opposite corners of its initial
+  axis-aligned footprint.
+- A Ramp or Stairs uses the same rectangular footprint. The dominant drag axis
+  is the initial run axis and the direction from the press side toward the
+  release side is the ascent direction. A tied square footprint uses the local
+  positive Z axis deterministically.
+- A Cylinder or Sphere uses the press point as its center and the snapped
+  center-to-release distance as its radius.
+
+Rectangular placement creates yaw zero; the rotation handle or inspector can
+then produce arbitrary orientation. The containing sector floor seeds the
+primitive's initial vertical placement. Per-kind defaults provide its initial
+height, rise, step count, and tessellation, after which the inspector exposes
+the exact values. A sphere is initially positioned with its bottom tangent to
+the containing floor.
+
+A release that produces a non-finite, degenerate, or below-minimum footprint is
+rejected without allocating an ID, dirtying the document, or changing cache
+revisions. A valid release performs one authoring mutation and derivation,
+selects the new primitive, and switches to the Select tool so it can be refined
+immediately. Escape or right click cancels an active placement preview.
+
+### Accurate 2D representation
+
+Structural primitives are represented by their actual projected footprint,
+not by the generic point/icon marker used for externally loaded models. The
+footprint therefore communicates where generated geometry and collision will
+exist relative to sector walls:
+
+- boxes, ramps, and stairs draw their rotated rectangular footprint
+- cylinders and spheres draw their circular footprint
+- ramps and stairs draw an internal arrow from the low end toward the high end
+- selected and hovered footprints use the existing selection and hover color
+  conventions
+
+The cached 2D document layer stores the ordinary footprint fill/outline and
+pick data. Selection outlines, handles, pending placement, and active drag
+previews remain immediate overlays. Their picking geometry must be derived from
+the same authored footprint math used to generate the structural mesh so the
+2D representation cannot silently disagree with 3D placement.
+
+### Selection and overlapping primitives
+
+Structural primitives participate in the existing Select tool and shared
+click-selection stack. A primitive contributes a candidate when the click lies
+inside its projected footprint or within the normal screen-space tolerance of
+its outline. Repeated clicks at the same location cycle through overlapping
+primitives, sectors, topology elements, lights, and placed objects using the
+existing deterministic candidate ordering and current-selection behavior.
+
+Selection uses the stable authored primitive ID. Generated surface or triangle
+IDs are never the editable identity. Selecting a primitive clears incompatible
+single-object selections in the same way as other Select-tool targets.
+
+Pressing and dragging inside the selected footprint moves the primitive in XZ.
+The move is grid-snapped and preserves its vertical values, yaw, dimensions,
+and material settings.
+
+### Resize and rotation handles
+
+When a structural primitive is selected with the Select tool, the editor draws
+shape-appropriate manipulation handles above the cached footprint:
+
+- boxes, ramps, and stairs have four local-space corner handles and four edge
+  handles
+- cylinders and spheres have radius handles on their perimeter
+- every kind has a rotation handle offset beyond the footprint
+
+Dragging a rectangular corner or edge changes the corresponding local-space
+dimensions while keeping the opposite corner or edge fixed. Dragging a radius
+handle changes radius while keeping the center fixed. Dragging the rotation
+handle changes yaw around the center and retains the current dimensions. The
+overlay displays the current dimensions or yaw during the gesture.
+
+Planar resize values use exact `SectorCoord` snapping. Rotation dragging is
+continuous; holding Shift snaps yaw to 15-degree increments. Rotation does not
+alter the footprint center. Handles affect only
+planar placement and dimensions; bottom/top height, ramp rise, and staircase
+rise remain inspector or 3D-adjustment properties because a top-down handle
+cannot represent them honestly.
+
+Handle hits take precedence over ordinary footprint selection and move drags.
+All handle and move gestures use transient preview state. Mouse motion updates
+only lightweight footprint overlays; it must not repeatedly run topology
+derivation, generated mesh construction, navigation building, or GPU upload.
+On release, one valid authoring-graph mutation is derived and committed. Escape
+or a rejected candidate restores the original values without changing the live
+graph, document dirty state, or cache revision.
+
+### Inspector
+
+Selecting a structural primitive opens a dedicated right-pane inspector. It
+uses the stable authoring ID and edits the authoring graph through a focused
+structural-primitive editing service. It does not use the placed-runtime-object
+editing service and does not write compiled topology records.
+
+The common inspector fields are:
+
+- enabled state and primitive kind label
+- position X/Z, yaw, and vertical placement
+- collision participation
+- lightmap receiver, baked-shadow occluder, and supported dynamic-shadow state
+- material and UV groups
+
+Kind-specific fields are:
+
+- Box: width, depth, bottom, and top
+- Ramp: width, run, solid-bottom elevation, low elevation, and high elevation
+- Stairs: width, total run, total rise, bottom elevation, and step count
+- Cylinder: radius, bottom, top, and bounded radial segments
+- Sphere: radius, vertical center, bounded latitude/longitude segments, and
+  optional collision
+
+Numeric edits use the same validation bounds and units as serialization and
+geometry generation. Invalid submitted values remain visible with a concise
+field error but do not mutate the authored record. A successful edit follows
+the same single commit/invalidation path as a completed handle drag.
+
+### Material and UV authoring
+
+The primitive inspector exposes semantic surface groups rather than a control
+for every generated polygon. Every primitive has a default material and UV
+transform. Optional group overrides inherit both from the default while unset:
+
+- Box: top, sides, bottom
+- Ramp: inclined top, sides/ends, bottom
+- Stairs: treads, risers/sides, underside
+- Cylinder: top cap, curved side, bottom cap
+- Sphere: one surface group using the default controls
+
+Each default or enabled override provides a material picker plus Scale U,
+Scale V, Offset U, and Offset V. Scale/offset use
+`SectorTopologyUvSettings` semantics and transform the shape-specific base UVs
+defined by deterministic geometry generation. They do not change whether a
+sphere uses spherical projection, a cylinder unwraps angularly, or a ramp maps
+along its incline.
+
+`TexturePickerService` continues to own generic picker lifecycle. Shared
+material selection and UV mutation behavior belongs in
+`MaterialEditingService`, extended with explicit authoring-primitive targets;
+the structural editing service owns primitive geometry and transform changes.
+Neither service may introduce a callback route through `SectorEditor` or
+mutate derived surface materials and copy them back into authoring data.
+
+Arbitrary per-triangle and generated-face material controls are not exposed.
+The stable generated face roles preserve the option of richer editing later
+without changing primitive identity or mesh generation.
+
+### Adjustment in 3D preview
+
+A structural primitive selected in 2D remains selected when the editor enters
+3D preview. It becomes eligible for **Edit -> Adjust selected** and `Ctrl+A`
+under the same availability and modal-exclusion rules as adjustable props and
+items. Directly clicking a rendered primitive to select or texture an
+individual face in 3D is not required for this slice.
+
+The existing adjustment keys and precision presets are reused:
+
+- arrow keys move in world X/Z
+- Page Up/Page Down move the complete primitive vertically
+- Q/E rotate yaw
+- Enter or the Apply button commits
+- Escape or the Cancel button restores the original authored values
+
+Beginning adjustment stages the selected authored primitive. A nudge updates
+the affected structural preview geometry deliberately so the result is visible,
+but does not treat `SectorTopologyMap` as editable state. Apply commits the
+staged authoring graph through derivation and the normal invalidation path.
+Cancel restores the original graph and preview geometry. Resizing and
+kind-specific parameter editing remain in the 2D handles and inspector rather
+than adding a second 3D gizmo system.
+
+### Editor service and state boundaries
+
+Editor integration adds explicit structural-primitive selection and pick kinds,
+small placement/manipulation state, and a focused editing service below
+`SectorEditor`. The service owns creation, deletion, transform/dimension
+mutation, candidate validation, and commit/cancel behavior. The Select tool,
+inspector, and preview adjustment use that service directly rather than a new
+broad callback bundle.
+
+Compiled surface picking may be read to resolve a primitive ID and face role,
+but all normal edits target authoring records. If authoring data or the
+compiled-to-authored mapping is missing, the editor reports the failure instead
+of falling back to topology mutation.
+
 ## Cache Invalidation and Lifecycle
 
 Adding, deleting, moving, resizing, rotating, enabling, or materially changing
@@ -394,6 +643,22 @@ levels and include:
 - missing-material and invalid-primitive fallback behavior
 - no structural mesh generation or dynamic allocation caused by steady-frame
   rendering
+- Structure palette visibility, active-kind retention, and input exclusion over
+  the canvas
+- click-drag placement and pending footprint previews for every primitive kind
+- exact rotated footprint drawing and ramp/stair ascent indicators
+- shared click-selection cycling when primitives overlap each other and
+  existing pick targets
+- move, resize, radius, and rotation-handle apply, cancel, and rejected-edit
+  behavior
+- inspector numeric validation and exact authoring-value updates
+- default material inheritance, semantic material overrides, and per-group UV
+  scale/offset behavior
+- `Ctrl+A` structural adjustment apply/cancel, affected preview refresh, and
+  preservation of authoring-graph ownership
+- correct document dirtying, topology-render-cache invalidation, navigation
+  rebuild requests, and lightmap source-hash invalidation after committed UI
+  edits
 
 ## Existing Engine Seams
 
