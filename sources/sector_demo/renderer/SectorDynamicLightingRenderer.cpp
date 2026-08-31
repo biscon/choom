@@ -1666,6 +1666,9 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                     SHADER_UNIFORM_INT);
         }
         for (const SectorMeshBatch& batch : *context.sectorDrawRecords) {
+            if (!batch.castsDynamicShadow) {
+                continue;
+            }
             const SectorReceiverBounds* bounds = FindSectorReceiverBounds(
                     context.sectorReceiverBounds, batch.sectorId);
             if (bounds != nullptr

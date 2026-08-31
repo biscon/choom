@@ -1127,7 +1127,8 @@ bool BuildSectorLightmapBvh(
 
 bool CastsLightmapOcclusion(const SectorGeneratedSurface& surface)
 {
-    return surface.ref.kind != SectorGeneratedSurfaceKind::Middle;
+    return surface.castsLightmapOcclusion
+            && surface.ref.kind != SectorGeneratedSurfaceKind::Middle;
 }
 
 bool CastsAlphaTestLightmapOcclusion(const SectorGeneratedSurface& surface)
@@ -2683,17 +2684,14 @@ std::vector<BakeTriangle> BuildBakeTriangles(
 {
     std::vector<BakeTriangle> triangles;
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
-        if (surfaceIndex >= layout.charts.size()) {
-            continue;
-        }
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
         if (!CastsLightmapOcclusion(surface)) {
             continue;
         }
-        const SectorLightmapChart& chart = layout.charts[surfaceIndex];
-        if (chart.surfaceIndex < 0) {
-            continue;
-        }
+        const SectorLightmapChart* chart = surfaceIndex < layout.charts.size()
+                        && layout.charts[surfaceIndex].surfaceIndex >= 0
+                ? &layout.charts[surfaceIndex]
+                : nullptr;
         for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
             Vector3 normal = surface.normal;
             if (Vector3LengthSqr(normal) <= BakeEpsilon) {
@@ -2701,9 +2699,9 @@ std::vector<BakeTriangle> BuildBakeTriangles(
                 const Vector3 edge2 = Vector3Subtract(surface.vertices[i + 2].position, surface.vertices[i + 0].position);
                 normal = Vector3Normalize(Vector3CrossProduct(edge1, edge2));
             }
-            const Vector2 uv0 = i + 0 < chart.vertexUvs.size() ? chart.vertexUvs[i + 0] : Vector2{};
-            const Vector2 uv1 = i + 1 < chart.vertexUvs.size() ? chart.vertexUvs[i + 1] : Vector2{};
-            const Vector2 uv2 = i + 2 < chart.vertexUvs.size() ? chart.vertexUvs[i + 2] : Vector2{};
+            const Vector2 uv0 = chart != nullptr && i + 0 < chart->vertexUvs.size() ? chart->vertexUvs[i + 0] : Vector2{};
+            const Vector2 uv1 = chart != nullptr && i + 1 < chart->vertexUvs.size() ? chart->vertexUvs[i + 1] : Vector2{};
+            const Vector2 uv2 = chart != nullptr && i + 2 < chart->vertexUvs.size() ? chart->vertexUvs[i + 2] : Vector2{};
             triangles.push_back(BakeTriangle{
                     surface.vertices[i + 0].position,
                     surface.vertices[i + 1].position,
@@ -2712,7 +2710,7 @@ std::vector<BakeTriangle> BuildBakeTriangles(
                     uv0,
                     uv1,
                     uv2,
-                    chart.atlasIndex,
+                    chart != nullptr ? chart->atlasIndex : -1,
                     surface.ref,
                     static_cast<int>(surfaceIndex),
                     static_cast<int>(i / 3)
@@ -3301,6 +3299,18 @@ std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopology
         AddReferencedLightmapTexture(referenced, sector.defaultWall.materialId);
         AddReferencedLightmapTexture(referenced, sector.defaultLower.materialId);
         AddReferencedLightmapTexture(referenced, sector.defaultUpper.materialId);
+    }
+    for (const SectorCompiledStructuralPrimitive& primitive
+            : map.compiledStructuralPrimitives) {
+        AddReferencedLightmapTexture(
+                referenced,
+                primitive.authored.materials.defaultSurface.materialId);
+        for (const SectorStructuralMaterialOverride& override
+                : primitive.authored.materials.overrides) {
+            if (override.enabled) {
+                AddReferencedLightmapTexture(referenced, override.settings.materialId);
+            }
+        }
     }
 
     std::vector<std::string> ids;
@@ -4034,9 +4044,19 @@ bool IsSameLogicalSectorLightmapSurface(
         const SectorGeneratedSurfaceRef& a,
         const SectorGeneratedSurfaceRef& b)
 {
-    if (a.kind != b.kind) {
+    if (a.sourceKind != b.sourceKind) {
         return false;
     }
+    if (a.sourceKind == SectorGeneratedSurfaceSourceKind::StructuralPrimitive) {
+        if (a.structuralFace.primitiveId != b.structuralFace.primitiveId
+                || a.structuralFace.role != b.structuralFace.role
+                || a.structuralFace.roleIndex != b.structuralFace.roleIndex) {
+            return false;
+        }
+        return a.structuralFace.role != SectorStructuralFaceRole::CylinderSide
+                && a.structuralFace.role != SectorStructuralFaceRole::SphereSurface;
+    }
+    if (a.kind != b.kind) return false;
 
     switch (a.kind) {
         case SectorGeneratedSurfaceKind::Floor:
@@ -5743,6 +5763,69 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendTopologyWallPart(hash, sector->defaultWall);
         FnvAppendTopologyWallPart(hash, sector->defaultLower);
         FnvAppendTopologyWallPart(hash, sector->defaultUpper);
+    }
+
+    if (!map.compiledStructuralPrimitives.empty()) {
+        FnvAppendString(hash, "structural-primitives-v1");
+        std::vector<const SectorCompiledStructuralPrimitive*> primitives;
+        primitives.reserve(map.compiledStructuralPrimitives.size());
+        for (const SectorCompiledStructuralPrimitive& primitive
+                : map.compiledStructuralPrimitives) {
+            primitives.push_back(&primitive);
+        }
+        std::sort(primitives.begin(), primitives.end(), [](const auto* left, const auto* right) {
+            return left->sourceAuthoringPrimitiveId < right->sourceAuthoringPrimitiveId;
+        });
+        FnvAppendInt(hash, static_cast<int>(primitives.size()));
+        for (const SectorCompiledStructuralPrimitive* compiled : primitives) {
+            const SectorAuthoringStructuralPrimitive& primitive = compiled->authored;
+            FnvAppendInt(hash, primitive.id);
+            FnvAppendInt(hash, static_cast<int>(primitive.kind));
+            FnvAppendInt(hash, primitive.enabled ? 1 : 0);
+            FnvAppendInt(hash, primitive.x);
+            FnvAppendInt(hash, primitive.z);
+            FnvAppendFloat(hash, primitive.yawDegrees);
+            FnvAppendInt(hash, primitive.collision ? 1 : 0);
+            FnvAppendInt(hash, primitive.receivesLightmap ? 1 : 0);
+            FnvAppendInt(hash, primitive.castsBakedShadow ? 1 : 0);
+            FnvAppendInt(hash, primitive.castsDynamicShadow ? 1 : 0);
+            FnvAppendString(hash, primitive.materials.defaultSurface.materialId);
+            FnvAppendTopologyUv(hash, primitive.materials.defaultSurface.uv);
+            for (const SectorStructuralMaterialOverride& override
+                    : primitive.materials.overrides) {
+                FnvAppendInt(hash, override.enabled ? 1 : 0);
+                if (override.enabled) {
+                    FnvAppendString(hash, override.settings.materialId);
+                    FnvAppendTopologyUv(hash, override.settings.uv);
+                }
+            }
+            switch (primitive.kind) {
+                case SectorStructuralPrimitiveKind::Box:
+                    FnvAppendInt(hash, primitive.box.width); FnvAppendInt(hash, primitive.box.depth);
+                    FnvAppendFloat(hash, primitive.box.bottom); FnvAppendFloat(hash, primitive.box.top);
+                    break;
+                case SectorStructuralPrimitiveKind::Ramp:
+                    FnvAppendInt(hash, primitive.ramp.width); FnvAppendInt(hash, primitive.ramp.run);
+                    FnvAppendFloat(hash, primitive.ramp.solidBottom); FnvAppendFloat(hash, primitive.ramp.low);
+                    FnvAppendFloat(hash, primitive.ramp.high);
+                    break;
+                case SectorStructuralPrimitiveKind::Stairs:
+                    FnvAppendInt(hash, primitive.stairs.width); FnvAppendInt(hash, primitive.stairs.run);
+                    FnvAppendFloat(hash, primitive.stairs.bottom); FnvAppendFloat(hash, primitive.stairs.rise);
+                    FnvAppendInt(hash, primitive.stairs.stepCount);
+                    break;
+                case SectorStructuralPrimitiveKind::Cylinder:
+                    FnvAppendInt(hash, primitive.cylinder.radius); FnvAppendFloat(hash, primitive.cylinder.bottom);
+                    FnvAppendFloat(hash, primitive.cylinder.top); FnvAppendInt(hash, primitive.cylinder.radialSegments);
+                    break;
+                case SectorStructuralPrimitiveKind::Sphere:
+                    FnvAppendInt(hash, primitive.sphere.radius); FnvAppendFloat(hash, primitive.sphere.centerHeight);
+                    FnvAppendInt(hash, primitive.sphere.latitudeSegments);
+                    FnvAppendInt(hash, primitive.sphere.longitudeSegments);
+                    break;
+            }
+            FnvAppendString(hash, compiled->geometryFingerprint);
+        }
     }
 
     std::vector<const SectorPlacedRuntimeObject*> staticModels;

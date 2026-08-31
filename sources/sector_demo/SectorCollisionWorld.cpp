@@ -41,6 +41,88 @@ bool IsFinite(Vector3 value)
             && std::isfinite(value.z);
 }
 
+bool PointInTriangleXZ(Vector2 point, Vector3 a, Vector3 b, Vector3 c, float* y)
+{
+    const Vector2 ab{b.x - a.x, b.z - a.z};
+    const Vector2 ac{c.x - a.x, c.z - a.z};
+    const Vector2 ap{point.x - a.x, point.y - a.z};
+    const float denominator = ab.x * ac.y - ab.y * ac.x;
+    if (std::fabs(denominator) <= CollisionMoveEpsilon) return false;
+    const float u = (ap.x * ac.y - ap.y * ac.x) / denominator;
+    const float v = (ab.x * ap.y - ab.y * ap.x) / denominator;
+    if (u < -CollisionPointEpsilon || v < -CollisionPointEpsilon
+            || u + v > 1.0f + CollisionPointEpsilon) {
+        return false;
+    }
+    if (y != nullptr) {
+        *y = a.y + u * (b.y - a.y) + v * (c.y - a.y);
+    }
+    return true;
+}
+
+bool RayTriangle(
+        Vector3 origin,
+        Vector3 direction,
+        Vector3 a,
+        Vector3 b,
+        Vector3 c,
+        float* distance,
+        Vector3* normal)
+{
+    const Vector3 ab{b.x - a.x, b.y - a.y, b.z - a.z};
+    const Vector3 ac{c.x - a.x, c.y - a.y, c.z - a.z};
+    const Vector3 p{
+            direction.y * ac.z - direction.z * ac.y,
+            direction.z * ac.x - direction.x * ac.z,
+            direction.x * ac.y - direction.y * ac.x};
+    const float determinant = ab.x * p.x + ab.y * p.y + ab.z * p.z;
+    if (std::fabs(determinant) <= CollisionMoveEpsilon) return false;
+    const float inverse = 1.0f / determinant;
+    const Vector3 t{origin.x - a.x, origin.y - a.y, origin.z - a.z};
+    const float u = (t.x * p.x + t.y * p.y + t.z * p.z) * inverse;
+    if (u < 0.0f || u > 1.0f) return false;
+    const Vector3 q{
+            t.y * ab.z - t.z * ab.y,
+            t.z * ab.x - t.x * ab.z,
+            t.x * ab.y - t.y * ab.x};
+    const float v = (direction.x * q.x + direction.y * q.y + direction.z * q.z)
+            * inverse;
+    if (v < 0.0f || u + v > 1.0f) return false;
+    const float hitDistance = (ac.x * q.x + ac.y * q.y + ac.z * q.z) * inverse;
+    if (hitDistance < 0.0f) return false;
+    if (distance != nullptr) *distance = hitDistance;
+    if (normal != nullptr) {
+        const Vector3 cross{
+                ab.y * ac.z - ab.z * ac.y,
+                ab.z * ac.x - ab.x * ac.z,
+                ab.x * ac.y - ab.y * ac.x};
+        const float length = std::sqrt(
+                cross.x * cross.x + cross.y * cross.y + cross.z * cross.z);
+        *normal = length > CollisionMoveEpsilon
+                ? Vector3{cross.x / length, cross.y / length, cross.z / length}
+                : Vector3{};
+    }
+    return true;
+}
+
+bool CircleOverlapsTriangleBounds(
+        Vector2 center,
+        float radius,
+        Vector3 a,
+        Vector3 b,
+        Vector3 c)
+{
+    const float minimumX = std::min({a.x, b.x, c.x});
+    const float maximumX = std::max({a.x, b.x, c.x});
+    const float minimumZ = std::min({a.z, b.z, c.z});
+    const float maximumZ = std::max({a.z, b.z, c.z});
+    const float closestX = std::clamp(center.x, minimumX, maximumX);
+    const float closestZ = std::clamp(center.y, minimumZ, maximumZ);
+    const float dx = center.x - closestX;
+    const float dz = center.y - closestZ;
+    return dx * dx + dz * dz <= radius * radius + CollisionMoveEpsilon;
+}
+
 float Cross(Vector2 a, Vector2 b)
 {
     return a.x * b.y - a.y * b.x;
@@ -394,6 +476,8 @@ bool SectorCollisionWorld::BuildFromTopology(
         std::string* errorMessage)
 {
     sectors.clear();
+    structuralPrimitives.clear();
+    structuralSurfaces.clear();
     footprintTraversalSectorIds.clear();
     if (errorMessage != nullptr) {
         errorMessage->clear();
@@ -481,6 +565,15 @@ bool SectorCollisionWorld::BuildFromTopology(
     }
 
     sectors = std::move(builtSectors);
+    for (const SectorCompiledStructuralPrimitive& primitive
+            : map.compiledStructuralPrimitives) {
+        if (!primitive.authored.enabled || !primitive.authored.collision) continue;
+        structuralPrimitives.push_back(primitive.authored);
+        structuralSurfaces.insert(
+                structuralSurfaces.end(),
+                primitive.surfaces.begin(),
+                primitive.surfaces.end());
+    }
     footprintTraversalSectorIds.assign(sectors.size(), 0);
     return true;
 }
@@ -507,6 +600,41 @@ bool SectorCollisionWorld::GetSectorFloorCeiling(
     }
     *out = sector->heights;
     return true;
+}
+
+bool SectorCollisionWorld::ResolveActorVerticalContext(
+        int sectorId,
+        const SectorCollisionVerticalQuery& query,
+        SectorCollisionHeights* out) const
+{
+    if (out == nullptr || !GetSectorFloorCeiling(sectorId, out)
+            || !IsFinite(query.positionXZ) || !std::isfinite(query.feetY)) {
+        return false;
+    }
+    const float maximumSupport = query.feetY + std::max(query.stepHeight, 0.0f)
+            + CollisionPointEpsilon;
+    const float head = query.feetY + std::max(query.actorHeight, 0.0f);
+    for (const SectorCompiledStructuralSurface& surface : structuralSurfaces) {
+        if (!surface.owningSectorIds.empty()
+                && std::find(surface.owningSectorIds.begin(), surface.owningSectorIds.end(), sectorId)
+                        == surface.owningSectorIds.end()) {
+            continue;
+        }
+        for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {
+            const Vector3 a = surface.vertices[index].position;
+            const Vector3 b = surface.vertices[index + 1].position;
+            const Vector3 c = surface.vertices[index + 2].position;
+            float surfaceY = 0.0f;
+            if (!PointInTriangleXZ(query.positionXZ, a, b, c, &surfaceY)) continue;
+            const float normalY = surface.normal.y;
+            if (normalY > 0.01f && surfaceY <= maximumSupport) {
+                out->floorZ = std::max(out->floorZ, surfaceY);
+            } else if (normalY < -0.01f && surfaceY >= head - CollisionPointEpsilon) {
+                out->ceilingZ = std::min(out->ceilingZ, surfaceY);
+            }
+        }
+    }
+    return out->ceilingZ > out->floorZ;
 }
 
 const std::vector<SectorCollisionEdge>* SectorCollisionWorld::GetSectorEdges(
@@ -766,6 +894,26 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
             break;
         }
 
+        SectorCollisionVerticalQuery verticalQuery;
+        verticalQuery.positionXZ = candidate;
+        verticalQuery.feetY = moveState.feetY;
+        verticalQuery.radius = config.radius;
+        verticalQuery.actorHeight = config.playerHeight;
+        verticalQuery.stepHeight = config.stepHeight;
+        verticalQuery.grounded = moveState.grounded;
+        SectorCollisionHeights verticalHeights;
+        if (!structuralSurfaces.empty()
+                && (!ResolveActorVerticalContext(resolvedSectorId, verticalQuery, &verticalHeights)
+                || verticalHeights.floorZ > moveState.feetY + config.stepHeight
+                        + CollisionPointEpsilon
+                || verticalHeights.ceilingZ - verticalHeights.floorZ
+                        < config.playerHeight - CollisionPointEpsilon)) {
+            result.positionXZ = previousPosition;
+            result.currentSectorId = previousSectorId;
+            result.blockedByStep = true;
+            break;
+        }
+
         result.positionXZ = candidate;
         result.currentSectorId = resolvedSectorId;
     }
@@ -902,6 +1050,32 @@ SectorCollisionRayHit SectorCollisionWorld::Raycast(
                     edge.neighborSectorId);
         }
     }
+    for (const SectorCompiledStructuralSurface& surface : structuralSurfaces) {
+        for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {
+            float distance = 0.0f;
+            Vector3 normal{};
+            if (!RayTriangle(
+                        origin,
+                        direction,
+                        surface.vertices[index].position,
+                        surface.vertices[index + 1].position,
+                        surface.vertices[index + 2].position,
+                        &distance,
+                        &normal)
+                    || distance > nearest) {
+                continue;
+            }
+            const int sectorId = surface.owningSectorIds.empty()
+                    ? 0 : surface.owningSectorIds.front();
+            accept(distance, normal,
+                    SectorCollisionRaySurfaceKind::StructuralPrimitive,
+                    sectorId, 0, 0, 0);
+            if (result.hit && std::fabs(result.distance - distance)
+                    <= CollisionPointEpsilon) {
+                result.structuralFace = surface.face;
+            }
+        }
+    }
     return result;
 }
 
@@ -925,6 +1099,21 @@ bool SectorCollisionWorld::AllowsPrismPlacement(
     const SectorCollisionSector* start = FindSector(startSectorId);
     if (start == nullptr) return false;
     if (resolvedSectorId != nullptr) *resolvedSectorId = startSectorId;
+    for (const SectorCompiledStructuralSurface& surface : structuralSurfaces) {
+        for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {
+            const Vector3 a = surface.vertices[index].position;
+            const Vector3 b = surface.vertices[index + 1].position;
+            const Vector3 c = surface.vertices[index + 2].position;
+            const float minimumY = std::min({a.y, b.y, c.y});
+            const float maximumY = std::max({a.y, b.y, c.y});
+            if (top <= minimumY + CollisionPointEpsilon
+                    || bottom >= maximumY - CollisionPointEpsilon
+                    || !CircleOverlapsTriangleBounds(center, radius, a, b, c)) {
+                continue;
+            }
+            return false;
+        }
+    }
     size_t traversalCount = 1;
     footprintTraversalSectorIds[0] = startSectorId;
     for (size_t traversalIndex = 0;

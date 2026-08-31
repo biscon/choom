@@ -2005,8 +2005,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 18,
-          "lightmap bake version is bumped for horizontal object probe clearance");
+    Check(game::kSectorLightmapBakeVersion == 19,
+          "lightmap bake version includes structural primitive geometry and lighting inputs");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);

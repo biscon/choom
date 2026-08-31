@@ -34,6 +34,8 @@ struct SectorMeshBatchKey {
     bool alphaTest = false;
     float alphaCutoff = 0.5f;
     bool receivesLightmap = true;
+    std::vector<int> owningSectorIds;
+    bool castsDynamicShadow = true;
 
     bool operator==(const SectorMeshBatchKey& other) const
     {
@@ -49,7 +51,9 @@ struct SectorMeshBatchKey {
                 && decalEmissiveStrength == other.decalEmissiveStrength
                 && alphaTest == other.alphaTest
                 && alphaCutoff == other.alphaCutoff
-                && receivesLightmap == other.receivesLightmap;
+                && receivesLightmap == other.receivesLightmap
+                && owningSectorIds == other.owningSectorIds
+                && castsDynamicShadow == other.castsDynamicShadow;
     }
 };
 
@@ -69,6 +73,7 @@ struct SectorMeshBatchKeyHash {
         const size_t alphaTestHash = std::hash<bool>{}(key.alphaTest);
         const size_t alphaCutoffHash = std::hash<float>{}(key.alphaCutoff);
         const size_t receivesLightmapHash = std::hash<bool>{}(key.receivesLightmap);
+        const size_t castsDynamicShadowHash = std::hash<bool>{}(key.castsDynamicShadow);
         size_t hash = sectorHash ^ (atlasHash + 0x9e3779b9u + (sectorHash << 6u) + (sectorHash >> 2u));
         hash ^= textureHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= decalHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
@@ -81,6 +86,11 @@ struct SectorMeshBatchKeyHash {
         hash ^= alphaTestHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= alphaCutoffHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= receivesLightmapHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
+        for (int owner : key.owningSectorIds) {
+            const size_t ownerHash = std::hash<int>{}(owner);
+            hash ^= ownerHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
+        }
+        hash ^= castsDynamicShadowHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         return hash;
     }
 };
@@ -123,7 +133,9 @@ SectorMeshBatchData& BatchForKey(
         float decalEmissiveStrength,
         bool alphaTest,
         float alphaCutoff,
-        bool receivesLightmap)
+        bool receivesLightmap,
+        const std::vector<int>& owningSectorIds,
+        bool castsDynamicShadow)
 {
     const bool hasDecal = !decalMaterialId.empty();
     const SectorMeshBatchKey key{
@@ -137,7 +149,9 @@ SectorMeshBatchData& BatchForKey(
             hasDecal ? DecalEmissiveStrengthOrDefault(decalEmissiveStrength) : 1.0f,
             alphaTest,
             alphaTest ? UnitOrDefault(alphaCutoff, 0.5f) : 0.5f,
-            receivesLightmap};
+            receivesLightmap,
+            owningSectorIds,
+            castsDynamicShadow};
     const auto existing = batchIndexByKey.find(key);
     if (existing != batchIndexByKey.end()) {
         return batches[existing->second];
@@ -155,6 +169,8 @@ SectorMeshBatchData& BatchForKey(
     batch.alphaTest = key.alphaTest;
     batch.alphaCutoff = key.alphaCutoff;
     batch.receivesLightmap = key.receivesLightmap;
+    batch.owningSectorIds = key.owningSectorIds;
+    batch.castsDynamicShadow = key.castsDynamicShadow;
     batches.push_back(std::move(batch));
     const size_t index = batches.size() - 1;
     batchIndexByKey.emplace(key, index);
@@ -305,7 +321,9 @@ SectorMeshBatchDataResult BuildSectorMeshBatchDataInternal(
                 surface.decalEmissiveStrength,
                 surface.alphaTest,
                 surface.alphaCutoff,
-                surface.receivesLightmap);
+                surface.receivesLightmap,
+                surface.owningSectorIds,
+                surface.castsDynamicShadow);
         batch.vertices.reserve(batch.vertices.size() + surface.vertices.size());
         for (size_t vertexIndex = 0; vertexIndex < surface.vertices.size(); ++vertexIndex) {
             const SectorGeneratedVertex& vertex = surface.vertices[vertexIndex];
@@ -348,6 +366,8 @@ SectorMeshBatch MakeUploadedBatch(const SectorMeshBatchData& builder, Mesh mesh)
     batch.alphaTest = builder.alphaTest;
     batch.alphaCutoff = builder.alphaCutoff;
     batch.receivesLightmap = builder.receivesLightmap;
+    batch.owningSectorIds = builder.owningSectorIds;
+    batch.castsDynamicShadow = builder.castsDynamicShadow;
     batch.mesh = mesh;
     batch.vertexCount = mesh.vertexCount;
     batch.triangleCount = mesh.triangleCount;
@@ -377,7 +397,15 @@ std::vector<SectorReceiverBounds> BuildSectorReceiverBounds(
     std::unordered_map<int, size_t> boundIndexBySectorId;
     bounds.reserve(drawRecordData.batches.size());
     for (const SectorMeshBatchData& batch : drawRecordData.batches) {
-        AccumulateReceiverBounds(bounds, boundIndexBySectorId, batch);
+        if (batch.owningSectorIds.empty()) {
+            AccumulateReceiverBounds(bounds, boundIndexBySectorId, batch);
+        } else {
+            for (int sectorId : batch.owningSectorIds) {
+                SectorMeshBatchData owned = batch;
+                owned.sectorId = sectorId;
+                AccumulateReceiverBounds(bounds, boundIndexBySectorId, owned);
+            }
+        }
     }
     bounds.erase(
             std::remove_if(
@@ -434,6 +462,8 @@ SectorMeshBuildResult BuildSectorMeshesFromGeneratedGeometry(
         batch.alphaTest = builder.alphaTest;
         batch.alphaCutoff = builder.alphaCutoff;
         batch.receivesLightmap = builder.receivesLightmap;
+        batch.owningSectorIds = builder.owningSectorIds;
+        batch.castsDynamicShadow = builder.castsDynamicShadow;
         batch.vertexCount = builder.vertexCount;
         batch.triangleCount = builder.triangleCount;
         result.batches.push_back(batch);
@@ -479,8 +509,18 @@ bool ShouldDrawSectorMeshRecordForVisibility(
         const SectorMeshBatch& record,
         const RuntimePortalVisibilityResult& visibility)
 {
-    return ShouldDrawRuntimeSectorGeometryForVisibility(
-            record.sectorId, visibility);
+    if (!record.owningSectorIds.empty()) {
+        return std::any_of(
+                record.owningSectorIds.begin(),
+                record.owningSectorIds.end(),
+                [&visibility](int sectorId) {
+                    return ShouldDrawRuntimeSectorGeometryForVisibility(
+                            sectorId, visibility);
+                });
+    }
+    return record.sectorId <= 0
+            || ShouldDrawRuntimeSectorGeometryForVisibility(
+                    record.sectorId, visibility);
 }
 
 size_t CountSectorMeshDrawRecordsForVisibility(

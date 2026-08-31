@@ -1950,6 +1950,33 @@ int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph)
     return next;
 }
 
+int AllocateSectorAuthoringStructuralPrimitiveId(const SectorAuthoringGraph& graph)
+{
+    return AllocateNextId(graph.structuralPrimitives);
+}
+
+const SectorAuthoringStructuralPrimitive* FindSectorAuthoringStructuralPrimitive(
+        const SectorAuthoringGraph& graph,
+        int id)
+{
+    const auto found = std::find_if(
+            graph.structuralPrimitives.begin(),
+            graph.structuralPrimitives.end(),
+            [id](const SectorAuthoringStructuralPrimitive& primitive) {
+                return primitive.id == id;
+            });
+    return found == graph.structuralPrimitives.end() ? nullptr : &*found;
+}
+
+SectorAuthoringStructuralPrimitive* FindSectorAuthoringStructuralPrimitive(
+        SectorAuthoringGraph& graph,
+        int id)
+{
+    return const_cast<SectorAuthoringStructuralPrimitive*>(
+            FindSectorAuthoringStructuralPrimitive(
+                    static_cast<const SectorAuthoringGraph&>(graph), id));
+}
+
 bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id)
 {
     if (id.empty() || id.size() > 63) {
@@ -2553,6 +2580,18 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
         const SectorAuthoringGraph& graph)
 {
     std::vector<SectorAuthoringValidationIssue> issues;
+
+    const std::vector<SectorStructuralDiagnostic> structuralDiagnostics =
+            ValidateSectorAuthoringStructuralPrimitives(graph.structuralPrimitives);
+    for (const SectorStructuralDiagnostic& diagnostic : structuralDiagnostics) {
+        issues.push_back(SectorAuthoringValidationIssue{
+                diagnostic.severity == SectorStructuralDiagnosticSeverity::Error
+                        ? SectorAuthoringValidationSeverity::Error
+                        : SectorAuthoringValidationSeverity::Warning,
+                SectorAuthoringObjectKind::StructuralPrimitive,
+                diagnostic.primitiveId,
+                diagnostic.message});
+    }
 
     std::set<int> vertexIds;
     for (const SectorAuthoringVertex& vertex : graph.vertices) {
@@ -3338,6 +3377,52 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
                 trigger.repeat,
                 trigger.delayMilliseconds,
                 trigger.script});
+    }
+
+    std::vector<SectorStructuralDiagnostic> structuralDiagnostics;
+    if (!CompileSectorStructuralPrimitives(
+                graph.structuralPrimitives,
+                result.topology,
+                result.topology.compiledStructuralPrimitives,
+                structuralDiagnostics)) {
+        for (const SectorStructuralDiagnostic& diagnostic : structuralDiagnostics) {
+            AddDerivationDiagnostic(
+                    result.diagnostics,
+                    SectorAuthoringDerivationDiagnosticKind::InvalidStructuralPrimitive,
+                    diagnostic.primitiveId,
+                    diagnostic.message,
+                    diagnostic.severity == SectorStructuralDiagnosticSeverity::Error
+                            ? SectorAuthoringValidationSeverity::Error
+                            : SectorAuthoringValidationSeverity::Warning);
+        }
+        result.topology = SectorTopologyMap{};
+        result.mapping = SectorAuthoringDerivationMapping{};
+        return result;
+    }
+    for (const SectorStructuralDiagnostic& diagnostic : structuralDiagnostics) {
+        AddDerivationDiagnostic(
+                result.diagnostics,
+                diagnostic.severity == SectorStructuralDiagnosticSeverity::Warning
+                        ? SectorAuthoringDerivationDiagnosticKind::UnresolvedStructuralPrimitiveMembership
+                        : SectorAuthoringDerivationDiagnosticKind::InvalidStructuralPrimitive,
+                diagnostic.primitiveId,
+                diagnostic.message,
+                diagnostic.severity == SectorStructuralDiagnosticSeverity::Error
+                        ? SectorAuthoringValidationSeverity::Error
+                        : SectorAuthoringValidationSeverity::Warning);
+    }
+    result.mapping.structuralPrimitives.reserve(
+            result.topology.compiledStructuralPrimitives.size());
+    for (size_t index = 0;
+            index < result.topology.compiledStructuralPrimitives.size();
+            ++index) {
+        const SectorCompiledStructuralPrimitive& primitive =
+                result.topology.compiledStructuralPrimitives[index];
+        result.mapping.structuralPrimitives.push_back(
+                SectorAuthoringDerivedStructuralPrimitiveMapping{
+                        primitive.sourceAuthoringPrimitiveId,
+                        static_cast<int>(index),
+                        primitive.owningSectorIds});
     }
 
     const std::vector<SectorTopologyValidationIssue> topologyIssues =

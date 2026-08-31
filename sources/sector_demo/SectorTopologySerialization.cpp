@@ -4127,6 +4127,55 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
     ValidateRuntimeObjects(map, "root");
 }
 
+SectorStructuralPrimitiveKind ReadStructuralPrimitiveKind(
+        const Json& value,
+        const std::string& context)
+{
+    const std::string kind = ReadString(value, "kind", context);
+    if (kind == "box") return SectorStructuralPrimitiveKind::Box;
+    if (kind == "ramp") return SectorStructuralPrimitiveKind::Ramp;
+    if (kind == "stairs") return SectorStructuralPrimitiveKind::Stairs;
+    if (kind == "cylinder") return SectorStructuralPrimitiveKind::Cylinder;
+    if (kind == "sphere") return SectorStructuralPrimitiveKind::Sphere;
+    Fail(context + ".kind must be 'box', 'ramp', 'stairs', 'cylinder', or 'sphere'");
+}
+
+SectorStructuralMaterialSettings ReadStructuralMaterialSettings(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) Fail(context + " must be an object");
+    SectorStructuralMaterialSettings settings;
+    settings.materialId = ReadOptionalString(value, "materialId", context);
+    const auto uv = value.find("uv");
+    if (uv != value.end()) settings.uv = ReadUv(*uv, context + ".uv");
+    return settings;
+}
+
+Json WriteStructuralMaterialSettings(
+        const SectorStructuralMaterialSettings& settings,
+        const std::string& context)
+{
+    Json result = Json::object();
+    if (!settings.materialId.empty()) result["materialId"] = settings.materialId;
+    if (settings.uv.scale.x != 1.0f || settings.uv.scale.y != 1.0f
+            || settings.uv.offset.x != 0.0f || settings.uv.offset.y != 0.0f) {
+        result["uv"] = WriteUv(settings.uv, context + ".uv");
+    }
+    return result;
+}
+
+SectorStructuralSurfaceGroup ReadStructuralSurfaceGroupName(const std::string& name)
+{
+    for (int index = 0;
+            index < static_cast<int>(SectorStructuralSurfaceGroup::Count);
+            ++index) {
+        const auto group = static_cast<SectorStructuralSurfaceGroup>(index);
+        if (name == SectorStructuralSurfaceGroupName(group)) return group;
+    }
+    Fail("Unknown structural material override group '" + name + "'");
+}
+
 SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
 {
     if (!value.is_object()) {
@@ -4468,6 +4517,103 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
                     ? ReadInt(triggerJson, "delayMilliseconds", context) : 0;
             trigger.script = ReadOptionalString(triggerJson, "script", context);
             graph.triggers.push_back(std::move(trigger));
+        }
+    }
+
+    const auto structuralPrimitivesIt = value.find("structuralPrimitives");
+    if (structuralPrimitivesIt != value.end()) {
+        if (!structuralPrimitivesIt->is_array()) {
+            Fail("root.authoringGraph.structuralPrimitives must be an array");
+        }
+        for (size_t i = 0; i < structuralPrimitivesIt->size(); ++i) {
+            const Json& primitiveJson = (*structuralPrimitivesIt)[i];
+            const std::string context = "root.authoringGraph.structuralPrimitives["
+                    + std::to_string(i) + "]";
+            if (!primitiveJson.is_object()) Fail(context + " must be an object");
+            const SectorStructuralPrimitiveKind kind =
+                    ReadStructuralPrimitiveKind(primitiveJson, context);
+            SectorAuthoringStructuralPrimitive primitive =
+                    DefaultSectorAuthoringStructuralPrimitive(kind);
+            primitive.id = ReadInt(primitiveJson, "id", context);
+            primitive.x = ReadCoord(primitiveJson, "x", context);
+            primitive.z = ReadCoord(primitiveJson, "z", context);
+            primitive.enabled = ReadOptionalBool(
+                    primitiveJson, "enabled", context, primitive.enabled);
+            primitive.yawDegrees = ReadOptionalFloat(
+                    primitiveJson, "yawDegrees", context, primitive.yawDegrees);
+            primitive.collision = ReadOptionalBool(
+                    primitiveJson, "collision", context, primitive.collision);
+            primitive.receivesLightmap = ReadOptionalBool(
+                    primitiveJson, "receivesLightmap", context, primitive.receivesLightmap);
+            primitive.castsBakedShadow = ReadOptionalBool(
+                    primitiveJson, "castsBakedShadow", context, primitive.castsBakedShadow);
+            primitive.castsDynamicShadow = ReadOptionalBool(
+                    primitiveJson, "castsDynamicShadow", context, primitive.castsDynamicShadow);
+            const auto material = primitiveJson.find("material");
+            if (material != primitiveJson.end()) {
+                primitive.materials.defaultSurface =
+                        ReadStructuralMaterialSettings(*material, context + ".material");
+            }
+            const auto overrides = primitiveJson.find("materialOverrides");
+            if (overrides != primitiveJson.end()) {
+                if (!overrides->is_object()) Fail(context + ".materialOverrides must be an object");
+                for (auto it = overrides->begin(); it != overrides->end(); ++it) {
+                    const SectorStructuralSurfaceGroup group =
+                            ReadStructuralSurfaceGroupName(it.key());
+                    SectorStructuralMaterialOverride& override =
+                            primitive.materials.overrides[static_cast<size_t>(group)];
+                    override.enabled = true;
+                    override.settings = ReadStructuralMaterialSettings(
+                            it.value(), context + ".materialOverrides." + it.key());
+                }
+            }
+            const std::string kindField = SectorStructuralPrimitiveKindName(kind);
+            const Json& parameters = RequireField(
+                    primitiveJson, kindField.c_str(), context);
+            if (!parameters.is_object()) Fail(context + "." + kindField + " must be an object");
+            switch (kind) {
+                case SectorStructuralPrimitiveKind::Box:
+                    primitive.box.width = ReadCoord(parameters, "width", context + ".box");
+                    primitive.box.depth = ReadCoord(parameters, "depth", context + ".box");
+                    primitive.box.bottom = ReadFloat(parameters, "bottom", context + ".box");
+                    primitive.box.top = ReadFloat(parameters, "top", context + ".box");
+                    break;
+                case SectorStructuralPrimitiveKind::Ramp:
+                    primitive.ramp.width = ReadCoord(parameters, "width", context + ".ramp");
+                    primitive.ramp.run = ReadCoord(parameters, "run", context + ".ramp");
+                    primitive.ramp.solidBottom = ReadFloat(parameters, "solidBottom", context + ".ramp");
+                    primitive.ramp.low = ReadFloat(parameters, "low", context + ".ramp");
+                    primitive.ramp.high = ReadFloat(parameters, "high", context + ".ramp");
+                    break;
+                case SectorStructuralPrimitiveKind::Stairs:
+                    primitive.stairs.width = ReadCoord(parameters, "width", context + ".stairs");
+                    primitive.stairs.run = ReadCoord(parameters, "run", context + ".stairs");
+                    primitive.stairs.bottom = ReadFloat(parameters, "bottom", context + ".stairs");
+                    primitive.stairs.rise = ReadFloat(parameters, "rise", context + ".stairs");
+                    primitive.stairs.stepCount = parameters.contains("stepCount")
+                            ? ReadInt(parameters, "stepCount", context + ".stairs")
+                            : SectorStructuralDefaultStairSteps;
+                    break;
+                case SectorStructuralPrimitiveKind::Cylinder:
+                    primitive.cylinder.radius = ReadCoord(parameters, "radius", context + ".cylinder");
+                    primitive.cylinder.bottom = ReadFloat(parameters, "bottom", context + ".cylinder");
+                    primitive.cylinder.top = ReadFloat(parameters, "top", context + ".cylinder");
+                    primitive.cylinder.radialSegments = parameters.contains("radialSegments")
+                            ? ReadInt(parameters, "radialSegments", context + ".cylinder")
+                            : SectorStructuralDefaultCylinderSegments;
+                    break;
+                case SectorStructuralPrimitiveKind::Sphere:
+                    primitive.sphere.radius = ReadCoord(parameters, "radius", context + ".sphere");
+                    primitive.sphere.centerHeight = ReadFloat(parameters, "centerHeight", context + ".sphere");
+                    primitive.sphere.latitudeSegments = parameters.contains("latitudeSegments")
+                            ? ReadInt(parameters, "latitudeSegments", context + ".sphere")
+                            : SectorStructuralDefaultSphereLatitudeSegments;
+                    primitive.sphere.longitudeSegments = parameters.contains("longitudeSegments")
+                            ? ReadInt(parameters, "longitudeSegments", context + ".sphere")
+                            : SectorStructuralDefaultSphereLongitudeSegments;
+                    break;
+            }
+            graph.structuralPrimitives.push_back(std::move(primitive));
         }
     }
 
@@ -4969,6 +5115,85 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             if (trigger->delayMilliseconds != 0) triggerJson["delayMilliseconds"] = trigger->delayMilliseconds;
             if (!trigger->script.empty()) triggerJson["script"] = trigger->script;
             graphJson["triggers"].push_back(std::move(triggerJson));
+        }
+    }
+
+    if (!graph.structuralPrimitives.empty()) {
+        graphJson["structuralPrimitives"] = Json::array();
+        for (const SectorAuthoringStructuralPrimitive* primitive
+                : SortedById(graph.structuralPrimitives)) {
+            const std::string kind = SectorStructuralPrimitiveKindName(primitive->kind);
+            const std::string context = "structural primitive " + std::to_string(primitive->id);
+            Json primitiveJson{
+                    {"id", primitive->id},
+                    {"kind", kind},
+                    {"x", primitive->x},
+                    {"z", primitive->z}};
+            const SectorAuthoringStructuralPrimitive defaults =
+                    DefaultSectorAuthoringStructuralPrimitive(primitive->kind);
+            if (!primitive->enabled) primitiveJson["enabled"] = false;
+            if (primitive->yawDegrees != 0.0f) primitiveJson["yawDegrees"] = primitive->yawDegrees;
+            if (primitive->collision != defaults.collision) primitiveJson["collision"] = primitive->collision;
+            if (!primitive->receivesLightmap) primitiveJson["receivesLightmap"] = false;
+            if (!primitive->castsBakedShadow) primitiveJson["castsBakedShadow"] = false;
+            if (!primitive->castsDynamicShadow) primitiveJson["castsDynamicShadow"] = false;
+            const Json material = WriteStructuralMaterialSettings(
+                    primitive->materials.defaultSurface, context + ".material");
+            if (!material.empty()) primitiveJson["material"] = material;
+            Json overrides = Json::object();
+            for (int index = 0;
+                    index < static_cast<int>(SectorStructuralSurfaceGroup::Count);
+                    ++index) {
+                const auto group = static_cast<SectorStructuralSurfaceGroup>(index);
+                const SectorStructuralMaterialOverride& override =
+                        primitive->materials.overrides[static_cast<size_t>(group)];
+                if (override.enabled) {
+                    overrides[SectorStructuralSurfaceGroupName(group)] =
+                            WriteStructuralMaterialSettings(
+                                    override.settings,
+                                    context + ".materialOverrides."
+                                            + SectorStructuralSurfaceGroupName(group));
+                }
+            }
+            if (!overrides.empty()) primitiveJson["materialOverrides"] = std::move(overrides);
+            switch (primitive->kind) {
+                case SectorStructuralPrimitiveKind::Box:
+                    primitiveJson["box"] = Json{{"width", primitive->box.width},
+                            {"depth", primitive->box.depth}, {"bottom", primitive->box.bottom},
+                            {"top", primitive->box.top}};
+                    break;
+                case SectorStructuralPrimitiveKind::Ramp:
+                    primitiveJson["ramp"] = Json{{"width", primitive->ramp.width},
+                            {"run", primitive->ramp.run}, {"solidBottom", primitive->ramp.solidBottom},
+                            {"low", primitive->ramp.low}, {"high", primitive->ramp.high}};
+                    break;
+                case SectorStructuralPrimitiveKind::Stairs:
+                    primitiveJson["stairs"] = Json{{"width", primitive->stairs.width},
+                            {"run", primitive->stairs.run}, {"bottom", primitive->stairs.bottom},
+                            {"rise", primitive->stairs.rise}};
+                    if (primitive->stairs.stepCount != SectorStructuralDefaultStairSteps) {
+                        primitiveJson["stairs"]["stepCount"] = primitive->stairs.stepCount;
+                    }
+                    break;
+                case SectorStructuralPrimitiveKind::Cylinder:
+                    primitiveJson["cylinder"] = Json{{"radius", primitive->cylinder.radius},
+                            {"bottom", primitive->cylinder.bottom}, {"top", primitive->cylinder.top}};
+                    if (primitive->cylinder.radialSegments != SectorStructuralDefaultCylinderSegments) {
+                        primitiveJson["cylinder"]["radialSegments"] = primitive->cylinder.radialSegments;
+                    }
+                    break;
+                case SectorStructuralPrimitiveKind::Sphere:
+                    primitiveJson["sphere"] = Json{{"radius", primitive->sphere.radius},
+                            {"centerHeight", primitive->sphere.centerHeight}};
+                    if (primitive->sphere.latitudeSegments != SectorStructuralDefaultSphereLatitudeSegments) {
+                        primitiveJson["sphere"]["latitudeSegments"] = primitive->sphere.latitudeSegments;
+                    }
+                    if (primitive->sphere.longitudeSegments != SectorStructuralDefaultSphereLongitudeSegments) {
+                        primitiveJson["sphere"]["longitudeSegments"] = primitive->sphere.longitudeSegments;
+                    }
+                    break;
+            }
+            graphJson["structuralPrimitives"].push_back(std::move(primitiveJson));
         }
     }
 

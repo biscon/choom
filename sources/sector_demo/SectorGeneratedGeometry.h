@@ -22,12 +22,19 @@ enum class SectorGeneratedSurfaceKind {
     Middle
 };
 
+enum class SectorGeneratedSurfaceSourceKind {
+    Topology,
+    StructuralPrimitive
+};
+
 struct SectorGeneratedSurfaceRef {
     SectorGeneratedSurfaceKind kind = SectorGeneratedSurfaceKind::Floor;
     int topologySectorId = -1;
     int topologyLineDefId = -1;
     int topologySideDefId = -1;
     SectorTopologySideKind topologySide = SectorTopologySideKind::Front;
+    SectorGeneratedSurfaceSourceKind sourceKind = SectorGeneratedSurfaceSourceKind::Topology;
+    SectorStructuralFaceId structuralFace;
 };
 
 struct SectorGeneratedVertex {
@@ -54,6 +61,9 @@ struct SectorGeneratedSurface {
     std::vector<SectorGeneratedVertex> vertices;
     float chartWidth = 0.0f;
     float chartHeight = 0.0f;
+    std::vector<int> owningSectorIds;
+    bool castsLightmapOcclusion = true;
+    bool castsDynamicShadow = true;
 };
 
 struct SectorGeneratedGeometry {

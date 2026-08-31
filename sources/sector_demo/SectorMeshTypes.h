@@ -19,6 +19,8 @@ struct SectorMeshBatch {
     bool alphaTest = false;
     float alphaCutoff = 0.5f;
     bool receivesLightmap = true;
+    std::vector<int> owningSectorIds;
+    bool castsDynamicShadow = true;
     Mesh mesh = {};
     int vertexCount = 0;
     int triangleCount = 0;

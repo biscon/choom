@@ -681,3 +681,56 @@ The feature should build on these existing contracts rather than bypass them:
 
 These seams make structural primitives an additive generated-geometry system,
 not a rewrite of sector topology.
+## Slice 1 implementation findings for slice 2
+
+Slice 1 established the engine-facing contract for structural primitives. Slice 2
+should extend this contract rather than introduce an editor-only representation.
+
+- The authoring source of truth is
+  `SectorAuthoringGraph::structuralPrimitives`. A primitive has a stable positive
+  authoring ID, one of `box`, `ramp`, `stairs`, `cylinder`, or `sphere`, an exact
+  topology-grid X/Z origin, an authored yaw and height values, feature flags,
+  parameters for its kind, and a default material plus semantic face overrides.
+- The JSON field is optional and named `structuralPrimitives`, so old maps remain
+  loadable. Kind parameters are stored in a matching `box`, `ramp`, `stairs`,
+  `cylinder`, or `sphere` object. Default flags, segment counts, step count, and
+  empty material overrides are omitted when saving.
+- Invalid IDs, dimensions, height ranges, segment counts, step counts, yaw, UVs,
+  or duplicate semantic material overrides are derivation errors. Missing
+  materials and a primitive whose footprint resolves to no sector are warnings;
+  missing materials use the existing empty-material fallback.
+- Derivation produces `SectorCompiledStructuralPrimitive` values on
+  `SectorTopologyMap`. These contain deterministic non-indexed triangles,
+  semantic face identities, resolved material/UV data, owning sector IDs, and a
+  geometry fingerprint. Source ordering is normalized by stable ID.
+- A structural face is identified by primitive ID, semantic group, and semantic
+  face index. Slice 2 picking/selection UI should retain this identity instead of
+  triangle indices, because tessellation counts are editable.
+- Sector ownership is derived from footprint overlap. A primitive can belong to
+  multiple sectors. Unresolved ownership is deliberately conservative: render,
+  collision, and bake paths do not silently cull the primitive.
+- Rendering, picking, portal visibility, baked-light receivers/occluders,
+  dynamic-shadow batches, collision ray tests, actor vertical support, placement,
+  and navigation all consume compiled data. None of these steady-state paths
+  recompiles primitive geometry.
+- `SectorCollisionWorld` copies enabled collidable primitive surfaces while it is
+  built. Slice 2 must rebuild the existing collision/preview cache after edits;
+  it must not mutate that cache directly.
+- Navigation uses upward slope-eligible surfaces as walkable input, other faces
+  as blockers, and a smooth ramp input for stairs. Its source hash is version 4
+  and includes primitive geometry fingerprints and collision/enabled state.
+- The baked-light source version is 19. It includes all structural geometry,
+  material/UV, receiver, occluder, and shadow-affecting settings. This is separate
+  from the primitive fingerprint so material-only edits also invalidate a bake.
+- Sphere collision defaults off. Slice 2 should expose that default clearly
+  rather than making a visually round sphere behave as a precise runtime sphere;
+  collision currently follows compiled triangle surfaces.
+- Slice 1 intentionally adds no 2D editor cache entries or authoring controls.
+  Every slice-2 mutation of `authoringGraph.structuralPrimitives` must use the
+  document-edited/derivation path and invalidate the 2D topology render cache via
+  the existing helpers. Over-invalidation is acceptable; direct mutation without
+  invalidation is not.
+- A useful slice-2 selection key is `(authoring object kind, stable ID)`, with the
+  semantic face identity kept separately for material-face editing. This avoids
+  colliding primitive IDs with existing vertex, linedef, sector, light, or object
+  IDs.

@@ -436,6 +436,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorMaterialRefactor.cpp
@@ -476,6 +477,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorMaterialRefactor.cpp
             sources/sector_demo/SectorMaterialRegistry.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTriggers.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
@@ -490,6 +492,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_generated_geometry_tests
             tests/SectorTopologyGeneratedGeometryTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
@@ -502,6 +505,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_mesh_builder_tests
             tests/SectorTopologyMeshBuilderTests.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorDynamicPointLightSelection.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/renderer/SectorStaticSpecularLighting.cpp
@@ -530,6 +534,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorDynamicPointLightSelection.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
@@ -560,6 +565,7 @@ if(BUILD_TESTING)
             sources/engine/assets/TextureAssets.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
@@ -579,6 +585,7 @@ if(BUILD_TESTING)
     add_executable(sector_collision_world_tests
             tests/SectorCollisionWorldTests.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
@@ -590,6 +597,7 @@ if(BUILD_TESTING)
     add_executable(sector_portal_visibility_tests
             tests/SectorPortalVisibilityTests.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
@@ -603,6 +611,7 @@ if(BUILD_TESTING)
             tests/SectorCollisionMovementTests.cpp
             sources/game/items/ItemDropPlacement.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
@@ -671,6 +680,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorAudioOcclusion.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
@@ -803,6 +813,7 @@ if(BUILD_TESTING)
             sources/engine/assets/TextureAssets.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
@@ -820,6 +831,7 @@ if(BUILD_TESTING)
     add_executable(sector_navigation_tests
             tests/SectorNavigationTests.cpp
             sources/game/navigation/SectorNavigationBuildInput.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/game/navigation/SectorNavigationCompression.cpp
             sources/game/navigation/SectorNavigationTypes.cpp
             sources/game/navigation/SectorNavigationWorld.cpp
@@ -830,6 +842,17 @@ if(BUILD_TESTING)
     target_include_directories(sector_navigation_tests PRIVATE sources)
     target_link_libraries(sector_navigation_tests PRIVATE raylib recastnavigation)
     add_test(NAME sector_navigation COMMAND sector_navigation_tests)
+
+    add_executable(sector_structural_primitive_tests
+            tests/SectorStructuralPrimitiveTests.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_structural_primitive_tests PRIVATE sources)
+    target_link_libraries(sector_structural_primitive_tests PRIVATE raylib)
+    add_test(NAME sector_structural_primitive COMMAND sector_structural_primitive_tests)
 endif()
 
 # -------------------------------
