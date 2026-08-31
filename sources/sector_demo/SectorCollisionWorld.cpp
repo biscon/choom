@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -14,6 +15,33 @@ namespace {
 
 constexpr float CollisionPointEpsilon = 0.001f;
 constexpr float CollisionMoveEpsilon = 0.0001f;
+
+enum class StructuralFootprintEdge {
+    None,
+    Low,
+    High,
+    Side
+};
+
+enum class StructuralBlockReason {
+    None,
+    Side,
+    Step,
+    Ceiling
+};
+
+struct StructuralCollisionShape {
+    SectorStructuralPrimitiveKind kind = SectorStructuralPrimitiveKind::Box;
+    Vector2 center = {};
+    Vector2 axisX = {1.0f, 0.0f};
+    Vector2 axisZ = {0.0f, 1.0f};
+    Vector2 halfExtents = {};
+    float radius = 0.0f;
+    float bottom = 0.0f;
+    float low = 0.0f;
+    float high = 0.0f;
+    float sphereCenterY = 0.0f;
+};
 
 enum class PointLoopContainment {
     Outside,
@@ -41,23 +69,56 @@ bool IsFinite(Vector3 value)
             && std::isfinite(value.z);
 }
 
-bool PointInTriangleXZ(Vector2 point, Vector3 a, Vector3 b, Vector3 c, float* y)
+StructuralCollisionShape BuildStructuralCollisionShape(
+        const SectorAuthoringStructuralPrimitive& primitive)
 {
-    const Vector2 ab{b.x - a.x, b.z - a.z};
-    const Vector2 ac{c.x - a.x, c.z - a.z};
-    const Vector2 ap{point.x - a.x, point.y - a.z};
-    const float denominator = ab.x * ac.y - ab.y * ac.x;
-    if (std::fabs(denominator) <= CollisionMoveEpsilon) return false;
-    const float u = (ap.x * ac.y - ap.y * ac.x) / denominator;
-    const float v = (ab.x * ap.y - ab.y * ap.x) / denominator;
-    if (u < -CollisionPointEpsilon || v < -CollisionPointEpsilon
-            || u + v > 1.0f + CollisionPointEpsilon) {
-        return false;
+    StructuralCollisionShape shape;
+    shape.kind = primitive.kind;
+    shape.center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
+    const float radians = primitive.yawDegrees * 3.14159265358979323846f / 180.0f;
+    const float cosine = std::cos(radians);
+    const float sine = std::sin(radians);
+    shape.axisX = {cosine, sine};
+    shape.axisZ = {-sine, cosine};
+    switch (primitive.kind) {
+        case SectorStructuralPrimitiveKind::Box:
+            shape.halfExtents = {
+                    SectorCoordToWorldDistance(primitive.box.width) * 0.5f,
+                    SectorCoordToWorldDistance(primitive.box.depth) * 0.5f};
+            shape.bottom = SectorAuthoringToWorldDistance(primitive.box.bottom);
+            shape.low = shape.high = SectorAuthoringToWorldDistance(primitive.box.top);
+            break;
+        case SectorStructuralPrimitiveKind::Ramp:
+            shape.halfExtents = {
+                    SectorCoordToWorldDistance(primitive.ramp.width) * 0.5f,
+                    SectorCoordToWorldDistance(primitive.ramp.run) * 0.5f};
+            shape.bottom = SectorAuthoringToWorldDistance(primitive.ramp.solidBottom);
+            shape.low = SectorAuthoringToWorldDistance(primitive.ramp.low);
+            shape.high = SectorAuthoringToWorldDistance(primitive.ramp.high);
+            break;
+        case SectorStructuralPrimitiveKind::Stairs:
+            shape.halfExtents = {
+                    SectorCoordToWorldDistance(primitive.stairs.width) * 0.5f,
+                    SectorCoordToWorldDistance(primitive.stairs.run) * 0.5f};
+            shape.bottom = SectorAuthoringToWorldDistance(primitive.stairs.bottom);
+            shape.low = shape.bottom;
+            shape.high = SectorAuthoringToWorldDistance(
+                    primitive.stairs.bottom + primitive.stairs.rise);
+            break;
+        case SectorStructuralPrimitiveKind::Cylinder:
+            shape.radius = SectorCoordToWorldDistance(primitive.cylinder.radius);
+            shape.bottom = SectorAuthoringToWorldDistance(primitive.cylinder.bottom);
+            shape.low = shape.high = SectorAuthoringToWorldDistance(primitive.cylinder.top);
+            break;
+        case SectorStructuralPrimitiveKind::Sphere:
+            shape.radius = SectorCoordToWorldDistance(primitive.sphere.radius);
+            shape.sphereCenterY = SectorAuthoringToWorldDistance(
+                    primitive.sphere.centerHeight);
+            shape.bottom = shape.sphereCenterY - shape.radius;
+            shape.low = shape.high = shape.sphereCenterY + shape.radius;
+            break;
     }
-    if (y != nullptr) {
-        *y = a.y + u * (b.y - a.y) + v * (c.y - a.y);
-    }
-    return true;
+    return shape;
 }
 
 bool RayTriangle(
@@ -172,6 +233,246 @@ Vector2 NormalizeOrZero(Vector2 value)
         return Vector2{};
     }
     return Scale(value, 1.0f / length);
+}
+
+Vector2 ToStructuralLocalPoint(
+        Vector2 point,
+        const StructuralCollisionShape& shape)
+{
+    const Vector2 relative = Subtract(point, shape.center);
+    return Vector2{Dot(relative, shape.axisX), Dot(relative, shape.axisZ)};
+}
+
+bool CircleOverlapsStructuralFootprint(
+        Vector2 position,
+        float radius,
+        const StructuralCollisionShape& shape)
+{
+    if (shape.kind == SectorStructuralPrimitiveKind::Cylinder
+            || shape.kind == SectorStructuralPrimitiveKind::Sphere) {
+        const float combined = radius + shape.radius;
+        return DistanceSquared(position, shape.center)
+                <= combined * combined + CollisionMoveEpsilon;
+    }
+    const Vector2 local = ToStructuralLocalPoint(position, shape);
+    const Vector2 closest{
+            std::clamp(local.x, -shape.halfExtents.x, shape.halfExtents.x),
+            std::clamp(local.y, -shape.halfExtents.y, shape.halfExtents.y)};
+    return DistanceSquared(local, closest)
+            <= radius * radius + CollisionMoveEpsilon;
+}
+
+float StructuralSupportHeight(
+        Vector2 position,
+        const StructuralCollisionShape& shape)
+{
+    if (shape.kind != SectorStructuralPrimitiveKind::Ramp
+            && shape.kind != SectorStructuralPrimitiveKind::Stairs) {
+        return shape.high;
+    }
+    const Vector2 local = ToStructuralLocalPoint(position, shape);
+    const float run = shape.halfExtents.y * 2.0f;
+    if (!(run > CollisionMoveEpsilon)) return shape.low;
+    const float t = std::clamp(
+            (local.y + shape.halfExtents.y) / run,
+            0.0f,
+            1.0f);
+    return shape.low + (shape.high - shape.low) * t;
+}
+
+float SphereHorizontalRadiusForVerticalInterval(
+        const StructuralCollisionShape& shape,
+        float intervalBottom,
+        float intervalTop)
+{
+    float verticalDistance = 0.0f;
+    if (shape.sphereCenterY < intervalBottom) {
+        verticalDistance = intervalBottom - shape.sphereCenterY;
+    } else if (shape.sphereCenterY > intervalTop) {
+        verticalDistance = shape.sphereCenterY - intervalTop;
+    }
+    if (verticalDistance >= shape.radius) return 0.0f;
+    return std::sqrt(std::max(
+            0.0f,
+            shape.radius * shape.radius
+                    - verticalDistance * verticalDistance));
+}
+
+bool ResolveCircleAgainstStructuralRectangle(
+        Vector2& position,
+        float radius,
+        const StructuralCollisionShape& shape,
+        Vector2& outNormal,
+        StructuralFootprintEdge& outEdge)
+{
+    const Vector2 local = ToStructuralLocalPoint(position, shape);
+    const Vector2 closest{
+            std::clamp(local.x, -shape.halfExtents.x, shape.halfExtents.x),
+            std::clamp(local.y, -shape.halfExtents.y, shape.halfExtents.y)};
+    const Vector2 delta = Subtract(local, closest);
+    const float distanceSquared = LengthSquared(delta);
+    const float radiusSquared = radius * radius;
+    Vector2 pushLocal{};
+    if (distanceSquared > CollisionMoveEpsilon) {
+        if (distanceSquared >= radiusSquared - CollisionMoveEpsilon) return false;
+        const float distance = std::sqrt(distanceSquared);
+        pushLocal = Scale(delta,
+                (radius - distance + CollisionMoveEpsilon) / distance);
+        if (std::fabs(delta.x) > std::fabs(delta.y)) {
+            outEdge = StructuralFootprintEdge::Side;
+        } else {
+            outEdge = closest.y < 0.0f
+                    ? StructuralFootprintEdge::Low
+                    : StructuralFootprintEdge::High;
+        }
+    } else {
+        const float overlapX = shape.halfExtents.x + radius - std::fabs(local.x);
+        const float overlapZ = shape.halfExtents.y + radius - std::fabs(local.y);
+        if (overlapX <= 0.0f || overlapZ <= 0.0f) return false;
+        if (overlapX < overlapZ) {
+            pushLocal.x = (local.x < 0.0f ? -1.0f : 1.0f)
+                    * (overlapX + CollisionMoveEpsilon);
+            outEdge = StructuralFootprintEdge::Side;
+        } else {
+            pushLocal.y = (local.y < 0.0f ? -1.0f : 1.0f)
+                    * (overlapZ + CollisionMoveEpsilon);
+            outEdge = local.y < 0.0f
+                    ? StructuralFootprintEdge::Low
+                    : StructuralFootprintEdge::High;
+        }
+    }
+    const Vector2 pushWorld = Add(
+            Scale(shape.axisX, pushLocal.x),
+            Scale(shape.axisZ, pushLocal.y));
+    position = Add(position, pushWorld);
+    outNormal = NormalizeOrZero(pushWorld);
+    return LengthSquared(outNormal) > CollisionMoveEpsilon;
+}
+
+bool ResolveCircleAgainstStructuralCircle(
+        Vector2& position,
+        float combinedRadius,
+        const StructuralCollisionShape& shape,
+        Vector2& outNormal)
+{
+    const Vector2 delta = Subtract(position, shape.center);
+    const float distanceSquared = LengthSquared(delta);
+    if (distanceSquared >= combinedRadius * combinedRadius
+                    - CollisionMoveEpsilon) {
+        return false;
+    }
+    if (distanceSquared > CollisionMoveEpsilon) {
+        const float distance = std::sqrt(distanceSquared);
+        outNormal = Scale(delta, 1.0f / distance);
+        position = Add(position, Scale(
+                outNormal,
+                combinedRadius - distance + CollisionMoveEpsilon));
+        return true;
+    }
+    outNormal = {1.0f, 0.0f};
+    position.x += combinedRadius + CollisionMoveEpsilon;
+    return true;
+}
+
+bool PointInsideStructuralFootprint(
+        Vector2 position,
+        const StructuralCollisionShape& shape)
+{
+    if (shape.kind == SectorStructuralPrimitiveKind::Cylinder
+            || shape.kind == SectorStructuralPrimitiveKind::Sphere) {
+        return DistanceSquared(position, shape.center)
+                <= shape.radius * shape.radius + CollisionMoveEpsilon;
+    }
+    const Vector2 local = ToStructuralLocalPoint(position, shape);
+    return std::fabs(local.x) <= shape.halfExtents.x + CollisionMoveEpsilon
+            && std::fabs(local.y) <= shape.halfExtents.y + CollisionMoveEpsilon;
+}
+
+bool CanTraverseContinuousStructuralSupport(
+        const StructuralCollisionShape& shape,
+        Vector2 previousPosition,
+        Vector2 candidate,
+        float feetY,
+        bool grounded,
+        const SectorCollisionMoveConfig& config)
+{
+    if (!grounded
+            || (shape.kind != SectorStructuralPrimitiveKind::Ramp
+                    && shape.kind != SectorStructuralPrimitiveKind::Stairs)) {
+        return false;
+    }
+
+    if (PointInsideStructuralFootprint(previousPosition, shape)) {
+        const float previousSupport = StructuralSupportHeight(
+                previousPosition, shape);
+        if (std::fabs(feetY - previousSupport)
+                > config.stepHeight + CollisionPointEpsilon) {
+            return false;
+        }
+        return PointInsideStructuralFootprint(candidate, shape)
+                || CircleOverlapsStructuralFootprint(
+                        candidate, config.radius, shape);
+    }
+
+    if (!PointInsideStructuralFootprint(candidate, shape)) {
+        return false;
+    }
+
+    const Vector2 previousLocal = ToStructuralLocalPoint(
+            previousPosition, shape);
+    if (previousLocal.y >= -shape.halfExtents.y + CollisionMoveEpsilon
+            || std::fabs(previousLocal.x)
+                    > shape.halfExtents.x + config.radius) {
+        return false;
+    }
+    return StructuralSupportHeight(candidate, shape) - feetY
+            <= config.stepHeight + CollisionPointEpsilon;
+}
+
+StructuralBlockReason StructuralBlockReasonForMove(
+        const StructuralCollisionShape& shape,
+        StructuralFootprintEdge edge,
+        Vector2 candidate,
+        float feetY,
+        bool grounded,
+        bool continuousTraversal,
+        const SectorCollisionMoveConfig& config,
+        float sectorCeiling)
+{
+    const float support = StructuralSupportHeight(candidate, shape);
+    const float playerTop = feetY + config.playerHeight;
+    if (playerTop <= shape.bottom + CollisionMoveEpsilon
+            || feetY > support + CollisionMoveEpsilon) {
+        return StructuralBlockReason::None;
+    }
+
+    const bool sloped = shape.kind == SectorStructuralPrimitiveKind::Ramp
+            || shape.kind == SectorStructuralPrimitiveKind::Stairs;
+    if (sloped && continuousTraversal) {
+        return support + config.playerHeight
+                        > sectorCeiling + CollisionMoveEpsilon
+                ? StructuralBlockReason::Ceiling
+                : StructuralBlockReason::None;
+    }
+    if (sloped && edge == StructuralFootprintEdge::Side) {
+        return StructuralBlockReason::Side;
+    }
+
+    if (feetY >= support - CollisionMoveEpsilon) {
+        return StructuralBlockReason::None;
+    }
+
+    const float rise = support - feetY;
+    if (rise <= config.stepHeight + CollisionMoveEpsilon
+            && grounded) {
+        return support + config.playerHeight
+                        > sectorCeiling + CollisionMoveEpsilon
+                ? StructuralBlockReason::Ceiling
+                : StructuralBlockReason::None;
+    }
+    return rise > CollisionMoveEpsilon
+            ? StructuralBlockReason::Step
+            : StructuralBlockReason::Side;
 }
 
 Vector2 ClosestPointOnSegment(Vector2 point, Vector2 a, Vector2 b)
@@ -611,27 +912,84 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
             || !IsFinite(query.positionXZ) || !std::isfinite(query.feetY)) {
         return false;
     }
-    const float maximumSupport = query.feetY + std::max(query.stepHeight, 0.0f)
+    const float radius = std::max(query.radius, 0.0f);
+    const float maximumSupport = query.feetY
+            + (query.grounded ? std::max(query.stepHeight, 0.0f) : 0.0f)
             + CollisionPointEpsilon;
-    const float head = query.feetY + std::max(query.actorHeight, 0.0f);
-    for (const SectorCompiledStructuralSurface& surface : structuralSurfaces) {
-        if (!surface.owningSectorIds.empty()
-                && std::find(surface.owningSectorIds.begin(), surface.owningSectorIds.end(), sectorId)
-                        == surface.owningSectorIds.end()) {
+    for (const SectorAuthoringStructuralPrimitive& primitive
+            : structuralPrimitives) {
+        const StructuralCollisionShape shape =
+                BuildStructuralCollisionShape(primitive);
+        if (!CircleOverlapsStructuralFootprint(
+                    query.positionXZ, radius, shape)) {
             continue;
         }
-        for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {
-            const Vector3 a = surface.vertices[index].position;
-            const Vector3 b = surface.vertices[index + 1].position;
-            const Vector3 c = surface.vertices[index + 2].position;
-            float surfaceY = 0.0f;
-            if (!PointInTriangleXZ(query.positionXZ, a, b, c, &surfaceY)) continue;
-            const float normalY = surface.normal.y;
-            if (normalY > 0.01f && surfaceY <= maximumSupport) {
-                out->floorZ = std::max(out->floorZ, surfaceY);
-            } else if (normalY < -0.01f && surfaceY >= head - CollisionPointEpsilon) {
-                out->ceilingZ = std::min(out->ceilingZ, surfaceY);
+        if (shape.kind == SectorStructuralPrimitiveKind::Sphere) {
+            const float centerDistance = std::sqrt(std::max(
+                    0.0f,
+                    DistanceSquared(query.positionXZ, shape.center)));
+            const float nearestHorizontal = std::max(
+                    0.0f, centerDistance - radius);
+            if (nearestHorizontal < shape.radius) {
+                const float verticalExtent = std::sqrt(std::max(
+                        0.0f,
+                        shape.radius * shape.radius
+                                - nearestHorizontal * nearestHorizontal));
+                const float lowerSurface = shape.sphereCenterY - verticalExtent;
+                const float upperSurface = shape.sphereCenterY + verticalExtent;
+                const bool canLand = query.grounded
+                        ? std::fabs(query.feetY - upperSurface)
+                                <= CollisionPointEpsilon
+                        : upperSurface <= query.feetY + CollisionPointEpsilon;
+                if (canLand && upperSurface >= out->floorZ) {
+                    out->floorZ = upperSurface;
+                    out->continuousFloor = false;
+                }
+                if (lowerSurface > query.feetY + CollisionPointEpsilon) {
+                    out->ceilingZ = std::min(out->ceilingZ, lowerSurface);
+                }
             }
+            continue;
+        }
+        const bool centerInside = PointInsideStructuralFootprint(
+                query.positionXZ, shape);
+        const float support = StructuralSupportHeight(
+                query.positionXZ, shape);
+        float retentionTolerance = CollisionPointEpsilon;
+        const bool continuous =
+                shape.kind == SectorStructuralPrimitiveKind::Ramp
+                || shape.kind == SectorStructuralPrimitiveKind::Stairs;
+        if (continuous && !centerInside) {
+            const Vector2 local = ToStructuralLocalPoint(
+                    query.positionXZ, shape);
+            const bool outsideEnd =
+                    std::fabs(local.x)
+                            <= shape.halfExtents.x + CollisionPointEpsilon
+                    && std::fabs(local.y)
+                            > shape.halfExtents.y + CollisionMoveEpsilon;
+            if (outsideEnd) {
+                retentionTolerance = std::max(query.stepHeight, 0.0f)
+                        + CollisionPointEpsilon;
+            }
+        }
+        const bool retainsSupport = !centerInside
+                && query.grounded
+                && std::fabs(query.feetY - support)
+                        <= retentionTolerance;
+        if (centerInside || retainsSupport) {
+            if (retainsSupport || support <= maximumSupport) {
+                if (support > out->floorZ + CollisionPointEpsilon) {
+                    out->floorZ = support;
+                    out->continuousFloor = continuous;
+                } else if (continuous
+                        && std::fabs(support - out->floorZ)
+                                <= CollisionPointEpsilon) {
+                    out->continuousFloor = true;
+                }
+            }
+        }
+        if (shape.bottom > query.feetY + CollisionPointEpsilon) {
+            out->ceilingZ = std::min(out->ceilingZ, shape.bottom);
         }
     }
     return out->ceilingZ > out->floorZ;
@@ -754,6 +1112,7 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
             1,
             64);
     const Vector2 substepDelta = Scale(desiredDelta, 1.0f / static_cast<float>(substeps));
+    float resolvedFeetY = moveState.feetY;
 
     for (int substep = 0; substep < substeps; ++substep) {
         const Vector2 previousPosition = result.positionXZ;
@@ -875,8 +1234,119 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
                 }
             }
 
+            SectorCollisionHeights structuralSectorHeights;
+            const int structuralSectorId = FindSectorContainingPointPreferCurrent(
+                    candidate, result.currentSectorId);
+            if (!GetSectorFloorCeiling(
+                        structuralSectorId, &structuralSectorHeights)) {
+                structuralSectorHeights.ceilingZ =
+                        std::numeric_limits<float>::infinity();
+            }
+            for (const SectorAuthoringStructuralPrimitive& primitive
+                    : structuralPrimitives) {
+                const StructuralCollisionShape shape =
+                        BuildStructuralCollisionShape(primitive);
+                Vector2 resolved = candidate;
+                Vector2 normal{};
+                StructuralBlockReason blockReason = StructuralBlockReason::None;
+                if (shape.kind == SectorStructuralPrimitiveKind::Sphere) {
+                    const float horizontalRadius =
+                            SphereHorizontalRadiusForVerticalInterval(
+                                    shape,
+                                    resolvedFeetY,
+                                    resolvedFeetY + config.playerHeight);
+                    if (!(horizontalRadius > CollisionMoveEpsilon)
+                            || !ResolveCircleAgainstStructuralCircle(
+                                    resolved,
+                                    horizontalRadius + config.radius,
+                                    shape,
+                                    normal)) {
+                        continue;
+                    }
+                    blockReason = StructuralBlockReason::Side;
+                } else if (shape.kind
+                        == SectorStructuralPrimitiveKind::Cylinder) {
+                    if (!ResolveCircleAgainstStructuralCircle(
+                                resolved,
+                                shape.radius + config.radius,
+                                shape,
+                                normal)) {
+                        continue;
+                    }
+                    blockReason = StructuralBlockReasonForMove(
+                            shape,
+                            StructuralFootprintEdge::None,
+                            candidate,
+                            resolvedFeetY,
+                            moveState.grounded,
+                            false,
+                            config,
+                            structuralSectorHeights.ceilingZ);
+                } else {
+                    StructuralFootprintEdge edge =
+                            StructuralFootprintEdge::None;
+                    if (!ResolveCircleAgainstStructuralRectangle(
+                                resolved,
+                                config.radius,
+                                shape,
+                                normal,
+                                edge)) {
+                        continue;
+                    }
+                    blockReason = StructuralBlockReasonForMove(
+                            shape,
+                            edge,
+                            candidate,
+                            resolvedFeetY,
+                            moveState.grounded,
+                            CanTraverseContinuousStructuralSupport(
+                                    shape,
+                                    previousPosition,
+                                    candidate,
+                                    resolvedFeetY,
+                                    moveState.grounded,
+                                    config),
+                            config,
+                            structuralSectorHeights.ceilingZ);
+                }
+                if (blockReason == StructuralBlockReason::None) continue;
+                candidate = resolved;
+                const float intoSurface = Dot(remaining, normal);
+                if (intoSurface < 0.0f) {
+                    remaining = Subtract(
+                            remaining, Scale(normal, intoSurface));
+                }
+                result.hitWall = true;
+                result.blockedByStep = result.blockedByStep
+                        || blockReason == StructuralBlockReason::Step;
+                result.blockedByCeiling = result.blockedByCeiling
+                        || blockReason == StructuralBlockReason::Ceiling;
+                changed = true;
+            }
+
             if (!changed) {
                 break;
+            }
+        }
+
+        float candidateFeetY = resolvedFeetY;
+        bool hasContinuousSupport = false;
+        for (const SectorAuthoringStructuralPrimitive& primitive
+                : structuralPrimitives) {
+            const StructuralCollisionShape shape =
+                    BuildStructuralCollisionShape(primitive);
+            if (CanTraverseContinuousStructuralSupport(
+                        shape,
+                        previousPosition,
+                        candidate,
+                        resolvedFeetY,
+                        moveState.grounded,
+                        config)) {
+                const float support = StructuralSupportHeight(candidate, shape);
+                candidateFeetY = hasContinuousSupport
+                        ? std::max(candidateFeetY, support)
+                        : support;
+                hasContinuousSupport = true;
             }
         }
 
@@ -884,7 +1354,7 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
                 FindSectorForPlayerFootprint(
                         candidate,
                         result.currentSectorId,
-                        moveState.feetY,
+                        candidateFeetY,
                         moveState.grounded,
                         config);
         if (resolvedSectorId == 0) {
@@ -896,7 +1366,7 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
 
         SectorCollisionVerticalQuery verticalQuery;
         verticalQuery.positionXZ = candidate;
-        verticalQuery.feetY = moveState.feetY;
+        verticalQuery.feetY = candidateFeetY;
         verticalQuery.radius = config.radius;
         verticalQuery.actorHeight = config.playerHeight;
         verticalQuery.stepHeight = config.stepHeight;
@@ -904,7 +1374,7 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
         SectorCollisionHeights verticalHeights;
         if (!structuralSurfaces.empty()
                 && (!ResolveActorVerticalContext(resolvedSectorId, verticalQuery, &verticalHeights)
-                || verticalHeights.floorZ > moveState.feetY + config.stepHeight
+                || verticalHeights.floorZ > candidateFeetY + config.stepHeight
                         + CollisionPointEpsilon
                 || verticalHeights.ceilingZ - verticalHeights.floorZ
                         < config.playerHeight - CollisionPointEpsilon)) {
@@ -916,6 +1386,7 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
 
         result.positionXZ = candidate;
         result.currentSectorId = resolvedSectorId;
+        resolvedFeetY = candidateFeetY;
     }
 
     return result;

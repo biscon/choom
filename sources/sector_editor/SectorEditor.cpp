@@ -6522,6 +6522,35 @@ void SectorEditor::DrawSectorsPanel(
         case SectorEditorInspectorPanelRequestKind::RebuildSectorCollisionWorld:
             RebuildSectorCollisionWorld();
             break;
+        case SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewRuntime:
+            if (state.mode == SectorEditorMode::Preview3D
+                    && sceneRuntime.Renderer().IsRendererReady()
+                    && engineContext != nullptr) {
+                RefreshResolvedMaterials();
+                std::string refreshError;
+                if (RefreshPreviewSurfaceGeometry(
+                            TopologyMap(), &refreshError)) {
+                    RebuildSectorCollisionWorld();
+                    sceneRuntime.Navigation().RequestRebuild();
+                    RefreshPreviewObjectProbeDebugData();
+                } else if (!RebuildPreviewMeshesPreservingView(
+                                   *engineContext)) {
+                    TraceLog(
+                            LOG_WARNING,
+                            "Structural preview refresh failed: %s",
+                            refreshError.empty()
+                                    ? "unknown error"
+                                    : refreshError.c_str());
+                }
+            }
+            break;
+        case SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials:
+            if (state.mode == SectorEditorMode::Preview3D
+                    && sceneRuntime.Renderer().IsRendererReady()
+                    && engineContext != nullptr) {
+                RefreshPreviewSurfaceMaterials(*engineContext);
+            }
+            break;
         case SectorEditorInspectorPanelRequestKind::BeginAuthoringInsertVertex:
             BeginPendingAuthoringInsertVertex(request.lineId);
             break;

@@ -793,6 +793,7 @@ SectorFpsVerticalContext BuildSectorStaticModelVerticalContext(
         if (collider.top <= reachableFloor
                 && collider.top > result.floorZ) {
             result.floorZ = collider.top;
+            result.continuousFloor = false;
         }
         if (collider.bottom >= playerTop - StaticModelCollisionEpsilon
                 && collider.bottom < result.ceilingZ) {

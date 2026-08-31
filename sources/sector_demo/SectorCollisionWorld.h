@@ -15,6 +15,7 @@ struct SectorTopologyMap;
 struct SectorCollisionHeights {
     float floorZ = 0.0f;
     float ceilingZ = 0.0f;
+    bool continuousFloor = false;
 };
 
 enum class SectorCollisionEdgeKind {

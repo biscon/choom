@@ -1,5 +1,6 @@
 #include "sector_demo/SectorStructuralPrimitives.h"
 
+#include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
@@ -173,6 +174,97 @@ void AppendQuad(
     AppendTriangle(surface, va, vc, vd, normal);
 }
 
+Vector2 VerticalBaseUv(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        Vector3 position,
+        Vector3 outwardNormal)
+{
+    const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
+    const Vector3 relative{position.x - center.x, 0.0f, position.z - center.y};
+    const Vector3 viewedRight{outwardNormal.z, 0.0f, -outwardNormal.x};
+    return Vector2{
+            (relative.x * viewedRight.x + relative.z * viewedRight.z)
+                    / kSectorGeneratedTextureWorldSize,
+            -position.y / kSectorGeneratedTextureWorldSize};
+}
+
+Vector2 FlatLocalBaseUv(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        Vector3 position)
+{
+    const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
+    const float radians = primitive.yawDegrees * Pi / 180.0f;
+    const float cosine = std::cos(radians);
+    const float sine = std::sin(radians);
+    const float relativeX = position.x - center.x;
+    const float relativeZ = position.z - center.y;
+    return Vector2{
+            (cosine * relativeX + sine * relativeZ)
+                    / kSectorGeneratedTextureWorldSize,
+            (-sine * relativeX + cosine * relativeZ)
+                    / kSectorGeneratedTextureWorldSize};
+}
+
+void AppendMappedQuad(
+        SectorCompiledStructuralSurface& surface,
+        Vector3 a,
+        Vector3 b,
+        Vector3 c,
+        Vector3 d,
+        Vector3 normal,
+        Vector2 uvA,
+        Vector2 uvB,
+        Vector2 uvC,
+        Vector2 uvD,
+        Vector2 chartA,
+        Vector2 chartB,
+        Vector2 chartC,
+        Vector2 chartD,
+        const SectorTopologyUvSettings& uv)
+{
+    const auto va = Vertex(a, normal, uvA, chartA, uv);
+    const auto vb = Vertex(b, normal, uvB, chartB, uv);
+    const auto vc = Vertex(c, normal, uvC, chartC, uv);
+    const auto vd = Vertex(d, normal, uvD, chartD, uv);
+    AppendTriangle(surface, va, vb, vc, normal);
+    AppendTriangle(surface, va, vc, vd, normal);
+}
+
+void AppendVerticalQuad(
+        SectorCompiledStructuralSurface& surface,
+        const SectorAuthoringStructuralPrimitive& primitive,
+        Vector3 a,
+        Vector3 b,
+        Vector3 c,
+        Vector3 d,
+        Vector3 normal,
+        const SectorTopologyUvSettings& uv)
+{
+    const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
+    const Vector3 viewedRight{normal.z, 0.0f, -normal.x};
+    const auto horizontal = [&](Vector3 position) {
+        return (position.x - center.x) * viewedRight.x
+                + (position.z - center.y) * viewedRight.z;
+    };
+    const float ha = horizontal(a);
+    const float hb = horizontal(b);
+    const float hc = horizontal(c);
+    const float hd = horizontal(d);
+    const float minimumHorizontal = std::min({ha, hb, hc, hd});
+    const float maximumY = std::max({a.y, b.y, c.y, d.y});
+    AppendMappedQuad(
+            surface, a, b, c, d, normal,
+            VerticalBaseUv(primitive, a, normal),
+            VerticalBaseUv(primitive, b, normal),
+            VerticalBaseUv(primitive, c, normal),
+            VerticalBaseUv(primitive, d, normal),
+            {ha - minimumHorizontal, maximumY - a.y},
+            {hb - minimumHorizontal, maximumY - b.y},
+            {hc - minimumHorizontal, maximumY - c.y},
+            {hd - minimumHorizontal, maximumY - d.y},
+            uv);
+}
+
 void BuildBox(
         const SectorAuthoringStructuralPrimitive& primitive,
         std::vector<SectorCompiledStructuralSurface>& surfaces)
@@ -197,8 +289,13 @@ void BuildBox(
         const Vector3 normal = RotateNormal(primitive, localNormal);
         SectorCompiledStructuralSurface surface = MakeSurface(
                 primitive, role, index, group, normal, chartWidth, chartHeight);
-        AppendQuad(surface, a, b, c, d, normal, chartWidth, chartHeight,
-                ResolveMaterial(primitive, group).uv);
+        if (std::fabs(localNormal.y) <= GeometryEpsilon) {
+            AppendVerticalQuad(surface, primitive, a, b, c, d, normal,
+                    ResolveMaterial(primitive, group).uv);
+        } else {
+            AppendQuad(surface, a, b, c, d, normal, chartWidth, chartHeight,
+                    ResolveMaterial(primitive, group).uv);
+        }
         surfaces.push_back(std::move(surface));
     };
     add(SectorStructuralFaceRole::BoxTop, 0, SectorStructuralSurfaceGroup::Top,
@@ -247,17 +344,17 @@ void BuildRamp(
         const Vector3 normal = RotateNormal(primitive, localNormal);
         auto surface = MakeSurface(primitive, SectorStructuralFaceRole::RampSideOrEnd,
                 index, SectorStructuralSurfaceGroup::SidesAndEnds, normal, w, h);
-        AppendQuad(surface, a, b, c, d, normal, w, h,
+        AppendVerticalQuad(surface, primitive, a, b, c, d, normal,
                 ResolveMaterial(primitive, SectorStructuralSurfaceGroup::SidesAndEnds).uv);
         if (!surface.vertices.empty()) surfaces.push_back(std::move(surface));
     };
     addQuad(0, {0, 0, -1}, bl0, tl0, tr0, br0, width,
             SectorAuthoringToWorldDistance(primitive.ramp.low - bottom));
-    addQuad(1, {1, 0, 0}, br0, tr0, tr1, br1, incline,
+    addQuad(1, {1, 0, 0}, br0, tr0, tr1, br1, run,
             SectorAuthoringToWorldDistance(primitive.ramp.high - bottom));
     addQuad(2, {0, 0, 1}, br1, tr1, tl1, bl1, width,
             SectorAuthoringToWorldDistance(primitive.ramp.high - bottom));
-    addQuad(3, {-1, 0, 0}, bl1, tl1, tl0, bl0, incline,
+    addQuad(3, {-1, 0, 0}, bl1, tl1, tl0, bl0, run,
             SectorAuthoringToWorldDistance(primitive.ramp.high - bottom));
     const Vector3 bottomNormal = RotateNormal(primitive, {0, -1, 0});
     auto underside = MakeSurface(primitive, SectorStructuralFaceRole::RampBottom, 0,
@@ -286,24 +383,30 @@ void BuildStairs(
         const Vector3 up = RotateNormal(primitive, {0, 1, 0});
         auto tread = MakeSurface(primitive, SectorStructuralFaceRole::StairTread, step,
                 SectorStructuralSurfaceGroup::Treads, up, width, stepRun);
-        AppendQuad(tread,
-                LocalToWorld(primitive, -hx, topHeight, z0),
-                LocalToWorld(primitive, -hx, topHeight, z1),
-                LocalToWorld(primitive, hx, topHeight, z1),
-                LocalToWorld(primitive, hx, topHeight, z0),
-                up, width, stepRun,
+        const Vector3 treadA = LocalToWorld(primitive, -hx, topHeight, z0);
+        const Vector3 treadB = LocalToWorld(primitive, -hx, topHeight, z1);
+        const Vector3 treadC = LocalToWorld(primitive, hx, topHeight, z1);
+        const Vector3 treadD = LocalToWorld(primitive, hx, topHeight, z0);
+        AppendMappedQuad(tread,
+                treadA, treadB, treadC, treadD, up,
+                FlatLocalBaseUv(primitive, treadA),
+                FlatLocalBaseUv(primitive, treadB),
+                FlatLocalBaseUv(primitive, treadC),
+                FlatLocalBaseUv(primitive, treadD),
+                {0.0f, 0.0f}, {0.0f, stepRun},
+                {width, stepRun}, {width, 0.0f},
                 ResolveMaterial(primitive, SectorStructuralSurfaceGroup::Treads).uv);
         surfaces.push_back(std::move(tread));
         const Vector3 back = RotateNormal(primitive, {0, 0, -1});
         auto riser = MakeSurface(primitive, SectorStructuralFaceRole::StairRiser, step,
                 SectorStructuralSurfaceGroup::RisersAndSides, back, width,
                 SectorAuthoringToWorldDistance(stepRise));
-        AppendQuad(riser,
+        AppendVerticalQuad(riser, primitive,
                 LocalToWorld(primitive, -hx, previousHeight, z0),
                 LocalToWorld(primitive, -hx, topHeight, z0),
                 LocalToWorld(primitive, hx, topHeight, z0),
                 LocalToWorld(primitive, hx, previousHeight, z0),
-                back, width, SectorAuthoringToWorldDistance(stepRise),
+                back,
                 ResolveMaterial(primitive, SectorStructuralSurfaceGroup::RisersAndSides).uv);
         surfaces.push_back(std::move(riser));
         for (int sideIndex = 0; sideIndex < 2; ++sideIndex) {
@@ -315,13 +418,12 @@ void BuildStairs(
                     sideIndex * steps + step,
                     SectorStructuralSurfaceGroup::RisersAndSides, normal, stepRun,
                     SectorAuthoringToWorldDistance(topHeight - primitive.stairs.bottom));
-            AppendQuad(side,
+            AppendVerticalQuad(side, primitive,
                     LocalToWorld(primitive, x, primitive.stairs.bottom, z0),
                     LocalToWorld(primitive, x, primitive.stairs.bottom, z1),
                     LocalToWorld(primitive, x, topHeight, z1),
                     LocalToWorld(primitive, x, topHeight, z0),
-                    normal, stepRun,
-                    SectorAuthoringToWorldDistance(topHeight - primitive.stairs.bottom),
+                    normal,
                     ResolveMaterial(primitive, SectorStructuralSurfaceGroup::RisersAndSides).uv);
             surfaces.push_back(std::move(side));
         }
@@ -331,23 +433,33 @@ void BuildStairs(
     auto end = MakeSurface(primitive, SectorStructuralFaceRole::StairRiser, steps,
             SectorStructuralSurfaceGroup::RisersAndSides, front, width,
             SectorAuthoringToWorldDistance(primitive.stairs.rise));
-    AppendQuad(end,
+    AppendVerticalQuad(end, primitive,
             LocalToWorld(primitive, hx, primitive.stairs.bottom, run * 0.5f),
             LocalToWorld(primitive, hx, high, run * 0.5f),
             LocalToWorld(primitive, -hx, high, run * 0.5f),
             LocalToWorld(primitive, -hx, primitive.stairs.bottom, run * 0.5f),
-            front, width, SectorAuthoringToWorldDistance(primitive.stairs.rise),
+            front,
             ResolveMaterial(primitive, SectorStructuralSurfaceGroup::RisersAndSides).uv);
     surfaces.push_back(std::move(end));
     const Vector3 down = RotateNormal(primitive, {0, -1, 0});
     auto underside = MakeSurface(primitive, SectorStructuralFaceRole::StairUnderside, 0,
             SectorStructuralSurfaceGroup::Underside, down, width, run);
-    AppendQuad(underside,
-            LocalToWorld(primitive, -hx, primitive.stairs.bottom, -run * 0.5f),
-            LocalToWorld(primitive, hx, primitive.stairs.bottom, -run * 0.5f),
-            LocalToWorld(primitive, hx, primitive.stairs.bottom, run * 0.5f),
-            LocalToWorld(primitive, -hx, primitive.stairs.bottom, run * 0.5f),
-            down, width, run,
+    const Vector3 undersideA = LocalToWorld(
+            primitive, -hx, primitive.stairs.bottom, -run * 0.5f);
+    const Vector3 undersideB = LocalToWorld(
+            primitive, hx, primitive.stairs.bottom, -run * 0.5f);
+    const Vector3 undersideC = LocalToWorld(
+            primitive, hx, primitive.stairs.bottom, run * 0.5f);
+    const Vector3 undersideD = LocalToWorld(
+            primitive, -hx, primitive.stairs.bottom, run * 0.5f);
+    AppendMappedQuad(underside,
+            undersideA, undersideB, undersideC, undersideD, down,
+            FlatLocalBaseUv(primitive, undersideA),
+            FlatLocalBaseUv(primitive, undersideB),
+            FlatLocalBaseUv(primitive, undersideC),
+            FlatLocalBaseUv(primitive, undersideD),
+            {0.0f, 0.0f}, {width, 0.0f},
+            {width, run}, {0.0f, run},
             ResolveMaterial(primitive, SectorStructuralSurfaceGroup::Underside).uv);
     surfaces.push_back(std::move(underside));
 }

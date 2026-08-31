@@ -35,15 +35,28 @@ constexpr int MaximumWeaponDamage = 1000000;
 
 SectorFpsVerticalContext BuildCombatVerticalContext(
         const SectorCollisionWorld& collisionWorld,
-        int sectorId)
+        int sectorId,
+        Vector2 positionXZ,
+        float feetY,
+        const SectorCollisionMoveConfig& config)
 {
     SectorFpsVerticalContext result;
     SectorCollisionHeights heights;
     if (sectorId != 0
-            && collisionWorld.GetSectorFloorCeiling(sectorId, &heights)) {
+            && collisionWorld.ResolveActorVerticalContext(
+                    sectorId,
+                    SectorCollisionVerticalQuery{
+                            positionXZ,
+                            feetY,
+                            config.radius,
+                            config.playerHeight,
+                            config.stepHeight,
+                            true},
+                    &heights)) {
         result.hasSector = true;
         result.floorZ = heights.floorZ;
         result.ceilingZ = heights.ceilingZ;
+        result.continuousFloor = heights.continuousFloor;
     }
     return result;
 }
@@ -960,7 +973,10 @@ bool UpdateNpcCombatSystem(
                     const SectorFpsVerticalContext vertical =
                             BuildCombatVerticalContext(
                                     collisionWorld,
-                                    result.currentSectorId);
+                                    result.currentSectorId,
+                                    result.positionXZ,
+                                    moveState.feetY,
+                                    config);
                     result = ResolveSectorStaticModelCollidersForPlayerMovement(
                             moveState, result, config, vertical, staticColliders);
                     transform.position.x = result.positionXZ.x;

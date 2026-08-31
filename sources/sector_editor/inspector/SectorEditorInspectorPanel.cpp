@@ -289,6 +289,7 @@ bool DrawTopologySideDefInspector(
 
 void DrawStructuralPrimitiveInspector(
         SectorEditorInspectorPanelContext& context,
+        SectorEditorInspectorPanelResult& panelResult,
         const SectorAuthoringStructuralPrimitive& primitive,
         float contentW,
         float rowH,
@@ -313,12 +314,17 @@ void DrawStructuralPrimitiveInspector(
 
     const auto mutate = [&](const char* status,
                             const std::function<void(SectorAuthoringStructuralPrimitive&)>& change) {
-        return context.structuralPrimitiveEditing.MutateById(
+        const bool changed = context.structuralPrimitiveEditing.MutateById(
                 primitive.id, status,
                 [&change](SectorAuthoringStructuralPrimitive& value) {
                     change(value);
                     return true;
                 });
+        if (changed) {
+            AppendRequest(panelResult,
+                    SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewRuntime);
+        }
+        return changed;
     };
     const auto drawCoord = [&](const char* id, const char* label, SectorCoord current,
                                size_t inputIndex,
@@ -505,8 +511,11 @@ void DrawStructuralPrimitiveInspector(
                 engine::UITextJustify::Right, current,
                 uiState.floatInputs[inputIndex], minimum, maximum, 3);
         if (result.changed && result.finite) {
-            context.materialEditing.ApplyAuthoringStructuralPrimitiveUvValue(
-                    primitive.id, -1, component, result.value);
+            if (context.materialEditing.ApplyAuthoringStructuralPrimitiveUvValue(
+                        primitive.id, -1, component, result.value)) {
+                AppendRequest(panelResult,
+                        SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials);
+            }
         }
         y += rowH + gap;
     };
@@ -553,8 +562,11 @@ void DrawStructuralPrimitiveInspector(
                     Rectangle{0.0f, y, contentW, rowH}, context.font,
                     TextFormat("Override %s", SectorStructuralSurfaceGroupName(group)),
                     enabledOverride)) {
-            context.materialEditing.SetAuthoringStructuralMaterialOverrideEnabled(
-                    primitive.id, group, enabledOverride);
+            if (context.materialEditing.SetAuthoringStructuralMaterialOverrideEnabled(
+                        primitive.id, group, enabledOverride)) {
+                AppendRequest(panelResult,
+                        SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials);
+            }
         }
         y += rowH + gap;
         if (!override.enabled) continue;
@@ -581,9 +593,12 @@ void DrawStructuralPrimitiveInspector(
                     uiState.floatInputs[baseInput + component],
                     minimum, maximum, 3);
             if (result.changed && result.finite) {
-                context.materialEditing.ApplyAuthoringStructuralPrimitiveUvValue(
-                        primitive.id, static_cast<int>(group),
-                        static_cast<int>(component), result.value);
+                if (context.materialEditing.ApplyAuthoringStructuralPrimitiveUvValue(
+                            primitive.id, static_cast<int>(group),
+                            static_cast<int>(component), result.value)) {
+                    AppendRequest(panelResult,
+                            SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials);
+                }
             }
             y += rowH + gap;
         };
@@ -974,7 +989,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (selectedStructuralPrimitive != nullptr) {
         const SectorAuthoringStructuralPrimitive display = *selectedStructuralPrimitive;
-        DrawStructuralPrimitiveInspector(context, display, contentW, rowH, gap);
+        DrawStructuralPrimitiveInspector(
+                context, result, display, contentW, rowH, gap);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;

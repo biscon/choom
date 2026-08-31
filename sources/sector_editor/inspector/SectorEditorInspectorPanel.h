@@ -37,6 +37,8 @@ class SectorEditorSoundService;
 
 enum class SectorEditorInspectorPanelRequestKind {
     RebuildSectorCollisionWorld,
+    RefreshStructuralPreviewRuntime,
+    RefreshStructuralPreviewMaterials,
     BeginAuthoringInsertVertex,
     DeleteSelectedAuthoringVertex,
     DeleteSelectedRuntimeObject,

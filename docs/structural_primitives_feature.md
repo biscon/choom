@@ -142,8 +142,8 @@ tessellation. Its initial role is decorative: ornaments, caps, finials, rounded
 details, and simple environmental forms.
 
 Sphere collision is disabled by default. If enabled, it uses an explicit simple
-sphere approximation and does not become a generally walkable surface in the
-first implementation.
+sphere approximation. An actor falling from above may land on its upper surface,
+but a grounded actor cannot auto-climb the curve from a horizontal approach.
 
 ## Authoring and Compiled Data Ownership
 
@@ -213,7 +213,8 @@ existing sector geometry. Degenerate faces are rejected rather than uploaded.
 
 UVs use world-scaled planar mapping consistent with generated sector surfaces:
 
-- prism and stair faces map in their natural face plane
+- prism and stair faces map in their natural primitive-local face plane; stair
+  treads share one continuous projection across the run
 - ramp tops map along width and incline distance
 - cylinder sides map angle to U and height to V; caps use planar mapping
 - spheres use deterministic spherical mapping with a fixed seam relative to
@@ -272,6 +273,9 @@ Required collision behavior includes:
 - local support-height queries for flat, ramp, and stair support surfaces
 - headroom checks against undersides and overhanging structures
 - stable grounded movement up and down ramps/stairs
+- continuous ramp/stair support does not emit repeated discrete step transitions
+- established top support persists until the actor footprint fully clears the
+  structural top edge
 - player-footprint-aware edge handling
 - collision participation for NPC movement
 - world/weapon ray intersection against structural surfaces

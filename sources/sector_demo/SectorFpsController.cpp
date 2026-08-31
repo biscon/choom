@@ -666,6 +666,12 @@ SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
     }
 
     if (state.grounded) {
+        if (context.continuousFloor) {
+            state.feetPosition.y = context.floorZ;
+            state.verticalVelocity = 0.0f;
+            result.transition = SectorFpsVerticalTransition::StayedGrounded;
+            return result;
+        }
         const float floorDelta = context.floorZ - state.feetPosition.y;
         if (std::fabs(floorDelta) <= FloorTransitionEpsilon) {
             state.feetPosition.y = context.floorZ;

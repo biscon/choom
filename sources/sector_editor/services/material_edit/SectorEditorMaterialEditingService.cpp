@@ -986,6 +986,10 @@ SectorEditorTexturePickerApplyResult SectorEditorMaterialEditingService::ApplyTe
                 ? "Updated structure material" : "Structure material unchanged";
         context_.statusText = result.status;
         CloseSectorEditorTexturePicker(context_.texturePicker);
+        if (result.changed && assets != nullptr
+                && context_.requestPreviewMaterialMeshRebuild) {
+            context_.requestPreviewMaterialMeshRebuild(assets);
+        }
         return result;
     }
 

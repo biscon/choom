@@ -5166,6 +5166,36 @@ void TestGlobalMaterialRegistryAndReferenceRefactor()
                   && std::find(missing.begin(), missing.end(), "missing") != missing.end(),
           "runtime resolution stores only referenced registered materials");
 
+    game::SectorMaterialRegistry structuralRegistry = parsed;
+    game::SectorMaterialDefinition structuralOverride =
+            parsed.materialsById.at("old_wall");
+    structuralOverride.id = "structure_override";
+    structuralRegistry.materialsById.emplace(
+            structuralOverride.id, structuralOverride);
+    SectorTopologyMap structuralMap;
+    game::SectorCompiledStructuralPrimitive compiledPrimitive;
+    game::SectorCompiledStructuralSurface defaultSurface;
+    defaultSurface.materialId = "old_wall";
+    game::SectorCompiledStructuralSurface overrideSurface;
+    overrideSurface.materialId = "structure_override";
+    game::SectorCompiledStructuralSurface missingSurface;
+    missingSurface.materialId = "missing_structure";
+    compiledPrimitive.surfaces = {
+            defaultSurface, overrideSurface, missingSurface};
+    structuralMap.compiledStructuralPrimitives.push_back(
+            std::move(compiledPrimitive));
+    const std::vector<std::string> missingStructural =
+            game::ResolveSectorMaterialsForMap(
+                    structuralMap, structuralRegistry);
+    Check(structuralMap.resolvedMaterialsById.count("old_wall") == 1
+                  && structuralMap.resolvedMaterialsById.count(
+                          "structure_override") == 1
+                  && std::find(
+                          missingStructural.begin(),
+                          missingStructural.end(),
+                          "missing_structure") != missingStructural.end(),
+          "runtime resolution includes structural default and override materials");
+
     const std::filesystem::path root =
             std::filesystem::temp_directory_path() / "sector_material_refactor_test";
     std::error_code fileError;
