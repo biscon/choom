@@ -20,6 +20,7 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringReflectionProbeSelectionTarget
 SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int markerId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringSoundEmitterSelectionTarget(int emitterId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringTriggerSelectionTarget(int triggerId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringStructuralPrimitiveSelectionTarget(int primitiveId);
 
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
@@ -72,6 +73,10 @@ bool SelectSectorEditorAuthoringTrigger(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int triggerId);
+bool SelectSectorEditorAuthoringStructuralPrimitive(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int primitiveId);
 
 void ClearSectorEditorAuthoringHover(SelectionState& selectionState);
 bool SetHoveredSectorEditorAuthoringLine(
@@ -102,6 +107,10 @@ bool SetHoveredSectorEditorAuthoringTrigger(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int triggerId);
+bool SetHoveredSectorEditorAuthoringStructuralPrimitive(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int primitiveId);
 
 void PruneSectorEditorAuthoringSelectionToGraph(
         const SectorAuthoringGraph& graph,
@@ -325,6 +334,7 @@ enum class SectorEditorInspectorTargetKind {
     AuthoringLevelMarker,
     AuthoringSoundEmitter,
     AuthoringTrigger,
+    AuthoringStructuralPrimitive,
     AuthoringUnavailable,
     LegacyTopology
 };
@@ -339,6 +349,7 @@ struct SectorEditorInspectorTarget {
     int levelMarkerId = -1;
     int soundEmitterId = -1;
     int triggerId = -1;
+    int structuralPrimitiveId = -1;
     SectorAuthoringSideId side;
     std::string status;
 };

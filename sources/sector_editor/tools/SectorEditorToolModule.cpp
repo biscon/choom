@@ -9,6 +9,7 @@
 #include "sector_editor/tools/reflection_probe/SectorEditorReflectionProbeTool.h"
 #include "sector_editor/tools/select/SectorEditorSelectTool.h"
 #include "sector_editor/tools/trigger/SectorEditorTriggerTool.h"
+#include "sector_editor/tools/structure/SectorEditorStructureTool.h"
 
 namespace game {
 
@@ -39,6 +40,7 @@ const SectorEditorToolModule* FindSectorEditorToolModule(SectorEditorTool tool)
         return &SectorEditorSoundEmitterToolModule();
     }
     if (tool == SectorEditorTool::Trigger) return &SectorEditorTriggerToolModule();
+    if (tool == SectorEditorTool::Structure) return &SectorEditorStructureToolModule();
     return nullptr;
 }
 

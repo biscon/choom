@@ -14,6 +14,7 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingState.h"
 #include "sector_editor/services/authoring_faces/SectorEditorSurfaceHeightEditingService.h"
+#include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingState.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include <raylib.h>
@@ -40,6 +41,7 @@ struct SectorEditorPreviewOverlayContext {
     RuntimeObjectDragState& runtimeObjectDrag;
     RuntimeObjectEditingState& runtimeObjectEditingState;
     PreviewSurfaceHeightAdjustmentState& surfaceHeightAdjustmentState;
+    SectorEditorStructuralPrimitiveEditingState& structuralPrimitiveEditingState;
     SectorEditorPreviewState& previewState;
     SectorRuntimeObjectState& runtimeObjects;
     SectorNavigationWorld& navigation;

@@ -422,6 +422,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.cpp
             sources/sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.cpp
             sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
+            sources/sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/engine/input/Input.cpp

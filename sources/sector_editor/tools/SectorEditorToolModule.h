@@ -11,6 +11,7 @@
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
+#include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.h"
 
 #include <raylib.h>
 
@@ -46,6 +47,8 @@ struct SectorEditorToolContext {
     SectorEditorAuthoringFaceMergeService* authoringFaceMerge = nullptr;
     SectorEditorTriggerEditingService* triggerEditing = nullptr;
     TriggerEditingState* triggerEditingState = nullptr;
+    SectorEditorStructuralPrimitiveEditingService* structuralPrimitiveEditing = nullptr;
+    SectorEditorStructuralPrimitiveEditingState* structuralPrimitiveState = nullptr;
 
     std::function<SectorPoint()> currentSnappedSectorPoint;
     std::function<bool(SectorPoint, SectorTopologyCoordPoint&, std::string&)> toTopologyCoordPoint;

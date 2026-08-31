@@ -29,6 +29,7 @@
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
+#include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorInspector.h"
 #include "engine/assets/AssetManager.h"
 #include "engine/EngineContext.h"
@@ -13021,6 +13022,117 @@ void TestPreviewSurfaceHeightAdjustmentStagesCancelsAndCommits()
     invalidEditing.CancelPreviewAdjustment(nullptr);
 }
 
+void TestStructuralPrimitiveEditorPlacementAndAdjustment()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeSingleSectorSquareMap();
+    game::SectorAuthoringGraph& graph = documentState.authoring.authoringGraph;
+    game::InitializeSectorEditorAuthoringStateFromTopology(
+            graph,
+            game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            documentState.map.topologyMap);
+    if (graph.faceAnchors.empty()) {
+        Check(false, "structure editor fixture has an authoring face anchor");
+        return;
+    }
+    game::SelectionState selection;
+    game::SectorEditorStructuralPrimitiveEditingState editingState;
+    std::string status;
+    state.topologyRenderRevision = 50;
+    state.topologyRenderCache.valid = true;
+    auto makeService = [&]() {
+        return game::SectorEditorStructuralPrimitiveEditingService{
+                game::SectorEditorStructuralPrimitiveEditingServiceContext{
+                        state,
+                        game::MakeSectorEditorDocumentLifecycleAccess(
+                                documentState.lifecycle),
+                        documentState.map.topologyMap,
+                        graph,
+                        game::MakeSectorEditorDerivationDocumentAccess(
+                                documentState.derivation),
+                        selection,
+                        editingState,
+                        status}};
+    };
+    auto service = makeService();
+    const game::SectorTopologyCoordPoint start{
+            graph.faceAnchors.front().x,
+            graph.faceAnchors.front().y};
+    float floor = 0.0f;
+    Check(service.ResolvePlacementFloor(start, floor),
+          "structure placement resolves its seed sector floor");
+    game::SectorAuthoringStructuralPrimitive preview;
+    std::string error;
+    const game::SectorTopologyCoordPoint tiedEnd{
+            static_cast<game::SectorCoord>(start.x + 32),
+            static_cast<game::SectorCoord>(start.y + 32)};
+    Check(service.BuildPlacementValue(
+                  game::SectorStructuralPrimitiveKind::Ramp,
+                  start, tiedEnd, floor, "wall", 7, preview, error)
+                  && Near(preview.yawDegrees, 0.0f)
+                  && preview.ramp.width == 32
+                  && preview.ramp.run == 32,
+          "square ramp placement deterministically ascends local positive Z");
+
+    const size_t originalCount = graph.structuralPrimitives.size();
+    Check(!service.CreateFromDrag(
+                  game::SectorStructuralPrimitiveKind::Box,
+                  start, start, floor, "wall")
+                  && graph.structuralPrimitives.size() == originalCount
+                  && state.topologyRenderRevision == 50
+                  && state.topologyRenderCache.valid,
+          "degenerate structure placement allocates no ID and does not invalidate");
+
+    int primitiveId = -1;
+    Check(service.CreateFromDrag(
+                  game::SectorStructuralPrimitiveKind::Ramp,
+                  start, tiedEnd, floor, "wall", &primitiveId)
+                  && primitiveId > 0
+                  && graph.structuralPrimitives.size() == originalCount + 1
+                  && selection.selectedAuthoring.kind
+                          == game::SectorAuthoringSelectionKind::StructuralPrimitive
+                  && selection.selectedAuthoring.structuralPrimitiveId == primitiveId
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && state.topologyRenderRevision == 51
+                  && !state.topologyRenderCache.valid,
+          "valid structure placement commits once, selects, dirties, and invalidates");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    const game::SectorAuthoringStructuralPrimitive original =
+            *game::FindSectorAuthoringStructuralPrimitive(graph, primitiveId);
+    Check(service.BeginPreviewAdjustment(),
+          "selected structure begins staged 3D adjustment");
+    game::SectorEditorStructuralPreviewCandidate candidate;
+    Check(service.BuildPreviewNudge(0.25f, 0.0f, 0.25f, 5.0f, candidate)
+                  && candidate.valid && candidate.changedFromOriginal,
+          "structure 3D nudge builds a derived staged candidate");
+    service.AcceptPreviewNudge(std::move(candidate));
+    Check(service.CancelPreviewAdjustment("cancelled")
+                  && game::FindSectorAuthoringStructuralPrimitive(graph, primitiveId)->x
+                          == original.x
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && state.topologyRenderRevision == 51,
+          "structure adjustment Cancel leaves the live graph and cache revision unchanged");
+
+    Check(service.BeginPreviewAdjustment(),
+          "selected structure can begin another adjustment");
+    game::SectorEditorStructuralPreviewCandidate appliedCandidate;
+    Check(service.BuildPreviewNudge(0.25f, 0.0f, 0.25f, 5.0f, appliedCandidate),
+          "structure adjustment builds apply candidate");
+    service.AcceptPreviewNudge(std::move(appliedCandidate));
+    Check(service.ApplyPreviewAdjustment()
+                  && game::FindSectorAuthoringStructuralPrimitive(graph, primitiveId)->x
+                          != original.x
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && state.topologyRenderRevision == 52
+                  && game::IsSectorEditorAuthoringDerivationCurrent(
+                          game::MakeSectorEditorDerivationDocumentAccess(
+                                  documentState.derivation)),
+          "structure adjustment Apply commits once through authoring derivation");
+}
+
 void TestDynamicPropConfigClipboardPreservesPlacementAndIdentity()
 {
     game::SectorTopologyMap map = MakeAdjacentSectorMap();
@@ -15165,6 +15277,7 @@ int main()
     TestStaticPropConfigClipboardPreservesPlacementAndIdentity();
     TestPreviewObjectAdjustmentStagesAndCommitsInPlace();
     TestPreviewSurfaceHeightAdjustmentStagesCancelsAndCommits();
+    TestStructuralPrimitiveEditorPlacementAndAdjustment();
     TestDynamicPropConfigClipboardPreservesPlacementAndIdentity();
     TestConfigClipboardTargetResolutionPrefersPreviewSurface();
     TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor();

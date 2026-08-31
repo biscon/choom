@@ -654,6 +654,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::AuthoringLine: return "Authoring Line";
         case SectorEditorTool::AuthoringRectangle: return "Rectangle";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex";
+        case SectorEditorTool::Structure: return "Structure";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
         case SectorEditorTool::RuntimeObject: return "Billboard";
         case SectorEditorTool::StaticModel: return "3D Prop";
@@ -683,6 +684,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
     return tool == SectorEditorTool::AuthoringLine
             || tool == SectorEditorTool::AuthoringRectangle
             || tool == SectorEditorTool::AuthoringInsertVertex
+            || tool == SectorEditorTool::Structure
             || tool == SectorEditorTool::AuthoringFogVolume
             || tool == SectorEditorTool::Trigger
             || tool == SectorEditorTool::LevelMarker
@@ -715,6 +717,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
     switch (kind) {
         case SectorEditorPickKind::None: return "none";
         case SectorEditorPickKind::RuntimeObject: return "object";
+        case SectorEditorPickKind::StructuralPrimitive: return "structure";
         case SectorEditorPickKind::DynamicSpotLight: return "dynamic spot";
         case SectorEditorPickKind::DynamicRectLight: return "dynamic rect light";
         case SectorEditorPickKind::DynamicLight: return "dynamic light";
@@ -744,6 +747,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
 {
     switch (target.kind) {
         case SectorEditorPickKind::RuntimeObject:
+        case SectorEditorPickKind::StructuralPrimitive:
         case SectorEditorPickKind::DynamicSpotLight:
         case SectorEditorPickKind::DynamicRectLight:
         case SectorEditorPickKind::DynamicLight:
@@ -779,17 +783,18 @@ int SectorEditorPickPriority(SectorEditorPickKind kind)
         case SectorEditorPickKind::LevelMarker: return 0;
         case SectorEditorPickKind::AuthoringReflectionProbe: return 0;
         case SectorEditorPickKind::RuntimeObject: return 1;
-        case SectorEditorPickKind::DynamicSpotLight: return 2;
-        case SectorEditorPickKind::DynamicRectLight: return 2;
-        case SectorEditorPickKind::DynamicLight: return 3;
-        case SectorEditorPickKind::StaticSpotLight: return 4;
-        case SectorEditorPickKind::StaticRectLight: return 4;
-        case SectorEditorPickKind::StaticLight: return 5;
-        case SectorEditorPickKind::AuthoringVertex: return 6;
-        case SectorEditorPickKind::AuthoringLine: return 7;
-        case SectorEditorPickKind::Trigger: return 8;
-        case SectorEditorPickKind::AuthoringFaceAnchor: return 9;
-        case SectorEditorPickKind::AuthoringFogVolume: return 10;
+        case SectorEditorPickKind::StructuralPrimitive: return 2;
+        case SectorEditorPickKind::DynamicSpotLight: return 3;
+        case SectorEditorPickKind::DynamicRectLight: return 3;
+        case SectorEditorPickKind::DynamicLight: return 4;
+        case SectorEditorPickKind::StaticSpotLight: return 5;
+        case SectorEditorPickKind::StaticRectLight: return 5;
+        case SectorEditorPickKind::StaticLight: return 6;
+        case SectorEditorPickKind::AuthoringVertex: return 7;
+        case SectorEditorPickKind::AuthoringLine: return 8;
+        case SectorEditorPickKind::Trigger: return 9;
+        case SectorEditorPickKind::AuthoringFaceAnchor: return 10;
+        case SectorEditorPickKind::AuthoringFogVolume: return 11;
         case SectorEditorPickKind::None: break;
     }
     return 100;
@@ -1157,6 +1162,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringLine: return "Authoring line: click snapped points to draw a continuous line chain, right click/Esc stops chain";
         case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
+        case SectorEditorTool::Structure: return "Structure: choose a shape, then drag a snapped footprint; right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: hidden; use Select to move selected authoring vertices";
         case SectorEditorTool::RuntimeObject: return "Billboard: click inside a sector to place a billboard marker";
         case SectorEditorTool::StaticModel: return "3D Prop: click inside a derived sector to place a floor-relative static model";

@@ -4,6 +4,7 @@
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/tools/structure/SectorEditorStructureTool.h"
 
 #include <raylib.h>
 
@@ -44,6 +45,11 @@ bool SelectPickTarget(
         case SectorEditorPickKind::RuntimeObject:
             SelectSectorEditorRuntimeObject(selectionContext, target.id);
             return context.selectionState.selectedRuntimeObjectId == target.id;
+        case SectorEditorPickKind::StructuralPrimitive:
+            SelectSectorEditorAuthoringStructuralPrimitiveTarget(selectionContext, target.id);
+            return context.selectionState.selectedAuthoring.kind
+                            == SectorAuthoringSelectionKind::StructuralPrimitive
+                    && context.selectionState.selectedAuthoring.structuralPrimitiveId == target.id;
         case SectorEditorPickKind::DynamicSpotLight:
             SelectSectorEditorTopologyDynamicSpotLight(selectionContext, target.id);
             return context.selectionState.selectedTopologyDynamicSpotLightId == target.id;
@@ -150,6 +156,11 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
                     context.authoringGraph,
                     context.selectionState,
                     target.id);
+        } else if (target.kind == SectorEditorPickKind::StructuralPrimitive) {
+            SetHoveredSectorEditorAuthoringStructuralPrimitive(
+                    context.authoringGraph,
+                    context.selectionState,
+                    target.id);
         } else if (target.kind == SectorEditorPickKind::AuthoringLine) {
             SetHoveredSectorEditorAuthoringLine(
                     context.authoringGraph,
@@ -202,6 +213,11 @@ bool UpdateSelectToolEarly(SectorEditorToolContext& context)
         return false;
     }
 
+    if (context.structuralPrimitiveState != nullptr
+            && context.structuralPrimitiveState->manipulation.active) {
+        return UpdateSectorEditorStructuralManipulation(context);
+    }
+
     SectorEditorManipulationServiceContext manipulationContext =
             context.buildManipulationServiceContext();
     const bool wasArmed = manipulationContext.manipulationState.selectDragArm.active;
@@ -221,6 +237,9 @@ bool HandleSelectMousePress(SectorEditorToolContext& context, const engine::Inpu
             && context.authoringFaceMerge->IsChoosingTarget()) {
         return true;
     }
+
+    if (BeginSectorEditorStructuralManipulation(
+                context, event.mouseButton.position)) return true;
 
     SectorEditorManipulationServiceContext manipulationContext =
             context.buildManipulationServiceContext();
@@ -327,8 +346,8 @@ const SectorEditorToolModule SelectModule{
         UpdateSelectToolEarly,
         HandleSelectMousePress,
         UpdateSelectTool,
-        nullptr,
-        nullptr};
+        DrawSectorEditorStructuralSelectionOverlay,
+        CancelSectorEditorStructuralManipulation};
 
 } // namespace
 

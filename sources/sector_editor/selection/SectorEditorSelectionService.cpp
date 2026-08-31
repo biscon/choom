@@ -875,6 +875,23 @@ void SelectSectorEditorAuthoringLevelMarkerTarget(
     context.ui.inspectorScroll.offset = Vector2{};
 }
 
+void SelectSectorEditorAuthoringStructuralPrimitiveTarget(
+        SectorEditorSelectionServiceContext& context,
+        int primitiveId)
+{
+    if (FindSectorAuthoringStructuralPrimitive(
+                context.authoringGraph, primitiveId) == nullptr) {
+        ClearSectorEditorSelection(context);
+        return;
+    }
+    ClearSectorEditorSelection(context);
+    SelectSectorEditorAuthoringStructuralPrimitive(
+            context.authoringGraph,
+            context.selectionState,
+            primitiveId);
+    context.ui.inspectorScroll.offset = Vector2{};
+}
+
 void SelectSectorEditorSurface3D(SectorEditorSelectionServiceContext& context, SectorSurfaceRef surface)
 {
     const TopologySurfaceEditTarget target = SectorEditorTopologyEditTargetForSurface(surface);

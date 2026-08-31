@@ -23,6 +23,7 @@
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
+#include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.h"
 
 #include <array>
 #include <string>
@@ -87,6 +88,7 @@ struct SectorEditorInspectorPanelContext {
     LevelMarkerEditingUiState& levelMarkerUiState;
     SoundEmitterEditingUiState& soundEmitterUiState;
     TriggerEditingUiState& triggerUiState;
+    SectorEditorStructuralPrimitiveEditingUiState& structuralPrimitiveUiState;
     std::string& statusText;
 
     SectorEditorSelectionServiceContext& selection;
@@ -103,6 +105,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorSoundEmitterEditingService& soundEmitterEditing;
     SectorEditorTriggerEditingService& triggerEditing;
     SectorEditorAuthoringFaceMergeService& authoringFaceMerge;
+    SectorEditorStructuralPrimitiveEditingService& structuralPrimitiveEditing;
     engine::EngineContext* engineContext = nullptr;
 };
 

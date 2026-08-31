@@ -1481,6 +1481,17 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringTriggerSelectionTarget(int tri
     return target;
 }
 
+SectorAuthoringSelectionTarget MakeSectorAuthoringStructuralPrimitiveSelectionTarget(
+        int primitiveId)
+{
+    SectorAuthoringSelectionTarget target;
+    if (IsValidSectorAuthoringId(primitiveId)) {
+        target.kind = SectorAuthoringSelectionKind::StructuralPrimitive;
+        target.structuralPrimitiveId = primitiveId;
+    }
+    return target;
+}
+
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
         SectorAuthoringSelectionTarget rhs)
@@ -1493,7 +1504,8 @@ bool SectorAuthoringSelectionTargetsEqual(
             && lhs.reflectionProbeId == rhs.reflectionProbeId
             && lhs.levelMarkerId == rhs.levelMarkerId
             && lhs.soundEmitterId == rhs.soundEmitterId
-            && lhs.triggerId == rhs.triggerId;
+            && lhs.triggerId == rhs.triggerId
+            && lhs.structuralPrimitiveId == rhs.structuralPrimitiveId;
 }
 
 bool IsSectorAuthoringSelectionTargetValid(
@@ -1505,7 +1517,7 @@ bool IsSectorAuthoringSelectionTargetValid(
         return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1 && target.reflectionProbeId == -1
                 && target.levelMarkerId == -1 && target.soundEmitterId == -1
-                && target.triggerId == -1;
+                && target.triggerId == -1 && target.structuralPrimitiveId == -1;
     case SectorAuthoringSelectionKind::Line:
         return target.vertexId == -1
                 && target.faceAnchorId == -1
@@ -1564,6 +1576,13 @@ bool IsSectorAuthoringSelectionTargetValid(
                 && target.fogVolumeId == -1 && target.levelMarkerId == -1
                 && target.soundEmitterId == -1
                 && FindSectorAuthoringTrigger(graph, target.triggerId) != nullptr;
+    case SectorAuthoringSelectionKind::StructuralPrimitive:
+        return target.lineId == -1 && target.vertexId == -1
+                && target.faceAnchorId == -1 && target.fogVolumeId == -1
+                && target.reflectionProbeId == -1 && target.levelMarkerId == -1
+                && target.soundEmitterId == -1 && target.triggerId == -1
+                && FindSectorAuthoringStructuralPrimitive(
+                        graph, target.structuralPrimitiveId) != nullptr;
     }
     return false;
 }
@@ -1751,6 +1770,22 @@ bool SelectSectorEditorAuthoringTrigger(
     return true;
 }
 
+bool SelectSectorEditorAuthoringStructuralPrimitive(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int primitiveId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringStructuralPrimitiveSelectionTarget(primitiveId);
+    if (target.kind != SectorAuthoringSelectionKind::StructuralPrimitive
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
+        return false;
+    }
+    selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
+    return true;
+}
+
 void ClearSectorEditorAuthoringHover(SelectionState& selectionState)
 {
     selectionState.hoveredAuthoring = EmptyAuthoringSelectionTarget();
@@ -1854,6 +1889,21 @@ bool SetHoveredSectorEditorAuthoringTrigger(
     const SectorAuthoringSelectionTarget target = MakeSectorAuthoringTriggerSelectionTarget(triggerId);
     if (target.kind != SectorAuthoringSelectionKind::Trigger
             || !IsSectorAuthoringSelectionTargetValid(graph, target)) return false;
+    selectionState.hoveredAuthoring = target;
+    return true;
+}
+
+bool SetHoveredSectorEditorAuthoringStructuralPrimitive(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int primitiveId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringStructuralPrimitiveSelectionTarget(primitiveId);
+    if (target.kind != SectorAuthoringSelectionKind::StructuralPrimitive
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
+        return false;
+    }
     selectionState.hoveredAuthoring = target;
     return true;
 }
@@ -3501,6 +3551,17 @@ SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringTrigger;
         target.triggerId = selectionState.selectedAuthoring.triggerId;
+        return target;
+    }
+    if (selectionState.selectedAuthoring.kind
+                    == SectorAuthoringSelectionKind::StructuralPrimitive
+            && FindSectorAuthoringStructuralPrimitive(
+                    authoringGraph,
+                    selectionState.selectedAuthoring.structuralPrimitiveId) != nullptr) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::AuthoringStructuralPrimitive;
+        target.structuralPrimitiveId =
+                selectionState.selectedAuthoring.structuralPrimitiveId;
         return target;
     }
 

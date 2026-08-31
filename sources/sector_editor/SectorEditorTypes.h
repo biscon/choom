@@ -29,6 +29,7 @@ enum class SectorEditorTool {
     AuthoringLine,
     AuthoringRectangle,
     AuthoringInsertVertex,
+    Structure,
     AuthoringMove,
     RuntimeObject,
     StaticModel,

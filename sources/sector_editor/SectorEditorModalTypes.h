@@ -34,6 +34,7 @@ enum class TopologyTexturePickerTargetKind {
     SideDef,
     AuthoringFaceAnchor,
     AuthoringSide,
+    AuthoringStructuralPrimitive,
     MapSky,
     RuntimeDoor
 };
@@ -57,6 +58,8 @@ struct TexturePickerState {
     TopologyWallPart topologyWallPart = TopologyWallPart::Wall;
     int authoringFaceAnchorId = -1;
     int authoringLineId = -1;
+    int authoringStructuralPrimitiveId = -1;
+    int authoringStructuralSurfaceGroup = -1;
     SectorTopologySideKind authoringSide = SectorTopologySideKind::Front;
     int runtimeObjectId = -1;
     int selectedTextureIndex = -1;

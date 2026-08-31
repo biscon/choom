@@ -23,6 +23,7 @@ enum class SectorEditorSelectionTargetKind {
     AuthoringLevelMarker,
     AuthoringSoundEmitter,
     AuthoringTrigger,
+    AuthoringStructuralPrimitive,
     RuntimeObject,
     StaticLight,
     StaticSpotLight,
@@ -69,6 +70,7 @@ inline bool IsTopologyTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
         case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
+        case SectorEditorSelectionTargetKind::AuthoringStructuralPrimitive:
         case SectorEditorSelectionTargetKind::RuntimeObject:
         case SectorEditorSelectionTargetKind::StaticLight:
         case SectorEditorSelectionTargetKind::StaticSpotLight:
@@ -91,6 +93,7 @@ inline bool IsAuthoringTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
         case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
+        case SectorEditorSelectionTargetKind::AuthoringStructuralPrimitive:
             return target.id >= 0;
         case SectorEditorSelectionTargetKind::None:
         case SectorEditorSelectionTargetKind::TopologySector:
@@ -139,6 +142,7 @@ inline bool IsLightTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
         case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
+        case SectorEditorSelectionTargetKind::AuthoringStructuralPrimitive:
         case SectorEditorSelectionTargetKind::RuntimeObject:
         case SectorEditorSelectionTargetKind::PreviewSurface:
             return false;
