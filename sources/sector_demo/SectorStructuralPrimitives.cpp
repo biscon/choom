@@ -282,6 +282,32 @@ void BuildBox(
     const Vector3 p101 = LocalToWorld(primitive, hx, primitive.box.top, -hz);
     const Vector3 p111 = LocalToWorld(primitive, hx, primitive.box.top, hz);
     const Vector3 p011 = LocalToWorld(primitive, -hx, primitive.box.top, hz);
+    const Vector3 topNormal = RotateNormal(primitive, {0, 1, 0});
+    auto top = MakeSurface(
+            primitive,
+            SectorStructuralFaceRole::BoxTop,
+            0,
+            SectorStructuralSurfaceGroup::Top,
+            topNormal,
+            width,
+            depth);
+    AppendMappedQuad(
+            top,
+            p001,
+            p011,
+            p111,
+            p101,
+            topNormal,
+            FlatLocalBaseUv(primitive, p001),
+            FlatLocalBaseUv(primitive, p011),
+            FlatLocalBaseUv(primitive, p111),
+            FlatLocalBaseUv(primitive, p101),
+            {0.0f, 0.0f},
+            {0.0f, depth},
+            {width, depth},
+            {width, 0.0f},
+            ResolveMaterial(primitive, SectorStructuralSurfaceGroup::Top).uv);
+    surfaces.push_back(std::move(top));
     const auto add = [&](SectorStructuralFaceRole role, int index,
                          SectorStructuralSurfaceGroup group, Vector3 localNormal,
                          Vector3 a, Vector3 b, Vector3 c, Vector3 d,
@@ -298,8 +324,6 @@ void BuildBox(
         }
         surfaces.push_back(std::move(surface));
     };
-    add(SectorStructuralFaceRole::BoxTop, 0, SectorStructuralSurfaceGroup::Top,
-            {0, 1, 0}, p001, p011, p111, p101, width, depth);
     add(SectorStructuralFaceRole::BoxSide, 0, SectorStructuralSurfaceGroup::Sides,
             {0, 0, -1}, p000, p001, p101, p100, width, height);
     add(SectorStructuralFaceRole::BoxSide, 1, SectorStructuralSurfaceGroup::Sides,

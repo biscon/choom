@@ -716,6 +716,53 @@ void TestTranslatedFlatDecalsUseLocalUvs()
     checkFlatSurface(ceiling, "ceiling");
 }
 
+void TestStructuralPrimitiveUsesOwningSectorAmbient()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    game::SectorAuthoringStructuralPrimitive box =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Box);
+    box.id = 91;
+    box.x = 32;
+    box.z = 32;
+    box.materials.defaultSurface.materialId = "structural-ambient";
+
+    std::vector<game::SectorStructuralDiagnostic> diagnostics;
+    Check(game::CompileSectorStructuralPrimitives(
+                  {box}, map, map.compiledStructuralPrimitives, diagnostics),
+          "structural ambient fixture compiles");
+
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error),
+          "structural ambient fixture builds generated geometry");
+
+    const Color expected{100, 80, 60, 255};
+    bool foundStructuralSurface = false;
+    bool allVerticesUseSectorAmbient = true;
+    for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (surface.ref.sourceKind
+                != game::SectorGeneratedSurfaceSourceKind::StructuralPrimitive) {
+            continue;
+        }
+        foundStructuralSurface = true;
+        allVerticesUseSectorAmbient = allVerticesUseSectorAmbient
+                && surface.ref.topologySectorId == 10
+                && surface.owningSectorIds == std::vector<int>{10};
+        for (const game::SectorGeneratedVertex& vertex : surface.vertices) {
+            allVerticesUseSectorAmbient = allVerticesUseSectorAmbient
+                    && vertex.color.r == expected.r
+                    && vertex.color.g == expected.g
+                    && vertex.color.b == expected.b
+                    && vertex.color.a == expected.a;
+        }
+    }
+    Check(foundStructuralSurface,
+          "structural ambient fixture emits structural surfaces");
+    Check(allVerticesUseSectorAmbient,
+          "structural surfaces inherit their primary owning sector ambient");
+}
+
 void TestInvalidAndEmptyMaps()
 {
     game::SectorTopologyMap invalid = MakeSquare();
@@ -757,6 +804,7 @@ int main()
     TestHeightEditsAffectTopologyGeometry();
     TestDecalsPropagateWithoutChangingBaseUvs();
     TestTranslatedFlatDecalsUseLocalUvs();
+    TestStructuralPrimitiveUsesOwningSectorAmbient();
     TestInvalidAndEmptyMaps();
     if (failures == 0) {
         std::puts("Sector topology generated geometry tests passed");

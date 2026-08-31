@@ -10,25 +10,32 @@
         14.399999618530273,
         80.0
       ],
-      "radius": 64.0,
+      "radius": 94.0,
       "sourceRadius": 2.0,
-      "intensity": 1.0,
+      "intensity": 3.0,
       "color": {
         "r": 255,
         "g": 255,
         "b": 255,
         "a": 255
       }
-    },
+    }
+  ],
+  "staticSpotLights": [
     {
-      "id": 2,
+      "id": 1,
       "position": [
-        187.0,
-        14.399999618530273,
-        81.0
+        48.6866340637207,
+        37.06144332885742,
+        94.027587890625
       ],
-      "radius": 64.0,
-      "sourceRadius": 2.0,
+      "target": [
+        40.181373596191406,
+        -2.2626724243164063,
+        146.88812255859375
+      ],
+      "range": 64.0,
+      "sourceRadius": 0.0,
       "intensity": 1.0,
       "color": {
         "r": 255,
@@ -38,10 +45,52 @@
       }
     }
   ],
-  "staticSpotLights": [],
   "staticRectLights": [],
-  "dynamicPointLights": [],
-  "dynamicSpotLights": [],
+  "dynamicPointLights": [
+    {
+      "id": 1,
+      "instanceId": "light_point_1",
+      "position": [
+        165.0,
+        40.400001525878906,
+        76.0
+      ],
+      "radius": 94.0,
+      "intensity": 2.5,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "castsShadow": true
+    }
+  ],
+  "dynamicSpotLights": [
+    {
+      "id": 1,
+      "instanceId": "light_spot_1",
+      "position": [
+        111.8949966430664,
+        36.75502395629883,
+        99.00041961669922
+      ],
+      "target": [
+        111.8949966430664,
+        5.824575424194336,
+        155.394287109375
+      ],
+      "range": 64.0,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "castsShadow": true
+    }
+  ],
   "dynamicRectLights": [],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
@@ -54,8 +103,8 @@
   },
   "previewSettings": {
     "walkSpeed": 3.0,
-    "runSpeed": 12.0,
-    "mouseSensitivity": 1.0,
+    "runSpeed": 6.0,
+    "mouseSensitivity": 0.5,
     "eyeHeight": 1.75,
     "gravity": 15.0,
     "playerRadius": 0.25,
@@ -81,6 +130,62 @@
       "a": 255
     },
     "intensity": 1.0
+  },
+  "bakedLightmap": {
+    "path": "assets/levels/test/test.lightmap.bin",
+    "width": 2048,
+    "height": 2048,
+    "version": 2,
+    "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
+    "sourceHash": "a8828bda9239e1f2",
+    "storedStatistics": {
+      "rgbMin": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rgbMax": [
+        2.12890625,
+        2.12890625,
+        2.12890625
+      ],
+      "auxiliaryMin": 0.451171875,
+      "auxiliaryMax": 1.0,
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 3486
+    },
+    "objectProbes": {
+      "path": "assets/levels/test/test.lightmap.object_probes.bin",
+      "version": 3,
+      "sourceHash": "a8828bda9239e1f2",
+      "count": 70,
+      "probeSpacingWorld": 4.0,
+      "probeLowerHeightWorld": 0.6000000238418579,
+      "probeUpperHeightWorld": 1.5,
+      "format": "layeredAmbientCubeLinearHdrF32LE",
+      "storedStatistics": {
+        "rgbMin": [
+          0.05000000074505806,
+          0.05000000074505806,
+          0.05000000074505806
+        ],
+        "rgbMax": [
+          1.6270781755447388,
+          1.6270781755447388,
+          1.6270781755447388
+        ],
+        "auxiliaryMin": 0.0,
+        "auxiliaryMax": 0.0,
+        "sampleCount": 420,
+        "rgbChannelsAboveOne": 27
+      }
+    }
+  },
+  "bakedReflectionProbes": {
+    "path": "assets/levels/test/test.reflection-probes.bin",
+    "version": 1,
+    "count": 1,
+    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
@@ -138,7 +243,7 @@
         "x": 1135,
         "y": 1086,
         "floorZ": 0.0,
-        "ceilingZ": 44.0,
+        "ceilingZ": 54.0,
         "floorMaterialId": "floor",
         "ceilingMaterialId": "ceiling",
         "floorUv": {
@@ -209,46 +314,63 @@
         }
       }
     ],
+    "reflectionProbes": [
+      {
+        "id": 1,
+        "x": 1920,
+        "z": 1408,
+        "yWorld": 2.75,
+        "influenceOffsetWorld": [
+          -0.5,
+          0.0,
+          0.5
+        ],
+        "halfExtentsWorld": [
+          13.5,
+          2.75,
+          10.5
+        ]
+      }
+    ],
     "structuralPrimitives": [
       {
         "id": 1,
         "kind": "box",
-        "x": 768,
-        "z": 704,
-        "yawDegrees": 332.1540832519531,
+        "x": 3328,
+        "z": 1472,
         "material": {
-          "materialId": "wall"
+          "materialId": "concrete_floor1"
         },
         "box": {
           "width": 512,
-          "depth": 384,
-          "bottom": 8.000000953674316,
-          "top": 9.999998092651367
+          "depth": 2688,
+          "bottom": 17.99999237060547,
+          "top": 19.999988555908203
         }
       },
       {
         "id": 2,
         "kind": "ramp",
-        "x": 1664,
-        "z": 704,
-        "yawDegrees": 245.2406463623047,
+        "x": 2688,
+        "z": 2176,
+        "yawDegrees": 270.0,
         "material": {
-          "materialId": "wall"
+          "materialId": "worn_gray_metal_step_512"
         },
         "ramp": {
-          "width": 128,
-          "run": 512,
+          "width": 256,
+          "run": 768,
           "solidBottom": 0.0,
-          "low": 0.0,
-          "high": 8.0
+          "low": 1.0,
+          "high": 20.0
         }
       },
       {
         "id": 3,
         "kind": "stairs",
-        "x": 2553,
-        "z": 650,
-        "yawDegrees": 256.57794189453125,
+        "x": 2777,
+        "z": 320,
+        "yawDegrees": 270.0,
         "material": {
           "materialId": "dirty_gray_concrete_wall_512"
         },
@@ -256,7 +378,7 @@
           "width": 384,
           "run": 589,
           "bottom": 0.0,
-          "rise": 18.0
+          "rise": 20.0
         }
       },
       {
@@ -265,7 +387,7 @@
         "x": 752,
         "z": 2176,
         "material": {
-          "materialId": "wall"
+          "materialId": "metal_plate"
         },
         "cylinder": {
           "radius": 215,
@@ -280,7 +402,7 @@
         "z": 2176,
         "collision": true,
         "material": {
-          "materialId": "worn_gray_metal_step_512"
+          "materialId": "old_wooden_floor_02"
         },
         "sphere": {
           "radius": 205,

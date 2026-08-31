@@ -118,6 +118,11 @@ int main()
     box.box.depth = 96;
     box.box.bottom = 3.0f;
     box.box.top = 11.0f;
+    auto& topOverride = box.materials.overrides[static_cast<size_t>(
+            SectorStructuralSurfaceGroup::Top)];
+    topOverride.enabled = true;
+    topOverride.settings.uv.scale = {1.5f, 0.75f};
+    topOverride.settings.uv.offset = {-0.25f, 0.5f};
     box.materials.overrides[static_cast<size_t>(
             SectorStructuralSurfaceGroup::Sides)].enabled = true;
     auto& sideSettings = box.materials.overrides[static_cast<size_t>(
@@ -145,6 +150,52 @@ int main()
                             && Near(vertex.uv.y, baseV * 3.0f - 0.5f),
                     "box vertical faces use upright wall projection before semantic UV transform");
         }
+    }
+    const float boxRadians = box.yawDegrees
+            * 3.14159265358979323846f / 180.0f;
+    const float boxCosine = std::cos(boxRadians);
+    const float boxSine = std::sin(boxRadians);
+    const float boxWidth = SectorCoordToWorldDistance(box.box.width);
+    const float boxDepth = SectorCoordToWorldDistance(box.box.depth);
+    const auto boxLocalPosition = [&](Vector3 position) {
+        const float relativeX = position.x - boxCenter.x;
+        const float relativeZ = position.z - boxCenter.y;
+        return Vector2{
+                boxCosine * relativeX + boxSine * relativeZ,
+                -boxSine * relativeX + boxCosine * relativeZ};
+    };
+    const SectorCompiledStructuralSurface* boxTop = FindSurface(
+            uvCompiled.front(), SectorStructuralFaceRole::BoxTop);
+    Require(boxTop != nullptr, "box top UV fixture is present");
+    for (const SectorCompiledStructuralVertex& vertex : boxTop->vertices) {
+        const Vector2 local = boxLocalPosition(vertex.position);
+        const Vector2 baseUv{
+                local.x / kSectorGeneratedTextureWorldSize,
+                local.y / kSectorGeneratedTextureWorldSize};
+        Require(Near(vertex.uv.x,
+                             baseUv.x * topOverride.settings.uv.scale.x
+                                     + topOverride.settings.uv.offset.x)
+                        && Near(vertex.uv.y,
+                                baseUv.y * topOverride.settings.uv.scale.y
+                                        + topOverride.settings.uv.offset.y),
+                "box top uses transformed primitive-local world-scale UVs");
+        Require(Near(vertex.chartUv.x, local.x + boxWidth * 0.5f)
+                        && Near(vertex.chartUv.y,
+                                local.y + boxDepth * 0.5f),
+                "box top lightmap chart follows its physical width and depth axes");
+    }
+    const SectorCompiledStructuralSurface* boxBottom = FindSurface(
+            uvCompiled.front(), SectorStructuralFaceRole::BoxBottom);
+    Require(boxBottom != nullptr, "box bottom UV fixture is present");
+    for (const SectorCompiledStructuralVertex& vertex : boxBottom->vertices) {
+        const Vector2 local = boxLocalPosition(vertex.position);
+        Require(Near(vertex.uv.x,
+                             (local.x + boxWidth * 0.5f)
+                                     / kSectorGeneratedTextureWorldSize)
+                        && Near(vertex.uv.y,
+                                (boxDepth * 0.5f - local.y)
+                                        / kSectorGeneratedTextureWorldSize),
+                "box bottom keeps its existing correctly scaled projection");
     }
 
     SectorAuthoringStructuralPrimitive stairs =

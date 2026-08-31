@@ -617,6 +617,12 @@ bool BuildSectorGeneratedGeometry(
             surface.ref.structuralFace = compiled.face;
             surface.ref.topologySectorId = compiled.owningSectorIds.empty()
                     ? -1 : compiled.owningSectorIds.front();
+            const SectorTopologySector* ambientSector =
+                    FindSectorTopologySector(
+                            map, surface.ref.topologySectorId);
+            const Color ambientColor = ambientSector != nullptr
+                    ? MakeTopologySectorVertexColor(*ambientSector)
+                    : WHITE;
             surface.materialId = compiled.materialId;
             surface.normal = compiled.normal;
             surface.receivesLightmap = compiled.receivesLightmap;
@@ -633,7 +639,7 @@ bool BuildSectorGeneratedGeometry(
                         vertex.uv,
                         vertex.uv,
                         vertex.chartUv,
-                        vertex.color});
+                        ambientColor});
             }
             generated.surfaces.push_back(std::move(surface));
         }

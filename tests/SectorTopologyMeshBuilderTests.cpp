@@ -839,6 +839,62 @@ void TestLightmapAtlasIndexSplitsDrawBatches()
     }
 }
 
+void TestStructuralPrimitiveReceivesAssignedLightmap()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    game::SectorAuthoringStructuralPrimitive box =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Box);
+    box.id = 92;
+    box.x = 32;
+    box.z = 32;
+    box.materials.defaultSurface.materialId = "structural-lightmap";
+
+    std::vector<game::SectorStructuralDiagnostic> diagnostics;
+    Check(game::CompileSectorStructuralPrimitives(
+                  {box}, map, map.compiledStructuralPrimitives, diagnostics),
+          "structural lightmap fixture compiles");
+    const game::SectorGeneratedGeometry geometry = BuildGeometryOrFail(
+            map, "structural lightmap fixture builds generated geometry");
+
+    game::SectorLightmapLayout layout;
+    layout.atlasCount = 2;
+    layout.charts.resize(geometry.surfaces.size());
+    bool foundStructuralSurface = false;
+    for (size_t surfaceIndex = 0;
+            surfaceIndex < geometry.surfaces.size();
+            ++surfaceIndex) {
+        const game::SectorGeneratedSurface& surface =
+                geometry.surfaces[surfaceIndex];
+        if (surface.ref.sourceKind
+                != game::SectorGeneratedSurfaceSourceKind::StructuralPrimitive) {
+            continue;
+        }
+        foundStructuralSurface = true;
+        layout.charts[surfaceIndex].surfaceIndex =
+                static_cast<int>(surfaceIndex);
+        layout.charts[surfaceIndex].atlasIndex = 1;
+        layout.charts[surfaceIndex].vertexUvs.assign(
+                surface.vertices.size(), Vector2{0.25f, 0.75f});
+    }
+
+    const game::SectorMeshBatchDataResult records =
+            game::BuildSectorMeshDrawRecordData(geometry, &layout);
+    const game::SectorMeshBatchData* structuralRecord =
+            FindSectorRecord(records, 10, "structural-lightmap", "");
+    Check(foundStructuralSurface,
+          "structural lightmap fixture emits structural surfaces");
+    Check(structuralRecord != nullptr
+                  && structuralRecord->receivesLightmap
+                  && structuralRecord->lightmapAtlasIndex == 1,
+          "structural draw record retains its assigned lightmap atlas");
+    Check(structuralRecord != nullptr
+                  && !structuralRecord->vertices.empty()
+                  && Near(structuralRecord->vertices.front().lightmapUv,
+                          Vector2{0.25f, 0.75f}),
+          "structural draw record receives its generated lightmap UVs");
+}
+
 void TestMiddleTextureBatchState()
 {
     game::SectorGeneratedGeometry geometry;
@@ -2992,6 +3048,7 @@ int main()
     TestSectorDrawRecordMaterialGrouping();
     TestSectorDrawRecordLightmapUvsUseOriginalSurfaceIndex();
     TestLightmapAtlasIndexSplitsDrawBatches();
+    TestStructuralPrimitiveReceivesAssignedLightmap();
     TestMiddleTextureBatchState();
     TestSectorDrawRecordMiddleTextureAlphaTest();
     TestSectorDrawRecordEmissiveDecalMetadata();

@@ -3427,6 +3427,90 @@
         -168.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 205,
+      "kind": "door",
+      "door": {
+        "instanceId": "door_205",
+        "anchor": {
+          "lineDefId": 410,
+          "frontSectorId": 63,
+          "backSectorId": 83,
+          "frontSideDefId": 410,
+          "backSideDefId": 450,
+          "endpointA": [
+            -1664,
+            -2640
+          ],
+          "endpointB": [
+            -1664,
+            -2480
+          ]
+        },
+        "width": 1.2549999952316284,
+        "height": 2.643749952316284,
+        "normalOffset": 0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_009",
+        "modelFit": "fit_width",
+        "motion": "swing",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "openDistance": 2.643749952316284,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_01"
+      },
+      "position": [
+        -104.0,
+        -15.75,
+        -160.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 206,
+      "kind": "door",
+      "door": {
+        "instanceId": "door_206",
+        "anchor": {
+          "lineDefId": 400,
+          "frontSectorId": 70,
+          "backSectorId": 81,
+          "frontSideDefId": 496,
+          "backSideDefId": 560,
+          "endpointA": [
+            -896,
+            -4240
+          ],
+          "endpointB": [
+            -896,
+            -4080
+          ]
+        },
+        "width": 1.2549999952316284,
+        "height": 2.643749952316284,
+        "normalOffset": 0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_009",
+        "modelFit": "fit_width",
+        "motion": "swing",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "openDistance": 2.643749952316284,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_01"
+      },
+      "position": [
+        -56.0,
+        -9.25,
+        -260.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -8301,8 +8385,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -8402,7 +8485,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "aeebadbf0303d4e3",
+    "sourceHash": "1290e00c47922ddb",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -8410,19 +8493,19 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.666015625,
-        1.666015625
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 1379
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 839
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "aeebadbf0303d4e3",
+      "sourceHash": "1290e00c47922ddb",
       "count": 3663,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -8435,31 +8518,24 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.192941665649414,
+          1.9389466047286987,
+          1.8518656492233276
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 21978,
-        "rgbChannelsAboveOne": 32
+        "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "aeebadbf0303d4e3",
+      "sourceHash": "1290e00c47922ddb",
       "modelCount": 53,
       "objectCount": 160,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
@@ -35048,7 +35124,7 @@
         "x": -881,
         "y": -4222,
         "floorZ": -9.25,
-        "ceilingZ": 10.0,
+        "ceilingZ": 11.75,
         "floorMaterialId": "worn_gray_metal_step_512",
         "ceilingMaterialId": "ceiling",
         "floorUv": {
@@ -35200,7 +35276,7 @@
         "x": -1649,
         "y": -2622,
         "floorZ": -15.75,
-        "ceilingZ": 6.0,
+        "ceilingZ": 5.5,
         "floorMaterialId": "worn_gray_metal_step_512",
         "ceilingMaterialId": "painted_plaster_wall",
         "floorUv": {
