@@ -33,9 +33,11 @@
 #include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
+#include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 #include "sector_editor/tools/materials/SectorEditorMaterialInspector.h"
 #include "sector_editor/tools/SectorEditorToolModule.h"
+#include "sector_editor/tools/structure/SectorEditorStructureTool.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectInspector.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
@@ -363,6 +365,11 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     MakeLiveDerivationAccess(documentState.derivation),
                     state.topologyRenderRevision, state.topologyRenderCache,
                     selectionState, triggerEditingState, statusText});
+    structuralPrimitiveEditingService.emplace(
+            SectorEditorStructuralPrimitiveEditingServiceContext{
+                    state, Lifecycle(), TopologyMap(), AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    selectionState, structuralPrimitiveEditingState, statusText});
     authoringFaceMergeService.emplace(
             SectorEditorAuthoringFaceMergeServiceContext{
                     state,
@@ -410,6 +417,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
+    structuralPrimitiveEditingState = SectorEditorStructuralPrimitiveEditingState{};
+    structuralPrimitiveEditingUiState = SectorEditorStructuralPrimitiveEditingUiState{};
     npcEditorState = SectorEditorNpcEditorState{};
     npcEditorSessionState = SectorEditorNpcEditorSessionState{};
     weaponEditorState = SectorEditorWeaponEditorState{};
@@ -440,6 +449,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     levelMarkerEditingService.reset();
     soundEmitterEditingService.reset();
     triggerEditingService.reset();
+    structuralPrimitiveEditingService.reset();
     playerAudio = PlayerAudioRuntime{};
     canvasRect = {};
     statusText.clear();
@@ -837,6 +847,14 @@ void SectorEditor::RenderUI(
                         && IsSectorEditorPreviewAdjustableObject(*object)) {
                     return true;
                 }
+                if (selectionState.selectedAuthoring.kind
+                            == SectorAuthoringSelectionKind::StructuralPrimitive
+                        && FindSectorAuthoringStructuralPrimitive(
+                                AuthoringGraph(),
+                                selectionState.selectedAuthoring.structuralPrimitiveId)
+                                != nullptr) {
+                    return true;
+                }
                 return IsSectorEditorPreviewSurfaceHeightAdjustable(
                         TopologyMap(),
                         AuthoringGraph(),
@@ -1225,6 +1243,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             : nullptr;
     context.triggerEditing = triggerEditingService ? &triggerEditingService.value() : nullptr;
     context.triggerEditingState = &triggerEditingState;
+    context.structuralPrimitiveEditing = structuralPrimitiveEditingService
+            ? &structuralPrimitiveEditingService.value() : nullptr;
+    context.structuralPrimitiveState = &structuralPrimitiveEditingState;
     context.currentSnappedSectorPoint = [this]() {
         return CurrentSnappedSectorPoint();
     };
@@ -1713,7 +1734,7 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [this](engine::InputEvent& event) {
+            [this, &input](engine::InputEvent& event) {
                 if (event.key.key == KEY_ESCAPE) {
                     SectorEditorManipulationServiceContext manipulationContext =
                             BuildManipulationServiceContext();
@@ -1733,6 +1754,14 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     } else if (state.pendingAuthoringInsertVertex.active
                             || state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
                         CancelPendingAuthoringInsertVertex("Insert Vertex cancelled");
+                    } else if (structuralPrimitiveEditingState.pendingPlacement.active) {
+                        structuralPrimitiveEditingState.pendingPlacement =
+                                PendingStructuralPrimitivePlacement{};
+                        statusText = "Structure placement cancelled";
+                    } else if (structuralPrimitiveEditingState.manipulation.active) {
+                        SectorEditorToolContext toolContext = BuildToolContext(&input);
+                        CancelSectorEditorStructuralManipulation(
+                                toolContext, "Structure adjustment cancelled");
                     } else if (triggerEditingState.pending.active) {
                         triggerEditingState.pending = PendingTriggerDrawState{};
                         statusText = "Trigger drawing cancelled";
@@ -1754,7 +1783,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_DELETE) {
-                    if (!selectionState.selectedAuthoringFaceAnchorIds.empty()
+                    if (selectionState.selectedAuthoring.kind
+                            == SectorAuthoringSelectionKind::StructuralPrimitive) {
+                        BuildStructuralPrimitiveEditingService().DeleteSelected();
+                    } else if (!selectionState.selectedAuthoringFaceAnchorIds.empty()
                             && authoringFaceMergeService) {
                         authoringFaceMergeService->BeginTargetPick();
                     } else if (IsGraphAuthoringTool(state.currentTool)) {
@@ -2077,6 +2109,12 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
     if (selectionState.selectedRuntimeObjectId >= 0) {
         return SectorEditorPickTarget{SectorEditorPickKind::RuntimeObject, selectionState.selectedRuntimeObjectId};
     }
+    if (selectionState.selectedAuthoring.kind
+                    == SectorAuthoringSelectionKind::StructuralPrimitive
+            && selectionState.selectedAuthoring.structuralPrimitiveId >= 0) {
+        return {SectorEditorPickKind::StructuralPrimitive,
+                selectionState.selectedAuthoring.structuralPrimitiveId};
+    }
     if (selectionState.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
             && selectionState.selectedTopologyDynamicSpotLightId >= 0) {
         return SectorEditorPickTarget{SectorEditorPickKind::DynamicSpotLight, selectionState.selectedTopologyDynamicSpotLightId};
@@ -2159,6 +2197,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + AuthoringGraph().levelMarkers.size()
             + AuthoringGraph().soundEmitters.size()
             + AuthoringGraph().triggers.size()
+            + AuthoringGraph().structuralPrimitives.size()
             + 3);
 
     const auto addPointCandidate = [&](SectorEditorPickKind kind, int id, Vector2 center) {
@@ -2193,6 +2232,12 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
     pickContext.viewCenter = state.viewCenter;
     pickContext.viewZoom = state.viewZoom;
     AppendCachedRuntimeObjectPickCandidates(
+            state.topologyRenderCache,
+            pickContext,
+            screenPoint,
+            ScreenLightPickPixels,
+            candidates);
+    AppendCachedStructuralPrimitivePickCandidates(
             state.topologyRenderCache,
             pickContext,
             screenPoint,
@@ -2647,6 +2692,51 @@ void SectorEditor::UpdatePreviewAdjustmentInput(engine::Input& input)
                     BuildRuntimeObjectEditingService();
             FinishPreviewObjectAdjustmentResult(
                     editing.PreviewNudge(dx, dz, dh, dyaw));
+            engine::ConsumeEvent(event);
+            return;
+        }
+
+        if (structuralPrimitiveEditingState.previewAdjustment.active) {
+            const PreviewObjectNudgePreset preset =
+                    static_cast<PreviewObjectNudgePreset>(
+                            structuralPrimitiveEditingState.previewAdjustment.preset);
+            const float moveStep =
+                    SectorEditorPreviewObjectTranslationStepWorld(preset);
+            const float yawStep = SectorEditorPreviewObjectYawStepDegrees(preset);
+            float dx = 0.0f;
+            float dz = 0.0f;
+            float dh = 0.0f;
+            float dyaw = 0.0f;
+            float dpitch = 0.0f;
+            float droll = 0.0f;
+            if (event.key.key == KEY_LEFT) dx = -moveStep;
+            else if (event.key.key == KEY_RIGHT) dx = moveStep;
+            else if (event.key.key == KEY_UP) dz = moveStep;
+            else if (event.key.key == KEY_DOWN) dz = -moveStep;
+            else if (event.key.key == KEY_PAGE_UP) dh = moveStep;
+            else if (event.key.key == KEY_PAGE_DOWN) dh = -moveStep;
+            else if (event.key.key == KEY_Q) dyaw = -yawStep;
+            else if (event.key.key == KEY_E) dyaw = yawStep;
+            else if (event.key.key == KEY_INSERT) dpitch = yawStep;
+            else if (event.key.key == KEY_DELETE) dpitch = -yawStep;
+            else if (event.key.key == KEY_HOME) droll = yawStep;
+            else if (event.key.key == KEY_END) droll = -yawStep;
+            else return;
+            SectorEditorStructuralPrimitiveEditingService editing =
+                    BuildStructuralPrimitiveEditingService();
+            SectorEditorStructuralPreviewCandidate candidate;
+            if (editing.BuildPreviewNudge(
+                        dx, dz, dh, dyaw, dpitch, droll, candidate)) {
+                std::string refreshError;
+                if (RefreshPreviewSurfaceGeometry(
+                            candidate.derivation.topology, &refreshError)) {
+                    editing.AcceptPreviewNudge(std::move(candidate));
+                } else {
+                    statusText = refreshError.empty()
+                            ? "Structure nudge failed: preview geometry refresh failed"
+                            : refreshError;
+                }
+            }
             engine::ConsumeEvent(event);
             return;
         }
@@ -3869,10 +3959,26 @@ SectorEditor::BuildSurfaceHeightEditingService()
             statusText}};
 }
 
+SectorEditorStructuralPrimitiveEditingService
+SectorEditor::BuildStructuralPrimitiveEditingService()
+{
+    return SectorEditorStructuralPrimitiveEditingService{
+            SectorEditorStructuralPrimitiveEditingServiceContext{
+                    state,
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    selectionState,
+                    structuralPrimitiveEditingState,
+                    statusText}};
+}
+
 bool SectorEditor::PreviewAdjustmentActive() const
 {
     return runtimeObjectEditingState.previewAdjustment.active
-            || surfaceHeightAdjustmentState.active;
+            || surfaceHeightAdjustmentState.active
+            || structuralPrimitiveEditingState.previewAdjustment.active;
 }
 
 bool SectorEditor::BeginPreviewAdjustment()
@@ -3896,6 +4002,10 @@ bool SectorEditor::BeginPreviewAdjustment()
             TopologyMap(), selectionState.selectedRuntimeObjectId);
     if (object != nullptr && IsSectorEditorPreviewAdjustableObject(*object)) {
         return BuildRuntimeObjectEditingService().BeginPreviewAdjustment();
+    }
+    if (selectionState.selectedAuthoring.kind
+            == SectorAuthoringSelectionKind::StructuralPrimitive) {
+        return BuildStructuralPrimitiveEditingService().BeginPreviewAdjustment();
     }
     return BuildSurfaceHeightEditingService().BeginPreviewAdjustment();
 }
@@ -3930,6 +4040,23 @@ bool SectorEditor::ApplyPreviewAdjustment()
         FinishPreviewObjectAdjustmentResult(result);
         return result.changed;
     }
+    if (structuralPrimitiveEditingState.previewAdjustment.active) {
+        const bool changed = BuildStructuralPrimitiveEditingService()
+                .ApplyPreviewAdjustment();
+        if (changed && engineContext != nullptr) {
+            std::string refreshError;
+            if (!sceneRuntime.RefreshTopologyRuntimeData(
+                        *engineContext, TopologyMap(), refreshError)) {
+                TraceLog(LOG_WARNING,
+                        "3D structure adjustment runtime refresh warning: %s",
+                        refreshError.empty() ? "unknown error" : refreshError.c_str());
+            }
+            RebuildSectorCollisionWorld();
+            sceneRuntime.Navigation().RequestRebuild();
+            RefreshPreviewObjectProbeDebugData();
+        }
+        return changed;
+    }
     if (!surfaceHeightAdjustmentState.active) return false;
 
     const PreviewSurfaceHeightAdjustmentResult result =
@@ -3960,6 +4087,20 @@ bool SectorEditor::CancelPreviewAdjustment(const char* message)
                 editing.CancelPreviewAdjustment(message);
         FinishPreviewObjectAdjustmentResult(result);
         return result.changed;
+    }
+    if (structuralPrimitiveEditingState.previewAdjustment.active) {
+        const bool changed = structuralPrimitiveEditingState.previewAdjustment.changed;
+        std::string refreshError;
+        const bool restored = !changed
+                || RefreshPreviewSurfaceGeometry(TopologyMap(), &refreshError);
+        BuildStructuralPrimitiveEditingService().CancelPreviewAdjustment(message);
+        if (!restored && engineContext != nullptr) {
+            TraceLog(LOG_WARNING,
+                    "Incremental structure-adjustment restore failed; rebuilding preview: %s",
+                    refreshError.empty() ? "unknown error" : refreshError.c_str());
+            RebuildPreviewMeshesPreservingView(*engineContext);
+        }
+        return changed;
     }
     if (!surfaceHeightAdjustmentState.active) return false;
 
@@ -4737,6 +4878,12 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
     if (!hit.hit) {
         return best;
     }
+    if (hit.ref.sourceKind
+            == SectorGeneratedSurfaceSourceKind::StructuralPrimitive) {
+        // Slice 2 keeps the authored primitive as the editable identity. Generated
+        // faces are not topology floor/wall targets in the 3D material picker.
+        return best;
+    }
 
     best.hit = true;
     best.surface = ToEditorSurfaceRef(hit.ref);
@@ -4948,6 +5095,7 @@ void SectorEditor::DrawPreviewOverlay(
             runtimeObjectEditingState.drag,
             runtimeObjectEditingState,
             surfaceHeightAdjustmentState,
+            structuralPrimitiveEditingState,
             previewState,
             sceneRuntime.RuntimeObjects(),
             sceneRuntime.Navigation(),
@@ -5178,6 +5326,10 @@ void SectorEditor::DrawTopologyDocument()
             drawLegacyTopologySelection ? selectionState.selectedTopologyDynamicLightId : -1,
             drawLegacyTopologySelection ? selectionState.selectedTopologyDynamicSpotLightId : -1,
             selectionState.selectedRuntimeObjectId,
+            selectionState.selectedAuthoring.kind
+                            == SectorAuthoringSelectionKind::StructuralPrimitive
+                    ? selectionState.selectedAuthoring.structuralPrimitiveId
+                    : -1,
             selectionState.hasHoveredVertex,
             selectionState.hoveredTopologyVertexId,
             selectionState.hoveredTopologyLightId,
@@ -5190,6 +5342,7 @@ void SectorEditor::DrawTopologyDocument()
             authoringFaceMergeState.hoveredTargetFaceAnchorId
     };
     DrawCachedTopologySectors(state.topologyRenderCache, drawContext);
+    DrawCachedStructuralPrimitives(state.topologyRenderCache, drawContext);
     DrawCachedTriggers(state.topologyRenderCache, drawContext,
             triggerEditingState.drag.active ? &triggerEditingState.drag : nullptr);
     DrawAuthoringFogVolumes();
@@ -5266,6 +5419,8 @@ void SectorEditor::DrawTopologyDocument()
     drawToolOverlay(SectorEditorTool::AuthoringFogVolume);
     drawToolOverlay(SectorEditorTool::ReflectionProbe);
     drawToolOverlay(SectorEditorTool::Trigger);
+    drawToolOverlay(SectorEditorTool::Structure);
+    drawToolOverlay(SectorEditorTool::Select);
     DrawTopologySnapCrosshair();
 
     if (!state.topologyRenderWarning.empty()) {
@@ -6129,6 +6284,11 @@ void SectorEditor::DrawToolsPanel(
             statusText = triggerEditingState.drawMode == TriggerDrawMode::Rectangle
                     ? "Trigger Rectangle: click first corner"
                     : "Trigger Polygon: click first point";
+        } else if (tool == SectorEditorTool::Structure) {
+            statusText = TextFormat(
+                    "Structure %s: drag in the canvas to place",
+                    SectorStructuralPrimitiveKindName(
+                            structuralPrimitiveEditingState.placementKind));
         }
     };
 
@@ -6163,6 +6323,7 @@ void SectorEditor::DrawToolsPanel(
     separator();
     sectionLabel("Map objects");
     const SectorEditorTool mapTools[] = {
+            SectorEditorTool::Structure,
             SectorEditorTool::RuntimeObject,
             SectorEditorTool::StaticModel,
             SectorEditorTool::DynamicModel,
@@ -6316,6 +6477,8 @@ void SectorEditor::DrawSectorsPanel(
     SectorEditorSoundService sounds = BuildSoundService(
             &runtimeObjectEditing, &soundEmitterEditingService.value());
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    SectorEditorStructuralPrimitiveEditingService structuralPrimitiveEditing =
+            BuildStructuralPrimitiveEditingService();
     SectorEditorInspectorPanelContext context{
             ui,
             config,
@@ -6341,6 +6504,7 @@ void SectorEditor::DrawSectorsPanel(
             levelMarkerEditingUiState,
             soundEmitterEditingUiState,
             triggerEditingUiState,
+            structuralPrimitiveEditingUiState,
             statusText,
             selection,
             runtimeObjectEditing,
@@ -6356,6 +6520,7 @@ void SectorEditor::DrawSectorsPanel(
             soundEmitterEditingService.value(),
             triggerEditingService.value(),
             authoringFaceMergeService.value(),
+            structuralPrimitiveEditing,
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
     for (int i = 0; i < result.requestCount; ++i) {
@@ -6363,6 +6528,35 @@ void SectorEditor::DrawSectorsPanel(
         switch (request.kind) {
         case SectorEditorInspectorPanelRequestKind::RebuildSectorCollisionWorld:
             RebuildSectorCollisionWorld();
+            break;
+        case SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewRuntime:
+            if (state.mode == SectorEditorMode::Preview3D
+                    && sceneRuntime.Renderer().IsRendererReady()
+                    && engineContext != nullptr) {
+                RefreshResolvedMaterials();
+                std::string refreshError;
+                if (RefreshPreviewSurfaceGeometry(
+                            TopologyMap(), &refreshError)) {
+                    RebuildSectorCollisionWorld();
+                    sceneRuntime.Navigation().RequestRebuild();
+                    RefreshPreviewObjectProbeDebugData();
+                } else if (!RebuildPreviewMeshesPreservingView(
+                                   *engineContext)) {
+                    TraceLog(
+                            LOG_WARNING,
+                            "Structural preview refresh failed: %s",
+                            refreshError.empty()
+                                    ? "unknown error"
+                                    : refreshError.c_str());
+                }
+            }
+            break;
+        case SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials:
+            if (state.mode == SectorEditorMode::Preview3D
+                    && sceneRuntime.Renderer().IsRendererReady()
+                    && engineContext != nullptr) {
+                RefreshPreviewSurfaceMaterials(*engineContext);
+            }
             break;
         case SectorEditorInspectorPanelRequestKind::BeginAuthoringInsertVertex:
             BeginPendingAuthoringInsertVertex(request.lineId);

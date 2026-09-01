@@ -7,6 +7,7 @@
 #include "sector_demo/SectorReflectionProbes.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorStaticModelCollision.h"
+#include "sector_demo/SectorStructuralPrimitives.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorUnits.h"
@@ -1351,6 +1352,32 @@ void TestSourceHashChanges()
     const game::SectorTopologyMap base = MakeSquare();
     const std::string hash = game::ComputeSectorLightmapSourceHash(base);
 
+    game::SectorTopologyMap structuralMap = base;
+    game::SectorAuthoringStructuralPrimitive structural =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Box);
+    structural.id = 700;
+    std::vector<game::SectorStructuralDiagnostic> structuralDiagnostics;
+    Check(game::CompileSectorStructuralPrimitives(
+                  {structural}, structuralMap,
+                  structuralMap.compiledStructuralPrimitives,
+                  structuralDiagnostics),
+          "structural source-hash fixture compiles");
+    const std::string structuralHash =
+            game::ComputeSectorLightmapSourceHash(structuralMap);
+    game::SectorTopologyMap pitchedStructural = structuralMap;
+    pitchedStructural.compiledStructuralPrimitives[0].authored.pitchDegrees =
+            15.0f;
+    Check(game::ComputeSectorLightmapSourceHash(pitchedStructural)
+                  != structuralHash,
+          "hash includes structural primitive pitch");
+    game::SectorTopologyMap rolledStructural = structuralMap;
+    rolledStructural.compiledStructuralPrimitives[0].authored.rollDegrees =
+            15.0f;
+    Check(game::ComputeSectorLightmapSourceHash(rolledStructural)
+                  != structuralHash,
+          "hash includes structural primitive roll");
+
     game::SectorTopologyMap dynamicPropMap = base;
     game::SectorPlacedRuntimeObject dynamicProp;
     dynamicProp.id = 77;
@@ -2005,8 +2032,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 18,
-          "lightmap bake version is bumped for horizontal object probe clearance");
+    Check(game::kSectorLightmapBakeVersion == 19,
+          "lightmap bake version includes structural primitive geometry and lighting inputs");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);

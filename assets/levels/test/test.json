@@ -1,0 +1,408 @@
+{
+  "formatVersion": 4,
+  "topology": "authoringGraph",
+  "coordSubdivisions": 16,
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        96.0,
+        14.399999618530273,
+        80.0
+      ],
+      "radius": 94.0,
+      "sourceRadius": 2.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      }
+    }
+  ],
+  "staticSpotLights": [],
+  "staticRectLights": [],
+  "dynamicPointLights": [
+    {
+      "id": 1,
+      "instanceId": "light_point_1",
+      "position": [
+        165.0,
+        40.400001525878906,
+        76.0
+      ],
+      "radius": 94.0,
+      "intensity": 2.5,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": true,
+      "shadowStrength": 0.8999999761581421,
+      "shadowSoftness": 4.0
+    }
+  ],
+  "dynamicSpotLights": [
+    {
+      "id": 1,
+      "instanceId": "light_spot_1",
+      "position": [
+        111.8949966430664,
+        36.75502395629883,
+        99.00041961669922
+      ],
+      "target": [
+        111.8949966430664,
+        5.824575424194336,
+        155.394287109375
+      ],
+      "range": 64.0,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": true
+    }
+  ],
+  "dynamicRectLights": [],
+  "lightmapSettings": {
+    "ambientOcclusionRadius": 16.0,
+    "ambientOcclusionStrength": 0.550000011920929,
+    "indirectBounceRadius": 64.0,
+    "indirectBounceStrength": 0.3499999940395355,
+    "objectProbeSpacingWorld": 1.0,
+    "objectProbeLowerHeightWorld": 0.6000000238418579,
+    "objectProbeUpperHeightWorld": 1.5
+  },
+  "previewSettings": {
+    "walkSpeed": 3.0,
+    "runSpeed": 6.0,
+    "mouseSensitivity": 0.5,
+    "eyeHeight": 1.75,
+    "gravity": 15.0,
+    "playerRadius": 0.25,
+    "playerHeight": 1.7999999523162842,
+    "stepHeight": 0.25,
+    "jumpHeight": 1.600000023841858,
+    "headBobStrength": 0.019999999552965164,
+    "headBobFrequency": 2.0,
+    "objectProbeDebugDrawMaxDistanceWorld": 48.0,
+    "npcToNpcCollisionEnabled": true
+  },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
+  },
+  "fogSettings": {
+    "enabled": true,
+    "color": {
+      "r": 50,
+      "g": 54,
+      "b": 58,
+      "a": 255
+    },
+    "startDistanceWorld": 3.0,
+    "density": 0.014999999664723873,
+    "maxOpacity": 0.550000011920929,
+    "referenceHeightWorld": 1.0,
+    "heightFalloff": 0.0
+  },
+  "bakedLightmap": {
+    "path": "assets/levels/test/test.lightmap.bin",
+    "width": 2048,
+    "height": 2048,
+    "version": 2,
+    "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
+    "sourceHash": "c36ef69e026634a3",
+    "storedStatistics": {
+      "rgbMin": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rgbMax": [
+        2.130859375,
+        2.037109375,
+        1.8740234375
+      ],
+      "auxiliaryMin": 0.45068359375,
+      "auxiliaryMax": 1.0,
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 3095
+    },
+    "objectProbes": {
+      "path": "assets/levels/test/test.lightmap.object_probes.bin",
+      "version": 3,
+      "sourceHash": "c36ef69e026634a3",
+      "count": 1134,
+      "probeSpacingWorld": 1.0,
+      "probeLowerHeightWorld": 0.6000000238418579,
+      "probeUpperHeightWorld": 1.5,
+      "format": "layeredAmbientCubeLinearHdrF32LE",
+      "storedStatistics": {
+        "rgbMin": [
+          0.05000000074505806,
+          0.05000000074505806,
+          0.05000000074505806
+        ],
+        "rgbMax": [
+          2.1130449771881104,
+          2.022216320037842,
+          1.864700436592102
+        ],
+        "auxiliaryMin": 0.0,
+        "auxiliaryMax": 0.0,
+        "sampleCount": 6804,
+        "rgbChannelsAboveOne": 432
+      }
+    }
+  },
+  "bakedReflectionProbes": {
+    "path": "assets/levels/test/test.reflection-probes.bin",
+    "version": 1,
+    "count": 1,
+    "format": "rgba16f-cubemap-mips"
+  },
+  "editorSettings": {
+    "gridSize": 1
+  },
+  "authoringGraph": {
+    "vertices": [
+      {
+        "id": 1,
+        "x": 128,
+        "y": 128
+      },
+      {
+        "id": 2,
+        "x": 3584,
+        "y": 128
+      },
+      {
+        "id": 3,
+        "x": 3584,
+        "y": 2816
+      },
+      {
+        "id": 4,
+        "x": 128,
+        "y": 2816
+      }
+    ],
+    "lines": [
+      {
+        "id": 1,
+        "startVertexId": 1,
+        "endVertexId": 2
+      },
+      {
+        "id": 2,
+        "startVertexId": 2,
+        "endVertexId": 3
+      },
+      {
+        "id": 3,
+        "startVertexId": 3,
+        "endVertexId": 4
+      },
+      {
+        "id": 4,
+        "startVertexId": 4,
+        "endVertexId": 1
+      }
+    ],
+    "lineSides": [],
+    "faceAnchors": [
+      {
+        "id": 1,
+        "name": "Sector 1",
+        "x": 1135,
+        "y": 1086,
+        "floorZ": 0.0,
+        "ceilingZ": 54.0,
+        "floorMaterialId": "large_industrial_tiles_512",
+        "ceilingMaterialId": "concrete_wall_009",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "materialId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      }
+    ],
+    "reflectionProbes": [
+      {
+        "id": 1,
+        "x": 1920,
+        "z": 1408,
+        "yWorld": 2.75,
+        "influenceOffsetWorld": [
+          -0.5,
+          0.0,
+          0.5
+        ],
+        "halfExtentsWorld": [
+          13.5,
+          2.75,
+          10.5
+        ]
+      }
+    ],
+    "structuralPrimitives": [
+      {
+        "id": 1,
+        "kind": "box",
+        "x": 3328,
+        "z": 1472,
+        "material": {
+          "materialId": "dark_wooden_planks"
+        },
+        "box": {
+          "width": 512,
+          "depth": 2688,
+          "bottom": 17.99999237060547,
+          "top": 19.999988555908203
+        }
+      },
+      {
+        "id": 2,
+        "kind": "ramp",
+        "x": 2688,
+        "z": 2432,
+        "yawDegrees": 270.0,
+        "material": {
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "ramp": {
+          "width": 768,
+          "run": 768,
+          "solidBottom": 0.0,
+          "low": 1.0,
+          "high": 20.0
+        }
+      },
+      {
+        "id": 3,
+        "kind": "stairs",
+        "x": 2777,
+        "z": 320,
+        "yawDegrees": 270.0,
+        "material": {
+          "materialId": "dirty_gray_concrete_wall_512"
+        },
+        "stairs": {
+          "width": 384,
+          "run": 589,
+          "bottom": 0.0,
+          "rise": 20.0
+        }
+      },
+      {
+        "id": 4,
+        "kind": "cylinder",
+        "x": 3488,
+        "z": 1456,
+        "pitchDegrees": 270.0,
+        "material": {
+          "materialId": "metal_plate"
+        },
+        "cylinder": {
+          "radius": 66,
+          "bottom": -45.0,
+          "top": 135.0
+        }
+      },
+      {
+        "id": 5,
+        "kind": "sphere",
+        "x": 1792,
+        "z": 2176,
+        "collision": true,
+        "material": {
+          "materialId": "old_wooden_floor_02"
+        },
+        "sphere": {
+          "radius": 205,
+          "centerHeight": 12.8125
+        }
+      }
+    ]
+  }
+}

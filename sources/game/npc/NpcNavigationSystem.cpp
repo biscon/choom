@@ -403,15 +403,29 @@ bool Replan(
 
 SectorFpsVerticalContext BuildVerticalContext(
         const SectorCollisionWorld& collisionWorld,
-        int sectorId)
+        int sectorId,
+        Vector2 positionXZ,
+        float feetY,
+        bool grounded,
+        const SectorCollisionMoveConfig& config)
 {
     SectorFpsVerticalContext result;
     SectorCollisionHeights heights;
     if (sectorId != 0
-            && collisionWorld.GetSectorFloorCeiling(sectorId, &heights)) {
+            && collisionWorld.ResolveActorVerticalContext(
+                    sectorId,
+                    SectorCollisionVerticalQuery{
+                            positionXZ,
+                            feetY,
+                            config.radius,
+                            config.playerHeight,
+                            config.stepHeight,
+                            grounded},
+                    &heights)) {
         result.hasSector = true;
         result.floorZ = heights.floorZ;
         result.ceilingZ = heights.ceilingZ;
+        result.continuousFloor = heights.continuousFloor;
     }
     return result;
 }
@@ -433,7 +447,12 @@ SectorCollisionMoveResult ResolveNpcHorizontalMovement(
     result = ResolveSectorDoorDynamicCollidersForPlayerMovement(
             moveState, result, moveConfig, doorColliders);
     const SectorFpsVerticalContext sectorContext = BuildVerticalContext(
-            collisionWorld, result.currentSectorId);
+            collisionWorld,
+            result.currentSectorId,
+            result.positionXZ,
+            moveState.feetY,
+            moveState.grounded,
+            moveConfig);
     result = ResolveSectorStaticModelCollidersForPlayerMovement(
             moveState,
             result,
@@ -486,7 +505,12 @@ Vector2 ApplyNpcMovementResult(
     transform.position.z = result.positionXZ.y;
     object.currentSectorId = result.currentSectorId;
     SectorFpsVerticalContext support = BuildVerticalContext(
-            collisionWorld, object.currentSectorId);
+            collisionWorld,
+            object.currentSectorId,
+            result.positionXZ,
+            previousPhysicalY,
+            true,
+            moveConfig);
     if (support.hasSector) {
         SectorFpsControllerState supportState;
         supportState.feetPosition = transform.position;
@@ -503,9 +527,11 @@ Vector2 ApplyNpcMovementResult(
                 supportConfig,
                 staticColliders);
         const float floorDelta = support.floorZ - previousPhysicalY;
-        if (std::fabs(floorDelta) <= moveConfig.stepHeight + 0.001f) {
+        if (support.continuousFloor
+                || std::fabs(floorDelta) <= moveConfig.stepHeight + 0.001f) {
             transform.position.y = support.floorZ;
             if (visualOffset != nullptr
+                    && !support.continuousFloor
                     && std::fabs(transform.position.y - previousPhysicalY)
                             > 0.001f) {
                 visualOffset->position.y = previousVisualY - transform.position.y;

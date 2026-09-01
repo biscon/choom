@@ -133,6 +133,18 @@ public:
             SectorAuthoringSideId sideId,
             TopologyWallPart wallPart,
             TopologyMaterialLayer layer);
+    bool OpenMaterialPickerForAuthoringStructuralPrimitive(
+            int primitiveId,
+            int surfaceGroup = -1);
+    bool ApplyAuthoringStructuralPrimitiveUvValue(
+            int primitiveId,
+            int surfaceGroup,
+            int component,
+            float value);
+    bool SetAuthoringStructuralMaterialOverrideEnabled(
+            int primitiveId,
+            SectorStructuralSurfaceGroup group,
+            bool enabled);
     SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(engine::AssetManager* assets);
 
 private:
@@ -158,6 +170,10 @@ private:
             const char* failureStatus);
     void MarkTopologyDocumentEdited(const char* status);
     void ApplyMaterialUiResetFlags(const SectorEditorMaterialActionResult& result);
+    bool MutateAuthoringStructuralPrimitive(
+            int primitiveId,
+            const char* status,
+            const std::function<bool(SectorAuthoringStructuralPrimitive&)>& mutate);
 
     SectorEditorMaterialEditingServiceContext context_;
 };

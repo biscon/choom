@@ -330,7 +330,8 @@ bool IsSectorEditorMaterialTexturePickerTarget(TopologyTexturePickerTargetKind k
     return kind == TopologyTexturePickerTargetKind::Sector
             || kind == TopologyTexturePickerTargetKind::SideDef
             || kind == TopologyTexturePickerTargetKind::AuthoringFaceAnchor
-            || kind == TopologyTexturePickerTargetKind::AuthoringSide;
+            || kind == TopologyTexturePickerTargetKind::AuthoringSide
+            || kind == TopologyTexturePickerTargetKind::AuthoringStructuralPrimitive;
 }
 
 std::string CurrentSectorEditorMaterialPickerTexture(

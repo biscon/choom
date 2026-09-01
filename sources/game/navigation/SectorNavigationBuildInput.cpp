@@ -239,6 +239,67 @@ void AddStaticObstacleGeometry(
             collider.halfExtents, collider.bottom, collider.top});
 }
 
+void AddStructuralPrimitiveGeometry(
+        const SectorCompiledStructuralPrimitive& primitive,
+        const SectorNavigationSettings& settings,
+        SectorNavigationBuildInput& input,
+        Vector3& minimum,
+        Vector3& maximum)
+{
+    if (!primitive.authored.enabled || !primitive.authored.collision) return;
+    const float minimumWalkableNormalY = std::cos(
+            settings.agentMaximumSlopeDegrees * DEG2RAD);
+    for (const SectorCompiledStructuralSurface& surface : primitive.surfaces) {
+        uint8_t area = surface.normal.y + 0.0001f >= minimumWalkableNormalY
+                ? NavigationRasterWalkableArea
+                : NavigationRasterNullArea;
+        if (primitive.authored.kind == SectorStructuralPrimitiveKind::Stairs) {
+            area = NavigationRasterNullArea;
+        }
+        for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {
+            AddTriangle(
+                    input,
+                    surface.vertices[index].position,
+                    surface.vertices[index + 1].position,
+                    surface.vertices[index + 2].position,
+                    area,
+                    primitive.authored.id,
+                    minimum,
+                    maximum);
+        }
+    }
+
+    if (primitive.authored.kind != SectorStructuralPrimitiveKind::Stairs) return;
+    const float halfWidth = SectorCoordToWorldDistance(primitive.authored.stairs.width) * 0.5f;
+    const float halfRun = SectorCoordToWorldDistance(primitive.authored.stairs.run) * 0.5f;
+    const auto corner = [&](float rightOffset, float forwardOffset, float authoredY) {
+        return TransformSectorStructuralPrimitivePoint(
+                primitive.authored, rightOffset, authoredY, forwardOffset);
+    };
+    const float low = primitive.authored.stairs.bottom;
+    const float high = primitive.authored.stairs.bottom
+            + primitive.authored.stairs.rise;
+    const Vector3 a = corner(-halfWidth, -halfRun, low);
+    const Vector3 b = corner(halfWidth, -halfRun, low);
+    const Vector3 c = corner(halfWidth, halfRun, high);
+    const Vector3 d = corner(-halfWidth, halfRun, high);
+    const float runWorld = halfRun * 2.0f;
+    const float riseWorld = SectorAuthoringToWorldDistance(
+            primitive.authored.stairs.rise);
+    const Vector3 proxyNormal = Vector3Normalize(
+            RotateSectorStructuralPrimitiveVector(
+                    primitive.authored,
+                    Vector3{0.0f, runWorld, -riseWorld}));
+    const uint8_t proxyArea = proxyNormal.y + 0.0001f
+                    >= minimumWalkableNormalY
+            ? NavigationRasterWalkableArea
+            : NavigationRasterNullArea;
+    AddTriangle(input, a, b, c, proxyArea,
+            primitive.authored.id, minimum, maximum);
+    AddTriangle(input, a, c, d, proxyArea,
+            primitive.authored.id, minimum, maximum);
+}
+
 const SectorTopologySector* SectorForSide(
         const SectorTopologyMap& map,
         int sideDefId)
@@ -640,6 +701,12 @@ bool BuildSectorNavigationBuildInput(
         AddStaticObstacleGeometry(*found->second, outInput, minimum, maximum);
     }
 
+    for (const SectorCompiledStructuralPrimitive& primitive
+            : map.compiledStructuralPrimitives) {
+        AddStructuralPrimitiveGeometry(
+                primitive, settings, outInput, minimum, maximum);
+    }
+
     if (outInput.triangles.empty()) return true;
     const float padding = settings.boundsPaddingWorld;
     minimum.x -= padding;
@@ -658,7 +725,7 @@ uint64_t ComputeSectorNavigationSourceHash(
         const SectorNavigationSettings& rawSettings)
 {
     Fnv64 hash;
-    hash.String("SectorNavigationSourceV3");
+    hash.String("SectorNavigationSourceV4");
     const SectorNavigationSettings settings = NormalizeSectorNavigationSettings(rawSettings);
     HashSettings(hash, settings);
 
@@ -677,6 +744,14 @@ uint64_t ComputeSectorNavigationSourceHash(
     for (const SectorTopologySector* sector : SortedById(map.sectors)) {
         hash.Pod(sector->id); hash.Float(sector->floorZ); hash.Float(sector->ceilingZ);
         hash.Pod(static_cast<uint8_t>(sector->ceilingSky));
+    }
+    for (const SectorCompiledStructuralPrimitive& primitive
+            : map.compiledStructuralPrimitives) {
+        hash.String("structural_primitive");
+        hash.Pod(primitive.authored.id);
+        hash.Pod(static_cast<uint8_t>(primitive.authored.enabled));
+        hash.Pod(static_cast<uint8_t>(primitive.authored.collision));
+        hash.String(primitive.geometryFingerprint);
     }
 
     std::unordered_map<int, const SectorStaticModelCollider*> collidersByObject;

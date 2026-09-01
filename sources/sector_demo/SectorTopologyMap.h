@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorReflectionProbeTypes.h"
+#include "sector_demo/SectorStructuralPrimitives.h"
 #include "sector_demo/SectorTopologyTypes.h"
 #include "sector_demo/SectorTextureTypes.h"
 
@@ -413,6 +414,7 @@ struct SectorTopologyMap {
     std::vector<SectorCompiledPatrol> patrols;
     std::vector<SectorCompiledSoundEmitter> soundEmitters;
     std::vector<SectorCompiledTrigger> triggers;
+    std::vector<SectorCompiledStructuralPrimitive> compiledStructuralPrimitives;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;

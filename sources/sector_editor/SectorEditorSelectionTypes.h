@@ -53,7 +53,8 @@ enum class SectorAuthoringSelectionKind {
     ReflectionProbe,
     LevelMarker,
     SoundEmitter,
-    Trigger
+    Trigger,
+    StructuralPrimitive
 };
 
 struct SectorAuthoringSelectionTarget {
@@ -66,6 +67,7 @@ struct SectorAuthoringSelectionTarget {
     int levelMarkerId = -1;
     int soundEmitterId = -1;
     int triggerId = -1;
+    int structuralPrimitiveId = -1;
 };
 
 enum class SectorSurfaceKind {
@@ -130,6 +132,7 @@ enum class SpotLightHandle {
 enum class SectorEditorPickKind {
     None,
     RuntimeObject,
+    StructuralPrimitive,
     DynamicSpotLight,
     DynamicRectLight,
     DynamicLight,

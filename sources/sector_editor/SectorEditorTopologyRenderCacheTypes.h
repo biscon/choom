@@ -110,6 +110,17 @@ struct CachedAuthoringTriggerDraw {
     std::vector<Vector2> fillTrianglePoints;
 };
 
+struct CachedStructuralPrimitiveDraw {
+    int primitiveId = -1;
+    SectorStructuralPrimitiveKind kind = SectorStructuralPrimitiveKind::Box;
+    bool enabled = true;
+    bool circular = false;
+    Vector2 center = {};
+    float radius = 0.0f;
+    Vector2 ascentDirection = {0.0f, 1.0f};
+    std::vector<Vector2> points;
+};
+
 struct CachedAuthoringVertexDraw {
     int vertexId = -1;
     SectorTopologyCoordPoint point = {};
@@ -160,6 +171,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedAuthoringLevelMarkerDraw> levelMarkers;
     std::vector<CachedAuthoringSoundEmitterDraw> soundEmitters;
     std::vector<CachedAuthoringTriggerDraw> triggers;
+    std::vector<CachedStructuralPrimitiveDraw> structuralPrimitives;
     std::vector<CachedAuthoringLineDraw> authoringLines;
     std::vector<CachedAuthoringVertexDraw> authoringVertices;
     std::vector<CachedAuthoringFaceHighlightDraw> authoringFaceHighlights;

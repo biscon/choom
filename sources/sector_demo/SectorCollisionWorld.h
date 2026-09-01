@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_demo/SectorTopologyTypes.h"
+#include "sector_demo/SectorStructuralPrimitives.h"
 
 #include <raylib.h>
 
@@ -14,6 +15,7 @@ struct SectorTopologyMap;
 struct SectorCollisionHeights {
     float floorZ = 0.0f;
     float ceilingZ = 0.0f;
+    bool continuousFloor = false;
 };
 
 enum class SectorCollisionEdgeKind {
@@ -55,6 +57,7 @@ enum class SectorCollisionRaySurfaceKind {
     Wall,
     LowerWall,
     UpperWall
+    ,StructuralPrimitive
 };
 
 struct SectorCollisionRayHit {
@@ -68,6 +71,16 @@ struct SectorCollisionRayHit {
     int lineDefId = 0;
     int sideDefId = 0;
     int neighborSectorId = 0;
+    SectorStructuralFaceId structuralFace;
+};
+
+struct SectorCollisionVerticalQuery {
+    Vector2 positionXZ = {};
+    float feetY = 0.0f;
+    float radius = 0.25f;
+    float actorHeight = 1.6f;
+    float stepHeight = 0.25f;
+    bool grounded = false;
 };
 
 struct SectorCollisionMoveConfig {
@@ -94,6 +107,14 @@ struct SectorCollisionMoveResult {
     bool blockedByCeiling = false;
 };
 
+struct SectorStructuralCollisionPrimitive {
+    SectorAuthoringStructuralPrimitive authored;
+    std::vector<Vector2> projectedHull;
+    float minimumY = 0.0f;
+    float maximumY = 0.0f;
+    bool conservativeTilted = false;
+};
+
 Vector2 GetSectorCollisionEdgeInwardNormal(const SectorCollisionEdge& edge);
 
 class SectorCollisionWorld {
@@ -102,6 +123,10 @@ public:
 
     const SectorCollisionSector* FindSector(int sectorId) const;
     bool GetSectorFloorCeiling(int sectorId, SectorCollisionHeights* out) const;
+    bool ResolveActorVerticalContext(
+            int sectorId,
+            const SectorCollisionVerticalQuery& query,
+            SectorCollisionHeights* out) const;
     const std::vector<SectorCollisionEdge>* GetSectorEdges(int sectorId) const;
     const std::vector<int>* GetPortalNeighbors(int sectorId) const;
 
@@ -137,6 +162,8 @@ private:
             float radius) const;
 
     std::vector<SectorCollisionSector> sectors;
+    std::vector<SectorStructuralCollisionPrimitive> structuralPrimitives;
+    std::vector<SectorCompiledStructuralSurface> structuralSurfaces;
     // ResolveMovement() reuses this queue so footprint portal traversal does not
     // allocate during normal gameplay. Collision movement queries are main-thread
     // and non-concurrent, matching the preview controller update.

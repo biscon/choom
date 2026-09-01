@@ -1053,8 +1053,130 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cache.runtimeObjects.push_back(cached);
     }
 
+    cache.structuralPrimitives.reserve(authoringGraph.structuralPrimitives.size());
+    for (const SectorAuthoringStructuralPrimitive& primitive
+            : authoringGraph.structuralPrimitives) {
+        const SectorStructuralFootprint footprint =
+                BuildSectorStructuralFootprint(primitive);
+        CachedStructuralPrimitiveDraw cached;
+        cached.primitiveId = primitive.id;
+        cached.kind = primitive.kind;
+        cached.enabled = primitive.enabled;
+        cached.circular = footprint.circular;
+        cached.center = SectorWorldToAuthoringPosition(footprint.centerWorld);
+        cached.radius = SectorWorldToAuthoringDistance(footprint.radiusWorld);
+        cached.ascentDirection = footprint.ascentDirectionWorld;
+        cached.points.reserve(footprint.pointsWorld.size());
+        for (Vector2 point : footprint.pointsWorld) {
+            cached.points.push_back(SectorWorldToAuthoringPosition(point));
+        }
+        cache.structuralPrimitives.push_back(std::move(cached));
+    }
+
     cache.valid = true;
     return cache;
+}
+
+void AppendCachedStructuralPrimitivePickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates)
+{
+    if (!cache.valid || tolerancePixels < 0.0f) return;
+    const float tolerance2 = tolerancePixels * tolerancePixels;
+    for (const CachedStructuralPrimitiveDraw& primitive
+            : cache.structuralPrimitives) {
+        if (primitive.points.size() < 3) continue;
+        std::vector<Vector2> points;
+        points.reserve(primitive.points.size());
+        for (Vector2 point : primitive.points) {
+            points.push_back(CachedMapToScreen(context, point));
+        }
+        bool inside = false;
+        for (size_t i = 0, j = points.size() - 1; i < points.size(); j = i++) {
+            const Vector2 a = points[i];
+            const Vector2 b = points[j];
+            if (((a.y > screenPoint.y) != (b.y > screenPoint.y))
+                    && screenPoint.x < (b.x - a.x)
+                                    * (screenPoint.y - a.y)
+                                    / (b.y - a.y) + a.x) {
+                inside = !inside;
+            }
+        }
+        float distance2 = inside ? 0.0f
+                : DistanceSquaredToPickSegment(
+                        screenPoint, points.back(), points.front());
+        if (!inside) {
+            for (size_t i = 1; i < points.size(); ++i) {
+                distance2 = std::min(distance2,
+                        DistanceSquaredToPickSegment(
+                                screenPoint, points[i - 1], points[i]));
+            }
+        }
+        if (distance2 <= tolerance2) {
+            outCandidates.push_back({
+                    {SectorEditorPickKind::StructuralPrimitive,
+                            primitive.primitiveId},
+                    distance2});
+        }
+    }
+}
+
+void DrawCachedStructuralPrimitives(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context)
+{
+    for (const CachedStructuralPrimitiveDraw& primitive
+            : cache.structuralPrimitives) {
+        if (primitive.points.size() < 3) continue;
+        const bool selected = context.selectedStructuralPrimitiveId
+                == primitive.primitiveId;
+        const bool hovered = context.hoveredAuthoring.kind
+                        == SectorAuthoringSelectionKind::StructuralPrimitive
+                && context.hoveredAuthoring.structuralPrimitiveId
+                        == primitive.primitiveId;
+        const Color outline = selected
+                ? Color{72, 220, 245, 255}
+                : hovered ? Color{244, 192, 70, 255}
+                : primitive.enabled ? Color{150, 202, 234, 235}
+                                    : Color{125, 130, 138, 210};
+        Color fill = outline;
+        fill.a = selected ? 70 : 42;
+        const Vector2 first = CachedMapToScreen(context, primitive.points[0]);
+        for (size_t i = 1; i + 1 < primitive.points.size(); ++i) {
+            DrawTriangle(first,
+                    CachedMapToScreen(context, primitive.points[i]),
+                    CachedMapToScreen(context, primitive.points[i + 1]),
+                    fill);
+        }
+        for (size_t i = 0; i < primitive.points.size(); ++i) {
+            const Vector2 a = CachedMapToScreen(context, primitive.points[i]);
+            const Vector2 b = CachedMapToScreen(
+                    context, primitive.points[(i + 1) % primitive.points.size()]);
+            DrawLineEx(a, b, selected ? 3.0f : 2.0f, outline);
+        }
+        if (primitive.kind == SectorStructuralPrimitiveKind::Ramp
+                || primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
+            const Vector2 center = CachedMapToScreen(context, primitive.center);
+            const Vector2 end{center.x + primitive.ascentDirection.x * 24.0f,
+                    center.y + primitive.ascentDirection.y * 24.0f};
+            DrawLineEx(center, end, 2.0f, outline);
+            const Vector2 side{-primitive.ascentDirection.y,
+                    primitive.ascentDirection.x};
+            DrawTriangle(end,
+                    Vector2{end.x - primitive.ascentDirection.x * 8.0f
+                                    + side.x * 5.0f,
+                            end.y - primitive.ascentDirection.y * 8.0f
+                                    + side.y * 5.0f},
+                    Vector2{end.x - primitive.ascentDirection.x * 8.0f
+                                    - side.x * 5.0f,
+                            end.y - primitive.ascentDirection.y * 8.0f
+                                    - side.y * 5.0f},
+                    outline);
+        }
+    }
 }
 
 void AppendCachedRuntimeObjectPickCandidates(

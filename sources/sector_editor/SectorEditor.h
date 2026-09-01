@@ -52,6 +52,7 @@
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
+#include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.h"
 #include "sector_editor/items/SectorEditorItemEditorService.h"
 #include "sector_editor/items/SectorEditorItemEditorState.h"
 #include "sector_editor/player/SectorEditorPlayerSettingsService.h"
@@ -541,6 +542,7 @@ private:
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
             SectorEditorSelectionServiceContext* selectionService = nullptr);
     SectorEditorSurfaceHeightEditingService BuildSurfaceHeightEditingService();
+    SectorEditorStructuralPrimitiveEditingService BuildStructuralPrimitiveEditingService();
     SectorEditorSoundService BuildSoundService(
             SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr,
             SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr);
@@ -617,6 +619,8 @@ private:
     RuntimeObjectEditingState runtimeObjectEditingState;
     RuntimeObjectEditingUiState runtimeObjectEditingUiState;
     PreviewSurfaceHeightAdjustmentState surfaceHeightAdjustmentState;
+    SectorEditorStructuralPrimitiveEditingState structuralPrimitiveEditingState;
+    SectorEditorStructuralPrimitiveEditingUiState structuralPrimitiveEditingUiState;
     SectorEditorNpcEditorState npcEditorState;
     SectorEditorNpcEditorSessionState npcEditorSessionState;
     SectorEditorWeaponEditorState weaponEditorState;
@@ -648,6 +652,7 @@ private:
     TriggerEditingState triggerEditingState;
     TriggerEditingUiState triggerEditingUiState;
     std::optional<SectorEditorTriggerEditingService> triggerEditingService;
+    std::optional<SectorEditorStructuralPrimitiveEditingService> structuralPrimitiveEditingService;
     SectorEditorLightmapBakeController lightmapBake;
     bool reflectionProbeBakePending = false;
     int reflectionProbeBakeSelectedId = -1;

@@ -45,21 +45,33 @@ void ResetPreviewCollisionAndVisualState(
 
 SectorFpsVerticalContext BuildSectorOnlyVerticalContext(
         const SectorEditorPreviewCollisionState& collisionState,
-        int sectorId)
+        int sectorId,
+        Vector2 positionXZ,
+        float feetY,
+        bool grounded,
+        const SectorFpsControllerConfig& config)
 {
     SectorFpsVerticalContext context;
     if (!collisionState.sectorCollisionWorldValid || sectorId == 0) {
         return context;
     }
     SectorCollisionHeights heights;
-    if (!collisionState.sectorCollisionWorld.GetSectorFloorCeiling(
+    if (!collisionState.sectorCollisionWorld.ResolveActorVerticalContext(
                 sectorId,
+                SectorCollisionVerticalQuery{
+                        positionXZ,
+                        feetY,
+                        config.playerRadius,
+                        config.playerHeight,
+                        config.stepHeight,
+                        grounded},
                 &heights)) {
         return context;
     }
     context.hasSector = true;
     context.floorZ = heights.floorZ;
     context.ceilingZ = heights.ceilingZ;
+    context.continuousFloor = heights.continuousFloor;
     return context;
 }
 
@@ -69,17 +81,20 @@ bool HasSectorEditorGameplayStandingClearance(
         const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
         const std::vector<SectorStaticModelCollider>& staticModelColliders)
 {
-    const SectorFpsVerticalContext sectorContext = BuildSectorOnlyVerticalContext(
-            collisionState,
-            controllerState.fpsControllerState.currentSectorId);
-    if (!sectorContext.hasSector) {
-        return true;
-    }
-
     const SectorFpsControllerConfig standing =
             NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
     const SectorFpsControllerState& state = controllerState.fpsControllerState;
     const Vector2 positionXZ{state.feetPosition.x, state.feetPosition.z};
+    const SectorFpsVerticalContext sectorContext = BuildSectorOnlyVerticalContext(
+            collisionState,
+            state.currentSectorId,
+            positionXZ,
+            state.feetPosition.y,
+            state.grounded,
+            standing);
+    if (!sectorContext.hasSector) {
+        return true;
+    }
     if (state.feetPosition.y + standing.playerHeight
             > sectorContext.ceilingZ + GameplayFloorSnapEpsilon) {
         return false;
@@ -209,14 +224,20 @@ SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
         const SectorEditorPreviewControllerState& controllerState,
         const std::vector<SectorStaticModelCollider>& staticModelColliders)
 {
+    const SectorFpsControllerConfig config = EffectiveSectorFpsControllerConfig(
+            controllerState.fpsControllerState,
+            controllerState.fpsControllerConfig);
+    const SectorFpsControllerState& state = controllerState.fpsControllerState;
     return BuildSectorStaticModelVerticalContext(
             BuildSectorOnlyVerticalContext(
                     collisionState,
-                    controllerState.fpsControllerState.currentSectorId),
-            controllerState.fpsControllerState,
-            EffectiveSectorFpsControllerConfig(
-                    controllerState.fpsControllerState,
-                    controllerState.fpsControllerConfig),
+                    state.currentSectorId,
+                    {state.feetPosition.x, state.feetPosition.z},
+                    state.feetPosition.y,
+                    state.grounded,
+                    config),
+            state,
+            config,
             staticModelColliders);
 }
 
@@ -386,7 +407,11 @@ void UpdateSectorEditorGameplayPreview(
                             4},
                     BuildSectorOnlyVerticalContext(
                             collisionState,
-                            moveResult.currentSectorId),
+                            moveResult.currentSectorId,
+                            moveResult.positionXZ,
+                            controllerState.fpsControllerState.feetPosition.y,
+                            controllerState.fpsControllerState.grounded,
+                            effectiveConfig),
                     staticModelColliders);
             if (npcCollisionCylinders != nullptr
                     && !npcCollisionCylinders->empty()) {

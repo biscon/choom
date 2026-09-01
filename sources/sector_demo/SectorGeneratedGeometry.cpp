@@ -7,6 +7,7 @@
 #include "util/earcut.h"
 
 #include <raylib.h>
+#include <raymath.h>
 
 #include <algorithm>
 #include <array>
@@ -459,7 +460,15 @@ SectorGeneratedSurfaceHit PickSectorGeneratedGeometry(
             if (!collision.hit || collision.distance <= minDistance) {
                 continue;
             }
-            const bool candidateFacesRay = Dot(surface.normal, ray.direction) < 0.0f;
+            Vector3 candidateNormal = surface.normal;
+            if (Dot(candidateNormal, candidateNormal) <= EdgeEpsilon) {
+                candidateNormal = Vector3Normalize(Vector3CrossProduct(
+                        Vector3Subtract(surface.vertices[i + 1].position,
+                                surface.vertices[i].position),
+                        Vector3Subtract(surface.vertices[i + 2].position,
+                                surface.vertices[i].position)));
+            }
+            const bool candidateFacesRay = Dot(candidateNormal, ray.direction) < 0.0f;
             const bool candidateCloser = !best.hit
                     || collision.distance < best.distance - PickDistanceTieEpsilon;
             const bool candidateTieBreaks = best.hit
@@ -482,6 +491,19 @@ bool ShouldIncludeSectorGeneratedSurfaceForVisibility(
         const SectorGeneratedSurface& surface,
         const RuntimePortalVisibilityResult& visibility)
 {
+    if (!surface.owningSectorIds.empty()) {
+        return std::any_of(
+                surface.owningSectorIds.begin(),
+                surface.owningSectorIds.end(),
+                [&visibility](int sectorId) {
+                    return ShouldDrawRuntimeSectorGeometryForVisibility(
+                            sectorId, visibility);
+                });
+    }
+    if (surface.ref.sourceKind
+            == SectorGeneratedSurfaceSourceKind::StructuralPrimitive) {
+        return true;
+    }
     return ShouldDrawRuntimeSectorGeometryForVisibility(
             surface.ref.topologySectorId, visibility);
 }
@@ -489,6 +511,15 @@ bool ShouldIncludeSectorGeneratedSurfaceForVisibility(
 std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& ref)
 {
     std::ostringstream label;
+    if (ref.sourceKind == SectorGeneratedSurfaceSourceKind::StructuralPrimitive) {
+        label << SectorStructuralPrimitiveKindName(
+                        ref.structuralFace.primitiveKind)
+              << " primitive=" << ref.structuralFace.primitiveId
+              << " face=" << SectorStructuralFaceRoleName(
+                        ref.structuralFace.role)
+              << " index=" << ref.structuralFace.roleIndex;
+        return label.str();
+    }
     label << SectorGeneratedSurfaceKindName(ref.kind);
     if (ref.topologySectorId >= 0) {
         label << " sector=" << ref.topologySectorId;
@@ -567,6 +598,50 @@ bool BuildSectorGeneratedGeometry(
                 return SetTopologyError(outGeometry, outError, error);
             }
             generated.surfaces.push_back(std::move(ceiling));
+        }
+    }
+
+    for (const SectorGeneratedSurface& surface : generated.surfaces) {
+        if (surface.ref.topologySectorId > 0 && surface.owningSectorIds.empty()) {
+            const_cast<SectorGeneratedSurface&>(surface).owningSectorIds = {
+                    surface.ref.topologySectorId};
+        }
+    }
+
+    for (const SectorCompiledStructuralPrimitive& primitive
+            : map.compiledStructuralPrimitives) {
+        for (const SectorCompiledStructuralSurface& compiled : primitive.surfaces) {
+            SectorGeneratedSurface surface;
+            surface.ref.sourceKind =
+                    SectorGeneratedSurfaceSourceKind::StructuralPrimitive;
+            surface.ref.structuralFace = compiled.face;
+            surface.ref.topologySectorId = compiled.owningSectorIds.empty()
+                    ? -1 : compiled.owningSectorIds.front();
+            const SectorTopologySector* ambientSector =
+                    FindSectorTopologySector(
+                            map, surface.ref.topologySectorId);
+            const Color ambientColor = ambientSector != nullptr
+                    ? MakeTopologySectorVertexColor(*ambientSector)
+                    : WHITE;
+            surface.materialId = compiled.materialId;
+            surface.normal = compiled.normal;
+            surface.receivesLightmap = compiled.receivesLightmap;
+            surface.chartWidth = compiled.chartWidth;
+            surface.chartHeight = compiled.chartHeight;
+            surface.owningSectorIds = compiled.owningSectorIds;
+            surface.castsLightmapOcclusion = compiled.castsBakedShadow;
+            surface.castsDynamicShadow = compiled.castsDynamicShadow;
+            surface.vertices.reserve(compiled.vertices.size());
+            for (const SectorCompiledStructuralVertex& vertex : compiled.vertices) {
+                surface.vertices.push_back(SectorGeneratedVertex{
+                        vertex.position,
+                        vertex.normal,
+                        vertex.uv,
+                        vertex.uv,
+                        vertex.chartUv,
+                        ambientColor});
+            }
+            generated.surfaces.push_back(std::move(surface));
         }
     }
 

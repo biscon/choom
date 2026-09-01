@@ -307,6 +307,12 @@ std::vector<std::string> ResolveSectorMaterialsForMap(
             AddMaterialId(referenced, object.door.materialId);
         }
     }
+    for (const SectorCompiledStructuralPrimitive& primitive
+            : map.compiledStructuralPrimitives) {
+        for (const SectorCompiledStructuralSurface& surface : primitive.surfaces) {
+            AddMaterialId(referenced, surface.materialId);
+        }
+    }
 
     map.resolvedMaterialsById.clear();
     std::vector<std::string> missing;

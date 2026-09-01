@@ -132,6 +132,9 @@ void SelectSectorEditorAuthoringVertexTarget(SectorEditorSelectionServiceContext
 void SelectSectorEditorAuthoringFaceAnchorTarget(SectorEditorSelectionServiceContext& context, int faceAnchorId);
 void SelectSectorEditorAuthoringFogVolumeTarget(SectorEditorSelectionServiceContext& context, int fogVolumeId);
 void SelectSectorEditorAuthoringLevelMarkerTarget(SectorEditorSelectionServiceContext& context, int levelMarkerId);
+void SelectSectorEditorAuthoringStructuralPrimitiveTarget(
+        SectorEditorSelectionServiceContext& context,
+        int primitiveId);
 void SelectSectorEditorSurface3D(SectorEditorSelectionServiceContext& context, SectorSurfaceRef surface);
 
 bool IsValidSectorEditorSurfaceRef(const SectorEditorSelectionServiceContext& context, SectorSurfaceRef surface);

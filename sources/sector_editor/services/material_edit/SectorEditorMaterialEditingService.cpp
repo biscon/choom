@@ -864,6 +864,19 @@ std::string SectorEditorMaterialEditingService::CurrentTextureForSurface(
 
 std::string SectorEditorMaterialEditingService::CurrentTextureForPickerTarget() const
 {
+    if (context_.texturePicker.topologyTargetKind
+            == TopologyTexturePickerTargetKind::AuthoringStructuralPrimitive) {
+        const SectorAuthoringStructuralPrimitive* primitive =
+                FindSectorAuthoringStructuralPrimitive(
+                        context_.authoringGraph,
+                        context_.texturePicker.authoringStructuralPrimitiveId);
+        if (primitive == nullptr) return {};
+        const int group = context_.texturePicker.authoringStructuralSurfaceGroup;
+        return group < 0
+                ? primitive->materials.defaultSurface.materialId
+                : primitive->materials.overrides[static_cast<size_t>(group)]
+                        .settings.materialId;
+    }
     return CurrentSectorEditorMaterialPickerTexture(
             context_.topologyMap,
             context_.authoringGraph,
@@ -949,6 +962,37 @@ SectorEditorTexturePickerApplyResult SectorEditorMaterialEditingService::ApplyTe
         return SectorEditorTexturePickerApplyResult{};
     }
 
+    if (context_.texturePicker.topologyTargetKind
+            == TopologyTexturePickerTargetKind::AuthoringStructuralPrimitive) {
+        SectorEditorTexturePickerApplyResult result;
+        const int primitiveId = context_.texturePicker.authoringStructuralPrimitiveId;
+        const int group = context_.texturePicker.authoringStructuralSurfaceGroup;
+        result.changed = MutateAuthoringStructuralPrimitive(
+                primitiveId,
+                "Updated structure material",
+                [group, &selected](SectorAuthoringStructuralPrimitive& primitive) {
+                    SectorStructuralMaterialSettings* settings =
+                            &primitive.materials.defaultSurface;
+                    if (group >= 0
+                            && group < static_cast<int>(SectorStructuralSurfaceGroup::Count)) {
+                        settings = &primitive.materials.overrides[
+                                static_cast<size_t>(group)].settings;
+                    }
+                    if (settings->materialId == selected.materialId) return false;
+                    settings->materialId = selected.materialId;
+                    return true;
+                });
+        result.status = result.changed
+                ? "Updated structure material" : "Structure material unchanged";
+        context_.statusText = result.status;
+        CloseSectorEditorTexturePicker(context_.texturePicker);
+        if (result.changed && assets != nullptr
+                && context_.requestPreviewMaterialMeshRebuild) {
+            context_.requestPreviewMaterialMeshRebuild(assets);
+        }
+        return result;
+    }
+
     SectorEditorMaterialPickerRoutingContext routingContext{
             context_.texturePicker,
             context_.lifecycle,
@@ -964,6 +1008,112 @@ SectorEditorTexturePickerApplyResult SectorEditorMaterialEditingService::ApplyTe
                         : false;
             }};
     return ApplySectorEditorMaterialTexturePickerSelection(routingContext, assets);
+}
+
+bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringStructuralPrimitive(
+        int primitiveId,
+        int surfaceGroup)
+{
+    const SectorAuthoringStructuralPrimitive* primitive =
+            FindSectorAuthoringStructuralPrimitive(context_.authoringGraph, primitiveId);
+    if (primitive == nullptr || surfaceGroup < -1
+            || surfaceGroup >= static_cast<int>(SectorStructuralSurfaceGroup::Count)) {
+        CloseSectorEditorTexturePicker(context_.texturePicker);
+        return false;
+    }
+    context_.texturePicker.rebuildPreviewOnApply = false;
+    context_.texturePicker.authoringSurface3DFlatTarget = false;
+    context_.texturePicker.topologyTargetKind =
+            TopologyTexturePickerTargetKind::AuthoringStructuralPrimitive;
+    context_.texturePicker.authoringStructuralPrimitiveId = primitiveId;
+    context_.texturePicker.authoringStructuralSurfaceGroup = surfaceGroup;
+    const SectorStructuralMaterialSettings& settings = surfaceGroup < 0
+            ? primitive->materials.defaultSurface
+            : primitive->materials.overrides[static_cast<size_t>(surfaceGroup)].settings;
+    OpenSectorEditorTexturePicker(
+            context_.texturePicker,
+            SortedSectorMaterialIds(context_.materialRegistry),
+            settings.materialId);
+    return true;
+}
+
+bool SectorEditorMaterialEditingService::ApplyAuthoringStructuralPrimitiveUvValue(
+        int primitiveId,
+        int surfaceGroup,
+        int component,
+        float value)
+{
+    if (!std::isfinite(value) || component < 0 || component > 3
+            || surfaceGroup < -1
+            || surfaceGroup >= static_cast<int>(SectorStructuralSurfaceGroup::Count)
+            || (component < 2 && value == 0.0f)) return false;
+    return MutateAuthoringStructuralPrimitive(
+            primitiveId,
+            "Updated structure material UV",
+            [surfaceGroup, component, value](SectorAuthoringStructuralPrimitive& primitive) {
+                SectorTopologyUvSettings& uv = surfaceGroup < 0
+                        ? primitive.materials.defaultSurface.uv
+                        : primitive.materials.overrides[
+                                static_cast<size_t>(surfaceGroup)].settings.uv;
+                float* target = component == 0 ? &uv.scale.x
+                        : component == 1 ? &uv.scale.y
+                        : component == 2 ? &uv.offset.x : &uv.offset.y;
+                if (*target == value) return false;
+                *target = value;
+                return true;
+            });
+}
+
+bool SectorEditorMaterialEditingService::SetAuthoringStructuralMaterialOverrideEnabled(
+        int primitiveId,
+        SectorStructuralSurfaceGroup group,
+        bool enabled)
+{
+    if (group == SectorStructuralSurfaceGroup::Count) return false;
+    return MutateAuthoringStructuralPrimitive(
+            primitiveId,
+            "Updated structure material override",
+            [group, enabled](SectorAuthoringStructuralPrimitive& primitive) {
+                auto& target = primitive.materials.overrides[static_cast<size_t>(group)];
+                if (target.enabled == enabled) return false;
+                if (enabled) target.settings = primitive.materials.defaultSurface;
+                target.enabled = enabled;
+                return true;
+            });
+}
+
+bool SectorEditorMaterialEditingService::MutateAuthoringStructuralPrimitive(
+        int primitiveId,
+        const char* status,
+        const std::function<bool(SectorAuthoringStructuralPrimitive&)>& mutate)
+{
+    if (!mutate) return false;
+    SectorAuthoringGraph candidate = context_.authoringGraph;
+    SectorAuthoringStructuralPrimitive* primitive =
+            FindSectorAuthoringStructuralPrimitive(candidate, primitiveId);
+    if (primitive == nullptr || !mutate(*primitive)) return false;
+    SectorAuthoringDerivationResult candidateDerivation =
+            DeriveSectorTopologyMapFromAuthoringGraph(candidate);
+    if (!candidateDerivation.success) {
+        context_.statusText = "Structure material edit rejected by authoring derivation";
+        return false;
+    }
+    context_.authoringGraph = std::move(candidate);
+    MarkSectorEditorAuthoringGraphEdited(
+            context_.lifecycle,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
+            context_.derivation,
+            status);
+    return RefreshSectorEditorAuthoringDerivation(
+            context_.lifecycle,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
+            context_.topologyMap,
+            context_.authoringGraph,
+            context_.derivation,
+            status,
+            "Updated structure material; derivation failed");
 }
 
 } // namespace game

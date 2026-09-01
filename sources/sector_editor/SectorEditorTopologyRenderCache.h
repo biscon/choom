@@ -46,6 +46,7 @@ struct SectorEditorTopologyDrawContext {
     int selectedDynamicLightId = -1;
     int selectedDynamicSpotLightId = -1;
     int selectedRuntimeObjectId = -1;
+    int selectedStructuralPrimitiveId = -1;
     bool hasHoveredVertex = false;
     int hoveredVertexId = -1;
     int hoveredLightId = -1;
@@ -81,6 +82,12 @@ void AppendCachedLevelMarkerPickCandidates(
         float tolerancePixels,
         std::vector<SectorEditorPickCandidate>& outCandidates);
 void AppendCachedSoundEmitterPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates);
+void AppendCachedStructuralPrimitivePickCandidates(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
         Vector2 screenPoint,
@@ -123,6 +130,9 @@ void DrawCachedTriggers(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
         const TriggerDragState* drag = nullptr);
+void DrawCachedStructuralPrimitives(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context);
 void DrawCachedAuthoringGraphOverlay(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);

@@ -188,8 +188,8 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 18: object probes require horizontal surface clearance and may skip thin sectors.
-constexpr int kSectorLightmapBakeVersion = 18;
+// Version 19: structural primitive charts and independent receiver/occluder state.
+constexpr int kSectorLightmapBakeVersion = 19;
 constexpr int kSectorLightmapArtifactVersion = 2;
 constexpr const char* kSectorLightmapArtifactFormat =
         "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE";

@@ -287,6 +287,345 @@ bool DrawTopologySideDefInspector(
     return DrawTopologySideDefMaterialInspector(materialContext);
 }
 
+void DrawStructuralPrimitiveInspector(
+        SectorEditorInspectorPanelContext& context,
+        SectorEditorInspectorPanelResult& panelResult,
+        const SectorAuthoringStructuralPrimitive& primitive,
+        float contentW,
+        float rowH,
+        float gap)
+{
+    auto& uiState = context.structuralPrimitiveUiState;
+    if (uiState.bufferedPrimitiveId != primitive.id) {
+        uiState = SectorEditorStructuralPrimitiveEditingUiState{};
+        uiState.bufferedPrimitiveId = primitive.id;
+    }
+    float y = 0.0f;
+    engine::Text(context.ui, context.config, context.assets,
+            Rectangle{0.0f, y, contentW, 34.0f}, context.font,
+            TextFormat("Structure %d", primitive.id),
+            engine::UITextJustify::Left, context.config.textColor);
+    y += 38.0f;
+    engine::Text(context.ui, context.config, context.assets,
+            Rectangle{0.0f, y, contentW, 28.0f}, context.font,
+            TextFormat("Kind: %s", SectorStructuralPrimitiveKindName(primitive.kind)),
+            engine::UITextJustify::Left, context.config.textColor);
+    y += 32.0f;
+
+    const auto mutate = [&](const char* status,
+                            const std::function<void(SectorAuthoringStructuralPrimitive&)>& change) {
+        const bool changed = context.structuralPrimitiveEditing.MutateById(
+                primitive.id, status,
+                [&change](SectorAuthoringStructuralPrimitive& value) {
+                    change(value);
+                    return true;
+                });
+        if (changed) {
+            AppendRequest(panelResult,
+                    SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewRuntime);
+        }
+        return changed;
+    };
+    const auto drawCoord = [&](const char* id, const char* label, SectorCoord current,
+                               size_t inputIndex,
+                               const std::function<void(SectorAuthoringStructuralPrimitive&, SectorCoord)>& set) {
+        const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                context.ui, context.config, context.input, context.assets, context.font,
+                id, label, layout.labelRect, layout.inputRect,
+                engine::UITextJustify::Right,
+                SectorCoordToVisibleAuthoring(current), uiState.floatInputs[inputIndex],
+                -8192.0f, 8192.0f, 3);
+        if (result.changed) {
+            SectorCoord value = 0;
+            if (!VisibleAuthoringToSectorCoord(result.value, value)) {
+                uiState.fieldError = "Value is outside the authoring coordinate range";
+            } else {
+                uiState.fieldError.clear();
+                if (!mutate("Updated structure",
+                            [set, value](auto& target) { set(target, value); })) {
+                    uiState.fieldError = context.statusText;
+                }
+            }
+        }
+        y += rowH + gap;
+    };
+    const auto drawFloat = [&](const char* id, const char* label, float current,
+                               size_t inputIndex, float minimum, float maximum,
+                               const std::function<void(SectorAuthoringStructuralPrimitive&, float)>& set) {
+        const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                context.ui, context.config, context.input, context.assets, context.font,
+                id, label, layout.labelRect, layout.inputRect,
+                engine::UITextJustify::Right, current, uiState.floatInputs[inputIndex],
+                minimum, maximum, 3);
+        if (result.changed && result.finite) {
+            uiState.fieldError.clear();
+            if (!mutate("Updated structure",
+                        [set, result](auto& target) { set(target, result.value); })) {
+                uiState.fieldError = context.statusText;
+            }
+        }
+        y += rowH + gap;
+    };
+    const auto drawInt = [&](const char* id, const char* label, int current,
+                             size_t inputIndex, int minimum, int maximum,
+                             const std::function<void(SectorAuthoringStructuralPrimitive&, int)>& set) {
+        const auto layout = BuildSectorEditorInspectorRightIntRowLayout(y, contentW, rowH, gap);
+        const SectorEditorIntInputResult result = DrawLabeledIntInput(
+                context.ui, context.config, context.input, context.assets, context.font,
+                id, label, layout.labelRect, layout.inputRect,
+                engine::UITextJustify::Right, current, uiState.intInputs[inputIndex],
+                minimum, maximum, 1);
+        if (result.changed && !mutate("Updated structure", [set, result](auto& target) {
+                    set(target, result.value);
+                })) {
+            uiState.fieldError = context.statusText;
+        }
+        y += rowH + gap;
+    };
+
+    bool enabled = primitive.enabled;
+    if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
+                "structure_enabled", Rectangle{0.0f, y, contentW, rowH}, context.font,
+                "Enabled", enabled)) {
+        mutate("Updated structure enabled state", [enabled](auto& value) { value.enabled = enabled; });
+    }
+    y += rowH + gap;
+    drawCoord("structure_x", "Position X", primitive.x, 0,
+            [](auto& value, SectorCoord coord) { value.x = coord; });
+    drawCoord("structure_z", "Position Z", primitive.z, 1,
+            [](auto& value, SectorCoord coord) { value.z = coord; });
+    drawFloat("structure_yaw", "Yaw", primitive.yawDegrees, 2, -3600.0f, 3600.0f,
+            [](auto& value, float number) { value.yawDegrees = number; });
+    drawFloat("structure_pitch", "Pitch", primitive.pitchDegrees, 3,
+            -3600.0f, 3600.0f,
+            [](auto& value, float number) { value.pitchDegrees = number; });
+    drawFloat("structure_roll", "Roll", primitive.rollDegrees, 4,
+            -3600.0f, 3600.0f,
+            [](auto& value, float number) { value.rollDegrees = number; });
+
+    bool collision = primitive.collision;
+    if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
+                "structure_collision", Rectangle{0.0f, y, contentW, rowH}, context.font,
+                "Collision", collision)) {
+        mutate("Updated structure collision", [collision](auto& value) { value.collision = collision; });
+    }
+    y += rowH + gap;
+    bool receives = primitive.receivesLightmap;
+    if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
+                "structure_lightmap", Rectangle{0.0f, y, contentW, rowH}, context.font,
+                "Receives Lightmap", receives)) {
+        mutate("Updated structure lighting", [receives](auto& value) { value.receivesLightmap = receives; });
+    }
+    y += rowH + gap;
+    bool baked = primitive.castsBakedShadow;
+    if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
+                "structure_baked_shadow", Rectangle{0.0f, y, contentW, rowH}, context.font,
+                "Casts Baked Shadow", baked)) {
+        mutate("Updated structure lighting", [baked](auto& value) { value.castsBakedShadow = baked; });
+    }
+    y += rowH + gap;
+    bool dynamic = primitive.castsDynamicShadow;
+    if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
+                "structure_dynamic_shadow", Rectangle{0.0f, y, contentW, rowH}, context.font,
+                "Casts Dynamic Shadow", dynamic)) {
+        mutate("Updated structure lighting", [dynamic](auto& value) { value.castsDynamicShadow = dynamic; });
+    }
+    y += rowH + gap;
+
+    if (primitive.kind == SectorStructuralPrimitiveKind::Box) {
+        drawCoord("structure_width", "Width", primitive.box.width, 5,
+                [](auto& value, SectorCoord coord) { value.box.width = coord; });
+        drawCoord("structure_depth", "Depth", primitive.box.depth, 6,
+                [](auto& value, SectorCoord coord) { value.box.depth = coord; });
+        drawFloat("structure_bottom", "Bottom", primitive.box.bottom, 7, -8192, 8192,
+                [](auto& value, float number) { value.box.bottom = number; });
+        drawFloat("structure_top", "Top", primitive.box.top, 8, -8192, 8192,
+                [](auto& value, float number) { value.box.top = number; });
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Ramp) {
+        drawCoord("structure_width", "Width", primitive.ramp.width, 5,
+                [](auto& value, SectorCoord coord) { value.ramp.width = coord; });
+        drawCoord("structure_run", "Run", primitive.ramp.run, 6,
+                [](auto& value, SectorCoord coord) { value.ramp.run = coord; });
+        drawFloat("structure_bottom", "Solid Bottom", primitive.ramp.solidBottom, 7, -8192, 8192,
+                [](auto& value, float number) { value.ramp.solidBottom = number; });
+        drawFloat("structure_low", "Low", primitive.ramp.low, 8, -8192, 8192,
+                [](auto& value, float number) { value.ramp.low = number; });
+        drawFloat("structure_high", "High", primitive.ramp.high, 9, -8192, 8192,
+                [](auto& value, float number) { value.ramp.high = number; });
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
+        drawCoord("structure_width", "Width", primitive.stairs.width, 5,
+                [](auto& value, SectorCoord coord) { value.stairs.width = coord; });
+        drawCoord("structure_run", "Total Run", primitive.stairs.run, 6,
+                [](auto& value, SectorCoord coord) { value.stairs.run = coord; });
+        drawFloat("structure_bottom", "Bottom", primitive.stairs.bottom, 7, -8192, 8192,
+                [](auto& value, float number) { value.stairs.bottom = number; });
+        drawFloat("structure_rise", "Total Rise", primitive.stairs.rise, 8, 1, 8192,
+                [](auto& value, float number) { value.stairs.rise = number; });
+        drawInt("structure_steps", "Step Count", primitive.stairs.stepCount, 0,
+                SectorStructuralMinimumStairSteps, SectorStructuralMaximumStairSteps,
+                [](auto& value, int number) { value.stairs.stepCount = number; });
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Cylinder) {
+        drawCoord("structure_radius", "Radius", primitive.cylinder.radius, 5,
+                [](auto& value, SectorCoord coord) { value.cylinder.radius = coord; });
+        drawFloat("structure_bottom", "Bottom", primitive.cylinder.bottom, 7, -8192, 8192,
+                [](auto& value, float number) { value.cylinder.bottom = number; });
+        drawFloat("structure_top", "Top", primitive.cylinder.top, 8, -8192, 8192,
+                [](auto& value, float number) { value.cylinder.top = number; });
+        drawInt("structure_segments", "Radial Segments", primitive.cylinder.radialSegments, 0,
+                SectorStructuralMinimumCylinderSegments, SectorStructuralMaximumCylinderSegments,
+                [](auto& value, int number) { value.cylinder.radialSegments = number; });
+    } else {
+        drawCoord("structure_radius", "Radius", primitive.sphere.radius, 5,
+                [](auto& value, SectorCoord coord) { value.sphere.radius = coord; });
+        drawFloat("structure_center_height", "Center Height", primitive.sphere.centerHeight,
+                7, -8192, 8192,
+                [](auto& value, float number) { value.sphere.centerHeight = number; });
+        drawInt("structure_latitudes", "Latitude Segments", primitive.sphere.latitudeSegments, 0,
+                SectorStructuralMinimumSphereLatitudeSegments,
+                SectorStructuralMaximumSphereLatitudeSegments,
+                [](auto& value, int number) { value.sphere.latitudeSegments = number; });
+        drawInt("structure_longitudes", "Longitude Segments", primitive.sphere.longitudeSegments, 1,
+                SectorStructuralMinimumSphereLongitudeSegments,
+                SectorStructuralMaximumSphereLongitudeSegments,
+                [](auto& value, int number) { value.sphere.longitudeSegments = number; });
+    }
+
+    engine::Text(context.ui, context.config, context.assets,
+            Rectangle{0.0f, y, contentW, 28.0f}, context.font,
+            TextFormat("Default material: %s",
+                    primitive.materials.defaultSurface.materialId.empty()
+                            ? "(none)" : primitive.materials.defaultSurface.materialId.c_str()),
+            engine::UITextJustify::Left, context.config.textColor);
+    y += 32.0f;
+    if (engine::Button(context.ui, context.config, context.input, context.assets,
+                "structure_default_material", Rectangle{0.0f, y, contentW, rowH},
+                context.font, "Choose Default Material")) {
+        context.materialEditing.OpenMaterialPickerForAuthoringStructuralPrimitive(
+                primitive.id);
+    }
+    y += rowH + gap;
+    const auto drawDefaultUv = [&](const char* id, const char* label,
+                                   float current, size_t inputIndex,
+                                   int component, float minimum, float maximum) {
+        const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(
+                y, contentW, rowH, gap);
+        const auto result = DrawLabeledFloatInput(
+                context.ui, context.config, context.input, context.assets,
+                context.font, id, label, layout.labelRect, layout.inputRect,
+                engine::UITextJustify::Right, current,
+                uiState.floatInputs[inputIndex], minimum, maximum, 3);
+        if (result.changed && result.finite) {
+            if (context.materialEditing.ApplyAuthoringStructuralPrimitiveUvValue(
+                        primitive.id, -1, component, result.value)) {
+                AppendRequest(panelResult,
+                        SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials);
+            }
+        }
+        y += rowH + gap;
+    };
+    drawDefaultUv("structure_uv_scale_u", "Scale U",
+            primitive.materials.defaultSurface.uv.scale.x, 12, 0, 0.001f, 1000.0f);
+    drawDefaultUv("structure_uv_scale_v", "Scale V",
+            primitive.materials.defaultSurface.uv.scale.y, 13, 1, 0.001f, 1000.0f);
+    drawDefaultUv("structure_uv_offset_u", "Offset U",
+            primitive.materials.defaultSurface.uv.offset.x, 14, 2, -100000.0f, 100000.0f);
+    drawDefaultUv("structure_uv_offset_v", "Offset V",
+            primitive.materials.defaultSurface.uv.offset.y, 15, 3, -100000.0f, 100000.0f);
+
+    std::array<SectorStructuralSurfaceGroup, 3> groups{};
+    size_t groupCount = 0;
+    if (primitive.kind == SectorStructuralPrimitiveKind::Box) {
+        groups = {SectorStructuralSurfaceGroup::Top,
+                SectorStructuralSurfaceGroup::Sides,
+                SectorStructuralSurfaceGroup::Bottom};
+        groupCount = 3;
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Ramp) {
+        groups = {SectorStructuralSurfaceGroup::InclinedTop,
+                SectorStructuralSurfaceGroup::SidesAndEnds,
+                SectorStructuralSurfaceGroup::Bottom};
+        groupCount = 3;
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
+        groups = {SectorStructuralSurfaceGroup::Treads,
+                SectorStructuralSurfaceGroup::RisersAndSides,
+                SectorStructuralSurfaceGroup::Underside};
+        groupCount = 3;
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Cylinder) {
+        groups = {SectorStructuralSurfaceGroup::TopCap,
+                SectorStructuralSurfaceGroup::CurvedSide,
+                SectorStructuralSurfaceGroup::BottomCap};
+        groupCount = 3;
+    }
+    for (size_t slot = 0; slot < groupCount; ++slot) {
+        const SectorStructuralSurfaceGroup group = groups[slot];
+        const size_t groupIndex = static_cast<size_t>(group);
+        const SectorStructuralMaterialOverride& override =
+                primitive.materials.overrides[groupIndex];
+        bool enabledOverride = override.enabled;
+        if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
+                    TextFormat("structure_override_%zu", slot),
+                    Rectangle{0.0f, y, contentW, rowH}, context.font,
+                    TextFormat("Override %s", SectorStructuralSurfaceGroupName(group)),
+                    enabledOverride)) {
+            if (context.materialEditing.SetAuthoringStructuralMaterialOverrideEnabled(
+                        primitive.id, group, enabledOverride)) {
+                AppendRequest(panelResult,
+                        SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials);
+            }
+        }
+        y += rowH + gap;
+        if (!override.enabled) continue;
+        if (engine::Button(context.ui, context.config, context.input, context.assets,
+                    TextFormat("structure_override_material_%zu", slot),
+                    Rectangle{0.0f, y, contentW, rowH}, context.font,
+                    TextFormat("Choose %s Material", SectorStructuralSurfaceGroupName(group)))) {
+            context.materialEditing.OpenMaterialPickerForAuthoringStructuralPrimitive(
+                    primitive.id, static_cast<int>(group));
+        }
+        y += rowH + gap;
+        const size_t baseInput = 16 + slot * 4;
+        const auto drawOverrideUv = [&](const char* suffix, const char* label,
+                                        float current, size_t component,
+                                        float minimum, float maximum) {
+            const std::string id = TextFormat(
+                    "structure_override_%zu_%s", slot, suffix);
+            const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(
+                    y, contentW, rowH, gap);
+            const auto result = DrawLabeledFloatInput(
+                    context.ui, context.config, context.input, context.assets,
+                    context.font, id.c_str(), label, layout.labelRect,
+                    layout.inputRect, engine::UITextJustify::Right, current,
+                    uiState.floatInputs[baseInput + component],
+                    minimum, maximum, 3);
+            if (result.changed && result.finite) {
+                if (context.materialEditing.ApplyAuthoringStructuralPrimitiveUvValue(
+                            primitive.id, static_cast<int>(group),
+                            static_cast<int>(component), result.value)) {
+                    AppendRequest(panelResult,
+                            SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials);
+                }
+            }
+            y += rowH + gap;
+        };
+        drawOverrideUv("scale_u", "Scale U", override.settings.uv.scale.x,
+                0, 0.001f, 1000.0f);
+        drawOverrideUv("scale_v", "Scale V", override.settings.uv.scale.y,
+                1, 0.001f, 1000.0f);
+        drawOverrideUv("offset_u", "Offset U", override.settings.uv.offset.x,
+                2, -100000.0f, 100000.0f);
+        drawOverrideUv("offset_v", "Offset V", override.settings.uv.offset.y,
+                3, -100000.0f, 100000.0f);
+    }
+
+    if (!uiState.fieldError.empty()) {
+        engine::Text(context.ui, context.config, context.assets,
+                Rectangle{0.0f, y, contentW, 40.0f}, context.smallFont,
+                uiState.fieldError.c_str(), engine::UITextJustify::Left,
+                context.config.invalidColor);
+    }
+}
+
 } // namespace
 
 SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
@@ -411,6 +750,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const SectorAuthoringTrigger* selectedTrigger =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringTrigger
             ? FindSectorAuthoringTrigger(authoringGraph, inspectorTarget.triggerId)
+            : nullptr;
+    const SectorAuthoringStructuralPrimitive* selectedStructuralPrimitive =
+            inspectorTarget.kind
+                            == SectorEditorInspectorTargetKind::AuthoringStructuralPrimitive
+            ? FindSectorAuthoringStructuralPrimitive(
+                    authoringGraph, inspectorTarget.structuralPrimitiveId)
             : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             context.topologyMap,
@@ -600,6 +945,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             return MeasureSectorEditorTriggerInspectorContentHeight(
                     context.triggerUiState, rowH, gap);
         }
+        if (selectedStructuralPrimitive != nullptr) {
+            return 2200.0f;
+        }
         return 42.0f;
     };
     const float contentH = inspectorContentHeight();
@@ -640,6 +988,15 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         : inspectorTarget.status.c_str(),
                 engine::UITextJustify::Left,
                 config.invalidColor);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedStructuralPrimitive != nullptr) {
+        const SectorAuthoringStructuralPrimitive display = *selectedStructuralPrimitive;
+        DrawStructuralPrimitiveInspector(
+                context, result, display, contentW, rowH, gap);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;

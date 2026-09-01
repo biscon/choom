@@ -315,7 +315,7 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
 Rectangle BuildSectorEditorPreviewAdjustmentPanelRect()
 {
     return Rectangle{EditorWidth - 392.0f, EditorMainMenuHeight + 18.0f,
-            360.0f, 244.0f};
+            360.0f, 286.0f};
 }
 
 void DrawSectorEditorPreviewSurfaceHighlights(
@@ -2619,6 +2619,92 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     Rectangle{textX + actionWidth + presetGap, adjustmentY,
                             actionWidth, rowH},
                     smallFont, "Cancel", engine::UITextJustify::Center,
+                    adjustmentMouseInteractive)) {
+            result.requestCancelAdjustment = true;
+        }
+    } else if (context.structuralPrimitiveEditingState.previewAdjustment.active) {
+        PreviewStructuralPrimitiveAdjustmentState& adjustment =
+                context.structuralPrimitiveEditingState.previewAdjustment;
+        const Rectangle adjustmentPanel = BuildSectorEditorPreviewAdjustmentPanelRect();
+        DrawRectangleRec(adjustmentPanel, Color{12, 15, 20, 225});
+        DrawRectangleLinesEx(adjustmentPanel, config.borderThickness,
+                Color{84, 204, 255, 255});
+        const float textX = adjustmentPanel.x + 14.0f;
+        float adjustmentY = adjustmentPanel.y + 12.0f;
+        const float adjustmentWidth = adjustmentPanel.width - 28.0f;
+        const SectorAuthoringStructuralPrimitive* primitive =
+                FindSectorAuthoringStructuralPrimitive(
+                        adjustment.stagedGraph, adjustment.primitiveId);
+        engine::Text(smallConfig, assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH}, smallFont,
+                primitive != nullptr
+                        ? TextFormat("Adjust %s structure %d",
+                                SectorStructuralPrimitiveKindName(primitive->kind),
+                                primitive->id)
+                        : "Adjustment target missing",
+                engine::UITextJustify::Left, Color{84, 204, 255, 255});
+        adjustmentY += rowH + 4.0f;
+        if (primitive != nullptr) {
+            engine::Text(smallConfig, assets,
+                    Rectangle{textX, adjustmentY, adjustmentWidth, rowH}, smallFont,
+                    TextFormat("X %.2f   Z %.2f   Yaw %.1f deg",
+                            SectorCoordToVisibleAuthoring(primitive->x),
+                            SectorCoordToVisibleAuthoring(primitive->z),
+                            primitive->yawDegrees),
+                    engine::UITextJustify::Left);
+            adjustmentY += rowH + 2.0f;
+            engine::Text(smallConfig, assets,
+                    Rectangle{textX, adjustmentY, adjustmentWidth, rowH}, smallFont,
+                    TextFormat("Pitch %.1f deg   Roll %.1f deg",
+                            primitive->pitchDegrees,
+                            primitive->rollDegrees),
+                    engine::UITextJustify::Left);
+            adjustmentY += rowH + 8.0f;
+        }
+        constexpr float presetGap = 6.0f;
+        const float presetWidth = (adjustmentWidth - presetGap * 2.0f) / 3.0f;
+        const char* presetLabels[] = {"Fine", "Normal", "Coarse"};
+        for (int preset = 0; preset < 3; ++preset) {
+            if (engine::Button(ui, smallConfig, input, assets,
+                        TextFormat("structure_adjust_preset_%d", preset),
+                        Rectangle{textX + preset * (presetWidth + presetGap),
+                                adjustmentY, presetWidth, rowH}, smallFont,
+                        adjustment.preset == preset
+                                ? TextFormat("%s *", presetLabels[preset])
+                                : presetLabels[preset],
+                        engine::UITextJustify::Center,
+                        adjustmentMouseInteractive)) {
+                adjustment.preset = preset;
+            }
+        }
+        adjustmentY += rowH + 7.0f;
+        const PreviewObjectNudgePreset preset =
+                static_cast<PreviewObjectNudgePreset>(adjustment.preset);
+        engine::Text(smallConfig, assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH}, smallFont,
+                TextFormat("Step %.2f m / %.2f deg",
+                        SectorEditorPreviewObjectTranslationStepWorld(preset),
+                        SectorEditorPreviewObjectYawStepDegrees(preset)),
+                engine::UITextJustify::Left, smallConfig.mutedTextColor);
+        adjustmentY += rowH + 2.0f;
+        engine::Text(smallConfig, assets,
+                Rectangle{textX, adjustmentY, adjustmentWidth, rowH * 3.0f}, smallFont,
+                "Arrows: world X/Z   PgUp/PgDn: height   Q/E: yaw\nIns/Del: pitch   Home/End: roll\nEnter: apply   Esc: cancel   F11: unlock cursor",
+                engine::UITextJustify::Left, smallConfig.mutedTextColor, true);
+        adjustmentY += rowH * 3.0f + 7.0f;
+        const float actionWidth = (adjustmentWidth - presetGap) * 0.5f;
+        if (engine::Button(ui, smallConfig, input, assets,
+                    "structure_adjust_apply",
+                    Rectangle{textX, adjustmentY, actionWidth, rowH}, smallFont,
+                    "Apply", engine::UITextJustify::Center,
+                    adjustmentMouseInteractive)) {
+            result.requestApplyAdjustment = true;
+        }
+        if (engine::Button(ui, smallConfig, input, assets,
+                    "structure_adjust_cancel",
+                    Rectangle{textX + actionWidth + presetGap, adjustmentY,
+                            actionWidth, rowH}, smallFont,
+                    "Cancel", engine::UITextJustify::Center,
                     adjustmentMouseInteractive)) {
             result.requestCancelAdjustment = true;
         }

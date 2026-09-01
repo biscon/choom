@@ -194,7 +194,7 @@
       "albedoTexturePath": "assets/images/hires/old_wooden_floor_02.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.800000011920929,
+      "roughnessFactor": 0.10000000149011612,
       "normalStrength": 1.0
     },
     "old_wooden_floor_03": {

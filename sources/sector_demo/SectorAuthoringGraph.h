@@ -169,6 +169,7 @@ struct SectorAuthoringGraph {
     std::vector<SectorAuthoringPatrol> patrols;
     std::vector<SectorAuthoringSoundEmitter> soundEmitters;
     std::vector<SectorAuthoringTrigger> triggers;
+    std::vector<SectorAuthoringStructuralPrimitive> structuralPrimitives;
 };
 
 enum class SectorAuthoringValidationSeverity {
@@ -188,6 +189,7 @@ enum class SectorAuthoringObjectKind {
     Patrol,
     SoundEmitter,
     Trigger
+    ,StructuralPrimitive
 };
 
 struct SectorAuthoringValidationIssue {
@@ -296,6 +298,8 @@ enum class SectorAuthoringDerivationDiagnosticKind {
     InvalidTopology,
     UnresolvedFogVolume,
     UnresolvedReflectionProbe
+    ,InvalidStructuralPrimitive
+    ,UnresolvedStructuralPrimitiveMembership
 };
 
 struct SectorAuthoringDerivationDiagnostic {
@@ -347,6 +351,12 @@ struct SectorAuthoringDerivedReflectionProbeMapping {
     bool resolved = false;
 };
 
+struct SectorAuthoringDerivedStructuralPrimitiveMapping {
+    int authoringPrimitiveId = -1;
+    int compiledPrimitiveIndex = -1;
+    std::vector<int> topologySectorIds;
+};
+
 enum class SectorAuthoringFaceResolutionKind {
     Unresolved,
     DerivedSector,
@@ -368,6 +378,7 @@ struct SectorAuthoringDerivationMapping {
     std::vector<SectorAuthoringResolvedFaceMapping> resolvedFaces;
     std::vector<SectorAuthoringDerivedFogVolumeMapping> fogVolumes;
     std::vector<SectorAuthoringDerivedReflectionProbeMapping> reflectionProbes;
+    std::vector<SectorAuthoringDerivedStructuralPrimitiveMapping> structuralPrimitives;
 };
 
 struct SectorAuthoringDerivationResult {
@@ -407,6 +418,7 @@ int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringPatrolId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringSoundEmitterId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph);
+int AllocateSectorAuthoringStructuralPrimitiveId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringPatrolReferenceId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringSoundEmitterReferenceId(const SectorAuthoringGraph& graph);
@@ -486,6 +498,12 @@ SectorAuthoringTrigger* FindSectorAuthoringTrigger(
 const SectorAuthoringTrigger* FindSectorAuthoringTriggerByReferenceId(
         const SectorAuthoringGraph& graph,
         const std::string& id);
+const SectorAuthoringStructuralPrimitive* FindSectorAuthoringStructuralPrimitive(
+        const SectorAuthoringGraph& graph,
+        int id);
+SectorAuthoringStructuralPrimitive* FindSectorAuthoringStructuralPrimitive(
+        SectorAuthoringGraph& graph,
+        int id);
 
 bool SectorAuthoringSideIdsEqual(SectorAuthoringSideId lhs, SectorAuthoringSideId rhs);
 SectorAuthoringSideId OppositeSectorAuthoringSideId(SectorAuthoringSideId id);
