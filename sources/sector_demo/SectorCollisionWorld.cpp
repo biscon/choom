@@ -70,8 +70,9 @@ bool IsFinite(Vector3 value)
 }
 
 StructuralCollisionShape BuildStructuralCollisionShape(
-        const SectorAuthoringStructuralPrimitive& primitive)
+        const SectorStructuralCollisionPrimitive& record)
 {
+    const SectorAuthoringStructuralPrimitive& primitive = record.authored;
     StructuralCollisionShape shape;
     shape.kind = primitive.kind;
     shape.center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
@@ -119,6 +120,101 @@ StructuralCollisionShape BuildStructuralCollisionShape(
             break;
     }
     return shape;
+}
+
+bool PointInsideConvexPolygon(
+        Vector2 point,
+        const std::vector<Vector2>& polygon)
+{
+    if (polygon.size() < 3) return false;
+    for (size_t index = 0; index < polygon.size(); ++index) {
+        const Vector2 a = polygon[index];
+        const Vector2 b = polygon[(index + 1) % polygon.size()];
+        const Vector2 edge{b.x - a.x, b.y - a.y};
+        const Vector2 relative{point.x - a.x, point.y - a.y};
+        if (edge.x * relative.y - edge.y * relative.x
+                < -CollisionMoveEpsilon) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ResolveCircleAgainstConvexPolygon(
+        Vector2& position,
+        float radius,
+        const std::vector<Vector2>& polygon,
+        Vector2& outNormal)
+{
+    if (polygon.size() < 3) return false;
+    const bool inside = PointInsideConvexPolygon(position, polygon);
+    float nearestDistanceSquared = std::numeric_limits<float>::infinity();
+    Vector2 nearestPoint{};
+    Vector2 nearestOutward{};
+    float nearestInsideDistance = std::numeric_limits<float>::infinity();
+    for (size_t index = 0; index < polygon.size(); ++index) {
+        const Vector2 a = polygon[index];
+        const Vector2 b = polygon[(index + 1) % polygon.size()];
+        const Vector2 edge{b.x - a.x, b.y - a.y};
+        const float edgeLengthSquared = edge.x * edge.x + edge.y * edge.y;
+        if (!(edgeLengthSquared > CollisionMoveEpsilon)) continue;
+        const float t = std::clamp(
+                ((position.x - a.x) * edge.x
+                        + (position.y - a.y) * edge.y) / edgeLengthSquared,
+                0.0f,
+                1.0f);
+        const Vector2 closest{a.x + edge.x * t, a.y + edge.y * t};
+        const float dx = position.x - closest.x;
+        const float dy = position.y - closest.y;
+        const float distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < nearestDistanceSquared) {
+            nearestDistanceSquared = distanceSquared;
+            nearestPoint = closest;
+        }
+        if (inside) {
+            const float edgeLength = std::sqrt(edgeLengthSquared);
+            const float insideDistance =
+                    (edge.x * (position.y - a.y)
+                            - edge.y * (position.x - a.x)) / edgeLength;
+            if (insideDistance < nearestInsideDistance) {
+                nearestInsideDistance = insideDistance;
+                nearestOutward = Vector2{edge.y / edgeLength, -edge.x / edgeLength};
+            }
+        }
+    }
+    if (inside) {
+        if (!std::isfinite(nearestInsideDistance)) return false;
+        outNormal = nearestOutward;
+        const float push = radius + nearestInsideDistance + CollisionMoveEpsilon;
+        position.x += outNormal.x * push;
+        position.y += outNormal.y * push;
+        return true;
+    }
+    if (!(nearestDistanceSquared < radius * radius - CollisionMoveEpsilon)) {
+        return false;
+    }
+    const float distance = std::sqrt(std::max(nearestDistanceSquared, 0.0f));
+    if (distance > CollisionMoveEpsilon) {
+        outNormal = Vector2{
+                (position.x - nearestPoint.x) / distance,
+                (position.y - nearestPoint.y) / distance};
+    } else {
+        outNormal = Vector2{1.0f, 0.0f};
+    }
+    const float push = radius - distance + CollisionMoveEpsilon;
+    position.x += outNormal.x * push;
+    position.y += outNormal.y * push;
+    return true;
+}
+
+bool CircleOverlapsConvexPolygon(
+        Vector2 position,
+        float radius,
+        const std::vector<Vector2>& polygon)
+{
+    Vector2 normal{};
+    return ResolveCircleAgainstConvexPolygon(
+            position, radius, polygon, normal);
 }
 
 bool RayTriangle(
@@ -869,7 +965,37 @@ bool SectorCollisionWorld::BuildFromTopology(
     for (const SectorCompiledStructuralPrimitive& primitive
             : map.compiledStructuralPrimitives) {
         if (!primitive.authored.enabled || !primitive.authored.collision) continue;
-        structuralPrimitives.push_back(primitive.authored);
+        SectorStructuralCollisionPrimitive collisionPrimitive;
+        collisionPrimitive.authored = primitive.authored;
+        collisionPrimitive.conservativeTilted =
+                primitive.authored.kind != SectorStructuralPrimitiveKind::Sphere
+                && SectorStructuralPrimitiveHasTilt(primitive.authored);
+        if (collisionPrimitive.conservativeTilted) {
+            collisionPrimitive.projectedHull =
+                    BuildSectorStructuralFootprint(primitive.authored).pointsWorld;
+            collisionPrimitive.minimumY = std::numeric_limits<float>::infinity();
+            collisionPrimitive.maximumY = -std::numeric_limits<float>::infinity();
+            for (const SectorCompiledStructuralSurface& surface
+                    : primitive.surfaces) {
+                for (const SectorCompiledStructuralVertex& vertex
+                        : surface.vertices) {
+                    collisionPrimitive.minimumY = std::min(
+                            collisionPrimitive.minimumY, vertex.position.y);
+                    collisionPrimitive.maximumY = std::max(
+                            collisionPrimitive.maximumY, vertex.position.y);
+                }
+            }
+            if (collisionPrimitive.projectedHull.size() < 3
+                    || !std::isfinite(collisionPrimitive.minimumY)
+                    || !std::isfinite(collisionPrimitive.maximumY)
+                    || collisionPrimitive.maximumY
+                            <= collisionPrimitive.minimumY
+                                    + CollisionMoveEpsilon) {
+                return SetError(errorMessage,
+                        "Tilted structural primitive generated an invalid collision hull");
+            }
+        }
+        structuralPrimitives.push_back(std::move(collisionPrimitive));
         structuralSurfaces.insert(
                 structuralSurfaces.end(),
                 primitive.surfaces.begin(),
@@ -916,8 +1042,28 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
     const float maximumSupport = query.feetY
             + (query.grounded ? std::max(query.stepHeight, 0.0f) : 0.0f)
             + CollisionPointEpsilon;
-    for (const SectorAuthoringStructuralPrimitive& primitive
+    for (const SectorStructuralCollisionPrimitive& primitive
             : structuralPrimitives) {
+        if (primitive.conservativeTilted) {
+            if (!CircleOverlapsConvexPolygon(
+                        query.positionXZ,
+                        radius,
+                        primitive.projectedHull)) {
+                continue;
+            }
+            if (primitive.maximumY <= maximumSupport
+                    && primitive.maximumY
+                            > out->floorZ + CollisionPointEpsilon) {
+                out->floorZ = primitive.maximumY;
+                out->continuousFloor = false;
+            }
+            if (primitive.minimumY
+                    > query.feetY + CollisionPointEpsilon) {
+                out->ceilingZ = std::min(
+                        out->ceilingZ, primitive.minimumY);
+            }
+            continue;
+        }
         const StructuralCollisionShape shape =
                 BuildStructuralCollisionShape(primitive);
         if (!CircleOverlapsStructuralFootprint(
@@ -1242,8 +1388,62 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
                 structuralSectorHeights.ceilingZ =
                         std::numeric_limits<float>::infinity();
             }
-            for (const SectorAuthoringStructuralPrimitive& primitive
+            for (const SectorStructuralCollisionPrimitive& primitive
                     : structuralPrimitives) {
+                if (primitive.conservativeTilted) {
+                    Vector2 resolved = candidate;
+                    Vector2 normal{};
+                    if (!ResolveCircleAgainstConvexPolygon(
+                                resolved,
+                                config.radius,
+                                primitive.projectedHull,
+                                normal)) {
+                        continue;
+                    }
+                    const float playerTop = resolvedFeetY
+                            + config.playerHeight;
+                    if (playerTop
+                                    <= primitive.minimumY
+                                            + CollisionMoveEpsilon
+                            || resolvedFeetY
+                                    > primitive.maximumY
+                                            + CollisionMoveEpsilon) {
+                        continue;
+                    }
+                    StructuralBlockReason blockReason =
+                            StructuralBlockReason::Step;
+                    if (resolvedFeetY
+                            >= primitive.maximumY - CollisionMoveEpsilon) {
+                        blockReason = StructuralBlockReason::None;
+                    } else if (moveState.grounded
+                            && primitive.maximumY - resolvedFeetY
+                                    <= config.stepHeight
+                                            + CollisionPointEpsilon) {
+                        blockReason = primitive.maximumY
+                                                + config.playerHeight
+                                        > structuralSectorHeights.ceilingZ
+                                                + CollisionMoveEpsilon
+                                ? StructuralBlockReason::Ceiling
+                                : StructuralBlockReason::None;
+                    } else if (primitive.minimumY
+                            > resolvedFeetY + CollisionMoveEpsilon) {
+                        blockReason = StructuralBlockReason::Ceiling;
+                    }
+                    if (blockReason == StructuralBlockReason::None) continue;
+                    candidate = resolved;
+                    const float intoSurface = Dot(remaining, normal);
+                    if (intoSurface < 0.0f) {
+                        remaining = Subtract(
+                                remaining, Scale(normal, intoSurface));
+                    }
+                    result.hitWall = true;
+                    result.blockedByStep = result.blockedByStep
+                            || blockReason == StructuralBlockReason::Step;
+                    result.blockedByCeiling = result.blockedByCeiling
+                            || blockReason == StructuralBlockReason::Ceiling;
+                    changed = true;
+                    continue;
+                }
                 const StructuralCollisionShape shape =
                         BuildStructuralCollisionShape(primitive);
                 Vector2 resolved = candidate;
@@ -1331,8 +1531,9 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
 
         float candidateFeetY = resolvedFeetY;
         bool hasContinuousSupport = false;
-        for (const SectorAuthoringStructuralPrimitive& primitive
+        for (const SectorStructuralCollisionPrimitive& primitive
                 : structuralPrimitives) {
+            if (primitive.conservativeTilted) continue;
             const StructuralCollisionShape shape =
                     BuildStructuralCollisionShape(primitive);
             if (CanTraverseContinuousStructuralSupport(

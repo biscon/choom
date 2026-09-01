@@ -118,6 +118,8 @@ struct SectorAuthoringStructuralPrimitive {
     SectorCoord x = 0;
     SectorCoord z = 0;
     float yawDegrees = 0.0f;
+    float pitchDegrees = 0.0f;
+    float rollDegrees = 0.0f;
     bool collision = true;
     bool receivesLightmap = true;
     bool castsBakedShadow = true;
@@ -199,6 +201,18 @@ SectorAuthoringStructuralPrimitive DefaultSectorAuthoringStructuralPrimitive(
 const char* SectorStructuralPrimitiveKindName(SectorStructuralPrimitiveKind kind);
 const char* SectorStructuralSurfaceGroupName(SectorStructuralSurfaceGroup group);
 const char* SectorStructuralFaceRoleName(SectorStructuralFaceRole role);
+float SectorStructuralPrimitivePivotHeight(
+        const SectorAuthoringStructuralPrimitive& primitive);
+bool SectorStructuralPrimitiveHasTilt(
+        const SectorAuthoringStructuralPrimitive& primitive);
+Vector3 RotateSectorStructuralPrimitiveVector(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        Vector3 local);
+Vector3 TransformSectorStructuralPrimitivePoint(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        float localXWorld,
+        float authoredHeight,
+        float localZWorld);
 SectorStructuralFootprint BuildSectorStructuralFootprint(
         const SectorAuthoringStructuralPrimitive& primitive);
 std::vector<SectorStructuralDiagnostic> ValidateSectorAuthoringStructuralPrimitives(

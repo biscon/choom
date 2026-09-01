@@ -2,6 +2,7 @@
 #include "game/navigation/SectorNavigationCompression.h"
 #include "game/navigation/SectorNavigationTypes.h"
 #include "game/navigation/SectorNavigationWorld.h"
+#include "sector_demo/SectorStructuralPrimitives.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include "DetourNavMesh.h"
@@ -688,6 +689,53 @@ void TestBuildInputAndSourceHash()
           "malformed navigation input fails deterministically");
 }
 
+void TestRotatedStructuralStairNavigation()
+{
+    game::SectorTopologyMap map = MakeSquareMap(2048);
+    game::SectorAuthoringStructuralPrimitive stairs =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Stairs);
+    stairs.id = 801;
+    stairs.x = 1024;
+    stairs.z = 1024;
+    stairs.stairs.width = 128;
+    stairs.stairs.run = 256;
+    stairs.stairs.rise = 8.0f;
+    std::vector<game::SectorStructuralDiagnostic> diagnostics;
+    Check(game::CompileSectorStructuralPrimitives(
+                  {stairs}, map, map.compiledStructuralPrimitives, diagnostics),
+          "upright structural stair navigation fixture compiles");
+
+    game::SectorNavigationBuildInput input;
+    std::vector<std::string> warnings;
+    std::string error;
+    Check(game::BuildSectorNavigationBuildInput(
+                  map, {}, {}, input, warnings, error),
+          "upright structural stair navigation input builds");
+    const auto walkableForStairs = [&]() {
+        return std::count_if(input.triangles.begin(), input.triangles.end(),
+                [&](const game::SectorNavigationBuildTriangle& triangle) {
+                    return triangle.sourceId == stairs.id && triangle.area != 0;
+                });
+    };
+    Check(walkableForStairs() == 2,
+          "upright stairs contribute their smoothed walkable proxy");
+
+    stairs.pitchDegrees = 90.0f;
+    diagnostics.clear();
+    Check(game::CompileSectorStructuralPrimitives(
+                  {stairs}, map, map.compiledStructuralPrimitives, diagnostics),
+          "wall-oriented structural stair navigation fixture compiles");
+    input = game::SectorNavigationBuildInput{};
+    warnings.clear();
+    error.clear();
+    Check(game::BuildSectorNavigationBuildInput(
+                  map, {}, {}, input, warnings, error),
+          "wall-oriented structural stair navigation input builds");
+    Check(walkableForStairs() == 0,
+          "wall-oriented stairs do not retain an upright walkable proxy");
+}
+
 void TestTopologyWalkabilityFixtures()
 {
     game::SectorTopologyMap passable = MakeAdjacentMap(0.0f, 24.0f, 2.0f, 24.0f);
@@ -1317,6 +1365,7 @@ int main()
     TestLayerCompression();
     TestStaticBuildAndQueries();
     TestBuildInputAndSourceHash();
+    TestRotatedStructuralStairNavigation();
     TestTopologyWalkabilityFixtures();
     TestStaticObstacleAndCapacityFixtures();
     TestDynamicObstacleLifecycleAndTileRevisions();

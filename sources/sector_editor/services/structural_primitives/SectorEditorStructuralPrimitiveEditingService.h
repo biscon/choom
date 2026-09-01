@@ -71,6 +71,8 @@ public:
             float deltaZWorld,
             float deltaHeightWorld,
             float deltaYawDegrees,
+            float deltaPitchDegrees,
+            float deltaRollDegrees,
             SectorEditorStructuralPreviewCandidate& outCandidate);
     void AcceptPreviewNudge(SectorEditorStructuralPreviewCandidate candidate);
     bool ApplyPreviewAdjustment();

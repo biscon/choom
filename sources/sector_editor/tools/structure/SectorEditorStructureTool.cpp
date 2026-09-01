@@ -352,6 +352,9 @@ SectorEditorStructuralHandleKind HitStructuralHandle(
             <= HandleRadiusPixels * HandleRadiusPixels * 2.0f) {
         return SectorEditorStructuralHandleKind::Rotate;
     }
+    if (SectorStructuralPrimitiveHasTilt(primitive)) {
+        return SectorEditorStructuralHandleKind::None;
+    }
     const std::vector<Vector2> points = FootprintMap(primitive);
     if (primitive.kind == SectorStructuralPrimitiveKind::Cylinder
             || primitive.kind == SectorStructuralPrimitiveKind::Sphere) {
@@ -597,8 +600,9 @@ void DrawSectorEditorStructuralSelectionOverlay(SectorEditorToolContext& context
     const Color color = drag.active && !drag.valid ? RED : YELLOW;
     DrawFootprint(context, *selected, color);
     const std::vector<Vector2> points = FootprintMap(*selected);
-    if (selected->kind == SectorStructuralPrimitiveKind::Cylinder
-            || selected->kind == SectorStructuralPrimitiveKind::Sphere) {
+    if (!SectorStructuralPrimitiveHasTilt(*selected)
+            && (selected->kind == SectorStructuralPrimitiveKind::Cylinder
+                    || selected->kind == SectorStructuralPrimitiveKind::Sphere)) {
         const float radius = selected->kind == SectorStructuralPrimitiveKind::Cylinder
                 ? SectorCoordToVisibleAuthoring(selected->cylinder.radius)
                 : SectorCoordToVisibleAuthoring(selected->sphere.radius);
@@ -609,7 +613,8 @@ void DrawSectorEditorStructuralSelectionOverlay(SectorEditorToolContext& context
                     center.x + direction.x * radius,
                     center.y + direction.y * radius}), HandleRadiusPixels, color);
         }
-    } else if (points.size() == 4) {
+    } else if (!SectorStructuralPrimitiveHasTilt(*selected)
+            && points.size() == 4) {
         for (size_t index = 0; index < 4; ++index) {
             DrawCircleV(context.mapToScreen(points[index]), HandleRadiusPixels, color);
             const Vector2 midpoint{

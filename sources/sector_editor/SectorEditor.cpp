@@ -2707,6 +2707,8 @@ void SectorEditor::UpdatePreviewAdjustmentInput(engine::Input& input)
             float dz = 0.0f;
             float dh = 0.0f;
             float dyaw = 0.0f;
+            float dpitch = 0.0f;
+            float droll = 0.0f;
             if (event.key.key == KEY_LEFT) dx = -moveStep;
             else if (event.key.key == KEY_RIGHT) dx = moveStep;
             else if (event.key.key == KEY_UP) dz = moveStep;
@@ -2715,11 +2717,16 @@ void SectorEditor::UpdatePreviewAdjustmentInput(engine::Input& input)
             else if (event.key.key == KEY_PAGE_DOWN) dh = -moveStep;
             else if (event.key.key == KEY_Q) dyaw = -yawStep;
             else if (event.key.key == KEY_E) dyaw = yawStep;
+            else if (event.key.key == KEY_INSERT) dpitch = yawStep;
+            else if (event.key.key == KEY_DELETE) dpitch = -yawStep;
+            else if (event.key.key == KEY_HOME) droll = yawStep;
+            else if (event.key.key == KEY_END) droll = -yawStep;
             else return;
             SectorEditorStructuralPrimitiveEditingService editing =
                     BuildStructuralPrimitiveEditingService();
             SectorEditorStructuralPreviewCandidate candidate;
-            if (editing.BuildPreviewNudge(dx, dz, dh, dyaw, candidate)) {
+            if (editing.BuildPreviewNudge(
+                        dx, dz, dh, dyaw, dpitch, droll, candidate)) {
                 std::string refreshError;
                 if (RefreshPreviewSurfaceGeometry(
                             candidate.derivation.topology, &refreshError)) {

@@ -107,6 +107,14 @@ struct SectorCollisionMoveResult {
     bool blockedByCeiling = false;
 };
 
+struct SectorStructuralCollisionPrimitive {
+    SectorAuthoringStructuralPrimitive authored;
+    std::vector<Vector2> projectedHull;
+    float minimumY = 0.0f;
+    float maximumY = 0.0f;
+    bool conservativeTilted = false;
+};
+
 Vector2 GetSectorCollisionEdgeInwardNormal(const SectorCollisionEdge& edge);
 
 class SectorCollisionWorld {
@@ -154,7 +162,7 @@ private:
             float radius) const;
 
     std::vector<SectorCollisionSector> sectors;
-    std::vector<SectorAuthoringStructuralPrimitive> structuralPrimitives;
+    std::vector<SectorStructuralCollisionPrimitive> structuralPrimitives;
     std::vector<SectorCompiledStructuralSurface> structuralSurfaces;
     // ResolveMovement() reuses this queue so footprint portal traversal does not
     // allocate during normal gameplay. Collision movement queries are main-thread

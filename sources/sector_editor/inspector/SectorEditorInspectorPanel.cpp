@@ -398,6 +398,12 @@ void DrawStructuralPrimitiveInspector(
             [](auto& value, SectorCoord coord) { value.z = coord; });
     drawFloat("structure_yaw", "Yaw", primitive.yawDegrees, 2, -3600.0f, 3600.0f,
             [](auto& value, float number) { value.yawDegrees = number; });
+    drawFloat("structure_pitch", "Pitch", primitive.pitchDegrees, 3,
+            -3600.0f, 3600.0f,
+            [](auto& value, float number) { value.pitchDegrees = number; });
+    drawFloat("structure_roll", "Roll", primitive.rollDegrees, 4,
+            -3600.0f, 3600.0f,
+            [](auto& value, float number) { value.rollDegrees = number; });
 
     bool collision = primitive.collision;
     if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
@@ -429,52 +435,52 @@ void DrawStructuralPrimitiveInspector(
     y += rowH + gap;
 
     if (primitive.kind == SectorStructuralPrimitiveKind::Box) {
-        drawCoord("structure_width", "Width", primitive.box.width, 3,
+        drawCoord("structure_width", "Width", primitive.box.width, 5,
                 [](auto& value, SectorCoord coord) { value.box.width = coord; });
-        drawCoord("structure_depth", "Depth", primitive.box.depth, 4,
+        drawCoord("structure_depth", "Depth", primitive.box.depth, 6,
                 [](auto& value, SectorCoord coord) { value.box.depth = coord; });
-        drawFloat("structure_bottom", "Bottom", primitive.box.bottom, 5, -8192, 8192,
+        drawFloat("structure_bottom", "Bottom", primitive.box.bottom, 7, -8192, 8192,
                 [](auto& value, float number) { value.box.bottom = number; });
-        drawFloat("structure_top", "Top", primitive.box.top, 6, -8192, 8192,
+        drawFloat("structure_top", "Top", primitive.box.top, 8, -8192, 8192,
                 [](auto& value, float number) { value.box.top = number; });
     } else if (primitive.kind == SectorStructuralPrimitiveKind::Ramp) {
-        drawCoord("structure_width", "Width", primitive.ramp.width, 3,
+        drawCoord("structure_width", "Width", primitive.ramp.width, 5,
                 [](auto& value, SectorCoord coord) { value.ramp.width = coord; });
-        drawCoord("structure_run", "Run", primitive.ramp.run, 4,
+        drawCoord("structure_run", "Run", primitive.ramp.run, 6,
                 [](auto& value, SectorCoord coord) { value.ramp.run = coord; });
-        drawFloat("structure_bottom", "Solid Bottom", primitive.ramp.solidBottom, 5, -8192, 8192,
+        drawFloat("structure_bottom", "Solid Bottom", primitive.ramp.solidBottom, 7, -8192, 8192,
                 [](auto& value, float number) { value.ramp.solidBottom = number; });
-        drawFloat("structure_low", "Low", primitive.ramp.low, 6, -8192, 8192,
+        drawFloat("structure_low", "Low", primitive.ramp.low, 8, -8192, 8192,
                 [](auto& value, float number) { value.ramp.low = number; });
-        drawFloat("structure_high", "High", primitive.ramp.high, 7, -8192, 8192,
+        drawFloat("structure_high", "High", primitive.ramp.high, 9, -8192, 8192,
                 [](auto& value, float number) { value.ramp.high = number; });
     } else if (primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
-        drawCoord("structure_width", "Width", primitive.stairs.width, 3,
+        drawCoord("structure_width", "Width", primitive.stairs.width, 5,
                 [](auto& value, SectorCoord coord) { value.stairs.width = coord; });
-        drawCoord("structure_run", "Total Run", primitive.stairs.run, 4,
+        drawCoord("structure_run", "Total Run", primitive.stairs.run, 6,
                 [](auto& value, SectorCoord coord) { value.stairs.run = coord; });
-        drawFloat("structure_bottom", "Bottom", primitive.stairs.bottom, 5, -8192, 8192,
+        drawFloat("structure_bottom", "Bottom", primitive.stairs.bottom, 7, -8192, 8192,
                 [](auto& value, float number) { value.stairs.bottom = number; });
-        drawFloat("structure_rise", "Total Rise", primitive.stairs.rise, 6, 1, 8192,
+        drawFloat("structure_rise", "Total Rise", primitive.stairs.rise, 8, 1, 8192,
                 [](auto& value, float number) { value.stairs.rise = number; });
         drawInt("structure_steps", "Step Count", primitive.stairs.stepCount, 0,
                 SectorStructuralMinimumStairSteps, SectorStructuralMaximumStairSteps,
                 [](auto& value, int number) { value.stairs.stepCount = number; });
     } else if (primitive.kind == SectorStructuralPrimitiveKind::Cylinder) {
-        drawCoord("structure_radius", "Radius", primitive.cylinder.radius, 3,
+        drawCoord("structure_radius", "Radius", primitive.cylinder.radius, 5,
                 [](auto& value, SectorCoord coord) { value.cylinder.radius = coord; });
-        drawFloat("structure_bottom", "Bottom", primitive.cylinder.bottom, 5, -8192, 8192,
+        drawFloat("structure_bottom", "Bottom", primitive.cylinder.bottom, 7, -8192, 8192,
                 [](auto& value, float number) { value.cylinder.bottom = number; });
-        drawFloat("structure_top", "Top", primitive.cylinder.top, 6, -8192, 8192,
+        drawFloat("structure_top", "Top", primitive.cylinder.top, 8, -8192, 8192,
                 [](auto& value, float number) { value.cylinder.top = number; });
         drawInt("structure_segments", "Radial Segments", primitive.cylinder.radialSegments, 0,
                 SectorStructuralMinimumCylinderSegments, SectorStructuralMaximumCylinderSegments,
                 [](auto& value, int number) { value.cylinder.radialSegments = number; });
     } else {
-        drawCoord("structure_radius", "Radius", primitive.sphere.radius, 3,
+        drawCoord("structure_radius", "Radius", primitive.sphere.radius, 5,
                 [](auto& value, SectorCoord coord) { value.sphere.radius = coord; });
         drawFloat("structure_center_height", "Center Height", primitive.sphere.centerHeight,
-                5, -8192, 8192,
+                7, -8192, 8192,
                 [](auto& value, float number) { value.sphere.centerHeight = number; });
         drawInt("structure_latitudes", "Latitude Segments", primitive.sphere.latitudeSegments, 0,
                 SectorStructuralMinimumSphereLatitudeSegments,

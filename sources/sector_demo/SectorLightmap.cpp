@@ -5766,7 +5766,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
     }
 
     if (!map.compiledStructuralPrimitives.empty()) {
-        FnvAppendString(hash, "structural-primitives-v1");
+        FnvAppendString(hash, "structural-primitives-v2");
         std::vector<const SectorCompiledStructuralPrimitive*> primitives;
         primitives.reserve(map.compiledStructuralPrimitives.size());
         for (const SectorCompiledStructuralPrimitive& primitive
@@ -5785,6 +5785,8 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
             FnvAppendInt(hash, primitive.x);
             FnvAppendInt(hash, primitive.z);
             FnvAppendFloat(hash, primitive.yawDegrees);
+            FnvAppendFloat(hash, primitive.pitchDegrees);
+            FnvAppendFloat(hash, primitive.rollDegrees);
             FnvAppendInt(hash, primitive.collision ? 1 : 0);
             FnvAppendInt(hash, primitive.receivesLightmap ? 1 : 0);
             FnvAppendInt(hash, primitive.castsBakedShadow ? 1 : 0);

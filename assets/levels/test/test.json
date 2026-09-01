@@ -15,36 +15,13 @@
       "intensity": 3.0,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 250,
+        "b": 241,
         "a": 255
       }
     }
   ],
-  "staticSpotLights": [
-    {
-      "id": 1,
-      "position": [
-        48.6866340637207,
-        37.06144332885742,
-        94.027587890625
-      ],
-      "target": [
-        40.181373596191406,
-        -2.2626724243164063,
-        146.88812255859375
-      ],
-      "range": 64.0,
-      "sourceRadius": 0.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      }
-    }
-  ],
+  "staticSpotLights": [],
   "staticRectLights": [],
   "dynamicPointLights": [
     {
@@ -59,11 +36,13 @@
       "intensity": 2.5,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 250,
+        "b": 241,
         "a": 255
       },
-      "castsShadow": true
+      "castsShadow": true,
+      "shadowStrength": 0.8999999761581421,
+      "shadowSoftness": 4.0
     }
   ],
   "dynamicSpotLights": [
@@ -84,8 +63,8 @@
       "intensity": 4.0,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 250,
+        "b": 241,
         "a": 255
       },
       "castsShadow": true
@@ -93,11 +72,11 @@
   ],
   "dynamicRectLights": [],
   "lightmapSettings": {
-    "ambientOcclusionRadius": 10.0,
+    "ambientOcclusionRadius": 16.0,
     "ambientOcclusionStrength": 0.550000011920929,
-    "indirectBounceRadius": 32.0,
-    "indirectBounceStrength": 0.20000000298023224,
-    "objectProbeSpacingWorld": 4.0,
+    "indirectBounceRadius": 64.0,
+    "indirectBounceStrength": 0.3499999940395355,
+    "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5
   },
@@ -131,13 +110,27 @@
     },
     "intensity": 1.0
   },
+  "fogSettings": {
+    "enabled": true,
+    "color": {
+      "r": 50,
+      "g": 54,
+      "b": 58,
+      "a": 255
+    },
+    "startDistanceWorld": 3.0,
+    "density": 0.014999999664723873,
+    "maxOpacity": 0.550000011920929,
+    "referenceHeightWorld": 1.0,
+    "heightFalloff": 0.0
+  },
   "bakedLightmap": {
     "path": "assets/levels/test/test.lightmap.bin",
     "width": 2048,
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "a8828bda9239e1f2",
+    "sourceHash": "c36ef69e026634a3",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -145,21 +138,21 @@
         0.0
       ],
       "rgbMax": [
-        2.12890625,
-        2.12890625,
-        2.12890625
+        2.130859375,
+        2.037109375,
+        1.8740234375
       ],
-      "auxiliaryMin": 0.451171875,
+      "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 3486
+      "rgbChannelsAboveOne": 3095
     },
     "objectProbes": {
       "path": "assets/levels/test/test.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "a8828bda9239e1f2",
-      "count": 70,
-      "probeSpacingWorld": 4.0,
+      "sourceHash": "c36ef69e026634a3",
+      "count": 1134,
+      "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
       "format": "layeredAmbientCubeLinearHdrF32LE",
@@ -170,14 +163,14 @@
           0.05000000074505806
         ],
         "rgbMax": [
-          1.6270781755447388,
-          1.6270781755447388,
-          1.6270781755447388
+          2.1130449771881104,
+          2.022216320037842,
+          1.864700436592102
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 420,
-        "rgbChannelsAboveOne": 27
+        "sampleCount": 6804,
+        "rgbChannelsAboveOne": 432
       }
     }
   },
@@ -244,8 +237,8 @@
         "y": 1086,
         "floorZ": 0.0,
         "ceilingZ": 54.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
+        "floorMaterialId": "large_industrial_tiles_512",
+        "ceilingMaterialId": "concrete_wall_009",
         "floorUv": {
           "scale": [
             1.0,
@@ -274,7 +267,7 @@
         },
         "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
-          "materialId": "beige_wall_001",
+          "materialId": "dirty_gray_concrete_wall_512",
           "uv": {
             "scale": [
               1.0,
@@ -339,7 +332,7 @@
         "x": 3328,
         "z": 1472,
         "material": {
-          "materialId": "concrete_floor1"
+          "materialId": "dark_wooden_planks"
         },
         "box": {
           "width": 512,
@@ -352,13 +345,13 @@
         "id": 2,
         "kind": "ramp",
         "x": 2688,
-        "z": 2176,
+        "z": 2432,
         "yawDegrees": 270.0,
         "material": {
           "materialId": "worn_gray_metal_step_512"
         },
         "ramp": {
-          "width": 256,
+          "width": 768,
           "run": 768,
           "solidBottom": 0.0,
           "low": 1.0,
@@ -384,15 +377,16 @@
       {
         "id": 4,
         "kind": "cylinder",
-        "x": 752,
-        "z": 2176,
+        "x": 3488,
+        "z": 1456,
+        "pitchDegrees": 270.0,
         "material": {
           "materialId": "metal_plate"
         },
         "cylinder": {
-          "radius": 215,
-          "bottom": 0.0,
-          "top": 16.0
+          "radius": 66,
+          "bottom": -45.0,
+          "top": 135.0
         }
       },
       {

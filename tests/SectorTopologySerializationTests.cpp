@@ -5335,6 +5335,61 @@ void TestAuthoringEditorSettingsRoundTripAndValidation()
           "non-object authoring editor settings are rejected");
 }
 
+void TestStructuralPrimitiveOrientationRoundTrip()
+{
+    game::SectorAuthoringDocument document =
+            MakeAuthoringDocumentFromMap(MakeSquare());
+    game::SectorAuthoringStructuralPrimitive primitive =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Cylinder);
+    primitive.id = 901;
+    primitive.x = 32;
+    primitive.z = 32;
+    primitive.pitchDegrees = 90.0f;
+    primitive.rollDegrees = 25.0f;
+    document.graph.structuralPrimitives.push_back(primitive);
+
+    const Json saved = Json::parse(SaveAuthoringText(document));
+    const Json& savedPrimitive =
+            saved["authoringGraph"]["structuralPrimitives"][0];
+    Check(Near(savedPrimitive["pitchDegrees"].get<float>(), 90.0f)
+                  && Near(savedPrimitive["rollDegrees"].get<float>(), 25.0f),
+          "structural primitive pitch and roll serialize");
+
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(saved.dump(), loaded, error)
+                  && loaded.graph.structuralPrimitives.size() == 1
+                  && Near(loaded.graph.structuralPrimitives[0].pitchDegrees, 90.0f)
+                  && Near(loaded.graph.structuralPrimitives[0].rollDegrees, 25.0f),
+          "structural primitive pitch and roll round-trip");
+
+    Json legacy = saved;
+    legacy["authoringGraph"]["structuralPrimitives"][0].erase("pitchDegrees");
+    legacy["authoringGraph"]["structuralPrimitives"][0].erase("rollDegrees");
+    Check(LoadAuthoringText(legacy.dump(), loaded, error)
+                  && Near(loaded.graph.structuralPrimitives[0].pitchDegrees, 0.0f)
+                  && Near(loaded.graph.structuralPrimitives[0].rollDegrees, 0.0f),
+          "missing structural pitch and roll preserve legacy defaults");
+    const Json legacySaved = Json::parse(SaveAuthoringText(loaded));
+    Check(!legacySaved["authoringGraph"]["structuralPrimitives"][0]
+                        .contains("pitchDegrees")
+                  && !legacySaved["authoringGraph"]["structuralPrimitives"][0]
+                              .contains("rollDegrees"),
+          "zero structural pitch and roll are omitted on save");
+
+    Json malformed = saved;
+    malformed["authoringGraph"]["structuralPrimitives"][0]["pitchDegrees"] =
+            "up";
+    Check(!LoadAuthoringText(malformed.dump(), loaded, error),
+          "non-numeric structural pitch is rejected");
+    Json outOfRange = saved;
+    outOfRange["authoringGraph"]["structuralPrimitives"][0]["rollDegrees"] =
+            360.0f;
+    Check(!LoadAuthoringText(outOfRange.dump(), loaded, error),
+          "out-of-range structural roll is rejected");
+}
+
 void TestRectLightRoundTrip()
 {
     SectorTopologyMap map = MakeSquare();
@@ -5452,6 +5507,7 @@ int main()
     TestTriggerRoundTripAndValidation();
     TestFootstepSetRoundTripAndDefaults();
     TestAuthoringEditorSettingsRoundTripAndValidation();
+    TestStructuralPrimitiveOrientationRoundTrip();
     TestFileApi();
     TestGlobalMaterialRegistryAndReferenceRefactor();
 

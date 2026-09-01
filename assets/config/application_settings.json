@@ -24,7 +24,7 @@
   },
   "toneMapping": {
     "operator": "acesFilmicFitted",
-    "exposureCompensationEv": 0.20000000298023224
+    "exposureCompensationEv": 0.0
   },
   "playerInventory": {
     "maxCarryWeightKg": 30.0,
@@ -89,7 +89,7 @@
     "enabled": true,
     "threshold": 1.0,
     "softKnee": 0.5,
-    "intensity": 0.25,
+    "intensity": 0.3499999940395355,
     "radius": 1.0
   },
   "playerSounds": {

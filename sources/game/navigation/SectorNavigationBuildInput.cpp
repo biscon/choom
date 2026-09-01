@@ -272,27 +272,31 @@ void AddStructuralPrimitiveGeometry(
     if (primitive.authored.kind != SectorStructuralPrimitiveKind::Stairs) return;
     const float halfWidth = SectorCoordToWorldDistance(primitive.authored.stairs.width) * 0.5f;
     const float halfRun = SectorCoordToWorldDistance(primitive.authored.stairs.run) * 0.5f;
-    const float yaw = primitive.authored.yawDegrees * DEG2RAD;
-    const Vector2 right{std::cos(yaw), -std::sin(yaw)};
-    const Vector2 forward{std::sin(yaw), std::cos(yaw)};
-    const Vector2 center = SectorCoordToWorldPosition2(
-            primitive.authored.x, primitive.authored.z);
-    const auto corner = [&](float rightOffset, float forwardOffset, float y) {
-        return Vector3{
-                center.x + right.x * rightOffset + forward.x * forwardOffset,
-                y,
-                center.y + right.y * rightOffset + forward.y * forwardOffset};
+    const auto corner = [&](float rightOffset, float forwardOffset, float authoredY) {
+        return TransformSectorStructuralPrimitivePoint(
+                primitive.authored, rightOffset, authoredY, forwardOffset);
     };
-    const float low = SectorAuthoringToWorldDistance(primitive.authored.stairs.bottom);
-    const float high = SectorAuthoringToWorldDistance(
-            primitive.authored.stairs.bottom + primitive.authored.stairs.rise);
+    const float low = primitive.authored.stairs.bottom;
+    const float high = primitive.authored.stairs.bottom
+            + primitive.authored.stairs.rise;
     const Vector3 a = corner(-halfWidth, -halfRun, low);
     const Vector3 b = corner(halfWidth, -halfRun, low);
     const Vector3 c = corner(halfWidth, halfRun, high);
     const Vector3 d = corner(-halfWidth, halfRun, high);
-    AddTriangle(input, a, b, c, NavigationRasterWalkableArea,
+    const float runWorld = halfRun * 2.0f;
+    const float riseWorld = SectorAuthoringToWorldDistance(
+            primitive.authored.stairs.rise);
+    const Vector3 proxyNormal = Vector3Normalize(
+            RotateSectorStructuralPrimitiveVector(
+                    primitive.authored,
+                    Vector3{0.0f, runWorld, -riseWorld}));
+    const uint8_t proxyArea = proxyNormal.y + 0.0001f
+                    >= minimumWalkableNormalY
+            ? NavigationRasterWalkableArea
+            : NavigationRasterNullArea;
+    AddTriangle(input, a, b, c, proxyArea,
             primitive.authored.id, minimum, maximum);
-    AddTriangle(input, a, c, d, NavigationRasterWalkableArea,
+    AddTriangle(input, a, c, d, proxyArea,
             primitive.authored.id, minimum, maximum);
 }
 

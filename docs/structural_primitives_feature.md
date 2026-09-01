@@ -159,7 +159,7 @@ Each authored primitive has:
 - exact planar placement using `SectorCoord`
 - authored vertical values using the same height units as sector floors and
   ceilings
-- yaw and kind-specific dimensions
+- yaw, pitch, roll, and kind-specific dimensions
 - material assignments using material registry IDs
 - UV settings needed by its generated faces
 - collision and shadow participation settings
@@ -463,6 +463,12 @@ handle changes radius while keeping the center fixed. Dragging the rotation
 handle changes yaw around the center and retains the current dimensions. The
 overlay displays the current dimensions or yaw during the gesture.
 
+Pitch and roll rotate around the center of the primitive's local bounding box.
+When either is non-zero, the 2D editor draws and picks the projected 3D
+silhouette but hides width/depth/radius handles because those edits become
+ambiguous in a top-down view. Move and yaw remain available in 2D; pitch, roll,
+and dimensions remain available through the inspector and 3D adjustment.
+
 Planar resize values use exact `SectorCoord` snapping. Rotation dragging is
 continuous; holding Shift snaps yaw to 15-degree increments. Rotation does not
 alter the footprint center. Handles affect only
@@ -488,7 +494,7 @@ editing service and does not write compiled topology records.
 The common inspector fields are:
 
 - enabled state and primitive kind label
-- position X/Z, yaw, and vertical placement
+- position X/Z, yaw, pitch, roll, and vertical placement
 - collision participation
 - lightmap receiver, baked-shadow occluder, and supported dynamic-shadow state
 - material and UV groups
@@ -550,6 +556,8 @@ The existing adjustment keys and precision presets are reused:
 - arrow keys move in world X/Z
 - Page Up/Page Down move the complete primitive vertically
 - Q/E rotate yaw
+- Insert/Delete rotate pitch
+- Home/End rotate roll
 - Enter or the Apply button commits
 - Escape or the Cancel button restores the original authored values
 
@@ -605,7 +613,7 @@ must cover:
 
 - stable, positive, unique IDs
 - supported primitive kinds
-- finite transforms, heights, dimensions, UV values, and yaw
+- finite transforms, heights, dimensions, UV values, yaw, pitch, and roll
 - positive non-degenerate dimensions
 - ordered ramp elevations and a usable ramp direction
 - positive staircase rise/run and a valid step count
@@ -658,8 +666,8 @@ levels and include:
 - inspector numeric validation and exact authoring-value updates
 - default material inheritance, semantic material overrides, and per-group UV
   scale/offset behavior
-- `Ctrl+A` structural adjustment apply/cancel, affected preview refresh, and
-  preservation of authoring-graph ownership
+- `Ctrl+A` yaw/pitch/roll adjustment apply/cancel, affected preview refresh,
+  and preservation of authoring-graph ownership
 - correct document dirtying, topology-render-cache invalidation, navigation
   rebuild requests, and lightmap source-hash invalidation after committed UI
   edits

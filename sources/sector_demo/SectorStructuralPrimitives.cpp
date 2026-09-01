@@ -72,25 +72,55 @@ Vector3 LocalToWorld(
         float authoredHeight,
         float localZ)
 {
-    const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
-    const float radians = primitive.yawDegrees * Pi / 180.0f;
-    const float cosine = std::cos(radians);
-    const float sine = std::sin(radians);
-    return Vector3{
-            center.x + cosine * localX - sine * localZ,
-            SectorAuthoringToWorldDistance(authoredHeight),
-            center.y + sine * localX + cosine * localZ};
+    return TransformSectorStructuralPrimitivePoint(
+            primitive, localX, authoredHeight, localZ);
 }
 
 Vector3 RotateNormal(const SectorAuthoringStructuralPrimitive& primitive, Vector3 local)
 {
-    const float radians = primitive.yawDegrees * Pi / 180.0f;
-    const float cosine = std::cos(radians);
-    const float sine = std::sin(radians);
-    return Normalize(Vector3{
-            cosine * local.x - sine * local.z,
-            local.y,
-            sine * local.x + cosine * local.z});
+    return Normalize(RotateSectorStructuralPrimitiveVector(primitive, local));
+}
+
+Vector3 InverseRotate(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        Vector3 world)
+{
+    const float yaw = primitive.yawDegrees * Pi / 180.0f;
+    const float pitch = primitive.pitchDegrees * Pi / 180.0f;
+    const float roll = primitive.rollDegrees * Pi / 180.0f;
+    const float cy = std::cos(yaw);
+    const float sy = std::sin(yaw);
+    const float cp = std::cos(pitch);
+    const float sp = std::sin(pitch);
+    const float cr = std::cos(roll);
+    const float sr = std::sin(roll);
+
+    const Vector3 afterYaw{
+            cy * world.x + sy * world.z,
+            world.y,
+            -sy * world.x + cy * world.z};
+    const Vector3 afterPitch{
+            afterYaw.x,
+            cp * afterYaw.y + sp * afterYaw.z,
+            -sp * afterYaw.y + cp * afterYaw.z};
+    return Vector3{
+            cr * afterPitch.x + sr * afterPitch.y,
+            -sr * afterPitch.x + cr * afterPitch.y,
+            afterPitch.z};
+}
+
+Vector3 UnrotatedWorldPosition(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        Vector3 world)
+{
+    const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
+    const float pivotY = SectorAuthoringToWorldDistance(
+            SectorStructuralPrimitivePivotHeight(primitive));
+    const Vector3 local = InverseRotate(primitive, Vector3{
+            world.x - center.x,
+            world.y - pivotY,
+            world.z - center.y});
+    return Vector3{center.x + local.x, pivotY + local.y, center.y + local.z};
 }
 
 const SectorStructuralMaterialSettings& ResolveMaterial(
@@ -179,6 +209,8 @@ Vector2 VerticalBaseUv(
         Vector3 position,
         Vector3 outwardNormal)
 {
+    position = UnrotatedWorldPosition(primitive, position);
+    outwardNormal = InverseRotate(primitive, outwardNormal);
     const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
     const Vector3 relative{position.x - center.x, 0.0f, position.z - center.y};
     const Vector3 viewedRight{outwardNormal.z, 0.0f, -outwardNormal.x};
@@ -192,17 +224,13 @@ Vector2 FlatLocalBaseUv(
         const SectorAuthoringStructuralPrimitive& primitive,
         Vector3 position)
 {
+    position = UnrotatedWorldPosition(primitive, position);
     const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
-    const float radians = primitive.yawDegrees * Pi / 180.0f;
-    const float cosine = std::cos(radians);
-    const float sine = std::sin(radians);
     const float relativeX = position.x - center.x;
     const float relativeZ = position.z - center.y;
     return Vector2{
-            (cosine * relativeX + sine * relativeZ)
-                    / kSectorGeneratedTextureWorldSize,
-            (-sine * relativeX + cosine * relativeZ)
-                    / kSectorGeneratedTextureWorldSize};
+            relativeX / kSectorGeneratedTextureWorldSize,
+            relativeZ / kSectorGeneratedTextureWorldSize};
 }
 
 void AppendMappedQuad(
@@ -241,8 +269,10 @@ void AppendVerticalQuad(
         const SectorTopologyUvSettings& uv)
 {
     const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
-    const Vector3 viewedRight{normal.z, 0.0f, -normal.x};
+    const Vector3 localNormal = InverseRotate(primitive, normal);
+    const Vector3 viewedRight{localNormal.z, 0.0f, -localNormal.x};
     const auto horizontal = [&](Vector3 position) {
+        position = UnrotatedWorldPosition(primitive, position);
         return (position.x - center.x) * viewedRight.x
                 + (position.z - center.y) * viewedRight.z;
     };
@@ -251,17 +281,21 @@ void AppendVerticalQuad(
     const float hc = horizontal(c);
     const float hd = horizontal(d);
     const float minimumHorizontal = std::min({ha, hb, hc, hd});
-    const float maximumY = std::max({a.y, b.y, c.y, d.y});
+    const Vector3 localA = UnrotatedWorldPosition(primitive, a);
+    const Vector3 localB = UnrotatedWorldPosition(primitive, b);
+    const Vector3 localC = UnrotatedWorldPosition(primitive, c);
+    const Vector3 localD = UnrotatedWorldPosition(primitive, d);
+    const float maximumY = std::max({localA.y, localB.y, localC.y, localD.y});
     AppendMappedQuad(
             surface, a, b, c, d, normal,
             VerticalBaseUv(primitive, a, normal),
             VerticalBaseUv(primitive, b, normal),
             VerticalBaseUv(primitive, c, normal),
             VerticalBaseUv(primitive, d, normal),
-            {ha - minimumHorizontal, maximumY - a.y},
-            {hb - minimumHorizontal, maximumY - b.y},
-            {hc - minimumHorizontal, maximumY - c.y},
-            {hd - minimumHorizontal, maximumY - d.y},
+            {ha - minimumHorizontal, maximumY - localA.y},
+            {hb - minimumHorizontal, maximumY - localB.y},
+            {hc - minimumHorizontal, maximumY - localC.y},
+            {hd - minimumHorizontal, maximumY - localD.y},
             uv);
 }
 
@@ -722,7 +756,130 @@ bool ValidMaterialSet(const SectorStructuralMaterialSet& materials)
     return true;
 }
 
+std::vector<Vector2> ConvexHull(std::vector<Vector2> points)
+{
+    std::sort(points.begin(), points.end(), [](Vector2 a, Vector2 b) {
+        return a.x < b.x || (a.x == b.x && a.y < b.y);
+    });
+    points.erase(std::unique(points.begin(), points.end(), [](Vector2 a, Vector2 b) {
+        return std::fabs(a.x - b.x) <= GeometryEpsilon
+                && std::fabs(a.y - b.y) <= GeometryEpsilon;
+    }), points.end());
+    if (points.size() <= 2) return points;
+    std::vector<Vector2> hull;
+    hull.reserve(points.size() * 2);
+    for (Vector2 point : points) {
+        while (hull.size() >= 2
+                && Cross2(hull[hull.size() - 2], hull.back(), point)
+                        <= GeometryEpsilon) {
+            hull.pop_back();
+        }
+        hull.push_back(point);
+    }
+    const size_t lowerSize = hull.size();
+    for (size_t index = points.size() - 1; index-- > 0;) {
+        const Vector2 point = points[index];
+        while (hull.size() > lowerSize
+                && Cross2(hull[hull.size() - 2], hull.back(), point)
+                        <= GeometryEpsilon) {
+            hull.pop_back();
+        }
+        hull.push_back(point);
+    }
+    if (!hull.empty()) hull.pop_back();
+    return hull;
+}
+
+void AppendProjectedPoint(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        std::vector<Vector2>& points,
+        float localX,
+        float authoredHeight,
+        float localZ)
+{
+    const Vector3 world = TransformSectorStructuralPrimitivePoint(
+            primitive, localX, authoredHeight, localZ);
+    points.push_back(Vector2{world.x, world.z});
+}
+
 } // namespace
+
+float SectorStructuralPrimitivePivotHeight(
+        const SectorAuthoringStructuralPrimitive& primitive)
+{
+    switch (primitive.kind) {
+        case SectorStructuralPrimitiveKind::Box:
+            return (primitive.box.bottom + primitive.box.top) * 0.5f;
+        case SectorStructuralPrimitiveKind::Ramp:
+            return (primitive.ramp.solidBottom + primitive.ramp.high) * 0.5f;
+        case SectorStructuralPrimitiveKind::Stairs:
+            return primitive.stairs.bottom + primitive.stairs.rise * 0.5f;
+        case SectorStructuralPrimitiveKind::Cylinder:
+            return (primitive.cylinder.bottom + primitive.cylinder.top) * 0.5f;
+        case SectorStructuralPrimitiveKind::Sphere:
+            return primitive.sphere.centerHeight;
+    }
+    return 0.0f;
+}
+
+bool SectorStructuralPrimitiveHasTilt(
+        const SectorAuthoringStructuralPrimitive& primitive)
+{
+    const auto nonZero = [](float degrees) {
+        if (!std::isfinite(degrees)) return true;
+        const float wrapped = std::fmod(std::fabs(degrees), 360.0f);
+        return wrapped > 0.0001f && std::fabs(wrapped - 360.0f) > 0.0001f;
+    };
+    return nonZero(primitive.pitchDegrees) || nonZero(primitive.rollDegrees);
+}
+
+Vector3 RotateSectorStructuralPrimitiveVector(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        Vector3 local)
+{
+    const float yaw = primitive.yawDegrees * Pi / 180.0f;
+    const float pitch = primitive.pitchDegrees * Pi / 180.0f;
+    const float roll = primitive.rollDegrees * Pi / 180.0f;
+    const float cy = std::cos(yaw);
+    const float sy = std::sin(yaw);
+    const float cp = std::cos(pitch);
+    const float sp = std::sin(pitch);
+    const float cr = std::cos(roll);
+    const float sr = std::sin(roll);
+
+    const Vector3 afterRoll{
+            cr * local.x - sr * local.y,
+            sr * local.x + cr * local.y,
+            local.z};
+    const Vector3 afterPitch{
+            afterRoll.x,
+            cp * afterRoll.y - sp * afterRoll.z,
+            sp * afterRoll.y + cp * afterRoll.z};
+    return Vector3{
+            cy * afterPitch.x - sy * afterPitch.z,
+            afterPitch.y,
+            sy * afterPitch.x + cy * afterPitch.z};
+}
+
+Vector3 TransformSectorStructuralPrimitivePoint(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        float localXWorld,
+        float authoredHeight,
+        float localZWorld)
+{
+    const Vector2 center = SectorCoordToWorldPosition2(primitive.x, primitive.z);
+    const float pivotHeight = SectorStructuralPrimitivePivotHeight(primitive);
+    const float pivotWorld = SectorAuthoringToWorldDistance(pivotHeight);
+    const Vector3 rotated = RotateSectorStructuralPrimitiveVector(
+            primitive,
+            Vector3{localXWorld,
+                    SectorAuthoringToWorldDistance(authoredHeight - pivotHeight),
+                    localZWorld});
+    return Vector3{
+            center.x + rotated.x,
+            pivotWorld + rotated.y,
+            center.y + rotated.z};
+}
 
 SectorAuthoringStructuralPrimitive DefaultSectorAuthoringStructuralPrimitive(
         SectorStructuralPrimitiveKind kind)
@@ -790,41 +947,128 @@ SectorStructuralFootprint BuildSectorStructuralFootprint(
 {
     SectorStructuralFootprint result;
     result.centerWorld = SectorCoordToWorldPosition2(primitive.x, primitive.z);
-    const float radians = primitive.yawDegrees * Pi / 180.0f;
-    result.ascentDirectionWorld = Vector2{-std::sin(radians), std::cos(radians)};
-    SectorCoord width = primitive.box.width;
-    SectorCoord depth = primitive.box.depth;
-    if (primitive.kind == SectorStructuralPrimitiveKind::Ramp) {
-        width = primitive.ramp.width;
-        depth = primitive.ramp.run;
-    } else if (primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
-        width = primitive.stairs.width;
-        depth = primitive.stairs.run;
-    } else if (primitive.kind == SectorStructuralPrimitiveKind::Cylinder
-            || primitive.kind == SectorStructuralPrimitiveKind::Sphere) {
+    const Vector3 ascent = RotateSectorStructuralPrimitiveVector(
+            primitive, Vector3{0.0f, 0.0f, 1.0f});
+    const float ascentLength = std::hypot(ascent.x, ascent.z);
+    if (ascentLength > GeometryEpsilon) {
+        result.ascentDirectionWorld = Vector2{
+                ascent.x / ascentLength, ascent.z / ascentLength};
+    } else {
+        const float yaw = primitive.yawDegrees * Pi / 180.0f;
+        result.ascentDirectionWorld = Vector2{-std::sin(yaw), std::cos(yaw)};
+    }
+
+    if (primitive.kind == SectorStructuralPrimitiveKind::Sphere) {
         result.circular = true;
-        const SectorCoord authoredRadius = primitive.kind == SectorStructuralPrimitiveKind::Cylinder
-                ? primitive.cylinder.radius : primitive.sphere.radius;
-        result.radiusWorld = SectorCoordToWorldDistance(authoredRadius);
-        const int segments = primitive.kind == SectorStructuralPrimitiveKind::Cylinder
-                ? primitive.cylinder.radialSegments : primitive.sphere.longitudeSegments;
+        result.radiusWorld = SectorCoordToWorldDistance(primitive.sphere.radius);
+        const int segments = primitive.sphere.longitudeSegments;
         result.pointsWorld.reserve(static_cast<size_t>(segments));
         for (int i = 0; i < segments; ++i) {
-            const float angle = radians + 2.0f * Pi * i / segments;
+            const float angle = 2.0f * Pi * i / segments;
             result.pointsWorld.push_back(Vector2{
                     result.centerWorld.x + std::cos(angle) * result.radiusWorld,
                     result.centerWorld.y + std::sin(angle) * result.radiusWorld});
         }
         return result;
     }
-    const float hx = SectorCoordToWorldDistance(width) * 0.5f;
-    const float hz = SectorCoordToWorldDistance(depth) * 0.5f;
-    result.pointsWorld.reserve(4);
-    for (Vector2 local : std::array<Vector2, 4>{{{-hx, -hz}, {hx, -hz}, {hx, hz}, {-hx, hz}}}) {
-        result.pointsWorld.push_back(Vector2{
-                result.centerWorld.x + std::cos(radians) * local.x - std::sin(radians) * local.y,
-                result.centerWorld.y + std::sin(radians) * local.x + std::cos(radians) * local.y});
+
+    if (primitive.kind != SectorStructuralPrimitiveKind::Cylinder
+            && !SectorStructuralPrimitiveHasTilt(primitive)) {
+        SectorCoord width = primitive.box.width;
+        SectorCoord depth = primitive.box.depth;
+        if (primitive.kind == SectorStructuralPrimitiveKind::Ramp) {
+            width = primitive.ramp.width;
+            depth = primitive.ramp.run;
+        } else if (primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
+            width = primitive.stairs.width;
+            depth = primitive.stairs.run;
+        }
+        const float hx = SectorCoordToWorldDistance(width) * 0.5f;
+        const float hz = SectorCoordToWorldDistance(depth) * 0.5f;
+        const float yaw = primitive.yawDegrees * Pi / 180.0f;
+        const float cosine = std::cos(yaw);
+        const float sine = std::sin(yaw);
+        result.pointsWorld.reserve(4);
+        for (Vector2 local : std::array<Vector2, 4>{{
+                    {-hx, -hz}, {hx, -hz}, {hx, hz}, {-hx, hz}}}) {
+            result.pointsWorld.push_back(Vector2{
+                    result.centerWorld.x + cosine * local.x - sine * local.y,
+                    result.centerWorld.y + sine * local.x + cosine * local.y});
+        }
+        return result;
     }
+
+    std::vector<Vector2> projected;
+    if (primitive.kind == SectorStructuralPrimitiveKind::Cylinder) {
+        const float radius = SectorCoordToWorldDistance(primitive.cylinder.radius);
+        const int segments = primitive.cylinder.radialSegments;
+        result.circular = !SectorStructuralPrimitiveHasTilt(primitive);
+        result.radiusWorld = radius;
+        projected.reserve(static_cast<size_t>(segments) * 2);
+        for (int index = 0; index < segments; ++index) {
+            const float angle = 2.0f * Pi * index / segments;
+            const float x = radius * std::cos(angle);
+            const float z = radius * std::sin(angle);
+            AppendProjectedPoint(
+                    primitive, projected, x, primitive.cylinder.bottom, z);
+            AppendProjectedPoint(
+                    primitive, projected, x, primitive.cylinder.top, z);
+        }
+    } else {
+        SectorCoord width = primitive.box.width;
+        SectorCoord depth = primitive.box.depth;
+        float bottom = primitive.box.bottom;
+        float top = primitive.box.top;
+        if (primitive.kind == SectorStructuralPrimitiveKind::Ramp) {
+            width = primitive.ramp.width;
+            depth = primitive.ramp.run;
+            bottom = primitive.ramp.solidBottom;
+            top = primitive.ramp.high;
+        } else if (primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
+            width = primitive.stairs.width;
+            depth = primitive.stairs.run;
+            bottom = primitive.stairs.bottom;
+            top = primitive.stairs.bottom + primitive.stairs.rise;
+        }
+        const float hx = SectorCoordToWorldDistance(width) * 0.5f;
+        const float hz = SectorCoordToWorldDistance(depth) * 0.5f;
+        projected.reserve(primitive.kind == SectorStructuralPrimitiveKind::Stairs
+                        ? static_cast<size_t>(primitive.stairs.stepCount + 1) * 4
+                        : 8);
+        for (float x : {-hx, hx}) {
+            for (float z : {-hz, hz}) {
+                AppendProjectedPoint(primitive, projected, x, bottom, z);
+            }
+        }
+        if (primitive.kind == SectorStructuralPrimitiveKind::Ramp) {
+            for (float x : {-hx, hx}) {
+                AppendProjectedPoint(
+                        primitive, projected, x, primitive.ramp.low, -hz);
+                AppendProjectedPoint(
+                        primitive, projected, x, primitive.ramp.high, hz);
+            }
+        } else if (primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
+            const float run = hz * 2.0f;
+            const float stepRun = run / primitive.stairs.stepCount;
+            const float stepRise = primitive.stairs.rise / primitive.stairs.stepCount;
+            for (int step = 0; step < primitive.stairs.stepCount; ++step) {
+                const float z0 = -hz + stepRun * step;
+                const float z1 = z0 + stepRun;
+                const float height = primitive.stairs.bottom + stepRise * (step + 1);
+                for (float x : {-hx, hx}) {
+                    AppendProjectedPoint(primitive, projected, x, height, z0);
+                    AppendProjectedPoint(primitive, projected, x, height, z1);
+                }
+            }
+        } else {
+            for (float x : {-hx, hx}) {
+                for (float z : {-hz, hz}) {
+                    AppendProjectedPoint(primitive, projected, x, top, z);
+                }
+            }
+        }
+    }
+    result.pointsWorld = ConvexHull(std::move(projected));
     return result;
 }
 
@@ -837,8 +1081,13 @@ std::vector<SectorStructuralDiagnostic> ValidateSectorAuthoringStructuralPrimiti
         if (primitive.id <= 0) AddError(diagnostics, primitive.id, "Structural primitive ID must be positive");
         else if (!ids.insert(primitive.id).second) AddError(diagnostics, primitive.id, "Duplicate structural primitive ID");
         if (!std::isfinite(primitive.yawDegrees) || primitive.yawDegrees < 0.0f
-                || primitive.yawDegrees >= 360.0f) {
-            AddError(diagnostics, primitive.id, "Structural primitive yaw must be in [0, 360)");
+                || primitive.yawDegrees >= 360.0f
+                || !std::isfinite(primitive.pitchDegrees) || primitive.pitchDegrees < 0.0f
+                || primitive.pitchDegrees >= 360.0f
+                || !std::isfinite(primitive.rollDegrees) || primitive.rollDegrees < 0.0f
+                || primitive.rollDegrees >= 360.0f) {
+            AddError(diagnostics, primitive.id,
+                    "Structural primitive rotation must be finite and in [0, 360)");
         }
         if (!ValidMaterialSet(primitive.materials)) {
             AddError(diagnostics, primitive.id, "Structural primitive UV settings must be finite and non-zero");

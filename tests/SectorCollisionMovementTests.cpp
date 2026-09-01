@@ -1542,6 +1542,34 @@ void TestStructuralPrimitiveCollision()
     Check(cylinderBlocked.hitWall && cylinderBlocked.positionXZ.x <= 2.751f,
           "cylinder uses its circular collision footprint");
 
+    game::SectorAuthoringStructuralPrimitive ceilingPipe = cylinder;
+    ceilingPipe.id = 7;
+    ceilingPipe.pitchDegrees = 90.0f;
+    ceilingPipe.cylinder.radius = Coord(4.0f);
+    ceilingPipe.cylinder.bottom = 16.0f;
+    ceilingPipe.cylinder.top = 32.0f;
+    SectorTopologyMap ceilingPipeMap = MakeSquare();
+    AddStructuralPrimitive(ceilingPipeMap, ceilingPipe);
+    const game::SectorCollisionMoveResult underPipe = Move(
+            BuildWorld(ceilingPipeMap),
+            {1.5f, 4.0f}, {3.0f, 0.0f}, 10, true,
+            0.0f, 0.25f, 1.6f);
+    Check(underPipe.positionXZ.x > 4.0f && !underPipe.hitWall,
+          "actor with enough headroom can pass beneath a horizontal cylinder");
+
+    game::SectorAuthoringStructuralPrimitive lowPipe = ceilingPipe;
+    lowPipe.id = 8;
+    lowPipe.cylinder.bottom = 4.0f;
+    lowPipe.cylinder.top = 20.0f;
+    SectorTopologyMap lowPipeMap = MakeSquare();
+    AddStructuralPrimitive(lowPipeMap, lowPipe);
+    const game::SectorCollisionMoveResult lowPipeBlocked = Move(
+            BuildWorld(lowPipeMap),
+            {1.5f, 4.0f}, {3.0f, 0.0f}, 10, true,
+            0.0f, 0.25f, 1.6f);
+    Check(lowPipeBlocked.hitWall && lowPipeBlocked.blockedByCeiling,
+          "low horizontal cylinder uses conservative tilted clearance collision");
+
     game::SectorAuthoringStructuralPrimitive sphere =
             game::DefaultSectorAuthoringStructuralPrimitive(
                     game::SectorStructuralPrimitiveKind::Sphere);

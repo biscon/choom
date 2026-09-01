@@ -13105,9 +13105,17 @@ void TestStructuralPrimitiveEditorPlacementAndAdjustment()
     Check(service.BeginPreviewAdjustment(),
           "selected structure begins staged 3D adjustment");
     game::SectorEditorStructuralPreviewCandidate candidate;
-    Check(service.BuildPreviewNudge(0.25f, 0.0f, 0.25f, 5.0f, candidate)
+    Check(service.BuildPreviewNudge(
+                  0.25f, 0.0f, 0.25f, 5.0f, 10.0f, -15.0f, candidate)
                   && candidate.valid && candidate.changedFromOriginal,
           "structure 3D nudge builds a derived staged candidate");
+    const game::SectorAuthoringStructuralPrimitive* staged =
+            game::FindSectorAuthoringStructuralPrimitive(
+                    candidate.graph, primitiveId);
+    Check(staged != nullptr
+                  && Near(staged->pitchDegrees, 10.0f)
+                  && Near(staged->rollDegrees, 345.0f),
+          "structure 3D nudge applies and normalizes pitch and roll");
     service.AcceptPreviewNudge(std::move(candidate));
     Check(service.CancelPreviewAdjustment("cancelled")
                   && game::FindSectorAuthoringStructuralPrimitive(graph, primitiveId)->x
@@ -13119,12 +13127,20 @@ void TestStructuralPrimitiveEditorPlacementAndAdjustment()
     Check(service.BeginPreviewAdjustment(),
           "selected structure can begin another adjustment");
     game::SectorEditorStructuralPreviewCandidate appliedCandidate;
-    Check(service.BuildPreviewNudge(0.25f, 0.0f, 0.25f, 5.0f, appliedCandidate),
+    Check(service.BuildPreviewNudge(
+                  0.25f, 0.0f, 0.25f, 5.0f, 10.0f, -15.0f,
+                  appliedCandidate),
           "structure adjustment builds apply candidate");
     service.AcceptPreviewNudge(std::move(appliedCandidate));
     Check(service.ApplyPreviewAdjustment()
                   && game::FindSectorAuthoringStructuralPrimitive(graph, primitiveId)->x
                           != original.x
+                  && Near(game::FindSectorAuthoringStructuralPrimitive(
+                                  graph, primitiveId)->pitchDegrees,
+                          10.0f)
+                  && Near(game::FindSectorAuthoringStructuralPrimitive(
+                                  graph, primitiveId)->rollDegrees,
+                          345.0f)
                   && documentState.lifecycle.topologyDocumentDirty
                   && state.topologyRenderRevision == 52
                   && game::IsSectorEditorAuthoringDerivationCurrent(

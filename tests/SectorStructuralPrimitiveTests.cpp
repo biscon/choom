@@ -324,6 +324,110 @@ int main()
                     && sphereMaximumV > sphereMinimumV,
             "sphere projection remains unchanged");
 
+    SectorAuthoringStructuralPrimitive tiltedBox = box;
+    tiltedBox.yawDegrees = 0.0f;
+    tiltedBox.pitchDegrees = 90.0f;
+    tiltedBox.rollDegrees = 0.0f;
+    const float pivotHeight = SectorStructuralPrimitivePivotHeight(tiltedBox);
+    const Vector2 tiltedCenter = SectorCoordToWorldPosition2(
+            tiltedBox.x, tiltedBox.z);
+    const Vector3 pivotWorld = TransformSectorStructuralPrimitivePoint(
+            tiltedBox, 0.0f, pivotHeight, 0.0f);
+    Require(Near(pivotWorld.x, tiltedCenter.x)
+                    && Near(pivotWorld.y,
+                            SectorAuthoringToWorldDistance(pivotHeight))
+                    && Near(pivotWorld.z, tiltedCenter.y),
+            "pitch and roll rotate around the structural shape center");
+    const Vector3 pitchedUp = RotateSectorStructuralPrimitiveVector(
+            tiltedBox, Vector3{0.0f, 1.0f, 0.0f});
+    Require(Near(pitchedUp.x, 0.0f)
+                    && Near(pitchedUp.y, 0.0f)
+                    && Near(pitchedUp.z, 1.0f),
+            "positive pitch rotates local up toward local positive Z");
+    tiltedBox.pitchDegrees = 0.0f;
+    tiltedBox.rollDegrees = 90.0f;
+    const Vector3 rolledUp = RotateSectorStructuralPrimitiveVector(
+            tiltedBox, Vector3{0.0f, 1.0f, 0.0f});
+    Require(Near(rolledUp.x, -1.0f)
+                    && Near(rolledUp.y, 0.0f)
+                    && Near(rolledUp.z, 0.0f),
+            "positive roll rotates local up toward local negative X");
+
+    std::vector<SectorCompiledStructuralPrimitive> baselineBox;
+    std::vector<SectorCompiledStructuralPrimitive> rotatedBox;
+    diagnostics.clear();
+    Require(CompileSectorStructuralPrimitives(
+                    {box}, emptyMap, baselineBox, diagnostics),
+            "baseline box compiles for rotation comparison");
+    tiltedBox = box;
+    tiltedBox.pitchDegrees = 23.0f;
+    tiltedBox.rollDegrees = 41.0f;
+    diagnostics.clear();
+    Require(CompileSectorStructuralPrimitives(
+                    {tiltedBox}, emptyMap, rotatedBox, diagnostics),
+            "tilted box compiles");
+    Require(baselineBox.front().geometryFingerprint
+                    != rotatedBox.front().geometryFingerprint,
+            "pitch and roll affect the deterministic geometry fingerprint");
+    Require(baselineBox.front().surfaces.size()
+                    == rotatedBox.front().surfaces.size(),
+            "rotation preserves semantic box surfaces");
+    for (size_t surfaceIndex = 0;
+            surfaceIndex < baselineBox.front().surfaces.size();
+            ++surfaceIndex) {
+        const auto& baselineSurface = baselineBox.front().surfaces[surfaceIndex];
+        const auto& rotatedSurface = rotatedBox.front().surfaces[surfaceIndex];
+        Require(baselineSurface.vertices.size() == rotatedSurface.vertices.size(),
+                "rotation preserves structural vertex ordering");
+        for (size_t vertexIndex = 0;
+                vertexIndex < baselineSurface.vertices.size();
+                ++vertexIndex) {
+            const auto& baselineVertex = baselineSurface.vertices[vertexIndex];
+            const auto& rotatedVertex = rotatedSurface.vertices[vertexIndex];
+            Require(Near(baselineVertex.uv.x, rotatedVertex.uv.x)
+                            && Near(baselineVertex.uv.y, rotatedVertex.uv.y)
+                            && Near(baselineVertex.chartUv.x,
+                                    rotatedVertex.chartUv.x)
+                            && Near(baselineVertex.chartUv.y,
+                                    rotatedVertex.chartUv.y),
+                    "rotation preserves local material and chart UVs");
+        }
+    }
+    const SectorStructuralFootprint tiltedFootprint =
+            BuildSectorStructuralFootprint(tiltedBox);
+    Require(!tiltedFootprint.circular
+                    && tiltedFootprint.pointsWorld.size() >= 4,
+            "tilted box exposes a projected convex footprint");
+
+    std::vector<SectorAuthoringStructuralPrimitive> rotatedKinds;
+    for (int index = 0; index < 5; ++index) {
+        SectorAuthoringStructuralPrimitive rotated =
+                DefaultSectorAuthoringStructuralPrimitive(kinds[index]);
+        rotated.id = 200 + index;
+        rotated.pitchDegrees = 17.0f;
+        rotated.rollDegrees = 29.0f;
+        rotatedKinds.push_back(rotated);
+    }
+    std::vector<SectorCompiledStructuralPrimitive> allRotated;
+    diagnostics.clear();
+    Require(CompileSectorStructuralPrimitives(
+                    rotatedKinds, emptyMap, allRotated, diagnostics)
+                    && allRotated.size() == rotatedKinds.size(),
+            "every structural primitive kind supports pitch and roll");
+    for (const auto& primitive : allRotated) {
+        for (const auto& surface : primitive.surfaces) {
+            for (const auto& vertex : surface.vertices) {
+                Require(std::isfinite(vertex.position.x)
+                                && std::isfinite(vertex.position.y)
+                                && std::isfinite(vertex.position.z)
+                                && std::isfinite(vertex.normal.x)
+                                && std::isfinite(vertex.normal.y)
+                                && std::isfinite(vertex.normal.z),
+                        "rotated structural geometry remains finite");
+            }
+        }
+    }
+
     std::cout << "Sector structural primitive tests passed\n";
     return 0;
 }

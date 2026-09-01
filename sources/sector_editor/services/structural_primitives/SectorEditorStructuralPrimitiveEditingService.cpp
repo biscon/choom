@@ -12,11 +12,11 @@
 namespace game {
 namespace {
 
-float WrapYaw(float yaw)
+float WrapDegrees(float degrees)
 {
-    yaw = std::fmod(yaw, 360.0f);
-    if (yaw < 0.0f) yaw += 360.0f;
-    return yaw;
+    degrees = std::fmod(degrees, 360.0f);
+    if (degrees < 0.0f) degrees += 360.0f;
+    return degrees;
 }
 
 SectorCoord RoundedCoordDelta(float worldDelta)
@@ -50,6 +50,8 @@ bool SamePrimitive(
     }
     return a.id == b.id && a.kind == b.kind && a.enabled == b.enabled
             && a.x == b.x && a.z == b.z && a.yawDegrees == b.yawDegrees
+            && a.pitchDegrees == b.pitchDegrees
+            && a.rollDegrees == b.rollDegrees
             && a.collision == b.collision
             && a.receivesLightmap == b.receivesLightmap
             && a.castsBakedShadow == b.castsBakedShadow
@@ -320,7 +322,9 @@ bool SectorEditorStructuralPrimitiveEditingService::MutateById(
     SectorAuthoringStructuralPrimitive* primitive =
             FindSectorAuthoringStructuralPrimitive(candidate, primitiveId);
     if (primitive == nullptr || !mutate(*primitive)) return false;
-    primitive->yawDegrees = WrapYaw(primitive->yawDegrees);
+    primitive->yawDegrees = WrapDegrees(primitive->yawDegrees);
+    primitive->pitchDegrees = WrapDegrees(primitive->pitchDegrees);
+    primitive->rollDegrees = WrapDegrees(primitive->rollDegrees);
     return CommitGraphCandidate(std::move(candidate), status);
 }
 
@@ -382,6 +386,8 @@ bool SectorEditorStructuralPrimitiveEditingService::BuildPreviewNudge(
         float deltaZWorld,
         float deltaHeightWorld,
         float deltaYawDegrees,
+        float deltaPitchDegrees,
+        float deltaRollDegrees,
         SectorEditorStructuralPreviewCandidate& outCandidate)
 {
     outCandidate = SectorEditorStructuralPreviewCandidate{};
@@ -399,7 +405,11 @@ bool SectorEditorStructuralPrimitiveEditingService::BuildPreviewNudge(
     primitive->z += RoundedCoordDelta(deltaZWorld);
     TranslateSectorStructuralPrimitiveHeight(
             *primitive, SectorWorldToAuthoringDistance(deltaHeightWorld));
-    primitive->yawDegrees = WrapYaw(primitive->yawDegrees + deltaYawDegrees);
+    primitive->yawDegrees = WrapDegrees(primitive->yawDegrees + deltaYawDegrees);
+    primitive->pitchDegrees = WrapDegrees(
+            primitive->pitchDegrees + deltaPitchDegrees);
+    primitive->rollDegrees = WrapDegrees(
+            primitive->rollDegrees + deltaRollDegrees);
     SectorAuthoringDerivationResult derivation =
             DeriveSectorTopologyMapFromAuthoringGraph(candidate);
     if (!derivation.success) {

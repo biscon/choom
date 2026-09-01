@@ -4541,6 +4541,17 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
                     primitiveJson, "enabled", context, primitive.enabled);
             primitive.yawDegrees = ReadOptionalFloat(
                     primitiveJson, "yawDegrees", context, primitive.yawDegrees);
+            primitive.pitchDegrees = ReadOptionalFloat(
+                    primitiveJson, "pitchDegrees", context, primitive.pitchDegrees);
+            primitive.rollDegrees = ReadOptionalFloat(
+                    primitiveJson, "rollDegrees", context, primitive.rollDegrees);
+            if (primitive.yawDegrees < 0.0f || primitive.yawDegrees >= 360.0f
+                    || primitive.pitchDegrees < 0.0f
+                    || primitive.pitchDegrees >= 360.0f
+                    || primitive.rollDegrees < 0.0f
+                    || primitive.rollDegrees >= 360.0f) {
+                Fail(context + " rotation fields must be in [0, 360)");
+            }
             primitive.collision = ReadOptionalBool(
                     primitiveJson, "collision", context, primitive.collision);
             primitive.receivesLightmap = ReadOptionalBool(
@@ -5133,6 +5144,12 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
                     DefaultSectorAuthoringStructuralPrimitive(primitive->kind);
             if (!primitive->enabled) primitiveJson["enabled"] = false;
             if (primitive->yawDegrees != 0.0f) primitiveJson["yawDegrees"] = primitive->yawDegrees;
+            if (primitive->pitchDegrees != 0.0f) {
+                primitiveJson["pitchDegrees"] = primitive->pitchDegrees;
+            }
+            if (primitive->rollDegrees != 0.0f) {
+                primitiveJson["rollDegrees"] = primitive->rollDegrees;
+            }
             if (primitive->collision != defaults.collision) primitiveJson["collision"] = primitive->collision;
             if (!primitive->receivesLightmap) primitiveJson["receivesLightmap"] = false;
             if (!primitive->castsBakedShadow) primitiveJson["castsBakedShadow"] = false;
