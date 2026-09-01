@@ -1143,6 +1143,10 @@ TopologySectorTextureField TopologyEditTargetSectorTextureField(TopologySurfaceE
 
 SectorSurfaceRef ToEditorSurfaceRef(const SectorGeneratedSurfaceRef& ref)
 {
+    if (ref.sourceKind != SectorGeneratedSurfaceSourceKind::Topology) {
+        return SectorSurfaceRef{};
+    }
+
     SectorSurfaceRef surface;
     surface.kind = ToEditorSurfaceKind(ref.kind);
     surface.topologySectorId = ref.topologySectorId;

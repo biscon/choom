@@ -1305,6 +1305,26 @@ void TestSideIdentityHelpers()
     }
 }
 
+void TestEditorSurfaceRefConversionRejectsStructuralGeometry()
+{
+    game::SectorGeneratedSurfaceRef topologyRef;
+    topologyRef.kind = game::SectorGeneratedSurfaceKind::Floor;
+    topologyRef.topologySectorId = 200;
+
+    const game::SectorSurfaceRef floor = game::ToEditorSurfaceRef(topologyRef);
+    Check(floor.kind == game::SectorSurfaceKind::Floor
+                  && floor.topologySectorId == 200,
+          "topology generated floor converts to editor floor identity");
+
+    topologyRef.sourceKind =
+            game::SectorGeneratedSurfaceSourceKind::StructuralPrimitive;
+    const game::SectorSurfaceRef structural =
+            game::ToEditorSurfaceRef(topologyRef);
+    Check(structural.kind == game::SectorSurfaceKind::None
+                  && structural.topologySectorId < 0,
+          "structural geometry cannot alias its owning topology floor identity");
+}
+
 void TestFaceAnchorDefaultsMatchTopologyDefaults()
 {
     game::SectorAuthoringFaceAnchor anchor;
@@ -15054,6 +15074,7 @@ int main()
     TestValidateAuthoringGraphRejectsDuplicateFaceAnchorIds();
     TestValidateAuthoringGraphRejectsDuplicateSideIdentity();
     TestSideIdentityHelpers();
+    TestEditorSurfaceRefConversionRejectsStructuralGeometry();
     TestFaceAnchorDefaultsMatchTopologyDefaults();
     TestImportEmptyTopologyMap();
     TestImportSingleSectorSquare();
