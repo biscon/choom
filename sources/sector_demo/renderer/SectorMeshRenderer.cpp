@@ -1324,11 +1324,8 @@ bool SectorMeshRenderer::RefreshSurfaceGeometryInternal(
                 map,
                 visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
                 lightAtmosphereSources);
-        authoredLightAtmosphereSourceCount = lightAtmosphereSources.size();
-        lightAtmosphereSources.reserve(
-                authoredLightAtmosphereSourceCount + 1);
         analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
-        analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size() + 1);
+        analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
         lightProxyRenderer.Reserve(lightAtmosphereSources.size());
     }
 
@@ -1577,8 +1574,6 @@ bool SectorMeshRenderer::RebuildRendererResources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
-    authoredLightAtmosphereSourceCount = lightAtmosphereSources.size();
-    lightAtmosphereSources.reserve(authoredLightAtmosphereSourceCount + 1);
     doorRenderer.ReserveRuntimeDoorCapacity(runtimeObjectCapacity);
     windowRenderer.Reserve(runtimeObjectCapacity);
     runtimeSeconds = 0.0f;
@@ -1588,7 +1583,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
     lightProxyRenderer.Shutdown();
     lightDustRenderer.Shutdown();
     analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
-    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size() + 1);
+    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
     lightProxyRenderer.Reserve(lightAtmosphereSources.size());
     UnloadHdrSceneColorView();
 
@@ -1755,7 +1750,6 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     surfaceLightmapBakeCurrent = false;
     objectProbeBakeCurrent = false;
     lightAtmosphereSources.clear();
-    authoredLightAtmosphereSourceCount = 0;
     flashlightCookieTexture = engine::NullTextureHandle();
     doorRenderer.ClearPreparedShadowCasters();
     dynamicModelShadowRenderer.ClearPreparedShadowCasters();
@@ -2455,16 +2449,9 @@ SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLigh
 }
 
 void SectorMeshRenderer::SetPlayerFlashlight(
-        const SectorPreviewDynamicPointLightSource* light,
-        const SectorLightAtmosphereSource* atmosphere)
+        const SectorPreviewDynamicPointLightSource* light)
 {
     dynamicLightState.SetReservedRuntimeLight(light);
-    if (lightAtmosphereSources.size() > authoredLightAtmosphereSourceCount) {
-        lightAtmosphereSources.resize(authoredLightAtmosphereSourceCount);
-    }
-    if (light != nullptr && atmosphere != nullptr) {
-        lightAtmosphereSources.push_back(*atmosphere);
-    }
 }
 
 void SectorMeshRenderer::DrawViewmodel(
@@ -3139,10 +3126,8 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
-    authoredLightAtmosphereSourceCount = lightAtmosphereSources.size();
-    lightAtmosphereSources.reserve(authoredLightAtmosphereSourceCount + 1);
     analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
-    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size() + 1);
+    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
     lightProxyRenderer.Reserve(lightAtmosphereSources.size());
     UpdateVisibilityDebug();
 }

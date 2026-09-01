@@ -188,8 +188,7 @@ public:
         return dynamicLightState.RuntimePointLight();
     }
     void SetPlayerFlashlight(
-            const SectorPreviewDynamicPointLightSource* light,
-            const SectorLightAtmosphereSource* atmosphere);
+            const SectorPreviewDynamicPointLightSource* light);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.sectorDrawRecords.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
@@ -439,7 +438,6 @@ private:
     SectorLightProxyRenderer lightProxyRenderer;
     SectorLightDustRenderer lightDustRenderer;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
-    std::size_t authoredLightAtmosphereSourceCount = 0;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
     bool localReflectionProbesCurrent = true;

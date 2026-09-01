@@ -27,7 +27,9 @@ void TestDefaultsAndSettingsParsing()
     assert(Near(settings.playerSneak.crouchMovementNoiseMultiplier, 0.25f));
     assert(Near(settings.playerFlashlight.intensity, 4.0f));
     assert(Near(settings.playerFlashlight.reachWorld, 18.0f));
-    assert(Near(settings.playerFlashlight.shadowContactOffsetWorld, 0.005f));
+    assert(settings.playerFlashlight.castsShadows);
+    assert(Near(settings.playerFlashlight.shadowStrength, 1.0f));
+    assert(Near(settings.playerFlashlight.shadowContactOffsetWorld, 0.05f));
     assert(Near(settings.playerFlashlight.lateralOffsetWorld, 0.10f));
     assert(Near(
             settings.playerFlashlight.aimConvergenceDistanceWorld, 10.0f));
@@ -85,11 +87,13 @@ void TestDefaultsAndSettingsParsing()
             < 1.0f - settings.playerSneak.darknessCutoffNormalized);
 
     assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"playerFlashlight":{"intensity":7.5,"reachWorld":24.0,"coneRadiusWorld":6.0,"tint":{"r":200,"g":220,"b":255,"a":255},"hotspotRadiusRatio":0.4,"spillBrightness":0.3,"edgeSoftness":0.2,"beamHaze":0.1,"shadowSoftness":2.0,"shadowContactOffsetWorld":0.007,"heightAboveEyeWorld":0.2,"lateralOffsetWorld":0.14,"aimConvergenceDistanceWorld":12.0,"aimResponseSeconds":0.08}})",
+            R"({"version":1,"playerFlashlight":{"intensity":7.5,"reachWorld":24.0,"coneRadiusWorld":6.0,"tint":{"r":200,"g":220,"b":255,"a":255},"hotspotRadiusRatio":0.4,"spillBrightness":0.3,"edgeSoftness":0.2,"beamHaze":0.1,"castsShadows":false,"shadowStrength":0.4,"shadowSoftness":2.0,"shadowContactOffsetWorld":0.007,"heightAboveEyeWorld":0.2,"lateralOffsetWorld":0.14,"aimConvergenceDistanceWorld":12.0,"aimResponseSeconds":0.08}})",
             settings,
             &error));
     assert(Near(settings.playerFlashlight.intensity, 7.5f));
     assert(Near(settings.playerFlashlight.reachWorld, 24.0f));
+    assert(!settings.playerFlashlight.castsShadows);
+    assert(Near(settings.playerFlashlight.shadowStrength, 0.4f));
     assert(Near(settings.playerFlashlight.shadowContactOffsetWorld, 0.007f));
     assert(Near(settings.playerFlashlight.lateralOffsetWorld, 0.14f));
     assert(Near(
@@ -105,6 +109,8 @@ void TestDefaultsAndSettingsParsing()
             flashlightPath.string(), loadedFlashlight, &error));
     assert(Near(loadedFlashlight.playerFlashlight.shadowContactOffsetWorld,
             0.007f));
+    assert(!loadedFlashlight.playerFlashlight.castsShadows);
+    assert(Near(loadedFlashlight.playerFlashlight.shadowStrength, 0.4f));
     assert(Near(loadedFlashlight.playerFlashlight.lateralOffsetWorld, 0.14f));
     assert(Near(
             loadedFlashlight.playerFlashlight.aimConvergenceDistanceWorld,
@@ -116,6 +122,14 @@ void TestDefaultsAndSettingsParsing()
             &error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerFlashlight":{"shadowContactOffsetWorld":0.1}})",
+            settings,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerFlashlight":{"shadowStrength":1.1}})",
+            settings,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerFlashlight":{"castsShadows":1}})",
             settings,
             &error));
 }

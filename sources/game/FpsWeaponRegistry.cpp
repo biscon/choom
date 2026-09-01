@@ -1425,9 +1425,12 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             flashlight.edgeSoftness = OptionalNumber(
                     *playerFlashlight, "edgeSoftness", flashlightContext)
                     .value_or(flashlight.edgeSoftness);
-            flashlight.beamHaze = OptionalNumber(
-                    *playerFlashlight, "beamHaze", flashlightContext)
-                    .value_or(flashlight.beamHaze);
+            flashlight.castsShadows = OptionalBoolean(
+                    *playerFlashlight, "castsShadows", flashlightContext)
+                    .value_or(flashlight.castsShadows);
+            flashlight.shadowStrength = OptionalNumber(
+                    *playerFlashlight, "shadowStrength", flashlightContext)
+                    .value_or(flashlight.shadowStrength);
             flashlight.shadowSoftness = OptionalNumber(
                     *playerFlashlight, "shadowSoftness", flashlightContext)
                     .value_or(flashlight.shadowSoftness);
@@ -2350,7 +2353,8 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     settings.playerFlashlight.hotspotRadiusRatio},
             {"spillBrightness", settings.playerFlashlight.spillBrightness},
             {"edgeSoftness", settings.playerFlashlight.edgeSoftness},
-            {"beamHaze", settings.playerFlashlight.beamHaze},
+            {"castsShadows", settings.playerFlashlight.castsShadows},
+            {"shadowStrength", settings.playerFlashlight.shadowStrength},
             {"shadowSoftness", settings.playerFlashlight.shadowSoftness},
             {"shadowContactOffsetWorld",
                     settings.playerFlashlight.shadowContactOffsetWorld},

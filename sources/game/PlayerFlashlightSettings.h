@@ -16,9 +16,10 @@ struct PlayerFlashlightApplicationSettings {
     float hotspotRadiusRatio = 0.30f;
     float spillBrightness = 0.22f;
     float edgeSoftness = 0.18f;
-    float beamHaze = 0.04f;
+    bool castsShadows = true;
+    float shadowStrength = 1.0f;
     float shadowSoftness = 1.5f;
-    float shadowContactOffsetWorld = 0.005f;
+    float shadowContactOffsetWorld = 0.05f;
     float heightAboveEyeWorld = 0.12f;
     float lateralOffsetWorld = 0.10f;
     float aimConvergenceDistanceWorld = 10.0f;
@@ -51,8 +52,9 @@ inline PlayerFlashlightApplicationSettings NormalizePlayerFlashlightSettings(
     settings.edgeSoftness = std::clamp(
             finiteOr(settings.edgeSoftness, defaults.edgeSoftness),
             0.02f, 0.50f);
-    settings.beamHaze = std::clamp(
-            finiteOr(settings.beamHaze, defaults.beamHaze), 0.0f, 0.25f);
+    settings.shadowStrength = std::clamp(
+            finiteOr(settings.shadowStrength, defaults.shadowStrength),
+            0.0f, 1.0f);
     settings.shadowSoftness = std::clamp(
             finiteOr(settings.shadowSoftness, defaults.shadowSoftness),
             0.0f, 4.0f);
@@ -91,7 +93,7 @@ inline std::string PlayerFlashlightSettingsError(
     if (settings.hotspotRadiusRatio != normalized.hotspotRadiusRatio) return "hotspotRadiusRatio must be between 0.05 and 0.9";
     if (settings.spillBrightness != normalized.spillBrightness) return "spillBrightness must be between 0 and 1";
     if (settings.edgeSoftness != normalized.edgeSoftness) return "edgeSoftness must be between 0.02 and 0.5";
-    if (settings.beamHaze != normalized.beamHaze) return "beamHaze must be between 0 and 0.25";
+    if (settings.shadowStrength != normalized.shadowStrength) return "shadowStrength must be between 0 and 1";
     if (settings.shadowSoftness != normalized.shadowSoftness) return "shadowSoftness must be between 0 and 4";
     if (settings.shadowContactOffsetWorld != normalized.shadowContactOffsetWorld) return "shadowContactOffsetWorld must be between 0 and 0.05";
     if (settings.heightAboveEyeWorld != normalized.heightAboveEyeWorld) return "heightAboveEyeWorld must be between -0.25 and 0.5";

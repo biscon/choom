@@ -123,7 +123,7 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState flashlightHotspotInput;
     engine::UIFloatInputState flashlightSpillInput;
     engine::UIFloatInputState flashlightEdgeInput;
-    engine::UIFloatInputState flashlightHazeInput;
+    engine::UIFloatInputState flashlightShadowStrengthInput;
     engine::UIFloatInputState flashlightShadowSoftnessInput;
     engine::UIFloatInputState flashlightShadowContactOffsetInput;
     engine::UIFloatInputState flashlightHeightInput;

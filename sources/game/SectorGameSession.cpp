@@ -1390,7 +1390,7 @@ void SectorGameSession::Update(
     if (gameOver) {
         UpdatePlayerHitCamera(hitCamera, dt);
         ApplyPlayerPose(scene);
-        scene.Renderer().SetPlayerFlashlight(nullptr, nullptr);
+        scene.Renderer().SetPlayerFlashlight(nullptr);
         return;
     }
     UpdatePlayerHitCamera(hitCamera, dt);
@@ -1599,7 +1599,7 @@ void SectorGameSession::Update(
         ClearHeldObjectUse();
         LeaveSectorFreeflyController();
         ApplyPlayerPose(scene);
-        scene.Renderer().SetPlayerFlashlight(nullptr, nullptr);
+        scene.Renderer().SetPlayerFlashlight(nullptr);
         return;
     }
     ProcessInventoryAction(context, scene);
@@ -2022,7 +2022,6 @@ void SectorGameSession::Update(
                         : nullptr);
     }
     SectorPreviewDynamicPointLightSource flashlightLight;
-    SectorLightAtmosphereSource flashlightAtmosphere;
     const bool flashlightVisible = applicationSettings != nullptr
             && cutscene.controlsEnabled
             && !cutscene.playerMove.active
@@ -2032,11 +2031,9 @@ void SectorGameSession::Update(
                     scene.Renderer().RenderCamera(),
                     controller.fpsControllerState.currentSectorId,
                     dt,
-                    flashlightLight,
-                    flashlightAtmosphere);
+                    flashlightLight);
     scene.Renderer().SetPlayerFlashlight(
-            flashlightVisible ? &flashlightLight : nullptr,
-            flashlightVisible ? &flashlightAtmosphere : nullptr);
+            flashlightVisible ? &flashlightLight : nullptr);
     UpdateAudioListener(context.audio, scene.Renderer().RenderCamera());
     const SectorFpsControllerConfig visibilityConfig =
             NormalizeSectorFpsControllerConfig(

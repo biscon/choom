@@ -43,19 +43,20 @@
     "crouchMovementNoiseMultiplier": 0.25
   },
   "playerFlashlight": {
-    "intensity": 3.0,
-    "reachWorld": 18.0,
+    "intensity": 2.0,
+    "reachWorld": 22.0,
     "coneRadiusWorld": 8.0,
     "tint": {
       "r": 255,
-      "g": 250,
-      "b": 245,
+      "g": 244,
+      "b": 220,
       "a": 255
     },
-    "hotspotRadiusRatio": 0.30000001192092896,
+    "hotspotRadiusRatio": 0.44999998807907104,
     "spillBrightness": 0.5,
     "edgeSoftness": 0.5,
-    "beamHaze": 0.0,
+    "castsShadows": false,
+    "shadowStrength": 0.75,
     "shadowSoftness": 2.0,
     "shadowContactOffsetWorld": 0.05000000074505806,
     "heightAboveEyeWorld": 0.11999999731779099,

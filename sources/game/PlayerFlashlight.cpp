@@ -45,11 +45,9 @@ bool UpdatePlayerFlashlight(
         const Camera3D& camera,
         int ownerSectorId,
         float dt,
-        SectorPreviewDynamicPointLightSource& outLight,
-        SectorLightAtmosphereSource& outAtmosphere)
+        SectorPreviewDynamicPointLightSource& outLight)
 {
     outLight = {};
-    outAtmosphere = {};
     if (!state.enabled) {
         state.directionValid = false;
         return false;
@@ -109,9 +107,9 @@ bool UpdatePlayerFlashlight(
     outLight.light.intensity = settings.intensity;
     outLight.light.selectionFadeMultiplier = 1.0f;
     outLight.light.selectionFadeEnabled = false;
-    outLight.light.castsShadow = true;
+    outLight.light.castsShadow = settings.castsShadows;
     outLight.light.shadowPriority = ReservedShadowPriority;
-    outLight.light.shadowStrength = 1.0f;
+    outLight.light.shadowStrength = settings.shadowStrength;
     outLight.light.shadowSoftness = settings.shadowSoftness;
     // Flashlight receivers interpret this profile-specific bias in world units.
     outLight.light.shadowBias = settings.shadowContactOffsetWorld;
@@ -121,26 +119,7 @@ bool UpdatePlayerFlashlight(
             settings.spillBrightness,
             settings.edgeSoftness};
     outLight.light.reserveSelection = true;
-    outLight.light.reserveShadow = true;
-
-    outAtmosphere.kind = SectorLightAtmosphereSourceKind::DynamicSpot;
-    outAtmosphere.shape = SectorLightAtmosphereShape::Cone;
-    outAtmosphere.lightId = outLight.lightId;
-    outAtmosphere.ownerSectorId = ownerSectorId;
-    outAtmosphere.positionWorld = origin;
-    outAtmosphere.directionWorld = state.smoothedDirection;
-    outAtmosphere.rangeWorld = settings.reachWorld;
-    outAtmosphere.outerConeCos = outLight.light.outerConeCos;
-    outAtmosphere.color = settings.tint;
-    outAtmosphere.intensity = settings.intensity;
-    outAtmosphere.atmosphere.proxy.shaft.enabled = settings.beamHaze > 0.0f;
-    outAtmosphere.atmosphere.proxy.shaft.lengthScale = 1.0f;
-    outAtmosphere.atmosphere.proxy.shaft.widthScale = 1.0f;
-    outAtmosphere.atmosphere.proxy.shaft.brightness = settings.beamHaze;
-    outAtmosphere.atmosphere.proxy.shaft.maxExtinction = 0.08f;
-    outAtmosphere.atmosphere.proxy.shaft.edgeSoftness =
-            std::clamp(settings.edgeSoftness * 2.0f, 0.05f, 1.0f);
-    outAtmosphere.atmosphere.proxy.shaft.scatteringTint = settings.tint;
+    outLight.light.reserveShadow = settings.castsShadows;
     return true;
 }
 

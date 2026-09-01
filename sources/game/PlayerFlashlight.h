@@ -2,7 +2,6 @@
 
 #include "game/PlayerFlashlightSettings.h"
 #include "sector_demo/SectorDynamicPointLightSelection.h"
-#include "sector_demo/renderer/SectorLightAtmosphere.h"
 
 #include <raylib.h>
 
@@ -27,7 +26,6 @@ bool UpdatePlayerFlashlight(
         const Camera3D& camera,
         int ownerSectorId,
         float dt,
-        SectorPreviewDynamicPointLightSource& outLight,
-        SectorLightAtmosphereSource& outAtmosphere);
+        SectorPreviewDynamicPointLightSource& outLight);
 
 } // namespace game

@@ -577,18 +577,15 @@ void SectorEditor::UpdateFpsViewmodelTransformsAndLight(float dt)
     if (previewState.controller.previewControlMode
             == SectorPreviewControlMode::Gameplay) {
         SectorPreviewDynamicPointLightSource flashlightLight;
-        SectorLightAtmosphereSource flashlightAtmosphere;
         const bool flashlightVisible = UpdatePlayerFlashlight(
                 flashlight,
                 applicationSettings.playerFlashlight,
                 sceneRuntime.Renderer().RenderCamera(),
                 previewState.controller.fpsControllerState.currentSectorId,
                 dt,
-                flashlightLight,
-                flashlightAtmosphere);
+                flashlightLight);
         sceneRuntime.Renderer().SetPlayerFlashlight(
-                flashlightVisible ? &flashlightLight : nullptr,
-                flashlightVisible ? &flashlightAtmosphere : nullptr);
+                flashlightVisible ? &flashlightLight : nullptr);
         const SectorFpsControllerConfig config =
                 NormalizeSectorFpsControllerConfig(
                         previewState.controller.fpsControllerConfig);
@@ -599,7 +596,7 @@ void SectorEditor::UpdateFpsViewmodelTransformsAndLight(float dt)
                 &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
                 engineContext != nullptr ? &engineContext->world : nullptr);
     } else {
-        sceneRuntime.Renderer().SetPlayerFlashlight(nullptr, nullptr);
+        sceneRuntime.Renderer().SetPlayerFlashlight(nullptr);
         sceneRuntime.Renderer().UpdateVisibilityDebug(
                 0,
                 0.0f,

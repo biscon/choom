@@ -125,7 +125,7 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             break;
         case SectorEditorPlayerSettingsTab::Lighting:
             scrollState = &state.lightingScroll;
-            contentHeight = 940.0f;
+            contentHeight = 980.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -472,14 +472,17 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         drawFloat("player_flashlight_edge", "Edge softness",
                 flashlight.edgeSoftness,
                 state.flashlightEdgeInput, 0.02f, 0.50f, 3);
-        drawFloat("player_flashlight_haze", "Beam haze",
-                flashlight.beamHaze,
-                state.flashlightHazeInput, 0.0f, 0.25f, 3);
+        section("Shadows");
+        drawCheckbox("player_flashlight_casts_shadows", "Cast shadows",
+                flashlight.castsShadows);
+        drawFloat("player_flashlight_shadow_strength", "Shadow strength",
+                flashlight.shadowStrength,
+                state.flashlightShadowStrengthInput, 0.0f, 1.0f, 3);
         drawFloat("player_flashlight_shadow_softness", "Shadow softness",
                 flashlight.shadowSoftness,
                 state.flashlightShadowSoftnessInput, 0.0f, 4.0f, 3);
         drawFloat("player_flashlight_shadow_contact_offset",
-                "Shadow contact offset (world)",
+                "Shadow contact bias (world)",
                 flashlight.shadowContactOffsetWorld,
                 state.flashlightShadowContactOffsetInput,
                 0.0f, 0.05f, 3);
