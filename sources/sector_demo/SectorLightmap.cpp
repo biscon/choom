@@ -5766,7 +5766,7 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
     }
 
     if (!map.compiledStructuralPrimitives.empty()) {
-        FnvAppendString(hash, "structural-primitives-v2");
+        FnvAppendString(hash, "structural-primitives-v3");
         std::vector<const SectorCompiledStructuralPrimitive*> primitives;
         primitives.reserve(map.compiledStructuralPrimitives.size());
         for (const SectorCompiledStructuralPrimitive& primitive
@@ -5824,6 +5824,13 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
                     FnvAppendInt(hash, primitive.sphere.radius); FnvAppendFloat(hash, primitive.sphere.centerHeight);
                     FnvAppendInt(hash, primitive.sphere.latitudeSegments);
                     FnvAppendInt(hash, primitive.sphere.longitudeSegments);
+                    break;
+                case SectorStructuralPrimitiveKind::Ladder:
+                    FnvAppendInt(hash, primitive.ladder.width);
+                    FnvAppendFloat(hash, primitive.ladder.bottom);
+                    FnvAppendFloat(hash, primitive.ladder.height);
+                    FnvAppendFloat(hash, primitive.ladder.thicknessScale);
+                    FnvAppendInt(hash, primitive.ladder.rungCount);
                     break;
             }
             FnvAppendString(hash, compiled->geometryFingerprint);

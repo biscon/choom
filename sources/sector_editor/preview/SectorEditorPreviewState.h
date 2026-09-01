@@ -6,6 +6,7 @@
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorFreeflyController.h"
+#include "sector_demo/SectorLadderInteraction.h"
 
 #include <string>
 
@@ -44,6 +45,7 @@ struct SectorEditorPreviewControllerState {
     SectorFpsFootstepCadenceState footstepCadenceState;
     SectorFpsFrameEvents frameEvents;
     SectorFpsLandingDipState landingDipState;
+    SectorLadderTraversalState ladderTraversal;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};
     LightPilotPreviewRestoreState lightPilotPreviewRestore;

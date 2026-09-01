@@ -5390,6 +5390,62 @@ void TestStructuralPrimitiveOrientationRoundTrip()
           "out-of-range structural roll is rejected");
 }
 
+void TestProceduralLadderRoundTrip()
+{
+    game::SectorAuthoringDocument document =
+            MakeAuthoringDocumentFromMap(MakeSquare());
+    game::SectorAuthoringStructuralPrimitive ladder =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 902;
+    ladder.x = 48;
+    ladder.z = 64;
+    ladder.yawDegrees = 90.0f;
+    ladder.ladder.width = 96;
+    ladder.ladder.bottom = 4.0f;
+    ladder.ladder.height = 24.0f;
+    ladder.ladder.thicknessScale = 1.5f;
+    ladder.ladder.rungCount = 9;
+    ladder.materials.defaultSurface.materialId = "frame";
+    auto& rungs = ladder.materials.overrides[static_cast<size_t>(
+            game::SectorStructuralSurfaceGroup::LadderRungs)];
+    rungs.enabled = true;
+    rungs.settings.materialId = "rungs";
+    document.graph.structuralPrimitives.push_back(ladder);
+
+    const Json saved = Json::parse(SaveAuthoringText(document));
+    const Json& value = saved["authoringGraph"]["structuralPrimitives"][0];
+    Check(value["kind"] == "ladder"
+                  && value["ladder"]["rungCount"] == 9
+                  && value["materialOverrides"].contains("ladderRungs"),
+          "procedural ladder kind, parameters, and rung material serialize");
+
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(saved.dump(), loaded, error)
+                  && loaded.graph.structuralPrimitives.size() == 1
+                  && loaded.graph.structuralPrimitives[0].kind
+                             == game::SectorStructuralPrimitiveKind::Ladder
+                  && loaded.graph.structuralPrimitives[0].ladder.width == 96
+                  && Near(loaded.graph.structuralPrimitives[0].ladder.height, 24.0f)
+                  && Near(loaded.graph.structuralPrimitives[0].ladder.thicknessScale, 1.5f)
+                  && loaded.graph.structuralPrimitives[0].ladder.rungCount == 9,
+          "procedural ladder data round-trips");
+
+    game::SectorAuthoringDocument defaultDocument =
+            MakeAuthoringDocumentFromMap(MakeSquare());
+    ladder = game::DefaultSectorAuthoringStructuralPrimitive(
+            game::SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 903;
+    defaultDocument.graph.structuralPrimitives.push_back(ladder);
+    const Json defaults = Json::parse(SaveAuthoringText(defaultDocument));
+    const Json& defaultValue =
+            defaults["authoringGraph"]["structuralPrimitives"][0]["ladder"];
+    Check(!defaultValue.contains("thicknessScale")
+                  && !defaultValue.contains("rungCount"),
+          "default ladder scale and rung count are omitted");
+}
+
 void TestRectLightRoundTrip()
 {
     SectorTopologyMap map = MakeSquare();
@@ -5508,6 +5564,7 @@ int main()
     TestFootstepSetRoundTripAndDefaults();
     TestAuthoringEditorSettingsRoundTripAndValidation();
     TestStructuralPrimitiveOrientationRoundTrip();
+    TestProceduralLadderRoundTrip();
     TestFileApi();
     TestGlobalMaterialRegistryAndReferenceRefactor();
 

@@ -633,6 +633,20 @@ if(BUILD_TESTING)
     target_link_libraries(sector_fps_controller_tests PRIVATE raylib)
     add_test(NAME sector_fps_controller COMMAND sector_fps_controller_tests)
 
+    add_executable(sector_ladder_interaction_tests
+            tests/SectorLadderInteractionTests.cpp
+            sources/sector_demo/SectorLadderInteraction.cpp
+            sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorStructuralPrimitives.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_ladder_interaction_tests PRIVATE sources)
+    target_link_libraries(sector_ladder_interaction_tests PRIVATE raylib)
+    add_test(NAME sector_ladder_interaction COMMAND sector_ladder_interaction_tests)
+
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp

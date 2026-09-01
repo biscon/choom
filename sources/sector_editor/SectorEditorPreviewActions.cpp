@@ -305,6 +305,7 @@ void UpdateSectorEditorGameplayPreview(
         const std::vector<SectorStaticModelCollider>& staticModelColliders,
         SectorEditorPreviewCollisionState& collisionState,
         SectorEditorPreviewControllerState& controllerState,
+        const SectorTopologyMap* topologyMap,
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
         float previousVisualEyeY,
@@ -322,6 +323,23 @@ void UpdateSectorEditorGameplayPreview(
             controllerState.fpsControllerState,
             controllerState.fpsControllerConfig,
             controllerInput);
+    if (topologyMap != nullptr
+            && UpdateSectorLadderTraversal(
+                    controllerState.ladderTraversal,
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig,
+                    controllerInput,
+                    *topologyMap,
+                    collisionState.sectorCollisionWorldValid
+                            ? &collisionState.sectorCollisionWorld : nullptr,
+                    dt)) {
+        collisionState.previewMoveResult = {};
+        collisionState.previewCollisionNoclipFallback = false;
+        ClearPreviewGameplayVisualState(controllerState);
+        RefreshSectorEditorGameplaySectorAndVerticalContext(
+                collisionState, controllerState);
+        return;
+    }
     const bool standingClearance = HasSectorEditorGameplayStandingClearance(
             collisionState,
             controllerState,

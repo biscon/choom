@@ -45,6 +45,7 @@ void UpdateSectorEditorGameplayPreview(
         const std::vector<SectorStaticModelCollider>& staticModelColliders,
         SectorEditorPreviewCollisionState& collisionState,
         SectorEditorPreviewControllerState& controllerState,
+        const SectorTopologyMap* topologyMap,
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
         float previousVisualEyeY,

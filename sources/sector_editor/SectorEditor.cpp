@@ -696,7 +696,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         }
         const bool canInteractWithDoors = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
                 && previewState.controller.freeflyController.mouseLookEnabled
-                && !uiState.keyboardCaptured;
+                && !uiState.keyboardCaptured
+                && !IsSectorLadderTraversalActive(
+                        previewState.controller.ladderTraversal);
         UpdatePreview3D(input, assets, dt);
         previewUseTarget = {};
         previewUsePromptTitle = {};
@@ -711,7 +713,8 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                     PreviewForwardFromPose(pose),
                     previewState.collision.sectorCollisionWorldValid
                             ? &previewState.collision.sectorCollisionWorld : nullptr,
-                    false);
+                    false,
+                    &TopologyMap());
             const std::string_view title = SectorUseTargetTitle(
                     context.world, previewUseTarget);
             if (!title.empty()) {
@@ -726,8 +729,25 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                     engine::InputEventType::KeyPressed,
                     true,
                     [this, &context](engine::InputEvent& event) {
-                        if (event.key.key != KEY_E
-                                || previewUseTarget.kind != SectorUseTargetKind::Door
+                        if (event.key.key != KEY_E) {
+                            return;
+                        }
+                        if (previewUseTarget.kind == SectorUseTargetKind::Ladder) {
+                            if (BeginSectorLadderTraversal(
+                                        previewState.controller.ladderTraversal,
+                                        previewState.controller.fpsControllerState,
+                                        previewState.controller.fpsControllerConfig,
+                                        TopologyMap(),
+                                        previewState.collision.sectorCollisionWorldValid
+                                                ? &previewState.collision.sectorCollisionWorld
+                                                : nullptr,
+                                        previewUseTarget.ladderPrimitiveId,
+                                        previewUseTarget.ladderEndpoint)) {
+                                engine::ConsumeEvent(event);
+                            }
+                            return;
+                        }
+                        if (previewUseTarget.kind != SectorUseTargetKind::Door
                                 || !context.world.IsAlive(previewUseTarget.entity)
                                 || !context.world.Has<SectorDoorMotion>(previewUseTarget.entity)) {
                             return;
@@ -742,7 +762,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                     });
         }
         if (state.mode == SectorEditorMode::Preview3D) {
-            if (ProcessFpsWeaponFire(input)) {
+            if (!IsSectorLadderTraversalActive(
+                        previewState.controller.ladderTraversal)
+                    && ProcessFpsWeaponFire(input)) {
                 ApplyGameplayPoseToPreview();
             }
             UpdateFpsViewmodelTransformsAndLight();
@@ -2709,6 +2731,11 @@ void SectorEditor::UpdatePreviewAdjustmentInput(engine::Input& input)
             float dyaw = 0.0f;
             float dpitch = 0.0f;
             float droll = 0.0f;
+            SectorEditorStructuralPrimitiveEditingService editing =
+                    BuildStructuralPrimitiveEditingService();
+            const SectorAuthoringStructuralPrimitive* selected = editing.Selected();
+            const bool yawOnly = selected != nullptr
+                    && selected->kind == SectorStructuralPrimitiveKind::Ladder;
             if (event.key.key == KEY_LEFT) dx = -moveStep;
             else if (event.key.key == KEY_RIGHT) dx = moveStep;
             else if (event.key.key == KEY_UP) dz = moveStep;
@@ -2717,13 +2744,11 @@ void SectorEditor::UpdatePreviewAdjustmentInput(engine::Input& input)
             else if (event.key.key == KEY_PAGE_DOWN) dh = -moveStep;
             else if (event.key.key == KEY_Q) dyaw = -yawStep;
             else if (event.key.key == KEY_E) dyaw = yawStep;
-            else if (event.key.key == KEY_INSERT) dpitch = yawStep;
-            else if (event.key.key == KEY_DELETE) dpitch = -yawStep;
-            else if (event.key.key == KEY_HOME) droll = yawStep;
-            else if (event.key.key == KEY_END) droll = -yawStep;
+            else if (!yawOnly && event.key.key == KEY_INSERT) dpitch = yawStep;
+            else if (!yawOnly && event.key.key == KEY_DELETE) dpitch = -yawStep;
+            else if (!yawOnly && event.key.key == KEY_HOME) droll = yawStep;
+            else if (!yawOnly && event.key.key == KEY_END) droll = -yawStep;
             else return;
-            SectorEditorStructuralPrimitiveEditingService editing =
-                    BuildStructuralPrimitiveEditingService();
             SectorEditorStructuralPreviewCandidate candidate;
             if (editing.BuildPreviewNudge(
                         dx, dz, dh, dyaw, dpitch, droll, candidate)) {
@@ -2958,6 +2983,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     sceneRuntime.RuntimeObjects().physicalModelColliders,
                     previewState.collision,
                     previewState.controller,
+                    &TopologyMap(),
                     state.previewSettingsModal.open,
                     controllerInput,
                     previousVisualEyeY,
@@ -6289,6 +6315,8 @@ void SectorEditor::DrawToolsPanel(
                     "Structure %s: drag in the canvas to place",
                     SectorStructuralPrimitiveKindName(
                             structuralPrimitiveEditingState.placementKind));
+        } else if (tool == SectorEditorTool::Ladder) {
+            statusText = "Ladder: click strictly inside a derived sector";
         }
     };
 
@@ -6324,6 +6352,7 @@ void SectorEditor::DrawToolsPanel(
     sectionLabel("Map objects");
     const SectorEditorTool mapTools[] = {
             SectorEditorTool::Structure,
+            SectorEditorTool::Ladder,
             SectorEditorTool::RuntimeObject,
             SectorEditorTool::StaticModel,
             SectorEditorTool::DynamicModel,

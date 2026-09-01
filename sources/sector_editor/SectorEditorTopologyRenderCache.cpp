@@ -1158,10 +1158,15 @@ void DrawCachedStructuralPrimitives(
             DrawLineEx(a, b, selected ? 3.0f : 2.0f, outline);
         }
         if (primitive.kind == SectorStructuralPrimitiveKind::Ramp
-                || primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
+                || primitive.kind == SectorStructuralPrimitiveKind::Stairs
+                || primitive.kind == SectorStructuralPrimitiveKind::Ladder) {
             const Vector2 center = CachedMapToScreen(context, primitive.center);
-            const Vector2 end{center.x + primitive.ascentDirection.x * 24.0f,
-                    center.y + primitive.ascentDirection.y * 24.0f};
+            const float directionLength = primitive.kind
+                            == SectorStructuralPrimitiveKind::Ladder
+                    ? 16.0f : 24.0f;
+            const Vector2 end{
+                    center.x + primitive.ascentDirection.x * directionLength,
+                    center.y + primitive.ascentDirection.y * directionLength};
             DrawLineEx(center, end, 2.0f, outline);
             const Vector2 side{-primitive.ascentDirection.y,
                     primitive.ascentDirection.x};
@@ -1175,6 +1180,15 @@ void DrawCachedStructuralPrimitives(
                             end.y - primitive.ascentDirection.y * 8.0f
                                     - side.y * 5.0f},
                     outline);
+            if (primitive.kind == SectorStructuralPrimitiveKind::Ladder
+                    && primitive.points.size() == 4) {
+                const Vector2 leftA = CachedMapToScreen(context, primitive.points[0]);
+                const Vector2 leftB = CachedMapToScreen(context, primitive.points[3]);
+                const Vector2 rightA = CachedMapToScreen(context, primitive.points[1]);
+                const Vector2 rightB = CachedMapToScreen(context, primitive.points[2]);
+                DrawLineEx(leftA, leftB, 3.0f, outline);
+                DrawLineEx(rightA, rightB, 3.0f, outline);
+            }
         }
     }
 }

@@ -55,7 +55,8 @@ float Dot(Vector3 a, Vector3 b)
 Vector3 Normalize(Vector3 value)
 {
     const float lengthSquared = Dot(value, value);
-    if (!(lengthSquared > GeometryEpsilon) || !std::isfinite(lengthSquared)) return {};
+    if (!(lengthSquared > GeometryEpsilon * GeometryEpsilon)
+            || !std::isfinite(lengthSquared)) return {};
     const float inverse = 1.0f / std::sqrt(lengthSquared);
     return Vector3{value.x * inverse, value.y * inverse, value.z * inverse};
 }
@@ -589,6 +590,177 @@ void BuildCylinder(
     addCap(false);
 }
 
+void BuildLadderRail(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        float centerX,
+        int railIndex,
+        std::vector<SectorCompiledStructuralSurface>& surfaces)
+{
+    const float half = SectorStructuralLadderFrameThicknessWorld
+            * primitive.ladder.thicknessScale * 0.5f;
+    const float x0 = centerX - half;
+    const float x1 = centerX + half;
+    const float z0 = -half;
+    const float z1 = half;
+    const float bottom = primitive.ladder.bottom;
+    const float top = bottom + primitive.ladder.height;
+    const float heightWorld = SectorAuthoringToWorldDistance(primitive.ladder.height);
+    const float size = half * 2.0f;
+    const Vector3 p000 = LocalToWorld(primitive, x0, bottom, z0);
+    const Vector3 p100 = LocalToWorld(primitive, x1, bottom, z0);
+    const Vector3 p110 = LocalToWorld(primitive, x1, bottom, z1);
+    const Vector3 p010 = LocalToWorld(primitive, x0, bottom, z1);
+    const Vector3 p001 = LocalToWorld(primitive, x0, top, z0);
+    const Vector3 p101 = LocalToWorld(primitive, x1, top, z0);
+    const Vector3 p111 = LocalToWorld(primitive, x1, top, z1);
+    const Vector3 p011 = LocalToWorld(primitive, x0, top, z1);
+    const auto& uv = ResolveMaterial(
+            primitive, SectorStructuralSurfaceGroup::LadderFrame).uv;
+    const auto add = [&](int faceIndex, Vector3 localNormal,
+                         Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+                         float chartWidth, float chartHeight) {
+        const Vector3 normal = RotateNormal(primitive, localNormal);
+        auto surface = MakeSurface(
+                primitive,
+                SectorStructuralFaceRole::LadderFrameFace,
+                railIndex * 6 + faceIndex,
+                SectorStructuralSurfaceGroup::LadderFrame,
+                normal,
+                chartWidth,
+                chartHeight);
+        if (std::fabs(localNormal.y) <= GeometryEpsilon) {
+            AppendVerticalQuad(surface, primitive, a, b, c, d, normal, uv);
+        } else {
+            AppendMappedQuad(
+                    surface, a, b, c, d, normal,
+                    FlatLocalBaseUv(primitive, a),
+                    FlatLocalBaseUv(primitive, b),
+                    FlatLocalBaseUv(primitive, c),
+                    FlatLocalBaseUv(primitive, d),
+                    {0.0f, 0.0f}, {size, 0.0f},
+                    {size, size}, {0.0f, size}, uv);
+        }
+        surfaces.push_back(std::move(surface));
+    };
+    add(0, {0, 1, 0}, p001, p011, p111, p101, size, size);
+    add(1, {0, 0, -1}, p000, p001, p101, p100, size, heightWorld);
+    add(2, {1, 0, 0}, p100, p101, p111, p110, size, heightWorld);
+    add(3, {0, 0, 1}, p110, p111, p011, p010, size, heightWorld);
+    add(4, {-1, 0, 0}, p010, p011, p001, p000, size, heightWorld);
+    add(5, {0, -1, 0}, p000, p100, p110, p010, size, size);
+}
+
+void BuildLadderRung(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        float x0,
+        float x1,
+        float authoredHeight,
+        int rungIndex,
+        std::vector<SectorCompiledStructuralSurface>& surfaces)
+{
+    const float radius = SectorStructuralLadderRungDiameterWorld
+            * primitive.ladder.thicknessScale * 0.5f;
+    const float length = x1 - x0;
+    const float circumference = 2.0f * Pi * radius;
+    const float radiusAuthored = SectorWorldToAuthoringDistance(radius);
+    const int count = SectorStructuralLadderRadialSegments;
+    const auto& uv = ResolveMaterial(
+            primitive, SectorStructuralSurfaceGroup::LadderRungs).uv;
+    auto side = MakeSurface(
+            primitive,
+            SectorStructuralFaceRole::LadderRungSide,
+            rungIndex,
+            SectorStructuralSurfaceGroup::LadderRungs,
+            {}, circumference, length);
+    for (int index = 0; index < count; ++index) {
+        const float a0 = 2.0f * Pi * index / count;
+        const float a1 = 2.0f * Pi * (index + 1) / count;
+        const float y0 = std::sin(a0);
+        const float y1 = std::sin(a1);
+        const float z0 = radius * std::cos(a0);
+        const float z1 = radius * std::cos(a1);
+        const Vector3 n0 = RotateNormal(primitive, {0.0f, y0, std::cos(a0)});
+        const Vector3 n1 = RotateNormal(primitive, {0.0f, y1, std::cos(a1)});
+        const Vector3 p00 = LocalToWorld(
+                primitive, x0, authoredHeight + radiusAuthored * y0, z0);
+        const Vector3 p01 = LocalToWorld(
+                primitive, x1, authoredHeight + radiusAuthored * y0, z0);
+        const Vector3 p11 = LocalToWorld(
+                primitive, x1, authoredHeight + radiusAuthored * y1, z1);
+        const Vector3 p10 = LocalToWorld(
+                primitive, x0, authoredHeight + radiusAuthored * y1, z1);
+        const float u0 = circumference * index / count;
+        const float u1 = circumference * (index + 1) / count;
+        AppendTriangle(side,
+                Vertex(p00, n0, {u0 / 2.0f, length / 2.0f}, {u0, length}, uv),
+                Vertex(p01, n0, {u0 / 2.0f, 0.0f}, {u0, 0.0f}, uv),
+                Vertex(p11, n1, {u1 / 2.0f, 0.0f}, {u1, 0.0f}, uv), n0);
+        AppendTriangle(side,
+                Vertex(p00, n0, {u0 / 2.0f, length / 2.0f}, {u0, length}, uv),
+                Vertex(p11, n1, {u1 / 2.0f, 0.0f}, {u1, 0.0f}, uv),
+                Vertex(p10, n1, {u1 / 2.0f, length / 2.0f}, {u1, length}, uv), n1);
+    }
+    surfaces.push_back(std::move(side));
+    const auto addCap = [&](bool right) {
+        const Vector3 normal = RotateNormal(
+                primitive, right ? Vector3{1, 0, 0} : Vector3{-1, 0, 0});
+        auto cap = MakeSurface(
+                primitive,
+                SectorStructuralFaceRole::LadderRungCap,
+                rungIndex * 2 + (right ? 1 : 0),
+                SectorStructuralSurfaceGroup::LadderRungs,
+                normal, radius * 2.0f, radius * 2.0f);
+        const float x = right ? x1 : x0;
+        const Vector3 center = LocalToWorld(primitive, x, authoredHeight, 0.0f);
+        for (int index = 0; index < count; ++index) {
+            const float a0 = 2.0f * Pi * index / count;
+            const float a1 = 2.0f * Pi * (index + 1) / count;
+            const auto point = [&](float angle) {
+                return LocalToWorld(
+                        primitive, x,
+                        authoredHeight + radiusAuthored * std::sin(angle),
+                        radius * std::cos(angle));
+            };
+            AppendTriangle(cap,
+                    Vertex(center, normal, {0, 0}, {radius, radius}, uv),
+                    Vertex(point(a0), normal,
+                            {std::cos(a0) * radius / 2.0f,
+                                    std::sin(a0) * radius / 2.0f},
+                            {(std::cos(a0) + 1.0f) * radius,
+                                    (std::sin(a0) + 1.0f) * radius}, uv),
+                    Vertex(point(a1), normal,
+                            {std::cos(a1) * radius / 2.0f,
+                                    std::sin(a1) * radius / 2.0f},
+                            {(std::cos(a1) + 1.0f) * radius,
+                                    (std::sin(a1) + 1.0f) * radius}, uv), normal);
+        }
+        surfaces.push_back(std::move(cap));
+    };
+    addCap(false);
+    addCap(true);
+}
+
+void BuildLadder(
+        const SectorAuthoringStructuralPrimitive& primitive,
+        std::vector<SectorCompiledStructuralSurface>& surfaces)
+{
+    const float width = SectorCoordToWorldDistance(primitive.ladder.width);
+    const float frameThickness = SectorStructuralLadderFrameThicknessWorld
+            * primitive.ladder.thicknessScale;
+    const float halfWidth = width * 0.5f;
+    BuildLadderRail(primitive, -halfWidth + frameThickness * 0.5f, 0, surfaces);
+    BuildLadderRail(primitive, halfWidth - frameThickness * 0.5f, 1, surfaces);
+    const float x0 = -halfWidth + frameThickness;
+    const float x1 = halfWidth - frameThickness;
+    const float spacing = primitive.ladder.height / (primitive.ladder.rungCount + 1);
+    for (int rung = 0; rung < primitive.ladder.rungCount; ++rung) {
+        BuildLadderRung(
+                primitive, x0, x1,
+                primitive.ladder.bottom + spacing * (rung + 1),
+                rung, surfaces);
+    }
+}
+
 void BuildSphere(
         const SectorAuthoringStructuralPrimitive& primitive,
         std::vector<SectorCompiledStructuralSurface>& surfaces)
@@ -818,6 +990,8 @@ float SectorStructuralPrimitivePivotHeight(
             return (primitive.cylinder.bottom + primitive.cylinder.top) * 0.5f;
         case SectorStructuralPrimitiveKind::Sphere:
             return primitive.sphere.centerHeight;
+        case SectorStructuralPrimitiveKind::Ladder:
+            return primitive.ladder.bottom + primitive.ladder.height * 0.5f;
     }
     return 0.0f;
 }
@@ -898,6 +1072,7 @@ const char* SectorStructuralPrimitiveKindName(SectorStructuralPrimitiveKind kind
         case SectorStructuralPrimitiveKind::Stairs: return "stairs";
         case SectorStructuralPrimitiveKind::Cylinder: return "cylinder";
         case SectorStructuralPrimitiveKind::Sphere: return "sphere";
+        case SectorStructuralPrimitiveKind::Ladder: return "ladder";
     }
     return "unknown";
 }
@@ -916,6 +1091,8 @@ const char* SectorStructuralSurfaceGroupName(SectorStructuralSurfaceGroup group)
         case SectorStructuralSurfaceGroup::TopCap: return "topCap";
         case SectorStructuralSurfaceGroup::CurvedSide: return "curvedSide";
         case SectorStructuralSurfaceGroup::BottomCap: return "bottomCap";
+        case SectorStructuralSurfaceGroup::LadderFrame: return "ladderFrame";
+        case SectorStructuralSurfaceGroup::LadderRungs: return "ladderRungs";
         case SectorStructuralSurfaceGroup::Count: break;
     }
     return "unknown";
@@ -938,6 +1115,9 @@ const char* SectorStructuralFaceRoleName(SectorStructuralFaceRole role)
         case SectorStructuralFaceRole::CylinderSide: return "cylinderSide";
         case SectorStructuralFaceRole::CylinderBottomCap: return "cylinderBottomCap";
         case SectorStructuralFaceRole::SphereSurface: return "sphereSurface";
+        case SectorStructuralFaceRole::LadderFrameFace: return "ladderFrameFace";
+        case SectorStructuralFaceRole::LadderRungSide: return "ladderRungSide";
+        case SectorStructuralFaceRole::LadderRungCap: return "ladderRungCap";
     }
     return "unknown";
 }
@@ -982,6 +1162,15 @@ SectorStructuralFootprint BuildSectorStructuralFootprint(
         } else if (primitive.kind == SectorStructuralPrimitiveKind::Stairs) {
             width = primitive.stairs.width;
             depth = primitive.stairs.run;
+        } else if (primitive.kind == SectorStructuralPrimitiveKind::Ladder) {
+            width = primitive.ladder.width;
+            depth = std::max<SectorCoord>(
+                    1,
+                    static_cast<SectorCoord>(std::lround(
+                            SectorWorldToAuthoringDistance(
+                                    SectorStructuralLadderFrameThicknessWorld
+                                    * primitive.ladder.thicknessScale)
+                            * SectorCoordSubdivisions)));
         }
         const float hx = SectorCoordToWorldDistance(width) * 0.5f;
         const float hz = SectorCoordToWorldDistance(depth) * 0.5f;
@@ -1140,6 +1329,36 @@ std::vector<SectorStructuralDiagnostic> ValidateSectorAuthoringStructuralPrimiti
                     AddError(diagnostics, primitive.id, "Sphere dimensions or segment counts are invalid");
                 }
                 break;
+            case SectorStructuralPrimitiveKind::Ladder: {
+                const float frameThickness = SectorStructuralLadderFrameThicknessWorld
+                        * primitive.ladder.thicknessScale;
+                const float rungDiameter = SectorStructuralLadderRungDiameterWorld
+                        * primitive.ladder.thicknessScale;
+                const float widthWorld = SectorCoordToWorldDistance(primitive.ladder.width);
+                const float spacingWorld = SectorAuthoringToWorldDistance(
+                        primitive.ladder.height / (primitive.ladder.rungCount + 1));
+                if (primitive.ladder.width < SectorStructuralMinimumPlanarExtent
+                        || !std::isfinite(primitive.ladder.bottom)
+                        || !std::isfinite(primitive.ladder.height)
+                        || primitive.ladder.height < SectorStructuralMinimumHeight
+                        || !std::isfinite(primitive.ladder.thicknessScale)
+                        || primitive.ladder.thicknessScale
+                                < SectorStructuralMinimumLadderThicknessScale
+                        || primitive.ladder.thicknessScale
+                                > SectorStructuralMaximumLadderThicknessScale
+                        || primitive.ladder.rungCount < SectorStructuralMinimumLadderRungs
+                        || primitive.ladder.rungCount > SectorStructuralMaximumLadderRungs
+                        || widthWorld <= frameThickness * 2.0f
+                        || spacingWorld < rungDiameter) {
+                    AddError(diagnostics, primitive.id,
+                            "Ladder dimensions, thickness, or rung count are invalid");
+                }
+                if (SectorStructuralPrimitiveHasTilt(primitive)) {
+                    AddError(diagnostics, primitive.id,
+                            "Ladders support yaw rotation only");
+                }
+                break;
+            }
             default:
                 AddError(diagnostics, primitive.id, "Unsupported structural primitive kind");
                 break;
@@ -1186,13 +1405,20 @@ bool CompileSectorStructuralPrimitives(
                 case SectorStructuralPrimitiveKind::Stairs: BuildStairs(*source, compiled.surfaces); break;
                 case SectorStructuralPrimitiveKind::Cylinder: BuildCylinder(*source, compiled.surfaces); break;
                 case SectorStructuralPrimitiveKind::Sphere: BuildSphere(*source, compiled.surfaces); break;
+                case SectorStructuralPrimitiveKind::Ladder: BuildLadder(*source, compiled.surfaces); break;
             }
             for (auto& surface : compiled.surfaces) surface.owningSectorIds = compiled.owningSectorIds;
-            if (compiled.surfaces.empty()
-                    || std::any_of(compiled.surfaces.begin(), compiled.surfaces.end(), [](const auto& surface) {
-                        return surface.vertices.empty();
-                    })) {
-                AddError(outDiagnostics, source->id, "Structural primitive generated invalid or empty geometry");
+            const auto emptySurface = std::find_if(
+                    compiled.surfaces.begin(), compiled.surfaces.end(),
+                    [](const auto& surface) { return surface.vertices.empty(); });
+            if (compiled.surfaces.empty() || emptySurface != compiled.surfaces.end()) {
+                const std::string detail = emptySurface == compiled.surfaces.end()
+                        ? std::string{}
+                        : std::string{" ("}
+                                + SectorStructuralFaceRoleName(emptySurface->face.role)
+                                + " " + std::to_string(emptySurface->face.roleIndex) + ")";
+                AddError(outDiagnostics, source->id,
+                        "Structural primitive generated invalid or empty geometry" + detail);
                 outCompiled.clear();
                 return false;
             }

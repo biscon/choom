@@ -47,24 +47,34 @@ int main()
             SectorStructuralPrimitiveKind::Ramp,
             SectorStructuralPrimitiveKind::Stairs,
             SectorStructuralPrimitiveKind::Cylinder,
-            SectorStructuralPrimitiveKind::Sphere};
+            SectorStructuralPrimitiveKind::Sphere,
+            SectorStructuralPrimitiveKind::Ladder};
     std::vector<SectorAuthoringStructuralPrimitive> authored;
-    for (int index = 0; index < 5; ++index) {
+    for (int index = 0; index < 6; ++index) {
         SectorAuthoringStructuralPrimitive primitive =
                 DefaultSectorAuthoringStructuralPrimitive(kinds[index]);
         primitive.id = 50 - index;
         authored.push_back(primitive);
     }
-    Require(!authored.back().collision,
+    Require(!authored[4].collision,
             "sphere collision must default off");
+    Require(authored[5].collision,
+            "ladder collision must default on");
     Require(ValidateSectorAuthoringStructuralPrimitives(authored).empty(),
             "default primitives must validate");
 
     SectorTopologyMap emptyMap;
     std::vector<SectorCompiledStructuralPrimitive> first;
     std::vector<SectorStructuralDiagnostic> diagnostics;
-    Require(CompileSectorStructuralPrimitives(
-                    authored, emptyMap, first, diagnostics),
+    const bool compiledDefaults = CompileSectorStructuralPrimitives(
+            authored, emptyMap, first, diagnostics);
+    if (!compiledDefaults) {
+        for (const SectorStructuralDiagnostic& diagnostic : diagnostics) {
+            std::cerr << "primitive " << diagnostic.primitiveId << ": "
+                      << diagnostic.message << '\n';
+        }
+    }
+    Require(compiledDefaults,
             "all primitive kinds must compile");
     Require(first.size() == authored.size(),
             "every enabled primitive must produce compiled data");
@@ -106,6 +116,56 @@ int main()
     authored.front().id = authored.back().id;
     const auto invalid = ValidateSectorAuthoringStructuralPrimitives(authored);
     Require(!invalid.empty(), "duplicate stable IDs must fail validation");
+
+    SectorAuthoringStructuralPrimitive ladder =
+            DefaultSectorAuthoringStructuralPrimitive(
+                    SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 75;
+    ladder.materials.defaultSurface.materialId = "frame";
+    auto& rungMaterial = ladder.materials.overrides[static_cast<size_t>(
+            SectorStructuralSurfaceGroup::LadderRungs)];
+    rungMaterial.enabled = true;
+    rungMaterial.settings.materialId = "rungs";
+    std::vector<SectorCompiledStructuralPrimitive> compiledLadder;
+    diagnostics.clear();
+    Require(CompileSectorStructuralPrimitives(
+                    {ladder}, emptyMap, compiledLadder, diagnostics),
+            "default ladder must compile");
+    Require(compiledLadder.front().surfaces.size()
+                    == static_cast<size_t>(12 + ladder.ladder.rungCount * 3),
+            "ladder emits six faces per rail and three surfaces per rung");
+    int frameSurfaces = 0;
+    int rungSurfaces = 0;
+    for (const SectorCompiledStructuralSurface& surface
+            : compiledLadder.front().surfaces) {
+        if (surface.materialGroup == SectorStructuralSurfaceGroup::LadderFrame) {
+            ++frameSurfaces;
+            Require(surface.materialId == "frame",
+                    "ladder frame uses the default structural material");
+        } else if (surface.materialGroup
+                == SectorStructuralSurfaceGroup::LadderRungs) {
+            ++rungSurfaces;
+            Require(surface.materialId == "rungs",
+                    "ladder rungs use their material override");
+        }
+    }
+    Require(frameSurfaces == 12
+                    && rungSurfaces == ladder.ladder.rungCount * 3,
+            "ladder surface roles separate frame and rungs");
+    const SectorStructuralFootprint ladderFootprint =
+            BuildSectorStructuralFootprint(ladder);
+    Require(!ladderFootprint.circular
+                    && ladderFootprint.pointsWorld.size() == 4,
+            "ladder exposes an oriented rectangular editor footprint");
+    SectorAuthoringStructuralPrimitive tiltedLadder = ladder;
+    tiltedLadder.pitchDegrees = 10.0f;
+    Require(!ValidateSectorAuthoringStructuralPrimitives({tiltedLadder}).empty(),
+            "ladder rejects pitch and roll");
+    SectorAuthoringStructuralPrimitive crowdedLadder = ladder;
+    crowdedLadder.ladder.rungCount = SectorStructuralMaximumLadderRungs;
+    crowdedLadder.ladder.height = 1.0f;
+    Require(!ValidateSectorAuthoringStructuralPrimitives({crowdedLadder}).empty(),
+            "ladder rejects overlapping rung spacing");
 
     SectorAuthoringStructuralPrimitive box =
             DefaultSectorAuthoringStructuralPrimitive(

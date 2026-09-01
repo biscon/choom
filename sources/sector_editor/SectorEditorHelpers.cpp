@@ -655,6 +655,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::AuthoringRectangle: return "Rectangle";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex";
         case SectorEditorTool::Structure: return "Structure";
+        case SectorEditorTool::Ladder: return "Ladder";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
         case SectorEditorTool::RuntimeObject: return "Billboard";
         case SectorEditorTool::StaticModel: return "3D Prop";
@@ -685,6 +686,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
             || tool == SectorEditorTool::AuthoringRectangle
             || tool == SectorEditorTool::AuthoringInsertVertex
             || tool == SectorEditorTool::Structure
+            || tool == SectorEditorTool::Ladder
             || tool == SectorEditorTool::AuthoringFogVolume
             || tool == SectorEditorTool::Trigger
             || tool == SectorEditorTool::LevelMarker
@@ -1163,6 +1165,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringRectangle: return "Rectangle: click first corner, then opposite corner, right click/Esc cancels";
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
         case SectorEditorTool::Structure: return "Structure: choose a shape, then drag a snapped footprint; right click/Esc cancels";
+        case SectorEditorTool::Ladder: return "Ladder: click strictly inside a derived sector to place a vertical ladder";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: hidden; use Select to move selected authoring vertices";
         case SectorEditorTool::RuntimeObject: return "Billboard: click inside a sector to place a billboard marker";
         case SectorEditorTool::StaticModel: return "3D Prop: click inside a derived sector to place a floor-relative static model";

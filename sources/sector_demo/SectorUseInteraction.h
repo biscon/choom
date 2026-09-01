@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ecs/Entity.h"
+#include "sector_demo/SectorLadderInteraction.h"
 
 #include <raylib.h>
 
@@ -15,13 +16,15 @@ struct FontAsset;
 namespace game {
 
 class SectorCollisionWorld;
+struct SectorTopologyMap;
 
 enum class SectorUseTargetKind {
     None,
     Item,
     StaticProp,
     DynamicProp,
-    Door
+    Door,
+    Ladder
 };
 
 struct SectorUseTarget {
@@ -30,6 +33,8 @@ struct SectorUseTarget {
     Vector3 targetPosition = {};
     float facingDot = -1.0f;
     float distance = 0.0f;
+    int ladderPrimitiveId = -1;
+    SectorLadderEndpoint ladderEndpoint = SectorLadderEndpoint::Bottom;
 };
 
 struct SectorUseHighlight {
@@ -56,7 +61,8 @@ SectorUseTarget FindSectorUseTarget(
         Vector3 eyePosition,
         Vector3 forward,
         const SectorCollisionWorld* collisionWorld,
-        bool includeDynamicProps = true);
+        bool includeDynamicProps = true,
+        const SectorTopologyMap* topologyMap = nullptr);
 
 void ConsiderSectorObjectUseBounds(
         SectorObjectUseTargetAccumulator& accumulator,

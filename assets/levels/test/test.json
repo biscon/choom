@@ -402,6 +402,26 @@
           "radius": 205,
           "centerHeight": 12.8125
         }
+      },
+      {
+        "id": 6,
+        "kind": "ladder",
+        "x": 3066,
+        "z": 1280,
+        "yawDegrees": 90.0,
+        "material": {
+          "materialId": "wood_table_worn"
+        },
+        "materialOverrides": {
+          "ladderRungs": {
+            "materialId": "worn_gray_metal_step_512"
+          }
+        },
+        "ladder": {
+          "width": 80,
+          "bottom": 0.0,
+          "height": 22.0
+        }
       }
     ]
   }

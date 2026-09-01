@@ -398,12 +398,14 @@ void DrawStructuralPrimitiveInspector(
             [](auto& value, SectorCoord coord) { value.z = coord; });
     drawFloat("structure_yaw", "Yaw", primitive.yawDegrees, 2, -3600.0f, 3600.0f,
             [](auto& value, float number) { value.yawDegrees = number; });
-    drawFloat("structure_pitch", "Pitch", primitive.pitchDegrees, 3,
-            -3600.0f, 3600.0f,
-            [](auto& value, float number) { value.pitchDegrees = number; });
-    drawFloat("structure_roll", "Roll", primitive.rollDegrees, 4,
-            -3600.0f, 3600.0f,
-            [](auto& value, float number) { value.rollDegrees = number; });
+    if (primitive.kind != SectorStructuralPrimitiveKind::Ladder) {
+        drawFloat("structure_pitch", "Pitch", primitive.pitchDegrees, 3,
+                -3600.0f, 3600.0f,
+                [](auto& value, float number) { value.pitchDegrees = number; });
+        drawFloat("structure_roll", "Roll", primitive.rollDegrees, 4,
+                -3600.0f, 3600.0f,
+                [](auto& value, float number) { value.rollDegrees = number; });
+    }
 
     bool collision = primitive.collision;
     if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
@@ -476,7 +478,7 @@ void DrawStructuralPrimitiveInspector(
         drawInt("structure_segments", "Radial Segments", primitive.cylinder.radialSegments, 0,
                 SectorStructuralMinimumCylinderSegments, SectorStructuralMaximumCylinderSegments,
                 [](auto& value, int number) { value.cylinder.radialSegments = number; });
-    } else {
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Sphere) {
         drawCoord("structure_radius", "Radius", primitive.sphere.radius, 5,
                 [](auto& value, SectorCoord coord) { value.sphere.radius = coord; });
         drawFloat("structure_center_height", "Center Height", primitive.sphere.centerHeight,
@@ -490,18 +492,40 @@ void DrawStructuralPrimitiveInspector(
                 SectorStructuralMinimumSphereLongitudeSegments,
                 SectorStructuralMaximumSphereLongitudeSegments,
                 [](auto& value, int number) { value.sphere.longitudeSegments = number; });
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Ladder) {
+        drawCoord("structure_ladder_width", "Width", primitive.ladder.width, 5,
+                [](auto& value, SectorCoord coord) { value.ladder.width = coord; });
+        drawFloat("structure_ladder_bottom", "Bottom", primitive.ladder.bottom,
+                7, -8192, 8192,
+                [](auto& value, float number) { value.ladder.bottom = number; });
+        drawFloat("structure_ladder_height", "Height", primitive.ladder.height,
+                8, SectorStructuralMinimumHeight, 8192,
+                [](auto& value, float number) { value.ladder.height = number; });
+        drawFloat("structure_ladder_thickness", "Thickness Scale",
+                primitive.ladder.thicknessScale, 9,
+                SectorStructuralMinimumLadderThicknessScale,
+                SectorStructuralMaximumLadderThicknessScale,
+                [](auto& value, float number) { value.ladder.thicknessScale = number; });
+        drawInt("structure_ladder_rungs", "Rung Count", primitive.ladder.rungCount,
+                0, SectorStructuralMinimumLadderRungs,
+                SectorStructuralMaximumLadderRungs,
+                [](auto& value, int number) { value.ladder.rungCount = number; });
     }
 
     engine::Text(context.ui, context.config, context.assets,
             Rectangle{0.0f, y, contentW, 28.0f}, context.font,
-            TextFormat("Default material: %s",
+            TextFormat("%s material: %s",
+                    primitive.kind == SectorStructuralPrimitiveKind::Ladder
+                            ? "Frame" : "Default",
                     primitive.materials.defaultSurface.materialId.empty()
                             ? "(none)" : primitive.materials.defaultSurface.materialId.c_str()),
             engine::UITextJustify::Left, context.config.textColor);
     y += 32.0f;
     if (engine::Button(context.ui, context.config, context.input, context.assets,
                 "structure_default_material", Rectangle{0.0f, y, contentW, rowH},
-                context.font, "Choose Default Material")) {
+                context.font,
+                primitive.kind == SectorStructuralPrimitiveKind::Ladder
+                        ? "Choose Frame Material" : "Choose Default Material")) {
         context.materialEditing.OpenMaterialPickerForAuthoringStructuralPrimitive(
                 primitive.id);
     }
@@ -525,14 +549,16 @@ void DrawStructuralPrimitiveInspector(
         }
         y += rowH + gap;
     };
-    drawDefaultUv("structure_uv_scale_u", "Scale U",
-            primitive.materials.defaultSurface.uv.scale.x, 12, 0, 0.001f, 1000.0f);
-    drawDefaultUv("structure_uv_scale_v", "Scale V",
-            primitive.materials.defaultSurface.uv.scale.y, 13, 1, 0.001f, 1000.0f);
-    drawDefaultUv("structure_uv_offset_u", "Offset U",
-            primitive.materials.defaultSurface.uv.offset.x, 14, 2, -100000.0f, 100000.0f);
-    drawDefaultUv("structure_uv_offset_v", "Offset V",
-            primitive.materials.defaultSurface.uv.offset.y, 15, 3, -100000.0f, 100000.0f);
+    if (primitive.kind != SectorStructuralPrimitiveKind::Ladder) {
+        drawDefaultUv("structure_uv_scale_u", "Scale U",
+                primitive.materials.defaultSurface.uv.scale.x, 12, 0, 0.001f, 1000.0f);
+        drawDefaultUv("structure_uv_scale_v", "Scale V",
+                primitive.materials.defaultSurface.uv.scale.y, 13, 1, 0.001f, 1000.0f);
+        drawDefaultUv("structure_uv_offset_u", "Offset U",
+                primitive.materials.defaultSurface.uv.offset.x, 14, 2, -100000.0f, 100000.0f);
+        drawDefaultUv("structure_uv_offset_v", "Offset V",
+                primitive.materials.defaultSurface.uv.offset.y, 15, 3, -100000.0f, 100000.0f);
+    }
 
     std::array<SectorStructuralSurfaceGroup, 3> groups{};
     size_t groupCount = 0;
@@ -556,6 +582,9 @@ void DrawStructuralPrimitiveInspector(
                 SectorStructuralSurfaceGroup::CurvedSide,
                 SectorStructuralSurfaceGroup::BottomCap};
         groupCount = 3;
+    } else if (primitive.kind == SectorStructuralPrimitiveKind::Ladder) {
+        groups = {SectorStructuralSurfaceGroup::LadderRungs};
+        groupCount = 1;
     }
     for (size_t slot = 0; slot < groupCount; ++slot) {
         const SectorStructuralSurfaceGroup group = groups[slot];
@@ -566,7 +595,9 @@ void DrawStructuralPrimitiveInspector(
         if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
                     TextFormat("structure_override_%zu", slot),
                     Rectangle{0.0f, y, contentW, rowH}, context.font,
-                    TextFormat("Override %s", SectorStructuralSurfaceGroupName(group)),
+                    primitive.kind == SectorStructuralPrimitiveKind::Ladder
+                            ? "Use Separate Rung Material"
+                            : TextFormat("Override %s", SectorStructuralSurfaceGroupName(group)),
                     enabledOverride)) {
             if (context.materialEditing.SetAuthoringStructuralMaterialOverrideEnabled(
                         primitive.id, group, enabledOverride)) {
@@ -579,7 +610,9 @@ void DrawStructuralPrimitiveInspector(
         if (engine::Button(context.ui, context.config, context.input, context.assets,
                     TextFormat("structure_override_material_%zu", slot),
                     Rectangle{0.0f, y, contentW, rowH}, context.font,
-                    TextFormat("Choose %s Material", SectorStructuralSurfaceGroupName(group)))) {
+                    primitive.kind == SectorStructuralPrimitiveKind::Ladder
+                            ? "Choose Rung Material"
+                            : TextFormat("Choose %s Material", SectorStructuralSurfaceGroupName(group)))) {
             context.materialEditing.OpenMaterialPickerForAuthoringStructuralPrimitive(
                     primitive.id, static_cast<int>(group));
         }
@@ -608,14 +641,16 @@ void DrawStructuralPrimitiveInspector(
             }
             y += rowH + gap;
         };
-        drawOverrideUv("scale_u", "Scale U", override.settings.uv.scale.x,
-                0, 0.001f, 1000.0f);
-        drawOverrideUv("scale_v", "Scale V", override.settings.uv.scale.y,
-                1, 0.001f, 1000.0f);
-        drawOverrideUv("offset_u", "Offset U", override.settings.uv.offset.x,
-                2, -100000.0f, 100000.0f);
-        drawOverrideUv("offset_v", "Offset V", override.settings.uv.offset.y,
-                3, -100000.0f, 100000.0f);
+        if (primitive.kind != SectorStructuralPrimitiveKind::Ladder) {
+            drawOverrideUv("scale_u", "Scale U", override.settings.uv.scale.x,
+                    0, 0.001f, 1000.0f);
+            drawOverrideUv("scale_v", "Scale V", override.settings.uv.scale.y,
+                    1, 0.001f, 1000.0f);
+            drawOverrideUv("offset_u", "Offset U", override.settings.uv.offset.x,
+                    2, -100000.0f, 100000.0f);
+            drawOverrideUv("offset_v", "Offset V", override.settings.uv.offset.y,
+                    3, -100000.0f, 100000.0f);
+        }
     }
 
     if (!uiState.fieldError.empty()) {

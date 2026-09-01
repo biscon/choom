@@ -118,6 +118,15 @@ StructuralCollisionShape BuildStructuralCollisionShape(
             shape.bottom = shape.sphereCenterY - shape.radius;
             shape.low = shape.high = shape.sphereCenterY + shape.radius;
             break;
+        case SectorStructuralPrimitiveKind::Ladder:
+            shape.halfExtents = {
+                    SectorCoordToWorldDistance(primitive.ladder.width) * 0.5f,
+                    SectorStructuralLadderFrameThicknessWorld
+                            * primitive.ladder.thicknessScale * 0.5f};
+            shape.bottom = SectorAuthoringToWorldDistance(primitive.ladder.bottom);
+            shape.low = shape.high = SectorAuthoringToWorldDistance(
+                    primitive.ladder.bottom + primitive.ladder.height);
+            break;
     }
     return shape;
 }

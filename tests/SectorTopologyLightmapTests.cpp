@@ -1378,6 +1378,37 @@ void TestSourceHashChanges()
                   != structuralHash,
           "hash includes structural primitive roll");
 
+    game::SectorTopologyMap ladderMap = base;
+    game::SectorAuthoringStructuralPrimitive ladder =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 701;
+    ladder.x = 64;
+    ladder.z = 64;
+    structuralDiagnostics.clear();
+    Check(game::CompileSectorStructuralPrimitives(
+                  {ladder}, ladderMap,
+                  ladderMap.compiledStructuralPrimitives,
+                  structuralDiagnostics),
+          "ladder source-hash fixture compiles");
+    const std::string ladderHash =
+            game::ComputeSectorLightmapSourceHash(ladderMap);
+    game::SectorTopologyMap changedLadder = ladderMap;
+    ++changedLadder.compiledStructuralPrimitives[0].authored.ladder.rungCount;
+    Check(game::ComputeSectorLightmapSourceHash(changedLadder) != ladderHash,
+          "hash includes procedural ladder rung layout");
+    changedLadder = ladderMap;
+    changedLadder.compiledStructuralPrimitives[0]
+            .authored.materials.overrides[static_cast<size_t>(
+                    game::SectorStructuralSurfaceGroup::LadderRungs)]
+            .enabled = true;
+    changedLadder.compiledStructuralPrimitives[0]
+            .authored.materials.overrides[static_cast<size_t>(
+                    game::SectorStructuralSurfaceGroup::LadderRungs)]
+            .settings.materialId = "metal/rungs";
+    Check(game::ComputeSectorLightmapSourceHash(changedLadder) != ladderHash,
+          "hash includes procedural ladder rung material assignment");
+
     game::SectorTopologyMap dynamicPropMap = base;
     game::SectorPlacedRuntimeObject dynamicProp;
     dynamicProp.id = 77;

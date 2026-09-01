@@ -2653,13 +2653,17 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             primitive->yawDegrees),
                     engine::UITextJustify::Left);
             adjustmentY += rowH + 2.0f;
-            engine::Text(smallConfig, assets,
-                    Rectangle{textX, adjustmentY, adjustmentWidth, rowH}, smallFont,
-                    TextFormat("Pitch %.1f deg   Roll %.1f deg",
-                            primitive->pitchDegrees,
-                            primitive->rollDegrees),
-                    engine::UITextJustify::Left);
-            adjustmentY += rowH + 8.0f;
+            if (primitive->kind != SectorStructuralPrimitiveKind::Ladder) {
+                engine::Text(smallConfig, assets,
+                        Rectangle{textX, adjustmentY, adjustmentWidth, rowH}, smallFont,
+                        TextFormat("Pitch %.1f deg   Roll %.1f deg",
+                                primitive->pitchDegrees,
+                                primitive->rollDegrees),
+                        engine::UITextJustify::Left);
+                adjustmentY += rowH + 8.0f;
+            } else {
+                adjustmentY += 8.0f;
+            }
         }
         constexpr float presetGap = 6.0f;
         const float presetWidth = (adjustmentWidth - presetGap * 2.0f) / 3.0f;
@@ -2687,9 +2691,13 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         SectorEditorPreviewObjectYawStepDegrees(preset)),
                 engine::UITextJustify::Left, smallConfig.mutedTextColor);
         adjustmentY += rowH + 2.0f;
+        const bool ladder = primitive != nullptr
+                && primitive->kind == SectorStructuralPrimitiveKind::Ladder;
         engine::Text(smallConfig, assets,
                 Rectangle{textX, adjustmentY, adjustmentWidth, rowH * 3.0f}, smallFont,
-                "Arrows: world X/Z   PgUp/PgDn: height   Q/E: yaw\nIns/Del: pitch   Home/End: roll\nEnter: apply   Esc: cancel   F11: unlock cursor",
+                ladder
+                        ? "Arrows: world X/Z   PgUp/PgDn: height   Q/E: yaw\nEnter: apply   Esc: cancel   F11: unlock cursor"
+                        : "Arrows: world X/Z   PgUp/PgDn: height   Q/E: yaw\nIns/Del: pitch   Home/End: roll\nEnter: apply   Esc: cancel   F11: unlock cursor",
                 engine::UITextJustify::Left, smallConfig.mutedTextColor, true);
         adjustmentY += rowH * 3.0f + 7.0f;
         const float actionWidth = (adjustmentWidth - presetGap) * 0.5f;
