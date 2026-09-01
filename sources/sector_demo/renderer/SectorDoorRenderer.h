@@ -121,6 +121,9 @@ struct SectorDoorOpaqueShaderLocations {
     int dynamicLightOuterConeCos = -1;
     int dynamicLightSpotShadowRight = -1;
     int dynamicLightSpotShadowProjection = -1;
+    int dynamicLightProfiles = -1;
+    int dynamicLightProfileParameters = -1;
+    int flashlightCookie = -1;
     int hasPointShadows = -1;
     int dynamicLightShadowSlots = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrices = [] {

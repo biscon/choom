@@ -571,6 +571,9 @@ bool SerializeGameSave(
                 {"stamina", Json{{"maximum", save.player.stamina.maximum},
                         {"current", save.player.stamina.current},
                         {"exhausted", save.player.stamina.exhausted}}}};
+        if (save.player.flashlightEnabled) {
+            root["player"]["flashlightEnabled"] = true;
+        }
         root["itemCampaign"] = ItemCampaignJson(save.itemCampaign);
         root["persistentScripts"] = PersistentJson(save.persistentScripts);
         root["levels"] = Json::array();
@@ -629,6 +632,8 @@ bool DeserializeGameSave(
         candidate.player.stamina.maximum = stamina.at("maximum").get<float>();
         candidate.player.stamina.current = stamina.at("current").get<float>();
         candidate.player.stamina.exhausted = stamina.value("exhausted", false);
+        candidate.player.flashlightEnabled = player.value(
+                "flashlightEnabled", false);
         RequireFinite(candidate.player.stamina.maximum, "player.stamina.maximum");
         RequireFinite(candidate.player.stamina.current, "player.stamina.current");
         Require(candidate.player.stamina.maximum > 0.0f

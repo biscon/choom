@@ -37,6 +37,43 @@ namespace game {
 
 namespace {
 
+engine::TextureHandle CreatePlayerFlashlightCookie(
+        engine::AssetManager& assets,
+        engine::AssetScopeHandle scope)
+{
+    constexpr int Size = 256;
+    Image image = GenImageColor(Size, Size, BLACK);
+    for (int y = 0; y < Size; ++y) {
+        for (int x = 0; x < Size; ++x) {
+            const float nx = (static_cast<float>(x) + 0.5f)
+                    / static_cast<float>(Size) * 2.0f - 1.0f;
+            const float ny = (static_cast<float>(y) + 0.5f)
+                    / static_cast<float>(Size) * 2.0f - 1.0f;
+            const float radius = std::sqrt(nx * nx + ny * ny);
+            const float ring = 0.5f + 0.5f * std::cos(radius * 35.0f);
+            const float asymmetry = std::clamp(
+                    0.92f + nx * 0.035f - ny * 0.025f,
+                    0.84f,
+                    1.0f);
+            const float value = radius < 1.0f
+                    ? std::clamp((0.72f + 0.28f * ring) * asymmetry,
+                            0.0f, 1.0f)
+                    : 0.0f;
+            const unsigned char channel = static_cast<unsigned char>(
+                    std::lround(value * 255.0f));
+            ImageDrawPixel(&image, x, y, Color{channel, channel, channel, 255});
+        }
+    }
+    const engine::TextureHandle handle = assets.CreateTextureFromImage(
+            scope,
+            "player_flashlight_cookie",
+            image,
+            engine::TextureColorUsage::LinearData,
+            engine::TextureLoad_BilinearFilter);
+    UnloadImage(image);
+    return handle;
+}
+
 constexpr float DefaultVisibilityDebugAspect = 16.0f / 9.0f;
 constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
 
@@ -235,6 +272,9 @@ uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightSpotShadowRight[MAX_DYNAMIC_LIGHTS];
 uniform vec2 dynamicLightSpotShadowProjection[MAX_DYNAMIC_LIGHTS];
+uniform int dynamicLightProfiles[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightProfileParameters[MAX_DYNAMIC_LIGHTS];
+uniform sampler2D flashlightCookie;
 uniform int hasPointShadows;
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
 uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
@@ -278,6 +318,31 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSq = dot(value, value);
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+float FlashlightProfileFactor(int lightIndex, vec3 directionFromLight)
+{
+    vec3 spotDirection = SafeNormalize(
+            dynamicLightDirections[lightIndex], vec3(0.0, -1.0, 0.0));
+    vec3 right = SafeNormalize(
+            dynamicLightSpotShadowRight[lightIndex], vec3(1.0, 0.0, 0.0));
+    vec3 up = SafeNormalize(cross(right, spotDirection), vec3(0.0, 0.0, 1.0));
+    float axial = max(dot(directionFromLight, spotDirection), 0.0001);
+    float inverseTan = dynamicLightSpotShadowProjection[lightIndex].x;
+    vec2 projected = vec2(
+            dot(directionFromLight, right),
+            dot(directionFromLight, up)) * inverseTan / axial;
+    float radial = length(projected);
+    vec3 parameters = dynamicLightProfileParameters[lightIndex];
+    float hotspot = 1.0 - smoothstep(
+            max(0.0, parameters.x * 0.55), parameters.x, radial);
+    float profile = mix(parameters.y, 1.0, hotspot);
+    float edge = 1.0 - smoothstep(
+            max(0.0, 1.0 - parameters.z), 1.0, radial);
+    float cookie = texture(
+            flashlightCookie,
+            projected * vec2(0.5, -0.5) + 0.5).r;
+    return profile * edge * mix(0.78, 1.12, cookie);
 }
 
 vec3 StoreFiniteHalfRadiance(vec3 value)
@@ -532,6 +597,10 @@ void main()
                 coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
                         ? smoothstep(outerConeCos, innerConeCos, coneDot)
                         : step(innerConeCos, coneDot);
+                if (dynamicLightProfiles[i] == 1) {
+                    coneAtten *= FlashlightProfileFactor(
+                            i, fragmentDirectionFromLight);
+                }
             }
             if (coneAtten <= 0.0) continue;
             int shadowSlot = dynamicLightShadowSlots[i];
@@ -944,6 +1013,9 @@ bool LoadPreviewMaterial(
         int& dynamicLightOuterConeCosLoc,
         int& dynamicLightSpotShadowRightLoc,
         int& dynamicLightSpotShadowProjectionLoc,
+        int& dynamicLightProfilesLoc,
+        int& dynamicLightProfileParametersLoc,
+        int& flashlightCookieLoc,
         int& hasPointShadowsLoc,
         int& dynamicLightShadowSlotsLoc,
         std::array<int, MaxDynamicSpotLightShadowCasters>& shadowLightMatrixLocs,
@@ -1025,6 +1097,12 @@ bool LoadPreviewMaterial(
             material.shader, "dynamicLightSpotShadowRight");
     dynamicLightSpotShadowProjectionLoc = GetShaderLocationArrayBase(
             material.shader, "dynamicLightSpotShadowProjection");
+    dynamicLightProfilesLoc = GetShaderLocationArrayBase(
+            material.shader, "dynamicLightProfiles");
+    dynamicLightProfileParametersLoc = GetShaderLocationArrayBase(
+            material.shader, "dynamicLightProfileParameters");
+    flashlightCookieLoc = GetShaderLocation(
+            material.shader, "flashlightCookie");
     hasPointShadowsLoc = GetShaderLocation(material.shader, "hasPointShadows");
     dynamicLightShadowSlotsLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightShadowSlots");
     for (std::size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
@@ -1261,8 +1339,11 @@ bool SectorMeshRenderer::RefreshSurfaceGeometryInternal(
                 map,
                 visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
                 lightAtmosphereSources);
+        authoredLightAtmosphereSourceCount = lightAtmosphereSources.size();
+        lightAtmosphereSources.reserve(
+                authoredLightAtmosphereSourceCount + 1);
         analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
-        analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
+        analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size() + 1);
         lightProxyRenderer.Reserve(lightAtmosphereSources.size());
     }
 
@@ -1331,6 +1412,8 @@ bool SectorMeshRenderer::RebuildRendererResources(
         error = "Preview failed: could not create asset scope";
         return false;
     }
+    flashlightCookieTexture = CreatePlayerFlashlightCookie(
+            assets, assetScope);
 
     EnsureSurfaceMaterialResources(assets, map, generatedGeometry);
 
@@ -1509,6 +1592,8 @@ bool SectorMeshRenderer::RebuildRendererResources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
+    authoredLightAtmosphereSourceCount = lightAtmosphereSources.size();
+    lightAtmosphereSources.reserve(authoredLightAtmosphereSourceCount + 1);
     doorRenderer.ReserveRuntimeDoorCapacity(runtimeObjectCapacity);
     windowRenderer.Reserve(runtimeObjectCapacity);
     runtimeSeconds = 0.0f;
@@ -1518,7 +1603,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
     lightProxyRenderer.Shutdown();
     lightDustRenderer.Shutdown();
     analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
-    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
+    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size() + 1);
     lightProxyRenderer.Reserve(lightAtmosphereSources.size());
     UnloadHdrSceneColorView();
 
@@ -1608,6 +1693,9 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 dynamicLightOuterConeCosLoc,
                 dynamicLightSpotShadowRightLoc,
                 dynamicLightSpotShadowProjectionLoc,
+                dynamicLightProfilesLoc,
+                dynamicLightProfileParametersLoc,
+                flashlightCookieLoc,
                 hasPointShadowsLoc,
                 dynamicLightShadowSlotsLoc,
                 shadowLightMatrixLocs,
@@ -1682,6 +1770,8 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     surfaceLightmapBakeCurrent = false;
     objectProbeBakeCurrent = false;
     lightAtmosphereSources.clear();
+    authoredLightAtmosphereSourceCount = 0;
+    flashlightCookieTexture = engine::NullTextureHandle();
     doorRenderer.ClearPreparedShadowCasters();
     dynamicModelShadowRenderer.ClearPreparedShadowCasters();
     runtimeSeconds = 0.0f;
@@ -1763,6 +1853,9 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
         shadowBiasLoc = -1;
         shadowStrengthLoc = -1;
         shadowSoftnessLoc = -1;
+        dynamicLightProfilesLoc = -1;
+        dynamicLightProfileParametersLoc = -1;
+        flashlightCookieLoc = -1;
         staticSpecularLocations = {};
     }
     if (depthPrepassMaterialLoaded) {
@@ -1823,6 +1916,9 @@ void SectorMeshRenderer::DrawScene(
     if (!initialized) {
         return;
     }
+
+    dynamicLightState.SetFlashlightCookieTexture(
+            assets.GetTexture(flashlightCookieTexture));
 
     BeginMode3D(camera);
     skyRenderer.Draw(assets, camera);
@@ -1886,6 +1982,10 @@ void SectorMeshRenderer::DrawScene(
     dynamicLightLocations.dynamicLightSpotShadowRight = dynamicLightSpotShadowRightLoc;
     dynamicLightLocations.dynamicLightSpotShadowProjection =
             dynamicLightSpotShadowProjectionLoc;
+    dynamicLightLocations.dynamicLightProfiles = dynamicLightProfilesLoc;
+    dynamicLightLocations.dynamicLightProfileParameters =
+            dynamicLightProfileParametersLoc;
+    dynamicLightLocations.flashlightCookie = flashlightCookieLoc;
     dynamicLightLocations.hasPointShadows = hasPointShadowsLoc;
     SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
@@ -2367,6 +2467,19 @@ SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLigh
             dynamicLightingEnabled,
             shadowMapsEnabled && dynamicLightingEnabled,
             runtimeSeconds);
+}
+
+void SectorMeshRenderer::SetPlayerFlashlight(
+        const SectorPreviewDynamicPointLightSource* light,
+        const SectorLightAtmosphereSource* atmosphere)
+{
+    dynamicLightState.SetReservedRuntimeLight(light);
+    if (lightAtmosphereSources.size() > authoredLightAtmosphereSourceCount) {
+        lightAtmosphereSources.resize(authoredLightAtmosphereSourceCount);
+    }
+    if (light != nullptr && atmosphere != nullptr) {
+        lightAtmosphereSources.push_back(*atmosphere);
+    }
 }
 
 void SectorMeshRenderer::DrawViewmodel(
@@ -3041,8 +3154,10 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
+    authoredLightAtmosphereSourceCount = lightAtmosphereSources.size();
+    lightAtmosphereSources.reserve(authoredLightAtmosphereSourceCount + 1);
     analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
-    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
+    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size() + 1);
     lightProxyRenderer.Reserve(lightAtmosphereSources.size());
     UpdateVisibilityDebug();
 }

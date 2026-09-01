@@ -103,6 +103,9 @@ uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightSpotShadowRight[MAX_DYNAMIC_LIGHTS];
 uniform vec2 dynamicLightSpotShadowProjection[MAX_DYNAMIC_LIGHTS];
+uniform int dynamicLightProfiles[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightProfileParameters[MAX_DYNAMIC_LIGHTS];
+uniform sampler2D flashlightCookie;
 uniform int hasPointShadows;
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
 
@@ -146,6 +149,22 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSq = dot(value, value);
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+float FlashlightProfileFactor(int lightIndex, vec3 directionFromLight)
+{
+    vec3 spotDirection = SafeNormalize(dynamicLightDirections[lightIndex], vec3(0.0, -1.0, 0.0));
+    vec3 right = SafeNormalize(dynamicLightSpotShadowRight[lightIndex], vec3(1.0, 0.0, 0.0));
+    vec3 up = SafeNormalize(cross(right, spotDirection), vec3(0.0, 0.0, 1.0));
+    float axial = max(dot(directionFromLight, spotDirection), 0.0001);
+    vec2 projected = vec2(dot(directionFromLight, right), dot(directionFromLight, up))
+            * dynamicLightSpotShadowProjection[lightIndex].x / axial;
+    float radial = length(projected);
+    vec3 parameters = dynamicLightProfileParameters[lightIndex];
+    float hotspot = 1.0 - smoothstep(max(0.0, parameters.x * 0.55), parameters.x, radial);
+    float edge = 1.0 - smoothstep(max(0.0, 1.0 - parameters.z), 1.0, radial);
+    float cookie = texture(flashlightCookie, projected * vec2(0.5, -0.5) + 0.5).r;
+    return mix(parameters.y, 1.0, hotspot) * edge * mix(0.78, 1.12, cookie);
 }
 
 vec3 StoreFiniteHalfRadiance(vec3 value)
@@ -342,6 +361,10 @@ void main()
                 coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
                         ? smoothstep(outerConeCos, innerConeCos, coneDot)
                         : step(innerConeCos, coneDot);
+                if (dynamicLightProfiles[i] == 1) {
+                    coneAtten *= FlashlightProfileFactor(
+                            i, fragmentDirectionFromLight);
+                }
             }
             if (coneAtten <= 0.0) continue;
             int shadowSlot = dynamicLightShadowSlots[i];
@@ -674,6 +697,12 @@ bool SectorDoorRenderer::LoadOpaqueResources()
             opaqueShader, "dynamicLightSpotShadowRight");
     opaqueShaderLocations.dynamicLightSpotShadowProjection = GetShaderLocationArrayBase(
             opaqueShader, "dynamicLightSpotShadowProjection");
+    opaqueShaderLocations.dynamicLightProfiles = GetShaderLocationArrayBase(
+            opaqueShader, "dynamicLightProfiles");
+    opaqueShaderLocations.dynamicLightProfileParameters = GetShaderLocationArrayBase(
+            opaqueShader, "dynamicLightProfileParameters");
+    opaqueShaderLocations.flashlightCookie = GetShaderLocation(
+            opaqueShader, "flashlightCookie");
     opaqueShaderLocations.hasPointShadows = GetShaderLocation(
             opaqueShader, "hasPointShadows");
     opaqueShaderLocations.dynamicLightShadowSlots = GetShaderLocationArrayBase(opaqueShader, "dynamicLightShadowSlots");
@@ -864,6 +893,12 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
             doorOpaqueLocations.dynamicLightSpotShadowRight;
     dynamicLightLocations.dynamicLightSpotShadowProjection =
             doorOpaqueLocations.dynamicLightSpotShadowProjection;
+    dynamicLightLocations.dynamicLightProfiles =
+            doorOpaqueLocations.dynamicLightProfiles;
+    dynamicLightLocations.dynamicLightProfileParameters =
+            doorOpaqueLocations.dynamicLightProfileParameters;
+    dynamicLightLocations.flashlightCookie =
+            doorOpaqueLocations.flashlightCookie;
     dynamicLightLocations.hasPointShadows = doorOpaqueLocations.hasPointShadows;
     const std::vector<SectorPreviewDynamicPointLightUniform> emptyDynamicLights;
     const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights =

@@ -4,6 +4,7 @@
 #include "engine/render/HdrEffectPolicy.h"
 #include "engine/render/ToneMapping.h"
 #include "game/PlayerHealthVisual.h"
+#include "game/PlayerFlashlightSettings.h"
 #include "game/PlayerSneak.h"
 #include "game/PlayerStamina.h"
 
@@ -338,6 +339,7 @@ struct FpsApplicationSettings {
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
     PlayerHealthApplicationSettings playerHealth;
+    PlayerFlashlightApplicationSettings playerFlashlight;
     PlayerSneakApplicationSettings playerSneak;
     PlayerStaminaApplicationSettings playerStamina;
     PlayerInventoryApplicationSettings playerInventory;

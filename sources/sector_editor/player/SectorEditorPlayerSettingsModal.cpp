@@ -6,6 +6,7 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <limits>
 
@@ -74,10 +75,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             font, "Player Settings");
 
     const char* tabNames[] = {
-            "Stamina", "Inventory", "Audio", "Health", "Sneaking"};
+            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting"};
     const float tabY = modal.y + 70.0f;
-    const float tabWidth = (modal.width - 56.0f - 32.0f) / 5.0f;
-    for (int i = 0; i < 5; ++i) {
+    const float tabWidth = (modal.width - 56.0f - 40.0f) / 6.0f;
+    for (int i = 0; i < 6; ++i) {
         const bool active = static_cast<int>(state.activeTab) == i;
         if (engine::ToolButton(
                     ui, config, input, assets,
@@ -121,6 +122,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         case SectorEditorPlayerSettingsTab::Sneaking:
             scrollState = &state.sneakingScroll;
             contentHeight = 520.0f;
+            break;
+        case SectorEditorPlayerSettingsTab::Lighting:
+            scrollState = &state.lightingScroll;
+            contentHeight = 780.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -425,6 +430,61 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                 sneak.crouchMovementNoiseMultiplier,
                 state.sneakCrouchNoiseInput,
                 0.0f, 1.0f, 3);
+    } else if (state.activeTab == SectorEditorPlayerSettingsTab::Lighting) {
+        PlayerFlashlightApplicationSettings& flashlight =
+                state.draft.playerFlashlight;
+        section("Flashlight beam");
+        drawFloat("player_flashlight_intensity", "Intensity",
+                flashlight.intensity, state.flashlightIntensityInput,
+                0.1f, 32.0f, 3);
+        drawFloat("player_flashlight_reach", "Reach (world units)",
+                flashlight.reachWorld, state.flashlightReachInput,
+                1.0f, 64.0f, 3);
+        drawFloat("player_flashlight_cone_radius",
+                "Cone radius at reach (world units)",
+                flashlight.coneRadiusWorld,
+                state.flashlightConeRadiusInput,
+                0.25f,
+                std::min(32.0f,
+                        flashlight.reachWorld * std::tan(60.0f * DEG2RAD)),
+                3);
+        int tintRed = flashlight.tint.r;
+        int tintGreen = flashlight.tint.g;
+        int tintBlue = flashlight.tint.b;
+        drawInt("player_flashlight_tint_red", "Tint red", tintRed,
+                state.flashlightTintRedInput, 0, 255);
+        drawInt("player_flashlight_tint_green", "Tint green", tintGreen,
+                state.flashlightTintGreenInput, 0, 255);
+        drawInt("player_flashlight_tint_blue", "Tint blue", tintBlue,
+                state.flashlightTintBlueInput, 0, 255);
+        flashlight.tint = Color{
+                static_cast<unsigned char>(tintRed),
+                static_cast<unsigned char>(tintGreen),
+                static_cast<unsigned char>(tintBlue),
+                255};
+        section("Beam character");
+        drawFloat("player_flashlight_hotspot", "Hotspot radius ratio",
+                flashlight.hotspotRadiusRatio,
+                state.flashlightHotspotInput, 0.05f, 0.90f, 3);
+        drawFloat("player_flashlight_spill", "Spill brightness",
+                flashlight.spillBrightness,
+                state.flashlightSpillInput, 0.0f, 1.0f, 3);
+        drawFloat("player_flashlight_edge", "Edge softness",
+                flashlight.edgeSoftness,
+                state.flashlightEdgeInput, 0.02f, 0.50f, 3);
+        drawFloat("player_flashlight_haze", "Beam haze",
+                flashlight.beamHaze,
+                state.flashlightHazeInput, 0.0f, 0.25f, 3);
+        drawFloat("player_flashlight_shadow_softness", "Shadow softness",
+                flashlight.shadowSoftness,
+                state.flashlightShadowSoftnessInput, 0.0f, 4.0f, 3);
+        section("Head mounting");
+        drawFloat("player_flashlight_height", "Height above eye (world)",
+                flashlight.heightAboveEyeWorld,
+                state.flashlightHeightInput, -0.25f, 0.50f, 3);
+        drawFloat("player_flashlight_aim_response", "Aim response (seconds)",
+                flashlight.aimResponseSeconds,
+                state.flashlightAimResponseInput, 0.0f, 0.25f, 3);
     } else {
         PlayerLowHealthVisualApplicationSettings& health =
                 state.draft.playerHealth.lowHealthVisual;

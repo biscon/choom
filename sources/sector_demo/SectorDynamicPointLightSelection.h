@@ -39,6 +39,11 @@ enum class SectorPreviewDynamicLightKind {
     Rect = 2
 };
 
+enum class SectorDynamicLightProfile {
+    None = 0,
+    Flashlight = 1
+};
+
 constexpr int SectorDynamicShadowFaceCount(
         SectorPreviewDynamicLightKind kind)
 {
@@ -88,6 +93,13 @@ struct SectorPreviewDynamicPointLightUniform {
     float shadowBias = DynamicSpotLightDefaultShadowBias;
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
     float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
+    SectorDynamicLightProfile profile = SectorDynamicLightProfile::None;
+    // x = hotspot radius ratio, y = spill brightness, z = edge softness.
+    Vector3 profileParameters = {};
+    // Reserved runtime lights are retained ahead of normally ranked lights and
+    // shadow casters while their respective budgets are non-zero.
+    bool reserveSelection = false;
+    bool reserveShadow = false;
 };
 
 struct SectorPreviewDynamicPointLightSource {
@@ -133,6 +145,7 @@ struct SectorPreviewDynamicSpotLightShadowUniforms {
 struct SectorDynamicShadowUpdateRequest {
     std::size_t casterIndex = 0;
     bool invalid = true;
+    bool reserved = false;
     uint64_t dirtySerial = 0;
     int shadowSlotCount = 1;
 };

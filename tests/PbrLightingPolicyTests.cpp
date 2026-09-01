@@ -1169,6 +1169,27 @@ void TestHdrEffectShaderAndPassPolicies()
           "optional bloom failure is latched and rlgl blend transitions are synchronized/restored");
 }
 
+void TestFlashlightProfileCoverage()
+{
+    const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const std::string models = ReadSource(PBR_SHADER_SOURCE_PATH);
+    const std::string doors = ReadSource(DOOR_SHADER_SOURCE_PATH);
+    const std::string billboards = ReadSource(BILLBOARD_SHADER_SOURCE_PATH);
+    const auto supportsFlashlight = [](const std::string& source) {
+        return source.find("uniform sampler2D flashlightCookie")
+                            != std::string::npos
+                && source.find("FlashlightProfileFactor")
+                            != std::string::npos
+                && source.find("dynamicLightProfiles[i] == 1")
+                            != std::string::npos;
+    };
+    Check(supportsFlashlight(sector)
+                    && supportsFlashlight(models)
+                    && supportsFlashlight(doors)
+                    && supportsFlashlight(billboards),
+          "all opaque and cutout dynamic-light receivers apply the projected flashlight profile");
+}
+
 } // namespace
 
 int main()
@@ -1183,6 +1204,7 @@ int main()
     TestBakedHdrConsumersStayUnclamped();
     TestDistanceFogUsesDarknessGatedScattering();
     TestHdrEffectShaderAndPassPolicies();
+    TestFlashlightProfileCoverage();
     if (failures != 0) {
         std::fprintf(stderr, "%d PBR lighting policy test(s) failed\n", failures);
         return 1;

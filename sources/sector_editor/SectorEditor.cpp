@@ -566,7 +566,7 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
     fpsPlayer.RecordShotResolution(resolvedShot);
     return true;
 }
-void SectorEditor::UpdateFpsViewmodelTransformsAndLight()
+void SectorEditor::UpdateFpsViewmodelTransformsAndLight(float dt)
 {
     fpsPlayer.UpdateTransformsAndLight(
             sceneRuntime.Renderer(),
@@ -576,6 +576,19 @@ void SectorEditor::UpdateFpsViewmodelTransformsAndLight()
 
     if (previewState.controller.previewControlMode
             == SectorPreviewControlMode::Gameplay) {
+        SectorPreviewDynamicPointLightSource flashlightLight;
+        SectorLightAtmosphereSource flashlightAtmosphere;
+        const bool flashlightVisible = UpdatePlayerFlashlight(
+                flashlight,
+                applicationSettings.playerFlashlight,
+                sceneRuntime.Renderer().RenderCamera(),
+                previewState.controller.fpsControllerState.currentSectorId,
+                dt,
+                flashlightLight,
+                flashlightAtmosphere);
+        sceneRuntime.Renderer().SetPlayerFlashlight(
+                flashlightVisible ? &flashlightLight : nullptr,
+                flashlightVisible ? &flashlightAtmosphere : nullptr);
         const SectorFpsControllerConfig config =
                 NormalizeSectorFpsControllerConfig(
                         previewState.controller.fpsControllerConfig);
@@ -586,6 +599,7 @@ void SectorEditor::UpdateFpsViewmodelTransformsAndLight()
                 &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
                 engineContext != nullptr ? &engineContext->world : nullptr);
     } else {
+        sceneRuntime.Renderer().SetPlayerFlashlight(nullptr, nullptr);
         sceneRuntime.Renderer().UpdateVisibilityDebug(
                 0,
                 0.0f,
@@ -686,7 +700,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                     == SectorPreviewControlMode::Gameplay) {
                 ApplyGameplayPoseToPreview();
             }
-            UpdateFpsViewmodelTransformsAndLight();
+            UpdateFpsViewmodelTransformsAndLight(dt);
             const Camera3D& camera = sceneRuntime.Renderer().RenderCamera();
             context.audio.SetListener(engine::AudioListener{
                     camera.position,
@@ -767,7 +781,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                     && ProcessFpsWeaponFire(input)) {
                 ApplyGameplayPoseToPreview();
             }
-            UpdateFpsViewmodelTransformsAndLight();
+            UpdateFpsViewmodelTransformsAndLight(dt);
             UpdatePreview3DSelection(input);
             const Camera3D& camera = sceneRuntime.Renderer().RenderCamera();
             context.audio.SetListener(engine::AudioListener{
@@ -2819,7 +2833,19 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [this, &assets, &controlModeToggled](engine::InputEvent& event) {
+            [this, &assets, &controlModeToggled,
+                    gameplayWeaponInput,
+                    weaponInputCaptured](engine::InputEvent& event) {
+                if (event.key.key == KEY_F
+                        && gameplayWeaponInput
+                        && !weaponInputCaptured) {
+                    TogglePlayerFlashlight(flashlight);
+                    statusText = flashlight.enabled
+                            ? "Flashlight enabled"
+                            : "Flashlight disabled";
+                    engine::ConsumeEvent(event);
+                    return;
+                }
                 if (event.key.key == KEY_F1) {
                     previewState.overlay.useBakedAmbientOcclusion = !previewState.overlay.useBakedAmbientOcclusion;
                     statusText = previewState.overlay.useBakedAmbientOcclusion

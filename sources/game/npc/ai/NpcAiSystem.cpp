@@ -815,7 +815,9 @@ void UpdateNpcAiSystem(
             ai.visualProximityDetectionFactor = 0.0f;
         } else if (useSneakDetection) {
             ai.visualLightDetectionFactor = PlayerSneakLightDetectionFactor(
-                    gameplay.playerNormalizedLightLevel,
+                    PlayerSneakVisualLightLevel(
+                            gameplay.playerNormalizedLightLevel,
+                            gameplay.playerFlashlightEnabled),
                     gameplay.playerSneakSettings->darknessCutoffNormalized,
                     gameplay.playerSneakSettings
                             ->lightHalfResponseRangeNormalized);
@@ -849,8 +851,12 @@ void UpdateNpcAiSystem(
                             ai.visualDetectionProgress,
                             ai.playerInGeometricSight,
                             sight.distanceWorld,
-                            gameplay.playerNormalizedLightLevel,
-                            gameplay.playerCrouchBlend,
+                            PlayerSneakVisualLightLevel(
+                                    gameplay.playerNormalizedLightLevel,
+                                    gameplay.playerFlashlightEnabled),
+                            PlayerSneakVisualCrouchBlend(
+                                    gameplay.playerCrouchBlend,
+                                    gameplay.playerFlashlightEnabled),
                             *gameplay.playerSneakSettings,
                             safeDt);
             ai.visualDetectionProgress = detection.progress;

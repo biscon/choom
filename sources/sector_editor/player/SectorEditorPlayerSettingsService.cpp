@@ -126,6 +126,7 @@ SectorEditorPlayerSettingsService::SaveAndClose(engine::EngineContext& context)
     candidate.playerInventory = state_.draft.playerInventory;
     candidate.playerHealth = state_.draft.playerHealth;
     candidate.playerSneak = state_.draft.playerSneak;
+    candidate.playerFlashlight = state_.draft.playerFlashlight;
     std::string saveError;
     if (!SaveFpsApplicationSettings(
                 settingsPath_.string(), candidate, &saveError)) {
@@ -175,6 +176,9 @@ void SectorEditorPlayerSettingsService::ResetActiveTab()
             break;
         case SectorEditorPlayerSettingsTab::Sneaking:
             state_.draft.playerSneak = defaults.playerSneak;
+            break;
+        case SectorEditorPlayerSettingsTab::Lighting:
+            state_.draft.playerFlashlight = defaults.playerFlashlight;
             break;
     }
     state_.errorMessage.clear();

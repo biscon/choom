@@ -11,6 +11,7 @@
 #include "game/PlayerAudio.h"
 #include "game/PlayerHitCamera.h"
 #include "game/PlayerLightLevel.h"
+#include "game/PlayerFlashlight.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
@@ -277,6 +278,7 @@ private:
     PlayerBreathingAudioRuntime breathingAudio;
     PlayerHeartbeatAudioRuntime heartbeatAudio;
     PlayerLightLevelSample playerLightLevel;
+    PlayerFlashlightState flashlight;
     std::string failureError;
     SectorUseTarget useTarget;
     SectorUseHighlightState useHighlightState;

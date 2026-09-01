@@ -25,6 +25,8 @@ void TestDefaultsAndSettingsParsing()
     assert(Near(settings.playerSneak.darknessProximityRangeWorld, 4.0f));
     assert(Near(settings.playerSneak.crouchVisualDetectionMultiplier, 0.85f));
     assert(Near(settings.playerSneak.crouchMovementNoiseMultiplier, 0.25f));
+    assert(Near(settings.playerFlashlight.intensity, 4.0f));
+    assert(Near(settings.playerFlashlight.reachWorld, 18.0f));
 
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1,"playerSneak":{"fullVisibilityLightLevel":2.5,"darknessCutoffNormalized":0.1,"lightHalfResponseRangeNormalized":0.2,"visualDetectionBuildSeconds":1.5,"visualDetectionDecaySeconds":2.0,"darknessProximityRangeWorld":0.75,"crouchVisualDetectionMultiplier":0.7,"crouchMovementNoiseMultiplier":0.2}})",
@@ -77,6 +79,18 @@ void TestDefaultsAndSettingsParsing()
     assert(settings.playerSneak.lightHalfResponseRangeNormalized > 0.0f);
     assert(settings.playerSneak.lightHalfResponseRangeNormalized
             < 1.0f - settings.playerSneak.darknessCutoffNormalized);
+
+    assert(game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerFlashlight":{"intensity":7.5,"reachWorld":24.0,"coneRadiusWorld":6.0,"tint":{"r":200,"g":220,"b":255,"a":255},"hotspotRadiusRatio":0.4,"spillBrightness":0.3,"edgeSoftness":0.2,"beamHaze":0.1,"shadowSoftness":2.0,"heightAboveEyeWorld":0.2,"aimResponseSeconds":0.08}})",
+            settings,
+            &error));
+    assert(Near(settings.playerFlashlight.intensity, 7.5f));
+    assert(Near(settings.playerFlashlight.reachWorld, 24.0f));
+    assert(settings.playerFlashlight.tint.b == 255);
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerFlashlight":{"edgeSoftness":0.0}})",
+            settings,
+            &error));
 }
 
 void TestLowLightDetectionResponseCurve()
@@ -205,6 +219,35 @@ void TestCrouchModifiersBlend()
                         settings, 1.0f), 0.25f));
 }
 
+void TestFlashlightForcesStandingFullLightVisibility()
+{
+    const game::PlayerSneakApplicationSettings settings;
+    const float light = game::PlayerSneakVisualLightLevel(0.0f, true);
+    const float crouch = game::PlayerSneakVisualCrouchBlend(1.0f, true);
+    assert(Near(light, 1.0f));
+    assert(Near(crouch, 0.0f));
+    const game::PlayerVisualDetectionStep visible =
+            game::AdvancePlayerVisualDetection(
+                    0.0f,
+                    true,
+                    20.0f,
+                    light,
+                    crouch,
+                    settings,
+                    settings.visualDetectionBuildSeconds);
+    assert(visible.detected && Near(visible.rateFactor, 1.0f));
+    const game::PlayerVisualDetectionStep occluded =
+            game::AdvancePlayerVisualDetection(
+                    0.0f,
+                    false,
+                    20.0f,
+                    light,
+                    crouch,
+                    settings,
+                    settings.visualDetectionBuildSeconds);
+    assert(!occluded.building && !occluded.detected);
+}
+
 } // namespace
 
 int main()
@@ -214,5 +257,6 @@ int main()
     TestDarknessProximityDetectionResponse();
     TestDetectionBuildAndDecay();
     TestCrouchModifiersBlend();
+    TestFlashlightForcesStandingFullLightVisibility();
     return 0;
 }

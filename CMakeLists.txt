@@ -818,6 +818,15 @@ if(BUILD_TESTING)
     target_link_libraries(player_sneak_tests PRIVATE raylib)
     add_test(NAME player_sneak COMMAND player_sneak_tests)
 
+    add_executable(player_flashlight_tests
+            tests/PlayerFlashlightTests.cpp
+            sources/game/PlayerFlashlight.cpp
+            sources/engine/render/ColorTransfer.cpp
+    )
+    target_include_directories(player_flashlight_tests PRIVATE sources)
+    target_link_libraries(player_flashlight_tests PRIVATE raylib)
+    add_test(NAME player_flashlight COMMAND player_flashlight_tests)
+
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
             sources/engine/assets/AssetManager.cpp

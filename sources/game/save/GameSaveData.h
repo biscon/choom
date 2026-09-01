@@ -129,6 +129,7 @@ struct GameSavePlayerState {
     float pitchRadians = 0.0f;
     Health health;
     PlayerStamina stamina;
+    bool flashlightEnabled = false;
 };
 
 struct GameSaveData {

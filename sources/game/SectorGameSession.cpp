@@ -1035,6 +1035,7 @@ bool SectorGameSession::StartNew(
     ClearPlayerHitCamera(hitCamera);
     breathingAudio = PlayerBreathingAudioRuntime{};
     heartbeatAudio = PlayerHeartbeatAudioRuntime{};
+    flashlight = PlayerFlashlightState{};
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
     if (path.empty()) {
@@ -1226,6 +1227,7 @@ void SectorGameSession::Shutdown(
     collision = SectorEditorPreviewCollisionState{};
     navigationDebug = SectorGameNavigationDebugState{};
     playerStamina = PlayerStamina{};
+    flashlight = PlayerFlashlightState{};
     playerKnockbackVelocity = {};
     playerStunRemainingSeconds = 0.0f;
     godMode = false;
@@ -1369,6 +1371,7 @@ GameSavePlayerState SectorGameSession::CapturePlayerSaveState() const
     result.pitchRadians = controller.fpsControllerState.pitchRadians;
     result.health = playerHealth;
     result.stamina = playerStamina;
+    result.flashlightEnabled = flashlight.enabled;
     return result;
 }
 
@@ -1387,6 +1390,7 @@ void SectorGameSession::Update(
     if (gameOver) {
         UpdatePlayerHitCamera(hitCamera, dt);
         ApplyPlayerPose(scene);
+        scene.Renderer().SetPlayerFlashlight(nullptr, nullptr);
         return;
     }
     UpdatePlayerHitCamera(hitCamera, dt);
@@ -1413,6 +1417,20 @@ void SectorGameSession::Update(
                             || heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
                         engine::ConsumeEvent(event);
                     }
+                });
+    }
+    if (!consoleInputCaptured
+            && cutscene.controlsEnabled
+            && !cutscene.playerMove.active
+            && !inventoryUi.open
+            && heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
+        context.input.ForEachEvent(
+                engine::InputEventType::KeyPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.key.key != KEY_F) return;
+                    TogglePlayerFlashlight(flashlight);
+                    engine::ConsumeEvent(event);
                 });
     }
     if (itemMessage[0] != '\0') {
@@ -1546,6 +1564,9 @@ void SectorGameSession::Update(
     npcGameplay.playerRadiusWorld = obstacleConfig.playerRadius;
     npcGameplay.playerNormalizedLightLevel = playerLightLevel.normalizedLight;
     npcGameplay.playerCrouchBlend = playerCrouchBlend;
+    npcGameplay.playerFlashlightEnabled = flashlight.enabled
+            && cutscene.controlsEnabled
+            && !cutscene.playerMove.active;
     if (applicationSettings != nullptr) {
         npcGameplay.playerMovementNoiseMultiplier =
                 playerMovementNoiseMultiplier;
@@ -1578,6 +1599,7 @@ void SectorGameSession::Update(
         ClearHeldObjectUse();
         LeaveSectorFreeflyController();
         ApplyPlayerPose(scene);
+        scene.Renderer().SetPlayerFlashlight(nullptr, nullptr);
         return;
     }
     ProcessInventoryAction(context, scene);
@@ -1999,6 +2021,22 @@ void SectorGameSession::Update(
                         ? &collision.sectorCollisionWorld
                         : nullptr);
     }
+    SectorPreviewDynamicPointLightSource flashlightLight;
+    SectorLightAtmosphereSource flashlightAtmosphere;
+    const bool flashlightVisible = applicationSettings != nullptr
+            && cutscene.controlsEnabled
+            && !cutscene.playerMove.active
+            && UpdatePlayerFlashlight(
+                    flashlight,
+                    applicationSettings->playerFlashlight,
+                    scene.Renderer().RenderCamera(),
+                    controller.fpsControllerState.currentSectorId,
+                    dt,
+                    flashlightLight,
+                    flashlightAtmosphere);
+    scene.Renderer().SetPlayerFlashlight(
+            flashlightVisible ? &flashlightLight : nullptr,
+            flashlightVisible ? &flashlightAtmosphere : nullptr);
     UpdateAudioListener(context.audio, scene.Renderer().RenderCamera());
     const SectorFpsControllerConfig visibilityConfig =
             NormalizeSectorFpsControllerConfig(
@@ -2130,6 +2168,9 @@ bool SectorGameSession::ActivateLoadedMap(
                 pendingPlayerRestore->pitchRadians;
         playerHealth = pendingPlayerRestore->health;
         playerStamina = pendingPlayerRestore->stamina;
+        SetPlayerFlashlightEnabled(
+                flashlight,
+                pendingPlayerRestore->flashlightEnabled);
         if (!BuildCollisionAndPlayer(scene, false, nullptr, &error)) {
             return false;
         }
@@ -2406,6 +2447,7 @@ bool SectorGameSession::ReloadCurrentMap(
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
     std::vector<GameSaveLevelState>* savedLevelStates = levelSaveStates;
     const Health savedHealth = playerHealth;
+    const bool savedFlashlightEnabled = flashlight.enabled;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
             || savedItemModelAssets == nullptr
@@ -2437,6 +2479,7 @@ bool SectorGameSession::ReloadCurrentMap(
     }
     if (remainPaused) Pause();
     playerHealth = savedHealth;
+    SetPlayerFlashlightEnabled(flashlight, savedFlashlightEnabled);
     error.clear();
     return true;
 }
@@ -2490,6 +2533,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     std::vector<GameSaveLevelState>* savedLevelStates = levelSaveStates;
     const Health savedHealth = playerHealth;
     const PlayerStamina savedStamina = playerStamina;
+    const bool savedFlashlightEnabled = flashlight.enabled;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
             || savedItemModelAssets == nullptr
@@ -2529,6 +2573,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     } else {
         playerHealth = savedHealth;
         playerStamina = savedStamina;
+        SetPlayerFlashlightEnabled(flashlight, savedFlashlightEnabled);
     }
 }
 

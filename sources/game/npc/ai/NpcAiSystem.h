@@ -99,6 +99,7 @@ struct NpcAiGameplayContext {
     float playerRadiusWorld = 0.25f;
     float playerNormalizedLightLevel = 1.0f;
     float playerCrouchBlend = 0.0f;
+    bool playerFlashlightEnabled = false;
     float playerMovementNoiseMultiplier = 1.0f;
     const PlayerSneakApplicationSettings* playerSneakSettings = nullptr;
     const PlayerLightLevelSample* playerLightLevel = nullptr;
