@@ -8,8 +8,13 @@
 #include "game/npc/NpcRuntime.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorDoorRuntime.h"
+#include "sector_demo/SectorLadderInteraction.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorStaticModelTransform.h"
+#include "sector_demo/SectorStructuralPrimitives.h"
+#include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorTopologyUnits.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <raymath.h>
 
@@ -19,6 +24,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <utility>
 
 namespace game {
 namespace {
@@ -290,7 +296,8 @@ SectorUseTarget FindSectorUseTarget(
         Vector3 eyePosition,
         Vector3 forward,
         const SectorCollisionWorld* collisionWorld,
-        bool includeDynamicProps)
+        bool includeDynamicProps,
+        const SectorTopologyMap* topologyMap)
 {
     SectorUseTarget best;
     if (!Finite(eyePosition) || !Finite(forward)
@@ -404,6 +411,74 @@ SectorUseTarget FindSectorUseTarget(
                         collisionWorld,
                         best);
             });
+    if (topologyMap != nullptr) {
+        for (const SectorCompiledStructuralPrimitive& compiled
+                : topologyMap->compiledStructuralPrimitives) {
+            const SectorAuthoringStructuralPrimitive& ladder = compiled.authored;
+            if (!ladder.enabled
+                    || ladder.kind != SectorStructuralPrimitiveKind::Ladder) {
+                continue;
+            }
+            const Vector2 center = SectorCoordToWorldPosition2(ladder.x, ladder.z);
+            const Vector3 front3 = RotateSectorStructuralPrimitiveVector(
+                    ladder, Vector3{0.0f, 0.0f, 1.0f});
+            const float length = std::hypot(front3.x, front3.z);
+            if (!(length > 0.0001f)) continue;
+            const Vector2 front{front3.x / length, front3.z / length};
+            const float depth = SectorStructuralLadderFrameThicknessWorld
+                    * ladder.ladder.thicknessScale;
+            constexpr float InteractionOffset = 0.55f;
+            constexpr float InteractionHeight = 1.0f;
+            const float bottomY = SectorAuthoringToWorldDistance(ladder.ladder.bottom);
+            const float topY = SectorAuthoringToWorldDistance(
+                    ladder.ladder.bottom + ladder.ladder.height);
+            const std::array<std::pair<SectorLadderEndpoint, Vector3>, 2> anchors{{
+                    {SectorLadderEndpoint::Bottom,
+                            Vector3{
+                                    center.x + front.x
+                                            * (depth * 0.5f + InteractionOffset),
+                                    bottomY + InteractionHeight,
+                                    center.y + front.y
+                                            * (depth * 0.5f + InteractionOffset)}},
+                    {SectorLadderEndpoint::Top,
+                            Vector3{
+                                    center.x - front.x
+                                            * (depth * 0.5f + InteractionOffset),
+                                    topY + InteractionHeight,
+                                    center.y - front.y
+                                            * (depth * 0.5f + InteractionOffset)}}}};
+            for (const auto& anchor : anchors) {
+                const Vector3 offset = Vector3Subtract(anchor.second, eyePosition);
+                const float distance = Vector3Length(offset);
+                if (!std::isfinite(distance) || distance > 2.0f) continue;
+                const float facing = distance > 0.0001f
+                        ? Vector3DotProduct(
+                                forward, Vector3Scale(offset, 1.0f / distance))
+                        : 1.0f;
+                if (facing < UseFacingDotThreshold
+                        || !IsVisible(
+                                collisionWorld, eyePosition, anchor.second, distance)) {
+                    continue;
+                }
+                const bool better = best.kind == SectorUseTargetKind::None
+                        || facing > best.facingDot + 0.0001f
+                        || (std::fabs(facing - best.facingDot) <= 0.0001f
+                                && distance < best.distance - 0.0001f)
+                        || (best.kind == SectorUseTargetKind::Ladder
+                                && std::fabs(facing - best.facingDot) <= 0.0001f
+                                && std::fabs(distance - best.distance) <= 0.0001f
+                                && ladder.id < best.ladderPrimitiveId);
+                if (!better) continue;
+                best = {};
+                best.kind = SectorUseTargetKind::Ladder;
+                best.targetPosition = anchor.second;
+                best.facingDot = facing;
+                best.distance = distance;
+                best.ladderPrimitiveId = ladder.id;
+                best.ladderEndpoint = anchor.first;
+            }
+        }
+    }
     return best;
 }
 
@@ -411,6 +486,7 @@ std::string_view SectorUseTargetTitle(
         engine::World& world,
         const SectorUseTarget& target)
 {
+    if (target.kind == SectorUseTargetKind::Ladder) return "Ladder";
     if (!world.IsAlive(target.entity)) return {};
     if (target.kind == SectorUseTargetKind::Item
             && world.Has<SectorItem>(target.entity)) {

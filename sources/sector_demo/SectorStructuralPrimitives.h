@@ -16,7 +16,8 @@ enum class SectorStructuralPrimitiveKind {
     Ramp,
     Stairs,
     Cylinder,
-    Sphere
+    Sphere,
+    Ladder
 };
 
 enum class SectorStructuralSurfaceGroup {
@@ -31,6 +32,8 @@ enum class SectorStructuralSurfaceGroup {
     TopCap,
     CurvedSide,
     BottomCap,
+    LadderFrame,
+    LadderRungs,
     Count
 };
 
@@ -48,7 +51,10 @@ enum class SectorStructuralFaceRole {
     CylinderTopCap,
     CylinderSide,
     CylinderBottomCap,
-    SphereSurface
+    SphereSurface,
+    LadderFrameFace,
+    LadderRungSide,
+    LadderRungCap
 };
 
 struct SectorStructuralFaceId {
@@ -111,6 +117,14 @@ struct SectorStructuralSphereParameters {
     int longitudeSegments = 24;
 };
 
+struct SectorStructuralLadderParameters {
+    SectorCoord width = SectorCoordSubdivisions * 5;
+    float bottom = 0.0f;
+    float height = 20.0f;
+    float thicknessScale = 1.0f;
+    int rungCount = 8;
+};
+
 struct SectorAuthoringStructuralPrimitive {
     int id = -1;
     SectorStructuralPrimitiveKind kind = SectorStructuralPrimitiveKind::Box;
@@ -130,6 +144,7 @@ struct SectorAuthoringStructuralPrimitive {
     SectorStructuralStairParameters stairs;
     SectorStructuralCylinderParameters cylinder;
     SectorStructuralSphereParameters sphere;
+    SectorStructuralLadderParameters ladder;
 };
 
 struct SectorStructuralFootprint {
@@ -195,6 +210,13 @@ inline constexpr int SectorStructuralDefaultSphereLongitudeSegments = 24;
 inline constexpr int SectorStructuralMinimumStairSteps = 1;
 inline constexpr int SectorStructuralMaximumStairSteps = 256;
 inline constexpr int SectorStructuralDefaultStairSteps = 8;
+inline constexpr float SectorStructuralLadderFrameThicknessWorld = 0.08f;
+inline constexpr float SectorStructuralLadderRungDiameterWorld = 0.04f;
+inline constexpr float SectorStructuralMinimumLadderThicknessScale = 0.25f;
+inline constexpr float SectorStructuralMaximumLadderThicknessScale = 4.0f;
+inline constexpr int SectorStructuralMinimumLadderRungs = 2;
+inline constexpr int SectorStructuralMaximumLadderRungs = 64;
+inline constexpr int SectorStructuralLadderRadialSegments = 16;
 
 SectorAuthoringStructuralPrimitive DefaultSectorAuthoringStructuralPrimitive(
         SectorStructuralPrimitiveKind kind);

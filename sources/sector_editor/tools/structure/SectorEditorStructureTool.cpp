@@ -175,6 +175,37 @@ bool UpdateStructureTool(SectorEditorToolContext& context)
     return handled;
 }
 
+bool HandleLadderMousePress(
+        SectorEditorToolContext& context,
+        const engine::InputEvent& event)
+{
+    if (event.mouseButton.button != MOUSE_LEFT_BUTTON
+            || context.structuralPrimitiveEditing == nullptr) return false;
+    SectorTopologyCoordPoint point;
+    std::string error;
+    if (!CurrentCoordPoint(context, point, error)) {
+        context.statusText = error.empty()
+                ? "Ladder placement is outside the authoring coordinate range"
+                : error;
+        return true;
+    }
+    float floor = 0.0f;
+    if (!context.structuralPrimitiveEditing->ResolvePlacementFloor(point, floor)) {
+        context.statusText =
+                "Ladder placement must be strictly inside a derived sector";
+        return true;
+    }
+    int primitiveId = -1;
+    if (context.structuralPrimitiveEditing->CreateFromDrag(
+                SectorStructuralPrimitiveKind::Ladder,
+                point, point, floor,
+                context.state.defaultWallTextureId,
+                &primitiveId)) {
+        context.currentTool = SectorEditorTool::Select;
+    }
+    return true;
+}
+
 void DrawFootprint(
         SectorEditorToolContext& context,
         const SectorAuthoringStructuralPrimitive& primitive,
@@ -256,6 +287,16 @@ const SectorEditorToolModule StructureModule{
         UpdateStructureTool,
         DrawStructureToolOverlay,
         CancelStructureTool};
+
+const SectorEditorToolModule LadderModule{
+        SectorEditorTool::Ladder,
+        "Ladder",
+        nullptr,
+        nullptr,
+        HandleLadderMousePress,
+        nullptr,
+        nullptr,
+        nullptr};
 
 } // namespace
 
@@ -353,6 +394,9 @@ SectorEditorStructuralHandleKind HitStructuralHandle(
         return SectorEditorStructuralHandleKind::Rotate;
     }
     if (SectorStructuralPrimitiveHasTilt(primitive)) {
+        return SectorEditorStructuralHandleKind::None;
+    }
+    if (primitive.kind == SectorStructuralPrimitiveKind::Ladder) {
         return SectorEditorStructuralHandleKind::None;
     }
     const std::vector<Vector2> points = FootprintMap(primitive);
@@ -614,6 +658,7 @@ void DrawSectorEditorStructuralSelectionOverlay(SectorEditorToolContext& context
                     center.y + direction.y * radius}), HandleRadiusPixels, color);
         }
     } else if (!SectorStructuralPrimitiveHasTilt(*selected)
+            && selected->kind != SectorStructuralPrimitiveKind::Ladder
             && points.size() == 4) {
         for (size_t index = 0; index < 4; ++index) {
             DrawCircleV(context.mapToScreen(points[index]), HandleRadiusPixels, color);
@@ -655,6 +700,11 @@ void DrawSectorEditorStructuralSelectionOverlay(SectorEditorToolContext& context
 const SectorEditorToolModule& SectorEditorStructureToolModule()
 {
     return StructureModule;
+}
+
+const SectorEditorToolModule& SectorEditorLadderToolModule()
+{
+    return LadderModule;
 }
 
 } // namespace game

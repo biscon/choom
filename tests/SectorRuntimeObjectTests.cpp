@@ -21,6 +21,7 @@
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorStaticModelTransform.h"
+#include "sector_demo/SectorStructuralPrimitives.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/renderer/SectorImpactParticleSystem.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -126,6 +127,46 @@ void TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps()
             true);
     Check(facingAway.kind == game::SectorUseTargetKind::None,
           "use targeting rejects objects outside the forward view cone");
+}
+
+void TestSectorUseTargetFindsBothLadderEndpoints()
+{
+    engine::World world;
+    game::SectorTopologyMap map;
+    game::SectorCompiledStructuralPrimitive compiled;
+    compiled.sourceAuthoringPrimitiveId = 77;
+    compiled.authored = game::DefaultSectorAuthoringStructuralPrimitive(
+            game::SectorStructuralPrimitiveKind::Ladder);
+    compiled.authored.id = 77;
+    map.compiledStructuralPrimitives.push_back(compiled);
+
+    const game::SectorUseTarget bottom = game::FindSectorUseTarget(
+            world, nullptr,
+            Vector3{0.0f, 1.2f, 1.0f},
+            Vector3{0.0f, 0.0f, -1.0f},
+            nullptr, false, &map);
+    Check(bottom.kind == game::SectorUseTargetKind::Ladder
+                  && bottom.ladderPrimitiveId == 77
+                  && bottom.ladderEndpoint == game::SectorLadderEndpoint::Bottom
+                  && game::SectorUseTargetTitle(world, bottom) == "Ladder",
+          "use targeting finds the bottom/front ladder endpoint without an ECS entity");
+
+    const game::SectorUseTarget top = game::FindSectorUseTarget(
+            world, nullptr,
+            Vector3{0.0f, 3.7f, -1.0f},
+            Vector3{0.0f, 0.0f, 1.0f},
+            nullptr, false, &map);
+    Check(top.kind == game::SectorUseTargetKind::Ladder
+                  && top.ladderEndpoint == game::SectorLadderEndpoint::Top,
+          "use targeting finds the top/rear ladder endpoint for descent");
+
+    const game::SectorUseTarget facingAway = game::FindSectorUseTarget(
+            world, nullptr,
+            Vector3{0.0f, 1.2f, 1.0f},
+            Vector3{0.0f, 0.0f, 1.0f},
+            nullptr, false, &map);
+    Check(facingAway.kind == game::SectorUseTargetKind::None,
+          "ladder endpoint targeting respects the forward view cone");
 }
 
 void TestSectorItemUseTargetFallbackAndPendingGate()
@@ -11567,6 +11608,7 @@ int main()
     TestNpcPatrolWaypointFacing();
     TestNpcPatrolPlaybackModes();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
+    TestSectorUseTargetFindsBothLadderEndpoints();
     TestSectorItemUseTargetFallbackAndPendingGate();
     TestHeldObjectUseRayTargetOrderingAndOcclusion();
     TestItemRuntimeSpawnAndFocusedRemoval();

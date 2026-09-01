@@ -130,7 +130,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "c36ef69e026634a3",
+    "sourceHash": "f61382e86a48bb49",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -150,7 +150,7 @@
     "objectProbes": {
       "path": "assets/levels/test/test.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "c36ef69e026634a3",
+      "sourceHash": "f61382e86a48bb49",
       "count": 1134,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -401,6 +401,43 @@
         "sphere": {
           "radius": 205,
           "centerHeight": 12.8125
+        }
+      },
+      {
+        "id": 6,
+        "kind": "ladder",
+        "x": 3066,
+        "z": 1280,
+        "yawDegrees": 90.0,
+        "material": {
+          "materialId": "wood_table_worn"
+        },
+        "materialOverrides": {
+          "ladderRungs": {
+            "materialId": "worn_gray_metal_step_512"
+          }
+        },
+        "ladder": {
+          "width": 80,
+          "bottom": 0.0,
+          "height": 22.0,
+          "rungCount": 9
+        }
+      },
+      {
+        "id": 7,
+        "kind": "ladder",
+        "x": 2688,
+        "z": 1024,
+        "material": {
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "ladder": {
+          "width": 160,
+          "bottom": 0.0,
+          "height": 40.0,
+          "thicknessScale": 1.2000000476837158,
+          "rungCount": 16
         }
       }
     ]

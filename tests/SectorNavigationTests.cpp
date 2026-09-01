@@ -721,6 +721,31 @@ void TestRotatedStructuralStairNavigation()
     Check(walkableForStairs() == 2,
           "upright stairs contribute their smoothed walkable proxy");
 
+    game::SectorTopologyMap ladderMap = MakeSquareMap(2048);
+    game::SectorAuthoringStructuralPrimitive ladder =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 802;
+    ladder.x = 1024;
+    ladder.z = 1024;
+    diagnostics.clear();
+    Check(game::CompileSectorStructuralPrimitives(
+                  {ladder}, ladderMap,
+                  ladderMap.compiledStructuralPrimitives, diagnostics),
+          "structural ladder navigation fixture compiles");
+    game::SectorNavigationBuildInput ladderInput;
+    warnings.clear();
+    error.clear();
+    Check(game::BuildSectorNavigationBuildInput(
+                  ladderMap, {}, {}, ladderInput, warnings, error),
+          "structural ladder navigation input builds");
+    Check(std::none_of(
+                  ladderInput.triangles.begin(), ladderInput.triangles.end(),
+                  [&](const game::SectorNavigationBuildTriangle& triangle) {
+                      return triangle.sourceId == ladder.id && triangle.area != 0;
+                  }),
+          "ladder geometry remains a non-walkable navigation obstacle");
+
     stairs.pitchDegrees = 90.0f;
     diagnostics.clear();
     Check(game::CompileSectorStructuralPrimitives(

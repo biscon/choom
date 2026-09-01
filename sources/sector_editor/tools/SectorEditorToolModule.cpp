@@ -41,6 +41,7 @@ const SectorEditorToolModule* FindSectorEditorToolModule(SectorEditorTool tool)
     }
     if (tool == SectorEditorTool::Trigger) return &SectorEditorTriggerToolModule();
     if (tool == SectorEditorTool::Structure) return &SectorEditorStructureToolModule();
+    if (tool == SectorEditorTool::Ladder) return &SectorEditorLadderToolModule();
     return nullptr;
 }
 

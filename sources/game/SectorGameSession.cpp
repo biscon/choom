@@ -1664,6 +1664,7 @@ void SectorGameSession::Update(
             objects.physicalModelColliders,
             collision,
             controller,
+            &topologyMap,
             false,
             input,
             previousVisualEyeY,
@@ -1771,7 +1772,8 @@ void SectorGameSession::Update(
         }
         UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
     } else if (heldObjectUse.phase == ItemHeldUsePhase::Inactive
-            && !inventoryUi.open && cutscene.controlsEnabled) {
+            && !inventoryUi.open && cutscene.controlsEnabled
+            && !IsSectorLadderTraversalActive(controller.ladderTraversal)) {
         const SectorViewPose interactionPose = SectorFpsControllerPose(
                 controller.fpsControllerState,
                 controller.fpsControllerConfig);
@@ -1782,7 +1784,8 @@ void SectorGameSession::Update(
                 GameplayForward(controller),
                 collision.sectorCollisionWorldValid
                         ? &collision.sectorCollisionWorld : nullptr,
-                true);
+                true,
+                &topologyMap);
         UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
         const std::string_view promptTitle = SectorUseTargetTitle(
                 context.world, useTarget);
@@ -1847,6 +1850,16 @@ void SectorGameSession::Update(
                 } else if (useTarget.kind == SectorUseTargetKind::Door) {
                     handled = RequestSectorScriptDoorUse(
                             context, scriptHost, useTarget.entity);
+                } else if (useTarget.kind == SectorUseTargetKind::Ladder) {
+                    handled = BeginSectorLadderTraversal(
+                            controller.ladderTraversal,
+                            controller.fpsControllerState,
+                            controller.fpsControllerConfig,
+                            topologyMap,
+                            collision.sectorCollisionWorldValid
+                                    ? &collision.sectorCollisionWorld : nullptr,
+                            useTarget.ladderPrimitiveId,
+                            useTarget.ladderEndpoint);
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
                         && context.world.IsAlive(useTarget.entity)
                         && context.world.Has<SectorDynamicModel>(useTarget.entity)) {

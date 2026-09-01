@@ -4137,7 +4137,8 @@ SectorStructuralPrimitiveKind ReadStructuralPrimitiveKind(
     if (kind == "stairs") return SectorStructuralPrimitiveKind::Stairs;
     if (kind == "cylinder") return SectorStructuralPrimitiveKind::Cylinder;
     if (kind == "sphere") return SectorStructuralPrimitiveKind::Sphere;
-    Fail(context + ".kind must be 'box', 'ramp', 'stairs', 'cylinder', or 'sphere'");
+    if (kind == "ladder") return SectorStructuralPrimitiveKind::Ladder;
+    Fail(context + ".kind must be 'box', 'ramp', 'stairs', 'cylinder', 'sphere', or 'ladder'");
 }
 
 SectorStructuralMaterialSettings ReadStructuralMaterialSettings(
@@ -4622,6 +4623,20 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
                     primitive.sphere.longitudeSegments = parameters.contains("longitudeSegments")
                             ? ReadInt(parameters, "longitudeSegments", context + ".sphere")
                             : SectorStructuralDefaultSphereLongitudeSegments;
+                    break;
+                case SectorStructuralPrimitiveKind::Ladder:
+                    primitive.ladder.width = ReadCoord(
+                            parameters, "width", context + ".ladder");
+                    primitive.ladder.bottom = ReadFloat(
+                            parameters, "bottom", context + ".ladder");
+                    primitive.ladder.height = ReadFloat(
+                            parameters, "height", context + ".ladder");
+                    primitive.ladder.thicknessScale = parameters.contains("thicknessScale")
+                            ? ReadFloat(parameters, "thicknessScale", context + ".ladder")
+                            : 1.0f;
+                    primitive.ladder.rungCount = parameters.contains("rungCount")
+                            ? ReadInt(parameters, "rungCount", context + ".ladder")
+                            : 8;
                     break;
             }
             graph.structuralPrimitives.push_back(std::move(primitive));
@@ -5207,6 +5222,20 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
                     }
                     if (primitive->sphere.longitudeSegments != SectorStructuralDefaultSphereLongitudeSegments) {
                         primitiveJson["sphere"]["longitudeSegments"] = primitive->sphere.longitudeSegments;
+                    }
+                    break;
+                case SectorStructuralPrimitiveKind::Ladder:
+                    primitiveJson["ladder"] = Json{
+                            {"width", primitive->ladder.width},
+                            {"bottom", primitive->ladder.bottom},
+                            {"height", primitive->ladder.height}};
+                    if (primitive->ladder.thicknessScale != 1.0f) {
+                        primitiveJson["ladder"]["thicknessScale"] =
+                                primitive->ladder.thicknessScale;
+                    }
+                    if (primitive->ladder.rungCount != 8) {
+                        primitiveJson["ladder"]["rungCount"] =
+                                primitive->ladder.rungCount;
                     }
                     break;
             }

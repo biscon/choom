@@ -1166,11 +1166,67 @@ Vector4 HdrLightmapTexel(
             game::SectorLightmapBinary16ToFloat(artifact.rgba16[base + 3u])};
 }
 
+bool CompactTestLightmapLayout(
+        game::SectorLightmapLayout& layout,
+        int minimumWidth,
+        int minimumHeight,
+        std::string& error)
+{
+    const int originalWidth = layout.atlasWidth;
+    const int originalHeight = layout.atlasHeight;
+    if (originalWidth <= 0 || originalHeight <= 0) {
+        error = "test lightmap layout has invalid atlas dimensions";
+        return false;
+    }
+
+    int compactWidth = std::max(1, minimumWidth);
+    int compactHeight = std::max(1, minimumHeight);
+    for (const game::SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex < 0) {
+            continue;
+        }
+        compactWidth = std::max(compactWidth, chart.x + chart.width);
+        compactHeight = std::max(compactHeight, chart.y + chart.height);
+    }
+    if (compactWidth > originalWidth || compactHeight > originalHeight) {
+        error = "test lightmap charts exceed the source atlas dimensions";
+        return false;
+    }
+
+    for (game::SectorLightmapChart& chart : layout.charts) {
+        for (Vector2& uv : chart.vertexUvs) {
+            uv.x *= static_cast<float>(originalWidth)
+                    / static_cast<float>(compactWidth);
+            uv.y *= static_cast<float>(originalHeight)
+                    / static_cast<float>(compactHeight);
+        }
+    }
+    layout.atlasWidth = compactWidth;
+    layout.atlasHeight = compactHeight;
+    return true;
+}
+
+bool BuildDraftTestLightmapLayout(
+        game::SectorTopologyMap& map,
+        game::SectorLightmapLayout& layout,
+        std::string& error,
+        int minimumWidth = 1,
+        int minimumHeight = 1)
+{
+    map.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::Draft;
+    return game::BuildSectorLightmapLayout(map, layout, error)
+            && CompactTestLightmapLayout(
+                    layout, minimumWidth, minimumHeight, error);
+}
+
 LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fileName)
 {
     game::SectorLightmapLayout layout;
     std::string error;
-    Check(game::BuildSectorLightmapLayout(map, layout, error), "metric lightmap layout builds");
+    Check(BuildDraftTestLightmapLayout(
+                  map, layout, error, 256, 256),
+          "metric lightmap layout builds at compact Draft quality");
     game::SectorGeneratedGeometry geometry;
     Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "metric geometry builds");
 
@@ -1377,6 +1433,37 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(rolledStructural)
                   != structuralHash,
           "hash includes structural primitive roll");
+
+    game::SectorTopologyMap ladderMap = base;
+    game::SectorAuthoringStructuralPrimitive ladder =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 701;
+    ladder.x = 64;
+    ladder.z = 64;
+    structuralDiagnostics.clear();
+    Check(game::CompileSectorStructuralPrimitives(
+                  {ladder}, ladderMap,
+                  ladderMap.compiledStructuralPrimitives,
+                  structuralDiagnostics),
+          "ladder source-hash fixture compiles");
+    const std::string ladderHash =
+            game::ComputeSectorLightmapSourceHash(ladderMap);
+    game::SectorTopologyMap changedLadder = ladderMap;
+    ++changedLadder.compiledStructuralPrimitives[0].authored.ladder.rungCount;
+    Check(game::ComputeSectorLightmapSourceHash(changedLadder) != ladderHash,
+          "hash includes procedural ladder rung layout");
+    changedLadder = ladderMap;
+    changedLadder.compiledStructuralPrimitives[0]
+            .authored.materials.overrides[static_cast<size_t>(
+                    game::SectorStructuralSurfaceGroup::LadderRungs)]
+            .enabled = true;
+    changedLadder.compiledStructuralPrimitives[0]
+            .authored.materials.overrides[static_cast<size_t>(
+                    game::SectorStructuralSurfaceGroup::LadderRungs)]
+            .settings.materialId = "metal/rungs";
+    Check(game::ComputeSectorLightmapSourceHash(changedLadder) != ladderHash,
+          "hash includes procedural ladder rung material assignment");
 
     game::SectorTopologyMap dynamicPropMap = base;
     game::SectorPlacedRuntimeObject dynamicProp;
@@ -2383,7 +2470,8 @@ void TestMiddleSurfacesReceiveLightmapsWithoutOccluding()
     Check(middleSurfaceCount == 2, "middle lightmap test generated middle surfaces");
 
     game::SectorLightmapLayout layout;
-    Check(game::BuildSectorLightmapLayout(map, layout, error), "middle lightmap layout builds");
+    Check(BuildDraftTestLightmapLayout(map, layout, error),
+          "middle lightmap layout builds at compact Draft quality");
     Check(static_cast<int>(layout.charts.size()) == static_cast<int>(geometry.surfaces.size()),
           "layout keeps surface-index slots for generated geometry");
     Check(CountValidCharts(layout) == static_cast<int>(geometry.surfaces.size()),
@@ -3721,7 +3809,8 @@ void TestObjectLightProbeBakeWritesSidecarAndStats()
 
     game::SectorLightmapLayout layout;
     std::string error;
-    Check(game::BuildSectorLightmapLayout(map, layout, error), "phase 3b lightmap layout builds");
+    Check(BuildDraftTestLightmapLayout(map, layout, error),
+          "phase 3b lightmap layout builds at compact Draft quality");
 
     game::SectorLightmapBakeResult result;
     Check(game::BakeSectorLightmap(map, layout, outputPath.string().c_str(), result, error),
@@ -4737,6 +4826,8 @@ void TestStaticModelFingerprintRefreshAndHashInputs()
 void TestStaticModelReceivesAndCastsBakedLighting()
 {
     game::SectorTopologyMap map = MakeSquare();
+    map.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::Draft;
     for (game::SectorTopologyVertex& vertex : map.vertices) {
         vertex.x *= 16;
         vertex.y *= 16;
@@ -4844,8 +4935,8 @@ void TestStaticModelReceivesAndCastsBakedLighting()
     game::SectorGeneratedGeometry geometry;
     game::SectorLightmapLayout layout;
     Check(game::BuildSectorGeneratedGeometry(map, geometry, &error)
-                  && game::BuildSectorLightmapLayout(map, layout, error),
-          "integrated prop shadow fixture builds stable topology layout");
+                  && BuildDraftTestLightmapLayout(map, layout, error),
+          "integrated prop shadow fixture builds compact Draft topology layout");
     int floorSurfaceIndex = -1;
     for (size_t i = 0; i < geometry.surfaces.size(); ++i) {
         if (geometry.surfaces[i].ref.kind

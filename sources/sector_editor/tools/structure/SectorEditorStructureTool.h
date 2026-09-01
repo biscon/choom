@@ -5,6 +5,7 @@
 namespace game {
 
 const SectorEditorToolModule& SectorEditorStructureToolModule();
+const SectorEditorToolModule& SectorEditorLadderToolModule();
 bool BeginSectorEditorStructuralManipulation(
         SectorEditorToolContext& context,
         Vector2 screenPoint);

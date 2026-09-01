@@ -1139,6 +1139,30 @@ void TestStructuralPrimitiveCollision()
                   && blocked.positionXZ.x <= 2.751f,
           "colliding box blocks and preserves the player radius");
 
+    game::SectorAuthoringStructuralPrimitive ladder =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 2;
+    ladder.x = Coord(32.0f);
+    ladder.z = Coord(32.0f);
+    SectorTopologyMap ladderMap = MakeSquare();
+    AddStructuralPrimitive(ladderMap, ladder);
+    const game::SectorCollisionMoveResult ladderBlocked = Move(
+            BuildWorld(ladderMap), {4.0f, 3.0f}, {0.0f, 2.0f}, 10, true);
+    Check(ladderBlocked.hitWall && ladderBlocked.blockedByStep
+                  && ladderBlocked.positionXZ.y < 3.8f,
+          "ladder collision uses a smooth slab that blocks passage through rung gaps");
+
+    ladder.collision = false;
+    SectorTopologyMap disabledLadderMap = MakeSquare();
+    AddStructuralPrimitive(disabledLadderMap, ladder);
+    const game::SectorCollisionMoveResult ladderPassThrough = Move(
+            BuildWorld(disabledLadderMap),
+            {4.0f, 3.0f}, {0.0f, 2.0f}, 10, true);
+    Check(ladderPassThrough.positionXZ.y > 4.5f
+                  && !ladderPassThrough.hitWall,
+          "collision-disabled ladders do not block movement");
+
     box.collision = false;
     SectorTopologyMap disabledBoxMap = MakeSquare();
     AddStructuralPrimitive(disabledBoxMap, box);

@@ -71,7 +71,12 @@ bool SamePrimitive(
             && a.sphere.radius == b.sphere.radius
             && a.sphere.centerHeight == b.sphere.centerHeight
             && a.sphere.latitudeSegments == b.sphere.latitudeSegments
-            && a.sphere.longitudeSegments == b.sphere.longitudeSegments;
+            && a.sphere.longitudeSegments == b.sphere.longitudeSegments
+            && a.ladder.width == b.ladder.width
+            && a.ladder.bottom == b.ladder.bottom
+            && a.ladder.height == b.ladder.height
+            && a.ladder.thicknessScale == b.ladder.thicknessScale
+            && a.ladder.rungCount == b.ladder.rungCount;
 }
 
 } // namespace
@@ -99,6 +104,9 @@ void TranslateSectorStructuralPrimitiveHeight(
             break;
         case SectorStructuralPrimitiveKind::Sphere:
             primitive.sphere.centerHeight += deltaAuthored;
+            break;
+        case SectorStructuralPrimitiveKind::Ladder:
+            primitive.ladder.bottom += deltaAuthored;
             break;
     }
 }
@@ -176,7 +184,11 @@ bool SectorEditorStructuralPrimitiveEditingService::BuildPlacementValue(
     primitive.id = primitiveId;
     primitive.materials.defaultSurface.materialId = defaultMaterialId;
 
-    if (kind == SectorStructuralPrimitiveKind::Cylinder
+    if (kind == SectorStructuralPrimitiveKind::Ladder) {
+        primitive.x = start.x;
+        primitive.z = start.y;
+        primitive.ladder.bottom = seedFloor;
+    } else if (kind == SectorStructuralPrimitiveKind::Cylinder
             || kind == SectorStructuralPrimitiveKind::Sphere) {
         const double radius = std::hypot(
                 static_cast<double>(dx64), static_cast<double>(dz64));
@@ -406,10 +418,12 @@ bool SectorEditorStructuralPrimitiveEditingService::BuildPreviewNudge(
     TranslateSectorStructuralPrimitiveHeight(
             *primitive, SectorWorldToAuthoringDistance(deltaHeightWorld));
     primitive->yawDegrees = WrapDegrees(primitive->yawDegrees + deltaYawDegrees);
-    primitive->pitchDegrees = WrapDegrees(
-            primitive->pitchDegrees + deltaPitchDegrees);
-    primitive->rollDegrees = WrapDegrees(
-            primitive->rollDegrees + deltaRollDegrees);
+    if (primitive->kind != SectorStructuralPrimitiveKind::Ladder) {
+        primitive->pitchDegrees = WrapDegrees(
+                primitive->pitchDegrees + deltaPitchDegrees);
+        primitive->rollDegrees = WrapDegrees(
+                primitive->rollDegrees + deltaRollDegrees);
+    }
     SectorAuthoringDerivationResult derivation =
             DeriveSectorTopologyMapFromAuthoringGraph(candidate);
     if (!derivation.success) {

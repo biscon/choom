@@ -253,7 +253,8 @@ void AddStructuralPrimitiveGeometry(
         uint8_t area = surface.normal.y + 0.0001f >= minimumWalkableNormalY
                 ? NavigationRasterWalkableArea
                 : NavigationRasterNullArea;
-        if (primitive.authored.kind == SectorStructuralPrimitiveKind::Stairs) {
+        if (primitive.authored.kind == SectorStructuralPrimitiveKind::Stairs
+                || primitive.authored.kind == SectorStructuralPrimitiveKind::Ladder) {
             area = NavigationRasterNullArea;
         }
         for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {
