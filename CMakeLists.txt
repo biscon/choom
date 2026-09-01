@@ -323,6 +323,8 @@ if(BUILD_TESTING)
             DOOR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDoorRenderer.cpp"
             WINDOW_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorWindowRenderer.cpp"
             BILLBOARD_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBillboardRenderer.cpp"
+            FLASHLIGHT_PROFILE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorFlashlightProfileSampling.h"
+            DYNAMIC_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicShadowSampling.h"
             BLOOM_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBloomRenderer.cpp"
             DISTANCE_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDistanceFogRenderer.cpp"
             ANALYTIC_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorAnalyticFogRenderer.cpp"

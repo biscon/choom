@@ -17,6 +17,9 @@ void TestDefaultsAndNormalization()
     assert(Near(defaults.intensity, 4.0f));
     assert(Near(defaults.reachWorld, 18.0f));
     assert(Near(defaults.coneRadiusWorld, 5.0f));
+    assert(Near(defaults.shadowContactOffsetWorld, 0.005f));
+    assert(Near(defaults.lateralOffsetWorld, 0.10f));
+    assert(Near(defaults.aimConvergenceDistanceWorld, 10.0f));
 
     game::PlayerFlashlightApplicationSettings invalid = defaults;
     invalid.reachWorld = -1.0f;
@@ -48,11 +51,29 @@ void TestToggleAndRuntimeSource()
     assert(light.light.castsShadow);
     assert(light.light.reserveSelection && light.light.reserveShadow);
     assert(light.light.profile == game::SectorDynamicLightProfile::Flashlight);
+    assert(Near(light.light.position.x, 1.10f));
     assert(Near(light.light.position.y, 1.72f));
     assert(Near(light.light.position.z, 1.95f));
     assert(Near(light.light.radius, 18.0f));
     assert(Near(light.light.outerConeCos,
             std::cos(std::atan2(5.0f, 18.0f))));
+    assert(Near(light.light.innerConeCos, light.light.outerConeCos));
+    assert(Near(light.light.shadowBias, 0.005f));
+    const Vector3 convergenceTarget{1.0f, 1.6f, -8.0f};
+    const Vector3 fromOrigin{
+            convergenceTarget.x - light.light.position.x,
+            convergenceTarget.y - light.light.position.y,
+            convergenceTarget.z - light.light.position.z};
+    const float convergenceDistance = std::sqrt(
+            fromOrigin.x * fromOrigin.x
+                    + fromOrigin.y * fromOrigin.y
+                    + fromOrigin.z * fromOrigin.z);
+    assert(Near(light.light.direction.x,
+            fromOrigin.x / convergenceDistance));
+    assert(Near(light.light.direction.y,
+            fromOrigin.y / convergenceDistance));
+    assert(Near(light.light.direction.z,
+            fromOrigin.z / convergenceDistance));
     assert(atmosphere.lightId == light.lightId);
     assert(atmosphere.shape == game::SectorLightAtmosphereShape::Cone);
     assert(atmosphere.atmosphere.proxy.shaft.enabled);

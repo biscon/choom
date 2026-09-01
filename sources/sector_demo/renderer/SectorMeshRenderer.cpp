@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include "sector_demo/renderer/SectorDynamicShadowSampling.h"
+#include "sector_demo/renderer/SectorFlashlightProfileSampling.h"
 
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/render/ColorTransfer.h"
@@ -51,14 +52,19 @@ engine::TextureHandle CreatePlayerFlashlightCookie(
                     / static_cast<float>(Size) * 2.0f - 1.0f;
             const float radius = std::sqrt(nx * nx + ny * ny);
             const float ring = 0.5f + 0.5f * std::cos(radius * 35.0f);
-            const float asymmetry = std::clamp(
-                    0.92f + nx * 0.035f - ny * 0.025f,
-                    0.84f,
+            const float patternT = std::clamp(
+                    (1.0f - radius) / 0.35f, 0.0f, 1.0f);
+            const float patternEnvelope = patternT * patternT
+                    * (3.0f - 2.0f * patternT);
+            const float asymmetry = nx * 0.06f - ny * 0.04f;
+            // Keep the cookie neutral at its boundary. The shared flashlight
+            // profile owns the only radial cutoff and feather.
+            const float value = std::clamp(
+                    0.5f
+                            + (ring - 0.5f) * 0.5f * patternEnvelope
+                            + asymmetry * patternEnvelope,
+                    0.0f,
                     1.0f);
-            const float value = radius < 1.0f
-                    ? std::clamp((0.72f + 0.28f * ring) * asymmetry,
-                            0.0f, 1.0f)
-                    : 0.0f;
             const unsigned char channel = static_cast<unsigned char>(
                     std::lround(value * 255.0f));
             ImageDrawPixel(&image, x, y, Color{channel, channel, channel, 255});
@@ -320,31 +326,9 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
 }
 
-float FlashlightProfileFactor(int lightIndex, vec3 directionFromLight)
-{
-    vec3 spotDirection = SafeNormalize(
-            dynamicLightDirections[lightIndex], vec3(0.0, -1.0, 0.0));
-    vec3 right = SafeNormalize(
-            dynamicLightSpotShadowRight[lightIndex], vec3(1.0, 0.0, 0.0));
-    vec3 up = SafeNormalize(cross(right, spotDirection), vec3(0.0, 0.0, 1.0));
-    float axial = max(dot(directionFromLight, spotDirection), 0.0001);
-    float inverseTan = dynamicLightSpotShadowProjection[lightIndex].x;
-    vec2 projected = vec2(
-            dot(directionFromLight, right),
-            dot(directionFromLight, up)) * inverseTan / axial;
-    float radial = length(projected);
-    vec3 parameters = dynamicLightProfileParameters[lightIndex];
-    float hotspot = 1.0 - smoothstep(
-            max(0.0, parameters.x * 0.55), parameters.x, radial);
-    float profile = mix(parameters.y, 1.0, hotspot);
-    float edge = 1.0 - smoothstep(
-            max(0.0, 1.0 - parameters.z), 1.0, radial);
-    float cookie = texture(
-            flashlightCookie,
-            projected * vec2(0.5, -0.5) + 0.5).r;
-    return profile * edge * mix(0.78, 1.12, cookie);
-}
-
+)"
+SECTOR_FLASHLIGHT_PROFILE_GLSL
+R"(
 vec3 StoreFiniteHalfRadiance(vec3 value)
 {
     vec3 result;
@@ -594,12 +578,13 @@ void main()
                 float coneDot = dot(spotDirection, fragmentDirectionFromLight);
                 float innerConeCos = dynamicLightInnerConeCos[i];
                 float outerConeCos = dynamicLightOuterConeCos[i];
-                coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
-                        ? smoothstep(outerConeCos, innerConeCos, coneDot)
-                        : step(innerConeCos, coneDot);
                 if (dynamicLightProfiles[i] == 1) {
-                    coneAtten *= FlashlightProfileFactor(
+                    coneAtten = FlashlightProfileFactor(
                             i, fragmentDirectionFromLight);
+                } else {
+                    coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
+                            ? smoothstep(outerConeCos, innerConeCos, coneDot)
+                            : step(innerConeCos, coneDot);
                 }
             }
             if (coneAtten <= 0.0) continue;

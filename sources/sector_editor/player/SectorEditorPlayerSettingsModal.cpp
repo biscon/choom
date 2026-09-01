@@ -125,7 +125,7 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             break;
         case SectorEditorPlayerSettingsTab::Lighting:
             scrollState = &state.lightingScroll;
-            contentHeight = 780.0f;
+            contentHeight = 940.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -478,10 +478,25 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         drawFloat("player_flashlight_shadow_softness", "Shadow softness",
                 flashlight.shadowSoftness,
                 state.flashlightShadowSoftnessInput, 0.0f, 4.0f, 3);
+        drawFloat("player_flashlight_shadow_contact_offset",
+                "Shadow contact offset (world)",
+                flashlight.shadowContactOffsetWorld,
+                state.flashlightShadowContactOffsetInput,
+                0.0f, 0.05f, 3);
         section("Head mounting");
         drawFloat("player_flashlight_height", "Height above eye (world)",
                 flashlight.heightAboveEyeWorld,
                 state.flashlightHeightInput, -0.25f, 0.50f, 3);
+        drawFloat("player_flashlight_lateral_offset",
+                "Right offset (world)",
+                flashlight.lateralOffsetWorld,
+                state.flashlightLateralOffsetInput,
+                -0.25f, 0.25f, 3);
+        drawFloat("player_flashlight_aim_convergence",
+                "Aim convergence distance (world)",
+                flashlight.aimConvergenceDistanceWorld,
+                state.flashlightAimConvergenceInput,
+                1.0f, 64.0f, 3);
         drawFloat("player_flashlight_aim_response", "Aim response (seconds)",
                 flashlight.aimResponseSeconds,
                 state.flashlightAimResponseInput, 0.0f, 0.25f, 3);

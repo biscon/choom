@@ -2,6 +2,7 @@
 
 #include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include "sector_demo/renderer/SectorDynamicShadowSampling.h"
+#include "sector_demo/renderer/SectorFlashlightProfileSampling.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/ecs/World.h"
@@ -210,22 +211,9 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
 }
 
-float FlashlightProfileFactor(int lightIndex, vec3 directionFromLight)
-{
-    vec3 spotDirection = SafeNormalize(dynamicLightDirections[lightIndex], vec3(0.0, -1.0, 0.0));
-    vec3 right = SafeNormalize(dynamicLightSpotShadowRight[lightIndex], vec3(1.0, 0.0, 0.0));
-    vec3 up = SafeNormalize(cross(right, spotDirection), vec3(0.0, 0.0, 1.0));
-    float axial = max(dot(directionFromLight, spotDirection), 0.0001);
-    vec2 projected = vec2(dot(directionFromLight, right), dot(directionFromLight, up))
-            * dynamicLightSpotShadowProjection[lightIndex].x / axial;
-    float radial = length(projected);
-    vec3 parameters = dynamicLightProfileParameters[lightIndex];
-    float hotspot = 1.0 - smoothstep(max(0.0, parameters.x * 0.55), parameters.x, radial);
-    float edge = 1.0 - smoothstep(max(0.0, 1.0 - parameters.z), 1.0, radial);
-    float cookie = texture(flashlightCookie, projected * vec2(0.5, -0.5) + 0.5).r;
-    return mix(parameters.y, 1.0, hotspot) * edge * mix(0.78, 1.12, cookie);
-}
-
+)"
+SECTOR_FLASHLIGHT_PROFILE_GLSL
+R"(
 vec3 SrgbToLinear(vec3 value)
 {
     bvec3 cutoff = lessThanEqual(value, vec3(0.04045));
@@ -450,14 +438,17 @@ void main()
                         ? -lightDirection
                         : spotDirection;
                 float coneDot = dot(spotDirection, fragmentDirectionFromLight);
-                coneAtten = abs(dynamicLightInnerConeCos[i] - dynamicLightOuterConeCos[i]) > 0.0001
-                        ? smoothstep(
-                                dynamicLightOuterConeCos[i],
-                                dynamicLightInnerConeCos[i],
-                                coneDot)
-                        : step(dynamicLightInnerConeCos[i], coneDot);
                 if (dynamicLightProfiles[i] == 1) {
-                    coneAtten *= FlashlightProfileFactor(i, fragmentDirectionFromLight);
+                    coneAtten = FlashlightProfileFactor(
+                            i, fragmentDirectionFromLight);
+                } else {
+                    coneAtten = abs(dynamicLightInnerConeCos[i]
+                                    - dynamicLightOuterConeCos[i]) > 0.0001
+                            ? smoothstep(
+                                    dynamicLightOuterConeCos[i],
+                                    dynamicLightInnerConeCos[i],
+                                    coneDot)
+                            : step(dynamicLightInnerConeCos[i], coneDot);
                 }
             }
             if (coneAtten <= 0.0) continue;

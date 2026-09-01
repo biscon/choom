@@ -1431,9 +1431,22 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             flashlight.shadowSoftness = OptionalNumber(
                     *playerFlashlight, "shadowSoftness", flashlightContext)
                     .value_or(flashlight.shadowSoftness);
+            flashlight.shadowContactOffsetWorld = OptionalNumber(
+                    *playerFlashlight,
+                    "shadowContactOffsetWorld",
+                    flashlightContext)
+                    .value_or(flashlight.shadowContactOffsetWorld);
             flashlight.heightAboveEyeWorld = OptionalNumber(
                     *playerFlashlight, "heightAboveEyeWorld", flashlightContext)
                     .value_or(flashlight.heightAboveEyeWorld);
+            flashlight.lateralOffsetWorld = OptionalNumber(
+                    *playerFlashlight, "lateralOffsetWorld", flashlightContext)
+                    .value_or(flashlight.lateralOffsetWorld);
+            flashlight.aimConvergenceDistanceWorld = OptionalNumber(
+                    *playerFlashlight,
+                    "aimConvergenceDistanceWorld",
+                    flashlightContext)
+                    .value_or(flashlight.aimConvergenceDistanceWorld);
             flashlight.aimResponseSeconds = OptionalNumber(
                     *playerFlashlight, "aimResponseSeconds", flashlightContext)
                     .value_or(flashlight.aimResponseSeconds);
@@ -2339,8 +2352,14 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"edgeSoftness", settings.playerFlashlight.edgeSoftness},
             {"beamHaze", settings.playerFlashlight.beamHaze},
             {"shadowSoftness", settings.playerFlashlight.shadowSoftness},
+            {"shadowContactOffsetWorld",
+                    settings.playerFlashlight.shadowContactOffsetWorld},
             {"heightAboveEyeWorld",
                     settings.playerFlashlight.heightAboveEyeWorld},
+            {"lateralOffsetWorld",
+                    settings.playerFlashlight.lateralOffsetWorld},
+            {"aimConvergenceDistanceWorld",
+                    settings.playerFlashlight.aimConvergenceDistanceWorld},
             {"aimResponseSeconds",
                     settings.playerFlashlight.aimResponseSeconds}};
     const PlayerLowHealthVisualApplicationSettings& lowHealthVisual =

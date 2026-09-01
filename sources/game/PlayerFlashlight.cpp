@@ -60,27 +60,39 @@ bool UpdatePlayerFlashlight(
     const Vector3 cameraDirection = NormalizeOr(
             Vector3Subtract(camera.target, camera.position),
             Vector3{0.0f, 0.0f, -1.0f});
+    const Vector3 cameraUp = NormalizeOr(camera.up, Vector3{0.0f, 1.0f, 0.0f});
+    const Vector3 cameraRight = NormalizeOr(
+            Vector3CrossProduct(cameraDirection, cameraUp),
+            Vector3{1.0f, 0.0f, 0.0f});
+    const Vector3 origin = Vector3Add(
+            Vector3Add(
+                    Vector3Add(camera.position,
+                            Vector3Scale(cameraUp,
+                                    settings.heightAboveEyeWorld)),
+                    Vector3Scale(cameraRight,
+                            settings.lateralOffsetWorld)),
+            Vector3Scale(cameraDirection, ForwardOffsetWorld));
+    const Vector3 convergenceTarget = Vector3Add(
+            camera.position,
+            Vector3Scale(cameraDirection,
+                    settings.aimConvergenceDistanceWorld));
+    const Vector3 targetDirection = NormalizeOr(
+            Vector3Subtract(convergenceTarget, origin),
+            cameraDirection);
     if (!state.directionValid || settings.aimResponseSeconds <= 0.0f
             || !Finite(dt) || dt <= 0.0f) {
-        state.smoothedDirection = cameraDirection;
+        state.smoothedDirection = targetDirection;
         state.directionValid = true;
     } else {
         const float response = std::max(0.0001f, settings.aimResponseSeconds);
         const float alpha = 1.0f - std::exp(-dt / response);
         state.smoothedDirection = NormalizeOr(
-                Vector3Lerp(state.smoothedDirection, cameraDirection, alpha),
-                cameraDirection);
+                Vector3Lerp(state.smoothedDirection, targetDirection, alpha),
+                targetDirection);
     }
 
-    const Vector3 cameraUp = NormalizeOr(camera.up, Vector3{0.0f, 1.0f, 0.0f});
-    const Vector3 origin = Vector3Add(
-            Vector3Add(camera.position,
-                    Vector3Scale(cameraUp, settings.heightAboveEyeWorld)),
-            Vector3Scale(cameraDirection, ForwardOffsetWorld));
     const float outerHalfAngle = std::atan2(
             settings.coneRadiusWorld, settings.reachWorld);
-    const float innerHalfAngle = outerHalfAngle
-            * std::clamp(1.0f - settings.edgeSoftness, 0.05f, 0.98f);
 
     outLight.lightId = PlayerFlashlightRuntimeLightId;
     outLight.ownerSectorId = ownerSectorId;
@@ -90,7 +102,9 @@ bool UpdatePlayerFlashlight(
     outLight.light.direction = state.smoothedDirection;
     outLight.light.color = engine::SrgbColorBytesToLinearSceneRgb(settings.tint);
     outLight.light.radius = settings.reachWorld;
-    outLight.light.innerConeCos = std::cos(innerHalfAngle);
+    // The flashlight profile owns its only edge transition. Matching the
+    // generic inner and outer cones prevents the renderer from fading it twice.
+    outLight.light.innerConeCos = std::cos(outerHalfAngle);
     outLight.light.outerConeCos = std::cos(outerHalfAngle);
     outLight.light.intensity = settings.intensity;
     outLight.light.selectionFadeMultiplier = 1.0f;
@@ -99,6 +113,8 @@ bool UpdatePlayerFlashlight(
     outLight.light.shadowPriority = ReservedShadowPriority;
     outLight.light.shadowStrength = 1.0f;
     outLight.light.shadowSoftness = settings.shadowSoftness;
+    // Flashlight receivers interpret this profile-specific bias in world units.
+    outLight.light.shadowBias = settings.shadowContactOffsetWorld;
     outLight.light.profile = SectorDynamicLightProfile::Flashlight;
     outLight.light.profileParameters = Vector3{
             settings.hotspotRadiusRatio,

@@ -106,16 +106,33 @@ float DynamicLightShadowVisibility(
         return 1.0;
     }
 
-    vec3 fromLight = worldPosition - dynamicLightPositions[lightIndex];
     bool pointProjection = dynamicLightTypes[lightIndex] == 0;
     bool rectProjection = dynamicLightTypes[lightIndex] == 2;
-    float normalLightDot = max(dot(
-            SafeNormalize(worldNormal, vec3(0.0, 1.0, 0.0)),
-            SafeNormalize(surfaceToLightDirection, vec3(0.0, 1.0, 0.0))), 0.0);
+    bool flashlightProjection = !pointProjection && !rectProjection
+            && dynamicLightProfiles[lightIndex] == 1;
+    vec3 receiverPlaneNormal = SafeNormalize(
+            worldNormal, vec3(0.0, 1.0, 0.0));
+    vec3 receiverToLight = SafeNormalize(
+            surfaceToLightDirection, vec3(0.0, 1.0, 0.0));
+    float signedNormalLightDot = dot(receiverPlaneNormal, receiverToLight);
+    float normalLightDot = max(signedNormalLightDot, 0.0);
+    vec3 fromLight = worldPosition - dynamicLightPositions[lightIndex];
     float effectiveBias = min(
             shadowBias[shadowSlot]
                     * (1.0 + (1.0 - normalLightDot) * 2.0),
             0.02);
+    if (flashlightProjection) {
+        // Constant projected-depth bias grows into large world-space gaps with
+        // distance. Move the receiver a small, slope-aware world distance
+        // toward the light instead so contact remains stable across the beam.
+        float contactOffset = shadowBias[shadowSlot]
+                * (1.0 + (1.0 - normalLightDot));
+        vec3 offsetNormal = signedNormalLightDot >= 0.0
+                ? receiverPlaneNormal
+                : -receiverPlaneNormal;
+        fromLight += offsetNormal * contactOffset;
+        effectiveBias = 0.000001;
+    }
     float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
     int atlasTiles = max(shadowAtlasTilesPerRow, 1);
     ivec2 tileResolution = textureSize(shadowMap0, 0) / atlasTiles;

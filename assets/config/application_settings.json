@@ -55,9 +55,12 @@
     "hotspotRadiusRatio": 0.30000001192092896,
     "spillBrightness": 0.5,
     "edgeSoftness": 0.5,
-    "beamHaze": 0.03999999910593033,
-    "shadowSoftness": 1.5,
+    "beamHaze": 0.0,
+    "shadowSoftness": 2.0,
+    "shadowContactOffsetWorld": 0.05000000074505806,
     "heightAboveEyeWorld": 0.11999999731779099,
+    "lateralOffsetWorld": 0.10000000149011612,
+    "aimConvergenceDistanceWorld": 10.0,
     "aimResponseSeconds": 0.054999999701976776
   },
   "playerHealth": {

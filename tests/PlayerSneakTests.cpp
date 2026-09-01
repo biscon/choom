@@ -27,6 +27,10 @@ void TestDefaultsAndSettingsParsing()
     assert(Near(settings.playerSneak.crouchMovementNoiseMultiplier, 0.25f));
     assert(Near(settings.playerFlashlight.intensity, 4.0f));
     assert(Near(settings.playerFlashlight.reachWorld, 18.0f));
+    assert(Near(settings.playerFlashlight.shadowContactOffsetWorld, 0.005f));
+    assert(Near(settings.playerFlashlight.lateralOffsetWorld, 0.10f));
+    assert(Near(
+            settings.playerFlashlight.aimConvergenceDistanceWorld, 10.0f));
 
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1,"playerSneak":{"fullVisibilityLightLevel":2.5,"darknessCutoffNormalized":0.1,"lightHalfResponseRangeNormalized":0.2,"visualDetectionBuildSeconds":1.5,"visualDetectionDecaySeconds":2.0,"darknessProximityRangeWorld":0.75,"crouchVisualDetectionMultiplier":0.7,"crouchMovementNoiseMultiplier":0.2}})",
@@ -81,14 +85,37 @@ void TestDefaultsAndSettingsParsing()
             < 1.0f - settings.playerSneak.darknessCutoffNormalized);
 
     assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"playerFlashlight":{"intensity":7.5,"reachWorld":24.0,"coneRadiusWorld":6.0,"tint":{"r":200,"g":220,"b":255,"a":255},"hotspotRadiusRatio":0.4,"spillBrightness":0.3,"edgeSoftness":0.2,"beamHaze":0.1,"shadowSoftness":2.0,"heightAboveEyeWorld":0.2,"aimResponseSeconds":0.08}})",
+            R"({"version":1,"playerFlashlight":{"intensity":7.5,"reachWorld":24.0,"coneRadiusWorld":6.0,"tint":{"r":200,"g":220,"b":255,"a":255},"hotspotRadiusRatio":0.4,"spillBrightness":0.3,"edgeSoftness":0.2,"beamHaze":0.1,"shadowSoftness":2.0,"shadowContactOffsetWorld":0.007,"heightAboveEyeWorld":0.2,"lateralOffsetWorld":0.14,"aimConvergenceDistanceWorld":12.0,"aimResponseSeconds":0.08}})",
             settings,
             &error));
     assert(Near(settings.playerFlashlight.intensity, 7.5f));
     assert(Near(settings.playerFlashlight.reachWorld, 24.0f));
+    assert(Near(settings.playerFlashlight.shadowContactOffsetWorld, 0.007f));
+    assert(Near(settings.playerFlashlight.lateralOffsetWorld, 0.14f));
+    assert(Near(
+            settings.playerFlashlight.aimConvergenceDistanceWorld, 12.0f));
     assert(settings.playerFlashlight.tint.b == 255);
+    const std::filesystem::path flashlightPath =
+            std::filesystem::temp_directory_path()
+            / "player_flashlight_settings_test.json";
+    assert(game::SaveFpsApplicationSettings(
+            flashlightPath.string(), settings, &error));
+    game::FpsApplicationSettings loadedFlashlight;
+    assert(game::LoadFpsApplicationSettings(
+            flashlightPath.string(), loadedFlashlight, &error));
+    assert(Near(loadedFlashlight.playerFlashlight.shadowContactOffsetWorld,
+            0.007f));
+    assert(Near(loadedFlashlight.playerFlashlight.lateralOffsetWorld, 0.14f));
+    assert(Near(
+            loadedFlashlight.playerFlashlight.aimConvergenceDistanceWorld,
+            12.0f));
+    std::filesystem::remove(flashlightPath, removeError);
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerFlashlight":{"edgeSoftness":0.0}})",
+            settings,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerFlashlight":{"shadowContactOffsetWorld":0.1}})",
             settings,
             &error));
 }

@@ -125,7 +125,10 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState flashlightEdgeInput;
     engine::UIFloatInputState flashlightHazeInput;
     engine::UIFloatInputState flashlightShadowSoftnessInput;
+    engine::UIFloatInputState flashlightShadowContactOffsetInput;
     engine::UIFloatInputState flashlightHeightInput;
+    engine::UIFloatInputState flashlightLateralOffsetInput;
+    engine::UIFloatInputState flashlightAimConvergenceInput;
     engine::UIFloatInputState flashlightAimResponseInput;
 };
 

@@ -18,7 +18,10 @@ struct PlayerFlashlightApplicationSettings {
     float edgeSoftness = 0.18f;
     float beamHaze = 0.04f;
     float shadowSoftness = 1.5f;
+    float shadowContactOffsetWorld = 0.005f;
     float heightAboveEyeWorld = 0.12f;
+    float lateralOffsetWorld = 0.10f;
+    float aimConvergenceDistanceWorld = 10.0f;
     float aimResponseSeconds = 0.055f;
 };
 
@@ -53,10 +56,22 @@ inline PlayerFlashlightApplicationSettings NormalizePlayerFlashlightSettings(
     settings.shadowSoftness = std::clamp(
             finiteOr(settings.shadowSoftness, defaults.shadowSoftness),
             0.0f, 4.0f);
+    settings.shadowContactOffsetWorld = std::clamp(
+            finiteOr(settings.shadowContactOffsetWorld,
+                    defaults.shadowContactOffsetWorld),
+            0.0f, 0.05f);
     settings.heightAboveEyeWorld = std::clamp(
             finiteOr(settings.heightAboveEyeWorld,
                     defaults.heightAboveEyeWorld),
             -0.25f, 0.50f);
+    settings.lateralOffsetWorld = std::clamp(
+            finiteOr(settings.lateralOffsetWorld,
+                    defaults.lateralOffsetWorld),
+            -0.25f, 0.25f);
+    settings.aimConvergenceDistanceWorld = std::clamp(
+            finiteOr(settings.aimConvergenceDistanceWorld,
+                    defaults.aimConvergenceDistanceWorld),
+            1.0f, 64.0f);
     settings.aimResponseSeconds = std::clamp(
             finiteOr(settings.aimResponseSeconds,
                     defaults.aimResponseSeconds),
@@ -78,7 +93,10 @@ inline std::string PlayerFlashlightSettingsError(
     if (settings.edgeSoftness != normalized.edgeSoftness) return "edgeSoftness must be between 0.02 and 0.5";
     if (settings.beamHaze != normalized.beamHaze) return "beamHaze must be between 0 and 0.25";
     if (settings.shadowSoftness != normalized.shadowSoftness) return "shadowSoftness must be between 0 and 4";
+    if (settings.shadowContactOffsetWorld != normalized.shadowContactOffsetWorld) return "shadowContactOffsetWorld must be between 0 and 0.05";
     if (settings.heightAboveEyeWorld != normalized.heightAboveEyeWorld) return "heightAboveEyeWorld must be between -0.25 and 0.5";
+    if (settings.lateralOffsetWorld != normalized.lateralOffsetWorld) return "lateralOffsetWorld must be between -0.25 and 0.25";
+    if (settings.aimConvergenceDistanceWorld != normalized.aimConvergenceDistanceWorld) return "aimConvergenceDistanceWorld must be between 1 and 64";
     if (settings.aimResponseSeconds != normalized.aimResponseSeconds) return "aimResponseSeconds must be between 0 and 0.25";
     if (settings.tint.a != 255) return "tint alpha must be 255";
     return {};
