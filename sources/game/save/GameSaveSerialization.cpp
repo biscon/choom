@@ -570,7 +570,12 @@ bool SerializeGameSave(
                 {"health", HealthJson(save.player.health)},
                 {"stamina", Json{{"maximum", save.player.stamina.maximum},
                         {"current", save.player.stamina.current},
-                        {"exhausted", save.player.stamina.exhausted}}}};
+                        {"exhausted", save.player.stamina.exhausted}}},
+                {"oxygen", Json{{"baseMaximum", save.player.oxygen.baseMaximum},
+                        {"maximum", save.player.oxygen.maximum},
+                        {"current", save.player.oxygen.current},
+                        {"drowningTimerSeconds",
+                                save.player.oxygen.drowningTimerSeconds}}}};
         if (save.player.flashlightEnabled) {
             root["player"]["flashlightEnabled"] = true;
         }
@@ -632,6 +637,34 @@ bool DeserializeGameSave(
         candidate.player.stamina.maximum = stamina.at("maximum").get<float>();
         candidate.player.stamina.current = stamina.at("current").get<float>();
         candidate.player.stamina.exhausted = stamina.value("exhausted", false);
+        const auto oxygenIt = player.find("oxygen");
+        if (oxygenIt != player.end()) {
+            Require(oxygenIt->is_object(), "player.oxygen must be an object");
+            candidate.player.oxygen.baseMaximum = oxygenIt->value(
+                    "baseMaximum", 100.0f);
+            candidate.player.oxygen.maximum = oxygenIt->value(
+                    "maximum", candidate.player.oxygen.baseMaximum);
+            candidate.player.oxygen.current = oxygenIt->value(
+                    "current", candidate.player.oxygen.maximum);
+            candidate.player.oxygen.drowningTimerSeconds = oxygenIt->value(
+                    "drowningTimerSeconds", 0.0f);
+            RequireFinite(candidate.player.oxygen.baseMaximum,
+                    "player.oxygen.baseMaximum");
+            RequireFinite(candidate.player.oxygen.maximum,
+                    "player.oxygen.maximum");
+            RequireFinite(candidate.player.oxygen.current,
+                    "player.oxygen.current");
+            RequireFinite(candidate.player.oxygen.drowningTimerSeconds,
+                    "player.oxygen.drowningTimerSeconds");
+            Require(candidate.player.oxygen.baseMaximum > 0.0f
+                            && candidate.player.oxygen.maximum > 0.0f
+                            && candidate.player.oxygen.current >= 0.0f
+                            && candidate.player.oxygen.current
+                                    <= candidate.player.oxygen.maximum
+                            && candidate.player.oxygen.drowningTimerSeconds >= 0.0f,
+                    "player oxygen is outside its valid range");
+            candidate.player.hasOxygenState = true;
+        }
         candidate.player.flashlightEnabled = player.value(
                 "flashlightEnabled", false);
         RequireFinite(candidate.player.stamina.maximum, "player.stamina.maximum");

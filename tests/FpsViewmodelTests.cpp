@@ -2041,6 +2041,13 @@ void CrosshairVisibilityAndLayout()
             22,
             false);
     assert(SameRectangle(healthOnly.health.border, vitals.stamina.border));
+    const game::FpsVitalsLayout withOxygen = game::BuildFpsVitalsLayout(
+            Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
+            1.0f, 22, true, true);
+    assert(withOxygen.oxygen.border.y < withOxygen.health.border.y);
+    const Vector2 oxygenAmmoPosition = game::BuildFpsAmmoCounterPosition(
+            withOxygen, 1.0f, 22, true, true);
+    assert(oxygenAmmoPosition.y < withOxygen.oxygen.textPosition.y);
 
     runtime.attachment.handModelTransform = MatrixTranslate(10.0f, 20.0f, 30.0f);
     runtime.attachment.attachmentWorldTransform = MatrixRotateY(1.25f);

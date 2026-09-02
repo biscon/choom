@@ -139,6 +139,10 @@ public:
     }
     const Health& PlayerHealth() const { return playerHealth; }
     const PlayerStamina& PlayerStaminaState() const { return playerStamina; }
+    const PlayerOxygen& PlayerOxygenState() const { return playerOxygen; }
+    const SectorLiquidMovementState& LiquidMovementState() const {
+        return controller.liquidMovement;
+    }
     void SetGodMode(bool enabled);
     void SetInvisible(bool enabled) { invisible = enabled; }
     void SetAiFrozen(bool frozen) { aiFrozen = frozen; }
@@ -272,6 +276,9 @@ private:
     bool saveGameBlocked = false;
     std::string saveGameBlockedReason;
     PlayerStamina playerStamina;
+    PlayerOxygen playerOxygen;
+    PlayerOxygenModifiers playerOxygenModifiers;
+    float oxygenHudAlpha = 0.0f;
     PlayerWindedCameraState windedCamera;
     PlayerLowHealthCameraState lowHealthCamera;
     PlayerHitCameraState hitCamera;

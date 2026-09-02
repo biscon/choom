@@ -754,6 +754,31 @@ std::string PlayerStaminaSettingsError(
     return {};
 }
 
+std::string PlayerLiquidSettingsError(
+        const PlayerLiquidApplicationSettings& settings)
+{
+    const auto finite = [](float value) { return std::isfinite(value); };
+    if (!finite(settings.oxygenMaximum) || settings.oxygenMaximum <= 0.0f) {
+        return "oxygenMaximum must be greater than zero";
+    }
+    if (!finite(settings.oxygenDepletionPerSecond)
+            || settings.oxygenDepletionPerSecond < 0.0f) {
+        return "oxygenDepletionPerSecond must be non-negative";
+    }
+    if (!finite(settings.oxygenRegenerationPerSecond)
+            || settings.oxygenRegenerationPerSecond < 0.0f) {
+        return "oxygenRegenerationPerSecond must be non-negative";
+    }
+    if (settings.drowningDamage < 0) {
+        return "drowningDamage must be non-negative";
+    }
+    if (!finite(settings.drowningDamageIntervalSeconds)
+            || settings.drowningDamageIntervalSeconds <= 0.0f) {
+        return "drowningDamageIntervalSeconds must be greater than zero";
+    }
+    return {};
+}
+
 void SetError(std::string* output, const std::string& message) { if (output) *output = message; }
 
 bool NearlyEqual(float a, float b) { return std::abs(a - b) <= 0.0001f; }
@@ -2050,6 +2075,33 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail(staminaContext + "." + staminaError);
             }
         }
+        const auto playerLiquids = root.find("playerLiquids");
+        if (playerLiquids != root.end()) {
+            const std::string liquidContext = "application settings.playerLiquids";
+            if (!playerLiquids->is_object()) {
+                Fail(liquidContext + " must be an object");
+            }
+            parsed.playerLiquids.oxygenMaximum = OptionalNumber(
+                    *playerLiquids, "oxygenMaximum", liquidContext)
+                    .value_or(parsed.playerLiquids.oxygenMaximum);
+            parsed.playerLiquids.oxygenDepletionPerSecond = OptionalNumber(
+                    *playerLiquids, "oxygenDepletionPerSecond", liquidContext)
+                    .value_or(parsed.playerLiquids.oxygenDepletionPerSecond);
+            parsed.playerLiquids.oxygenRegenerationPerSecond = OptionalNumber(
+                    *playerLiquids, "oxygenRegenerationPerSecond", liquidContext)
+                    .value_or(parsed.playerLiquids.oxygenRegenerationPerSecond);
+            parsed.playerLiquids.drowningDamage = OptionalInteger(
+                    *playerLiquids, "drowningDamage", liquidContext)
+                    .value_or(parsed.playerLiquids.drowningDamage);
+            parsed.playerLiquids.drowningDamageIntervalSeconds = OptionalNumber(
+                    *playerLiquids, "drowningDamageIntervalSeconds", liquidContext)
+                    .value_or(parsed.playerLiquids.drowningDamageIntervalSeconds);
+            const std::string liquidError = PlayerLiquidSettingsError(
+                    parsed.playerLiquids);
+            if (!liquidError.empty()) {
+                Fail(liquidContext + "." + liquidError);
+            }
+        }
         const auto overrides = root.find("viewmodelOverrides");
         if (overrides != root.end()) {
             if (!overrides->is_object()) Fail("application settings.viewmodelOverrides must be an object");
@@ -2243,6 +2295,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             settings.playerStamina);
     if (!staminaError.empty()) {
         SetError(error, "application settings playerStamina." + staminaError);
+        return false;
+    }
+    const std::string liquidError = PlayerLiquidSettingsError(
+            settings.playerLiquids);
+    if (!liquidError.empty()) {
+        SetError(error, "application settings playerLiquids." + liquidError);
         return false;
     }
     const std::string sneakError = PlayerSneakSettingsError(
@@ -2461,6 +2519,15 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"fadeOutSeconds",
                             settings.playerStamina.breathingAudio
                                     .fadeOutSeconds}}}};
+    root["playerLiquids"] = {
+            {"oxygenMaximum", settings.playerLiquids.oxygenMaximum},
+            {"oxygenDepletionPerSecond",
+                    settings.playerLiquids.oxygenDepletionPerSecond},
+            {"oxygenRegenerationPerSecond",
+                    settings.playerLiquids.oxygenRegenerationPerSecond},
+            {"drowningDamage", settings.playerLiquids.drowningDamage},
+            {"drowningDamageIntervalSeconds",
+                    settings.playerLiquids.drowningDamageIntervalSeconds}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

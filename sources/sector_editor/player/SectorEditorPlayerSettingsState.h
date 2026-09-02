@@ -16,7 +16,8 @@ enum class SectorEditorPlayerSettingsTab {
     Audio,
     Health,
     Sneaking,
-    Lighting
+    Lighting,
+    Liquids
 };
 
 struct SectorEditorPlayerSoundEventDraft {
@@ -52,6 +53,7 @@ struct SectorEditorPlayerSettingsState {
     engine::UIScrollState healthScroll;
     engine::UIScrollState sneakingScroll;
     engine::UIScrollState lightingScroll;
+    engine::UIScrollState liquidsScroll;
     std::string errorMessage;
 
     engine::UIFloatInputState staminaMaximumInput;
@@ -67,6 +69,12 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState breathingThresholdInput;
     engine::UIFloatInputState breathingVolumeInput;
     engine::UIFloatInputState breathingFadeOutInput;
+
+    engine::UIFloatInputState oxygenMaximumInput;
+    engine::UIFloatInputState oxygenDepletionInput;
+    engine::UIFloatInputState oxygenRegenerationInput;
+    engine::UIIntInputState drowningDamageInput;
+    engine::UIFloatInputState drowningIntervalInput;
 
     engine::UIFloatInputState inventoryWeightInput;
     engine::UIIntInputState inventorySlotsInput;

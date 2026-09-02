@@ -131,7 +131,8 @@ FpsVitalsLayout BuildFpsVitalsLayout(
         Rectangle playableViewport,
         float uiScale,
         int fontPixelSize,
-        bool includeStamina)
+        bool includeStamina,
+        bool includeOxygen)
 {
     const int margin = ScaledPixels(22.0f, uiScale);
     const int width = ScaledPixels(180.0f, uiScale);
@@ -160,6 +161,15 @@ FpsVitalsLayout BuildFpsVitalsLayout(
             result.health.border.x,
             result.health.border.y
                     - static_cast<float>(fontPixelSize + textGap)};
+    if (includeOxygen) {
+        const int oxygenY = static_cast<int>(std::lround(
+                result.health.textPosition.y)) - gap - height;
+        result.oxygen.border = Rect(x, oxygenY, width, height);
+        result.oxygen.textPosition = Vector2{
+                result.oxygen.border.x,
+                result.oxygen.border.y
+                        - static_cast<float>(fontPixelSize + textGap)};
+    }
     return result;
 }
 
@@ -195,11 +205,15 @@ Vector2 BuildFpsAmmoCounterPosition(
         const FpsVitalsLayout& vitals,
         float uiScale,
         int fontPixelSize,
-        bool includeStamina)
+        bool includeStamina,
+        bool includeOxygen)
 {
-    const float topTextY = includeStamina
+    float topTextY = includeStamina
             ? std::min(vitals.health.textPosition.y, vitals.stamina.textPosition.y)
             : vitals.health.textPosition.y;
+    if (includeOxygen) {
+        topTextY = std::min(topTextY, vitals.oxygen.textPosition.y);
+    }
     return Vector2{
             vitals.health.border.x,
             topTextY - static_cast<float>(fontPixelSize)
@@ -288,7 +302,8 @@ void DrawFpsHud(const FpsHudContext& context)
             context.playableViewport,
             uiScale,
             fontAsset->pixelSize,
-            context.stamina != nullptr);
+            context.stamina != nullptr,
+            context.oxygen != nullptr && context.oxygenAlpha > 0.0f);
     if (context.showAmmo && activeWeapon != nullptr) {
         char ammoText[64] = {};
         std::snprintf(
@@ -304,7 +319,8 @@ void DrawFpsHud(const FpsHudContext& context)
                         vitals,
                         uiScale,
                         fontAsset->pixelSize,
-                        context.stamina != nullptr),
+                        context.stamina != nullptr,
+                        context.oxygen != nullptr && context.oxygenAlpha > 0.0f),
                 static_cast<float>(fontAsset->pixelSize),
                 1.0f,
                 Color{210, 210, 202, 190});
@@ -341,31 +357,53 @@ void DrawFpsHud(const FpsHudContext& context)
             1.0f,
             Color{235, 235, 225, 235});
 
-    if (context.stamina == nullptr) return;
-    const Rectangle staminaBorder = vitals.stamina.border;
-    DrawRectangleRec(staminaBorder, Color{8, 10, 12, 210});
-    const Rectangle staminaInterior = Inset(staminaBorder, 2);
-    DrawRectangleRec(
-            Rectangle{
-                    staminaInterior.x,
-                    staminaInterior.y,
-                    staminaInterior.width * PlayerStaminaRatio(*context.stamina),
-                    staminaInterior.height},
-            Color{45, 100, 190, 235});
-    char staminaText[48] = {};
-    std::snprintf(
-            staminaText,
-            sizeof(staminaText),
-            "%.0f / %.0f",
-            context.stamina->current,
-            context.stamina->maximum);
-    DrawTextEx(
-            fontAsset->font,
-            staminaText,
-            vitals.stamina.textPosition,
-            static_cast<float>(fontAsset->pixelSize),
-            1.0f,
-            Color{235, 235, 225, 235});
+    if (context.stamina != nullptr) {
+        const Rectangle staminaBorder = vitals.stamina.border;
+        DrawRectangleRec(staminaBorder, Color{8, 10, 12, 210});
+        const Rectangle staminaInterior = Inset(staminaBorder, 2);
+        DrawRectangleRec(
+                Rectangle{
+                        staminaInterior.x,
+                        staminaInterior.y,
+                        staminaInterior.width * PlayerStaminaRatio(*context.stamina),
+                        staminaInterior.height},
+                Color{45, 100, 190, 235});
+        char staminaText[48] = {};
+        std::snprintf(
+                staminaText,
+                sizeof(staminaText),
+                "%.0f / %.0f",
+                context.stamina->current,
+                context.stamina->maximum);
+        DrawTextEx(
+                fontAsset->font,
+                staminaText,
+                vitals.stamina.textPosition,
+                static_cast<float>(fontAsset->pixelSize),
+                1.0f,
+                Color{235, 235, 225, 235});
+    }
+
+    if (context.oxygen != nullptr && context.oxygenAlpha > 0.0f) {
+        const unsigned char alpha = static_cast<unsigned char>(std::lround(
+                std::clamp(context.oxygenAlpha, 0.0f, 1.0f) * 235.0f));
+        Color background{8, 10, 12, static_cast<unsigned char>(
+                std::min(210, static_cast<int>(alpha)))};
+        Color fill{48, 164, 206, alpha};
+        Color textColor{235, 245, 250, alpha};
+        DrawRectangleRec(vitals.oxygen.border, background);
+        const Rectangle interior = Inset(vitals.oxygen.border, 2);
+        DrawRectangleRec(
+                Rectangle{interior.x, interior.y,
+                        interior.width * PlayerOxygenRatio(*context.oxygen),
+                        interior.height},
+                fill);
+        char oxygenText[48] = {};
+        std::snprintf(oxygenText, sizeof(oxygenText), "O2  %.0f / %.0f",
+                context.oxygen->current, context.oxygen->maximum);
+        DrawTextEx(fontAsset->font, oxygenText, vitals.oxygen.textPosition,
+                static_cast<float>(fontAsset->pixelSize), 1.0f, textColor);
+    }
 }
 
 } // namespace game

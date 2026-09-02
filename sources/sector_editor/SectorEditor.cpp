@@ -1631,6 +1631,13 @@ void SectorEditor::HandleMainMenuCommand(
                         SectorEditorPlayerSettingsTab::Sneaking);
             }
             break;
+        case SectorEditorMainMenuCommand::OpenLiquidGameplaySettings:
+            if (engineContext != nullptr) {
+                BuildPlayerSettingsService().Open(
+                        *engineContext,
+                        SectorEditorPlayerSettingsTab::Liquids);
+            }
+            break;
         case SectorEditorMainMenuCommand::None:
             break;
     }
@@ -2966,6 +2973,26 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             sceneRuntime.Renderer().ApplyRendererPose(
                     previewState.controller.freeflyController.pose,
                     false);
+            const SectorViewPose& pose =
+                    previewState.controller.freeflyController.pose;
+            const int liquidSectorId = previewState.collision.sectorCollisionWorldValid
+                    ? previewState.collision.sectorCollisionWorld.FindSectorContainingPoint(
+                            Vector2{pose.position.x, pose.position.z})
+                    : 0;
+            const SectorFpsControllerConfig liquidConfig =
+                    previewState.controller.fpsControllerConfig;
+            const Vector3 liquidFeet{
+                    pose.position.x,
+                    pose.position.y - liquidConfig.eyeHeight,
+                    pose.position.z};
+            const SectorLiquidContact liquidContact = SampleSectorLiquidContact(
+                    TopologyMap(), liquidSectorId, liquidFeet, liquidConfig);
+            previewState.controller.liquidMovement.contact = liquidContact;
+            previewState.controller.liquidMovement.cameraSubmerged =
+                    UpdateSectorLiquidCameraSubmersion(
+                            previewState.controller.liquidMovement.cameraSubmerged,
+                            liquidContact,
+                            pose.position.y);
         } else {
             const float previousVisualEyeY = sceneRuntime.Renderer().RendererPose().position.y;
             input.ForEachEvent(
@@ -2989,6 +3016,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             controllerInput.strafeLeft = input.IsKeyDown(KEY_A);
             controllerInput.strafeRight = input.IsKeyDown(KEY_D);
             controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
+            controllerInput.swimUp = input.IsKeyDown(KEY_SPACE);
+            controllerInput.swimDown = input.IsKeyDown(KEY_LEFT_CONTROL)
+                    || input.IsKeyDown(KEY_RIGHT_CONTROL);
             controllerInput.mouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
             controllerInput.mouseDelta = input.MouseDelta();
             const bool canConsumeGameplayActions =

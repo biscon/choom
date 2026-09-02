@@ -697,29 +697,49 @@ engine::ScenePresentationEffectParameters
 GameApplication::ScenePresentationEffects() const
 {
     engine::ScenePresentationEffectParameters result;
-    if (BackgroundScreen() != ApplicationScreen::Game
-            || !gameSession.IsRunning()
-            || IsSectorBloomDiagnosticView(
+    result.runtimeSeconds = static_cast<float>(GetTime());
+    const SectorLiquidMovementState* liquidState = nullptr;
+    if (BackgroundScreen() == ApplicationScreen::Game
+            && gameSession.IsRunning()
+            && !IsSectorBloomDiagnosticView(
                     gameScene.Renderer().BloomDebugView())) {
-        return result;
+        liquidState = &gameSession.LiquidMovementState();
+        const PlayerLowHealthVisualApplicationSettings& settings =
+                applicationSettings.playerHealth.lowHealthVisual;
+        const float strength = PlayerLowHealthVisualStrength(
+                gameSession.PlayerHealth(), settings);
+        const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
+                settings.vignetteColor);
+        result.desaturation = settings.maximumDesaturation * strength;
+        result.vignetteOpacity = PlayerLowHealthVignetteOpacity(
+                gameSession.PlayerHealth(), settings);
+        result.vignetteColorLinear = {
+                vignetteColor.x,
+                vignetteColor.y,
+                vignetteColor.z};
+        result.vignetteInnerRadius = settings.vignetteInnerRadius;
+        result.vignetteOuterRadius = settings.vignetteOuterRadius;
+    } else if (BackgroundScreen() == ApplicationScreen::Editor
+            && editor.IsPreview3DActive()) {
+        liquidState = &editor.PreviewLiquidMovementState();
     }
-
-    const PlayerLowHealthVisualApplicationSettings& settings =
-            applicationSettings.playerHealth.lowHealthVisual;
-    const float strength = PlayerLowHealthVisualStrength(
-            gameSession.PlayerHealth(),
-            settings);
-    const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
-            settings.vignetteColor);
-    result.desaturation = settings.maximumDesaturation * strength;
-    result.vignetteOpacity = PlayerLowHealthVignetteOpacity(
-            gameSession.PlayerHealth(), settings);
-    result.vignetteColorLinear = {
-            vignetteColor.x,
-            vignetteColor.y,
-            vignetteColor.z};
-    result.vignetteInnerRadius = settings.vignetteInnerRadius;
-    result.vignetteOuterRadius = settings.vignetteOuterRadius;
+    if (liquidState != nullptr
+            && liquidState->cameraSubmerged
+            && liquidState->contact.hasLiquid) {
+        const SectorLiquidSettings& liquid = liquidState->contact.settings;
+        result.underwaterAmount = 1.0f;
+        result.underwaterShallowColorLinear =
+                engine::SrgbColorBytesToLinearSceneRgb(liquid.shallowColor);
+        result.underwaterDeepColorLinear =
+                engine::SrgbColorBytesToLinearSceneRgb(liquid.deepColor);
+        result.underwaterVisibilityDepthWorld = liquid.visibilityDepthWorld;
+        result.underwaterRippleScaleWorld = liquid.rippleScaleWorld;
+        result.underwaterRippleStrength = liquid.rippleStrength;
+        result.underwaterRippleSpeed = liquid.rippleSpeed;
+        result.underwaterFlowDirectionRadians =
+                liquid.flowDirectionDegrees * DEG2RAD;
+        result.underwaterFlowSpeedWorld = liquid.flowSpeedWorld;
+    }
     return result;
 }
 

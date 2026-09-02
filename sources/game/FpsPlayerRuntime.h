@@ -130,7 +130,9 @@ public:
             const Health* health = nullptr,
             const PlayerStamina* stamina = nullptr,
             std::uint64_t reserveRounds = 0,
-            bool showAmmo = false) const;
+            bool showAmmo = false,
+            const PlayerOxygen* oxygen = nullptr,
+            float oxygenAlpha = 0.0f) const;
 
     FpsViewmodelRuntimeState& State() { return state; }
     const FpsViewmodelRuntimeState& State() const { return state; }

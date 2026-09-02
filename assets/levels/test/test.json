@@ -83,6 +83,7 @@
   "previewSettings": {
     "walkSpeed": 3.0,
     "runSpeed": 6.0,
+    "swimSpeed": 6.0,
     "mouseSensitivity": 0.5,
     "eyeHeight": 1.75,
     "gravity": 15.0,
@@ -130,7 +131,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "f61382e86a48bb49",
+    "sourceHash": "e1b99a61aabee423",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -145,12 +146,12 @@
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 3095
+      "rgbChannelsAboveOne": 3900
     },
     "objectProbes": {
       "path": "assets/levels/test/test.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "f61382e86a48bb49",
+      "sourceHash": "e1b99a61aabee423",
       "count": 1134,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -170,15 +171,9 @@
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 6804,
-        "rgbChannelsAboveOne": 432
+        "rgbChannelsAboveOne": 490
       }
     }
-  },
-  "bakedReflectionProbes": {
-    "path": "assets/levels/test/test.reflection-probes.bin",
-    "version": 1,
-    "count": 1,
-    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
@@ -204,6 +199,26 @@
         "id": 4,
         "x": 128,
         "y": 2816
+      },
+      {
+        "id": 5,
+        "x": 512,
+        "y": 768
+      },
+      {
+        "id": 6,
+        "x": 1280,
+        "y": 768
+      },
+      {
+        "id": 7,
+        "x": 1280,
+        "y": 1536
+      },
+      {
+        "id": 8,
+        "x": 512,
+        "y": 1536
       }
     ],
     "lines": [
@@ -226,6 +241,26 @@
         "id": 4,
         "startVertexId": 4,
         "endVertexId": 1
+      },
+      {
+        "id": 5,
+        "startVertexId": 5,
+        "endVertexId": 6
+      },
+      {
+        "id": 6,
+        "startVertexId": 6,
+        "endVertexId": 7
+      },
+      {
+        "id": 7,
+        "startVertexId": 7,
+        "endVertexId": 8
+      },
+      {
+        "id": 8,
+        "startVertexId": 8,
+        "endVertexId": 5
       }
     ],
     "lineSides": [],
@@ -233,8 +268,8 @@
       {
         "id": 1,
         "name": "Sector 1",
-        "x": 1135,
-        "y": 1086,
+        "x": 2395,
+        "y": 1638,
         "floorZ": 0.0,
         "ceilingZ": 54.0,
         "floorMaterialId": "large_industrial_tiles_512",
@@ -304,6 +339,86 @@
               0.0
             ]
           }
+        }
+      },
+      {
+        "id": 2,
+        "name": "Sector 2",
+        "x": 895,
+        "y": 1150,
+        "floorZ": -50.0,
+        "ceilingZ": 54.0,
+        "floorMaterialId": "floor",
+        "ceilingMaterialId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "liquid": {
+          "enabled": true,
+          "surfaceOffset": 50.0
         }
       }
     ],

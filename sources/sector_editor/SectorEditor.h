@@ -114,6 +114,9 @@ public:
     void SetGameSessionExists(bool exists) { gameSessionExists = exists; }
     bool ConsumeClearGameSessionRequest();
     bool ConsumePlayerAudioSettingsChanged();
+    const SectorLiquidMovementState& PreviewLiquidMovementState() const {
+        return previewState.controller.liquidMovement;
+    }
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::EngineContext& context);

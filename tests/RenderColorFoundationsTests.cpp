@@ -246,16 +246,24 @@ void TestToneMapping()
                   && shader.find("presentationVignetteColorLinear")
                           != std::string::npos,
           "presentation shader exposes low-health effect uniforms");
+    Check(shader.find("presentationUnderwaterAmount") != std::string::npos
+                  && shader.find("presentationUnderwaterShallowColorLinear")
+                          != std::string::npos
+                  && shader.find("presentationUnderwaterRipple")
+                          != std::string::npos,
+          "presentation shader exposes procedural underwater effect uniforms");
     Check(shader.find("pow(centered.x, 4.0)") != std::string::npos
                   && shader.find("smoothstep(") != std::string::npos,
           "presentation shader uses a soft rounded-screen vignette");
     const size_t exposurePosition = shader.find("vec3 exposed =");
     const size_t toneMapPosition = shader.find(
             "vec3 mapped = ApplyToneMapping");
+    const size_t underwaterPosition = shader.find("exposed = mix(exposed");
     const size_t impairmentPosition = shader.find("float luminance = dot");
     const size_t displayTransferPosition = shader.find(
             "LinearSceneToDisplaySrgb(mapped)");
-    Check(exposurePosition < toneMapPosition
+    Check(exposurePosition < underwaterPosition
+                  && underwaterPosition < toneMapPosition
                   && toneMapPosition < impairmentPosition
                   && impairmentPosition < displayTransferPosition,
           "exposure, tone mapping, low-health effects, and sRGB transfer are ordered correctly");

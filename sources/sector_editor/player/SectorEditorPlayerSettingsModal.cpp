@@ -75,10 +75,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             font, "Player Settings");
 
     const char* tabNames[] = {
-            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting"};
+            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting", "Liquids"};
     const float tabY = modal.y + 70.0f;
-    const float tabWidth = (modal.width - 56.0f - 40.0f) / 6.0f;
-    for (int i = 0; i < 6; ++i) {
+    const float tabWidth = (modal.width - 56.0f - 48.0f) / 7.0f;
+    for (int i = 0; i < 7; ++i) {
         const bool active = static_cast<int>(state.activeTab) == i;
         if (engine::ToolButton(
                     ui, config, input, assets,
@@ -126,6 +126,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         case SectorEditorPlayerSettingsTab::Lighting:
             scrollState = &state.lightingScroll;
             contentHeight = 980.0f;
+            break;
+        case SectorEditorPlayerSettingsTab::Liquids:
+            scrollState = &state.liquidsScroll;
+            contentHeight = 360.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -251,6 +255,23 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                 "Pickup target height (world)",
                 inventory.pickupVacuumTargetHeightWorld,
                 state.inventoryVacuumHeightInput, 0.0f, 1000.0f, 3);
+    } else if (state.activeTab == SectorEditorPlayerSettingsTab::Liquids) {
+        PlayerLiquidApplicationSettings& liquids = state.draft.playerLiquids;
+        section("Oxygen and drowning");
+        drawFloat("player_liquids_oxygen_maximum", "Maximum oxygen",
+                liquids.oxygenMaximum, state.oxygenMaximumInput,
+                0.001f, 100000.0f, 2);
+        drawFloat("player_liquids_oxygen_depletion", "Depletion / second",
+                liquids.oxygenDepletionPerSecond, state.oxygenDepletionInput,
+                0.0f, 100000.0f, 2);
+        drawFloat("player_liquids_oxygen_regeneration", "Regeneration / second",
+                liquids.oxygenRegenerationPerSecond, state.oxygenRegenerationInput,
+                0.0f, 100000.0f, 2);
+        drawInt("player_liquids_drowning_damage", "Drowning damage",
+                liquids.drowningDamage, state.drowningDamageInput, 0, 100000);
+        drawFloat("player_liquids_drowning_interval", "Damage interval (seconds)",
+                liquids.drowningDamageIntervalSeconds, state.drowningIntervalInput,
+                0.001f, 1000.0f, 3);
     } else if (state.activeTab == SectorEditorPlayerSettingsTab::Audio) {
         FootstepApplicationSettings& footsteps = state.draft.footsteps;
         section("Footsteps and movement noise");

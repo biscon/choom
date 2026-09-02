@@ -167,7 +167,7 @@ void DrawPreviewSettingsModal(
 
     auto drawGeneralTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 12.0f * (rowH + gap) + 12.0f;
+        const float contentH = 13.0f * (rowH + gap) + 12.0f;
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui,
                 config,
@@ -180,6 +180,7 @@ void DrawPreviewSettingsModal(
         (void)contentW;
         drawFloat(contentY, "sector_editor_preview_walk_speed", "Walk speed", modalState.draftConfig.walkSpeed, modalState.walkSpeedInput, 0.1f, 100.0f, 2);
         drawFloat(contentY, "sector_editor_preview_run_speed", "Run speed", modalState.draftConfig.runSpeed, modalState.runSpeedInput, 0.1f, 200.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_swim_speed", "Swim speed", modalState.draftConfig.swimSpeed, modalState.swimSpeedInput, 0.1f, 100.0f, 2);
         drawFloat(contentY, "sector_editor_preview_mouse_sensitivity", "Mouse sensitivity", modalState.draftConfig.mouseSensitivity, modalState.mouseSensitivityInput, 0.01f, 20.0f, 3);
         drawFloat(contentY, "sector_editor_preview_eye_height", "Camera eye height", modalState.draftConfig.eyeHeight, modalState.eyeHeightInput, 0.1f, 20.0f, 2);
         drawFloat(contentY, "sector_editor_preview_gravity", "Gravity", modalState.draftConfig.gravity, modalState.gravityInput, 0.0f, 200.0f, 2);

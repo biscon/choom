@@ -600,6 +600,20 @@ int main(int argc, char** argv)
             scenePresentationShader, "presentationVignetteInnerRadius");
     const int presentationVignetteOuterRadiusLoc = GetShaderLocation(
             scenePresentationShader, "presentationVignetteOuterRadius");
+    const int presentationUnderwaterAmountLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterAmount");
+    const int presentationUnderwaterShallowColorLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterShallowColorLinear");
+    const int presentationUnderwaterDeepColorLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterDeepColorLinear");
+    const int presentationUnderwaterVisibilityLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterVisibilityDepthWorld");
+    const int presentationUnderwaterRippleLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterRipple");
+    const int presentationUnderwaterFlowLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterFlow");
+    const int presentationRuntimeSecondsLoc = GetShaderLocation(
+            scenePresentationShader, "presentationRuntimeSeconds");
     if (!IsShaderValid(scenePresentationShader)) {
         TraceLog(LOG_ERROR, "RENDER: required tone-map/sRGB presentation shader unavailable");
         if (IsShaderValid(fxaaShader)) UnloadShader(fxaaShader);
@@ -1021,6 +1035,42 @@ int main(int argc, char** argv)
                     scenePresentationShader,
                     presentationVignetteOuterRadiusLoc,
                     &presentationEffects.vignetteOuterRadius,
+                    SHADER_UNIFORM_FLOAT);
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterAmountLoc,
+                    &presentationEffects.underwaterAmount,
+                    SHADER_UNIFORM_FLOAT);
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterShallowColorLoc,
+                    &presentationEffects.underwaterShallowColorLinear,
+                    SHADER_UNIFORM_VEC3);
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterDeepColorLoc,
+                    &presentationEffects.underwaterDeepColorLinear,
+                    SHADER_UNIFORM_VEC3);
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterVisibilityLoc,
+                    &presentationEffects.underwaterVisibilityDepthWorld,
+                    SHADER_UNIFORM_FLOAT);
+            const Vector4 underwaterRipple{
+                    presentationEffects.underwaterRippleScaleWorld,
+                    presentationEffects.underwaterRippleStrength,
+                    presentationEffects.underwaterRippleSpeed,
+                    0.0f};
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterRippleLoc,
+                    &underwaterRipple,
+                    SHADER_UNIFORM_VEC4);
+            const Vector2 underwaterFlow{
+                    presentationEffects.underwaterFlowDirectionRadians,
+                    presentationEffects.underwaterFlowSpeedWorld};
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterFlowLoc,
+                    &underwaterFlow,
+                    SHADER_UNIFORM_VEC2);
+            SetShaderValue(scenePresentationShader,
+                    presentationRuntimeSecondsLoc,
+                    &presentationEffects.runtimeSeconds,
                     SHADER_UNIFORM_FLOAT);
             BeginShaderMode(scenePresentationShader);
             DrawTexturePro(

@@ -1298,6 +1298,7 @@ bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewS
     const SectorPreviewSettings b = NormalizeSectorPreviewSettings(right);
     return a.walkSpeed == b.walkSpeed
             && a.runSpeed == b.runSpeed
+            && a.swimSpeed == b.swimSpeed
             && a.mouseSensitivity == b.mouseSensitivity
             && a.eyeHeight == b.eyeHeight
             && a.gravity == b.gravity

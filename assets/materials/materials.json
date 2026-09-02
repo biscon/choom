@@ -232,6 +232,13 @@
       "roughnessFactor": 0.550000011920929,
       "normalStrength": 1.0
     },
+    "seamless_worn_concrete": {
+      "albedoTexturePath": "assets/images/walls/seamless_worn_concrete.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0
+    },
     "step_01_512": {
       "albedoTexturePath": "assets/images/step_01_512.png",
       "filter": "anisotropic8x",

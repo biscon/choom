@@ -123,6 +123,7 @@ SectorEditorPlayerSettingsService::SaveAndClose(engine::EngineContext& context)
     candidate.footsteps = state_.draft.footsteps;
     candidate.playerSounds = state_.draft.playerSounds;
     candidate.playerStamina = state_.draft.playerStamina;
+    candidate.playerLiquids = state_.draft.playerLiquids;
     candidate.playerInventory = state_.draft.playerInventory;
     candidate.playerHealth = state_.draft.playerHealth;
     candidate.playerSneak = state_.draft.playerSneak;
@@ -179,6 +180,9 @@ void SectorEditorPlayerSettingsService::ResetActiveTab()
             break;
         case SectorEditorPlayerSettingsTab::Lighting:
             state_.draft.playerFlashlight = defaults.playerFlashlight;
+            break;
+        case SectorEditorPlayerSettingsTab::Liquids:
+            state_.draft.playerLiquids = defaults.playerLiquids;
             break;
     }
     state_.errorMessage.clear();

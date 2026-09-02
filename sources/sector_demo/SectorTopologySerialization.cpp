@@ -1605,6 +1605,10 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
     if (runSpeedIt != value.end()) {
         settings.runSpeed = ReadFloat(value, "runSpeed", context);
     }
+    const auto swimSpeedIt = value.find("swimSpeed");
+    if (swimSpeedIt != value.end()) {
+        settings.swimSpeed = ReadFloat(value, "swimSpeed", context);
+    }
     const auto mouseSensitivityIt = value.find("mouseSensitivity");
     if (mouseSensitivityIt != value.end()) {
         settings.mouseSensitivity = ReadFloat(value, "mouseSensitivity", context);
@@ -2811,6 +2815,7 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
 {
     RequireFinite(settings.walkSpeed, "previewSettings.walkSpeed");
     RequireFinite(settings.runSpeed, "previewSettings.runSpeed");
+    RequireFinite(settings.swimSpeed, "previewSettings.swimSpeed");
     RequireFinite(settings.mouseSensitivity, "previewSettings.mouseSensitivity");
     RequireFinite(settings.eyeHeight, "previewSettings.eyeHeight");
     RequireFinite(settings.gravity, "previewSettings.gravity");
@@ -2827,6 +2832,7 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
     return Json{
             {"walkSpeed", normalized.walkSpeed},
             {"runSpeed", normalized.runSpeed},
+            {"swimSpeed", normalized.swimSpeed},
             {"mouseSensitivity", normalized.mouseSensitivity},
             {"eyeHeight", normalized.eyeHeight},
             {"gravity", normalized.gravity},

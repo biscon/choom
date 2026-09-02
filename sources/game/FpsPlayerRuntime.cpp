@@ -1227,7 +1227,9 @@ void FpsPlayerRuntime::RenderHud(
         const Health* health,
         const PlayerStamina* stamina,
         std::uint64_t reserveRounds,
-        bool showAmmo) const
+        bool showAmmo,
+        const PlayerOxygen* oxygen,
+        float oxygenAlpha) const
 {
     const int displayedLoaded = IsFpsWeaponReloading(state)
             ? state.reload.loadedRoundsBefore
@@ -1240,6 +1242,8 @@ void FpsPlayerRuntime::RenderHud(
             font,
             health,
             stamina,
+            oxygen,
+            oxygenAlpha,
             displayedLoaded,
             reserveRounds,
             showAmmo});

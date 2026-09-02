@@ -10,6 +10,7 @@ namespace game {
 struct SectorFpsControllerConfig {
     float walkSpeed = 6.0f;
     float runSpeed = 12.0f;
+    float swimSpeed = 6.0f;
     float mouseSensitivity = 1.0f;
     float eyeHeight = 1.2f;
     float gravity = 25.0f;
@@ -40,6 +41,8 @@ struct SectorFpsControllerInput {
     bool run = false;
     bool jumpPressed = false;
     bool crouchTogglePressed = false;
+    bool swimUp = false;
+    bool swimDown = false;
     bool mouseLookEnabled = false;
     Vector2 mouseDelta = {};
     float movementSpeedScale = 1.0f;

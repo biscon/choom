@@ -149,5 +149,12 @@
       "volume": 0.75,
       "fadeOutSeconds": 2.0
     }
+  },
+  "playerLiquids": {
+    "oxygenMaximum": 100.0,
+    "oxygenDepletionPerSecond": 5.0,
+    "oxygenRegenerationPerSecond": 20.0,
+    "drowningDamage": 10,
+    "drowningDamageIntervalSeconds": 0.75
   }
 }

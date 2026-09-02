@@ -231,6 +231,7 @@ struct SectorPreviewSettingsModalState {
     engine::HdrBloomSettings draftHdrBloom;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
+    engine::UIFloatInputState swimSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
     engine::UIFloatInputState eyeHeightInput;
     engine::UIFloatInputState gravityInput;

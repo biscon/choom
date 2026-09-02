@@ -1030,6 +1030,9 @@ bool SectorGameSession::StartNew(
     aiDebugVisible = false;
     gameOver = false;
     playerStamina = MakePlayerStamina(settings.playerStamina);
+    playerOxygen = MakePlayerOxygen(settings.playerLiquids);
+    playerOxygenModifiers = PlayerOxygenModifiers{};
+    oxygenHudAlpha = 0.0f;
     ClearPlayerWindedCamera(windedCamera);
     ClearPlayerLowHealthCamera(lowHealthCamera);
     ClearPlayerHitCamera(hitCamera);
@@ -1227,6 +1230,9 @@ void SectorGameSession::Shutdown(
     collision = SectorEditorPreviewCollisionState{};
     navigationDebug = SectorGameNavigationDebugState{};
     playerStamina = PlayerStamina{};
+    playerOxygen = PlayerOxygen{};
+    playerOxygenModifiers = PlayerOxygenModifiers{};
+    oxygenHudAlpha = 0.0f;
     flashlight = PlayerFlashlightState{};
     playerKnockbackVelocity = {};
     playerStunRemainingSeconds = 0.0f;
@@ -1371,6 +1377,8 @@ GameSavePlayerState SectorGameSession::CapturePlayerSaveState() const
     result.pitchRadians = controller.fpsControllerState.pitchRadians;
     result.health = playerHealth;
     result.stamina = playerStamina;
+    result.oxygen = playerOxygen;
+    result.hasOxygenState = true;
     result.flashlightEnabled = flashlight.enabled;
     return result;
 }
@@ -1621,6 +1629,9 @@ void SectorGameSession::Update(
         input.strafeRight = context.input.IsKeyDown(KEY_D);
         input.run = context.input.IsKeyDown(KEY_LEFT_SHIFT)
                 || context.input.IsKeyDown(KEY_RIGHT_SHIFT);
+        input.swimUp = context.input.IsKeyDown(KEY_SPACE);
+        input.swimDown = context.input.IsKeyDown(KEY_LEFT_CONTROL)
+                || context.input.IsKeyDown(KEY_RIGHT_CONTROL);
         input.mouseLookEnabled =
                 AdvanceSectorFreeflyMouseLookCapture(
                         controller.freeflyController);
@@ -1723,6 +1734,30 @@ void SectorGameSession::Update(
         playerKnockbackVelocity = {};
     }
     if (applicationSettings != nullptr) {
+        const bool submerged = controller.liquidMovement.cameraSubmerged;
+        const PlayerOxygenUpdateResult oxygenResult = UpdatePlayerOxygen(
+                playerOxygen,
+                applicationSettings->playerLiquids,
+                playerOxygenModifiers,
+                submerged,
+                dt);
+        if (submerged || !oxygenResult.fullyRegenerated) {
+            oxygenHudAlpha = 1.0f;
+        } else {
+            oxygenHudAlpha = std::max(
+                    0.0f, oxygenHudAlpha - std::max(0.0f, dt) / 0.6f);
+        }
+        if (oxygenResult.drowningDamage > 0 && !godMode) {
+            const int applied = ApplyDamage(
+                    playerHealth, oxygenResult.drowningDamage);
+            if (applied > 0 && playerAudio != nullptr) {
+                PlayPlayerSound(
+                        context.assets,
+                        context.audio,
+                        *playerAudio,
+                        "pain");
+            }
+        }
         UpdatePlayerStamina(
                 playerStamina,
                 applicationSettings->playerStamina,
@@ -2165,6 +2200,9 @@ bool SectorGameSession::ActivateLoadedMap(
                 pendingPlayerRestore->pitchRadians;
         playerHealth = pendingPlayerRestore->health;
         playerStamina = pendingPlayerRestore->stamina;
+        playerOxygen = pendingPlayerRestore->hasOxygenState
+                ? pendingPlayerRestore->oxygen
+                : MakePlayerOxygen(applicationSettings->playerLiquids);
         SetPlayerFlashlightEnabled(
                 flashlight,
                 pendingPlayerRestore->flashlightEnabled);
@@ -2232,7 +2270,9 @@ void SectorGameSession::RenderHud(
                 &playerHealth,
                 &playerStamina,
                 reserveRounds,
-                showAmmo);
+                showAmmo,
+                oxygenHudAlpha > 0.0f ? &playerOxygen : nullptr,
+                oxygenHudAlpha);
         if (itemMessage[0] != '\0') {
             DrawSectorUseMessage(
                     playableViewport,
@@ -2444,6 +2484,7 @@ bool SectorGameSession::ReloadCurrentMap(
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
     std::vector<GameSaveLevelState>* savedLevelStates = levelSaveStates;
     const Health savedHealth = playerHealth;
+    const PlayerOxygen savedOxygen = playerOxygen;
     const bool savedFlashlightEnabled = flashlight.enabled;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
@@ -2476,6 +2517,7 @@ bool SectorGameSession::ReloadCurrentMap(
     }
     if (remainPaused) Pause();
     playerHealth = savedHealth;
+    playerOxygen = savedOxygen;
     SetPlayerFlashlightEnabled(flashlight, savedFlashlightEnabled);
     error.clear();
     return true;
@@ -2530,6 +2572,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     std::vector<GameSaveLevelState>* savedLevelStates = levelSaveStates;
     const Health savedHealth = playerHealth;
     const PlayerStamina savedStamina = playerStamina;
+    const PlayerOxygen savedOxygen = playerOxygen;
     const bool savedFlashlightEnabled = flashlight.enabled;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
@@ -2570,6 +2613,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     } else {
         playerHealth = savedHealth;
         playerStamina = savedStamina;
+        playerOxygen = savedOxygen;
         SetPlayerFlashlightEnabled(flashlight, savedFlashlightEnabled);
     }
 }

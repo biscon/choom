@@ -4,6 +4,7 @@
 
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorLiquidInteraction.h"
 #include "sector_demo/SectorStaticModelCollision.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
@@ -340,20 +341,40 @@ void UpdateSectorEditorGameplayPreview(
                 collisionState, controllerState);
         return;
     }
+    SectorLiquidContact liquidContact;
+    if (topologyMap != nullptr) {
+        liquidContact = SampleSectorLiquidContact(
+                *topologyMap,
+                controllerState.fpsControllerState.currentSectorId,
+                controllerState.fpsControllerState.feetPosition,
+                controllerState.fpsControllerConfig);
+    }
+    UpdateSectorLiquidMovementState(
+            controllerState.liquidMovement,
+            liquidContact,
+            controllerInput.swimDown);
+    const bool swimming = controllerState.liquidMovement.swimming;
+    if (swimming) {
+        ResetSectorFpsCrouch(controllerState.fpsControllerState);
+        controllerState.fpsControllerState.grounded = false;
+        controllerState.fpsControllerState.verticalVelocity = 0.0f;
+    }
     const bool standingClearance = HasSectorEditorGameplayStandingClearance(
             collisionState,
             controllerState,
             dynamicDoorColliders,
             staticModelColliders);
-    if (controllerInput.crouchTogglePressed) {
+    if (!swimming && controllerInput.crouchTogglePressed) {
         TryToggleSectorFpsCrouch(
                 controllerState.fpsControllerState,
                 standingClearance);
     }
-    UpdateSectorFpsCrouch(
-            controllerState.fpsControllerState,
-            standingClearance,
-            dt);
+    if (!swimming) {
+        UpdateSectorFpsCrouch(
+                controllerState.fpsControllerState,
+                standingClearance,
+                dt);
+    }
     const SectorFpsControllerConfig effectiveConfig = EffectiveSectorFpsControllerConfig(
             controllerState.fpsControllerState,
             controllerState.fpsControllerConfig);
@@ -361,11 +382,21 @@ void UpdateSectorEditorGameplayPreview(
             previousVisualEyeY
             - controllerState.landingDipState.offsetY
             + (effectiveConfig.eyeHeight - previousStanceEyeHeight);
-    const Vector2 desiredHorizontalMovement = ComputeSectorFpsHorizontalMovementDelta(
-            controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig,
-            controllerInput,
-            dt);
+    const Vector3 swimMovement = swimming
+            ? ComputeSectorLiquidSwimMovementDelta(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig,
+                    controllerInput,
+                    controllerState.liquidMovement.surfaceLatched,
+                    dt)
+            : Vector3{};
+    const Vector2 desiredHorizontalMovement = swimming
+            ? Vector2{swimMovement.x, swimMovement.z}
+            : ComputeSectorFpsHorizontalMovementDelta(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig,
+                    controllerInput,
+                    dt);
     const Vector2 previousFeetXZ{
             controllerState.fpsControllerState.feetPosition.x,
             controllerState.fpsControllerState.feetPosition.z};
@@ -477,7 +508,7 @@ void UpdateSectorEditorGameplayPreview(
     }
     RefreshSectorEditorGameplaySectorAndVerticalContext(collisionState, controllerState);
     bool startedJump = false;
-    if (controllerInput.jumpPressed) {
+    if (!swimming && controllerInput.jumpPressed) {
         startedJump = TryStartSectorFpsJump(
                 controllerState.fpsControllerState,
                 controllerState.fpsControllerConfig);
@@ -485,18 +516,102 @@ void UpdateSectorEditorGameplayPreview(
             ClearSectorFpsLandingDip(controllerState.landingDipState);
         }
     }
-    collisionState.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
-            controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig,
-            BuildSectorEditorGameplayVerticalContext(
-                    collisionState,
-                    controllerState,
-                    staticModelColliders),
-            dt);
+    if (swimming) {
+        if (topologyMap != nullptr) {
+            liquidContact = SampleSectorLiquidContact(
+                    *topologyMap,
+                    controllerState.fpsControllerState.currentSectorId,
+                    controllerState.fpsControllerState.feetPosition,
+                    controllerState.fpsControllerConfig);
+            controllerState.liquidMovement.contact = liquidContact;
+        }
+        const SectorFpsVerticalContext verticalContext =
+                BuildSectorEditorGameplayVerticalContext(
+                        collisionState, controllerState, staticModelColliders);
+        controllerState.fpsControllerState.feetPosition.y += swimMovement.y;
+        if (controllerState.liquidMovement.surfaceLatched
+                && controllerState.liquidMovement.contact.hasLiquid) {
+            controllerState.fpsControllerState.feetPosition.y =
+                    controllerState.liquidMovement.contact.surfaceY
+                    + SectorLiquidSurfaceEyeOffsetWorld
+                    - effectiveConfig.eyeHeight;
+        }
+        if (verticalContext.hasSector) {
+            const float maximumFeetY = std::max(
+                    verticalContext.floorZ,
+                    verticalContext.ceilingZ - effectiveConfig.playerHeight);
+            controllerState.fpsControllerState.feetPosition.y = std::clamp(
+                    controllerState.fpsControllerState.feetPosition.y,
+                    verticalContext.floorZ,
+                    maximumFeetY);
+        }
+        controllerState.fpsControllerState.grounded = false;
+        controllerState.fpsControllerState.verticalVelocity = 0.0f;
+        collisionState.previewVerticalResult = SectorFpsVerticalResult{
+                verticalContext.hasSector,
+                false,
+                verticalContext.floorZ,
+                verticalContext.ceilingZ,
+                0.0f,
+                SectorFpsVerticalTransition::None};
+        if (topologyMap != nullptr) {
+            liquidContact = SampleSectorLiquidContact(
+                    *topologyMap,
+                    controllerState.fpsControllerState.currentSectorId,
+                    controllerState.fpsControllerState.feetPosition,
+                    controllerState.fpsControllerConfig);
+            controllerState.liquidMovement.contact = liquidContact;
+            const float eyeY = SectorFpsControllerEyePosition(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig).y;
+            if (!controllerInput.swimDown
+                    && !controllerState.liquidMovement.surfaceLatched
+                    && liquidContact.hasLiquid
+                    && eyeY >= liquidContact.surfaceY
+                            - SectorLiquidSurfaceEyeOffsetWorld) {
+                controllerState.liquidMovement.surfaceLatched = true;
+            }
+            controllerState.liquidMovement.cameraSubmerged =
+                    UpdateSectorLiquidCameraSubmersion(
+                            controllerState.liquidMovement.cameraSubmerged,
+                            liquidContact,
+                            eyeY);
+        }
+    } else {
+        collisionState.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig,
+                BuildSectorEditorGameplayVerticalContext(
+                        collisionState,
+                        controllerState,
+                        staticModelColliders),
+                dt);
+        if (topologyMap != nullptr) {
+            liquidContact = SampleSectorLiquidContact(
+                    *topologyMap,
+                    controllerState.fpsControllerState.currentSectorId,
+                    controllerState.fpsControllerState.feetPosition,
+                    controllerState.fpsControllerConfig);
+            controllerState.liquidMovement.contact = liquidContact;
+        }
+        const float eyeY = SectorFpsControllerEyePosition(
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig).y;
+        controllerState.liquidMovement.cameraSubmerged =
+                UpdateSectorLiquidCameraSubmersion(
+                        controllerState.liquidMovement.cameraSubmerged,
+                        liquidContact,
+                        eyeY);
+    }
     controllerState.frameEvents = BuildSectorFpsFrameEvents(
             startedJump,
             collisionState.previewVerticalResult);
-    if (collisionState.previewCollisionNoclipFallback || !collisionState.previewVerticalResult.hasSector) {
+    if (swimming) {
+        controllerState.visualStepOffsetY = 0.0f;
+        ClearSectorFpsLandingDip(controllerState.landingDipState);
+        ClearSectorFpsHeadBob(controllerState.headBobState);
+        ClearSectorFpsFootstepCadence(controllerState.footstepCadenceState);
+    } else if (collisionState.previewCollisionNoclipFallback || !collisionState.previewVerticalResult.hasSector) {
         controllerState.visualStepOffsetY = 0.0f;
         ClearSectorFpsLandingDip(controllerState.landingDipState);
     } else if (startedJump) {
@@ -524,7 +639,8 @@ void UpdateSectorEditorGameplayPreview(
     controllerState.frameEvents.sprinting =
             SectorFpsInputUsesRunSpeed(controllerInput)
             && Vector2Length(resolvedHorizontalMovement) > 0.0001f;
-    const bool headBobActive = !collisionState.previewCollisionNoclipFallback
+    const bool headBobActive = !swimming
+            && !collisionState.previewCollisionNoclipFallback
             && collisionState.previewVerticalResult.hasSector
             && controllerState.fpsControllerState.grounded
             && !previewSettingsModalOpen;

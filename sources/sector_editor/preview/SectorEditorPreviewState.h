@@ -7,6 +7,7 @@
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorLadderInteraction.h"
+#include "sector_demo/SectorLiquidInteraction.h"
 
 #include <string>
 
@@ -46,6 +47,7 @@ struct SectorEditorPreviewControllerState {
     SectorFpsFrameEvents frameEvents;
     SectorFpsLandingDipState landingDipState;
     SectorLadderTraversalState ladderTraversal;
+    SectorLiquidMovementState liquidMovement;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};
     LightPilotPreviewRestoreState lightPilotPreviewRestore;

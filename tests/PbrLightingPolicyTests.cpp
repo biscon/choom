@@ -945,6 +945,11 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&liquidShader.find("ToneMap")==std::string::npos
                     &&liquidShader.find("LinearToSrgb")==std::string::npos,
           "liquid shader is procedural, depth-aware, probe-reflective, and linear HDR");
+    Check(liquidShader.find("if (dot(normal, viewDirection) < 0.0) normal = -normal")
+                            !=std::string::npos
+                    &&liquidShader.find("rlDisableBackfaceCulling()")
+                            !=std::string::npos,
+          "liquid surfaces render from below with view-facing procedural normals");
     Check(glassShader.find("rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY)")
                             !=std::string::npos
                     &&glassShader.find("float fresnel = clamp(0.04 + 0.96")

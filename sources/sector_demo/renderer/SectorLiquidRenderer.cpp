@@ -189,6 +189,7 @@ void main()
     vec3 normal = ProceduralNormal();
     vec3 viewDirection = SafeNormalize(cameraPosition - fragWorldPosition,
             vec3(0.0, 1.0, 0.0));
+    if (dot(normal, viewDirection) < 0.0) normal = -normal;
     float ndotv = clamp(dot(normal, viewDirection), 0.0, 1.0);
     float fresnel = 0.02 + 0.98 * pow(1.0 - ndotv, 5.0);
     float roughness = clamp(liquidParams0.y, 0.02, 1.0);
@@ -400,8 +401,7 @@ bool SectorLiquidRenderer::HasVisibleLiquids(
         Vector3 cameraPosition) const
 {
     for (const Surface& surface : surfaces) {
-        if (cameraPosition.y > surface.surfaceY + 0.001f
-                && VisibleSector(surface.sectorId, visibility)) return true;
+        if (VisibleSector(surface.sectorId, visibility)) return true;
     }
     return false;
 }
@@ -413,8 +413,7 @@ void SectorLiquidRenderer::Draw(const SectorLiquidDrawContext& context)
     if (!materialLoaded || shader.id == 0 || context.assets == nullptr) return;
     for (std::size_t i = 0; i < surfaces.size(); ++i) {
         const Surface& surface = surfaces[i];
-        if (context.camera.position.y <= surface.surfaceY + 0.001f
-                || !VisibleSector(surface.sectorId, context.visibility)) continue;
+        if (!VisibleSector(surface.sectorId, context.visibility)) continue;
         drawItems.push_back(DrawItem{i, Vector3DistanceSqr(
                 context.camera.position, surface.center)});
     }
@@ -470,7 +469,7 @@ void SectorLiquidRenderer::Draw(const SectorLiquidDrawContext& context)
     if (advanced != 0) rlDisableDepthTest();
     else rlEnableDepthTest();
     rlDisableDepthMask();
-    rlEnableBackfaceCulling();
+    rlDisableBackfaceCulling();
 
     for (const DrawItem& item : drawItems) {
         Surface& surface = surfaces[item.surfaceIndex];

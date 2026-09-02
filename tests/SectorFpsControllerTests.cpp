@@ -2,6 +2,8 @@
 #include "sector_demo/SectorFreeflyController.h"
 #include "game/PlayerStamina.h"
 #include "game/PlayerHitCamera.h"
+#include "game/PlayerOxygen.h"
+#include "sector_demo/SectorLiquidInteraction.h"
 
 #include <raymath.h>
 
@@ -1291,6 +1293,83 @@ void TestNoSectorPreservesVerticalState()
     Check(!state.grounded, "no-sector context clears grounded state");
 }
 
+void TestLiquidContactAndSwimHysteresis()
+{
+    game::SectorTopologyMap map;
+    game::SectorTopologySector sector;
+    sector.id = 7;
+    sector.floorZ = 0.0f;
+    sector.ceilingZ = 24.0f;
+    sector.liquid.enabled = true;
+    sector.liquid.surfaceOffset = 16.0f;
+    map.sectors.push_back(sector);
+    game::SectorFpsControllerConfig config;
+    config.playerHeight = 1.6f;
+    config.eyeHeight = 1.2f;
+    const game::SectorLiquidContact contact = game::SampleSectorLiquidContact(
+            map, 7, Vector3{0.0f, 0.8f, 0.0f}, config);
+    Check(contact.hasLiquid && Near(contact.surfaceY, 2.0f),
+            "liquid contact resolves authored surface height to world units");
+    Check(Near(contact.immersionFraction, 0.75f),
+            "liquid contact reports body immersion fraction");
+
+    game::SectorLiquidMovementState state;
+    game::UpdateSectorLiquidMovementState(state, contact, false);
+    Check(state.swimming, "mid-body immersion enters swimming");
+    game::SectorLiquidContact shallower = contact;
+    shallower.immersionFraction = 0.45f;
+    game::UpdateSectorLiquidMovementState(state, shallower, false);
+    Check(state.swimming, "swim exit hysteresis retains swimming at 45 percent");
+    shallower.immersionFraction = 0.39f;
+    game::UpdateSectorLiquidMovementState(state, shallower, false);
+    Check(!state.swimming, "swimming exits below 40 percent immersion");
+}
+
+void TestSwimMovementModes()
+{
+    game::SectorFpsControllerState state;
+    state.pitchRadians = 30.0f * DEG2RAD;
+    game::SectorFpsControllerConfig config;
+    config.swimSpeed = 6.0f;
+    game::SectorFpsControllerInput input;
+    input.moveForward = true;
+    Vector3 movement = game::ComputeSectorLiquidSwimMovementDelta(
+            state, config, input, true, 1.0f);
+    Check(Near(movement.y, 0.0f) && Near(Vector3Length(movement), 6.0f),
+            "surface-latched forward swimming stays horizontal at swim speed");
+    movement = game::ComputeSectorLiquidSwimMovementDelta(
+            state, config, input, false, 1.0f);
+    Check(movement.y > 0.0f && Near(Vector3Length(movement), 6.0f),
+            "diving forward movement follows mouse-look pitch");
+    input.swimDown = true;
+    movement = game::ComputeSectorLiquidSwimMovementDelta(
+            state, config, input, false, 1.0f);
+    Check(movement.y < 3.0f,
+            "swim down contributes world-down to normalized movement");
+}
+
+void TestPlayerOxygenDrainRecoveryAndDrowning()
+{
+    game::PlayerLiquidApplicationSettings settings;
+    settings.oxygenDepletionPerSecond = 50.0f;
+    settings.oxygenRegenerationPerSecond = 25.0f;
+    settings.drowningDamage = 10;
+    settings.drowningDamageIntervalSeconds = 0.5f;
+    game::PlayerOxygen oxygen = game::MakePlayerOxygen(settings);
+    game::PlayerOxygenUpdateResult result = game::UpdatePlayerOxygen(
+            oxygen, settings, {}, true, 3.0f);
+    Check(Near(oxygen.current, 0.0f) && result.drowningDamage == 20,
+            "oxygen depletion produces periodic drowning damage at zero");
+    result = game::UpdatePlayerOxygen(oxygen, settings, {}, false, 1.0f);
+    Check(Near(oxygen.current, 25.0f) && result.drowningDamage == 0,
+            "oxygen regenerates and clears drowning outside liquid");
+    game::PlayerOxygenModifiers modifiers;
+    modifiers.capacityBonus = 50.0f;
+    game::ApplyPlayerOxygenModifiers(oxygen, modifiers);
+    Check(Near(oxygen.maximum, 150.0f),
+            "oxygen capacity supports future equipment modifiers");
+}
+
 } // namespace
 
 int main()
@@ -1330,6 +1409,9 @@ int main()
     TestCeilingClamp();
     TestCannotFitClampsToFloor();
     TestNoSectorPreservesVerticalState();
+    TestLiquidContactAndSwimHysteresis();
+    TestSwimMovementModes();
+    TestPlayerOxygenDrainRecoveryAndDrowning();
     if (failures == 0) {
         std::puts("Sector FPS controller tests passed");
     }
