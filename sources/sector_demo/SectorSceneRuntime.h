@@ -98,11 +98,13 @@ public:
     void ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
     void ApplyTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::EngineContext& context,
             const SectorTopologyMap& map,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
     void ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,

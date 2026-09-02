@@ -503,12 +503,18 @@ void TestLiquidSerializationAndValidation()
     liquid.rippleSpeed = 0.7f;
     liquid.flowDirectionDegrees = 450.0f;
     liquid.flowSpeedWorld = 1.25f;
+    liquid.particulates.amount = 123;
+    liquid.particulates.sizeWorld = 0.018f;
+    liquid.particulates.opacity = 0.46f;
+    liquid.particulates.flowInfluence = 0.37f;
+    liquid.particulates.wakeInfluence = 0.72f;
 
     const Json saved = Json::parse(SaveText(map));
     Check(saved["sectors"][0].contains("liquid")
                   && saved["sectors"][0]["liquid"]["enabled"] == true
                   && saved["sectors"][0]["liquid"]["surfaceReference"] == "ceiling"
-                  && Near(saved["sectors"][0]["liquid"]["flowDirectionDegrees"].get<float>(), 90.0f),
+                  && Near(saved["sectors"][0]["liquid"]["flowDirectionDegrees"].get<float>(), 90.0f)
+                  && saved["sectors"][0]["liquid"]["particulates"]["amount"] == 123,
           "liquid settings serialize with normalized flow direction");
 
     SectorTopologyMap loaded;
@@ -521,7 +527,12 @@ void TestLiquidSerializationAndValidation()
                   && loaded.sectors[0].liquid.shallowColor.g == 80
                   && Near(loaded.sectors[0].liquid.visibilityDepthWorld, 2.5f)
                   && Near(loaded.sectors[0].liquid.flowDirectionDegrees, 90.0f)
-                  && Near(loaded.sectors[0].liquid.flowSpeedWorld, 1.25f),
+                  && Near(loaded.sectors[0].liquid.flowSpeedWorld, 1.25f)
+                  && loaded.sectors[0].liquid.particulates.amount == 123
+                  && Near(loaded.sectors[0].liquid.particulates.sizeWorld, 0.018f)
+                  && Near(loaded.sectors[0].liquid.particulates.opacity, 0.46f)
+                  && Near(loaded.sectors[0].liquid.particulates.flowInfluence, 0.37f)
+                  && Near(loaded.sectors[0].liquid.particulates.wakeInfluence, 0.72f),
           "liquid settings round-trip without preset identity");
 
     Json legacyFoam = saved;
@@ -551,6 +562,14 @@ void TestLiquidSerializationAndValidation()
     invalid["sectors"][0]["liquid"]["roughness"] = 2.0f;
     Check(!LoadText(invalid.dump(), loaded, error),
           "out-of-range liquid appearance values are rejected");
+    invalid = saved;
+    invalid["sectors"][0]["liquid"]["particulates"]["amount"] = 193;
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "liquid particulate amount above the fixed pool is rejected");
+    invalid = saved;
+    invalid["sectors"][0]["liquid"]["particulates"]["opacity"] = -0.1f;
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "out-of-range liquid particulate appearance is rejected");
 
     SectorTopologyMap fullHeight = MakeSquare();
     fullHeight.sectors[0].liquid.enabled = true;

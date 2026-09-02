@@ -118,6 +118,12 @@ views and maps to world Z for generated 3D geometry.
   The effect blends at camera-submersion transitions and combines with portal
   sound filtering by using whichever low-pass cutoff is lower. Editor sound-file
   previews opt out of listener effects.
+- `Settings -> Liquids -> Underwater visuals` configures the application-wide
+  screen-distortion strength plus projected-caustics strength, world scale, and
+  animation speed. Caustics use a generated procedural lookup texture and are
+  projected onto visible submerged surfaces; no authored texture is required.
+  Their world-space triplanar projection fades at depth discontinuities and
+  uses bounded luminance modulation so it does not create emissive bloom bands.
 - `Copy config` / `Paste config` (`Ctrl+C` / `Ctrl+V`): copy and paste the
   selected compatible editor configuration. Disabled commands do not fire.
 
@@ -219,6 +225,8 @@ Selecting a topology sector opens the sector inspector. It edits:
 - ceiling sky/open toggle
 - floor and ceiling texture IDs and UV scale/offset
 - ambient color and intensity
+- liquid volume state, height, appearance, flow, and underwater particulate
+  settings
 - default wall, lower, and upper texture IDs and UV scale/offset
 - `Insert Sector Inside`
 - `Cut Sector`
@@ -226,6 +234,14 @@ Selecting a topology sector opens the sector inspector. It edits:
 
 Sector default wall/lower/upper settings initialize future sidedefs created for
 that sector. Editing those defaults does not rewrite existing concrete sidedefs.
+
+The liquid modal's particulate controls are per volume and participate in
+sector `Copy config` / `Paste config`. `Amount` selects up to 192 nearby specks,
+`Size` and `Opacity` control their appearance, `Flow influence` carries them in
+the authored liquid direction, and `Wake influence` controls their local
+response to camera movement. Particles exist only in a fixed-radius pool around
+the submerged camera and are submitted in one draw. Setting amount or opacity
+to zero disables the effect for that volume.
 
 Sector deletion is transactional. It removes sidedefs owned by the sector,
 clears those slots from linedefs, removes linedefs with no remaining side, prunes

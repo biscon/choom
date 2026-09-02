@@ -641,12 +641,15 @@ void GameApplication::Apply3DTransparentSurfaces(
         engine::EngineContext& context,
         bool collectGpuDiagnostics)
 {
+    const SectorUnderwaterRenderContext underwater =
+            ActiveUnderwaterRenderContext();
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameScene.ApplyTransparentSurfaces(
-                sceneTarget, context, gameSession.Map(), collectGpuDiagnostics);
+                sceneTarget, context, gameSession.Map(), underwater,
+                collectGpuDiagnostics);
     } else {
         editor.ApplyPreview3DTransparentSurfaces(
-                sceneTarget, context, collectGpuDiagnostics);
+                sceneTarget, context, underwater, collectGpuDiagnostics);
     }
 }
 
@@ -675,16 +678,45 @@ void GameApplication::Apply3DWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
         bool collectGpuDiagnostics)
 {
+    const SectorUnderwaterRenderContext underwater =
+            ActiveUnderwaterRenderContext();
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameScene.ApplyWorldAtmosphere(
                 sceneTarget,
                 gameSession.Map(),
+                underwater,
                 collectGpuDiagnostics);
     } else {
         editor.ApplyPreview3DWorldAtmosphere(
                 sceneTarget,
+                underwater,
                 collectGpuDiagnostics);
     }
+}
+
+SectorUnderwaterRenderContext
+GameApplication::ActiveUnderwaterRenderContext() const
+{
+    SectorUnderwaterRenderContext result;
+    const SectorLiquidMovementState* state = nullptr;
+    if (BackgroundScreen() == ApplicationScreen::Game
+            && gameSession.IsRunning()) {
+        state = &gameSession.LiquidMovementState();
+    } else if (BackgroundScreen() == ApplicationScreen::Editor
+            && editor.IsPreview3DActive()) {
+        state = &editor.PreviewLiquidMovementState();
+    }
+    if (state != nullptr) {
+        result.cameraSubmerged = state->cameraSubmerged;
+        result.contact = state->contact;
+    }
+    result.causticsStrength =
+            applicationSettings.playerLiquids.visuals.causticsStrength;
+    result.causticsScaleMultiplier = applicationSettings.playerLiquids.visuals
+            .causticsScaleMultiplier;
+    result.causticsSpeedMultiplier = applicationSettings.playerLiquids.visuals
+            .causticsSpeedMultiplier;
+    return result;
 }
 
 const SectorAtmosphereDiagnostics& GameApplication::AtmosphereDiagnostics() const
@@ -738,6 +770,8 @@ GameApplication::ScenePresentationEffects() const
         result.underwaterRippleScaleWorld = liquid.rippleScaleWorld;
         result.underwaterRippleStrength = liquid.rippleStrength;
         result.underwaterRippleSpeed = liquid.rippleSpeed;
+        result.underwaterDistortionStrength = applicationSettings
+                .playerLiquids.visuals.screenDistortionStrength;
         result.underwaterFlowDirectionRadians =
                 liquid.flowDirectionDegrees * DEG2RAD;
         result.underwaterFlowSpeedWorld = liquid.flowSpeedWorld;

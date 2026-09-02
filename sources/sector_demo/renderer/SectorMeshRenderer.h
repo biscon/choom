@@ -22,6 +22,7 @@
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
+#include "sector_demo/renderer/SectorUnderwaterRenderer.h"
 #include "sector_demo/renderer/SectorWindowRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
@@ -47,11 +48,13 @@ struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
 
 struct SectorAtmosphereDiagnostics {
+    double causticsGpuMilliseconds = 0.0;
     double distanceFogGpuMilliseconds = 0.0;
     double analyticFogGpuMilliseconds = 0.0;
     double analyticShaftGpuMilliseconds = 0.0;
     double lightHaloGpuMilliseconds = 0.0;
     double dustGpuMilliseconds = 0.0;
+    double underwaterParticlesGpuMilliseconds = 0.0;
     int dynamicLightCount = 0;
     int analyticFogEligibleCount = 0;
     int analyticFogActiveCount = 0;
@@ -67,6 +70,7 @@ struct SectorAtmosphereDiagnostics {
     int dustEligibleEmitterCount = 0;
     int dustActiveEmitterCount = 0;
     int dustVisibleParticleCount = 0;
+    int underwaterVisibleParticleCount = 0;
 };
 
 class SectorMeshRenderer {
@@ -125,6 +129,7 @@ public:
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
     bool ApplyTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
@@ -132,6 +137,7 @@ public:
             engine::World* runtimeObjectWorld,
             SectorRuntimeDoorLightingContext doorLighting,
             const SectorTopologyFogSettings& fogSettings,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
     bool ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
@@ -302,7 +308,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t AtmosphereGpuPassCount = 5;
+    static constexpr std::size_t AtmosphereGpuPassCount = 7;
     static constexpr std::size_t AtmosphereGpuQueryLatency = 4;
 
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -439,6 +445,7 @@ private:
     SectorAnalyticLightShaftRenderer analyticLightShaftRenderer;
     SectorLightProxyRenderer lightProxyRenderer;
     SectorLightDustRenderer lightDustRenderer;
+    SectorUnderwaterRenderer underwaterRenderer;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;

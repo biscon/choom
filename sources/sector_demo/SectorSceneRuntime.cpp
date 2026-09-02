@@ -1152,12 +1152,14 @@ void SectorSceneRuntime::RenderScene(
 void SectorSceneRuntime::ApplyWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     renderer.ApplyWorldAtmosphere(
             sceneTarget,
             map,
             runtimeObjects.objectLightProbes,
+            underwater,
             collectGpuDiagnostics);
 }
 
@@ -1165,6 +1167,7 @@ void SectorSceneRuntime::ApplyTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::EngineContext& context,
         const SectorTopologyMap& map,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     renderer.ApplyTransparentSurfaces(
@@ -1176,6 +1179,7 @@ void SectorSceneRuntime::ApplyTransparentSurfaces(
                     &map,
                     runtimeObjects.staticLightingRevision},
             map.fogSettings,
+            underwater,
             collectGpuDiagnostics);
 }
 

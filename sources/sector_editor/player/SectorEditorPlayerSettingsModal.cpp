@@ -134,7 +134,7 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             break;
         case SectorEditorPlayerSettingsTab::Liquids:
             scrollState = &state.liquidsScroll;
-            contentHeight = 860.0f;
+            contentHeight = 1160.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -296,6 +296,39 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         drawFloat("player_liquids_exit_duration", "Exit duration (seconds)",
                 liquids.exitTransitionDurationSeconds,
                 state.exitTransitionDurationInput, 0.1f, 2.0f, 2);
+        section("Underwater visuals");
+        drawFloat(
+                "player_liquids_distortion_strength",
+                "Screen distortion strength",
+                liquids.visuals.screenDistortionStrength,
+                state.underwaterDistortionStrengthInput,
+                0.0f,
+                4.0f,
+                2);
+        drawFloat(
+                "player_liquids_caustics_strength",
+                "Caustics strength",
+                liquids.visuals.causticsStrength,
+                state.underwaterCausticsStrengthInput,
+                0.0f,
+                1.0f,
+                2);
+        drawFloat(
+                "player_liquids_caustics_scale",
+                "Caustics scale multiplier",
+                liquids.visuals.causticsScaleMultiplier,
+                state.underwaterCausticsScaleInput,
+                0.1f,
+                10.0f,
+                2);
+        drawFloat(
+                "player_liquids_caustics_speed",
+                "Caustics speed multiplier",
+                liquids.visuals.causticsSpeedMultiplier,
+                state.underwaterCausticsSpeedInput,
+                0.0f,
+                10.0f,
+                2);
         section("Audio");
         const auto drawSoundPath = [&] (
                 const char* idPrefix,

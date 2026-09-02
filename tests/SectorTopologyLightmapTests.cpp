@@ -1962,6 +1962,11 @@ void TestSourceHashChanges()
     changedLiquid.sectors[0].liquid.visibilityDepthWorld = 0.7f;
     changedLiquid.sectors[0].liquid.flowDirectionDegrees = 123.0f;
     changedLiquid.sectors[0].liquid.flowSpeedWorld = 2.0f;
+    changedLiquid.sectors[0].liquid.particulates.amount = 192;
+    changedLiquid.sectors[0].liquid.particulates.sizeWorld = 0.04f;
+    changedLiquid.sectors[0].liquid.particulates.opacity = 0.8f;
+    changedLiquid.sectors[0].liquid.particulates.flowInfluence = 0.9f;
+    changedLiquid.sectors[0].liquid.particulates.wakeInfluence = 1.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedLiquid) == hash,
           "hash ignores visual-only liquid volume and appearance settings");
 

@@ -24,6 +24,14 @@ enum class SectorLiquidSurfaceReference {
     Ceiling
 };
 
+struct SectorLiquidParticulateSettings {
+    int amount = 72;
+    float sizeWorld = 0.010f;
+    float opacity = 0.28f;
+    float flowInfluence = 0.25f;
+    float wakeInfluence = 0.60f;
+};
+
 // Liquid appearance is procedural. Distances and speeds use runtime/world units,
 // while surfaceOffset uses the sector editor's authored height units.
 struct SectorLiquidSettings {
@@ -40,6 +48,7 @@ struct SectorLiquidSettings {
     float rippleSpeed = 0.35f;
     float flowDirectionDegrees = 0.0f;
     float flowSpeedWorld = 0.0f;
+    SectorLiquidParticulateSettings particulates;
 };
 
 constexpr float SectorLiquidMinVisibilityDepthWorld = 0.05f;
@@ -50,6 +59,20 @@ constexpr float SectorLiquidMaxRefractionStrength = 0.25f;
 constexpr float SectorLiquidMaxRippleStrength = 2.0f;
 constexpr float SectorLiquidMaxRippleSpeed = 10.0f;
 constexpr float SectorLiquidMaxFlowSpeedWorld = 32.0f;
+constexpr int SectorLiquidMaxParticulateAmount = 192;
+constexpr float SectorLiquidMinParticulateSizeWorld = 0.001f;
+constexpr float SectorLiquidMaxParticulateSizeWorld = 0.1f;
+
+inline bool AreSectorLiquidParticulateSettingsEqual(
+        const SectorLiquidParticulateSettings& a,
+        const SectorLiquidParticulateSettings& b)
+{
+    return a.amount == b.amount
+            && a.sizeWorld == b.sizeWorld
+            && a.opacity == b.opacity
+            && a.flowInfluence == b.flowInfluence
+            && a.wakeInfluence == b.wakeInfluence;
+}
 
 inline bool AreSectorLiquidSettingsEqual(
         const SectorLiquidSettings& a,
@@ -71,7 +94,9 @@ inline bool AreSectorLiquidSettingsEqual(
             && a.rippleStrength == b.rippleStrength
             && a.rippleSpeed == b.rippleSpeed
             && a.flowDirectionDegrees == b.flowDirectionDegrees
-            && a.flowSpeedWorld == b.flowSpeedWorld;
+            && a.flowSpeedWorld == b.flowSpeedWorld
+            && AreSectorLiquidParticulateSettingsEqual(
+                    a.particulates, b.particulates);
 }
 
 inline bool IsDefaultSectorLiquidSettings(const SectorLiquidSettings& settings)

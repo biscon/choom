@@ -167,6 +167,12 @@
       "exitSoundPath": "",
       "swimLoopSoundPath": "player/swimming_loop.ogg",
       "underwaterMuffling": 0.75
+    },
+    "visuals": {
+      "screenDistortionStrength": 1.649999976158142,
+      "causticsStrength": 0.800000011920929,
+      "causticsScaleMultiplier": 3.0,
+      "causticsSpeedMultiplier": 2.5
     }
   }
 }

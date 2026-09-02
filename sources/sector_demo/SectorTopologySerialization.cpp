@@ -2687,6 +2687,14 @@ void ValidateLiquidSettings(
     RequireFinite(settings.rippleSpeed, context + ".rippleSpeed");
     RequireFinite(settings.flowDirectionDegrees, context + ".flowDirectionDegrees");
     RequireFinite(settings.flowSpeedWorld, context + ".flowSpeedWorld");
+    RequireFinite(settings.particulates.sizeWorld,
+            context + ".particulates.sizeWorld");
+    RequireFinite(settings.particulates.opacity,
+            context + ".particulates.opacity");
+    RequireFinite(settings.particulates.flowInfluence,
+            context + ".particulates.flowInfluence");
+    RequireFinite(settings.particulates.wakeInfluence,
+            context + ".particulates.wakeInfluence");
     const float span = std::max(0.0f, ceilingZ - floorZ);
     if (settings.surfaceOffset < 0.0f || settings.surfaceOffset > span) {
         Fail(context + ".surfaceOffset must be within the sector height span");
@@ -2705,7 +2713,19 @@ void ValidateLiquidSettings(
             || settings.rippleSpeed < 0.0f
             || settings.rippleSpeed > SectorLiquidMaxRippleSpeed
             || settings.flowSpeedWorld < 0.0f
-            || settings.flowSpeedWorld > SectorLiquidMaxFlowSpeedWorld) {
+            || settings.flowSpeedWorld > SectorLiquidMaxFlowSpeedWorld
+            || settings.particulates.amount < 0
+            || settings.particulates.amount > SectorLiquidMaxParticulateAmount
+            || settings.particulates.sizeWorld
+                    < SectorLiquidMinParticulateSizeWorld
+            || settings.particulates.sizeWorld
+                    > SectorLiquidMaxParticulateSizeWorld
+            || settings.particulates.opacity < 0.0f
+            || settings.particulates.opacity > 1.0f
+            || settings.particulates.flowInfluence < 0.0f
+            || settings.particulates.flowInfluence > 1.0f
+            || settings.particulates.wakeInfluence < 0.0f
+            || settings.particulates.wakeInfluence > 1.0f) {
         Fail(context + " contains an out-of-range liquid parameter");
     }
 }
@@ -2747,6 +2767,28 @@ SectorLiquidSettings ReadLiquidSettings(
     settings.rippleSpeed = ReadOptionalFloat(value, "rippleSpeed", liquidContext, settings.rippleSpeed);
     settings.flowDirectionDegrees = ReadOptionalFloat(value, "flowDirectionDegrees", liquidContext, settings.flowDirectionDegrees);
     settings.flowSpeedWorld = ReadOptionalFloat(value, "flowSpeedWorld", liquidContext, settings.flowSpeedWorld);
+    const auto particulatesIt = value.find("particulates");
+    if (particulatesIt != value.end()) {
+        if (!particulatesIt->is_object()) {
+            Fail(liquidContext + ".particulates must be an object");
+        }
+        const std::string particulateContext = liquidContext + ".particulates";
+        settings.particulates.amount = particulatesIt->contains("amount")
+                ? ReadInt(*particulatesIt, "amount", particulateContext)
+                : settings.particulates.amount;
+        settings.particulates.sizeWorld = ReadOptionalFloat(
+                *particulatesIt, "sizeWorld", particulateContext,
+                settings.particulates.sizeWorld);
+        settings.particulates.opacity = ReadOptionalFloat(
+                *particulatesIt, "opacity", particulateContext,
+                settings.particulates.opacity);
+        settings.particulates.flowInfluence = ReadOptionalFloat(
+                *particulatesIt, "flowInfluence", particulateContext,
+                settings.particulates.flowInfluence);
+        settings.particulates.wakeInfluence = ReadOptionalFloat(
+                *particulatesIt, "wakeInfluence", particulateContext,
+                settings.particulates.wakeInfluence);
+    }
     ValidateLiquidSettings(settings, floorZ, ceilingZ, liquidContext);
     settings.flowDirectionDegrees = NormalizeSectorLiquidSettingsForSpan(
             settings, floorZ, ceilingZ).flowDirectionDegrees;
@@ -2783,6 +2825,28 @@ Json WriteLiquidSettings(
     if (settings.rippleSpeed != defaults.rippleSpeed) value["rippleSpeed"] = settings.rippleSpeed;
     if (settings.flowDirectionDegrees != defaults.flowDirectionDegrees) value["flowDirectionDegrees"] = settings.flowDirectionDegrees;
     if (settings.flowSpeedWorld != defaults.flowSpeedWorld) value["flowSpeedWorld"] = settings.flowSpeedWorld;
+    if (!AreSectorLiquidParticulateSettingsEqual(
+                settings.particulates, defaults.particulates)) {
+        Json particulates = Json::object();
+        if (settings.particulates.amount != defaults.particulates.amount) {
+            particulates["amount"] = settings.particulates.amount;
+        }
+        if (settings.particulates.sizeWorld != defaults.particulates.sizeWorld) {
+            particulates["sizeWorld"] = settings.particulates.sizeWorld;
+        }
+        if (settings.particulates.opacity != defaults.particulates.opacity) {
+            particulates["opacity"] = settings.particulates.opacity;
+        }
+        if (settings.particulates.flowInfluence
+                != defaults.particulates.flowInfluence) {
+            particulates["flowInfluence"] = settings.particulates.flowInfluence;
+        }
+        if (settings.particulates.wakeInfluence
+                != defaults.particulates.wakeInfluence) {
+            particulates["wakeInfluence"] = settings.particulates.wakeInfluence;
+        }
+        value["particulates"] = std::move(particulates);
+    }
     return value;
 }
 

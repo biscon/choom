@@ -22,6 +22,7 @@ struct ScenePresentationEffectParameters {
     float underwaterRippleScaleWorld = 0.9f;
     float underwaterRippleStrength = 0.22f;
     float underwaterRippleSpeed = 0.35f;
+    float underwaterDistortionStrength = 1.35f;
     float underwaterFlowDirectionRadians = 0.0f;
     float underwaterFlowSpeedWorld = 0.0f;
     float runtimeSeconds = 0.0f;
@@ -69,6 +70,7 @@ void main()
             sin(p.y * 5.7 + phase * 1.13) + sin(p.x * 8.1 - phase * 1.71),
             cos(p.x * 6.3 + phase * 1.37) + cos(p.y * 9.2 - phase * 1.29));
     distortion *= underwater * min(rippleStrength, 2.0) * 0.0014;
+    distortion *= clamp(presentationUnderwaterRipple.w, 0.0, 4.0);
     vec2 sceneUv = clamp(fragTexCoord + distortion, vec2(0.001), vec2(0.999));
     vec4 scene = texture(texture0, sceneUv);
     vec3 exposed = max(scene.rgb, vec3(0.0))

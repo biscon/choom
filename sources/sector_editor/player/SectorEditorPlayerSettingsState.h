@@ -92,6 +92,10 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState surfaceRecoveryInput;
     engine::UIFloatInputState maximumExitLedgeHeightInput;
     engine::UIFloatInputState exitTransitionDurationInput;
+    engine::UIFloatInputState underwaterDistortionStrengthInput;
+    engine::UIFloatInputState underwaterCausticsStrengthInput;
+    engine::UIFloatInputState underwaterCausticsScaleInput;
+    engine::UIFloatInputState underwaterCausticsSpeedInput;
     engine::UIFloatInputState underwaterMufflingInput;
 
     engine::UIFloatInputState inventoryWeightInput;

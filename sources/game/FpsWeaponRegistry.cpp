@@ -836,6 +836,26 @@ std::string PlayerLiquidSettingsError(
             || settings.audio.underwaterMuffling > 1.0f) {
         return "audio.underwaterMuffling must be between 0 and 1";
     }
+    if (!finite(settings.visuals.screenDistortionStrength)
+            || settings.visuals.screenDistortionStrength < 0.0f
+            || settings.visuals.screenDistortionStrength > 4.0f) {
+        return "visuals.screenDistortionStrength must be between 0 and 4";
+    }
+    if (!finite(settings.visuals.causticsStrength)
+            || settings.visuals.causticsStrength < 0.0f
+            || settings.visuals.causticsStrength > 1.0f) {
+        return "visuals.causticsStrength must be between 0 and 1";
+    }
+    if (!finite(settings.visuals.causticsScaleMultiplier)
+            || settings.visuals.causticsScaleMultiplier < 0.1f
+            || settings.visuals.causticsScaleMultiplier > 10.0f) {
+        return "visuals.causticsScaleMultiplier must be between 0.1 and 10";
+    }
+    if (!finite(settings.visuals.causticsSpeedMultiplier)
+            || settings.visuals.causticsSpeedMultiplier < 0.0f
+            || settings.visuals.causticsSpeedMultiplier > 10.0f) {
+        return "visuals.causticsSpeedMultiplier must be between 0 and 10";
+    }
     return {};
 }
 
@@ -2196,6 +2216,37 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                         *audio, "underwaterMuffling", audioContext)
                         .value_or(parsed.playerLiquids.audio.underwaterMuffling);
             }
+            const auto visuals = playerLiquids->find("visuals");
+            if (visuals != playerLiquids->end()) {
+                const std::string visualsContext = liquidContext + ".visuals";
+                if (!visuals->is_object()) {
+                    Fail(visualsContext + " must be an object");
+                }
+                parsed.playerLiquids.visuals.screenDistortionStrength =
+                        OptionalNumber(
+                                *visuals,
+                                "screenDistortionStrength",
+                                visualsContext).value_or(
+                                        parsed.playerLiquids.visuals
+                                                .screenDistortionStrength);
+                parsed.playerLiquids.visuals.causticsStrength = OptionalNumber(
+                        *visuals, "causticsStrength", visualsContext)
+                        .value_or(parsed.playerLiquids.visuals.causticsStrength);
+                parsed.playerLiquids.visuals.causticsScaleMultiplier =
+                        OptionalNumber(
+                                *visuals,
+                                "causticsScaleMultiplier",
+                                visualsContext).value_or(
+                                        parsed.playerLiquids.visuals
+                                                .causticsScaleMultiplier);
+                parsed.playerLiquids.visuals.causticsSpeedMultiplier =
+                        OptionalNumber(
+                                *visuals,
+                                "causticsSpeedMultiplier",
+                                visualsContext).value_or(
+                                        parsed.playerLiquids.visuals
+                                                .causticsSpeedMultiplier);
+            }
             const std::string liquidError = PlayerLiquidSettingsError(
                     parsed.playerLiquids);
             if (!liquidError.empty()) {
@@ -2647,7 +2698,19 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"swimLoopSoundPath",
                             settings.playerLiquids.audio.swimLoopSoundPath},
                     {"underwaterMuffling",
-                            settings.playerLiquids.audio.underwaterMuffling}}}};
+                            settings.playerLiquids.audio.underwaterMuffling}}},
+            {"visuals", {
+                    {"screenDistortionStrength",
+                            settings.playerLiquids.visuals
+                                    .screenDistortionStrength},
+                    {"causticsStrength",
+                            settings.playerLiquids.visuals.causticsStrength},
+                    {"causticsScaleMultiplier",
+                            settings.playerLiquids.visuals
+                                    .causticsScaleMultiplier},
+                    {"causticsSpeedMultiplier",
+                            settings.playerLiquids.visuals
+                                    .causticsSpeedMultiplier}}}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

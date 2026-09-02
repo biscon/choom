@@ -38,6 +38,8 @@ void ApplyPreset(SectorLiquidSettings& liquid, LiquidPreset preset)
             liquid.visibilityDepthWorld = 1.8f;
             liquid.roughness = 0.2f;
             liquid.refractionStrength = 0.018f;
+            liquid.particulates = SectorLiquidParticulateSettings{
+                    112, 0.012f, 0.38f, 0.30f, 0.55f};
             break;
         case LiquidPreset::Sewage:
             liquid.shallowColor = Color{87, 112, 62, 255};
@@ -46,6 +48,8 @@ void ApplyPreset(SectorLiquidSettings& liquid, LiquidPreset preset)
             liquid.roughness = 0.26f;
             liquid.refractionStrength = 0.012f;
             liquid.rippleScaleWorld = 0.7f;
+            liquid.particulates = SectorLiquidParticulateSettings{
+                    160, 0.016f, 0.50f, 0.40f, 0.45f};
             break;
         case LiquidPreset::GreenSludge:
             liquid.shallowColor = Color{64, 151, 58, 255};
@@ -56,6 +60,8 @@ void ApplyPreset(SectorLiquidSettings& liquid, LiquidPreset preset)
             liquid.rippleScaleWorld = 1.4f;
             liquid.rippleStrength = 0.08f;
             liquid.rippleSpeed = 0.15f;
+            liquid.particulates = SectorLiquidParticulateSettings{
+                    96, 0.022f, 0.42f, 0.15f, 0.20f};
             break;
     }
 }
@@ -63,6 +69,7 @@ void ApplyPreset(SectorLiquidSettings& liquid, LiquidPreset preset)
 void ResetInputs(SectorEditorLiquidSettingsModalState& state)
 {
     state.floatInputs = {};
+    state.particulateAmountInput = {};
     state.colorInputs = {};
     state.errorMessage.clear();
 }
@@ -162,6 +169,17 @@ SectorEditorLiquidSettingsModalAction DrawSectorEditorLiquidSettingsModal(
                 minimum, maximum, decimals);
         rowY += rowH + gap;
     };
+    auto drawInt = [&](float x, int& target, const char* id,
+                           const char* label, int minimum, int maximum,
+                           float& rowY) {
+        engine::Text(config, assets,
+                Rectangle{x, rowY, labelW, rowH}, smallFont, label);
+        engine::IntInput(ui, config, input, assets, id,
+                Rectangle{x + labelW, rowY, columnW - labelW, rowH},
+                smallFont, target, state.particulateAmountInput,
+                minimum, maximum, 1);
+        rowY += rowH + gap;
+    };
 
     engine::Text(config, assets, Rectangle{leftX, leftY, labelW, rowH}, smallFont, "Surface reference");
     const char* referenceOptions[] = {"Floor", "Ceiling"};
@@ -220,6 +238,27 @@ SectorEditorLiquidSettingsModalAction DrawSectorEditorLiquidSettingsModal(
             "Roughness", 0.0f, 1.0f, 2, rightY);
     drawFloat(rightX, state.draft.refractionStrength, 8, "sector_editor_liquid_refraction",
             "Refraction strength", 0.0f, SectorLiquidMaxRefractionStrength, 3, rightY);
+    rightY += 4.0f;
+    engine::Text(config, assets,
+            Rectangle{rightX, rightY, columnW, 30.0f},
+            smallFont, "Underwater particulates");
+    rightY += 32.0f;
+    drawInt(rightX, state.draft.particulates.amount,
+            "sector_editor_liquid_particulate_amount",
+            "Amount", 0, SectorLiquidMaxParticulateAmount, rightY);
+    drawFloat(rightX, state.draft.particulates.sizeWorld, 9,
+            "sector_editor_liquid_particulate_size",
+            "Size (m)", SectorLiquidMinParticulateSizeWorld,
+            SectorLiquidMaxParticulateSizeWorld, 3, rightY);
+    drawFloat(rightX, state.draft.particulates.opacity, 10,
+            "sector_editor_liquid_particulate_opacity",
+            "Opacity", 0.0f, 1.0f, 2, rightY);
+    drawFloat(rightX, state.draft.particulates.flowInfluence, 11,
+            "sector_editor_liquid_particulate_flow",
+            "Flow influence", 0.0f, 1.0f, 2, rightY);
+    drawFloat(rightX, state.draft.particulates.wakeInfluence, 12,
+            "sector_editor_liquid_particulate_wake",
+            "Wake influence", 0.0f, 1.0f, 2, rightY);
 
     engine::Text(config, assets,
             Rectangle{leftX, modal.y + modal.height - 154.0f, innerW, 42.0f},

@@ -11,6 +11,13 @@ struct PlayerLiquidAudioApplicationSettings {
     float underwaterMuffling = 0.65f;
 };
 
+struct PlayerLiquidVisualApplicationSettings {
+    float screenDistortionStrength = 1.35f;
+    float causticsStrength = 0.16f;
+    float causticsScaleMultiplier = 1.0f;
+    float causticsSpeedMultiplier = 1.0f;
+};
+
 struct PlayerLiquidApplicationSettings {
     float oxygenMaximum = 100.0f;
     float oxygenDepletionPerSecond = 5.0f;
@@ -24,6 +31,7 @@ struct PlayerLiquidApplicationSettings {
     float maximumExitLedgeHeightWorld = 0.75f;
     float exitTransitionDurationSeconds = 0.30f;
     PlayerLiquidAudioApplicationSettings audio;
+    PlayerLiquidVisualApplicationSettings visuals;
 };
 
 struct PlayerOxygenModifiers {

@@ -13402,6 +13402,11 @@ void TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor()
     source.liquid.deepColor = Color{3, 15, 22, 255};
     source.liquid.flowDirectionDegrees = 225.0f;
     source.liquid.flowSpeedWorld = 1.5f;
+    source.liquid.particulates.amount = 141;
+    source.liquid.particulates.sizeWorld = 0.019f;
+    source.liquid.particulates.opacity = 0.41f;
+    source.liquid.particulates.flowInfluence = 0.33f;
+    source.liquid.particulates.wakeInfluence = 0.78f;
 
     game::SectorAuthoringFaceAnchor destination;
     destination.id = 99;
@@ -13445,7 +13450,12 @@ void TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor()
                   && Near(destination.liquid.surfaceOffset, 5.0f)
                   && destination.liquid.shallowColor.g == 90
                   && Near(destination.liquid.flowDirectionDegrees, 225.0f)
-                  && Near(destination.liquid.flowSpeedWorld, 1.5f),
+                  && Near(destination.liquid.flowSpeedWorld, 1.5f)
+                  && destination.liquid.particulates.amount == 141
+                  && Near(destination.liquid.particulates.sizeWorld, 0.019f)
+                  && Near(destination.liquid.particulates.opacity, 0.41f)
+                  && Near(destination.liquid.particulates.flowInfluence, 0.33f)
+                  && Near(destination.liquid.particulates.wakeInfluence, 0.78f),
           "sector config application copies complete liquid settings");
     Check(!game::ApplySectorEditorSectorConfig(destination, source),
           "applying identical sector config is a no-op");

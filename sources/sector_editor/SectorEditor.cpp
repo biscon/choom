@@ -4893,6 +4893,7 @@ void SectorEditor::RenderPreview3DViewmodel(
 }
 void SectorEditor::ApplyPreview3DWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     if (state.mode != SectorEditorMode::Preview3D) {
@@ -4901,17 +4902,20 @@ void SectorEditor::ApplyPreview3DWorldAtmosphere(
     sceneRuntime.ApplyWorldAtmosphere(
             sceneTarget,
             TopologyMap(),
+            underwater,
             collectGpuDiagnostics);
 }
 
 void SectorEditor::ApplyPreview3DTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::EngineContext& context,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     if (state.mode != SectorEditorMode::Preview3D) return;
     sceneRuntime.ApplyTransparentSurfaces(
-            sceneTarget, context, TopologyMap(), collectGpuDiagnostics);
+            sceneTarget, context, TopologyMap(), underwater,
+            collectGpuDiagnostics);
 }
 
 void SectorEditor::ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget)

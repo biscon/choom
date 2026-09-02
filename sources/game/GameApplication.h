@@ -126,6 +126,7 @@ private:
     void EndGameToMainMenu(engine::EngineContext& context);
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
+    SectorUnderwaterRenderContext ActiveUnderwaterRenderContext() const;
     bool DebugConsoleAvailable() const;
     void ApplyPerspectiveFov();
 

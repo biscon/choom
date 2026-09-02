@@ -150,12 +150,14 @@ public:
         }
         const int detailY = topOffset + 70 + static_cast<int>(PassCount) * 20;
         DrawText(TextFormat(
-                         "atmo GPU dist/fog/shaft/haze/dust %.2f/%.2f/%.2f/%.2f/%.2f",
+                         "atmo GPU caust/dist/fog/shaft/haze/dust/marine %.2f/%.2f/%.2f/%.2f/%.2f/%.2f/%.2f",
+                         atmosphere.causticsGpuMilliseconds,
                          atmosphere.distanceFogGpuMilliseconds,
                          atmosphere.analyticFogGpuMilliseconds,
                          atmosphere.analyticShaftGpuMilliseconds,
                          atmosphere.lightHaloGpuMilliseconds,
-                         atmosphere.dustGpuMilliseconds),
+                         atmosphere.dustGpuMilliseconds,
+                         atmosphere.underwaterParticlesGpuMilliseconds),
                 16, detailY, 16, SKYBLUE);
         DrawText(TextFormat(
                          "fog %d/%d S%.2f  shaft %d/%d D%d  haze %d S%.2f D%d  lights %d",
@@ -171,10 +173,11 @@ public:
                          atmosphere.dynamicLightCount),
                 16, detailY + 20, 16, SKYBLUE);
         DrawText(TextFormat(
-                         "dust %d/%d particles %d",
+                         "dust %d/%d particles %d  marine particles %d",
                          atmosphere.dustActiveEmitterCount,
                          atmosphere.dustEligibleEmitterCount,
-                         atmosphere.dustVisibleParticleCount),
+                         atmosphere.dustVisibleParticleCount,
+                         atmosphere.underwaterVisibleParticleCount),
                 16, detailY + 40, 16, SKYBLUE);
     }
 
@@ -318,12 +321,14 @@ public:
                 profiler.GpuMilliseconds(RenderProfilePass::FinalComposite));
         std::fprintf(
                 output,
-                " %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %.4f %d %d %d %d",
+                " %.3f %.3f %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %.4f %d %d %d %d %d",
+                atmosphere.causticsGpuMilliseconds,
                 atmosphere.distanceFogGpuMilliseconds,
                 atmosphere.analyticFogGpuMilliseconds,
                 atmosphere.analyticShaftGpuMilliseconds,
                 atmosphere.lightHaloGpuMilliseconds,
                 atmosphere.dustGpuMilliseconds,
+                atmosphere.underwaterParticlesGpuMilliseconds,
                 atmosphere.analyticFogEligibleCount,
                 atmosphere.analyticFogActiveCount,
                 atmosphere.analyticFogScissorCoverage,
@@ -338,6 +343,7 @@ public:
                 atmosphere.dustActiveEmitterCount,
                 atmosphere.dustEligibleEmitterCount,
                 atmosphere.dustVisibleParticleCount,
+                atmosphere.underwaterVisibleParticleCount,
                 atmosphere.dynamicLightCount);
         std::fputc('\n', output);
         std::fflush(output);
@@ -1058,7 +1064,7 @@ int main(int argc, char** argv)
                     presentationEffects.underwaterRippleScaleWorld,
                     presentationEffects.underwaterRippleStrength,
                     presentationEffects.underwaterRippleSpeed,
-                    0.0f};
+                    presentationEffects.underwaterDistortionStrength};
             SetShaderValue(scenePresentationShader,
                     presentationUnderwaterRippleLoc,
                     &underwaterRipple,

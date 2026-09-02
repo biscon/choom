@@ -918,7 +918,10 @@
           "rippleStrength": 0.44999998807907104,
           "rippleSpeed": 0.550000011920929,
           "flowDirectionDegrees": 90.0,
-          "flowSpeedWorld": 0.25
+          "flowSpeedWorld": 0.25,
+          "particulates": {
+            "opacity": 0.18000000715255737
+          }
         }
       },
       {

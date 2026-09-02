@@ -33,7 +33,8 @@ struct SectorEditorLiquidSettingsModalState {
     bool open = false;
     int faceAnchorId = -1;
     SectorLiquidSettings draft;
-    std::array<engine::UIFloatInputState, 9> floatInputs{};
+    std::array<engine::UIFloatInputState, 13> floatInputs{};
+    engine::UIIntInputState particulateAmountInput;
     std::array<engine::UIIntInputState, 6> colorInputs{};
     std::string errorMessage;
 };

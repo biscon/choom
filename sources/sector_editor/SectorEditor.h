@@ -128,10 +128,12 @@ public:
             Rectangle playableViewport) const;
     void ApplyPreview3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
     void ApplyPreview3DTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::EngineContext& context,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
     void ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget);
     bool CompositePreview3DViewmodel(

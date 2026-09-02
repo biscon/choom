@@ -950,6 +950,36 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&liquidShader.find("rlDisableBackfaceCulling()")
                             !=std::string::npos,
           "liquid surfaces render from below with view-facing procedural normals");
+    const std::string underwaterShader = ReadSource(
+            UNDERWATER_SHADER_SOURCE_PATH);
+    Check(underwaterShader.find("gl_FragCoord.xy / max(viewportSize")
+                            != std::string::npos
+                    && underwaterShader.find("sceneDistance = forwardDistance")
+                            != std::string::npos
+                    && underwaterShader.find(
+                               "/ max(dot(rayDirection, cameraForward)")
+                            != std::string::npos
+                    && underwaterShader.find("expectedPixelWorld * 18.0")
+                            != std::string::npos,
+          "underwater caustics reconstruct proven camera rays and reject depth discontinuities");
+    Check(underwaterShader.find("projectionWeights = pow(absoluteNormal")
+                            != std::string::npos
+                    && underwaterShader.find("world.zy,")
+                            != std::string::npos
+                    && underwaterShader.find("world.xz,")
+                            != std::string::npos
+                    && underwaterShader.find("world.xy,")
+                            != std::string::npos,
+          "underwater caustics use stable triplanar world projection");
+    Check(underwaterShader.find("pattern - 0.38") != std::string::npos
+                    && underwaterShader.find("smoothstep(0.80, 1.25, luminance)")
+                            != std::string::npos
+                    && underwaterShader.find(
+                               "clamp(1.0 + signedModulation, 0.75, 1.35)")
+                            != std::string::npos
+                    && underwaterShader.find("scene.rgb) * (1.0 + contribution)")
+                            == std::string::npos,
+          "underwater caustics are energy-centered, bounded, and bloom-safe");
     Check(glassShader.find("rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY)")
                             !=std::string::npos
                     &&glassShader.find("float fresnel = clamp(0.04 + 0.96")
@@ -1011,6 +1041,10 @@ void TestHdrEffectShaderAndPassPolicies()
           "refractive liquids snapshot color without flipping and render through the depth-detached scene color view");
     Check(sectorRenderer.find("bool refractionReady = visibleLiquids")!=std::string::npos
                     &&sectorRenderer.find("liquidRenderer.Draw(liquidContext)")
+                            !=std::string::npos
+                    &&sectorRenderer.find("underwaterRenderer.ApplyCaustics")
+                            !=std::string::npos
+                    &&sectorRenderer.find("underwaterRenderer.DrawParticles")
                             !=std::string::npos
                     &&sectorRenderer.find("windowContext.advancedTransmission = false")
                             !=std::string::npos

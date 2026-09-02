@@ -250,6 +250,8 @@ void TestToneMapping()
                   && shader.find("presentationUnderwaterShallowColorLinear")
                           != std::string::npos
                   && shader.find("presentationUnderwaterRipple")
+                          != std::string::npos
+                  && shader.find("presentationUnderwaterRipple.w")
                           != std::string::npos,
           "presentation shader exposes procedural underwater effect uniforms");
     Check(shader.find("pow(centered.x, 4.0)") != std::string::npos

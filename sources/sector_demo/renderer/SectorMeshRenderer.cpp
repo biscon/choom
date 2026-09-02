@@ -1399,7 +1399,6 @@ bool SectorMeshRenderer::RebuildRendererResources(
     }
     flashlightCookieTexture = CreatePlayerFlashlightCookie(
             assets, assetScope);
-
     EnsureSurfaceMaterialResources(assets, map, generatedGeometry);
 
     if (ShouldRenderSkyCylinder(map)) {
@@ -1585,6 +1584,10 @@ bool SectorMeshRenderer::RebuildRendererResources(
     analyticLightShaftRenderer.Shutdown();
     lightProxyRenderer.Shutdown();
     lightDustRenderer.Shutdown();
+    if (!underwaterRenderer.Initialize(assets, assetScope)) {
+        TraceLog(LOG_WARNING,
+                "UNDERWATER: optional visual resources are incomplete; unavailable effects disabled");
+    }
     analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
     analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
     lightProxyRenderer.Reserve(lightAtmosphereSources.size());
@@ -1774,6 +1777,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     analyticLightShaftRenderer.Shutdown();
     lightProxyRenderer.Shutdown();
     lightDustRenderer.Shutdown();
+    underwaterRenderer.Shutdown();
     UnloadHdrSceneColorView();
     if (!initialized
             && engine::IsNull(assetScope)
@@ -2759,11 +2763,14 @@ void SectorMeshRenderer::BeginAtmosphereGpuFrame(bool enabled)
         }
         if (ready) {
             double* values[AtmosphereGpuPassCount] = {
+                    &atmosphereDiagnostics.causticsGpuMilliseconds,
                     &atmosphereDiagnostics.distanceFogGpuMilliseconds,
                     &atmosphereDiagnostics.analyticFogGpuMilliseconds,
                     &atmosphereDiagnostics.analyticShaftGpuMilliseconds,
                     &atmosphereDiagnostics.lightHaloGpuMilliseconds,
-                    &atmosphereDiagnostics.dustGpuMilliseconds};
+                    &atmosphereDiagnostics.dustGpuMilliseconds,
+                    &atmosphereDiagnostics
+                            .underwaterParticlesGpuMilliseconds};
             for (std::size_t pass = 0; pass < AtmosphereGpuPassCount; ++pass) {
                 if ((issuedMask & (1u << pass)) == 0) continue;
                 GLuint64 startNanoseconds = 0;
@@ -2836,6 +2843,8 @@ void SectorMeshRenderer::RefreshAtmosphereDiagnostics(
             lightDustRenderer.ActiveEmitterCount();
     atmosphereDiagnostics.dustVisibleParticleCount =
             lightDustRenderer.VisibleParticleCount();
+    atmosphereDiagnostics.underwaterVisibleParticleCount =
+            underwaterRenderer.VisibleParticleCount();
 }
 
 bool SectorMeshRenderer::ApplyTransparentSurfaces(
@@ -2844,6 +2853,7 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
         engine::World* runtimeObjectWorld,
         SectorRuntimeDoorLightingContext doorLighting,
         const SectorTopologyFogSettings& fogSettings,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     preGlassLightEffectsRendered = false;
@@ -2863,6 +2873,26 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
     const SectorTopologyMap* map = doorLighting.mapForFallback;
     const SectorBillboardDynamicLightContext lightContext =
             BuildBillboardDynamicLightContext();
+    BeginAtmosphereGpuPass(0);
+    bool causticsApplied = false;
+    if (map != nullptr
+            && sceneTarget.descriptor.colorFormat
+                    == engine::RenderTargetColorFormat::Rgba16Float
+            && sceneTarget.actual.depth
+                    == engine::RenderTargetDepthKind::SampleableTexture
+            && EnsureHdrSceneScratch(sceneTarget)) {
+        causticsApplied = underwaterRenderer.ApplyCaustics(
+                sceneTarget.native,
+                hdrSceneScratch.native,
+                assets,
+                camera,
+                runtimeSeconds,
+                underwater);
+        if (causticsApplied && !CommitHdrScratch(sceneTarget)) {
+            causticsApplied = false;
+        }
+    }
+    EndAtmosphereGpuPass(0);
     const bool canRenderPreGlassEffects = (visibleWindows || visibleLiquids)
             && map != nullptr
             && sceneTarget.descriptor.colorFormat
@@ -2880,24 +2910,24 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
         }
         const RuntimePortalVisibilityResult& lightingVisibility =
                 dynamicLightState.LightingVisibility();
-        BeginAtmosphereGpuPass(2);
+        BeginAtmosphereGpuPass(3);
         preGlassShaftApplied = analyticLightShaftRenderer.Apply(
                 sceneTarget.native, hdrSceneColorView, effectFogSettings,
                 camera, lightContext, lightAtmosphereSources,
                 lightingVisibility, meshes.sectorReceiverBounds);
-        EndAtmosphereGpuPass(2);
-        BeginAtmosphereGpuPass(3);
+        EndAtmosphereGpuPass(3);
+        BeginAtmosphereGpuPass(4);
         preGlassHaloApplied = lightProxyRenderer.Apply(
                 sceneTarget.native, hdrSceneColorView, effectFogSettings,
                 camera, lightContext, lightAtmosphereSources,
                 lightingVisibility, meshes.sectorReceiverBounds);
-        EndAtmosphereGpuPass(3);
+        EndAtmosphereGpuPass(4);
         preGlassLightEffectsRendered = true;
     }
 
     if (!visibleWindows && !visibleLiquids) {
         renderDebugText += " | transparents: idle";
-        return preGlassShaftApplied || preGlassHaloApplied;
+        return causticsApplied || preGlassShaftApplied || preGlassHaloApplied;
     }
 
     bool refractionReady = visibleLiquids
@@ -2990,6 +3020,7 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     if (!atmosphereGpuFramePrepared) {
@@ -3014,17 +3045,17 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
     bool atmosphereFailed = false;
-    BeginAtmosphereGpuPass(0);
+    BeginAtmosphereGpuPass(1);
     const bool distanceFogApplied = distanceFogRenderer.Apply(
             nativeScene, hdrSceneScratch.native, map.fogSettings, camera);
     if (distanceFogApplied && !CommitHdrScratch(sceneTarget)) atmosphereFailed = true;
-    EndAtmosphereGpuPass(0);
+    EndAtmosphereGpuPass(1);
     if (atmosphereFailed) {
         RefreshAtmosphereDiagnostics(dynamicLightContext);
         return false;
     }
 
-    BeginAtmosphereGpuPass(1);
+    BeginAtmosphereGpuPass(2);
     bool analyticFogApplied = false;
     if (EnsureHdrSceneColorView(sceneTarget)) {
         analyticFogApplied = analyticFogRenderer.Apply(
@@ -3036,9 +3067,9 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                 objectLightProbes,
                 visibilityResult);
     }
-    EndAtmosphereGpuPass(1);
+    EndAtmosphereGpuPass(2);
 
-    if (!skipPostGlassLightEffects) BeginAtmosphereGpuPass(2);
+    if (!skipPostGlassLightEffects) BeginAtmosphereGpuPass(3);
     bool analyticShaftApplied = earlyShaftApplied;
     if (!skipPostGlassLightEffects && EnsureHdrSceneColorView(sceneTarget)) {
         analyticShaftApplied = analyticLightShaftRenderer.Apply(
@@ -3047,9 +3078,9 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                 dynamicLightState.LightingVisibility(),
                 meshes.sectorReceiverBounds);
     }
-    if (!skipPostGlassLightEffects) EndAtmosphereGpuPass(2);
+    if (!skipPostGlassLightEffects) EndAtmosphereGpuPass(3);
 
-    if (!skipPostGlassLightEffects) BeginAtmosphereGpuPass(3);
+    if (!skipPostGlassLightEffects) BeginAtmosphereGpuPass(4);
     bool lightHaloApplied = earlyHaloApplied;
     if (!skipPostGlassLightEffects && EnsureHdrSceneColorView(sceneTarget)) {
         lightHaloApplied = lightProxyRenderer.Apply(
@@ -3058,9 +3089,9 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                 dynamicLightState.LightingVisibility(),
                 meshes.sectorReceiverBounds);
     }
-    if (!skipPostGlassLightEffects) EndAtmosphereGpuPass(3);
+    if (!skipPostGlassLightEffects) EndAtmosphereGpuPass(4);
 
-    BeginAtmosphereGpuPass(4);
+    BeginAtmosphereGpuPass(5);
     const bool lightDustApplied = lightDustRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
@@ -3072,10 +3103,19 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds);
-    EndAtmosphereGpuPass(4);
+    EndAtmosphereGpuPass(5);
+    BeginAtmosphereGpuPass(6);
+    const bool underwaterParticlesApplied = underwaterRenderer.DrawParticles(
+            nativeScene,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            camera,
+            runtimeSeconds,
+            underwater);
+    EndAtmosphereGpuPass(6);
     RefreshAtmosphereDiagnostics(dynamicLightContext);
     return distanceFogApplied || analyticFogApplied || analyticShaftApplied
-            || lightHaloApplied || lightDustApplied;
+            || lightHaloApplied || lightDustApplied
+            || underwaterParticlesApplied;
 }
 
 bool SectorMeshRenderer::ApplyHdrBloom(

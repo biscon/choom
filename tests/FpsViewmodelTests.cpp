@@ -821,6 +821,10 @@ void SettingsResolutionAndPersistence()
     assert(settings.playerLiquids.audio.swimLoopSoundPath
             == "player/swimming_loop.ogg");
     assert(Near(settings.playerLiquids.audio.underwaterMuffling, 0.65f));
+    assert(Near(settings.playerLiquids.visuals.screenDistortionStrength, 1.35f));
+    assert(Near(settings.playerLiquids.visuals.causticsStrength, 0.16f));
+    assert(Near(settings.playerLiquids.visuals.causticsScaleMultiplier, 1.0f));
+    assert(Near(settings.playerLiquids.visuals.causticsSpeedMultiplier, 1.0f));
     game::FpsApplicationSettings parsedToneMapping;
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1,"toneMapping":{"operator":"acesFilmicFitted","exposureCompensationEv":-1.25}})",
@@ -1001,6 +1005,10 @@ void SettingsResolutionAndPersistence()
     settings.playerLiquids.audio.swimLoopSoundPath =
             "player/custom_swim.ogg";
     settings.playerLiquids.audio.underwaterMuffling = 0.42f;
+    settings.playerLiquids.visuals.screenDistortionStrength = 2.1f;
+    settings.playerLiquids.visuals.causticsStrength = 0.27f;
+    settings.playerLiquids.visuals.causticsScaleMultiplier = 1.4f;
+    settings.playerLiquids.visuals.causticsSpeedMultiplier = 0.8f;
     settings.playerHealth.lowHealthVisual.enabled = true;
     settings.playerHealth.lowHealthVisual.thresholdRatio = 0.45f;
     settings.playerHealth.lowHealthVisual.vignetteColor = Color{55, 4, 9, 255};
@@ -1072,6 +1080,10 @@ void SettingsResolutionAndPersistence()
     assert(loaded.playerLiquids.audio.swimLoopSoundPath
             == "player/custom_swim.ogg");
     assert(Near(loaded.playerLiquids.audio.underwaterMuffling, 0.42f));
+    assert(Near(loaded.playerLiquids.visuals.screenDistortionStrength, 2.1f));
+    assert(Near(loaded.playerLiquids.visuals.causticsStrength, 0.27f));
+    assert(Near(loaded.playerLiquids.visuals.causticsScaleMultiplier, 1.4f));
+    assert(Near(loaded.playerLiquids.visuals.causticsSpeedMultiplier, 0.8f));
     assert(Near(loaded.playerStamina.regenerationPerSecond, 14.0f));
     assert(Near(loaded.playerStamina.exhaustedRecoveryRatio, 0.25f));
     assert(!loaded.playerStamina.windedCamera.enabled);
@@ -1335,6 +1347,22 @@ void SettingsResolutionAndPersistence()
             &error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerLiquids":{"audio":{"underwaterMuffling":1.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"visuals":{"screenDistortionStrength":4.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"visuals":{"causticsStrength":-0.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"visuals":{"causticsScaleMultiplier":0.09}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"visuals":{"causticsSpeedMultiplier":10.01}}})",
             loaded,
             &error));
     assert(game::ParseFpsApplicationSettings(
