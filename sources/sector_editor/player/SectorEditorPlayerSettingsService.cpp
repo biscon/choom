@@ -46,7 +46,11 @@ bool SameLiquidAudio(
     return left.splashSoundPath == right.splashSoundPath
             && left.exitSoundPath == right.exitSoundPath
             && left.swimLoopSoundPath == right.swimLoopSoundPath
-            && left.underwaterMuffling == right.underwaterMuffling;
+            && left.underwaterMuffling == right.underwaterMuffling
+            && left.roomtoneSubmergeFadeSeconds
+                    == right.roomtoneSubmergeFadeSeconds
+            && left.roomtoneResurfaceFadeSeconds
+                    == right.roomtoneResurfaceFadeSeconds;
 }
 
 void CopyEventIdToBuffer(SectorEditorPlayerSoundEventDraft& draft)

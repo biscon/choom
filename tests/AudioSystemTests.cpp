@@ -341,6 +341,44 @@ void PlayerLiquidAudioTransitions()
     assert(decision.loopShouldPlay);
 }
 
+void PlayerLiquidRoomtoneGainTransitions()
+{
+    game::PlayerLiquidAudioApplicationSettings settings;
+    assert(Near(settings.roomtoneSubmergeFadeSeconds, 0.10f));
+    assert(Near(settings.roomtoneResurfaceFadeSeconds, 0.20f));
+
+    float gain = 1.0f;
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, true, settings, 0.025f);
+    assert(Near(gain, 0.75f));
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, true, settings, 0.075f);
+    assert(Near(gain, 0.0f));
+
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, false, settings, 0.05f);
+    assert(Near(gain, 0.25f));
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, false, settings, 0.15f);
+    assert(Near(gain, 1.0f));
+
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, true, settings, 0.05f);
+    assert(Near(gain, 0.5f));
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, false, settings, 0.10f);
+    assert(Near(gain, 1.0f));
+
+    settings.roomtoneSubmergeFadeSeconds = 0.0f;
+    settings.roomtoneResurfaceFadeSeconds = 0.0f;
+    assert(Near(game::AdvancePlayerLiquidRoomtoneGain(
+                        1.0f, true, settings, 0.0f),
+            0.0f));
+    assert(Near(game::AdvancePlayerLiquidRoomtoneGain(
+                        0.0f, false, settings, 0.0f),
+            1.0f));
+}
+
 } // namespace
 
 int main()
@@ -353,5 +391,6 @@ int main()
     PlayerSoundCatalogAndPlaybackSelection();
     ListenerLowPassMappingAndTransition();
     PlayerLiquidAudioTransitions();
+    PlayerLiquidRoomtoneGainTransitions();
     std::cout << "Audio system tests passed\n";
 }

@@ -134,7 +134,7 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             break;
         case SectorEditorPlayerSettingsTab::Liquids:
             scrollState = &state.liquidsScroll;
-            contentHeight = 1160.0f;
+            contentHeight = 1260.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -389,6 +389,22 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                 0.0f,
                 1.0f,
                 2);
+        drawFloat(
+                "player_liquids_roomtone_submerge_fade",
+                "Roomtone submerge fade (seconds)",
+                liquids.audio.roomtoneSubmergeFadeSeconds,
+                state.roomtoneSubmergeFadeInput,
+                0.0f,
+                60.0f,
+                3);
+        drawFloat(
+                "player_liquids_roomtone_resurface_fade",
+                "Roomtone resurface fade (seconds)",
+                liquids.audio.roomtoneResurfaceFadeSeconds,
+                state.roomtoneResurfaceFadeInput,
+                0.0f,
+                60.0f,
+                3);
     } else if (state.activeTab == SectorEditorPlayerSettingsTab::Audio) {
         FootstepApplicationSettings& footsteps = state.draft.footsteps;
         section("Footsteps and movement noise");

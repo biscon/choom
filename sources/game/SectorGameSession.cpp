@@ -1600,6 +1600,10 @@ void SectorGameSession::Update(
             dt,
             &playerPosition,
             controller.fpsControllerState.currentSectorId,
+            controller.liquidMovement.cameraSubmerged,
+            applicationSettings != nullptr
+                    ? applicationSettings->playerLiquids.audio
+                    : PlayerLiquidAudioApplicationSettings{},
             &playerObstacle,
             &npcGameplay,
             SectorCutscenePlayerDoorHoldId(cutscene));

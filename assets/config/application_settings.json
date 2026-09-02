@@ -166,7 +166,9 @@
       "splashSoundPath": "player/water_splash.wav",
       "exitSoundPath": "",
       "swimLoopSoundPath": "player/swimming_loop.ogg",
-      "underwaterMuffling": 0.75
+      "underwaterMuffling": 0.75,
+      "roomtoneSubmergeFadeSeconds": 0.10000000149011612,
+      "roomtoneResurfaceFadeSeconds": 0.20000000298023224
     },
     "visuals": {
       "screenDistortionStrength": 0.8500000238418579,

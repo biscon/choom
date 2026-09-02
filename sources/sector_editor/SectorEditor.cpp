@@ -660,6 +660,15 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 
     if (state.mode == SectorEditorMode::Preview3D) {
         const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
+        int playerSectorId =
+                previewState.controller.fpsControllerState.currentSectorId;
+        if (previewState.controller.previewControlMode
+                        == SectorPreviewControlMode::FreeFly
+                && previewState.collision.sectorCollisionWorldValid) {
+            playerSectorId = previewState.collision.sectorCollisionWorld
+                    .FindSectorContainingPoint(
+                            Vector2{playerPosition.x, playerPosition.z});
+        }
         SectorDoorPlayerObstacle playerObstacle;
         const SectorDoorPlayerObstacle* playerObstaclePtr = nullptr;
         if (previewState.controller.previewControlMode
@@ -679,7 +688,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 TopologyMap(),
                 dt,
                 &playerPosition,
-                previewState.controller.fpsControllerState.currentSectorId,
+                playerSectorId,
+                previewState.controller.liquidMovement.cameraSubmerged,
+                applicationSettings.playerLiquids.audio,
                 playerObstaclePtr);
         UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open

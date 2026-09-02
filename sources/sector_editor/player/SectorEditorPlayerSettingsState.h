@@ -97,6 +97,8 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState underwaterCausticsScaleInput;
     engine::UIFloatInputState underwaterCausticsSpeedInput;
     engine::UIFloatInputState underwaterMufflingInput;
+    engine::UIFloatInputState roomtoneSubmergeFadeInput;
+    engine::UIFloatInputState roomtoneResurfaceFadeInput;
 
     engine::UIFloatInputState inventoryWeightInput;
     engine::UIIntInputState inventorySlotsInput;

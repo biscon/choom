@@ -3,6 +3,8 @@
 #include "game/FpsWeaponRegistry.h"
 #include "game/SoundSetAudio.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -48,6 +50,28 @@ struct PlayerLiquidAudioPlaybackState {
     engine::SoundPlaybackHandle swimLoopPlayback =
             engine::NullSoundPlaybackHandle();
 };
+
+inline float AdvancePlayerLiquidRoomtoneGain(
+        float currentGain,
+        bool cameraSubmerged,
+        const PlayerLiquidAudioApplicationSettings& settings,
+        float rawDt)
+{
+    const float target = cameraSubmerged ? 0.0f : 1.0f;
+    const float current = std::clamp(
+            std::isfinite(currentGain) ? currentGain : 1.0f,
+            0.0f,
+            1.0f);
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    const float duration = cameraSubmerged
+            ? settings.roomtoneSubmergeFadeSeconds
+            : settings.roomtoneResurfaceFadeSeconds;
+    if (!std::isfinite(duration) || duration <= 0.0f) return target;
+    const float maximumChange = dt / duration;
+    return current < target
+            ? std::min(target, current + maximumChange)
+            : std::max(target, current - maximumChange);
+}
 
 inline PlayerLiquidAudioFrameDecision AdvancePlayerLiquidAudioFrame(
         PlayerLiquidAudioFrameState& state,

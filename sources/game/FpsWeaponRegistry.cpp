@@ -836,6 +836,16 @@ std::string PlayerLiquidSettingsError(
             || settings.audio.underwaterMuffling > 1.0f) {
         return "audio.underwaterMuffling must be between 0 and 1";
     }
+    if (!finite(settings.audio.roomtoneSubmergeFadeSeconds)
+            || settings.audio.roomtoneSubmergeFadeSeconds < 0.0f
+            || settings.audio.roomtoneSubmergeFadeSeconds > 60.0f) {
+        return "audio.roomtoneSubmergeFadeSeconds must be between 0 and 60";
+    }
+    if (!finite(settings.audio.roomtoneResurfaceFadeSeconds)
+            || settings.audio.roomtoneResurfaceFadeSeconds < 0.0f
+            || settings.audio.roomtoneResurfaceFadeSeconds > 60.0f) {
+        return "audio.roomtoneResurfaceFadeSeconds must be between 0 and 60";
+    }
     if (!finite(settings.visuals.screenDistortionStrength)
             || settings.visuals.screenDistortionStrength < 0.0f
             || settings.visuals.screenDistortionStrength > 4.0f) {
@@ -2215,6 +2225,20 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 parsed.playerLiquids.audio.underwaterMuffling = OptionalNumber(
                         *audio, "underwaterMuffling", audioContext)
                         .value_or(parsed.playerLiquids.audio.underwaterMuffling);
+                parsed.playerLiquids.audio.roomtoneSubmergeFadeSeconds =
+                        OptionalNumber(
+                                *audio,
+                                "roomtoneSubmergeFadeSeconds",
+                                audioContext).value_or(
+                                        parsed.playerLiquids.audio
+                                                .roomtoneSubmergeFadeSeconds);
+                parsed.playerLiquids.audio.roomtoneResurfaceFadeSeconds =
+                        OptionalNumber(
+                                *audio,
+                                "roomtoneResurfaceFadeSeconds",
+                                audioContext).value_or(
+                                        parsed.playerLiquids.audio
+                                                .roomtoneResurfaceFadeSeconds);
             }
             const auto visuals = playerLiquids->find("visuals");
             if (visuals != playerLiquids->end()) {
@@ -2698,7 +2722,13 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"swimLoopSoundPath",
                             settings.playerLiquids.audio.swimLoopSoundPath},
                     {"underwaterMuffling",
-                            settings.playerLiquids.audio.underwaterMuffling}}},
+                            settings.playerLiquids.audio.underwaterMuffling},
+                    {"roomtoneSubmergeFadeSeconds",
+                            settings.playerLiquids.audio
+                                    .roomtoneSubmergeFadeSeconds},
+                    {"roomtoneResurfaceFadeSeconds",
+                            settings.playerLiquids.audio
+                                    .roomtoneResurfaceFadeSeconds}}},
             {"visuals", {
                     {"screenDistortionStrength",
                             settings.playerLiquids.visuals

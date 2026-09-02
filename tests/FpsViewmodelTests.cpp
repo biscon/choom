@@ -821,6 +821,12 @@ void SettingsResolutionAndPersistence()
     assert(settings.playerLiquids.audio.swimLoopSoundPath
             == "player/swimming_loop.ogg");
     assert(Near(settings.playerLiquids.audio.underwaterMuffling, 0.65f));
+    assert(Near(
+            settings.playerLiquids.audio.roomtoneSubmergeFadeSeconds,
+            0.10f));
+    assert(Near(
+            settings.playerLiquids.audio.roomtoneResurfaceFadeSeconds,
+            0.20f));
     assert(Near(settings.playerLiquids.visuals.screenDistortionStrength, 1.35f));
     assert(Near(settings.playerLiquids.visuals.causticsStrength, 0.16f));
     assert(Near(settings.playerLiquids.visuals.causticsScaleMultiplier, 1.0f));
@@ -1005,6 +1011,8 @@ void SettingsResolutionAndPersistence()
     settings.playerLiquids.audio.swimLoopSoundPath =
             "player/custom_swim.ogg";
     settings.playerLiquids.audio.underwaterMuffling = 0.42f;
+    settings.playerLiquids.audio.roomtoneSubmergeFadeSeconds = 0.35f;
+    settings.playerLiquids.audio.roomtoneResurfaceFadeSeconds = 0.60f;
     settings.playerLiquids.visuals.screenDistortionStrength = 2.1f;
     settings.playerLiquids.visuals.causticsStrength = 0.27f;
     settings.playerLiquids.visuals.causticsScaleMultiplier = 1.4f;
@@ -1080,6 +1088,12 @@ void SettingsResolutionAndPersistence()
     assert(loaded.playerLiquids.audio.swimLoopSoundPath
             == "player/custom_swim.ogg");
     assert(Near(loaded.playerLiquids.audio.underwaterMuffling, 0.42f));
+    assert(Near(
+            loaded.playerLiquids.audio.roomtoneSubmergeFadeSeconds,
+            0.35f));
+    assert(Near(
+            loaded.playerLiquids.audio.roomtoneResurfaceFadeSeconds,
+            0.60f));
     assert(Near(loaded.playerLiquids.visuals.screenDistortionStrength, 2.1f));
     assert(Near(loaded.playerLiquids.visuals.causticsStrength, 0.27f));
     assert(Near(loaded.playerLiquids.visuals.causticsScaleMultiplier, 1.4f));
@@ -1347,6 +1361,18 @@ void SettingsResolutionAndPersistence()
             &error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerLiquids":{"audio":{"underwaterMuffling":1.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"roomtoneSubmergeFadeSeconds":-0.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"roomtoneResurfaceFadeSeconds":60.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"roomtoneSubmergeFadeSeconds":"quick"}}})",
             loaded,
             &error));
     assert(!game::ParseFpsApplicationSettings(

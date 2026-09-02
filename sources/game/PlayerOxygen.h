@@ -9,6 +9,8 @@ struct PlayerLiquidAudioApplicationSettings {
     std::string exitSoundPath;
     std::string swimLoopSoundPath = "player/swimming_loop.ogg";
     float underwaterMuffling = 0.65f;
+    float roomtoneSubmergeFadeSeconds = 0.10f;
+    float roomtoneResurfaceFadeSeconds = 0.20f;
 };
 
 struct PlayerLiquidVisualApplicationSettings {

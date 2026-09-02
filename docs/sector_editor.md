@@ -117,7 +117,11 @@ views and maps to world Z for generated 3D geometry.
   low-pass amount: `0` is dry/unfiltered and `1` is the strongest filtering.
   The effect blends at camera-submersion transitions and combines with portal
   sound filtering by using whichever low-pass cutoff is lower. Editor sound-file
-  previews opt out of listener effects.
+  previews opt out of listener effects. Sector roomtones separately fade to
+  silence when the camera submerges and fade back in when it resurfaces, using
+  the configurable roomtone submerge/resurface durations. Their streams keep
+  playing while muted, and swimming at the surface with the camera above water
+  leaves them audible.
 - `Settings -> Liquids -> Underwater visuals` configures the application-wide
   screen-distortion strength plus projected-caustics strength, world scale, and
   animation speed. Caustics use a generated procedural lookup texture and are
