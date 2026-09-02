@@ -86,6 +86,12 @@ void RequestPlayerAudioAssets(
         runtime.liquidSplash = assets.RequestSound(
                 assets.GlobalScope(), splashPath.c_str());
     }
+    if (!liquidSettings.exitSoundPath.empty()) {
+        const std::string exitPath = ResolveSectorAudioAssetPath(
+                liquidSettings.exitSoundPath);
+        runtime.liquidExit = assets.RequestSound(
+                assets.GlobalScope(), exitPath.c_str());
+    }
     if (!liquidSettings.swimLoopSoundPath.empty()) {
         const std::string loopPath = ResolveSectorAudioAssetPath(
                 liquidSettings.swimLoopSoundPath);
@@ -170,8 +176,12 @@ void UpdatePlayerLiquidAudio(
                     swimming,
                     exitingWater,
                     swimControlHeld);
-    if (decision.playSplash && !engine::IsNull(playerAudio.liquidSplash)) {
+    if (decision.playEntrySplash
+            && !engine::IsNull(playerAudio.liquidSplash)) {
         audio.PlaySound(assets, playerAudio.liquidSplash);
+    }
+    if (decision.playExitSound && !engine::IsNull(playerAudio.liquidExit)) {
+        audio.PlaySound(assets, playerAudio.liquidExit);
     }
 
     if (!decision.loopShouldExist) {

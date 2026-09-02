@@ -164,6 +164,7 @@
     "exitTransitionDurationSeconds": 0.75,
     "audio": {
       "splashSoundPath": "player/water_splash.wav",
+      "exitSoundPath": "",
       "swimLoopSoundPath": "player/swimming_loop.ogg",
       "underwaterMuffling": 0.75
     }

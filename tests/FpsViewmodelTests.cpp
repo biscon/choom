@@ -817,6 +817,7 @@ void SettingsResolutionAndPersistence()
     assert(Near(settings.playerLiquids.swimCollisionHeightWorld, 0.60f));
     assert(settings.playerLiquids.audio.splashSoundPath
             == "player/water_splash.wav");
+    assert(settings.playerLiquids.audio.exitSoundPath.empty());
     assert(settings.playerLiquids.audio.swimLoopSoundPath
             == "player/swimming_loop.ogg");
     assert(Near(settings.playerLiquids.audio.underwaterMuffling, 0.65f));
@@ -995,6 +996,8 @@ void SettingsResolutionAndPersistence()
     settings.playerLiquids.exitTransitionDurationSeconds = 0.45f;
     settings.playerLiquids.audio.splashSoundPath =
             "player/custom_splash.wav";
+    settings.playerLiquids.audio.exitSoundPath =
+            "player/custom_exit.wav";
     settings.playerLiquids.audio.swimLoopSoundPath =
             "player/custom_swim.ogg";
     settings.playerLiquids.audio.underwaterMuffling = 0.42f;
@@ -1064,6 +1067,8 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerLiquids.exitTransitionDurationSeconds, 0.45f));
     assert(loaded.playerLiquids.audio.splashSoundPath
             == "player/custom_splash.wav");
+    assert(loaded.playerLiquids.audio.exitSoundPath
+            == "player/custom_exit.wav");
     assert(loaded.playerLiquids.audio.swimLoopSoundPath
             == "player/custom_swim.ogg");
     assert(Near(loaded.playerLiquids.audio.underwaterMuffling, 0.42f));
@@ -1325,14 +1330,19 @@ void SettingsResolutionAndPersistence()
             loaded,
             &error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"exitSoundPath":"../escape.wav"}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerLiquids":{"audio":{"underwaterMuffling":1.01}}})",
             loaded,
             &error));
     assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"playerLiquids":{"audio":{"splashSoundPath":"","swimLoopSoundPath":"","underwaterMuffling":0}}})",
+            R"({"version":1,"playerLiquids":{"audio":{"splashSoundPath":"","exitSoundPath":"","swimLoopSoundPath":"","underwaterMuffling":0}}})",
             loaded,
             &error));
     assert(loaded.playerLiquids.audio.splashSoundPath.empty());
+    assert(loaded.playerLiquids.audio.exitSoundPath.empty());
     assert(loaded.playerLiquids.audio.swimLoopSoundPath.empty());
     assert(Near(loaded.playerLiquids.audio.underwaterMuffling, 0.0f));
     assert(!game::ParseFpsApplicationSettings(

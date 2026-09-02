@@ -6,6 +6,7 @@ namespace game {
 
 struct PlayerLiquidAudioApplicationSettings {
     std::string splashSoundPath = "player/water_splash.wav";
+    std::string exitSoundPath;
     std::string swimLoopSoundPath = "player/swimming_loop.ogg";
     float underwaterMuffling = 0.65f;
 };

@@ -823,6 +823,10 @@ std::string PlayerLiquidSettingsError(
             && !ValidAudioPath(settings.audio.splashSoundPath)) {
         return "audio.splashSoundPath must be an empty or relative .ogg, .wav, or .mp3 path";
     }
+    if (!settings.audio.exitSoundPath.empty()
+            && !ValidAudioPath(settings.audio.exitSoundPath)) {
+        return "audio.exitSoundPath must be an empty or relative .ogg, .wav, or .mp3 path";
+    }
     if (!settings.audio.swimLoopSoundPath.empty()
             && !ValidAudioPath(settings.audio.swimLoopSoundPath)) {
         return "audio.swimLoopSoundPath must be an empty or relative .ogg, .wav, or .mp3 path";
@@ -2180,6 +2184,10 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                         OptionalStringAllowEmpty(
                                 *audio, "splashSoundPath", audioContext)
                                 .value_or(parsed.playerLiquids.audio.splashSoundPath);
+                parsed.playerLiquids.audio.exitSoundPath =
+                        OptionalStringAllowEmpty(
+                                *audio, "exitSoundPath", audioContext)
+                                .value_or(parsed.playerLiquids.audio.exitSoundPath);
                 parsed.playerLiquids.audio.swimLoopSoundPath =
                         OptionalStringAllowEmpty(
                                 *audio, "swimLoopSoundPath", audioContext)
@@ -2634,6 +2642,8 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"audio", {
                     {"splashSoundPath",
                             settings.playerLiquids.audio.splashSoundPath},
+                    {"exitSoundPath",
+                            settings.playerLiquids.audio.exitSoundPath},
                     {"swimLoopSoundPath",
                             settings.playerLiquids.audio.swimLoopSoundPath},
                     {"underwaterMuffling",

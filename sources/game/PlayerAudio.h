@@ -27,6 +27,7 @@ struct PlayerAudioRuntime {
     engine::MusicHandle heavyBreathing = engine::NullMusicHandle();
     engine::SoundHandle heartbeat = engine::NullSoundHandle();
     engine::SoundHandle liquidSplash = engine::NullSoundHandle();
+    engine::SoundHandle liquidExit = engine::NullSoundHandle();
     engine::SoundHandle liquidSwimLoop = engine::NullSoundHandle();
 };
 
@@ -36,7 +37,8 @@ struct PlayerLiquidAudioFrameState {
 };
 
 struct PlayerLiquidAudioFrameDecision {
-    bool playSplash = false;
+    bool playEntrySplash = false;
+    bool playExitSound = false;
     bool loopShouldExist = false;
     bool loopShouldPlay = false;
 };
@@ -55,7 +57,8 @@ inline PlayerLiquidAudioFrameDecision AdvancePlayerLiquidAudioFrame(
 {
     PlayerLiquidAudioFrameDecision result;
     if (state.initialized && swimming != state.wasSwimming) {
-        result.playSplash = true;
+        result.playEntrySplash = swimming;
+        result.playExitSound = !swimming;
     }
     state.initialized = true;
     state.wasSwimming = swimming;

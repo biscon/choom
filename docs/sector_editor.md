@@ -109,7 +109,8 @@ views and maps to world Z for generated 3D geometry.
   are selected from the discovered footstep/player sound catalogs and can be
   previewed from the modal.
 - `Settings -> Liquids -> Audio` opens the Liquids tab directly and selects
-  application-wide entry/exit splash and swimming-loop files from
+  separate application-wide entry-splash, liquid-exit, and swimming-loop files
+  from
   `assets/audio`. The loop pauses while the swimming player supplies no swim
   input and resumes from the same playback
   position when input resumes. `Underwater muffling` is a normalized listener

@@ -312,32 +312,32 @@ void PlayerLiquidAudioTransitions()
     game::PlayerLiquidAudioFrameDecision decision =
             game::AdvancePlayerLiquidAudioFrame(
                     state, true, false, false);
-    assert(!decision.playSplash);
+    assert(!decision.playEntrySplash && !decision.playExitSound);
     assert(decision.loopShouldExist && !decision.loopShouldPlay);
 
     decision = game::AdvancePlayerLiquidAudioFrame(
             state, true, false, true);
-    assert(!decision.playSplash);
+    assert(!decision.playEntrySplash && !decision.playExitSound);
     assert(decision.loopShouldExist && decision.loopShouldPlay);
 
     decision = game::AdvancePlayerLiquidAudioFrame(
             state, true, true, true);
-    assert(!decision.playSplash);
+    assert(!decision.playEntrySplash && !decision.playExitSound);
     assert(!decision.loopShouldExist && !decision.loopShouldPlay);
 
     decision = game::AdvancePlayerLiquidAudioFrame(
             state, true, false, true);
-    assert(!decision.playSplash);
+    assert(!decision.playEntrySplash && !decision.playExitSound);
     assert(decision.loopShouldPlay);
 
     decision = game::AdvancePlayerLiquidAudioFrame(
             state, false, false, false);
-    assert(decision.playSplash);
+    assert(!decision.playEntrySplash && decision.playExitSound);
     assert(!decision.loopShouldExist);
 
     decision = game::AdvancePlayerLiquidAudioFrame(
             state, true, false, true);
-    assert(decision.playSplash);
+    assert(decision.playEntrySplash && !decision.playExitSound);
     assert(decision.loopShouldPlay);
 }
 

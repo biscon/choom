@@ -24,6 +24,7 @@ enum class SectorEditorPlayerSettingsTab {
 enum class SectorEditorPlayerLiquidAudioPickerTarget {
     None,
     Splash,
+    Exit,
     SwimLoop
 };
 

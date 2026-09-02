@@ -44,6 +44,7 @@ bool SameLiquidAudio(
         const PlayerLiquidAudioApplicationSettings& right)
 {
     return left.splashSoundPath == right.splashSoundPath
+            && left.exitSoundPath == right.exitSoundPath
             && left.swimLoopSoundPath == right.swimLoopSoundPath
             && left.underwaterMuffling == right.underwaterMuffling;
 }
@@ -246,16 +247,21 @@ void SectorEditorPlayerSettingsService::OpenLiquidAudioPicker(
     if (target == SectorEditorPlayerLiquidAudioPickerTarget::None) return;
     SectorEditorAudioAssetPickerService picker{
             context, audioPickerSession_};
-    const std::string& current =
-            target == SectorEditorPlayerLiquidAudioPickerTarget::Splash
-            ? state_.draft.playerLiquids.audio.splashSoundPath
-            : state_.draft.playerLiquids.audio.swimLoopSoundPath;
+    const std::string* current =
+            &state_.draft.playerLiquids.audio.swimLoopSoundPath;
+    if (target == SectorEditorPlayerLiquidAudioPickerTarget::Splash) {
+        current = &state_.draft.playerLiquids.audio.splashSoundPath;
+    } else if (target == SectorEditorPlayerLiquidAudioPickerTarget::Exit) {
+        current = &state_.draft.playerLiquids.audio.exitSoundPath;
+    }
     picker.Open(
             state_.liquidAudioPicker,
             target == SectorEditorPlayerLiquidAudioPickerTarget::Splash
                     ? "Pick Liquid Splash Sound"
-                    : "Pick Swimming Loop Sound",
-            current,
+                    : target == SectorEditorPlayerLiquidAudioPickerTarget::Exit
+                            ? "Pick Liquid Exit Sound"
+                            : "Pick Swimming Loop Sound",
+            *current,
             SectorSoundType::Sound);
     state_.liquidAudioPickerTarget = target;
 }
@@ -278,6 +284,9 @@ SectorEditorPlayerSettingsService::DrawLiquidAudioPicker(
         if (state_.liquidAudioPickerTarget
                 == SectorEditorPlayerLiquidAudioPickerTarget::Splash) {
             state_.draft.playerLiquids.audio.splashSoundPath = selected;
+        } else if (state_.liquidAudioPickerTarget
+                == SectorEditorPlayerLiquidAudioPickerTarget::Exit) {
+            state_.draft.playerLiquids.audio.exitSoundPath = selected;
         } else if (state_.liquidAudioPickerTarget
                 == SectorEditorPlayerLiquidAudioPickerTarget::SwimLoop) {
             state_.draft.playerLiquids.audio.swimLoopSoundPath = selected;

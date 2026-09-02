@@ -335,9 +335,14 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         };
         drawSoundPath(
                 "player_liquids_splash_sound",
-                "Entry / exit splash",
+                "Entry splash",
                 liquids.audio.splashSoundPath,
                 SectorEditorPlayerLiquidAudioPickerTarget::Splash);
+        drawSoundPath(
+                "player_liquids_exit_sound",
+                "Liquid exit",
+                liquids.audio.exitSoundPath,
+                SectorEditorPlayerLiquidAudioPickerTarget::Exit);
         drawSoundPath(
                 "player_liquids_swim_loop",
                 "Swimming loop",
