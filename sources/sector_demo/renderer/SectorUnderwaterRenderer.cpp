@@ -192,7 +192,13 @@ void main()
         signedModulation *= 1.0 - smoothstep(0.80, 1.25, luminance);
     }
     float modulation = clamp(1.0 + signedModulation, 0.75, 1.35);
-    vec3 rgb = max(scene.rgb, vec3(0.0)) * modulation;
+    float darkSurfaceFactor = 1.0 - smoothstep(0.08, 0.30, luminance);
+    float positivePattern = max(pattern - 0.38, 0.0);
+    float darkSurfaceLift = min(
+            positivePattern * effectStrength * 0.10 * darkSurfaceFactor,
+            0.04);
+    vec3 rgb = max(scene.rgb, vec3(0.0)) * modulation
+            + vec3(darkSurfaceLift);
     finalColor = vec4(min(rgb, vec3(65504.0)), scene.a);
 }
 )glsl";

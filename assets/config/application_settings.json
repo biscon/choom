@@ -169,10 +169,10 @@
       "underwaterMuffling": 0.75
     },
     "visuals": {
-      "screenDistortionStrength": 1.649999976158142,
-      "causticsStrength": 0.800000011920929,
-      "causticsScaleMultiplier": 3.0,
-      "causticsSpeedMultiplier": 2.5
+      "screenDistortionStrength": 0.8500000238418579,
+      "causticsStrength": 0.8999999761581421,
+      "causticsScaleMultiplier": 2.5,
+      "causticsSpeedMultiplier": 2.0
     }
   }
 }

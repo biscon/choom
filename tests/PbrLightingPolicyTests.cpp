@@ -977,9 +977,17 @@ void TestHdrEffectShaderAndPassPolicies()
                     && underwaterShader.find(
                                "clamp(1.0 + signedModulation, 0.75, 1.35)")
                             != std::string::npos
+                    && underwaterShader.find(
+                               "1.0 - smoothstep(0.08, 0.30, luminance)")
+                            != std::string::npos
+                    && underwaterShader.find(
+                               "positivePattern * effectStrength * 0.10 * darkSurfaceFactor")
+                            != std::string::npos
+                    && underwaterShader.find("0.04);")
+                            != std::string::npos
                     && underwaterShader.find("scene.rgb) * (1.0 + contribution)")
                             == std::string::npos,
-          "underwater caustics are energy-centered, bounded, and bloom-safe");
+          "underwater caustics are energy-centered, dark-surface visible, bounded, and bloom-safe");
     Check(glassShader.find("rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY)")
                             !=std::string::npos
                     &&glassShader.find("float fresnel = clamp(0.04 + 0.96")

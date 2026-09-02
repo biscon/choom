@@ -124,6 +124,8 @@ views and maps to world Z for generated 3D geometry.
   projected onto visible submerged surfaces; no authored texture is required.
   Their world-space triplanar projection fades at depth discontinuities and
   uses bounded luminance modulation so it does not create emissive bloom bands.
+  A small capped lift keeps bright ridges legible on very dark materials while
+  fading out on ordinarily lit surfaces.
 - `Copy config` / `Paste config` (`Ctrl+C` / `Ctrl+V`): copy and paste the
   selected compatible editor configuration. Disabled commands do not fire.
 
