@@ -1,6 +1,14 @@
 #pragma once
 
+#include <string>
+
 namespace game {
+
+struct PlayerLiquidAudioApplicationSettings {
+    std::string splashSoundPath = "player/water_splash.wav";
+    std::string swimLoopSoundPath = "player/swimming_loop.ogg";
+    float underwaterMuffling = 0.65f;
+};
 
 struct PlayerLiquidApplicationSettings {
     float oxygenMaximum = 100.0f;
@@ -14,6 +22,7 @@ struct PlayerLiquidApplicationSettings {
     float surfaceRecoveryFrequencyHz = 0.35f;
     float maximumExitLedgeHeightWorld = 0.75f;
     float exitTransitionDurationSeconds = 0.30f;
+    PlayerLiquidAudioApplicationSettings audio;
 };
 
 struct PlayerOxygenModifiers {

@@ -66,6 +66,7 @@ engine::SoundPlaybackHandle PlayPlayerSoundInternal(
 void RequestPlayerAudioAssets(
         engine::AssetManager& assets,
         const PlayerSoundApplicationSettings& settings,
+        const PlayerLiquidAudioApplicationSettings& liquidSettings,
         PlayerAudioRuntime& runtime)
 {
     runtime = PlayerAudioRuntime{};
@@ -79,6 +80,18 @@ void RequestPlayerAudioAssets(
     runtime.heartbeat = assets.RequestSound(
             assets.GlobalScope(),
             heartbeatPath.c_str());
+    if (!liquidSettings.splashSoundPath.empty()) {
+        const std::string splashPath = ResolveSectorAudioAssetPath(
+                liquidSettings.splashSoundPath);
+        runtime.liquidSplash = assets.RequestSound(
+                assets.GlobalScope(), splashPath.c_str());
+    }
+    if (!liquidSettings.swimLoopSoundPath.empty()) {
+        const std::string loopPath = ResolveSectorAudioAssetPath(
+                liquidSettings.swimLoopSoundPath);
+        runtime.liquidSwimLoop = assets.RequestSound(
+                assets.GlobalScope(), loopPath.c_str());
+    }
     const SoundSetCatalog catalog = DiscoverSoundSetCatalog(
             ASSETS_PATH "audio/player",
             "player");
@@ -140,6 +153,60 @@ void RequestPlayerAudioAssets(
                 loaded.id.size());
         runtime.events.push_back(std::move(event));
     }
+}
+
+void UpdatePlayerLiquidAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        const PlayerAudioRuntime& playerAudio,
+        PlayerLiquidAudioPlaybackState& state,
+        bool swimming,
+        bool exitingWater,
+        bool swimControlHeld)
+{
+    const PlayerLiquidAudioFrameDecision decision =
+            AdvancePlayerLiquidAudioFrame(
+                    state.frame,
+                    swimming,
+                    exitingWater,
+                    swimControlHeld);
+    if (decision.playSplash && !engine::IsNull(playerAudio.liquidSplash)) {
+        audio.PlaySound(assets, playerAudio.liquidSplash);
+    }
+
+    if (!decision.loopShouldExist) {
+        if (!engine::IsNull(state.swimLoopPlayback)) {
+            audio.StopSound(assets, state.swimLoopPlayback);
+            state.swimLoopPlayback = engine::NullSoundPlaybackHandle();
+        }
+        return;
+    }
+
+    if (decision.loopShouldPlay) {
+        if (!audio.IsSoundPlaying(state.swimLoopPlayback)) {
+            engine::SoundPlaybackSettings settings;
+            settings.looping = true;
+            state.swimLoopPlayback = audio.PlaySound(
+                    assets, playerAudio.liquidSwimLoop, settings);
+        } else {
+            audio.SetSoundPlaybackPaused(
+                    assets, state.swimLoopPlayback, false);
+        }
+    } else if (audio.IsSoundPlaying(state.swimLoopPlayback)) {
+        audio.SetSoundPlaybackPaused(
+                assets, state.swimLoopPlayback, true);
+    }
+}
+
+void StopPlayerLiquidAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        PlayerLiquidAudioPlaybackState& state)
+{
+    if (!engine::IsNull(state.swimLoopPlayback)) {
+        audio.StopSound(assets, state.swimLoopPlayback);
+    }
+    state = PlayerLiquidAudioPlaybackState{};
 }
 
 engine::SoundPlaybackHandle PlayPlayerSound(

@@ -3,6 +3,7 @@
 #include "engine/ui/UI.h"
 #include "game/FpsWeaponRegistry.h"
 #include "game/SoundSetAudio.h"
+#include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
 
 #include <array>
 #include <string>
@@ -18,6 +19,12 @@ enum class SectorEditorPlayerSettingsTab {
     Sneaking,
     Lighting,
     Liquids
+};
+
+enum class SectorEditorPlayerLiquidAudioPickerTarget {
+    None,
+    Splash,
+    SwimLoop
 };
 
 struct SectorEditorPlayerSoundEventDraft {
@@ -47,6 +54,9 @@ struct SectorEditorPlayerSettingsState {
     std::vector<std::string> playerSoundLabelStorage;
     std::vector<const char*> playerSoundLabels;
     SectorEditorPlayerAudioPreviewState audioPreview;
+    SectorEditorAudioAssetPickerState liquidAudioPicker;
+    SectorEditorPlayerLiquidAudioPickerTarget liquidAudioPickerTarget =
+            SectorEditorPlayerLiquidAudioPickerTarget::None;
     engine::UIScrollState staminaScroll;
     engine::UIScrollState inventoryScroll;
     engine::UIScrollState audioScroll;
@@ -81,6 +91,7 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState surfaceRecoveryInput;
     engine::UIFloatInputState maximumExitLedgeHeightInput;
     engine::UIFloatInputState exitTransitionDurationInput;
+    engine::UIFloatInputState underwaterMufflingInput;
 
     engine::UIFloatInputState inventoryWeightInput;
     engine::UIIntInputState inventorySlotsInput;

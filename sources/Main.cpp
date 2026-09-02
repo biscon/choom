@@ -922,7 +922,9 @@ int main(int argc, char** argv)
                 }
             }
         }
-        context.audio.Update(assets);
+        context.audio.SetListenerLowPassStrength(
+                application.UnderwaterAudioMuffling());
+        context.audio.Update(assets, dt);
 
         BeginTextureMode(consoleTarget);
         ClearBackground(BLANK);

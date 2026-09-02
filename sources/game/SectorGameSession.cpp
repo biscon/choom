@@ -1038,6 +1038,7 @@ bool SectorGameSession::StartNew(
     ClearPlayerHitCamera(hitCamera);
     breathingAudio = PlayerBreathingAudioRuntime{};
     heartbeatAudio = PlayerHeartbeatAudioRuntime{};
+    liquidAudio = PlayerLiquidAudioPlaybackState{};
     flashlight = PlayerFlashlightState{};
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
@@ -1213,9 +1214,14 @@ void SectorGameSession::Shutdown(
                 context.assets,
                 context.audio,
                 heartbeatAudio);
+        StopPlayerLiquidAudio(
+                context.assets,
+                context.audio,
+                liquidAudio);
     } else {
         breathingAudio = PlayerBreathingAudioRuntime{};
         heartbeatAudio = PlayerHeartbeatAudioRuntime{};
+        liquidAudio = PlayerLiquidAudioPlaybackState{};
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
@@ -1279,6 +1285,7 @@ void SectorGameSession::Shutdown(
 
 void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
 {
+    StopPlayerLiquidAudio(context.assets, context.audio, liquidAudio);
     if (levelSaveStates != nullptr && running
             && scriptHost.runtimeObjects != nullptr) {
         UpsertGameSaveLevelState(
@@ -1603,6 +1610,10 @@ void SectorGameSession::Update(
                 context.assets,
                 context.audio,
                 heartbeatAudio);
+        StopPlayerLiquidAudio(
+                context.assets,
+                context.audio,
+                liquidAudio);
         SetInventoryOpen(false);
         ClearHeldObjectUse();
         LeaveSectorFreeflyController();
@@ -1706,6 +1717,22 @@ void SectorGameSession::Update(
             previousVisualEyeY,
             dt,
             &scene.NpcNavigation().collisionCylinders);
+    if (playerAudio != nullptr) {
+        const bool swimControlHeld = input.moveForward
+                || input.moveBackward
+                || input.strafeLeft
+                || input.strafeRight
+                || input.swimUp
+                || input.swimDown;
+        UpdatePlayerLiquidAudio(
+                context.assets,
+                context.audio,
+                *playerAudio,
+                liquidAudio,
+                controller.liquidMovement.swimming,
+                controller.liquidMovement.exitingWater,
+                swimControlHeld);
+    }
     FinishSectorCutscenePlayerMoveFrame(
             cutscene,
             scene.Navigation(),

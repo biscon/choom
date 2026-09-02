@@ -284,6 +284,7 @@ private:
     PlayerHitCameraState hitCamera;
     PlayerBreathingAudioRuntime breathingAudio;
     PlayerHeartbeatAudioRuntime heartbeatAudio;
+    PlayerLiquidAudioPlaybackState liquidAudio;
     PlayerLightLevelSample playerLightLevel;
     PlayerFlashlightState flashlight;
     std::string failureError;

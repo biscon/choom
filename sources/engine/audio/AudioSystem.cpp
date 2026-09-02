@@ -167,6 +167,27 @@ void UpdatePlaybackPropagation(
 
 } // namespace
 
+float AudioListenerLowPassCutoffHz(float normalizedStrength)
+{
+    const float strength = std::clamp(
+            FiniteOr(normalizedStrength, 0.0f), 0.0f, 1.0f);
+    if (strength <= 0.0f) return AudioUnfilteredLowPassCutoffHz;
+    if (strength >= 1.0f) return AudioMinimumListenerLowPassCutoffHz;
+    const float dryLog = std::log(AudioUnfilteredLowPassCutoffHz);
+    const float wetLog = std::log(AudioMinimumListenerLowPassCutoffHz);
+    return std::exp(dryLog + (wetLog - dryLog) * strength);
+}
+
+float CombineAudioLowPassCutoffs(float firstHz, float secondHz)
+{
+    return std::clamp(
+            std::min(
+                    FiniteOr(firstHz, AudioUnfilteredLowPassCutoffHz),
+                    FiniteOr(secondHz, AudioUnfilteredLowPassCutoffHz)),
+            MinimumLowPassCutoffHz,
+            AudioUnfilteredLowPassCutoffHz);
+}
+
 float ComputeAudioDistanceAttenuation(
         float rawDistanceWorld,
         const PositionalSoundSettings& unnormalizedSource)
@@ -256,6 +277,8 @@ void AudioSystem::Shutdown()
     musicPlaybacks.clear();
     suspended = false;
     nextSequence = 1;
+    listenerLowPassStrength = 0.0f;
+    listenerLowPassTargetStrength = 0.0f;
     if (deviceReady || IsAudioDeviceReady()) {
         CloseAudioDevice();
     }
@@ -265,6 +288,12 @@ void AudioSystem::Shutdown()
 void AudioSystem::SetListener(const AudioListener& value)
 {
     listener = value;
+}
+
+void AudioSystem::SetListenerLowPassStrength(float normalizedStrength)
+{
+    listenerLowPassTargetStrength = std::clamp(
+            FiniteOr(normalizedStrength, 0.0f), 0.0f, 1.0f);
 }
 
 void AudioSystem::UpdatePositionalSoundPropagation(
@@ -285,8 +314,15 @@ void AudioSystem::UpdatePositionalSoundPropagation(
     }
 }
 
-void AudioSystem::Update(AssetManager& assets)
+void AudioSystem::Update(AssetManager& assets, float rawDt)
 {
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    const float maximumChange = AudioListenerEffectTransitionSeconds > 0.0f
+            ? dt / AudioListenerEffectTransitionSeconds : 1.0f;
+    listenerLowPassStrength = MoveTowards(
+            listenerLowPassStrength,
+            listenerLowPassTargetStrength,
+            maximumChange);
     if (!deviceReady || suspended) return;
 
     for (size_t i = 0; i < soundPlaybacks.size(); ++i) {
@@ -295,6 +331,7 @@ void AudioSystem::Update(AssetManager& assets)
         const Sound* voice = assets.GetSoundVoice(
                 playback.sound,
                 playback.voiceIndex);
+        if (playback.pausedByCaller) continue;
         if (voice == nullptr || !::IsSoundPlaying(*voice)) {
             DeactivateSoundSlot(assets, i, false);
             continue;
@@ -356,6 +393,28 @@ bool AudioSystem::SetSoundPlaybackSettings(
     const Sound* voice = assets.GetSoundVoice(slot.sound, slot.voiceIndex);
     if (voice == nullptr) return false;
     ApplySoundMix(*voice, slot);
+    return true;
+}
+
+bool AudioSystem::SetSoundPlaybackPaused(
+        AssetManager& assets,
+        SoundPlaybackHandle playback,
+        bool paused)
+{
+    if (!IsValidPlayback(playback)) return false;
+    SoundPlaybackSlot& slot = soundPlaybacks[playback.index];
+    const Sound* voice = assets.GetSoundVoice(slot.sound, slot.voiceIndex);
+    if (voice == nullptr) return false;
+    if (slot.pausedByCaller == paused) return true;
+    slot.pausedByCaller = paused;
+    if (paused) {
+        if (!slot.pausedBySystem && ::IsSoundPlaying(*voice)) {
+            ::PauseSound(*voice);
+        }
+    } else if (!slot.pausedBySystem && !suspended) {
+        ApplySoundMix(*voice, slot);
+        ::ResumeSound(*voice);
+    }
     return true;
 }
 
@@ -480,6 +539,7 @@ void AudioSystem::PauseAll(AssetManager& assets)
     if (!deviceReady || suspended) return;
     for (SoundPlaybackSlot& playback : soundPlaybacks) {
         if (!playback.active) continue;
+        if (playback.pausedByCaller) continue;
         const Sound* voice = assets.GetSoundVoice(
                 playback.sound,
                 playback.voiceIndex);
@@ -559,6 +619,7 @@ SoundPlaybackHandle AudioSystem::PlaySoundInternal(
     playback.active = true;
     playback.positional = positional != nullptr;
     playback.pausedBySystem = false;
+    playback.pausedByCaller = false;
     playback.sound = sound;
     playback.voiceIndex = voiceIndex;
     playback.sequence = nextSequence++;
@@ -590,7 +651,8 @@ size_t AudioSystem::FindSoundPlaybackSlot(
     uint64_t oldestGlobalSequence = std::numeric_limits<uint64_t>::max();
     for (size_t i = 0; i < soundPlaybacks.size(); ++i) {
         SoundPlaybackSlot& playback = soundPlaybacks[i];
-        if (playback.active && !suspended && !playback.pausedBySystem) {
+        if (playback.active && !suspended && !playback.pausedBySystem
+                && !playback.pausedByCaller) {
             const Sound* voice = assets.GetSoundVoice(
                     playback.sound,
                     playback.voiceIndex);
@@ -679,11 +741,16 @@ void AudioSystem::ApplySoundMix(
     ::SetSoundPitch(voice, playback.settings.pitch);
     ::SetSoundPan(voice, ToRaylibPan(pan));
     ::SetSoundLooping(voice, playback.settings.looping);
+    const float propagationCutoff = playback.positional
+                    && playback.propagationInitialized
+            ? playback.propagation.lowPassCutoffHz
+            : AudioUnfilteredLowPassCutoffHz;
+    const float listenerCutoff = playback.settings.affectedByListenerEffects
+            ? AudioListenerLowPassCutoffHz(listenerLowPassStrength)
+            : AudioUnfilteredLowPassCutoffHz;
     ::SetAudioStreamLowPassFilter(
             voice.stream,
-            playback.positional && playback.propagationInitialized
-                    ? playback.propagation.lowPassCutoffHz
-                    : AudioUnfilteredLowPassCutoffHz);
+            CombineAudioLowPassCutoffs(propagationCutoff, listenerCutoff));
 }
 
 void AudioSystem::ApplyMusicMix(
@@ -714,11 +781,16 @@ void AudioSystem::ApplyMusicMix(
     ::SetMusicVolume(stream, volume);
     ::SetMusicPitch(stream, playback.settings.pitch);
     ::SetMusicPan(stream, ToRaylibPan(pan));
+    const float propagationCutoff = playback.positional
+                    && playback.propagationInitialized
+            ? playback.propagation.lowPassCutoffHz
+            : AudioUnfilteredLowPassCutoffHz;
+    const float listenerCutoff = playback.settings.affectedByListenerEffects
+            ? AudioListenerLowPassCutoffHz(listenerLowPassStrength)
+            : AudioUnfilteredLowPassCutoffHz;
     ::SetAudioStreamLowPassFilter(
             stream.stream,
-            playback.positional && playback.propagationInitialized
-                    ? playback.propagation.lowPassCutoffHz
-                    : AudioUnfilteredLowPassCutoffHz);
+            CombineAudioLowPassCutoffs(propagationCutoff, listenerCutoff));
 }
 
 void AudioSystem::DeactivateSoundSlot(
@@ -734,7 +806,9 @@ void AudioSystem::DeactivateSoundSlot(
                 playback.voiceIndex);
         if (voice != nullptr) {
             ::SetSoundLooping(*voice, false);
-            if (playback.pausedBySystem) ::ResumeSound(*voice);
+            if (playback.pausedBySystem || playback.pausedByCaller) {
+                ::ResumeSound(*voice);
+            }
             ::StopSound(*voice);
         }
     }

@@ -689,6 +689,19 @@ std::optional<bool> OptionalBoolean(
     return Boolean(object, name, context);
 }
 
+std::optional<std::string> OptionalStringAllowEmpty(
+        const Json& object,
+        const char* name,
+        const std::string& context)
+{
+    const auto value = object.find(name);
+    if (value == object.end()) return std::nullopt;
+    if (!value->is_string()) {
+        Fail(context + "." + name + " must be a string");
+    }
+    return value->get<std::string>();
+}
+
 std::string PlayerStaminaSettingsError(
         const PlayerStaminaApplicationSettings& settings)
 {
@@ -805,6 +818,19 @@ std::string PlayerLiquidSettingsError(
             || settings.exitTransitionDurationSeconds < 0.1f
             || settings.exitTransitionDurationSeconds > 2.0f) {
         return "exitTransitionDurationSeconds must be between 0.1 and 2";
+    }
+    if (!settings.audio.splashSoundPath.empty()
+            && !ValidAudioPath(settings.audio.splashSoundPath)) {
+        return "audio.splashSoundPath must be an empty or relative .ogg, .wav, or .mp3 path";
+    }
+    if (!settings.audio.swimLoopSoundPath.empty()
+            && !ValidAudioPath(settings.audio.swimLoopSoundPath)) {
+        return "audio.swimLoopSoundPath must be an empty or relative .ogg, .wav, or .mp3 path";
+    }
+    if (!finite(settings.audio.underwaterMuffling)
+            || settings.audio.underwaterMuffling < 0.0f
+            || settings.audio.underwaterMuffling > 1.0f) {
+        return "audio.underwaterMuffling must be between 0 and 1";
     }
     return {};
 }
@@ -2144,6 +2170,24 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             parsed.playerLiquids.exitTransitionDurationSeconds = OptionalNumber(
                     *playerLiquids, "exitTransitionDurationSeconds", liquidContext)
                     .value_or(parsed.playerLiquids.exitTransitionDurationSeconds);
+            const auto audio = playerLiquids->find("audio");
+            if (audio != playerLiquids->end()) {
+                const std::string audioContext = liquidContext + ".audio";
+                if (!audio->is_object()) {
+                    Fail(audioContext + " must be an object");
+                }
+                parsed.playerLiquids.audio.splashSoundPath =
+                        OptionalStringAllowEmpty(
+                                *audio, "splashSoundPath", audioContext)
+                                .value_or(parsed.playerLiquids.audio.splashSoundPath);
+                parsed.playerLiquids.audio.swimLoopSoundPath =
+                        OptionalStringAllowEmpty(
+                                *audio, "swimLoopSoundPath", audioContext)
+                                .value_or(parsed.playerLiquids.audio.swimLoopSoundPath);
+                parsed.playerLiquids.audio.underwaterMuffling = OptionalNumber(
+                        *audio, "underwaterMuffling", audioContext)
+                        .value_or(parsed.playerLiquids.audio.underwaterMuffling);
+            }
             const std::string liquidError = PlayerLiquidSettingsError(
                     parsed.playerLiquids);
             if (!liquidError.empty()) {
@@ -2586,7 +2630,14 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"maximumExitLedgeHeightWorld",
                     settings.playerLiquids.maximumExitLedgeHeightWorld},
             {"exitTransitionDurationSeconds",
-                    settings.playerLiquids.exitTransitionDurationSeconds}};
+                    settings.playerLiquids.exitTransitionDurationSeconds},
+            {"audio", {
+                    {"splashSoundPath",
+                            settings.playerLiquids.audio.splashSoundPath},
+                    {"swimLoopSoundPath",
+                            settings.playerLiquids.audio.swimLoopSoundPath},
+                    {"underwaterMuffling",
+                            settings.playerLiquids.audio.underwaterMuffling}}}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

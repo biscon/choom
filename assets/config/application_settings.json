@@ -157,10 +157,15 @@
     "drowningDamage": 10,
     "drowningDamageIntervalSeconds": 0.75,
     "entrySlowdownSeconds": 0.5,
-    "swimCollisionHeightWorld": 0.6,
+    "swimCollisionHeightWorld": 0.6000000238418579,
     "waterDragPerSecond": 3.0,
     "surfaceRecoveryFrequencyHz": 0.75,
     "maximumExitLedgeHeightWorld": 0.75,
-    "exitTransitionDurationSeconds": 0.75
+    "exitTransitionDurationSeconds": 0.75,
+    "audio": {
+      "splashSoundPath": "player/water_splash.wav",
+      "swimLoopSoundPath": "player/swimming_loop.ogg",
+      "underwaterMuffling": 0.75
+    }
   }
 }

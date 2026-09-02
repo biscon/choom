@@ -97,6 +97,7 @@ public:
     const engine::RenderTarget* HdrDebugPresentationSource() const;
     const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const;
     engine::ScenePresentationEffectParameters ScenePresentationEffects() const;
+    float UnderwaterAudioMuffling() const;
     float WorldFadeOpacity() const;
     void Render3DHud(
             const engine::World& world,

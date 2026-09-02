@@ -26,7 +26,43 @@ struct PlayerAudioRuntime {
     std::vector<PlayerSoundRuntimeEvent> events;
     engine::MusicHandle heavyBreathing = engine::NullMusicHandle();
     engine::SoundHandle heartbeat = engine::NullSoundHandle();
+    engine::SoundHandle liquidSplash = engine::NullSoundHandle();
+    engine::SoundHandle liquidSwimLoop = engine::NullSoundHandle();
 };
+
+struct PlayerLiquidAudioFrameState {
+    bool initialized = false;
+    bool wasSwimming = false;
+};
+
+struct PlayerLiquidAudioFrameDecision {
+    bool playSplash = false;
+    bool loopShouldExist = false;
+    bool loopShouldPlay = false;
+};
+
+struct PlayerLiquidAudioPlaybackState {
+    PlayerLiquidAudioFrameState frame;
+    engine::SoundPlaybackHandle swimLoopPlayback =
+            engine::NullSoundPlaybackHandle();
+};
+
+inline PlayerLiquidAudioFrameDecision AdvancePlayerLiquidAudioFrame(
+        PlayerLiquidAudioFrameState& state,
+        bool swimming,
+        bool exitingWater,
+        bool swimControlHeld)
+{
+    PlayerLiquidAudioFrameDecision result;
+    if (state.initialized && swimming != state.wasSwimming) {
+        result.playSplash = true;
+    }
+    state.initialized = true;
+    state.wasSwimming = swimming;
+    result.loopShouldExist = swimming && !exitingWater;
+    result.loopShouldPlay = result.loopShouldExist && swimControlHeld;
+    return result;
+}
 
 struct PlayerBreathingAudioRuntime {
     float volume = 0.0f;
@@ -43,7 +79,21 @@ struct PlayerHeartbeatAudioRuntime {
 void RequestPlayerAudioAssets(
         engine::AssetManager& assets,
         const PlayerSoundApplicationSettings& settings,
+        const PlayerLiquidAudioApplicationSettings& liquidSettings,
         PlayerAudioRuntime& runtime);
+
+void UpdatePlayerLiquidAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        const PlayerAudioRuntime& playerAudio,
+        PlayerLiquidAudioPlaybackState& state,
+        bool swimming,
+        bool exitingWater,
+        bool swimControlHeld);
+void StopPlayerLiquidAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        PlayerLiquidAudioPlaybackState& state);
 
 engine::SoundPlaybackHandle PlayPlayerSound(
         engine::AssetManager& assets,

@@ -679,6 +679,7 @@ private:
     ItemModelAssetState& itemModelAssets;
     FpsApplicationSettings& applicationSettings;
     PlayerAudioRuntime playerAudio;
+    PlayerLiquidAudioPlaybackState liquidAudio;
     std::string applicationSettingsPath;
     std::string weaponRegistryPath;
     std::string itemRegistryPath;

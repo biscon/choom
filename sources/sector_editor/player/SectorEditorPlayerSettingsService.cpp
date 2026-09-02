@@ -39,6 +39,15 @@ bool SameFootsteps(
                     == right.landingNoiseRadiusWorld;
 }
 
+bool SameLiquidAudio(
+        const PlayerLiquidAudioApplicationSettings& left,
+        const PlayerLiquidAudioApplicationSettings& right)
+{
+    return left.splashSoundPath == right.splashSoundPath
+            && left.swimLoopSoundPath == right.swimLoopSoundPath
+            && left.underwaterMuffling == right.underwaterMuffling;
+}
+
 void CopyEventIdToBuffer(SectorEditorPlayerSoundEventDraft& draft)
 {
     std::snprintf(
@@ -54,10 +63,12 @@ SectorEditorPlayerSettingsService::SectorEditorPlayerSettingsService(
         SectorEditorPlayerSettingsState& state,
         FpsApplicationSettings& settings,
         std::string& statusText,
+        SectorEditorAudioAssetPickerSessionState& audioPickerSession,
         std::filesystem::path settingsPath)
     : state_(state)
     , settings_(settings)
     , statusText_(statusText)
+    , audioPickerSession_(audioPickerSession)
     , settingsPath_(std::move(settingsPath))
 {
 }
@@ -66,6 +77,9 @@ void SectorEditorPlayerSettingsService::Open(
         engine::EngineContext& context,
         std::optional<SectorEditorPlayerSettingsTab> selectedTab)
 {
+    SectorEditorAudioAssetPickerService audioPicker{
+            context, audioPickerSession_};
+    audioPicker.Close(state_.liquidAudioPicker);
     StopAudioPreview(context);
     const SectorEditorPlayerSettingsTab activeTab = state_.activeTab;
     state_ = SectorEditorPlayerSettingsState{};
@@ -92,6 +106,9 @@ void SectorEditorPlayerSettingsService::Cancel(engine::EngineContext& context)
 {
     const SectorEditorPlayerSettingsTab activeTab = state_.activeTab;
     StopAudioPreview(context);
+    SectorEditorAudioAssetPickerService audioPicker{
+            context, audioPickerSession_};
+    audioPicker.Close(state_.liquidAudioPicker);
     state_ = SectorEditorPlayerSettingsState{};
     state_.activeTab = activeTab;
 }
@@ -99,6 +116,9 @@ void SectorEditorPlayerSettingsService::Cancel(engine::EngineContext& context)
 void SectorEditorPlayerSettingsService::Shutdown(engine::EngineContext& context)
 {
     StopAudioPreview(context);
+    SectorEditorAudioAssetPickerService audioPicker{
+            context, audioPickerSession_};
+    audioPicker.Close(state_.liquidAudioPicker);
     state_ = SectorEditorPlayerSettingsState{};
 }
 
@@ -139,7 +159,10 @@ SectorEditorPlayerSettingsService::SaveAndClose(engine::EngineContext& context)
 
     result.playerAudioChanged = !SamePlayerSounds(
             settings_.playerSounds,
-            candidate.playerSounds);
+            candidate.playerSounds)
+            || !SameLiquidAudio(
+                    settings_.playerLiquids.audio,
+                    candidate.playerLiquids.audio);
     result.footstepsChanged = !SameFootsteps(
             settings_.footsteps,
             candidate.footsteps);
@@ -216,6 +239,59 @@ void SectorEditorPlayerSettingsService::RemoveSoundEvent(size_t index)
     state_.errorMessage.clear();
 }
 
+void SectorEditorPlayerSettingsService::OpenLiquidAudioPicker(
+        engine::EngineContext& context,
+        SectorEditorPlayerLiquidAudioPickerTarget target)
+{
+    if (target == SectorEditorPlayerLiquidAudioPickerTarget::None) return;
+    SectorEditorAudioAssetPickerService picker{
+            context, audioPickerSession_};
+    const std::string& current =
+            target == SectorEditorPlayerLiquidAudioPickerTarget::Splash
+            ? state_.draft.playerLiquids.audio.splashSoundPath
+            : state_.draft.playerLiquids.audio.swimLoopSoundPath;
+    picker.Open(
+            state_.liquidAudioPicker,
+            target == SectorEditorPlayerLiquidAudioPickerTarget::Splash
+                    ? "Pick Liquid Splash Sound"
+                    : "Pick Swimming Loop Sound",
+            current,
+            SectorSoundType::Sound);
+    state_.liquidAudioPickerTarget = target;
+}
+
+SectorEditorAudioAssetPickerResult
+SectorEditorPlayerSettingsService::DrawLiquidAudioPicker(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::FontHandle font,
+        engine::EngineContext& context)
+{
+    SectorEditorAudioAssetPickerService picker{
+            context, audioPickerSession_};
+    const SectorEditorAudioAssetPickerResult result = picker.DrawModal(
+            ui, config, input, font, state_.liquidAudioPicker);
+    if (result == SectorEditorAudioAssetPickerResult::Selected) {
+        const std::string selected = picker.SelectedPath(
+                state_.liquidAudioPicker);
+        if (state_.liquidAudioPickerTarget
+                == SectorEditorPlayerLiquidAudioPickerTarget::Splash) {
+            state_.draft.playerLiquids.audio.splashSoundPath = selected;
+        } else if (state_.liquidAudioPickerTarget
+                == SectorEditorPlayerLiquidAudioPickerTarget::SwimLoop) {
+            state_.draft.playerLiquids.audio.swimLoopSoundPath = selected;
+        }
+        state_.errorMessage.clear();
+    }
+    if (result != SectorEditorAudioAssetPickerResult::None) {
+        picker.Close(state_.liquidAudioPicker);
+        state_.liquidAudioPickerTarget =
+                SectorEditorPlayerLiquidAudioPickerTarget::None;
+    }
+    return result;
+}
+
 void SectorEditorPlayerSettingsService::PreviewFootstepSet(
         engine::EngineContext& context)
 {
@@ -271,8 +347,10 @@ void SectorEditorPlayerSettingsService::UpdateAudioPreview(
         return;
     }
     if (!context.assets.IsReady(state_.audioPreview.sound)) return;
+    engine::SoundPlaybackSettings settings;
+    settings.affectedByListenerEffects = false;
     state_.audioPreview.playback = context.audio.PlaySound(
-            context.assets, state_.audioPreview.sound);
+            context.assets, state_.audioPreview.sound, settings);
     state_.audioPreview.pending = false;
     state_.audioPreview.message = engine::IsNull(
             state_.audioPreview.playback)

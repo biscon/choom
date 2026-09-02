@@ -101,12 +101,22 @@ views and maps to world Z for generated 3D geometry.
 - `3D Mode` (`Ctrl+D`, under `View`): rebuild the 3D preview from the current
   in-memory topology map, or return to 2D from preview mode.
 - `Settings -> Player`: open the application-wide Player Settings modal. Its
-  Stamina, Inventory, Audio, and Health tabs expose the player-specific values
-  stored in `assets/config/application_settings.json` that do not belong in the
-  end-user Graphics Settings screen. Apply validates and saves all player tabs;
+  Stamina, Inventory, Audio, Health, Sneaking, and Liquids tabs expose the
+  player-specific values stored in `assets/config/application_settings.json`
+  that do not belong in the end-user Graphics Settings screen. Apply validates
+  and saves all player tabs;
   Cancel leaves both the live settings and the JSON file unchanged. Audio sets
   are selected from the discovered footstep/player sound catalogs and can be
   previewed from the modal.
+- `Settings -> Liquids -> Audio` opens the Liquids tab directly and selects
+  application-wide entry/exit splash and swimming-loop files from
+  `assets/audio`. The loop pauses while the swimming player supplies no swim
+  input and resumes from the same playback
+  position when input resumes. `Underwater muffling` is a normalized listener
+  low-pass amount: `0` is dry/unfiltered and `1` is the strongest filtering.
+  The effect blends at camera-submersion transitions and combines with portal
+  sound filtering by using whichever low-pass cutoff is lower. Editor sound-file
+  previews opt out of listener effects.
 - `Copy config` / `Paste config` (`Ctrl+C` / `Ctrl+V`): copy and paste the
   selected compatible editor configuration. Disabled commands do not fire.
 

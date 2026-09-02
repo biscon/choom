@@ -88,6 +88,7 @@ bool GameApplication::Init(
     RequestPlayerAudioAssets(
             context.assets,
             applicationSettings.playerSounds,
+            applicationSettings.playerLiquids.audio,
             playerAudio);
     std::string materialError;
     if (!LoadSectorMaterialRegistry(
@@ -526,6 +527,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         RequestPlayerAudioAssets(
                 context.assets,
                 applicationSettings.playerSounds,
+                applicationSettings.playerLiquids.audio,
                 playerAudio);
     }
     if (editor.IsPreview3DActive()) {
@@ -741,6 +743,23 @@ GameApplication::ScenePresentationEffects() const
         result.underwaterFlowSpeedWorld = liquid.flowSpeedWorld;
     }
     return result;
+}
+
+float GameApplication::UnderwaterAudioMuffling() const
+{
+    const SectorLiquidMovementState* liquidState = nullptr;
+    if (BackgroundScreen() == ApplicationScreen::Game
+            && gameSession.IsRunning()) {
+        liquidState = &gameSession.LiquidMovementState();
+    } else if (BackgroundScreen() == ApplicationScreen::Editor
+            && editor.IsPreview3DActive()) {
+        liquidState = &editor.PreviewLiquidMovementState();
+    }
+    return liquidState != nullptr
+                    && liquidState->cameraSubmerged
+                    && liquidState->contact.hasLiquid
+            ? applicationSettings.playerLiquids.audio.underwaterMuffling
+            : 0.0f;
 }
 
 void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)

@@ -318,6 +318,7 @@ bool SectorEditor::Init(engine::EngineContext& context)
     RequestPlayerAudioAssets(
             context.assets,
             applicationSettings.playerSounds,
+            applicationSettings.playerLiquids.audio,
             playerAudio);
     sceneRuntime.SetItemRuntimeAssets(&itemRegistry, &itemModelAssets);
     ResetToBlankMap(context);
@@ -452,6 +453,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     triggerEditingService.reset();
     structuralPrimitiveEditingService.reset();
     playerAudio = PlayerAudioRuntime{};
+    liquidAudio = PlayerLiquidAudioPlaybackState{};
     canvasRect = {};
     statusText.clear();
     gameSessionExists = false;
@@ -3058,6 +3060,22 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     previousVisualEyeY,
                     dt,
                     &sceneRuntime.NpcNavigation().collisionCylinders);
+            if (engineContext != nullptr) {
+                const bool swimControlHeld = controllerInput.moveForward
+                        || controllerInput.moveBackward
+                        || controllerInput.strafeLeft
+                        || controllerInput.strafeRight
+                        || controllerInput.swimUp
+                        || controllerInput.swimDown;
+                UpdatePlayerLiquidAudio(
+                        engineContext->assets,
+                        engineContext->audio,
+                        playerAudio,
+                        liquidAudio,
+                        previewState.controller.liquidMovement.swimming,
+                        previewState.controller.liquidMovement.exitingWater,
+                        swimControlHeld);
+            }
             if (previewState.controller.frameEvents.footstep
                     && engineContext != nullptr) {
                 sceneRuntime.PlayFootstepForSector(
@@ -7499,9 +7517,14 @@ void SectorEditor::DrawPlayerSettingsModal(
             service);
     if (!result.saved) return;
     if (result.playerAudioChanged) {
+        StopPlayerLiquidAudio(
+                engineContext->assets,
+                engineContext->audio,
+                liquidAudio);
         RequestPlayerAudioAssets(
                 engineContext->assets,
                 applicationSettings.playerSounds,
+                applicationSettings.playerLiquids.audio,
                 playerAudio);
         playerAudioSettingsChanged = true;
     }
@@ -8145,6 +8168,10 @@ void SectorEditor::LeavePreview3D()
     previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
     if (engineContext != nullptr) {
+        StopPlayerLiquidAudio(
+                engineContext->assets,
+                engineContext->audio,
+                liquidAudio);
         engineContext->audio.StopAll(engineContext->assets);
         sceneRuntime.StopLevelAudio(*engineContext);
         EndFpsViewmodel(engineContext->assets);
@@ -8188,6 +8215,13 @@ void SectorEditor::TogglePreviewControlMode()
                 sceneRuntime.RuntimeObjects().physicalModelColliders,
                 sceneRuntime.Renderer())) {
         return;
+    }
+
+    if (engineContext != nullptr) {
+        StopPlayerLiquidAudio(
+                engineContext->assets,
+                engineContext->audio,
+                liquidAudio);
     }
 
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(previewState.controller.previewControlMode));
@@ -8778,6 +8812,7 @@ SectorEditorPlayerSettingsService SectorEditor::BuildPlayerSettingsService()
             playerSettingsState,
             applicationSettings,
             statusText,
+            audioAssetPickerSessionState,
             applicationSettingsPath};
 }
 

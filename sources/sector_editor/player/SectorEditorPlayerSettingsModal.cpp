@@ -40,6 +40,11 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
 {
     SectorEditorPlayerSettingsState& state = service.State();
     if (!state.open) return {};
+    if (state.liquidAudioPicker.open) {
+        service.DrawLiquidAudioPicker(
+                ui, config, input, font, engineContext);
+        return {};
+    }
     service.UpdateAudioPreview(engineContext);
 
     bool cancelRequested = false;
@@ -129,7 +134,7 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             break;
         case SectorEditorPlayerSettingsTab::Liquids:
             scrollState = &state.liquidsScroll;
-            contentHeight = 360.0f;
+            contentHeight = 860.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -291,6 +296,61 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         drawFloat("player_liquids_exit_duration", "Exit duration (seconds)",
                 liquids.exitTransitionDurationSeconds,
                 state.exitTransitionDurationInput, 0.1f, 2.0f, 2);
+        section("Audio");
+        const auto drawSoundPath = [&] (
+                const char* idPrefix,
+                const char* label,
+                std::string& path,
+                SectorEditorPlayerLiquidAudioPickerTarget target) {
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{0.0f, y, LabelWidth, RowHeight},
+                    smallFont, label,
+                    engine::UITextJustify::Left,
+                    config.textColor);
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{fieldX, y, 370.0f, RowHeight},
+                    smallFont,
+                    path.empty() ? "<None>" : path.c_str(),
+                    engine::UITextJustify::Left,
+                    path.empty() ? config.mutedTextColor : config.textColor,
+                    true);
+            if (engine::Button(
+                        ui, config, input, assets,
+                        TextFormat("%s_pick", idPrefix),
+                        Rectangle{fieldX + 386.0f, y, 112.0f, RowHeight},
+                        smallFont, "Pick")) {
+                service.OpenLiquidAudioPicker(engineContext, target);
+            }
+            if (engine::Button(
+                        ui, config, input, assets,
+                        TextFormat("%s_clear", idPrefix),
+                        Rectangle{fieldX + 510.0f, y, 112.0f, RowHeight},
+                        smallFont, "Clear")) {
+                path.clear();
+                state.errorMessage.clear();
+            }
+            y += RowHeight + RowGap;
+        };
+        drawSoundPath(
+                "player_liquids_splash_sound",
+                "Entry / exit splash",
+                liquids.audio.splashSoundPath,
+                SectorEditorPlayerLiquidAudioPickerTarget::Splash);
+        drawSoundPath(
+                "player_liquids_swim_loop",
+                "Swimming loop",
+                liquids.audio.swimLoopSoundPath,
+                SectorEditorPlayerLiquidAudioPickerTarget::SwimLoop);
+        drawFloat(
+                "player_liquids_underwater_muffling",
+                "Underwater muffling (0-1)",
+                liquids.audio.underwaterMuffling,
+                state.underwaterMufflingInput,
+                0.0f,
+                1.0f,
+                2);
     } else if (state.activeTab == SectorEditorPlayerSettingsTab::Audio) {
         FootstepApplicationSettings& footsteps = state.draft.footsteps;
         section("Footsteps and movement noise");
