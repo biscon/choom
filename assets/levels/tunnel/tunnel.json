@@ -2,7 +2,42 @@
   "formatVersion": 4,
   "topology": "authoringGraph",
   "coordSubdivisions": 16,
-  "staticLights": [],
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        8.0,
+        38.73739242553711,
+        88.0
+      ],
+      "radius": 84.0,
+      "sourceRadius": 2.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    },
+    {
+      "id": 2,
+      "position": [
+        16.0,
+        30.0,
+        8.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "staticSpotLights": [],
   "staticRectLights": [],
   "dynamicPointLights": [
@@ -10,9 +45,9 @@
       "id": 1,
       "instanceId": "light_point_1",
       "position": [
-        0.0,
-        14.399999618530273,
-        -0.0
+        7.685684680938721,
+        40.405181884765625,
+        -56.21576690673828
       ],
       "radius": 100.0,
       "intensity": 3.0,
@@ -71,7 +106,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "0bf4dc780116b7ec",
+    "sourceHash": "c9d72c830246aa95",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -79,19 +114,19 @@
         0.0
       ],
       "rgbMax": [
-        0.0,
-        0.0,
-        0.0
+        1.109375,
+        1.109375,
+        1.109375
       ],
       "auxiliaryMin": 0.50244140625,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 0
+      "rgbChannelsAboveOne": 564
     },
     "objectProbes": {
       "path": "assets/levels/tunnel/tunnel.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "0bf4dc780116b7ec",
+      "sourceHash": "c9d72c830246aa95",
       "count": 24,
       "probeSpacingWorld": 4.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -99,14 +134,14 @@
       "format": "layeredAmbientCubeLinearHdrF32LE",
       "storedStatistics": {
         "rgbMin": [
-          0.4000000059604645,
-          0.4000000059604645,
-          0.4000000059604645
+          0.05000000074505806,
+          0.05000000074505806,
+          0.05000000074505806
         ],
         "rgbMax": [
-          0.4000000059604645,
-          0.4000000059604645,
-          0.4000000059604645
+          0.40495389699935913,
+          0.40495389699935913,
+          0.40495389699935913
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
@@ -114,6 +149,12 @@
         "rgbChannelsAboveOne": 0
       }
     }
+  },
+  "bakedReflectionProbes": {
+    "path": "assets/levels/tunnel/tunnel.reflection-probes.bin",
+    "version": 1,
+    "count": 1,
+    "format": "rgba16f-cubemap-mips"
   },
   "authoringGraph": {
     "vertices": [
@@ -556,7 +597,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "dirty_gray_concrete_wall_512",
           "uv": {
@@ -595,6 +636,37 @@
               0.0
             ]
           }
+        },
+        "liquid": {
+          "enabled": true,
+          "surfaceOffset": 20.0,
+          "shallowColor": {
+            "r": 112,
+            "g": 110,
+            "b": 73,
+            "a": 255
+          },
+          "deepColor": {
+            "r": 35,
+            "g": 31,
+            "b": 18,
+            "a": 255
+          },
+          "foamColor": {
+            "r": 183,
+            "g": 176,
+            "b": 137,
+            "a": 255
+          },
+          "visibilityDepthWorld": 1.7999999523162842,
+          "roughness": 0.20000000298023224,
+          "refractionStrength": 0.017999999225139618,
+          "rippleScaleWorld": 1.2000000476837158,
+          "rippleStrength": 0.44999998807907104,
+          "rippleSpeed": 0.550000011920929,
+          "flowDirectionDegrees": 90.0,
+          "flowSpeedWorld": 0.25,
+          "foamAmount": 0.0
         }
       },
       {
@@ -632,7 +704,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "dirty_gray_concrete_wall_512",
           "uv": {
@@ -708,7 +780,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "dirty_gray_concrete_wall_512",
           "uv": {
@@ -784,7 +856,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -860,7 +932,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -900,6 +972,19 @@
             ]
           }
         }
+      }
+    ],
+    "reflectionProbes": [
+      {
+        "id": 1,
+        "x": 128,
+        "z": 0,
+        "yWorld": 2.5,
+        "halfExtentsWorld": [
+          7.0,
+          5.0,
+          16.0
+        ]
       }
     ],
     "structuralPrimitives": [

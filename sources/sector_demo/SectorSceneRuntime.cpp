@@ -1161,13 +1161,13 @@ void SectorSceneRuntime::ApplyWorldAtmosphere(
             collectGpuDiagnostics);
 }
 
-void SectorSceneRuntime::ApplyGlass(
+void SectorSceneRuntime::ApplyTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::EngineContext& context,
         const SectorTopologyMap& map,
         bool collectGpuDiagnostics)
 {
-    renderer.ApplyGlass(
+    renderer.ApplyTransparentSurfaces(
             sceneTarget,
             context.assets,
             &context.world,

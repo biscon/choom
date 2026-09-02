@@ -99,7 +99,7 @@ public:
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
             bool collectGpuDiagnostics = false);
-    void ApplyGlass(
+    void ApplyTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::EngineContext& context,
             const SectorTopologyMap& map,

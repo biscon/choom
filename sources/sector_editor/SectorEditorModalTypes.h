@@ -16,6 +16,7 @@
 #include <raylib.h>
 
 #include <functional>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,15 @@ struct SectorEditorColorSettingsModalState {
     bool open = false;
     engine::ToneMappingSettings draft;
     engine::UIFloatInputState exposureInput;
+    std::string errorMessage;
+};
+
+struct SectorEditorLiquidSettingsModalState {
+    bool open = false;
+    int faceAnchorId = -1;
+    SectorLiquidSettings draft;
+    std::array<engine::UIFloatInputState, 10> floatInputs{};
+    std::array<engine::UIIntInputState, 9> colorInputs{};
     std::string errorMessage;
 };
 

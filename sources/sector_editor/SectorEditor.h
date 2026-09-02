@@ -126,7 +126,7 @@ public:
     void ApplyPreview3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             bool collectGpuDiagnostics = false);
-    void ApplyPreview3DGlass(
+    void ApplyPreview3DTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::EngineContext& context,
             bool collectGpuDiagnostics = false);
@@ -393,6 +393,13 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
+    void DrawLiquidSettingsModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawPlayerSettingsModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -487,6 +494,7 @@ private:
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void OpenColorSettingsModal();
     void ApplyColorSettingsModal();
+    void ApplyLiquidSettingsModal();
     void OpenDoorTextureSettingsModal();
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();

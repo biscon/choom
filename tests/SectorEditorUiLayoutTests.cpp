@@ -579,8 +579,8 @@ void TestAuthoringFaceInspectorHeightIncludesAllSections()
                     rowH,
                     gap,
                     anchorSummaryHeight);
-    Check(Near(height, 1626.0f),
-          "authoring face height includes roomtone, merge, ceiling sky, audio, materials, decals, and padding");
+    Check(Near(height, 1766.0f),
+          "authoring face height includes liquid, roomtone, merge, ceiling sky, audio, materials, decals, and padding");
 
     anchor.roomtone.fadeMilliseconds = 500;
     const float overriddenFadeHeight =

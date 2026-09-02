@@ -18,6 +18,7 @@
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLightDustRenderer.h"
 #include "sector_demo/renderer/SectorLightProxyRenderer.h"
+#include "sector_demo/renderer/SectorLiquidRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -125,14 +126,13 @@ public:
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
             bool collectGpuDiagnostics = false);
-    bool ApplyGlass(
+    bool ApplyTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::AssetManager& assets,
             engine::World* runtimeObjectWorld,
             SectorRuntimeDoorLightingContext doorLighting,
             const SectorTopologyFogSettings& fogSettings,
-            bool collectGpuDiagnostics = false,
-            bool requestRefraction = false);
+            bool collectGpuDiagnostics = false);
     bool ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
@@ -257,6 +257,8 @@ public:
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
     size_t WindowConsideredCount() const { return windowRenderer.ConsideredCount(); }
     size_t WindowDrawnCount() const { return windowRenderer.DrawnCount(); }
+    size_t LiquidSurfaceCount() const { return liquidRenderer.SurfaceCount(); }
+    size_t LiquidDrawnCount() const { return liquidRenderer.DrawnCount(); }
     SectorPbrContributionSettings PbrContributionSettings() const
     {
         return pbrContributionSettings;
@@ -426,7 +428,7 @@ private:
     int shadowSoftnessLoc = -1;
     int shadowAtlasTilesPerRowLoc = -1;
     bool depthPrepassEnabled = false;
-    bool glassRefractionFallbackLogged = false;
+    bool liquidRefractionFallbackLogged = false;
     bool atmosphereGpuFramePrepared = false;
     bool preGlassLightEffectsRendered = false;
     bool preGlassShaftApplied = false;
@@ -477,6 +479,7 @@ private:
     SectorPbrContributionSettings pbrContributionSettings;
     SectorDoorRenderer doorRenderer;
     SectorWindowRenderer windowRenderer;
+    SectorLiquidRenderer liquidRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;

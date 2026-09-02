@@ -13395,6 +13395,14 @@ void TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor()
     source.defaultWall.decal.materialId = "wall_decal";
     source.defaultLower.materialId = "lower_a";
     source.defaultUpper.materialId = "upper_a";
+    source.liquid.enabled = true;
+    source.liquid.surfaceReference = game::SectorLiquidSurfaceReference::Ceiling;
+    source.liquid.surfaceOffset = 5.0f;
+    source.liquid.shallowColor = Color{20, 90, 120, 255};
+    source.liquid.deepColor = Color{3, 15, 22, 255};
+    source.liquid.flowDirectionDegrees = 225.0f;
+    source.liquid.flowSpeedWorld = 1.5f;
+    source.liquid.foamAmount = 0.7f;
 
     game::SectorAuthoringFaceAnchor destination;
     destination.id = 99;
@@ -13432,6 +13440,15 @@ void TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor()
                   && destination.defaultLower.materialId == "lower_a"
                   && destination.defaultUpper.materialId == "upper_a",
           "sector config application copies default wall configuration");
+    Check(destination.liquid.enabled
+                  && destination.liquid.surfaceReference
+                          == game::SectorLiquidSurfaceReference::Ceiling
+                  && Near(destination.liquid.surfaceOffset, 5.0f)
+                  && destination.liquid.shallowColor.g == 90
+                  && Near(destination.liquid.flowDirectionDegrees, 225.0f)
+                  && Near(destination.liquid.flowSpeedWorld, 1.5f)
+                  && Near(destination.liquid.foamAmount, 0.7f),
+          "sector config application copies complete liquid settings");
     Check(!game::ApplySectorEditorSectorConfig(destination, source),
           "applying identical sector config is a no-op");
 }

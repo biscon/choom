@@ -634,16 +634,16 @@ void GameApplication::Render3DViewmodel(engine::AssetManager& assets)
     }
 }
 
-void GameApplication::Apply3DGlass(
+void GameApplication::Apply3DTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::EngineContext& context,
         bool collectGpuDiagnostics)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameScene.ApplyGlass(
+        gameScene.ApplyTransparentSurfaces(
                 sceneTarget, context, gameSession.Map(), collectGpuDiagnostics);
     } else {
-        editor.ApplyPreview3DGlass(
+        editor.ApplyPreview3DTransparentSurfaces(
                 sceneTarget, context, collectGpuDiagnostics);
     }
 }

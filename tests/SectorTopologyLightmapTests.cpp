@@ -1955,6 +1955,16 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
           "hash ignores NPC-to-NPC collision policy");
 
+    game::SectorTopologyMap changedLiquid = base;
+    changedLiquid.sectors[0].liquid.enabled = true;
+    changedLiquid.sectors[0].liquid.surfaceOffset = 8.0f;
+    changedLiquid.sectors[0].liquid.deepColor = Color{3, 30, 18, 255};
+    changedLiquid.sectors[0].liquid.visibilityDepthWorld = 0.7f;
+    changedLiquid.sectors[0].liquid.flowDirectionDegrees = 123.0f;
+    changedLiquid.sectors[0].liquid.flowSpeedWorld = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedLiquid) == hash,
+          "hash ignores visual-only liquid volume and appearance settings");
+
     game::SectorTopologyMap changedAudio = base;
     changedAudio.audioSettings.roomtoneFadeMilliseconds = 1750;
     changedAudio.audioSettings.soundsById.emplace(

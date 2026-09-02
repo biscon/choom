@@ -4,6 +4,7 @@
 #include "engine/render/ColorTransfer.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorColorSettingsModal.h"
+#include "sector_editor/SectorEditorLiquidSettingsModal.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
@@ -922,6 +923,12 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
+        if (state.liquidSettingsModal.open) {
+            DrawLiquidSettingsModal(ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         if (playerSettingsState.open) {
             DrawPlayerSettingsModal(
                     ui, config, input, assets, font, smallFont);
@@ -999,7 +1006,8 @@ void SectorEditor::RenderUI(
                 && !runtimeObjectEditingState.staticModelPicker.open
                 && !state.decalTintModal.open
                 && !state.doorTextureSettingsModal.open
-                && !state.previewSettingsModal.open) {
+                && !state.previewSettingsModal.open
+                && !state.liquidSettingsModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
         }
         if (state.decalTintModal.open) {
@@ -1025,7 +1033,8 @@ void SectorEditor::RenderUI(
                 || runtimeObjectEditingState.staticModelPicker.open
                 || state.decalTintModal.open
                 || state.doorTextureSettingsModal.open
-                || state.previewSettingsModal.open) {
+                || state.previewSettingsModal.open
+                || state.liquidSettingsModal.open) {
             uiState.keyboardCaptured = true;
         }
         engine::EndUI(ui, config, input, assets);
@@ -1047,6 +1056,12 @@ void SectorEditor::RenderUI(
     if (state.colorSettingsModal.open) {
         DrawColorSettingsModal(
                 ui, config, input, assets, font, smallFont);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.liquidSettingsModal.open) {
+        DrawLiquidSettingsModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -4840,13 +4855,13 @@ void SectorEditor::ApplyPreview3DWorldAtmosphere(
             collectGpuDiagnostics);
 }
 
-void SectorEditor::ApplyPreview3DGlass(
+void SectorEditor::ApplyPreview3DTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::EngineContext& context,
         bool collectGpuDiagnostics)
 {
     if (state.mode != SectorEditorMode::Preview3D) return;
-    sceneRuntime.ApplyGlass(
+    sceneRuntime.ApplyTransparentSurfaces(
             sceneTarget, context, TopologyMap(), collectGpuDiagnostics);
 }
 
@@ -6610,6 +6625,19 @@ void SectorEditor::DrawSectorsPanel(
                 RefreshPreviewSurfaceMaterials(*engineContext);
             }
             break;
+        case SectorEditorInspectorPanelRequestKind::RefreshPreviewSurfaceGeometry:
+            if (state.mode == SectorEditorMode::Preview3D
+                    && sceneRuntime.Renderer().IsRendererReady()
+                    && engineContext != nullptr) {
+                std::string refreshError;
+                if (!RefreshPreviewSurfaceGeometry(TopologyMap(), &refreshError)) {
+                    TraceLog(LOG_WARNING,
+                            "Liquid preview refresh failed: %s",
+                            refreshError.empty() ? "unknown error" : refreshError.c_str());
+                    RebuildPreviewMeshesPreservingView(*engineContext);
+                }
+            }
+            break;
         case SectorEditorInspectorPanelRequestKind::BeginAuthoringInsertVertex:
             BeginPendingAuthoringInsertVertex(request.lineId);
             break;
@@ -7389,6 +7417,35 @@ void SectorEditor::DrawColorSettingsModal(
     }
 }
 
+void SectorEditor::DrawLiquidSettingsModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    const SectorEditorLiquidSettingsModalAction action =
+            DrawSectorEditorLiquidSettingsModal(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    smallFont,
+                    state.liquidSettingsModal);
+    switch (action) {
+        case SectorEditorLiquidSettingsModalAction::Cancel:
+            state.liquidSettingsModal = {};
+            break;
+        case SectorEditorLiquidSettingsModalAction::Apply:
+            ApplyLiquidSettingsModal();
+            break;
+        case SectorEditorLiquidSettingsModalAction::None:
+            break;
+    }
+}
+
 void SectorEditor::DrawPlayerSettingsModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -7922,6 +7979,7 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.lightmapBakeSetupModal.open
             || state.previewSettingsModal.open
             || state.colorSettingsModal.open
+            || state.liquidSettingsModal.open
             || playerSettingsState.open;
 }
 
@@ -8459,6 +8517,62 @@ void SectorEditor::ApplyColorSettingsModal()
     applicationSettings = std::move(candidate);
     statusText = "Color settings saved";
     state.colorSettingsModal = {};
+}
+
+void SectorEditor::ApplyLiquidSettingsModal()
+{
+    if (!state.liquidSettingsModal.open) return;
+    SectorAuthoringFaceAnchor* anchor = FindSectorAuthoringFaceAnchor(
+            AuthoringGraph(), state.liquidSettingsModal.faceAnchorId);
+    if (anchor == nullptr) {
+        state.liquidSettingsModal.errorMessage =
+                "The edited authoring face no longer exists";
+        return;
+    }
+    if (!std::isfinite(anchor->floorZ)
+            || !std::isfinite(anchor->ceilingZ)
+            || anchor->ceilingZ <= anchor->floorZ) {
+        state.liquidSettingsModal.errorMessage =
+                "The sector must have a valid positive height";
+        return;
+    }
+
+    SectorLiquidSettings liquid = NormalizeSectorLiquidSettingsForSpan(
+            state.liquidSettingsModal.draft,
+            anchor->floorZ,
+            anchor->ceilingZ);
+    liquid.enabled = true;
+    const int faceAnchorId = anchor->id;
+    const bool changed = MutateSectorEditorAuthoringFaceAnchorById(
+            state,
+            Lifecycle(),
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveDerivationAccess(documentState.derivation),
+            faceAnchorId,
+            "Updated sector liquid",
+            [liquid](SectorAuthoringFaceAnchor& target) {
+                target.liquid = liquid;
+                return true;
+            });
+    if (!changed) {
+        state.liquidSettingsModal.errorMessage =
+                "Could not update the liquid settings";
+        return;
+    }
+
+    state.liquidSettingsModal = {};
+    if (state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        std::string refreshError;
+        if (!RefreshPreviewSurfaceGeometry(TopologyMap(), &refreshError)) {
+            TraceLog(LOG_WARNING, "Liquid preview refresh failed: %s",
+                    refreshError.empty() ? "unknown error" : refreshError.c_str());
+            if (engineContext != nullptr) {
+                RebuildPreviewMeshesPreservingView(*engineContext);
+            }
+        }
+    }
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)

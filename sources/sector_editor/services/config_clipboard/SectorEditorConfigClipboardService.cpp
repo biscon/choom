@@ -65,6 +65,7 @@ bool SameSectorConfig(
             && a.roomtone.soundId == b.roomtone.soundId
             && a.roomtone.volume == b.roomtone.volume
             && a.roomtone.fadeMilliseconds == b.roomtone.fadeMilliseconds
+            && AreSectorLiquidSettingsEqual(a.liquid, b.liquid)
             && SameUv(a.floorUv, b.floorUv)
             && SameUv(a.ceilingUv, b.ceilingUv)
             && SameDecal(a.floorDecal, b.floorDecal)
@@ -237,6 +238,8 @@ bool ApplySectorEditorSectorConfig(
     candidate.name = destination.name;
     candidate.x = destination.x;
     candidate.y = destination.y;
+    candidate.liquid = NormalizeSectorLiquidSettingsForSpan(
+            candidate.liquid, candidate.floorZ, candidate.ceilingZ);
     if (SameSectorConfig(destination, candidate)) {
         return false;
     }

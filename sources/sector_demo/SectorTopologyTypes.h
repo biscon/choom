@@ -6,6 +6,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -17,6 +18,97 @@ enum class SectorRoomtoneMode {
     Play,
     Silence
 };
+
+enum class SectorLiquidSurfaceReference {
+    Floor,
+    Ceiling
+};
+
+// Liquid appearance is procedural. Distances and speeds use runtime/world units,
+// while surfaceOffset uses the sector editor's authored height units.
+struct SectorLiquidSettings {
+    bool enabled = false;
+    SectorLiquidSurfaceReference surfaceReference = SectorLiquidSurfaceReference::Floor;
+    float surfaceOffset = 0.0f;
+    Color shallowColor = Color{49, 126, 142, 255};
+    Color deepColor = Color{8, 38, 54, 255};
+    Color foamColor = Color{210, 229, 223, 255};
+    float visibilityDepthWorld = 4.0f;
+    float roughness = 0.12f;
+    float refractionStrength = 0.025f;
+    float rippleScaleWorld = 0.9f;
+    float rippleStrength = 0.22f;
+    float rippleSpeed = 0.35f;
+    float flowDirectionDegrees = 0.0f;
+    float flowSpeedWorld = 0.0f;
+    float foamAmount = 0.35f;
+};
+
+constexpr float SectorLiquidMinVisibilityDepthWorld = 0.05f;
+constexpr float SectorLiquidMaxVisibilityDepthWorld = 128.0f;
+constexpr float SectorLiquidMinRippleScaleWorld = 0.05f;
+constexpr float SectorLiquidMaxRippleScaleWorld = 64.0f;
+constexpr float SectorLiquidMaxRefractionStrength = 0.25f;
+constexpr float SectorLiquidMaxRippleStrength = 2.0f;
+constexpr float SectorLiquidMaxRippleSpeed = 10.0f;
+constexpr float SectorLiquidMaxFlowSpeedWorld = 32.0f;
+
+inline bool AreSectorLiquidSettingsEqual(
+        const SectorLiquidSettings& a,
+        const SectorLiquidSettings& b)
+{
+    const auto sameColor = [](Color left, Color right) {
+        return left.r == right.r && left.g == right.g
+                && left.b == right.b && left.a == right.a;
+    };
+    return a.enabled == b.enabled
+            && a.surfaceReference == b.surfaceReference
+            && a.surfaceOffset == b.surfaceOffset
+            && sameColor(a.shallowColor, b.shallowColor)
+            && sameColor(a.deepColor, b.deepColor)
+            && sameColor(a.foamColor, b.foamColor)
+            && a.visibilityDepthWorld == b.visibilityDepthWorld
+            && a.roughness == b.roughness
+            && a.refractionStrength == b.refractionStrength
+            && a.rippleScaleWorld == b.rippleScaleWorld
+            && a.rippleStrength == b.rippleStrength
+            && a.rippleSpeed == b.rippleSpeed
+            && a.flowDirectionDegrees == b.flowDirectionDegrees
+            && a.flowSpeedWorld == b.flowSpeedWorld
+            && a.foamAmount == b.foamAmount;
+}
+
+inline bool IsDefaultSectorLiquidSettings(const SectorLiquidSettings& settings)
+{
+    return AreSectorLiquidSettingsEqual(settings, SectorLiquidSettings{});
+}
+
+inline float ResolveSectorLiquidSurfaceHeight(
+        const SectorLiquidSettings& liquid,
+        float floorZ,
+        float ceilingZ)
+{
+    return liquid.surfaceReference == SectorLiquidSurfaceReference::Ceiling
+            ? ceilingZ - liquid.surfaceOffset
+            : floorZ + liquid.surfaceOffset;
+}
+
+inline SectorLiquidSettings NormalizeSectorLiquidSettingsForSpan(
+        SectorLiquidSettings liquid,
+        float floorZ,
+        float ceilingZ)
+{
+    const float span = std::max(0.0f, ceilingZ - floorZ);
+    liquid.surfaceOffset = std::clamp(
+            std::isfinite(liquid.surfaceOffset) ? liquid.surfaceOffset : 0.0f,
+            0.0f,
+            span);
+    liquid.flowDirectionDegrees = std::isfinite(liquid.flowDirectionDegrees)
+            ? std::fmod(liquid.flowDirectionDegrees, 360.0f)
+            : 0.0f;
+    if (liquid.flowDirectionDegrees < 0.0f) liquid.flowDirectionDegrees += 360.0f;
+    return liquid;
+}
 
 struct SectorRoomtoneSettings {
     static constexpr float DefaultVolume = 0.6f;
@@ -176,6 +268,7 @@ struct SectorTopologySector {
     std::string footstepSet;
     bool ceilingSky = false;
     SectorRoomtoneSettings roomtone;
+    SectorLiquidSettings liquid;
 
     SectorTopologyUvSettings floorUv;
     SectorTopologyUvSettings ceilingUv;

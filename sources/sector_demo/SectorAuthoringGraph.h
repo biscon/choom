@@ -57,6 +57,7 @@ struct SectorAuthoringFaceAnchor {
     std::string footstepSet;
     bool ceilingSky = false;
     SectorRoomtoneSettings roomtone;
+    SectorLiquidSettings liquid;
 
     SectorTopologyUvSettings floorUv;
     SectorTopologyUvSettings ceilingUv;

@@ -1308,6 +1308,9 @@ bool SectorMeshRenderer::RefreshSurfaceGeometryInternal(
         }
     }
 
+    if (!liquidRenderer.Rebuild(map, candidateGeometry, error)) {
+        return false;
+    }
     UnloadSectorMeshes(meshes);
     meshes = std::move(candidateMeshes);
     generatedGeometry = std::move(candidateGeometry);
@@ -1627,6 +1630,18 @@ bool SectorMeshRenderer::RebuildRendererResources(
         error = "Preview failed: could not load window transparency shader";
         return false;
     }
+    if (!liquidRenderer.Initialize(map.sectors.size())) {
+        Shutdown(assets);
+        error = "Preview failed: could not load liquid transparency shader";
+        return false;
+    }
+    if (!liquidRenderer.Rebuild(map, generatedGeometry, error)) {
+        Shutdown(assets);
+        error = error.empty()
+                ? "Preview failed: could not build liquid surfaces"
+                : "Preview failed: " + error;
+        return false;
+    }
 
     if (!LoadPreviewMaterial(
                 material,
@@ -1773,6 +1788,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
             && !doorRenderer.HasOpaqueResources()
             && !doorRenderer.HasCachedDoorMeshes()
             && !windowRenderer.IsLoaded()
+            && !liquidRenderer.IsLoaded()
             && !dynamicLightState.HasShadowMapResources()
             && !dynamicLightState.HasShadowMaterial()
             && !dynamicModelShadowRenderer.IsLoaded()
@@ -1798,7 +1814,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     skyRenderer.Shutdown();
     pbrEnvironment = {};
     localReflectionProbesCurrent = true;
-    glassRefractionFallbackLogged = false;
+    liquidRefractionFallbackLogged = false;
     atmosphereGpuFramePrepared = false;
     preGlassLightEffectsRendered = false;
     preGlassShaftApplied = false;
@@ -1847,6 +1863,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     staticModelRenderer.Shutdown();
     doorRenderer.ShutdownOpaqueResources();
     windowRenderer.Shutdown();
+    liquidRenderer.Shutdown();
 
     if (!engine::IsNull(assetScope)) {
         assets.UnloadScope(assetScope);
@@ -2821,33 +2838,33 @@ void SectorMeshRenderer::RefreshAtmosphereDiagnostics(
             lightDustRenderer.VisibleParticleCount();
 }
 
-bool SectorMeshRenderer::ApplyGlass(
+bool SectorMeshRenderer::ApplyTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld,
         SectorRuntimeDoorLightingContext doorLighting,
         const SectorTopologyFogSettings& fogSettings,
-        bool collectGpuDiagnostics,
-        bool requestRefraction)
+        bool collectGpuDiagnostics)
 {
     preGlassLightEffectsRendered = false;
     preGlassShaftApplied = false;
     preGlassHaloApplied = false;
-    if (!initialized || runtimeObjectWorld == nullptr) {
-        return false;
-    }
+    if (!initialized) return false;
 
     // Halo and shaft GPU timings remain part of the atmosphere diagnostics even
     // though these two effects are composited before transparent windows.
     BeginAtmosphereGpuFrame(collectGpuDiagnostics);
     atmosphereGpuFramePrepared = true;
 
-    const bool visibleWindows = windowRenderer.HasVisibleWindows(
-            *runtimeObjectWorld, &visibilityResult);
+    const bool visibleWindows = runtimeObjectWorld != nullptr
+            && windowRenderer.HasVisibleWindows(*runtimeObjectWorld, &visibilityResult);
+    const bool visibleLiquids = liquidRenderer.HasVisibleLiquids(
+            &visibilityResult, camera.position);
     const SectorTopologyMap* map = doorLighting.mapForFallback;
     const SectorBillboardDynamicLightContext lightContext =
             BuildBillboardDynamicLightContext();
-    const bool canRenderPreGlassEffects = visibleWindows && map != nullptr
+    const bool canRenderPreGlassEffects = (visibleWindows || visibleLiquids)
+            && map != nullptr
             && sceneTarget.descriptor.colorFormat
                     == engine::RenderTargetColorFormat::Rgba16Float
             && sceneTarget.actual.depth
@@ -2878,14 +2895,12 @@ bool SectorMeshRenderer::ApplyGlass(
         preGlassLightEffectsRendered = true;
     }
 
-    if (!visibleWindows) {
-        renderDebugText += " | glass: idle";
+    if (!visibleWindows && !visibleLiquids) {
+        renderDebugText += " | transparents: idle";
         return preGlassShaftApplied || preGlassHaloApplied;
     }
 
-    // Refraction remains available to future non-window transparent materials,
-    // but portal windows deliberately never request the scene-color snapshot.
-    bool refractionReady = requestRefraction
+    bool refractionReady = visibleLiquids
             && sceneTarget.actual.depth
                     == engine::RenderTargetDepthKind::SampleableTexture
             && sceneTarget.native.depth.id != 0
@@ -2906,42 +2921,67 @@ bool SectorMeshRenderer::ApplyGlass(
     }
     const SectorFogRenderContext fogContext =
             BuildSectorFogRenderContext(materialFogSettings, camera.position);
-    BeginTextureMode(refractionReady
-            ? hdrSceneColorView : sceneTarget.native);
-    BeginMode3D(camera);
-    SectorWindowDrawContext windowContext;
-    windowContext.assets = &assets;
-    windowContext.world = runtimeObjectWorld;
-    windowContext.camera = camera;
-    windowContext.visibility = &visibilityResult;
-    windowContext.environment = &pbrEnvironment;
-    windowContext.localReflectionProbesCurrent = localReflectionProbesCurrent;
-    windowContext.pbr = pbrContributionSettings;
-    if (map != nullptr) windowContext.directionalLight = map->directionalLight;
-    windowContext.fog = fogContext;
-    windowContext.advancedTransmission = refractionReady;
-    windowContext.sceneColor = refractionReady
-            ? &hdrSceneScratch.native.texture : nullptr;
-    windowContext.sceneDepth = refractionReady
-            ? &sceneTarget.native.depth : nullptr;
-    windowContext.viewportSize = Vector2{
+    const Vector2 viewportSize{
             static_cast<float>(sceneTarget.native.texture.width),
             static_cast<float>(sceneTarget.native.texture.height)};
-    windowContext.renderDebugText = &renderDebugText;
-    windowRenderer.Draw(windowContext);
-    EndMode3D();
-    EndTextureMode();
+
+    if (visibleLiquids) {
+        BeginTextureMode(refractionReady ? hdrSceneColorView : sceneTarget.native);
+        BeginMode3D(camera);
+        SectorLiquidDrawContext liquidContext;
+        liquidContext.assets = &assets;
+        liquidContext.camera = camera;
+        liquidContext.visibility = &visibilityResult;
+        liquidContext.environment = &pbrEnvironment;
+        liquidContext.localReflectionProbesCurrent = localReflectionProbesCurrent;
+        liquidContext.pbr = pbrContributionSettings;
+        if (map != nullptr) liquidContext.directionalLight = map->directionalLight;
+        liquidContext.fog = fogContext;
+        liquidContext.advancedTransmission = refractionReady;
+        liquidContext.sceneColor = refractionReady
+                ? &hdrSceneScratch.native.texture : nullptr;
+        liquidContext.sceneDepth = refractionReady
+                ? &sceneTarget.native.depth : nullptr;
+        liquidContext.viewportSize = viewportSize;
+        liquidContext.runtimeSeconds = runtimeSeconds;
+        liquidContext.renderDebugText = &renderDebugText;
+        liquidRenderer.Draw(liquidContext);
+        EndMode3D();
+        EndTextureMode();
+    }
+
     if (refractionReady) {
         SetTextureFilter(hdrSceneScratch.native.texture, TEXTURE_FILTER_POINT);
     }
 
-    if (requestRefraction && !refractionReady) {
-        if (!glassRefractionFallbackLogged) {
+    if (visibleLiquids && !refractionReady) {
+        if (!liquidRefractionFallbackLogged) {
             TraceLog(LOG_WARNING,
-                    "GLASS: requested refraction unavailable; using simple glass");
-            glassRefractionFallbackLogged = true;
+                    "LIQUID: scene sampling unavailable; using reflection/tint fallback");
+            liquidRefractionFallbackLogged = true;
         }
-        renderDebugText += " | glass: refraction fallback (sampleable depth or HDR scratch unavailable)";
+        renderDebugText += " | liquid refraction fallback (sampleable depth or HDR scratch unavailable)";
+    }
+
+    if (visibleWindows) {
+        BeginTextureMode(sceneTarget.native);
+        BeginMode3D(camera);
+        SectorWindowDrawContext windowContext;
+        windowContext.assets = &assets;
+        windowContext.world = runtimeObjectWorld;
+        windowContext.camera = camera;
+        windowContext.visibility = &visibilityResult;
+        windowContext.environment = &pbrEnvironment;
+        windowContext.localReflectionProbesCurrent = localReflectionProbesCurrent;
+        windowContext.pbr = pbrContributionSettings;
+        if (map != nullptr) windowContext.directionalLight = map->directionalLight;
+        windowContext.fog = fogContext;
+        windowContext.advancedTransmission = false;
+        windowContext.viewportSize = viewportSize;
+        windowContext.renderDebugText = &renderDebugText;
+        windowRenderer.Draw(windowContext);
+        EndMode3D();
+        EndTextureMode();
     }
     return true;
 }

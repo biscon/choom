@@ -2668,6 +2668,131 @@ void RequireFinite(float value, const std::string& context)
     }
 }
 
+void ValidateLiquidSettings(
+        const SectorLiquidSettings& settings,
+        float floorZ,
+        float ceilingZ,
+        const std::string& context)
+{
+    RequireFinite(settings.surfaceOffset, context + ".surfaceOffset");
+    RequireFinite(settings.visibilityDepthWorld, context + ".visibilityDepthWorld");
+    RequireFinite(settings.roughness, context + ".roughness");
+    RequireFinite(settings.refractionStrength, context + ".refractionStrength");
+    RequireFinite(settings.rippleScaleWorld, context + ".rippleScaleWorld");
+    RequireFinite(settings.rippleStrength, context + ".rippleStrength");
+    RequireFinite(settings.rippleSpeed, context + ".rippleSpeed");
+    RequireFinite(settings.flowDirectionDegrees, context + ".flowDirectionDegrees");
+    RequireFinite(settings.flowSpeedWorld, context + ".flowSpeedWorld");
+    RequireFinite(settings.foamAmount, context + ".foamAmount");
+    const float span = std::max(0.0f, ceilingZ - floorZ);
+    if (settings.surfaceOffset < 0.0f || settings.surfaceOffset > span) {
+        Fail(context + ".surfaceOffset must be within the sector height span");
+    }
+    if (settings.visibilityDepthWorld < SectorLiquidMinVisibilityDepthWorld
+            || settings.visibilityDepthWorld > SectorLiquidMaxVisibilityDepthWorld) {
+        Fail(context + ".visibilityDepthWorld is out of range");
+    }
+    if (settings.roughness < 0.0f || settings.roughness > 1.0f
+            || settings.refractionStrength < 0.0f
+            || settings.refractionStrength > SectorLiquidMaxRefractionStrength
+            || settings.rippleScaleWorld < SectorLiquidMinRippleScaleWorld
+            || settings.rippleScaleWorld > SectorLiquidMaxRippleScaleWorld
+            || settings.rippleStrength < 0.0f
+            || settings.rippleStrength > SectorLiquidMaxRippleStrength
+            || settings.rippleSpeed < 0.0f
+            || settings.rippleSpeed > SectorLiquidMaxRippleSpeed
+            || settings.flowSpeedWorld < 0.0f
+            || settings.flowSpeedWorld > SectorLiquidMaxFlowSpeedWorld
+            || settings.foamAmount < 0.0f
+            || settings.foamAmount > 1.0f) {
+        Fail(context + " contains an out-of-range liquid parameter");
+    }
+}
+
+SectorLiquidSettings ReadLiquidSettings(
+        const Json& owner,
+        const std::string& context,
+        float floorZ,
+        float ceilingZ)
+{
+    SectorLiquidSettings settings;
+    const auto it = owner.find("liquid");
+    if (it == owner.end()) return settings;
+    if (!it->is_object()) Fail(context + ".liquid must be an object");
+    const Json& value = *it;
+    const std::string liquidContext = context + ".liquid";
+    settings.enabled = ReadOptionalBool(value, "enabled", liquidContext, settings.enabled);
+    const auto referenceIt = value.find("surfaceReference");
+    if (referenceIt != value.end()) {
+        if (!referenceIt->is_string()) {
+            Fail(liquidContext + ".surfaceReference must be a string");
+        }
+        const std::string reference = referenceIt->get<std::string>();
+        if (reference == "floor") settings.surfaceReference = SectorLiquidSurfaceReference::Floor;
+        else if (reference == "ceiling") settings.surfaceReference = SectorLiquidSurfaceReference::Ceiling;
+        else Fail(liquidContext + ".surfaceReference must be 'floor' or 'ceiling'");
+    }
+    settings.surfaceOffset = ReadOptionalFloat(
+            value, "surfaceOffset", liquidContext, settings.surfaceOffset);
+    const auto shallowIt = value.find("shallowColor");
+    if (shallowIt != value.end()) settings.shallowColor = ReadColor(*shallowIt, liquidContext + ".shallowColor");
+    const auto deepIt = value.find("deepColor");
+    if (deepIt != value.end()) settings.deepColor = ReadColor(*deepIt, liquidContext + ".deepColor");
+    const auto foamIt = value.find("foamColor");
+    if (foamIt != value.end()) settings.foamColor = ReadColor(*foamIt, liquidContext + ".foamColor");
+    settings.visibilityDepthWorld = ReadOptionalFloat(value, "visibilityDepthWorld", liquidContext, settings.visibilityDepthWorld);
+    settings.roughness = ReadOptionalFloat(value, "roughness", liquidContext, settings.roughness);
+    settings.refractionStrength = ReadOptionalFloat(value, "refractionStrength", liquidContext, settings.refractionStrength);
+    settings.rippleScaleWorld = ReadOptionalFloat(value, "rippleScaleWorld", liquidContext, settings.rippleScaleWorld);
+    settings.rippleStrength = ReadOptionalFloat(value, "rippleStrength", liquidContext, settings.rippleStrength);
+    settings.rippleSpeed = ReadOptionalFloat(value, "rippleSpeed", liquidContext, settings.rippleSpeed);
+    settings.flowDirectionDegrees = ReadOptionalFloat(value, "flowDirectionDegrees", liquidContext, settings.flowDirectionDegrees);
+    settings.flowSpeedWorld = ReadOptionalFloat(value, "flowSpeedWorld", liquidContext, settings.flowSpeedWorld);
+    settings.foamAmount = ReadOptionalFloat(value, "foamAmount", liquidContext, settings.foamAmount);
+    ValidateLiquidSettings(settings, floorZ, ceilingZ, liquidContext);
+    settings.flowDirectionDegrees = NormalizeSectorLiquidSettingsForSpan(
+            settings, floorZ, ceilingZ).flowDirectionDegrees;
+    return settings;
+}
+
+Json WriteLiquidSettings(
+        const SectorLiquidSettings& source,
+        float floorZ,
+        float ceilingZ,
+        const std::string& context)
+{
+    SectorLiquidSettings settings = NormalizeSectorLiquidSettingsForSpan(
+            source, floorZ, ceilingZ);
+    ValidateLiquidSettings(settings, floorZ, ceilingZ, context);
+    const SectorLiquidSettings defaults;
+    Json value = Json::object();
+    if (settings.enabled != defaults.enabled) value["enabled"] = settings.enabled;
+    if (settings.surfaceReference != defaults.surfaceReference) value["surfaceReference"] = "ceiling";
+    if (settings.surfaceOffset != defaults.surfaceOffset) value["surfaceOffset"] = settings.surfaceOffset;
+    if (settings.shallowColor.r != defaults.shallowColor.r
+            || settings.shallowColor.g != defaults.shallowColor.g
+            || settings.shallowColor.b != defaults.shallowColor.b
+            || settings.shallowColor.a != defaults.shallowColor.a) value["shallowColor"] = WriteColor(settings.shallowColor);
+    if (settings.deepColor.r != defaults.deepColor.r
+            || settings.deepColor.g != defaults.deepColor.g
+            || settings.deepColor.b != defaults.deepColor.b
+            || settings.deepColor.a != defaults.deepColor.a) value["deepColor"] = WriteColor(settings.deepColor);
+    if (settings.foamColor.r != defaults.foamColor.r
+            || settings.foamColor.g != defaults.foamColor.g
+            || settings.foamColor.b != defaults.foamColor.b
+            || settings.foamColor.a != defaults.foamColor.a) value["foamColor"] = WriteColor(settings.foamColor);
+    if (settings.visibilityDepthWorld != defaults.visibilityDepthWorld) value["visibilityDepthWorld"] = settings.visibilityDepthWorld;
+    if (settings.roughness != defaults.roughness) value["roughness"] = settings.roughness;
+    if (settings.refractionStrength != defaults.refractionStrength) value["refractionStrength"] = settings.refractionStrength;
+    if (settings.rippleScaleWorld != defaults.rippleScaleWorld) value["rippleScaleWorld"] = settings.rippleScaleWorld;
+    if (settings.rippleStrength != defaults.rippleStrength) value["rippleStrength"] = settings.rippleStrength;
+    if (settings.rippleSpeed != defaults.rippleSpeed) value["rippleSpeed"] = settings.rippleSpeed;
+    if (settings.flowDirectionDegrees != defaults.flowDirectionDegrees) value["flowDirectionDegrees"] = settings.flowDirectionDegrees;
+    if (settings.flowSpeedWorld != defaults.flowSpeedWorld) value["flowSpeedWorld"] = settings.flowSpeedWorld;
+    if (settings.foamAmount != defaults.foamAmount) value["foamAmount"] = settings.foamAmount;
+    return value;
+}
+
 Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
 {
     Json value{
@@ -4255,6 +4380,8 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         ValidateOptionalFootstepSet(anchor.footstepSet, context + ".footstepSet");
         anchor.ceilingSky = ReadOptionalBool(faceAnchors[i], "ceilingSky", context, false);
         anchor.roomtone = ReadRoomtoneSettings(faceAnchors[i], context);
+        anchor.liquid = ReadLiquidSettings(
+                faceAnchors[i], context, anchor.floorZ, anchor.ceilingZ);
         anchor.floorUv = ReadUv(RequireField(faceAnchors[i], "floorUv", context), context + ".floorUv");
         anchor.ceilingUv = ReadUv(RequireField(faceAnchors[i], "ceilingUv", context), context + ".ceilingUv");
         ReadOptionalDecal(faceAnchors[i], "floorDecal", context, anchor.floorDecal);
@@ -4912,6 +5039,13 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             anchorJson["footstepSet"] = anchor->footstepSet;
         }
         WriteRoomtoneSettings(anchorJson, anchor->roomtone, context);
+        if (!IsDefaultSectorLiquidSettings(anchor->liquid)) {
+            anchorJson["liquid"] = WriteLiquidSettings(
+                    anchor->liquid,
+                    anchor->floorZ,
+                    anchor->ceilingZ,
+                    context + ".liquid");
+        }
         if (anchor->isVoid) {
             anchorJson["isVoid"] = true;
         }
@@ -5352,6 +5486,7 @@ SectorTopologyMap ParseMap(const Json& root)
         ValidateOptionalFootstepSet(sector.footstepSet, context + ".footstepSet");
         sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
         sector.roomtone = ReadRoomtoneSettings(value, context);
+        sector.liquid = ReadLiquidSettings(value, context, sector.floorZ, sector.ceilingZ);
         sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
         sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
         ReadOptionalDecal(value, "floorDecal", context, sector.floorDecal);
@@ -5490,6 +5625,13 @@ Json SerializeMap(const SectorTopologyMap& sourceMap)
             sectorJson["footstepSet"] = sector->footstepSet;
         }
         WriteRoomtoneSettings(sectorJson, sector->roomtone, context);
+        if (!IsDefaultSectorLiquidSettings(sector->liquid)) {
+            sectorJson["liquid"] = WriteLiquidSettings(
+                    sector->liquid,
+                    sector->floorZ,
+                    sector->ceilingZ,
+                    context + ".liquid");
+        }
         root["sectors"].push_back(std::move(sectorJson));
     }
 

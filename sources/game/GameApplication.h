@@ -80,7 +80,7 @@ public:
     void Render2D(engine::AssetManager& assets);
     void Render3DShadowMaps(engine::EngineContext& context);
     void Render3DScene(engine::EngineContext& context);
-    void Apply3DGlass(
+    void Apply3DTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::EngineContext& context,
             bool collectGpuDiagnostics = false);
