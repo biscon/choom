@@ -278,7 +278,19 @@ bool TryBeginSectorLiquidExit(
     return false;
 }
 
-bool UpdateSectorLiquidExitTransition(
+enum class SectorLiquidExitTransitionStatus {
+    InProgress,
+    Completed,
+    Aborted,
+};
+
+struct SectorLiquidExitTransitionUpdate {
+    SectorLiquidExitTransitionStatus status =
+            SectorLiquidExitTransitionStatus::InProgress;
+    float unusedSeconds = 0.0f;
+};
+
+SectorLiquidExitTransitionUpdate UpdateSectorLiquidExitTransition(
         SectorEditorPreviewControllerState& controllerState,
         const SectorCollisionWorld& collisionWorld,
         const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
@@ -289,7 +301,11 @@ bool UpdateSectorLiquidExitTransition(
 {
     SectorLiquidMovementState& liquid = controllerState.liquidMovement;
     SectorFpsControllerState& player = controllerState.fpsControllerState;
-    if (!liquid.exitingWater) return false;
+    if (!liquid.exitingWater) {
+        return SectorLiquidExitTransitionUpdate{
+                SectorLiquidExitTransitionStatus::Completed,
+                std::max(0.0f, dt)};
+    }
     const SectorFpsControllerConfig config =
             NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
     const Vector2 targetXZ{
@@ -335,30 +351,27 @@ bool UpdateSectorLiquidExitTransition(
         liquid.exitingWater = false;
         liquid.surfaceLatched = true;
         liquid.swimming = true;
-        return true;
+        return SectorLiquidExitTransitionUpdate{
+                SectorLiquidExitTransitionStatus::Aborted, 0.0f};
     }
     const float duration = std::clamp(
             std::isfinite(settings.exitTransitionDurationSeconds)
                     ? settings.exitTransitionDurationSeconds : 0.30f,
             0.1f, 2.0f);
-    liquid.exitElapsedSeconds += std::max(0.0f, dt);
+    const float safeDt = std::max(0.0f, dt);
+    const float remainingDuration = std::max(
+            0.0f, duration - liquid.exitElapsedSeconds);
+    const float consumedSeconds = std::min(safeDt, remainingDuration);
+    liquid.exitElapsedSeconds += consumedSeconds;
     const float progress = std::clamp(
             liquid.exitElapsedSeconds / duration, 0.0f, 1.0f);
     const float liftY = liquid.exitTargetFeetPosition.y
             + GameplayFloorSnapEpsilon * 2.0f;
-    Vector3 proposed = liquid.exitStartFeetPosition;
-    if (progress < 0.45f) {
-        const float phase = progress / 0.45f;
-        const float smooth = phase * phase * (3.0f - 2.0f * phase);
-        proposed.y += (liftY - proposed.y) * smooth;
-    } else {
-        const float phase = (progress - 0.45f) / 0.55f;
-        const float smooth = phase * phase * (3.0f - 2.0f * phase);
-        proposed.x += (liquid.exitTargetFeetPosition.x - proposed.x) * smooth;
-        proposed.z += (liquid.exitTargetFeetPosition.z - proposed.z) * smooth;
-        proposed.y = liftY;
-        if (progress >= 1.0f) proposed.y = liquid.exitTargetFeetPosition.y;
-    }
+    const Vector3 proposed = EvaluateSectorLiquidExitTrajectory(
+            liquid.exitStartFeetPosition,
+            liquid.exitTargetFeetPosition,
+            liftY,
+            progress);
 
     player.feetPosition = proposed;
     player.currentSectorId = liquid.exitTargetSectorId;
@@ -368,8 +381,12 @@ bool UpdateSectorLiquidExitTransition(
         liquid.exitingWater = false;
         liquid.swimming = false;
         liquid.surfaceLatched = false;
+        return SectorLiquidExitTransitionUpdate{
+                SectorLiquidExitTransitionStatus::Completed,
+                std::max(0.0f, safeDt - consumedSeconds)};
     }
-    return true;
+    return SectorLiquidExitTransitionUpdate{
+            SectorLiquidExitTransitionStatus::InProgress, 0.0f};
 }
 
 } // namespace
@@ -630,6 +647,11 @@ void UpdateSectorEditorGameplayPreview(
                         ? entryContext.floorZ
                         : controllerState.liquidMovement.contact.bottomY);
     }
+    if (controllerState.liquidMovement.impactEntryActive
+            && controllerInput.swimUp) {
+        controllerState.liquidMovement.impactEntryActive = false;
+        controllerState.fpsControllerState.verticalVelocity = 0.0f;
+    }
     TryBeginSectorLiquidExit(
             collisionState,
             controllerState,
@@ -638,20 +660,17 @@ void UpdateSectorEditorGameplayPreview(
             npcCollisionCylinders,
             controllerInput,
             liquidSettings);
-    if (controllerState.liquidMovement.impactEntryActive
-            && controllerInput.swimUp) {
-        controllerState.liquidMovement.impactEntryActive = false;
-        controllerState.fpsControllerState.verticalVelocity = 0.0f;
-    }
+    bool completedLiquidExitThisFrame = false;
     if (controllerState.liquidMovement.exitingWater) {
-        UpdateSectorLiquidExitTransition(
-                controllerState,
-                collisionState.sectorCollisionWorld,
-                dynamicDoorColliders,
-                staticModelColliders,
-                npcCollisionCylinders,
-                liquidSettings,
-                dt);
+        const SectorLiquidExitTransitionUpdate exitUpdate =
+                UpdateSectorLiquidExitTransition(
+                        controllerState,
+                        collisionState.sectorCollisionWorld,
+                        dynamicDoorColliders,
+                        staticModelColliders,
+                        npcCollisionCylinders,
+                        liquidSettings,
+                        dt);
         RefreshSectorEditorGameplaySectorAndVerticalContext(
                 collisionState, controllerState);
         if (topologyMap != nullptr) {
@@ -673,7 +692,15 @@ void UpdateSectorEditorGameplayPreview(
         collisionState.previewMoveResult = {};
         collisionState.previewVerticalResult = {};
         ClearPreviewGameplayVisualState(controllerState);
-        return;
+        if (exitUpdate.status != SectorLiquidExitTransitionStatus::Completed
+                || exitUpdate.unusedSeconds <= 0.0f) {
+            return;
+        }
+        completedLiquidExitThisFrame = true;
+        dt = exitUpdate.unusedSeconds;
+        previousVisualEyeY = SectorFpsControllerEyePosition(
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig).y;
     }
     const bool swimming = controllerState.liquidMovement.swimming;
     if (swimming) {
@@ -829,7 +856,8 @@ void UpdateSectorEditorGameplayPreview(
     }
     RefreshSectorEditorGameplaySectorAndVerticalContext(collisionState, controllerState);
     bool startedJump = false;
-    if (!swimming && controllerInput.jumpPressed) {
+    if (!swimming && !completedLiquidExitThisFrame
+            && controllerInput.jumpPressed) {
         startedJump = TryStartSectorFpsJump(
                 controllerState.fpsControllerState,
                 controllerState.fpsControllerConfig);

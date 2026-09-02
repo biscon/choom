@@ -1340,8 +1340,8 @@ void TestSwimMovementModes()
     input.swimUp = true;
     movement = game::ComputeSectorLiquidSwimMovementDelta(
             state, config, input, true, 1.0f);
-    Check(Near(movement.y, 0.0f),
-            "surface-latched swim-up waits for a validated water exit");
+    Check(movement.y > 0.0f && Near(Vector3Length(movement), 6.0f),
+            "surface-latched swim-up actively ascends at swim speed");
     input.swimUp = false;
     movement = game::ComputeSectorLiquidSwimMovementDelta(
             state, config, input, false, 1.0f);
@@ -1352,6 +1352,36 @@ void TestSwimMovementModes()
             state, config, input, false, 1.0f);
     Check(movement.y < 3.0f,
             "swim down contributes world-down to normalized movement");
+}
+
+void TestLiquidExitTrajectoryIsContinuous()
+{
+    const Vector3 start{1.0f, -1.0f, 2.0f};
+    const Vector3 target{5.0f, 1.0f, 8.0f};
+    const float liftY = 1.01f;
+    const Vector3 early = game::EvaluateSectorLiquidExitTrajectory(
+            start, target, liftY, 0.10f);
+    const Vector3 middle = game::EvaluateSectorLiquidExitTrajectory(
+            start, target, liftY, 0.45f);
+    const Vector3 late = game::EvaluateSectorLiquidExitTrajectory(
+            start, target, liftY, 0.90f);
+    const Vector3 endpoint = game::EvaluateSectorLiquidExitTrajectory(
+            start, target, liftY, 1.0f);
+
+    Check(early.x > start.x && early.z > start.z && early.y > start.y,
+            "liquid exit begins forward and upward movement immediately");
+    Check(middle.x > early.x && middle.z > early.z && middle.y > early.y,
+            "liquid exit remains monotonic through the former phase boundary");
+    Check(late.x > middle.x && late.z > middle.z && late.y > middle.y,
+            "liquid exit keeps moving forward near completion");
+    Check(Near(endpoint, target),
+            "liquid exit trajectory reaches the exact grounded target");
+
+    const Vector3 beforeEnd = game::EvaluateSectorLiquidExitTrajectory(
+            start, target, liftY, 0.99f);
+    Check(target.x - beforeEnd.x > 0.0f
+                    && target.z - beforeEnd.z > 0.0f,
+            "liquid exit retains forward motion through its final segment");
 }
 
 void TestLiquidEntryMomentumAndSurfaceRecovery()
@@ -1523,6 +1553,37 @@ void TestLiquidEntryMomentumAndSurfaceRecovery()
             0.1f);
     Check(swimmer.feetPosition.y < previousY,
             "explicit swim-down input overrides surface recovery");
+
+    game::SectorLiquidMovementState activeSurface = recoveryLiquid;
+    activeSurface.impactEntryActive = false;
+    game::SectorFpsControllerState activeAscent;
+    activeAscent.feetPosition.y = targetFeetY - 0.5f;
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            activeAscent,
+            config,
+            activeSurface,
+            physics,
+            config.swimSpeed,
+            -10.0f,
+            10.0f,
+            0.5f);
+    Check(Near(activeAscent.feetPosition.y, targetFeetY)
+                    && Near(activeAscent.verticalVelocity, 0.0f),
+            "active surface ascent stops at the stable swimming height");
+
+    game::SectorFpsControllerState alreadyHigh;
+    alreadyHigh.feetPosition.y = targetFeetY + 0.2f;
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            alreadyHigh,
+            config,
+            activeSurface,
+            physics,
+            config.swimSpeed,
+            -10.0f,
+            10.0f,
+            0.1f);
+    Check(Near(alreadyHigh.feetPosition.y, targetFeetY + 0.2f),
+            "surface ascent cap does not snap a high entry downward");
 }
 
 void TestPlayerOxygenDrainRecoveryAndDrowning()
@@ -1588,6 +1649,7 @@ int main()
     TestNoSectorPreservesVerticalState();
     TestLiquidContactAndSwimHysteresis();
     TestSwimMovementModes();
+    TestLiquidExitTrajectoryIsContinuous();
     TestLiquidEntryMomentumAndSurfaceRecovery();
     TestPlayerOxygenDrainRecoveryAndDrowning();
     if (failures == 0) {

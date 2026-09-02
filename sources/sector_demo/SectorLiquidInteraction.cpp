@@ -93,7 +93,7 @@ Vector3 ComputeSectorLiquidSwimMovementDelta(
     if (input.moveBackward) movement = Vector3Subtract(movement, forward);
     if (input.strafeRight) movement = Vector3Add(movement, right);
     if (input.strafeLeft) movement = Vector3Subtract(movement, right);
-    if (input.swimUp && !surfaceLatched) movement.y += 1.0f;
+    if (input.swimUp) movement.y += 1.0f;
     if (input.swimDown) movement.y -= 1.0f;
     if (Vector3LengthSqr(movement) <= 0.0001f) {
         return Vector3{};
@@ -105,6 +105,28 @@ Vector3 ComputeSectorLiquidSwimMovementDelta(
     result.x += input.externalHorizontalMovementDelta.x;
     result.z += input.externalHorizontalMovementDelta.y;
     return result;
+}
+
+Vector3 EvaluateSectorLiquidExitTrajectory(
+        Vector3 startFeetPosition,
+        Vector3 targetFeetPosition,
+        float liftY,
+        float progress)
+{
+    const float t = std::clamp(
+            std::isfinite(progress) ? progress : 0.0f,
+            0.0f,
+            1.0f);
+    if (t >= 1.0f) return targetFeetPosition;
+
+    const float liftProgress = t * (2.0f - t);
+    return Vector3{
+            startFeetPosition.x
+                    + (targetFeetPosition.x - startFeetPosition.x) * t,
+            startFeetPosition.y
+                    + (liftY - startFeetPosition.y) * liftProgress,
+            startFeetPosition.z
+                    + (targetFeetPosition.z - startFeetPosition.z) * t};
 }
 
 bool UpdateSectorLiquidCameraSubmersion(
@@ -213,6 +235,19 @@ void UpdateSectorLiquidSwimmingVerticalMotion(
         }
         return;
     }
+    float effectiveMaximumFeetY = maximumFeetY;
+    if (liquid.surfaceLatched
+            && liquid.contact.hasLiquid
+            && std::isfinite(desiredVerticalVelocity)
+            && desiredVerticalVelocity > 0.001f) {
+        const float stableSurfaceFeetY = liquid.contact.surfaceY
+                + SectorLiquidSurfaceEyeOffsetWorld - normalized.eyeHeight;
+        const float surfaceCap = std::max(
+                stableSurfaceFeetY, state.feetPosition.y);
+        effectiveMaximumFeetY = std::isfinite(effectiveMaximumFeetY)
+                ? std::min(effectiveMaximumFeetY, surfaceCap)
+                : surfaceCap;
+    }
     const int stepCount = std::clamp(
             static_cast<int>(std::ceil(dt * 120.0f)), 1, 64);
     const float stepDt = dt / static_cast<float>(stepCount);
@@ -257,9 +292,9 @@ void UpdateSectorLiquidSwimmingVerticalMotion(
             state.feetPosition.y = minimumFeetY;
             if (state.verticalVelocity < 0.0f) state.verticalVelocity = 0.0f;
         }
-        if (std::isfinite(maximumFeetY)
-                && state.feetPosition.y > maximumFeetY) {
-            state.feetPosition.y = maximumFeetY;
+        if (std::isfinite(effectiveMaximumFeetY)
+                && state.feetPosition.y > effectiveMaximumFeetY) {
+            state.feetPosition.y = effectiveMaximumFeetY;
             if (state.verticalVelocity > 0.0f) state.verticalVelocity = 0.0f;
         }
     }

@@ -158,7 +158,7 @@
     "drowningDamageIntervalSeconds": 0.75,
     "entrySlowdownSeconds": 0.6000000238418579,
     "waterDragPerSecond": 2.5,
-    "surfaceRecoveryFrequencyHz": 0.44999998807907104,
+    "surfaceRecoveryFrequencyHz": 0.75,
     "maximumExitLedgeHeightWorld": 0.75,
     "exitTransitionDurationSeconds": 0.75
   }

@@ -59,6 +59,11 @@ Vector3 ComputeSectorLiquidSwimMovementDelta(
         const SectorFpsControllerInput& input,
         bool surfaceLatched,
         float dt);
+Vector3 EvaluateSectorLiquidExitTrajectory(
+        Vector3 startFeetPosition,
+        Vector3 targetFeetPosition,
+        float liftY,
+        float progress);
 bool UpdateSectorLiquidCameraSubmersion(
         bool wasSubmerged,
         const SectorLiquidContact& contact,
