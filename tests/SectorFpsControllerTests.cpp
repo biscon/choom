@@ -1358,33 +1358,106 @@ void TestLiquidEntryMomentumAndSurfaceRecovery()
 {
     game::SectorFpsControllerConfig config;
     game::SectorLiquidPhysicsConfig physics;
+    physics.entrySlowdownSeconds = 0.20f;
     game::SectorLiquidContact contact;
     contact.hasLiquid = true;
     contact.surfaceY = 0.0f;
-    contact.immersionFraction = 0.25f;
-
-    game::SectorFpsControllerState fastEntry;
-    fastEntry.verticalVelocity = -10.0f;
-    game::SectorFpsControllerState slowEntry = fastEntry;
-    slowEntry.verticalVelocity = -5.0f;
-    game::ApplySectorLiquidEntryResistance(
-            fastEntry, config, contact, physics, 0.1f);
-    game::ApplySectorLiquidEntryResistance(
-            slowEntry, config, contact, physics, 0.1f);
-    Check(fastEntry.verticalVelocity < 0.0f
-                    && std::fabs(fastEntry.verticalVelocity) < 10.0f,
-            "liquid entry retains but damps downward impact velocity");
-    Check(fastEntry.verticalVelocity < slowEntry.verticalVelocity,
-            "faster water entry retains greater downward momentum");
+    contact.immersionFraction = 0.75f;
 
     game::SectorLiquidMovementState liquid;
     liquid.swimming = true;
     liquid.surfaceLatched = true;
     liquid.contact = contact;
     game::SectorFpsControllerState swimmer;
-    swimmer.feetPosition.y = -2.0f;
-    swimmer.verticalVelocity = fastEntry.verticalVelocity;
-    for (int step = 0; step < 240; ++step) {
+    swimmer.feetPosition.y = -0.8f;
+    swimmer.verticalVelocity = -10.0f;
+    Check(game::BeginSectorLiquidImpactEntry(
+                    liquid, swimmer, config, physics, -10.0f),
+            "downward swimming transition begins an impact-entry phase");
+    Check(Near(liquid.impactEntryTargetFeetY, -1.8f),
+            "ten-unit impact with 0.2-second slowdown travels one world unit");
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            swimmer,
+            config,
+            liquid,
+            physics,
+            0.0f,
+            -10.0f,
+            10.0f,
+            0.2f);
+    Check(!liquid.impactEntryActive
+                    && Near(swimmer.feetPosition.y, -1.8f)
+                    && Near(swimmer.verticalVelocity, 0.0f),
+            "impact entry reaches its computed depth before recovery starts");
+
+    game::SectorLiquidMovementState gentleLiquid = liquid;
+    game::SectorFpsControllerState gentleSwimmer;
+    gentleSwimmer.feetPosition.y = -0.8f;
+    gentleSwimmer.verticalVelocity = -3.0f;
+    Check(!game::BeginSectorLiquidImpactEntry(
+                    gentleLiquid,
+                    gentleSwimmer,
+                    config,
+                    physics,
+                    -10.0f)
+                    && Near(gentleSwimmer.verticalVelocity, 0.0f),
+            "gentle entries hand off to recovery without coupled momentum");
+
+    game::SectorLiquidMovementState alternateRecovery = liquid;
+    game::SectorFpsControllerState alternateSwimmer;
+    alternateSwimmer.feetPosition.y = -0.8f;
+    alternateSwimmer.verticalVelocity = -10.0f;
+    game::SectorLiquidPhysicsConfig alternatePhysics = physics;
+    alternatePhysics.surfaceRecoveryFrequencyHz = 2.0f;
+    Check(game::BeginSectorLiquidImpactEntry(
+                    alternateRecovery,
+                    alternateSwimmer,
+                    config,
+                    alternatePhysics,
+                    -10.0f)
+                    && Near(
+                            alternateRecovery.impactEntryTargetFeetY,
+                            liquid.impactEntryTargetFeetY),
+            "surface recovery frequency does not change impact depth");
+    for (int step = 0; step < 4; ++step) {
+        game::UpdateSectorLiquidSwimmingVerticalMotion(
+                alternateSwimmer,
+                config,
+                alternateRecovery,
+                alternatePhysics,
+                0.0f,
+                -10.0f,
+                10.0f,
+                0.05f);
+    }
+    Check(Near(alternateSwimmer.feetPosition.y, -1.8f),
+            "impact depth is stable across smaller integration steps");
+
+    game::SectorLiquidMovementState shallowLiquid = liquid;
+    game::SectorFpsControllerState shallowSwimmer;
+    shallowSwimmer.feetPosition.y = -0.8f;
+    shallowSwimmer.verticalVelocity = -10.0f;
+    Check(game::BeginSectorLiquidImpactEntry(
+                    shallowLiquid,
+                    shallowSwimmer,
+                    config,
+                    physics,
+                    -1.4f),
+            "shallow liquid still begins a shortened impact phase");
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            shallowSwimmer,
+            config,
+            shallowLiquid,
+            physics,
+            0.0f,
+            -1.4f,
+            10.0f,
+            0.2f);
+    Check(Near(shallowSwimmer.feetPosition.y, -1.4f)
+                    && !shallowLiquid.impactEntryActive,
+            "liquid floor safely truncates impact penetration");
+
+    for (int step = 0; step < 600; ++step) {
         game::UpdateSectorLiquidSwimmingVerticalMotion(
                 swimmer,
                 config,
@@ -1399,7 +1472,43 @@ void TestLiquidEntryMomentumAndSurfaceRecovery()
             - config.eyeHeight;
     Check(Near(swimmer.feetPosition.y, targetFeetY, 0.01f)
                     && Near(swimmer.verticalVelocity, 0.0f, 0.02f),
-            "surface buoyancy smoothly settles at the stable eye offset");
+            "surface recovery begins after entry and settles at the eye offset");
+
+    game::SectorLiquidMovementState freeSwim = liquid;
+    freeSwim.surfaceLatched = false;
+    game::SectorFpsControllerState lowDrag;
+    lowDrag.verticalVelocity = -4.0f;
+    game::SectorFpsControllerState highDrag = lowDrag;
+    game::SectorLiquidPhysicsConfig lowDragPhysics = physics;
+    lowDragPhysics.waterDragPerSecond = 1.0f;
+    game::SectorLiquidPhysicsConfig highDragPhysics = physics;
+    highDragPhysics.waterDragPerSecond = 10.0f;
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            lowDrag, config, freeSwim, lowDragPhysics,
+            0.0f, -10.0f, 10.0f, 0.1f);
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            highDrag, config, freeSwim, highDragPhysics,
+            0.0f, -10.0f, 10.0f, 0.1f);
+    Check(std::fabs(highDrag.verticalVelocity)
+                    < std::fabs(lowDrag.verticalVelocity),
+            "swim coasting drag independently damps free vertical motion");
+
+    game::SectorLiquidMovementState recoveryLiquid = liquid;
+    recoveryLiquid.surfaceLatched = true;
+    game::SectorFpsControllerState recoveryLowDrag;
+    recoveryLowDrag.feetPosition.y = -1.8f;
+    game::SectorFpsControllerState recoveryHighDrag = recoveryLowDrag;
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            recoveryLowDrag, config, recoveryLiquid, lowDragPhysics,
+            0.0f, -10.0f, 10.0f, 0.1f);
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            recoveryHighDrag, config, recoveryLiquid, highDragPhysics,
+            0.0f, -10.0f, 10.0f, 0.1f);
+    Check(Near(recoveryLowDrag.feetPosition.y, recoveryHighDrag.feetPosition.y)
+                    && Near(
+                            recoveryLowDrag.verticalVelocity,
+                            recoveryHighDrag.verticalVelocity),
+            "swim coasting drag does not alter surface recovery");
 
     liquid.surfaceLatched = false;
     const float previousY = swimmer.feetPosition.y;

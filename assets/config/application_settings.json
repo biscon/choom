@@ -156,9 +156,10 @@
     "oxygenRegenerationPerSecond": 20.0,
     "drowningDamage": 10,
     "drowningDamageIntervalSeconds": 0.75,
-    "waterDragPerSecond": 0.15000000596046448,
-    "surfaceRecoveryFrequencyHz": 0.3499999940395355,
+    "entrySlowdownSeconds": 0.6000000238418579,
+    "waterDragPerSecond": 2.5,
+    "surfaceRecoveryFrequencyHz": 0.44999998807907104,
     "maximumExitLedgeHeightWorld": 0.75,
-    "exitTransitionDurationSeconds": 0.30000001192092896
+    "exitTransitionDurationSeconds": 0.75
   }
 }

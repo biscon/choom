@@ -83,7 +83,7 @@
   "previewSettings": {
     "walkSpeed": 3.0,
     "runSpeed": 6.0,
-    "swimSpeed": 6.0,
+    "swimSpeed": 2.0,
     "mouseSensitivity": 0.5,
     "eyeHeight": 1.75,
     "gravity": 15.0,

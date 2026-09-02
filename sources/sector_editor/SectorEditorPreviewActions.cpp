@@ -121,6 +121,7 @@ SectorLiquidPhysicsConfig LiquidPhysicsConfig(
         const PlayerLiquidApplicationSettings& settings)
 {
     return SectorLiquidPhysicsConfig{
+            settings.entrySlowdownSeconds,
             settings.waterDragPerSecond,
             settings.surfaceRecoveryFrequencyHz};
 }
@@ -164,16 +165,20 @@ bool TryBeginSectorLiquidExit(
 {
     SectorLiquidMovementState& liquid = controllerState.liquidMovement;
     SectorFpsControllerState& player = controllerState.fpsControllerState;
+    const SectorFpsControllerConfig config =
+            NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
+    const float stableSurfaceFeetY = liquid.contact.surfaceY
+            + SectorLiquidSurfaceEyeOffsetWorld - config.eyeHeight;
     if (!collisionState.sectorCollisionWorldValid
             || !liquid.swimming || !liquid.surfaceLatched
             || !liquid.contact.hasLiquid || liquid.exitingWater
+            || liquid.impactEntryActive
+            || player.feetPosition.y < stableSurfaceFeetY - 0.15f
             || !input.swimUp || !input.moveForward || input.swimDown
             || player.verticalVelocity < -0.5f) {
         return false;
     }
 
-    const SectorFpsControllerConfig config =
-            NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
     const float maximumHeight = std::clamp(
             std::isfinite(settings.maximumExitLedgeHeightWorld)
                     ? settings.maximumExitLedgeHeightWorld : 0.75f,
@@ -261,6 +266,7 @@ bool TryBeginSectorLiquidExit(
         }
 
         liquid.exitingWater = true;
+        liquid.impactEntryActive = false;
         liquid.exitStartFeetPosition = player.feetPosition;
         liquid.exitTargetFeetPosition = Vector3{
                 candidate.x, heights.floorZ, candidate.y};
@@ -600,11 +606,29 @@ void UpdateSectorEditorGameplayPreview(
                 controllerState.fpsControllerState.feetPosition,
                 controllerState.fpsControllerConfig);
     }
+    const bool wasSwimming = controllerState.liquidMovement.swimming;
     if (!controllerState.liquidMovement.exitingWater) {
         UpdateSectorLiquidMovementState(
                 controllerState.liquidMovement,
                 liquidContact,
                 controllerInput.swimDown);
+    }
+    if (!wasSwimming && controllerState.liquidMovement.swimming) {
+        if (!controllerInput.swimDown
+                && controllerState.fpsControllerState.verticalVelocity < 0.0f) {
+            controllerState.liquidMovement.surfaceLatched = true;
+        }
+        const SectorFpsVerticalContext entryContext =
+                BuildSectorEditorGameplayVerticalContext(
+                        collisionState, controllerState, staticModelColliders);
+        BeginSectorLiquidImpactEntry(
+                controllerState.liquidMovement,
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig,
+                LiquidPhysicsConfig(liquidSettings),
+                entryContext.hasSector
+                        ? entryContext.floorZ
+                        : controllerState.liquidMovement.contact.bottomY);
     }
     TryBeginSectorLiquidExit(
             collisionState,
@@ -614,6 +638,11 @@ void UpdateSectorEditorGameplayPreview(
             npcCollisionCylinders,
             controllerInput,
             liquidSettings);
+    if (controllerState.liquidMovement.impactEntryActive
+            && controllerInput.swimUp) {
+        controllerState.liquidMovement.impactEntryActive = false;
+        controllerState.fpsControllerState.verticalVelocity = 0.0f;
+    }
     if (controllerState.liquidMovement.exitingWater) {
         UpdateSectorLiquidExitTransition(
                 controllerState,
@@ -893,12 +922,6 @@ void UpdateSectorEditorGameplayPreview(
                     controllerState.fpsControllerState.feetPosition,
                     controllerState.fpsControllerConfig);
             controllerState.liquidMovement.contact = liquidContact;
-            ApplySectorLiquidEntryResistance(
-                    controllerState.fpsControllerState,
-                    controllerState.fpsControllerConfig,
-                    liquidContact,
-                    LiquidPhysicsConfig(liquidSettings),
-                    dt);
         }
         const float eyeY = SectorFpsControllerEyePosition(
                 controllerState.fpsControllerState,

@@ -813,6 +813,7 @@ void SettingsResolutionAndPersistence()
     assert(settings.toneMapping.toneMapper
             == engine::ToneMappingOperator::KhronosPbrNeutral);
     assert(Near(settings.toneMapping.exposureCompensationEv, 0.0f));
+    assert(Near(settings.playerLiquids.entrySlowdownSeconds, 0.20f));
     game::FpsApplicationSettings parsedToneMapping;
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1,"toneMapping":{"operator":"acesFilmicFitted","exposureCompensationEv":-1.25}})",
@@ -980,6 +981,7 @@ void SettingsResolutionAndPersistence()
     settings.playerStamina.breathingAudio.thresholdRatio = 0.3f;
     settings.playerStamina.breathingAudio.volume = 0.6f;
     settings.playerStamina.breathingAudio.fadeOutSeconds = 3.0f;
+    settings.playerLiquids.entrySlowdownSeconds = 0.3f;
     settings.playerLiquids.waterDragPerSecond = 7.5f;
     settings.playerLiquids.surfaceRecoveryFrequencyHz = 2.25f;
     settings.playerLiquids.maximumExitLedgeHeightWorld = 1.1f;
@@ -1042,6 +1044,7 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerStamina.maximum, 120.0f));
     assert(Near(loaded.playerStamina.sprintDrainPerSecond, 18.0f));
     assert(Near(loaded.playerStamina.jumpCost, 24.0f));
+    assert(Near(loaded.playerLiquids.entrySlowdownSeconds, 0.3f));
     assert(Near(loaded.playerLiquids.waterDragPerSecond, 7.5f));
     assert(Near(loaded.playerLiquids.surfaceRecoveryFrequencyHz, 2.25f));
     assert(Near(loaded.playerLiquids.maximumExitLedgeHeightWorld, 1.1f));

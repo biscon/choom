@@ -273,7 +273,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                 liquids.drowningDamageIntervalSeconds, state.drowningIntervalInput,
                 0.001f, 1000.0f, 3);
         section("Movement and water exit");
-        drawFloat("player_liquids_water_drag", "Water drag / second",
+        drawFloat("player_liquids_entry_slowdown", "Entry slowdown (seconds)",
+                liquids.entrySlowdownSeconds, state.entrySlowdownInput,
+                0.0f, 2.0f, 2);
+        drawFloat("player_liquids_water_drag", "Swim coasting drag / second",
                 liquids.waterDragPerSecond, state.waterDragInput,
                 0.0f, 40.0f, 2);
         drawFloat("player_liquids_surface_recovery", "Surface recovery (Hz)",

@@ -776,6 +776,11 @@ std::string PlayerLiquidSettingsError(
             || settings.drowningDamageIntervalSeconds <= 0.0f) {
         return "drowningDamageIntervalSeconds must be greater than zero";
     }
+    if (!finite(settings.entrySlowdownSeconds)
+            || settings.entrySlowdownSeconds < 0.0f
+            || settings.entrySlowdownSeconds > 2.0f) {
+        return "entrySlowdownSeconds must be between 0 and 2";
+    }
     if (!finite(settings.waterDragPerSecond)
             || settings.waterDragPerSecond < 0.0f
             || settings.waterDragPerSecond > 40.0f) {
@@ -2116,6 +2121,9 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             parsed.playerLiquids.drowningDamageIntervalSeconds = OptionalNumber(
                     *playerLiquids, "drowningDamageIntervalSeconds", liquidContext)
                     .value_or(parsed.playerLiquids.drowningDamageIntervalSeconds);
+            parsed.playerLiquids.entrySlowdownSeconds = OptionalNumber(
+                    *playerLiquids, "entrySlowdownSeconds", liquidContext)
+                    .value_or(parsed.playerLiquids.entrySlowdownSeconds);
             parsed.playerLiquids.waterDragPerSecond = OptionalNumber(
                     *playerLiquids, "waterDragPerSecond", liquidContext)
                     .value_or(parsed.playerLiquids.waterDragPerSecond);
@@ -2560,6 +2568,8 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"drowningDamage", settings.playerLiquids.drowningDamage},
             {"drowningDamageIntervalSeconds",
                     settings.playerLiquids.drowningDamageIntervalSeconds},
+            {"entrySlowdownSeconds",
+                    settings.playerLiquids.entrySlowdownSeconds},
             {"waterDragPerSecond", settings.playerLiquids.waterDragPerSecond},
             {"surfaceRecoveryFrequencyHz",
                     settings.playerLiquids.surfaceRecoveryFrequencyHz},
