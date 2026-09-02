@@ -3054,6 +3054,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     &TopologyMap(),
                     state.previewSettingsModal.open,
                     controllerInput,
+                    applicationSettings.playerLiquids,
                     previousVisualEyeY,
                     dt,
                     &sceneRuntime.NpcNavigation().collisionCylinders);

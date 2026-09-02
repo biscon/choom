@@ -19,7 +19,17 @@ struct SectorLiquidMovementState {
     bool swimming = false;
     bool surfaceLatched = false;
     bool cameraSubmerged = false;
+    bool exitingWater = false;
+    Vector3 exitStartFeetPosition = {};
+    Vector3 exitTargetFeetPosition = {};
+    int exitTargetSectorId = 0;
+    float exitElapsedSeconds = 0.0f;
     SectorLiquidContact contact;
+};
+
+struct SectorLiquidPhysicsConfig {
+    float waterDragPerSecond = 5.0f;
+    float surfaceRecoveryFrequencyHz = 1.5f;
 };
 
 constexpr float SectorLiquidSwimEnterImmersion = 0.50f;
@@ -46,5 +56,20 @@ bool UpdateSectorLiquidCameraSubmersion(
         bool wasSubmerged,
         const SectorLiquidContact& contact,
         float eyeY);
+void ApplySectorLiquidEntryResistance(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        const SectorLiquidContact& contact,
+        const SectorLiquidPhysicsConfig& physics,
+        float dt);
+void UpdateSectorLiquidSwimmingVerticalMotion(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        SectorLiquidMovementState& liquid,
+        const SectorLiquidPhysicsConfig& physics,
+        float desiredVerticalVelocity,
+        float minimumFeetY,
+        float maximumFeetY,
+        float dt);
 
 } // namespace game

@@ -776,6 +776,26 @@ std::string PlayerLiquidSettingsError(
             || settings.drowningDamageIntervalSeconds <= 0.0f) {
         return "drowningDamageIntervalSeconds must be greater than zero";
     }
+    if (!finite(settings.waterDragPerSecond)
+            || settings.waterDragPerSecond < 0.0f
+            || settings.waterDragPerSecond > 40.0f) {
+        return "waterDragPerSecond must be between 0 and 40";
+    }
+    if (!finite(settings.surfaceRecoveryFrequencyHz)
+            || settings.surfaceRecoveryFrequencyHz < 0.1f
+            || settings.surfaceRecoveryFrequencyHz > 10.0f) {
+        return "surfaceRecoveryFrequencyHz must be between 0.1 and 10";
+    }
+    if (!finite(settings.maximumExitLedgeHeightWorld)
+            || settings.maximumExitLedgeHeightWorld < 0.0f
+            || settings.maximumExitLedgeHeightWorld > 3.0f) {
+        return "maximumExitLedgeHeightWorld must be between 0 and 3";
+    }
+    if (!finite(settings.exitTransitionDurationSeconds)
+            || settings.exitTransitionDurationSeconds < 0.1f
+            || settings.exitTransitionDurationSeconds > 2.0f) {
+        return "exitTransitionDurationSeconds must be between 0.1 and 2";
+    }
     return {};
 }
 
@@ -2096,6 +2116,18 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             parsed.playerLiquids.drowningDamageIntervalSeconds = OptionalNumber(
                     *playerLiquids, "drowningDamageIntervalSeconds", liquidContext)
                     .value_or(parsed.playerLiquids.drowningDamageIntervalSeconds);
+            parsed.playerLiquids.waterDragPerSecond = OptionalNumber(
+                    *playerLiquids, "waterDragPerSecond", liquidContext)
+                    .value_or(parsed.playerLiquids.waterDragPerSecond);
+            parsed.playerLiquids.surfaceRecoveryFrequencyHz = OptionalNumber(
+                    *playerLiquids, "surfaceRecoveryFrequencyHz", liquidContext)
+                    .value_or(parsed.playerLiquids.surfaceRecoveryFrequencyHz);
+            parsed.playerLiquids.maximumExitLedgeHeightWorld = OptionalNumber(
+                    *playerLiquids, "maximumExitLedgeHeightWorld", liquidContext)
+                    .value_or(parsed.playerLiquids.maximumExitLedgeHeightWorld);
+            parsed.playerLiquids.exitTransitionDurationSeconds = OptionalNumber(
+                    *playerLiquids, "exitTransitionDurationSeconds", liquidContext)
+                    .value_or(parsed.playerLiquids.exitTransitionDurationSeconds);
             const std::string liquidError = PlayerLiquidSettingsError(
                     parsed.playerLiquids);
             if (!liquidError.empty()) {
@@ -2527,7 +2559,14 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     settings.playerLiquids.oxygenRegenerationPerSecond},
             {"drowningDamage", settings.playerLiquids.drowningDamage},
             {"drowningDamageIntervalSeconds",
-                    settings.playerLiquids.drowningDamageIntervalSeconds}};
+                    settings.playerLiquids.drowningDamageIntervalSeconds},
+            {"waterDragPerSecond", settings.playerLiquids.waterDragPerSecond},
+            {"surfaceRecoveryFrequencyHz",
+                    settings.playerLiquids.surfaceRecoveryFrequencyHz},
+            {"maximumExitLedgeHeightWorld",
+                    settings.playerLiquids.maximumExitLedgeHeightWorld},
+            {"exitTransitionDurationSeconds",
+                    settings.playerLiquids.exitTransitionDurationSeconds}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

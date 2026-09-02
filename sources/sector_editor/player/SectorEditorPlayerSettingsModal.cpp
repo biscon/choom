@@ -272,6 +272,19 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         drawFloat("player_liquids_drowning_interval", "Damage interval (seconds)",
                 liquids.drowningDamageIntervalSeconds, state.drowningIntervalInput,
                 0.001f, 1000.0f, 3);
+        section("Movement and water exit");
+        drawFloat("player_liquids_water_drag", "Water drag / second",
+                liquids.waterDragPerSecond, state.waterDragInput,
+                0.0f, 40.0f, 2);
+        drawFloat("player_liquids_surface_recovery", "Surface recovery (Hz)",
+                liquids.surfaceRecoveryFrequencyHz, state.surfaceRecoveryInput,
+                0.1f, 10.0f, 2);
+        drawFloat("player_liquids_exit_height", "Maximum exit ledge height (world)",
+                liquids.maximumExitLedgeHeightWorld,
+                state.maximumExitLedgeHeightInput, 0.0f, 3.0f, 2);
+        drawFloat("player_liquids_exit_duration", "Exit duration (seconds)",
+                liquids.exitTransitionDurationSeconds,
+                state.exitTransitionDurationInput, 0.1f, 2.0f, 2);
     } else if (state.activeTab == SectorEditorPlayerSettingsTab::Audio) {
         FootstepApplicationSettings& footsteps = state.draft.footsteps;
         section("Footsteps and movement noise");

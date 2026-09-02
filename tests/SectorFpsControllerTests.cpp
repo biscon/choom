@@ -1337,6 +1337,12 @@ void TestSwimMovementModes()
             state, config, input, true, 1.0f);
     Check(Near(movement.y, 0.0f) && Near(Vector3Length(movement), 6.0f),
             "surface-latched forward swimming stays horizontal at swim speed");
+    input.swimUp = true;
+    movement = game::ComputeSectorLiquidSwimMovementDelta(
+            state, config, input, true, 1.0f);
+    Check(Near(movement.y, 0.0f),
+            "surface-latched swim-up waits for a validated water exit");
+    input.swimUp = false;
     movement = game::ComputeSectorLiquidSwimMovementDelta(
             state, config, input, false, 1.0f);
     Check(movement.y > 0.0f && Near(Vector3Length(movement), 6.0f),
@@ -1346,6 +1352,68 @@ void TestSwimMovementModes()
             state, config, input, false, 1.0f);
     Check(movement.y < 3.0f,
             "swim down contributes world-down to normalized movement");
+}
+
+void TestLiquidEntryMomentumAndSurfaceRecovery()
+{
+    game::SectorFpsControllerConfig config;
+    game::SectorLiquidPhysicsConfig physics;
+    game::SectorLiquidContact contact;
+    contact.hasLiquid = true;
+    contact.surfaceY = 0.0f;
+    contact.immersionFraction = 0.25f;
+
+    game::SectorFpsControllerState fastEntry;
+    fastEntry.verticalVelocity = -10.0f;
+    game::SectorFpsControllerState slowEntry = fastEntry;
+    slowEntry.verticalVelocity = -5.0f;
+    game::ApplySectorLiquidEntryResistance(
+            fastEntry, config, contact, physics, 0.1f);
+    game::ApplySectorLiquidEntryResistance(
+            slowEntry, config, contact, physics, 0.1f);
+    Check(fastEntry.verticalVelocity < 0.0f
+                    && std::fabs(fastEntry.verticalVelocity) < 10.0f,
+            "liquid entry retains but damps downward impact velocity");
+    Check(fastEntry.verticalVelocity < slowEntry.verticalVelocity,
+            "faster water entry retains greater downward momentum");
+
+    game::SectorLiquidMovementState liquid;
+    liquid.swimming = true;
+    liquid.surfaceLatched = true;
+    liquid.contact = contact;
+    game::SectorFpsControllerState swimmer;
+    swimmer.feetPosition.y = -2.0f;
+    swimmer.verticalVelocity = fastEntry.verticalVelocity;
+    for (int step = 0; step < 240; ++step) {
+        game::UpdateSectorLiquidSwimmingVerticalMotion(
+                swimmer,
+                config,
+                liquid,
+                physics,
+                0.0f,
+                -10.0f,
+                10.0f,
+                1.0f / 120.0f);
+    }
+    const float targetFeetY = game::SectorLiquidSurfaceEyeOffsetWorld
+            - config.eyeHeight;
+    Check(Near(swimmer.feetPosition.y, targetFeetY, 0.01f)
+                    && Near(swimmer.verticalVelocity, 0.0f, 0.02f),
+            "surface buoyancy smoothly settles at the stable eye offset");
+
+    liquid.surfaceLatched = false;
+    const float previousY = swimmer.feetPosition.y;
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            swimmer,
+            config,
+            liquid,
+            physics,
+            -config.swimSpeed,
+            -10.0f,
+            10.0f,
+            0.1f);
+    Check(swimmer.feetPosition.y < previousY,
+            "explicit swim-down input overrides surface recovery");
 }
 
 void TestPlayerOxygenDrainRecoveryAndDrowning()
@@ -1411,6 +1479,7 @@ int main()
     TestNoSectorPreservesVerticalState();
     TestLiquidContactAndSwimHysteresis();
     TestSwimMovementModes();
+    TestLiquidEntryMomentumAndSurfaceRecovery();
     TestPlayerOxygenDrainRecoveryAndDrowning();
     if (failures == 0) {
         std::puts("Sector FPS controller tests passed");

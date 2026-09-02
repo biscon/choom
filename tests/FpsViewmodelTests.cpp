@@ -980,6 +980,10 @@ void SettingsResolutionAndPersistence()
     settings.playerStamina.breathingAudio.thresholdRatio = 0.3f;
     settings.playerStamina.breathingAudio.volume = 0.6f;
     settings.playerStamina.breathingAudio.fadeOutSeconds = 3.0f;
+    settings.playerLiquids.waterDragPerSecond = 7.5f;
+    settings.playerLiquids.surfaceRecoveryFrequencyHz = 2.25f;
+    settings.playerLiquids.maximumExitLedgeHeightWorld = 1.1f;
+    settings.playerLiquids.exitTransitionDurationSeconds = 0.45f;
     settings.playerHealth.lowHealthVisual.enabled = true;
     settings.playerHealth.lowHealthVisual.thresholdRatio = 0.45f;
     settings.playerHealth.lowHealthVisual.vignetteColor = Color{55, 4, 9, 255};
@@ -1038,6 +1042,10 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerStamina.maximum, 120.0f));
     assert(Near(loaded.playerStamina.sprintDrainPerSecond, 18.0f));
     assert(Near(loaded.playerStamina.jumpCost, 24.0f));
+    assert(Near(loaded.playerLiquids.waterDragPerSecond, 7.5f));
+    assert(Near(loaded.playerLiquids.surfaceRecoveryFrequencyHz, 2.25f));
+    assert(Near(loaded.playerLiquids.maximumExitLedgeHeightWorld, 1.1f));
+    assert(Near(loaded.playerLiquids.exitTransitionDurationSeconds, 0.45f));
     assert(Near(loaded.playerStamina.regenerationPerSecond, 14.0f));
     assert(Near(loaded.playerStamina.exhaustedRecoveryRatio, 0.25f));
     assert(!loaded.playerStamina.windedCamera.enabled);

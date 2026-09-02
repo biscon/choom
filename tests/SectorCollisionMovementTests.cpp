@@ -1399,6 +1399,23 @@ void TestStructuralPrimitiveCollision()
                   && Near(rampHeights.floorZ, 0.5f)
                   && rampHeights.continuousFloor,
           "ramp exposes its inclined support height");
+    game::SectorCollisionHeights tangentBankHeights;
+    game::SectorCollisionHeights rampSectorHeights;
+    Check(rampWorld.GetSectorFloorCeiling(10, &rampSectorHeights)
+                  && rampWorld.ResolveActorVerticalContext(
+                          10,
+                          game::SectorCollisionVerticalQuery{
+                                  {2.75f, 4.0f},
+                                  -1.12f,
+                                  0.25f,
+                                  1.6f,
+                                  0.25f,
+                                  false},
+                          &tangentBankHeights)
+                  && Near(
+                          tangentBankHeights.ceilingZ,
+                          rampSectorHeights.ceilingZ),
+          "tangent ramp-bank contact does not become an overhead ceiling");
     game::SectorCollisionHeights rampSideHeights;
     Check(rampWorld.ResolveActorVerticalContext(
                   10,

@@ -75,6 +75,10 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState oxygenRegenerationInput;
     engine::UIIntInputState drowningDamageInput;
     engine::UIFloatInputState drowningIntervalInput;
+    engine::UIFloatInputState waterDragInput;
+    engine::UIFloatInputState surfaceRecoveryInput;
+    engine::UIFloatInputState maximumExitLedgeHeightInput;
+    engine::UIFloatInputState exitTransitionDurationInput;
 
     engine::UIFloatInputState inventoryWeightInput;
     engine::UIIntInputState inventorySlotsInput;

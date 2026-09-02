@@ -8,6 +8,10 @@ struct PlayerLiquidApplicationSettings {
     float oxygenRegenerationPerSecond = 20.0f;
     int drowningDamage = 10;
     float drowningDamageIntervalSeconds = 0.75f;
+    float waterDragPerSecond = 5.0f;
+    float surfaceRecoveryFrequencyHz = 1.5f;
+    float maximumExitLedgeHeightWorld = 0.75f;
+    float exitTransitionDurationSeconds = 0.30f;
 };
 
 struct PlayerOxygenModifiers {

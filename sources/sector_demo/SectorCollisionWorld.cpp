@@ -348,6 +348,10 @@ Vector2 ToStructuralLocalPoint(
     return Vector2{Dot(relative, shape.axisX), Dot(relative, shape.axisZ)};
 }
 
+bool PointInsideStructuralFootprint(
+        Vector2 position,
+        const StructuralCollisionShape& shape);
+
 bool CircleOverlapsStructuralFootprint(
         Vector2 position,
         float radius,
@@ -365,6 +369,30 @@ bool CircleOverlapsStructuralFootprint(
             std::clamp(local.y, -shape.halfExtents.y, shape.halfExtents.y)};
     return DistanceSquared(local, closest)
             <= radius * radius + CollisionMoveEpsilon;
+}
+
+bool CirclePenetratesStructuralFootprint(
+        Vector2 position,
+        float radius,
+        const StructuralCollisionShape& shape)
+{
+    if (PointInsideStructuralFootprint(position, shape)) {
+        return true;
+    }
+    if (shape.kind == SectorStructuralPrimitiveKind::Cylinder
+            || shape.kind == SectorStructuralPrimitiveKind::Sphere) {
+        const float combined = std::max(
+                0.0f, radius + shape.radius - CollisionMoveEpsilon);
+        return DistanceSquared(position, shape.center) < combined * combined;
+    }
+    const Vector2 local = ToStructuralLocalPoint(position, shape);
+    const Vector2 closest{
+            std::clamp(local.x, -shape.halfExtents.x, shape.halfExtents.x),
+            std::clamp(local.y, -shape.halfExtents.y, shape.halfExtents.y)};
+    const float penetrationRadius = std::max(
+            0.0f, radius - CollisionMoveEpsilon);
+    return DistanceSquared(local, closest)
+            < penetrationRadius * penetrationRadius;
 }
 
 float StructuralSupportHeight(
@@ -1143,7 +1171,9 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                 }
             }
         }
-        if (shape.bottom > query.feetY + CollisionPointEpsilon) {
+        if (shape.bottom > query.feetY + CollisionPointEpsilon
+                && CirclePenetratesStructuralFootprint(
+                        query.positionXZ, radius, shape)) {
             out->ceilingZ = std::min(out->ceilingZ, shape.bottom);
         }
     }

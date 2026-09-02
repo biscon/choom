@@ -49,6 +49,7 @@ void UpdateSectorLiquidMovementState(
     if (!contact.hasLiquid) {
         state.swimming = false;
         state.surfaceLatched = false;
+        state.exitingWater = false;
         return;
     }
 
@@ -89,7 +90,7 @@ Vector3 ComputeSectorLiquidSwimMovementDelta(
     if (input.moveBackward) movement = Vector3Subtract(movement, forward);
     if (input.strafeRight) movement = Vector3Add(movement, right);
     if (input.strafeLeft) movement = Vector3Subtract(movement, right);
-    if (input.swimUp) movement.y += 1.0f;
+    if (input.swimUp && !surfaceLatched) movement.y += 1.0f;
     if (input.swimDown) movement.y -= 1.0f;
     if (Vector3LengthSqr(movement) <= 0.0001f) {
         return Vector3{};
@@ -115,6 +116,102 @@ bool UpdateSectorLiquidCameraSubmersion(
             + (wasSubmerged ? SectorLiquidSubmersionHysteresisWorld
                             : -SectorLiquidSubmersionHysteresisWorld);
     return eyeY < threshold;
+}
+
+void ApplySectorLiquidEntryResistance(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        const SectorLiquidContact& contact,
+        const SectorLiquidPhysicsConfig& physics,
+        float dt)
+{
+    if (!contact.hasLiquid || contact.immersionFraction <= 0.0f
+            || state.verticalVelocity >= 0.0f
+            || !std::isfinite(dt) || dt <= 0.0f) {
+        return;
+    }
+    const SectorFpsControllerConfig normalized =
+            NormalizeSectorFpsControllerConfig(config);
+    const float influence = std::clamp(
+            contact.immersionFraction / SectorLiquidSwimEnterImmersion,
+            0.0f, 1.0f);
+    const float drag = std::clamp(
+            std::isfinite(physics.waterDragPerSecond)
+                    ? physics.waterDragPerSecond : 5.0f,
+            0.0f, 40.0f);
+    // The ordinary airborne solver has already applied full gravity. As the
+    // body enters liquid, progressively cancel it and damp the retained impact
+    // velocity instead of treating the surface as a floor.
+    state.verticalVelocity += normalized.gravity * influence * dt;
+    state.verticalVelocity *= std::exp(-drag * influence * dt);
+}
+
+void UpdateSectorLiquidSwimmingVerticalMotion(
+        SectorFpsControllerState& state,
+        const SectorFpsControllerConfig& config,
+        SectorLiquidMovementState& liquid,
+        const SectorLiquidPhysicsConfig& physics,
+        float desiredVerticalVelocity,
+        float minimumFeetY,
+        float maximumFeetY,
+        float dt)
+{
+    if (!std::isfinite(dt) || dt <= 0.0f) return;
+    const SectorFpsControllerConfig normalized =
+            NormalizeSectorFpsControllerConfig(config);
+    const float drag = std::clamp(
+            std::isfinite(physics.waterDragPerSecond)
+                    ? physics.waterDragPerSecond : 5.0f,
+            0.0f, 40.0f);
+    const int stepCount = std::clamp(
+            static_cast<int>(std::ceil(dt * 120.0f)), 1, 64);
+    const float stepDt = dt / static_cast<float>(stepCount);
+    for (int step = 0; step < stepCount; ++step) {
+        state.verticalVelocity *= std::exp(-drag * stepDt);
+        if (std::isfinite(desiredVerticalVelocity)
+                && std::fabs(desiredVerticalVelocity) > 0.001f) {
+            const float acceleration = std::max(
+                    8.0f * normalized.swimSpeed, 1.0f);
+            const float difference = desiredVerticalVelocity
+                    - state.verticalVelocity;
+            state.verticalVelocity += std::clamp(
+                    difference,
+                    -acceleration * stepDt,
+                    acceleration * stepDt);
+        } else if (liquid.surfaceLatched && liquid.contact.hasLiquid) {
+            const float frequency = std::clamp(
+                    std::isfinite(physics.surfaceRecoveryFrequencyHz)
+                            ? physics.surfaceRecoveryFrequencyHz : 1.5f,
+                    0.1f, 10.0f);
+            const float omega = 2.0f * PI * frequency;
+            const float targetFeetY = liquid.contact.surfaceY
+                    + SectorLiquidSurfaceEyeOffsetWorld - normalized.eyeHeight;
+            const float error = targetFeetY - state.feetPosition.y;
+            state.verticalVelocity += (omega * omega * error
+                    - 2.0f * omega * state.verticalVelocity) * stepDt;
+            state.verticalVelocity = std::clamp(
+                    state.verticalVelocity,
+                    -std::max(normalized.swimSpeed * 2.0f, 1.0f),
+                    std::max(normalized.swimSpeed, 1.0f));
+            if (std::fabs(error) < 0.002f
+                    && std::fabs(state.verticalVelocity) < 0.02f) {
+                state.feetPosition.y = targetFeetY;
+                state.verticalVelocity = 0.0f;
+            }
+        }
+
+        state.feetPosition.y += state.verticalVelocity * stepDt;
+        if (std::isfinite(minimumFeetY)
+                && state.feetPosition.y < minimumFeetY) {
+            state.feetPosition.y = minimumFeetY;
+            if (state.verticalVelocity < 0.0f) state.verticalVelocity = 0.0f;
+        }
+        if (std::isfinite(maximumFeetY)
+                && state.feetPosition.y > maximumFeetY) {
+            state.feetPosition.y = maximumFeetY;
+            if (state.verticalVelocity > 0.0f) state.verticalVelocity = 0.0f;
+        }
+    }
 }
 
 } // namespace game

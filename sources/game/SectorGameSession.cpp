@@ -1700,6 +1700,9 @@ void SectorGameSession::Update(
             &topologyMap,
             false,
             input,
+            applicationSettings != nullptr
+                    ? applicationSettings->playerLiquids
+                    : PlayerLiquidApplicationSettings{},
             previousVisualEyeY,
             dt,
             &scene.NpcNavigation().collisionCylinders);
