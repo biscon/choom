@@ -39,6 +39,12 @@ struct SectorLiquidPhysicsConfig {
     float surfaceRecoveryFrequencyHz = 0.35f;
 };
 
+struct SectorLiquidCollisionProxy {
+    float radius = 0.25f;
+    float height = 0.60f;
+    float bottomOffsetFromFeet = 0.90f;
+};
+
 constexpr float SectorLiquidSwimEnterImmersion = 0.50f;
 constexpr float SectorLiquidSwimExitImmersion = 0.40f;
 constexpr float SectorLiquidSurfaceEyeOffsetWorld = 0.08f;
@@ -64,6 +70,9 @@ Vector3 EvaluateSectorLiquidExitTrajectory(
         Vector3 targetFeetPosition,
         float liftY,
         float progress);
+SectorLiquidCollisionProxy BuildSectorLiquidCollisionProxy(
+        const SectorFpsControllerConfig& config,
+        float requestedHeightWorld);
 bool UpdateSectorLiquidCameraSubmersion(
         bool wasSubmerged,
         const SectorLiquidContact& contact,

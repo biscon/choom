@@ -75,5 +75,10 @@ SectorFpsVerticalContext BuildSectorStaticModelVerticalContext(
         const SectorFpsControllerState& playerState,
         const SectorFpsControllerConfig& playerConfig,
         const std::vector<SectorStaticModelCollider>& colliders);
+SectorFpsVerticalContext BuildSectorStaticModelVerticalContext(
+        const SectorFpsVerticalContext& sectorContext,
+        const SectorCollisionMoveState& moveState,
+        const SectorCollisionMoveConfig& moveConfig,
+        const std::vector<SectorStaticModelCollider>& colliders);
 
 } // namespace game

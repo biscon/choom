@@ -129,6 +129,24 @@ Vector3 EvaluateSectorLiquidExitTrajectory(
                     + (targetFeetPosition.z - startFeetPosition.z) * t};
 }
 
+SectorLiquidCollisionProxy BuildSectorLiquidCollisionProxy(
+        const SectorFpsControllerConfig& config,
+        float requestedHeightWorld)
+{
+    const SectorFpsControllerConfig normalized =
+            NormalizeSectorFpsControllerConfig(config);
+    const float requested = std::isfinite(requestedHeightWorld)
+            ? requestedHeightWorld : 0.60f;
+    const float height = std::clamp(
+            requested,
+            0.10f,
+            std::max(normalized.playerHeight, 0.10f));
+    return SectorLiquidCollisionProxy{
+            normalized.playerRadius,
+            height,
+            normalized.eyeHeight - height * 0.5f};
+}
+
 bool UpdateSectorLiquidCameraSubmersion(
         bool wasSubmerged,
         const SectorLiquidContact& contact,

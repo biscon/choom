@@ -9,6 +9,7 @@ struct PlayerLiquidApplicationSettings {
     int drowningDamage = 10;
     float drowningDamageIntervalSeconds = 0.75f;
     float entrySlowdownSeconds = 0.20f;
+    float swimCollisionHeightWorld = 0.60f;
     float waterDragPerSecond = 5.0f;
     float surfaceRecoveryFrequencyHz = 0.35f;
     float maximumExitLedgeHeightWorld = 0.75f;

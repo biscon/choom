@@ -1384,6 +1384,82 @@ void TestLiquidExitTrajectoryIsContinuous()
             "liquid exit retains forward motion through its final segment");
 }
 
+void TestLiquidCollisionProxyAndVerticalClearance()
+{
+    game::SectorFpsControllerConfig config;
+    config.playerRadius = 0.25f;
+    config.playerHeight = 1.6f;
+    config.eyeHeight = 1.2f;
+    const game::SectorLiquidCollisionProxy proxy =
+            game::BuildSectorLiquidCollisionProxy(config, 0.60f);
+    Check(Near(proxy.radius, 0.25f)
+                    && Near(proxy.height, 0.60f)
+                    && Near(proxy.bottomOffsetFromFeet, 0.90f),
+            "swim collision proxy preserves radius and centers on the eye");
+    Check(Near(
+                    proxy.bottomOffsetFromFeet + proxy.height * 0.5f,
+                    config.eyeHeight),
+            "swim collision proxy midpoint matches camera height");
+
+    const game::SectorLiquidCollisionProxy capped =
+            game::BuildSectorLiquidCollisionProxy(config, 3.0f);
+    Check(Near(capped.height, config.playerHeight),
+            "swim collision height cannot exceed standing player height");
+
+    game::SectorLiquidMovementState liquid;
+    liquid.swimming = true;
+    game::SectorLiquidPhysicsConfig physics;
+    game::SectorFpsControllerState descending;
+    descending.feetPosition.y = 0.0f;
+    const float floorY = 0.0f;
+    const float minimumFeetY = floorY - proxy.bottomOffsetFromFeet;
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            descending,
+            config,
+            liquid,
+            physics,
+            -config.swimSpeed,
+            minimumFeetY,
+            10.0f,
+            1.0f);
+    const float descendingEyeY = descending.feetPosition.y + config.eyeHeight;
+    Check(Near(descending.feetPosition.y, minimumFeetY)
+                    && Near(descendingEyeY, floorY + proxy.height * 0.5f),
+            "swim proxy lets the camera approach the floor by half its height");
+
+    game::SectorFpsControllerState ascending;
+    ascending.feetPosition.y = 0.0f;
+    const float ceilingY = 3.0f;
+    const float maximumFeetY = ceilingY
+            - proxy.bottomOffsetFromFeet - proxy.height;
+    game::UpdateSectorLiquidSwimmingVerticalMotion(
+            ascending,
+            config,
+            liquid,
+            physics,
+            config.swimSpeed,
+            -10.0f,
+            maximumFeetY,
+            1.0f);
+    const float ascendingEyeY = ascending.feetPosition.y + config.eyeHeight;
+    Check(Near(ascending.feetPosition.y, maximumFeetY)
+                    && Near(ascendingEyeY, ceilingY - proxy.height * 0.5f),
+            "swim proxy keeps the camera half its height below the ceiling");
+
+    game::SectorFpsControllerState impact;
+    impact.feetPosition.y = 0.0f;
+    impact.verticalVelocity = -10.0f;
+    liquid.surfaceLatched = true;
+    liquid.contact.hasLiquid = true;
+    liquid.contact.surfaceY = config.eyeHeight
+            - game::SectorLiquidSurfaceEyeOffsetWorld;
+    physics.entrySlowdownSeconds = 0.20f;
+    Check(game::BeginSectorLiquidImpactEntry(
+                    liquid, impact, config, physics, minimumFeetY)
+                    && Near(liquid.impactEntryTargetFeetY, minimumFeetY),
+            "liquid entry momentum uses the compact proxy floor limit");
+}
+
 void TestLiquidEntryMomentumAndSurfaceRecovery()
 {
     game::SectorFpsControllerConfig config;
@@ -1650,6 +1726,7 @@ int main()
     TestLiquidContactAndSwimHysteresis();
     TestSwimMovementModes();
     TestLiquidExitTrajectoryIsContinuous();
+    TestLiquidCollisionProxyAndVerticalClearance();
     TestLiquidEntryMomentumAndSurfaceRecovery();
     TestPlayerOxygenDrainRecoveryAndDrowning();
     if (failures == 0) {

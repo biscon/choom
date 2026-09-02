@@ -422,6 +422,9 @@ void TestPortalStepAndCeilingRules()
     result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true, 0.0f, 0.25f, 1.0f);
     Check(result.currentSectorId == 20 && !result.blockedByCeiling,
           "crouched-height collider passes through the same low portal");
+    result = Move(world, start, Vector2{2.0f, 0.0f}, 10, false, 0.2f, 0.25f, 0.6f);
+    Check(result.currentSectorId == 20 && !result.blockedByCeiling,
+          "compact camera-centered swim collider passes through a submerged low portal");
 }
 
 void TestBlocksPlayerPortalMovement()

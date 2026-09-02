@@ -1236,7 +1236,8 @@
           7.0,
           5.0,
           16.0
-        ]
+        ],
+        "resolution": 256
       }
     ],
     "structuralPrimitives": [

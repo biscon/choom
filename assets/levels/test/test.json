@@ -175,6 +175,12 @@
       }
     }
   },
+  "bakedReflectionProbes": {
+    "path": "assets/levels/test/test.reflection-probes.bin",
+    "version": 1,
+    "count": 1,
+    "format": "rgba16f-cubemap-mips"
+  },
   "editorSettings": {
     "gridSize": 1
   },

@@ -276,6 +276,9 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         drawFloat("player_liquids_entry_slowdown", "Entry slowdown (seconds)",
                 liquids.entrySlowdownSeconds, state.entrySlowdownInput,
                 0.0f, 2.0f, 2);
+        drawFloat("player_liquids_collision_height", "Swim collision height (world)",
+                liquids.swimCollisionHeightWorld,
+                state.swimCollisionHeightInput, 0.1f, 3.0f, 2);
         drawFloat("player_liquids_water_drag", "Swim coasting drag / second",
                 liquids.waterDragPerSecond, state.waterDragInput,
                 0.0f, 40.0f, 2);
