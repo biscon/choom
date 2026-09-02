@@ -142,6 +142,18 @@ bool CurrentAuthoringDerivationAvailable(
     return authoringDerivationCurrent && authoringDerivation.success;
 }
 
+bool IsRegisteredRoomtoneMusic(
+        const SectorAuthoringGraph& graph,
+        const std::string& soundId)
+{
+    if (soundId.empty()) {
+        return false;
+    }
+    const auto found = graph.audioSettings.soundsById.find(soundId);
+    return found != graph.audioSettings.soundsById.end()
+            && found->second.type == SectorSoundType::Music;
+}
+
 SectorEditorInspectorTarget UnavailableInspectorTarget(const char* status)
 {
     SectorEditorInspectorTarget target;
@@ -3912,6 +3924,121 @@ bool MutateSectorEditorAuthoringFaceAnchorById(
             derivation,
             status,
             "Updated authoring face anchor; derivation failed");
+}
+
+bool SetSectorEditorAuthoringFaceRoomtoneMode(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int faceAnchorId,
+        SectorRoomtoneMode mode,
+        std::string* outStatus)
+{
+    if (outStatus != nullptr) {
+        outStatus->clear();
+    }
+    SectorAuthoringFaceAnchor* anchor =
+            FindSectorAuthoringFaceAnchor(authoringGraph, faceAnchorId);
+    if (anchor == nullptr) {
+        if (outStatus != nullptr) {
+            *outStatus = "Roomtone unchanged: authoring face is unavailable";
+        }
+        return false;
+    }
+    if (mode != SectorRoomtoneMode::Inherit
+            && mode != SectorRoomtoneMode::Play
+            && mode != SectorRoomtoneMode::Silence) {
+        if (outStatus != nullptr) {
+            *outStatus = "Roomtone unchanged: invalid playback mode";
+        }
+        return false;
+    }
+    if (mode == SectorRoomtoneMode::Play
+            && !IsRegisteredRoomtoneMusic(authoringGraph, anchor->roomtone.soundId)) {
+        if (outStatus != nullptr) {
+            *outStatus = "Roomtone unchanged: choose a registered Music map sound ID before enabling Play";
+        }
+        return false;
+    }
+    if (anchor->roomtone.mode == mode) {
+        return false;
+    }
+
+    constexpr const char* Status = "Updated authoring face roomtone mode";
+    const bool changed = MutateSectorEditorAuthoringFaceAnchorById(
+            state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            faceAnchorId,
+            Status,
+            [mode](SectorAuthoringFaceAnchor& edited) {
+                edited.roomtone.mode = mode;
+                return true;
+            });
+    if (outStatus != nullptr) {
+        *outStatus = changed ? Status : derivation.authoringDerivationStatus;
+    }
+    return changed;
+}
+
+bool SetSectorEditorAuthoringFaceRoomtoneSoundId(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int faceAnchorId,
+        const std::string& soundId,
+        std::string* outStatus)
+{
+    if (outStatus != nullptr) {
+        outStatus->clear();
+    }
+    SectorAuthoringFaceAnchor* anchor =
+            FindSectorAuthoringFaceAnchor(authoringGraph, faceAnchorId);
+    if (anchor == nullptr) {
+        if (outStatus != nullptr) {
+            *outStatus = "Roomtone unchanged: authoring face is unavailable";
+        }
+        return false;
+    }
+    if (soundId.empty() && anchor->roomtone.mode == SectorRoomtoneMode::Play) {
+        if (outStatus != nullptr) {
+            *outStatus = "Roomtone unchanged: choose Inherit or Silence before clearing an active roomtone";
+        }
+        return false;
+    }
+    if (!soundId.empty() && !IsRegisteredRoomtoneMusic(authoringGraph, soundId)) {
+        if (outStatus != nullptr) {
+            *outStatus = "Roomtone unchanged: ID must reference a registered Music map sound";
+        }
+        return false;
+    }
+    if (anchor->roomtone.soundId == soundId) {
+        return false;
+    }
+
+    constexpr const char* Status = "Updated authoring face roomtone sound";
+    const bool changed = MutateSectorEditorAuthoringFaceAnchorById(
+            state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            faceAnchorId,
+            Status,
+            [&soundId](SectorAuthoringFaceAnchor& edited) {
+                edited.roomtone.soundId = soundId;
+                return true;
+            });
+    if (outStatus != nullptr) {
+        *outStatus = changed ? Status : derivation.authoringDerivationStatus;
+    }
+    return changed;
 }
 
 bool MutateSectorEditorAuthoringSideForTopologySideDef(

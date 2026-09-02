@@ -2299,12 +2299,19 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     ? SectorRoomtoneMode::Inherit
                     : playClicked ? SectorRoomtoneMode::Play
                                   : SectorRoomtoneMode::Silence;
-            mutateFaceAnchor("Updated authoring face roomtone mode",
-                    [nextMode](SectorAuthoringFaceAnchor& anchor) {
-                if (anchor.roomtone.mode == nextMode) return false;
-                anchor.roomtone.mode = nextMode;
-                return true;
-            });
+            std::string roomtoneStatus;
+            SetSectorEditorAuthoringFaceRoomtoneMode(
+                    state,
+                    context.lifecycle,
+                    context.topologyMap,
+                    authoringGraph,
+                    context.derivation,
+                    faceAnchorId,
+                    nextMode,
+                    &roomtoneStatus);
+            if (!roomtoneStatus.empty()) {
+                statusText = std::move(roomtoneStatus);
+            }
         }
         y += rowH + gap;
 
@@ -2320,17 +2327,18 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 engine::UITextJustify::Left);
         if (roomtoneSoundResult.submitted) {
             const std::string soundId{uiState.roomtoneSoundIdBuffer};
-            const SectorSoundDefinition* definition = context.sounds.Find(soundId);
-            if (!soundId.empty()
-                    && (definition == nullptr || definition->type != SectorSoundType::Music)) {
-                statusText = "Roomtone must reference a Music map sound ID";
-            } else {
-                mutateFaceAnchor("Updated authoring face roomtone sound",
-                        [&soundId](SectorAuthoringFaceAnchor& anchor) {
-                    if (anchor.roomtone.soundId == soundId) return false;
-                    anchor.roomtone.soundId = soundId;
-                    return true;
-                });
+            std::string roomtoneStatus;
+            SetSectorEditorAuthoringFaceRoomtoneSoundId(
+                    state,
+                    context.lifecycle,
+                    context.topologyMap,
+                    authoringGraph,
+                    context.derivation,
+                    faceAnchorId,
+                    soundId,
+                    &roomtoneStatus);
+            if (!roomtoneStatus.empty()) {
+                statusText = std::move(roomtoneStatus);
             }
         }
         y += rowH + gap;

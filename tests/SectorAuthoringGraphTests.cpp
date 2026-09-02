@@ -3460,6 +3460,230 @@ void TestEditorAuthoringFaceAnchorInspectorWritesProjectAfterDerivation()
           "face anchor inspector write bumps topology render revision");
 }
 
+void TestEditorRoomtoneRejectsInvalidReferencesWithoutInvalidatingSelection()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& graph = documentState.authoring.authoringGraph;
+    graph = MakeAdjacentTwoRoomGraph();
+    graph.audioSettings.soundsById.emplace(
+            "ambient_music",
+            game::SectorSoundDefinition{
+                    "ambient_music", "ambience/ambient.ogg", game::SectorSoundType::Music});
+    graph.audioSettings.soundsById.emplace(
+            "door_click",
+            game::SectorSoundDefinition{
+                    "door_click", "sfx/door.wav", game::SectorSoundType::Sound});
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "roomtone edit setup derives valid adjacent sectors");
+
+    state.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::size_t originalMappingCount =
+            documentState.derivation.authoringDerivation.mapping.sectors.size();
+    std::string status;
+    Check(!game::SetSectorEditorAuthoringFaceRoomtoneMode(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  100,
+                  game::SectorRoomtoneMode::Play,
+                  &status)
+                  && status.find("unchanged") != std::string::npos,
+          "Play mode without a Music ID is rejected with a warning");
+    Check(!game::SetSectorEditorAuthoringFaceRoomtoneSoundId(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  100,
+                  "missing_music",
+                  &status),
+          "missing roomtone ID is rejected");
+    Check(!game::SetSectorEditorAuthoringFaceRoomtoneSoundId(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  100,
+                  "door_click",
+                  &status),
+          "buffered Sound ID is rejected for roomtone");
+
+    const game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(graph, 100);
+    Check(anchor != nullptr
+                  && anchor->roomtone.mode == game::SectorRoomtoneMode::Inherit
+                  && anchor->roomtone.soundId.empty(),
+          "rejected roomtone edits preserve authoring settings");
+    Check(!documentState.lifecycle.topologyDocumentDirty
+                  && !documentState.lifecycle.hasUnsavedChanges
+                  && state.topologyRenderCache.valid
+                  && state.topologyRenderRevision == originalRevision,
+          "rejected roomtone edits preserve dirty and render-cache state");
+    Check(documentState.derivation.authoringDerivationState
+                          == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                  && !documentState.derivation.authoringDerivedTopologyStale
+                  && documentState.derivation.authoringDerivation.mapping.sectors.size()
+                          == originalMappingCount,
+          "rejected roomtone edits preserve current derivation mappings");
+
+    game::SectorAuthoringSelectionTarget selection;
+    Check(FindEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  documentState,
+                  graph,
+                  VisibleAuthoringPoint(96, 32),
+                  0.1f,
+                  0.1f,
+                  &selection)
+                  && selection.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && selection.faceAnchorId == 101,
+          "other sectors remain selectable after rejected roomtone edits");
+
+    Check(game::SetSectorEditorAuthoringFaceRoomtoneSoundId(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  100,
+                  "ambient_music",
+                  &status),
+          "registered Music ID is accepted for roomtone");
+    Check(game::SetSectorEditorAuthoringFaceRoomtoneMode(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  100,
+                  game::SectorRoomtoneMode::Play,
+                  &status),
+          "Play mode is accepted after assigning registered Music");
+    anchor = game::FindSectorAuthoringFaceAnchor(graph, 100);
+    const game::SectorTopologySector* sector =
+            game::FindSectorTopologySector(documentState.map.topologyMap, 100);
+    Check(anchor != nullptr && sector != nullptr
+                  && anchor->roomtone.mode == game::SectorRoomtoneMode::Play
+                  && anchor->roomtone.soundId == "ambient_music"
+                  && sector->roomtone.mode == game::SectorRoomtoneMode::Play
+                  && sector->roomtone.soundId == "ambient_music",
+          "valid roomtone edits synchronize authoring and derived sector data");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && !state.topologyRenderCache.valid
+                  && state.topologyRenderRevision > originalRevision,
+          "valid roomtone edits dirty the document and invalidate the render cache");
+
+    state.topologyRenderCache.valid = true;
+    const uint64_t activeRevision = state.topologyRenderRevision;
+    Check(!game::SetSectorEditorAuthoringFaceRoomtoneSoundId(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  100,
+                  "",
+                  &status)
+                  && state.topologyRenderCache.valid
+                  && state.topologyRenderRevision == activeRevision,
+          "clearing an active Play roomtone is rejected without cache invalidation");
+    Check(game::SetSectorEditorAuthoringFaceRoomtoneMode(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  100,
+                  game::SectorRoomtoneMode::Silence,
+                  &status)
+                  && game::SetSectorEditorAuthoringFaceRoomtoneSoundId(
+                          state,
+                          game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                          documentState.map.topologyMap,
+                          graph,
+                          game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                          100,
+                          "",
+                          &status),
+          "switching away from Play permits clearing the roomtone ID");
+}
+
+void TestDanglingRoomtoneWarningKeepsAuthoringDerivationSelectable()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& graph = documentState.authoring.authoringGraph;
+    graph = MakeAdjacentTwoRoomGraph();
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(graph, 100);
+    if (anchor == nullptr) {
+        Check(false, "dangling roomtone fixture has a face anchor");
+        return;
+    }
+    anchor->roomtone.mode = game::SectorRoomtoneMode::Play;
+    anchor->roomtone.soundId = "missing_music";
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "dangling roomtone reference remains derivable");
+    bool foundWarning = false;
+    for (const game::SectorAuthoringDerivationDiagnostic& diagnostic
+            : documentState.derivation.authoringDerivation.diagnostics) {
+        if (diagnostic.severity == game::SectorAuthoringValidationSeverity::Warning
+                && diagnostic.message.find("missing map sound ID") != std::string::npos) {
+            foundWarning = true;
+            break;
+        }
+    }
+    Check(foundWarning, "dangling roomtone derivation reports a warning");
+    Check(documentState.derivation.authoringDerivation.success
+                  && documentState.derivation.authoringDerivationState
+                          == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                  && !documentState.derivation.authoringDerivedTopologyStale,
+          "dangling roomtone warning preserves current derived topology");
+
+    game::SectorAuthoringSelectionTarget selection;
+    Check(FindEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  documentState,
+                  graph,
+                  VisibleAuthoringPoint(32, 32),
+                  0.1f,
+                  0.1f,
+                  &selection)
+                  && selection.kind == game::SectorAuthoringSelectionKind::FaceAnchor
+                  && selection.faceAnchorId == 100,
+          "sector with dangling roomtone remains selectable for repair");
+
+    std::string status;
+    Check(game::SetSectorEditorAuthoringFaceRoomtoneMode(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  100,
+                  game::SectorRoomtoneMode::Silence,
+                  &status),
+          "dangling Play roomtone can be repaired by selecting Silence");
+}
+
 void TestEditorAuthoringFaceAnchorInspectorWriteDoesNotDirectlyMutateDerivedTopology()
 {
     game::SectorEditorState state;
@@ -15172,6 +15396,8 @@ int main()
     TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping();
     TestEditorAuthoringSuccessfulDerivationUpdatesState();
     TestEditorAuthoringFaceAnchorInspectorWritesProjectAfterDerivation();
+    TestEditorRoomtoneRejectsInvalidReferencesWithoutInvalidatingSelection();
+    TestDanglingRoomtoneWarningKeepsAuthoringDerivationSelectable();
     TestEditorAuthoringFaceAnchorInspectorWriteDoesNotDirectlyMutateDerivedTopology();
     TestEditorSetAllModalUsesSelectedSectorLightingAndFallbacks();
     TestEditorSetAllSectorLightingUpdatesAllSectorsOnceAndChangesLightmapHash();

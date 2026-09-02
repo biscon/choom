@@ -1024,13 +1024,28 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
         if ((roomtone.mode != SectorRoomtoneMode::Inherit
                     && roomtone.mode != SectorRoomtoneMode::Play
                     && roomtone.mode != SectorRoomtoneMode::Silence)
-                || (roomtone.mode == SectorRoomtoneMode::Play && roomtone.soundId.empty())
                 || !std::isfinite(roomtone.volume)
                 || roomtone.volume < 0.0f || roomtone.volume > 1.0f
                 || roomtone.fadeMilliseconds < SectorRoomtoneSettings::UseMapFadeMilliseconds
                 || roomtone.fadeMilliseconds > 60000) {
             AddIssue(&issues, SectorTopologyObjectKind::Sector, sector.id,
                      "has invalid roomtone settings");
+        }
+        if (roomtone.mode == SectorRoomtoneMode::Play) {
+            const auto sound = map.audioSettings.soundsById.find(roomtone.soundId);
+            if (roomtone.soundId.empty()) {
+                AddIssue(&issues, SectorTopologyObjectKind::Sector, sector.id,
+                         "roomtone has no Music map sound ID; playback is disabled",
+                         SectorTopologyValidationSeverity::Warning);
+            } else if (sound == map.audioSettings.soundsById.end()) {
+                AddIssue(&issues, SectorTopologyObjectKind::Sector, sector.id,
+                         "roomtone references a missing map sound ID; playback is disabled",
+                         SectorTopologyValidationSeverity::Warning);
+            } else if (sound->second.type != SectorSoundType::Music) {
+                AddIssue(&issues, SectorTopologyObjectKind::Sector, sector.id,
+                         "roomtone references a non-Music map sound ID; playback is disabled",
+                         SectorTopologyValidationSeverity::Warning);
+            }
         }
         if (!CanExtractSector(map, indexes, sector.id)) {
             continue;

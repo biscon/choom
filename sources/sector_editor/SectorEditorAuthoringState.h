@@ -441,6 +441,26 @@ bool MutateSectorEditorAuthoringFaceAnchorById(
         const char* status,
         const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate);
 
+bool SetSectorEditorAuthoringFaceRoomtoneMode(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int faceAnchorId,
+        SectorRoomtoneMode mode,
+        std::string* outStatus = nullptr);
+
+bool SetSectorEditorAuthoringFaceRoomtoneSoundId(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int faceAnchorId,
+        const std::string& soundId,
+        std::string* outStatus = nullptr);
+
 bool MutateSectorEditorAuthoringSideForTopologySideDef(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,

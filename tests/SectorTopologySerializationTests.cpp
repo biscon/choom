@@ -384,6 +384,17 @@ void ExpectSaveRejected(const SectorTopologyMap& map, const char* description)
     Check(!error.empty(), "rejected save reports an error");
 }
 
+void ExpectAuthoringSaveRejected(
+        const game::SectorAuthoringDocument& document,
+        const char* description)
+{
+    std::string text;
+    std::string error;
+    Check(!game::SaveSectorAuthoringDocumentToJsonString(document, text, &error),
+          description);
+    Check(!error.empty(), "rejected authoring save reports an error");
+}
+
 void TestRoundTrip()
 {
     const SectorTopologyMap original = MakeSquare();
@@ -3144,6 +3155,16 @@ void TestAudioSettingsRoundTripAndValidation()
     SectorTopologyMap invalidSave = original;
     invalidSave.audioSettings.roomtoneFadeMilliseconds = -1;
     ExpectSaveRejected(invalidSave, "invalid roomtone fade is rejected on save");
+    invalidSave = original;
+    invalidSave.sectors[0].roomtone.soundId = "missing_music";
+    ExpectSaveRejected(invalidSave, "missing roomtone reference is rejected on save");
+
+    game::SectorAuthoringDocument invalidAuthoring =
+            MakeAuthoringDocumentFromMap(original);
+    invalidAuthoring.graph.faceAnchors[0].roomtone.soundId = "missing_music";
+    ExpectAuthoringSaveRejected(
+            invalidAuthoring,
+            "missing authoring roomtone reference is rejected on save");
 }
 
 void TestSkySettingsRoundTripAndValidation()

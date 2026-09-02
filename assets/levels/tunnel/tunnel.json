@@ -101,6 +101,14 @@
     },
     "intensity": 1.0
   },
+  "audio": {
+    "sounds": {
+      "damp_cavern": {
+        "path": "ambience/damp-cavern-ambience.ogg",
+        "type": "music"
+      }
+    }
+  },
   "bakedLightmap": {
     "path": "assets/levels/tunnel/tunnel.lightmap.bin",
     "width": 2048,
@@ -998,6 +1006,10 @@
               0.0
             ]
           }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "damp_cavern"
         }
       },
       {
@@ -1075,8 +1087,11 @@
             ]
           }
         },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "damp_cavern"
+        },
         "liquid": {
-          "enabled": true,
           "surfaceOffset": 17.5,
           "particulates": {
             "amount": 132,
@@ -1158,6 +1173,10 @@
               0.0
             ]
           }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "damp_cavern"
         }
       },
       {
@@ -1234,6 +1253,10 @@
               0.0
             ]
           }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "damp_cavern"
         }
       }
     ],
