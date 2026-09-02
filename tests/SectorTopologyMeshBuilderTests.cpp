@@ -2108,7 +2108,8 @@ void TestDynamicShadowUpdateScheduling()
     std::vector<game::SectorDynamicShadowUpdateRequest> pending;
     for (std::size_t index = 0; index < 5; ++index) {
         pending.push_back(game::SectorDynamicShadowUpdateRequest{
-                index, index == 3, static_cast<uint64_t>(index + 1),
+                index, index == 3, false,
+                static_cast<uint64_t>(index + 1),
                 game::DynamicPointLightShadowFaceCount});
     }
     game::SortSectorDynamicShadowUpdateRequests(pending);
@@ -2134,6 +2135,59 @@ void TestDynamicShadowUpdateScheduling()
     }
     Check(game::SectorDynamicShadowUpdateCount(5, 0) == 5,
           "zero shadow update budget means unlimited updates");
+
+    pending = {
+            game::SectorDynamicShadowUpdateRequest{0, true, false, 1, 1},
+            game::SectorDynamicShadowUpdateRequest{1, false, true, 9, 1}};
+    game::SortSectorDynamicShadowUpdateRequests(pending);
+    Check(pending.front().casterIndex == 1,
+          "reserved moving shadow updates run before ordinary invalid tiles");
+}
+
+void TestReservedRuntimeLightSelection()
+{
+    game::SectorPreviewDynamicPointLightSource ordinary = LightSource(
+            10, 1, Vector3{}, 8.0f, 20.0f);
+    game::SectorPreviewDynamicPointLightSource reserved = LightSource(
+            -2, 1, Vector3{}, 8.0f, 0.1f);
+    reserved.light.reserveSelection = true;
+    std::vector<game::SectorPreviewDynamicPointLightSource> candidates{
+            ordinary, reserved};
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected;
+    std::vector<game::SectorPreviewDynamicLightKey> selectedKeys;
+    std::vector<game::SectorPreviewDynamicLightKey> previous{
+            game::MakeSectorPreviewDynamicLightKey(ordinary.light)};
+    game::SelectRankedSectorPreviewDynamicPointLights(
+            candidates,
+            game::RuntimePortalVisibilityResult{},
+            {},
+            1,
+            selected,
+            &selectedKeys,
+            &previous);
+    Check(selected.size() == 1 && selected[0].lightId == -2,
+          "reserved runtime light displaces an already selected brighter light");
+
+    game::SectorPreviewDynamicPointLightUniform normalShadow =
+            ShadowSpotLightSource(
+                    20, 1, Vector3{}, 8.0f, 20.0f).light;
+    normalShadow.shadowPriority = 999;
+    game::SectorPreviewDynamicPointLightUniform reservedShadow =
+            ShadowSpotLightSource(
+                    -2, 1, Vector3{}, 8.0f, 0.1f).light;
+    reservedShadow.reserveShadow = true;
+    std::vector<game::SectorPreviewDynamicPointLightUniform> shadowLights{
+            normalShadow, reservedShadow};
+    std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> casters;
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            shadowLights,
+            game::RuntimePortalVisibilityResult{},
+            {},
+            1,
+            casters);
+    Check(casters.size() == 1 && casters[0].lightId == -2
+                    && casters[0].shadowSlotCount == 1,
+          "reserved flashlight owns exactly one spotlight atlas tile");
 }
 
 void TestPersistentDynamicShadowSlotOwnership()
@@ -3076,6 +3130,7 @@ int main()
     TestDynamicSpotLightShadowMatrices();
     TestCompactDynamicSpotShadowProjection();
     TestDynamicShadowUpdateScheduling();
+    TestReservedRuntimeLightSelection();
     TestPersistentDynamicShadowSlotOwnership();
     TestDynamicSpotLightShadowUniformPacking();
     TestDynamicPointLightFlickerHelper();

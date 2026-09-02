@@ -65,6 +65,9 @@ struct SectorDynamicLightShaderLocations {
     int dynamicLightOuterConeCos = -1;
     int dynamicLightSpotShadowRight = -1;
     int dynamicLightSpotShadowProjection = -1;
+    int dynamicLightProfiles = -1;
+    int dynamicLightProfileParameters = -1;
+    int flashlightCookie = -1;
     int hasPointShadows = -1;
 };
 
@@ -136,6 +139,9 @@ struct SectorBillboardDynamicLightContext {
     // x = spot inverse tan(outer half-angle), y = far / (far - near).
     // Rect cube shadows use only the uploaded right axis.
     std::array<Vector2, MaxDynamicLights> dynamicLightSpotShadowProjection{};
+    std::array<int, MaxDynamicLights> dynamicLightProfiles{};
+    std::array<Vector3, MaxDynamicLights> dynamicLightProfileParameters{};
+    const Texture2D* flashlightCookie = nullptr;
     int hasPointShadows = 0;
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
     SectorDynamicShadowMapTextures shadowMaps{};
@@ -196,6 +202,8 @@ public:
             float runtimeSeconds) const;
     void SetRuntimePointLight(
             const SectorPreviewDynamicPointLightSource* light);
+    void SetReservedRuntimeLight(
+            const SectorPreviewDynamicPointLightSource* light);
     const SectorPreviewDynamicPointLightSource* RuntimePointLight() const
     {
         return runtimePointLightActive ? &runtimePointLight : nullptr;
@@ -207,6 +215,9 @@ public:
         maxShadowLightUpdatesPerFrame = std::min(count, MaxDynamicLights);
     }
     void SetSelectionFadeInSeconds(float seconds);
+    void SetFlashlightCookieTexture(const Texture2D* texture) {
+        flashlightCookieTexture = texture;
+    }
 
     const std::vector<SectorPreviewDynamicPointLightSource>& Sources() const { return sources; }
     const std::vector<SectorPreviewDynamicPointLightSource>& Candidates() const { return candidates; }
@@ -287,6 +298,8 @@ private:
     std::vector<SectorPreviewDynamicPointLightSource> selectionSources;
     SectorPreviewDynamicPointLightSource runtimePointLight;
     bool runtimePointLightActive = false;
+    SectorPreviewDynamicPointLightSource reservedRuntimeLight;
+    bool reservedRuntimeLightActive = false;
     std::vector<SectorPreviewDynamicPointLightSource> candidates;
     std::vector<SectorPreviewDynamicPointLightUniform> selectedLights;
     std::vector<SectorPreviewDynamicLightKey> selectedLightKeys;
@@ -335,6 +348,7 @@ private:
     std::size_t maxDynamicLights = MaxDynamicLights;
     std::size_t maxShadowLightUpdatesPerFrame = 2;
     float selectionFadeInSeconds = DynamicLightDefaultFadeInSeconds;
+    const Texture2D* flashlightCookieTexture = nullptr;
     int shadowLightViewProjectionLoc = -1;
     int shadowUseSkinningLoc = -1;
     int spotShadowCutoutLightViewProjectionLoc = -1;

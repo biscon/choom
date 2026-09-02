@@ -31,6 +31,7 @@
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "game/FpsPlayerRuntime.h"
+#include "game/PlayerFlashlight.h"
 #include "game/PlayerAudio.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
@@ -200,7 +201,7 @@ private:
     void EndFpsViewmodel(engine::AssetManager& assets);
     void UpdateFpsViewmodel(engine::AssetManager& assets, float dt);
     bool ProcessFpsWeaponFire(engine::Input& input);
-    void UpdateFpsViewmodelTransformsAndLight();
+    void UpdateFpsViewmodelTransformsAndLight(float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingAuthoringLine(const char* message);
     void CancelPendingAuthoringRectangle(const char* message);
@@ -660,6 +661,7 @@ private:
     std::string statusText;
     SectorSceneRuntime sceneRuntime;
     FpsPlayerRuntime fpsPlayer;
+    PlayerFlashlightState flashlight;
     FpsWeaponRegistry weaponRegistry;
     SectorMaterialRegistry& materialRegistry;
     ItemRegistry& itemRegistry;

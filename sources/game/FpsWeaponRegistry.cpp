@@ -1394,6 +1394,71 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail(sneakContext + "." + sneakError);
             }
         }
+        const auto playerFlashlight = root.find("playerFlashlight");
+        if (playerFlashlight != root.end()) {
+            const std::string flashlightContext =
+                    "application settings.playerFlashlight";
+            if (!playerFlashlight->is_object()) {
+                Fail(flashlightContext + " must be an object");
+            }
+            PlayerFlashlightApplicationSettings& flashlight =
+                    parsed.playerFlashlight;
+            flashlight.intensity = OptionalNumber(
+                    *playerFlashlight, "intensity", flashlightContext)
+                    .value_or(flashlight.intensity);
+            flashlight.reachWorld = OptionalNumber(
+                    *playerFlashlight, "reachWorld", flashlightContext)
+                    .value_or(flashlight.reachWorld);
+            flashlight.coneRadiusWorld = OptionalNumber(
+                    *playerFlashlight, "coneRadiusWorld", flashlightContext)
+                    .value_or(flashlight.coneRadiusWorld);
+            const auto tint = playerFlashlight->find("tint");
+            if (tint != playerFlashlight->end()) {
+                flashlight.tint = ReadColor(*tint, flashlightContext + ".tint");
+            }
+            flashlight.hotspotRadiusRatio = OptionalNumber(
+                    *playerFlashlight, "hotspotRadiusRatio", flashlightContext)
+                    .value_or(flashlight.hotspotRadiusRatio);
+            flashlight.spillBrightness = OptionalNumber(
+                    *playerFlashlight, "spillBrightness", flashlightContext)
+                    .value_or(flashlight.spillBrightness);
+            flashlight.edgeSoftness = OptionalNumber(
+                    *playerFlashlight, "edgeSoftness", flashlightContext)
+                    .value_or(flashlight.edgeSoftness);
+            flashlight.castsShadows = OptionalBoolean(
+                    *playerFlashlight, "castsShadows", flashlightContext)
+                    .value_or(flashlight.castsShadows);
+            flashlight.shadowStrength = OptionalNumber(
+                    *playerFlashlight, "shadowStrength", flashlightContext)
+                    .value_or(flashlight.shadowStrength);
+            flashlight.shadowSoftness = OptionalNumber(
+                    *playerFlashlight, "shadowSoftness", flashlightContext)
+                    .value_or(flashlight.shadowSoftness);
+            flashlight.shadowContactOffsetWorld = OptionalNumber(
+                    *playerFlashlight,
+                    "shadowContactOffsetWorld",
+                    flashlightContext)
+                    .value_or(flashlight.shadowContactOffsetWorld);
+            flashlight.heightAboveEyeWorld = OptionalNumber(
+                    *playerFlashlight, "heightAboveEyeWorld", flashlightContext)
+                    .value_or(flashlight.heightAboveEyeWorld);
+            flashlight.lateralOffsetWorld = OptionalNumber(
+                    *playerFlashlight, "lateralOffsetWorld", flashlightContext)
+                    .value_or(flashlight.lateralOffsetWorld);
+            flashlight.aimConvergenceDistanceWorld = OptionalNumber(
+                    *playerFlashlight,
+                    "aimConvergenceDistanceWorld",
+                    flashlightContext)
+                    .value_or(flashlight.aimConvergenceDistanceWorld);
+            flashlight.aimResponseSeconds = OptionalNumber(
+                    *playerFlashlight, "aimResponseSeconds", flashlightContext)
+                    .value_or(flashlight.aimResponseSeconds);
+            const std::string flashlightError =
+                    PlayerFlashlightSettingsError(flashlight);
+            if (!flashlightError.empty()) {
+                Fail(flashlightContext + "." + flashlightError);
+            }
+        }
         const auto playerHealth = root.find("playerHealth");
         if (playerHealth != root.end()) {
             const std::string healthContext = "application settings.playerHealth";
@@ -2186,6 +2251,13 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings playerSneak." + sneakError);
         return false;
     }
+    const std::string flashlightError = PlayerFlashlightSettingsError(
+            settings.playerFlashlight);
+    if (!flashlightError.empty()) {
+        SetError(error,
+                "application settings playerFlashlight." + flashlightError);
+        return false;
+    }
     const engine::ToneMappingSettings normalizedToneMapping =
             engine::NormalizeToneMappingSettings(settings.toneMapping);
     if (settings.toneMapping.toneMapper != normalizedToneMapping.toneMapper
@@ -2272,6 +2344,28 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     settings.playerSneak.crouchVisualDetectionMultiplier},
             {"crouchMovementNoiseMultiplier",
                     settings.playerSneak.crouchMovementNoiseMultiplier}};
+    root["playerFlashlight"] = {
+            {"intensity", settings.playerFlashlight.intensity},
+            {"reachWorld", settings.playerFlashlight.reachWorld},
+            {"coneRadiusWorld", settings.playerFlashlight.coneRadiusWorld},
+            {"tint", ColorValue(settings.playerFlashlight.tint)},
+            {"hotspotRadiusRatio",
+                    settings.playerFlashlight.hotspotRadiusRatio},
+            {"spillBrightness", settings.playerFlashlight.spillBrightness},
+            {"edgeSoftness", settings.playerFlashlight.edgeSoftness},
+            {"castsShadows", settings.playerFlashlight.castsShadows},
+            {"shadowStrength", settings.playerFlashlight.shadowStrength},
+            {"shadowSoftness", settings.playerFlashlight.shadowSoftness},
+            {"shadowContactOffsetWorld",
+                    settings.playerFlashlight.shadowContactOffsetWorld},
+            {"heightAboveEyeWorld",
+                    settings.playerFlashlight.heightAboveEyeWorld},
+            {"lateralOffsetWorld",
+                    settings.playerFlashlight.lateralOffsetWorld},
+            {"aimConvergenceDistanceWorld",
+                    settings.playerFlashlight.aimConvergenceDistanceWorld},
+            {"aimResponseSeconds",
+                    settings.playerFlashlight.aimResponseSeconds}};
     const PlayerLowHealthVisualApplicationSettings& lowHealthVisual =
             settings.playerHealth.lowHealthVisual;
     const PlayerHeartbeatAudioApplicationSettings& heartbeatAudio =

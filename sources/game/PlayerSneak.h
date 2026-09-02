@@ -110,6 +110,28 @@ inline float PlayerSneakCrouchVisualMultiplier(
     return 1.0f + (settings.crouchVisualDetectionMultiplier - 1.0f) * blend;
 }
 
+inline float PlayerSneakVisualLightLevel(
+        float sampledNormalizedLight,
+        bool flashlightEnabled)
+{
+    return flashlightEnabled
+            ? 1.0f
+            : (std::isfinite(sampledNormalizedLight)
+                    ? std::clamp(sampledNormalizedLight, 0.0f, 1.0f)
+                    : 0.0f);
+}
+
+inline float PlayerSneakVisualCrouchBlend(
+        float crouchBlend,
+        bool flashlightEnabled)
+{
+    return flashlightEnabled
+            ? 0.0f
+            : (std::isfinite(crouchBlend)
+                    ? std::clamp(crouchBlend, 0.0f, 1.0f)
+                    : 0.0f);
+}
+
 inline float PlayerSneakProximityDetectionFactor(
         float distanceWorld,
         float proximityRangeWorld)

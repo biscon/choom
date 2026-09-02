@@ -187,6 +187,8 @@ public:
     {
         return dynamicLightState.RuntimePointLight();
     }
+    void SetPlayerFlashlight(
+            const SectorPreviewDynamicPointLightSource* light);
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.sectorDrawRecords.size(); }
     int TriangleCount() const { return meshes.triangleCount; }
@@ -362,6 +364,8 @@ private:
     std::vector<engine::TextureHandle> lightmapTextures;
     std::vector<engine::TextureHandle> directionalLightmapTextures;
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
+    engine::TextureHandle flashlightCookieTexture =
+            engine::NullTextureHandle();
     Material material = {};
     Texture2D defaultMaterialTexture = {};
     bool materialLoaded = false;
@@ -407,6 +411,9 @@ private:
     int dynamicLightOuterConeCosLoc = -1;
     int dynamicLightSpotShadowRightLoc = -1;
     int dynamicLightSpotShadowProjectionLoc = -1;
+    int dynamicLightProfilesLoc = -1;
+    int dynamicLightProfileParametersLoc = -1;
+    int flashlightCookieLoc = -1;
     int hasPointShadowsLoc = -1;
     int dynamicLightShadowSlotsLoc = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {

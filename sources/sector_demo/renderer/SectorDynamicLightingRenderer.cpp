@@ -395,6 +395,8 @@ void UploadSectorRendererDynamicPointLights(
     std::array<float, MaxDynamicLights> outerConeCos{};
     std::array<Vector3, MaxDynamicLights> spotShadowRight{};
     std::array<Vector2, MaxDynamicLights> spotShadowProjection{};
+    std::array<int, MaxDynamicLights> profiles{};
+    std::array<Vector3, MaxDynamicLights> profileParameters{};
     for (int i = 0; i < lightCount; ++i) {
         positions[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].position;
         colors[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].color;
@@ -412,6 +414,10 @@ void UploadSectorRendererDynamicPointLights(
                 : lights[static_cast<size_t>(i)].direction;
         innerConeCos[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].innerConeCos;
         outerConeCos[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].outerConeCos;
+        profiles[static_cast<size_t>(i)] = static_cast<int>(
+                lights[static_cast<size_t>(i)].profile);
+        profileParameters[static_cast<size_t>(i)] =
+                lights[static_cast<size_t>(i)].profileParameters;
         if (lights[static_cast<size_t>(i)].kind
                 != SectorPreviewDynamicLightKind::Point) {
             BuildSectorDynamicSpotShadowProjectionUpload(
@@ -433,6 +439,8 @@ void UploadSectorRendererDynamicPointLights(
     context.dynamicLightOuterConeCos = outerConeCos;
     context.dynamicLightSpotShadowRight = spotShadowRight;
     context.dynamicLightSpotShadowProjection = spotShadowProjection;
+    context.dynamicLightProfiles = profiles;
+    context.dynamicLightProfileParameters = profileParameters;
     UploadSectorRendererDynamicPointLights(shader, locations, context);
 }
 
@@ -535,6 +543,30 @@ void UploadSectorRendererDynamicPointLights(
                 SHADER_UNIFORM_VEC2,
                 context.dynamicLightCount);
     }
+    if (locations.dynamicLightProfiles >= 0) {
+        SetShaderValueV(
+                shader,
+                locations.dynamicLightProfiles,
+                context.dynamicLightProfiles.data(),
+                SHADER_UNIFORM_INT,
+                context.dynamicLightCount);
+    }
+    if (locations.dynamicLightProfileParameters >= 0) {
+        SetShaderValueV(
+                shader,
+                locations.dynamicLightProfileParameters,
+                context.dynamicLightProfileParameters.data(),
+                SHADER_UNIFORM_VEC3,
+                context.dynamicLightCount);
+    }
+    if (locations.flashlightCookie >= 0
+            && context.flashlightCookie != nullptr
+            && context.flashlightCookie->id != 0) {
+        SetShaderValueTexture(
+                shader,
+                locations.flashlightCookie,
+                *context.flashlightCookie);
+    }
 }
 
 void UploadSectorRendererDynamicSpotLightShadowUniforms(
@@ -599,6 +631,9 @@ void SectorDynamicLightingRenderer::Reset()
     selectionSources.clear();
     runtimePointLight = {};
     runtimePointLightActive = false;
+    reservedRuntimeLight = {};
+    reservedRuntimeLightActive = false;
+    flashlightCookieTexture = nullptr;
     candidates.clear();
     selectedLights.clear();
     selectedLightKeys.clear();
@@ -650,7 +685,7 @@ void SectorDynamicLightingRenderer::RebuildSources(
 {
     BuildSectorPreviewDynamicPointLightSources(map, sectorLookupWorld, sources);
     lightingVisibilityCacheValid = false;
-    selectionSources.reserve(sources.size() + 1);
+    selectionSources.reserve(sources.size() + 2);
     ReserveSelectionBuffers();
 }
 
@@ -685,6 +720,22 @@ void SectorDynamicLightingRenderer::SetRuntimePointLight(
     }
 }
 
+void SectorDynamicLightingRenderer::SetReservedRuntimeLight(
+        const SectorPreviewDynamicPointLightSource* light)
+{
+    reservedRuntimeLightActive = light != nullptr;
+    reservedRuntimeLight = light != nullptr
+            ? *light
+            : SectorPreviewDynamicPointLightSource{};
+    if (reservedRuntimeLightActive) {
+        reservedRuntimeLight.light.selectionFadeMultiplier = 1.0f;
+        reservedRuntimeLight.light.selectionFadeEnabled = false;
+        reservedRuntimeLight.light.reserveSelection = true;
+        reservedRuntimeLight.light.reserveShadow =
+                reservedRuntimeLight.light.castsShadow;
+    }
+}
+
 void SectorDynamicLightingRenderer::SetSelectionFadeInSeconds(float seconds)
 {
     selectionFadeInSeconds = std::isfinite(seconds)
@@ -708,6 +759,9 @@ void SectorDynamicLightingRenderer::UpdateSelection(
             dynamicPortalBlockers);
     selectionSources.assign(sources.begin(), sources.end());
     if (runtimePointLightActive) selectionSources.push_back(runtimePointLight);
+    if (reservedRuntimeLightActive) {
+        selectionSources.push_back(reservedRuntimeLight);
+    }
     CollectSectorPreviewDynamicPointLightCandidates(
             selectionSources,
             lightingVisibility,
@@ -906,6 +960,7 @@ SectorBillboardDynamicLightContext SectorDynamicLightingRenderer::BuildLightCont
         float runtimeSeconds) const
 {
     SectorBillboardDynamicLightContext context;
+    context.flashlightCookie = flashlightCookieTexture;
     context.shadowUniforms = PackShadowUniforms(shadowMapsEnabled);
     const std::array<int, MaxDynamicLights> globalShadowSlots =
             context.shadowUniforms.dynamicLightShadowSlots;
@@ -945,6 +1000,12 @@ SectorBillboardDynamicLightContext SectorDynamicLightingRenderer::BuildLightCont
                 : light.direction;
         context.dynamicLightInnerConeCos[localIndex] = light.innerConeCos;
         context.dynamicLightOuterConeCos[localIndex] = light.outerConeCos;
+        context.dynamicLightProfiles[localIndex] = static_cast<int>(
+                flashlightCookieTexture != nullptr
+                        ? light.profile
+                        : SectorDynamicLightProfile::None);
+        context.dynamicLightProfileParameters[localIndex] =
+                light.profileParameters;
         if (light.kind != SectorPreviewDynamicLightKind::Point) {
             BuildSectorDynamicSpotShadowProjectionUpload(
                     light,
@@ -1578,7 +1639,15 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
         if (!dirty) continue;
         ++shadowRenderStats.dirtyLights;
         pendingShadowLightUpdates.push_back(SectorDynamicShadowUpdateRequest{
-                casterIndex, invalid, serial, caster.shadowSlotCount});
+                casterIndex,
+                invalid,
+                caster.dynamicLightIndex >= 0
+                        && static_cast<std::size_t>(caster.dynamicLightIndex)
+                                < selectedLights.size()
+                        && selectedLights[static_cast<std::size_t>(
+                                caster.dynamicLightIndex)].reserveShadow,
+                serial,
+                caster.shadowSlotCount});
     }
     SortSectorDynamicShadowUpdateRequests(pendingShadowLightUpdates);
     shadowRenderStats.queuedLights = pendingShadowLightUpdates.size();

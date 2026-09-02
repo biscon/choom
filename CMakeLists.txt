@@ -323,6 +323,8 @@ if(BUILD_TESTING)
             DOOR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDoorRenderer.cpp"
             WINDOW_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorWindowRenderer.cpp"
             BILLBOARD_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBillboardRenderer.cpp"
+            FLASHLIGHT_PROFILE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorFlashlightProfileSampling.h"
+            DYNAMIC_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicShadowSampling.h"
             BLOOM_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBloomRenderer.cpp"
             DISTANCE_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDistanceFogRenderer.cpp"
             ANALYTIC_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorAnalyticFogRenderer.cpp"
@@ -817,6 +819,15 @@ if(BUILD_TESTING)
     target_include_directories(player_sneak_tests PRIVATE sources)
     target_link_libraries(player_sneak_tests PRIVATE raylib)
     add_test(NAME player_sneak COMMAND player_sneak_tests)
+
+    add_executable(player_flashlight_tests
+            tests/PlayerFlashlightTests.cpp
+            sources/game/PlayerFlashlight.cpp
+            sources/engine/render/ColorTransfer.cpp
+    )
+    target_include_directories(player_flashlight_tests PRIVATE sources)
+    target_link_libraries(player_flashlight_tests PRIVATE raylib)
+    add_test(NAME player_flashlight COMMAND player_flashlight_tests)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp

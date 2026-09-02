@@ -77,6 +77,7 @@ void SortSectorDynamicShadowUpdateRequests(
             requests.begin(), requests.end(),
             [](const SectorDynamicShadowUpdateRequest& left,
                     const SectorDynamicShadowUpdateRequest& right) {
+                if (left.reserved != right.reserved) return left.reserved;
                 if (left.invalid != right.invalid) return left.invalid;
                 return left.dirtySerial < right.dirtySerial;
             });
@@ -267,6 +268,10 @@ bool BetterScoredDynamicPointLight(
         const ScoredDynamicPointLightCandidate& lhs,
         const ScoredDynamicPointLightCandidate& rhs)
 {
+    if (lhs.source->light.reserveSelection
+            != rhs.source->light.reserveSelection) {
+        return lhs.source->light.reserveSelection;
+    }
     if (lhs.score != rhs.score) {
         return lhs.score > rhs.score;
     }
@@ -279,6 +284,9 @@ bool BetterScoredDynamicSpotLightShadowCandidate(
         const ScoredDynamicSpotLightShadowCandidate& lhs,
         const ScoredDynamicSpotLightShadowCandidate& rhs)
 {
+    if (lhs.light->reserveShadow != rhs.light->reserveShadow) {
+        return lhs.light->reserveShadow;
+    }
     if (lhs.light->shadowPriority != rhs.light->shadowPriority) {
         return lhs.light->shadowPriority > rhs.light->shadowPriority;
     }
@@ -307,7 +315,8 @@ int FindWeakestPreviouslySelectedLightIndex(
 {
     int weakestIndex = -1;
     for (std::size_t i = 0; i < selected.size(); ++i) {
-        if (!selected[i].previouslySelected) {
+        if (!selected[i].previouslySelected
+                || selected[i].source->light.reserveSelection) {
             continue;
         }
         if (weakestIndex < 0
@@ -317,6 +326,21 @@ int FindWeakestPreviouslySelectedLightIndex(
                             MakeSectorPreviewDynamicLightKey(
                                     selected[static_cast<std::size_t>(weakestIndex)].source->light),
                             MakeSectorPreviewDynamicLightKey(selected[i].source->light)))) {
+            weakestIndex = static_cast<int>(i);
+        }
+    }
+    return weakestIndex;
+}
+
+int FindWeakestNonReservedLightIndex(
+        const std::vector<ScoredDynamicPointLightCandidate>& selected)
+{
+    int weakestIndex = -1;
+    for (std::size_t i = 0; i < selected.size(); ++i) {
+        if (selected[i].source->light.reserveSelection) continue;
+        if (weakestIndex < 0
+                || selected[i].score
+                        < selected[static_cast<std::size_t>(weakestIndex)].score) {
             weakestIndex = static_cast<int>(i);
         }
     }
@@ -812,6 +836,14 @@ void SelectRankedSectorPreviewDynamicPointLights(
         }
 
         if (candidate.previouslySelected) {
+            continue;
+        }
+
+        if (candidate.source->light.reserveSelection) {
+            const int replaceIndex = FindWeakestNonReservedLightIndex(selected);
+            if (replaceIndex >= 0) {
+                selected[static_cast<std::size_t>(replaceIndex)] = candidate;
+            }
             continue;
         }
 

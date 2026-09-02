@@ -111,7 +111,7 @@
     "intensity": 1.0
   },
   "fogSettings": {
-    "enabled": true,
+    "enabled": false,
     "color": {
       "r": 50,
       "g": 54,

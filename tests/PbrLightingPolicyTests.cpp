@@ -1169,6 +1169,45 @@ void TestHdrEffectShaderAndPassPolicies()
           "optional bloom failure is latched and rlgl blend transitions are synchronized/restored");
 }
 
+void TestFlashlightProfileCoverage()
+{
+    const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const std::string models = ReadSource(PBR_SHADER_SOURCE_PATH);
+    const std::string doors = ReadSource(DOOR_SHADER_SOURCE_PATH);
+    const std::string billboards = ReadSource(BILLBOARD_SHADER_SOURCE_PATH);
+    const std::string profile = ReadSource(FLASHLIGHT_PROFILE_SOURCE_PATH);
+    const std::string shadows = ReadSource(DYNAMIC_SHADOW_SOURCE_PATH);
+    const auto supportsFlashlight = [](const std::string& source) {
+        return source.find("uniform sampler2D flashlightCookie")
+                            != std::string::npos
+                && source.find("FlashlightProfileFactor")
+                            != std::string::npos
+                && source.find("dynamicLightProfiles[i] == 1")
+                            != std::string::npos
+                && source.find("coneAtten = FlashlightProfileFactor")
+                            != std::string::npos
+                && source.find("coneAtten *= FlashlightProfileFactor")
+                            == std::string::npos;
+    };
+    Check(supportsFlashlight(sector)
+                    && supportsFlashlight(models)
+                    && supportsFlashlight(doors)
+                    && supportsFlashlight(billboards),
+          "all opaque and cutout dynamic-light receivers apply the projected flashlight profile");
+    Check(profile.find("if (radial >= 1.0) return 0.0")
+                            != std::string::npos
+                    && profile.find("float edge = 1.0 - smoothstep")
+                            != std::string::npos
+                    && profile.find("cookieVariation") != std::string::npos,
+          "shared flashlight profile owns one outer feather and keeps the cookie as variation only");
+    Check(shadows.find("bool flashlightProjection") != std::string::npos
+                    && shadows.find("fromLight += offsetNormal * contactOffset")
+                            != std::string::npos
+                    && shadows.find("effectiveBias = 0.000001")
+                            != std::string::npos,
+          "flashlight shadow receivers use a world-space contact offset instead of constant projected-depth bias");
+}
+
 } // namespace
 
 int main()
@@ -1183,6 +1222,7 @@ int main()
     TestBakedHdrConsumersStayUnclamped();
     TestDistanceFogUsesDarknessGatedScattering();
     TestHdrEffectShaderAndPassPolicies();
+    TestFlashlightProfileCoverage();
     if (failures != 0) {
         std::fprintf(stderr, "%d PBR lighting policy test(s) failed\n", failures);
         return 1;

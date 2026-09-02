@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorBillboardRenderer.h"
 
 #include "sector_demo/renderer/SectorDynamicShadowSampling.h"
+#include "sector_demo/renderer/SectorFlashlightProfileSampling.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/assets/SpriteAnimationAssets.h"
@@ -76,6 +77,9 @@ uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightSpotShadowRight[MAX_DYNAMIC_LIGHTS];
 uniform vec2 dynamicLightSpotShadowProjection[MAX_DYNAMIC_LIGHTS];
+uniform int dynamicLightProfiles[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightProfileParameters[MAX_DYNAMIC_LIGHTS];
+uniform sampler2D flashlightCookie;
 uniform int hasPointShadows;
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
 uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
@@ -108,6 +112,9 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
 }
 
+)"
+SECTOR_FLASHLIGHT_PROFILE_GLSL
+R"(
 vec3 StoreFiniteHalfRadiance(vec3 value)
 {
     vec3 result;
@@ -193,9 +200,14 @@ void main()
                 float coneDot = dot(spotDirection, fragmentDirectionFromLight);
                 float innerConeCos = dynamicLightInnerConeCos[i];
                 float outerConeCos = dynamicLightOuterConeCos[i];
-                coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
-                        ? smoothstep(outerConeCos, innerConeCos, coneDot)
-                        : step(innerConeCos, coneDot);
+                if (dynamicLightProfiles[i] == 1) {
+                    coneAtten = FlashlightProfileFactor(
+                            i, fragmentDirectionFromLight);
+                } else {
+                    coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
+                            ? smoothstep(outerConeCos, innerConeCos, coneDot)
+                            : step(innerConeCos, coneDot);
+                }
             }
             if (coneAtten <= 0.0) continue;
             int shadowSlot = dynamicLightShadowSlots[i];
@@ -403,6 +415,9 @@ bool SectorBillboardRenderer::Load()
         dynamicLightOuterConeCosLoc = -1;
         dynamicLightSpotShadowRightLoc = -1;
         dynamicLightSpotShadowProjectionLoc = -1;
+        dynamicLightProfilesLoc = -1;
+        dynamicLightProfileParametersLoc = -1;
+        flashlightCookieLoc = -1;
         hasPointShadowsLoc = -1;
         dynamicLightShadowSlotsLoc = -1;
         shadowLightMatrixLocs.fill(-1);
@@ -437,6 +452,11 @@ bool SectorBillboardRenderer::Load()
             cutoutShader, "dynamicLightSpotShadowRight");
     dynamicLightSpotShadowProjectionLoc = GetShaderLocationArrayBase(
             cutoutShader, "dynamicLightSpotShadowProjection");
+    dynamicLightProfilesLoc = GetShaderLocationArrayBase(
+            cutoutShader, "dynamicLightProfiles");
+    dynamicLightProfileParametersLoc = GetShaderLocationArrayBase(
+            cutoutShader, "dynamicLightProfileParameters");
+    flashlightCookieLoc = GetShaderLocation(cutoutShader, "flashlightCookie");
     hasPointShadowsLoc = GetShaderLocation(cutoutShader, "hasPointShadows");
     dynamicLightShadowSlotsLoc = GetShaderLocationArrayBase(cutoutShader, "dynamicLightShadowSlots");
     for (std::size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
@@ -473,6 +493,9 @@ void SectorBillboardRenderer::Shutdown()
     dynamicLightOuterConeCosLoc = -1;
     dynamicLightSpotShadowRightLoc = -1;
     dynamicLightSpotShadowProjectionLoc = -1;
+    dynamicLightProfilesLoc = -1;
+    dynamicLightProfileParametersLoc = -1;
+    flashlightCookieLoc = -1;
     hasPointShadowsLoc = -1;
     dynamicLightShadowSlotsLoc = -1;
     shadowLightMatrixLocs.fill(-1);
@@ -535,6 +558,10 @@ void SectorBillboardRenderer::Draw(
     dynamicLightLocations.dynamicLightSpotShadowRight = dynamicLightSpotShadowRightLoc;
     dynamicLightLocations.dynamicLightSpotShadowProjection =
             dynamicLightSpotShadowProjectionLoc;
+    dynamicLightLocations.dynamicLightProfiles = dynamicLightProfilesLoc;
+    dynamicLightLocations.dynamicLightProfileParameters =
+            dynamicLightProfileParametersLoc;
+    dynamicLightLocations.flashlightCookie = flashlightCookieLoc;
     dynamicLightLocations.hasPointShadows = hasPointShadowsLoc;
     UploadSectorRendererDynamicPointLights(cutoutShader, dynamicLightLocations, dynamicLightContext);
     SectorDynamicSpotLightShadowShaderLocations shadowLocations;

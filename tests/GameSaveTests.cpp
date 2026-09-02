@@ -101,6 +101,7 @@ void SerializationRoundTripsStableState()
     assert(restored.slot == 3);
     assert(restored.name == source.name);
     assert(restored.player.health.current == 73);
+    assert(!restored.player.flashlightEnabled);
     assert(restored.itemCampaign.inventory.entries.size() == 1);
     assert(restored.itemCampaign.levels[0].droppedItems[0].item.sessionDrop);
     assert(restored.persistentScripts.bools.at("generator_started"));
@@ -111,6 +112,25 @@ void SerializationRoundTripsStableState()
     assert(restored.levels[0].npcs[0].shuffleOrder.size() == 3);
     assert(restored.levels[0].dynamicLights[0].color.b == 255);
     assert(restored.levels[0].triggers[0].consumed);
+}
+
+void FlashlightStateIsBackwardCompatible()
+{
+    game::GameSaveData source = MakeSave();
+    source.player.flashlightEnabled = true;
+    std::string encoded;
+    std::string error;
+    assert(game::SerializeGameSave(source, encoded, error));
+    assert(encoded.find("flashlightEnabled") != std::string::npos);
+    game::GameSaveData restored;
+    assert(game::DeserializeGameSave(encoded, restored, error));
+    assert(restored.player.flashlightEnabled);
+
+    source.player.flashlightEnabled = false;
+    assert(game::SerializeGameSave(source, encoded, error));
+    assert(encoded.find("flashlightEnabled") == std::string::npos);
+    assert(game::DeserializeGameSave(encoded, restored, error));
+    assert(!restored.player.flashlightEnabled);
 }
 
 void InvalidInputDoesNotReplaceDestination()
@@ -165,6 +185,7 @@ void IncompatibleVersionIsReportedPerSlot()
 int main()
 {
     SerializationRoundTripsStableState();
+    FlashlightStateIsBackwardCompatible();
     InvalidInputDoesNotReplaceDestination();
     StorageScansSlotsAndRejectsUnsafeNames();
     IncompatibleVersionIsReportedPerSlot();

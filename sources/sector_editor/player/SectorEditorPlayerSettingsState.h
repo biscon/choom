@@ -15,7 +15,8 @@ enum class SectorEditorPlayerSettingsTab {
     Inventory,
     Audio,
     Health,
-    Sneaking
+    Sneaking,
+    Lighting
 };
 
 struct SectorEditorPlayerSoundEventDraft {
@@ -50,6 +51,7 @@ struct SectorEditorPlayerSettingsState {
     engine::UIScrollState audioScroll;
     engine::UIScrollState healthScroll;
     engine::UIScrollState sneakingScroll;
+    engine::UIScrollState lightingScroll;
     std::string errorMessage;
 
     engine::UIFloatInputState staminaMaximumInput;
@@ -111,6 +113,23 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState sneakProximityRangeInput;
     engine::UIFloatInputState sneakCrouchVisualInput;
     engine::UIFloatInputState sneakCrouchNoiseInput;
+
+    engine::UIFloatInputState flashlightIntensityInput;
+    engine::UIFloatInputState flashlightReachInput;
+    engine::UIFloatInputState flashlightConeRadiusInput;
+    engine::UIIntInputState flashlightTintRedInput;
+    engine::UIIntInputState flashlightTintGreenInput;
+    engine::UIIntInputState flashlightTintBlueInput;
+    engine::UIFloatInputState flashlightHotspotInput;
+    engine::UIFloatInputState flashlightSpillInput;
+    engine::UIFloatInputState flashlightEdgeInput;
+    engine::UIFloatInputState flashlightShadowStrengthInput;
+    engine::UIFloatInputState flashlightShadowSoftnessInput;
+    engine::UIFloatInputState flashlightShadowContactOffsetInput;
+    engine::UIFloatInputState flashlightHeightInput;
+    engine::UIFloatInputState flashlightLateralOffsetInput;
+    engine::UIFloatInputState flashlightAimConvergenceInput;
+    engine::UIFloatInputState flashlightAimResponseInput;
 };
 
 } // namespace game
