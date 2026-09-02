@@ -32,7 +32,6 @@ struct SectorLiquidSettings {
     float surfaceOffset = 0.0f;
     Color shallowColor = Color{49, 126, 142, 255};
     Color deepColor = Color{8, 38, 54, 255};
-    Color foamColor = Color{210, 229, 223, 255};
     float visibilityDepthWorld = 4.0f;
     float roughness = 0.12f;
     float refractionStrength = 0.025f;
@@ -41,7 +40,6 @@ struct SectorLiquidSettings {
     float rippleSpeed = 0.35f;
     float flowDirectionDegrees = 0.0f;
     float flowSpeedWorld = 0.0f;
-    float foamAmount = 0.35f;
 };
 
 constexpr float SectorLiquidMinVisibilityDepthWorld = 0.05f;
@@ -66,7 +64,6 @@ inline bool AreSectorLiquidSettingsEqual(
             && a.surfaceOffset == b.surfaceOffset
             && sameColor(a.shallowColor, b.shallowColor)
             && sameColor(a.deepColor, b.deepColor)
-            && sameColor(a.foamColor, b.foamColor)
             && a.visibilityDepthWorld == b.visibilityDepthWorld
             && a.roughness == b.roughness
             && a.refractionStrength == b.refractionStrength
@@ -74,8 +71,7 @@ inline bool AreSectorLiquidSettingsEqual(
             && a.rippleStrength == b.rippleStrength
             && a.rippleSpeed == b.rippleSpeed
             && a.flowDirectionDegrees == b.flowDirectionDegrees
-            && a.flowSpeedWorld == b.flowSpeedWorld
-            && a.foamAmount == b.foamAmount;
+            && a.flowSpeedWorld == b.flowSpeedWorld;
 }
 
 inline bool IsDefaultSectorLiquidSettings(const SectorLiquidSettings& settings)

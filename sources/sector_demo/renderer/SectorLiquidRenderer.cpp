@@ -39,8 +39,7 @@ uniform vec3 cameraPosition;
 uniform float runtimeSeconds;
 uniform vec3 shallowColor;
 uniform vec3 deepColor;
-uniform vec3 foamColor;
-// visibility depth, roughness, refraction strength, foam amount
+// visibility depth, roughness, refraction strength, unused
 uniform vec4 liquidParams0;
 // ripple scale, ripple strength, ripple speed, unused
 uniform vec4 liquidParams1;
@@ -77,6 +76,8 @@ uniform float fogReferenceHeightWorld;
 uniform float fogHeightFalloff;
 
 out vec4 finalColor;
+
+const float OpaqueDepthEpsilon = 0.000001;
 
 vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
@@ -182,7 +183,7 @@ void main()
     vec2 baseUv = gl_FragCoord.xy / max(viewportSize, vec2(1.0));
     if (advancedTransmission != 0) {
         float opaqueDepth = texture(sceneDepth, baseUv).r;
-        if (opaqueDepth + 0.0005 < gl_FragCoord.z) discard;
+        if (opaqueDepth + OpaqueDepthEpsilon < gl_FragCoord.z) discard;
     }
 
     vec3 normal = ProceduralNormal();
@@ -204,14 +205,13 @@ void main()
 
     float opticalDepth = liquidParams0.x;
     vec3 transmitted = shallowColor;
-    float foam = 0.0;
     if (advancedTransmission != 0) {
         vec2 distortion = normal.xz * liquidParams0.z
                 * mix(0.25, 1.0, 1.0 - ndotv);
         vec2 refractedUv = clamp(baseUv + distortion,
                 vec2(0.001), vec2(0.999));
         float refractedDepth = texture(sceneDepth, refractedUv).r;
-        if (refractedDepth + 0.0005 < gl_FragCoord.z) {
+        if (refractedDepth + OpaqueDepthEpsilon < gl_FragCoord.z) {
             refractedUv = baseUv;
             refractedDepth = texture(sceneDepth, baseUv).r;
         }
@@ -224,15 +224,9 @@ void main()
         vec3 absorptionTint = mix(vec3(1.0), deepColor, absorption * 0.88);
         transmitted = mix(sceneTransmission * absorptionTint,
                 deepColor, absorption * absorption * 0.72);
-        float foamWidth = mix(0.02, 0.65, liquidParams0.w);
-        foam = (1.0 - smoothstep(0.0, foamWidth, opticalDepth)) * liquidParams0.w;
-        float crest = 0.5 + 0.5 * sin((fragWorldPosition.x + fragWorldPosition.z) * 13.0
-                + runtimeSeconds * 1.9);
-        foam *= mix(0.72, 1.0, crest);
     }
 
     vec3 rgb = mix(transmitted, reflection, fresnel);
-    rgb = mix(rgb, foamColor, clamp(foam, 0.0, 1.0));
     rgb = mix(rgb, fogColor, FogAmount());
     rgb = clamp(rgb, vec3(0.0), vec3(65504.0));
     if (advancedTransmission != 0) {
@@ -283,7 +277,6 @@ bool SectorLiquidRenderer::Initialize(std::size_t capacity)
     runtimeSecondsLoc = GetShaderLocation(shader, "runtimeSeconds");
     shallowColorLoc = GetShaderLocation(shader, "shallowColor");
     deepColorLoc = GetShaderLocation(shader, "deepColor");
-    foamColorLoc = GetShaderLocation(shader, "foamColor");
     liquidParams0Loc = GetShaderLocation(shader, "liquidParams0");
     liquidParams1Loc = GetShaderLocation(shader, "liquidParams1");
     flowParamsLoc = GetShaderLocation(shader, "flowParams");
@@ -484,16 +477,14 @@ void SectorLiquidRenderer::Draw(const SectorLiquidDrawContext& context)
         const SectorLiquidSettings& liquid = surface.settings;
         const Vector3 shallow = engine::SrgbColorBytesToLinearSceneRgb(liquid.shallowColor);
         const Vector3 deep = engine::SrgbColorBytesToLinearSceneRgb(liquid.deepColor);
-        const Vector3 foam = engine::SrgbColorBytesToLinearSceneRgb(liquid.foamColor);
         const Vector4 params0{liquid.visibilityDepthWorld, liquid.roughness,
-                liquid.refractionStrength, liquid.foamAmount};
+                liquid.refractionStrength, 0.0f};
         const Vector4 params1{liquid.rippleScaleWorld, liquid.rippleStrength,
                 liquid.rippleSpeed, 0.0f};
         const Vector2 flow{liquid.flowDirectionDegrees * DEG2RAD,
                 liquid.flowSpeedWorld};
         if (shallowColorLoc >= 0) SetShaderValue(shader, shallowColorLoc, &shallow, SHADER_UNIFORM_VEC3);
         if (deepColorLoc >= 0) SetShaderValue(shader, deepColorLoc, &deep, SHADER_UNIFORM_VEC3);
-        if (foamColorLoc >= 0) SetShaderValue(shader, foamColorLoc, &foam, SHADER_UNIFORM_VEC3);
         if (liquidParams0Loc >= 0) SetShaderValue(shader, liquidParams0Loc, &params0, SHADER_UNIFORM_VEC4);
         if (liquidParams1Loc >= 0) SetShaderValue(shader, liquidParams1Loc, &params1, SHADER_UNIFORM_VEC4);
         if (flowParamsLoc >= 0) SetShaderValue(shader, flowParamsLoc, &flow, SHADER_UNIFORM_VEC2);

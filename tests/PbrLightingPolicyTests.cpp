@@ -938,6 +938,8 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&liquidShader.find("uniform sampler2D sceneDepth")!=std::string::npos
                     &&liquidShader.find("ProceduralNormal")!=std::string::npos
                     &&liquidShader.find("ReconstructWorldPosition")!=std::string::npos
+                    &&liquidShader.find("OpaqueDepthEpsilon = 0.000001")!=std::string::npos
+                    &&liquidShader.find("0.0005")==std::string::npos
                     &&liquidShader.find("environmentBoxProjection")!=std::string::npos
                     &&liquidShader.find("textureLod(environmentTexture")!=std::string::npos
                     &&liquidShader.find("ToneMap")==std::string::npos

@@ -495,7 +495,6 @@ void TestLiquidSerializationAndValidation()
     liquid.surfaceOffset = 6.0f;
     liquid.shallowColor = Color{20, 80, 120, 255};
     liquid.deepColor = Color{2, 12, 30, 255};
-    liquid.foamColor = Color{180, 200, 190, 255};
     liquid.visibilityDepthWorld = 2.5f;
     liquid.roughness = 0.22f;
     liquid.refractionStrength = 0.04f;
@@ -504,7 +503,6 @@ void TestLiquidSerializationAndValidation()
     liquid.rippleSpeed = 0.7f;
     liquid.flowDirectionDegrees = 450.0f;
     liquid.flowSpeedWorld = 1.25f;
-    liquid.foamAmount = 0.6f;
 
     const Json saved = Json::parse(SaveText(map));
     Check(saved["sectors"][0].contains("liquid")
@@ -525,6 +523,17 @@ void TestLiquidSerializationAndValidation()
                   && Near(loaded.sectors[0].liquid.flowDirectionDegrees, 90.0f)
                   && Near(loaded.sectors[0].liquid.flowSpeedWorld, 1.25f),
           "liquid settings round-trip without preset identity");
+
+    Json legacyFoam = saved;
+    legacyFoam["sectors"][0]["liquid"]["foamColor"] = Json{
+            {"r", 180}, {"g", 200}, {"b", 190}, {"a", 255}};
+    legacyFoam["sectors"][0]["liquid"]["foamAmount"] = 0.6f;
+    Check(LoadText(legacyFoam.dump(), loaded, error),
+          "legacy liquid foam fields remain load-compatible");
+    const Json migratedFoam = Json::parse(SaveText(loaded));
+    Check(!migratedFoam["sectors"][0]["liquid"].contains("foamColor")
+                  && !migratedFoam["sectors"][0]["liquid"].contains("foamAmount"),
+          "retired liquid foam fields are omitted when resaved");
 
     const Json defaults = Json::parse(SaveText(MakeSquare()));
     Check(!defaults["sectors"][0].contains("liquid"),

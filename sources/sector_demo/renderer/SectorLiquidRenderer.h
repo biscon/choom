@@ -77,7 +77,6 @@ private:
     int runtimeSecondsLoc = -1;
     int shallowColorLoc = -1;
     int deepColorLoc = -1;
-    int foamColorLoc = -1;
     int liquidParams0Loc = -1;
     int liquidParams1Loc = -1;
     int flowParamsLoc = -1;

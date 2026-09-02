@@ -35,33 +35,27 @@ void ApplyPreset(SectorLiquidSettings& liquid, LiquidPreset preset)
         case LiquidPreset::DirtyWater:
             liquid.shallowColor = Color{112, 110, 73, 255};
             liquid.deepColor = Color{35, 31, 18, 255};
-            liquid.foamColor = Color{183, 176, 137, 255};
             liquid.visibilityDepthWorld = 1.8f;
             liquid.roughness = 0.2f;
             liquid.refractionStrength = 0.018f;
-            liquid.foamAmount = 0.45f;
             break;
         case LiquidPreset::Sewage:
             liquid.shallowColor = Color{87, 112, 62, 255};
             liquid.deepColor = Color{22, 34, 14, 255};
-            liquid.foamColor = Color{143, 163, 98, 255};
             liquid.visibilityDepthWorld = 0.9f;
             liquid.roughness = 0.26f;
             liquid.refractionStrength = 0.012f;
             liquid.rippleScaleWorld = 0.7f;
-            liquid.foamAmount = 0.65f;
             break;
         case LiquidPreset::GreenSludge:
             liquid.shallowColor = Color{64, 151, 58, 255};
             liquid.deepColor = Color{13, 47, 12, 255};
-            liquid.foamColor = Color{127, 207, 78, 255};
             liquid.visibilityDepthWorld = 0.4f;
             liquid.roughness = 0.38f;
             liquid.refractionStrength = 0.006f;
             liquid.rippleScaleWorld = 1.4f;
             liquid.rippleStrength = 0.08f;
             liquid.rippleSpeed = 0.15f;
-            liquid.foamAmount = 0.3f;
             break;
     }
 }
@@ -219,7 +213,6 @@ SectorEditorLiquidSettingsModalAction DrawSectorEditorLiquidSettingsModal(
     };
     drawColor("sector_editor_liquid_shallow", "Shallow RGB", state.draft.shallowColor, 0);
     drawColor("sector_editor_liquid_deep", "Deep RGB", state.draft.deepColor, 3);
-    drawColor("sector_editor_liquid_foam_color", "Foam RGB", state.draft.foamColor, 6);
     drawFloat(rightX, state.draft.visibilityDepthWorld, 6, "sector_editor_liquid_visibility_depth",
             "Visibility depth (m)", SectorLiquidMinVisibilityDepthWorld,
             SectorLiquidMaxVisibilityDepthWorld, 2, rightY);
@@ -227,8 +220,6 @@ SectorEditorLiquidSettingsModalAction DrawSectorEditorLiquidSettingsModal(
             "Roughness", 0.0f, 1.0f, 2, rightY);
     drawFloat(rightX, state.draft.refractionStrength, 8, "sector_editor_liquid_refraction",
             "Refraction strength", 0.0f, SectorLiquidMaxRefractionStrength, 3, rightY);
-    drawFloat(rightX, state.draft.foamAmount, 9, "sector_editor_liquid_foam",
-            "Intersection foam", 0.0f, 1.0f, 2, rightY);
 
     engine::Text(config, assets,
             Rectangle{leftX, modal.y + modal.height - 154.0f, innerW, 42.0f},

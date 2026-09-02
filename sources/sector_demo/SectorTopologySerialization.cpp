@@ -2683,7 +2683,6 @@ void ValidateLiquidSettings(
     RequireFinite(settings.rippleSpeed, context + ".rippleSpeed");
     RequireFinite(settings.flowDirectionDegrees, context + ".flowDirectionDegrees");
     RequireFinite(settings.flowSpeedWorld, context + ".flowSpeedWorld");
-    RequireFinite(settings.foamAmount, context + ".foamAmount");
     const float span = std::max(0.0f, ceilingZ - floorZ);
     if (settings.surfaceOffset < 0.0f || settings.surfaceOffset > span) {
         Fail(context + ".surfaceOffset must be within the sector height span");
@@ -2702,9 +2701,7 @@ void ValidateLiquidSettings(
             || settings.rippleSpeed < 0.0f
             || settings.rippleSpeed > SectorLiquidMaxRippleSpeed
             || settings.flowSpeedWorld < 0.0f
-            || settings.flowSpeedWorld > SectorLiquidMaxFlowSpeedWorld
-            || settings.foamAmount < 0.0f
-            || settings.foamAmount > 1.0f) {
+            || settings.flowSpeedWorld > SectorLiquidMaxFlowSpeedWorld) {
         Fail(context + " contains an out-of-range liquid parameter");
     }
 }
@@ -2738,8 +2735,6 @@ SectorLiquidSettings ReadLiquidSettings(
     if (shallowIt != value.end()) settings.shallowColor = ReadColor(*shallowIt, liquidContext + ".shallowColor");
     const auto deepIt = value.find("deepColor");
     if (deepIt != value.end()) settings.deepColor = ReadColor(*deepIt, liquidContext + ".deepColor");
-    const auto foamIt = value.find("foamColor");
-    if (foamIt != value.end()) settings.foamColor = ReadColor(*foamIt, liquidContext + ".foamColor");
     settings.visibilityDepthWorld = ReadOptionalFloat(value, "visibilityDepthWorld", liquidContext, settings.visibilityDepthWorld);
     settings.roughness = ReadOptionalFloat(value, "roughness", liquidContext, settings.roughness);
     settings.refractionStrength = ReadOptionalFloat(value, "refractionStrength", liquidContext, settings.refractionStrength);
@@ -2748,7 +2743,6 @@ SectorLiquidSettings ReadLiquidSettings(
     settings.rippleSpeed = ReadOptionalFloat(value, "rippleSpeed", liquidContext, settings.rippleSpeed);
     settings.flowDirectionDegrees = ReadOptionalFloat(value, "flowDirectionDegrees", liquidContext, settings.flowDirectionDegrees);
     settings.flowSpeedWorld = ReadOptionalFloat(value, "flowSpeedWorld", liquidContext, settings.flowSpeedWorld);
-    settings.foamAmount = ReadOptionalFloat(value, "foamAmount", liquidContext, settings.foamAmount);
     ValidateLiquidSettings(settings, floorZ, ceilingZ, liquidContext);
     settings.flowDirectionDegrees = NormalizeSectorLiquidSettingsForSpan(
             settings, floorZ, ceilingZ).flowDirectionDegrees;
@@ -2777,10 +2771,6 @@ Json WriteLiquidSettings(
             || settings.deepColor.g != defaults.deepColor.g
             || settings.deepColor.b != defaults.deepColor.b
             || settings.deepColor.a != defaults.deepColor.a) value["deepColor"] = WriteColor(settings.deepColor);
-    if (settings.foamColor.r != defaults.foamColor.r
-            || settings.foamColor.g != defaults.foamColor.g
-            || settings.foamColor.b != defaults.foamColor.b
-            || settings.foamColor.a != defaults.foamColor.a) value["foamColor"] = WriteColor(settings.foamColor);
     if (settings.visibilityDepthWorld != defaults.visibilityDepthWorld) value["visibilityDepthWorld"] = settings.visibilityDepthWorld;
     if (settings.roughness != defaults.roughness) value["roughness"] = settings.roughness;
     if (settings.refractionStrength != defaults.refractionStrength) value["refractionStrength"] = settings.refractionStrength;
@@ -2789,7 +2779,6 @@ Json WriteLiquidSettings(
     if (settings.rippleSpeed != defaults.rippleSpeed) value["rippleSpeed"] = settings.rippleSpeed;
     if (settings.flowDirectionDegrees != defaults.flowDirectionDegrees) value["flowDirectionDegrees"] = settings.flowDirectionDegrees;
     if (settings.flowSpeedWorld != defaults.flowSpeedWorld) value["flowSpeedWorld"] = settings.flowSpeedWorld;
-    if (settings.foamAmount != defaults.foamAmount) value["foamAmount"] = settings.foamAmount;
     return value;
 }
 
