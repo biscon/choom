@@ -157,6 +157,8 @@ struct SectorDuctAccess {
     float thickness = 0.08f;
     SectorDuctCoverSettings cover;
     SectorDuctCoverPhase coverPhase = SectorDuctCoverPhase::Attached;
+    // Records which side initiated removal. The wall-mounted cover itself
+    // always moves into and settles in the outside sector.
     SectorDuctCoverRemovalSide removalSide =
             SectorDuctCoverRemovalSide::Outside;
     float coverMotionElapsedSeconds = 0.0f;
@@ -180,6 +182,9 @@ bool IsSectorDuctCoverClear(const SectorDuctAccess& access);
 bool BeginSectorDuctCoverRemoval(
         SectorDuctAccess& access,
         Vector3 actorPosition);
+Vector3 SectorDuctCoverSettledOffset(
+        const SectorDuctAccess& access,
+        float outsideFloorY);
 
 Matrix BuildSectorWindowModelMatrix(
         const SectorObjectTransform& transform,

@@ -124,6 +124,23 @@ bool BeginSectorDuctCoverRemoval(
     return true;
 }
 
+Vector3 SectorDuctCoverSettledOffset(
+        const SectorDuctAccess& access,
+        float outsideFloorY)
+{
+    const float along = access.cover.slideSide
+                    == SectorDuctCoverSlideSide::PortalStart
+            ? -1.0f : 1.0f;
+    const float pop = access.cover.thickness + 0.05f;
+    const float slide = access.width + 0.05f;
+    return Vector3{
+            -access.outsideToCrawlspaceNormal.x * pop
+                    + access.tangent.x * along * slide,
+            outsideFloorY - access.openingBottom,
+            -access.outsideToCrawlspaceNormal.y * pop
+                    + access.tangent.y * along * slide};
+}
+
 
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
@@ -1983,10 +2000,7 @@ void UpdateSectorRuntimeObjects(
                         access.coverPhase == SectorDuctCoverPhase::Removing
                         || access.coverPhase == SectorDuctCoverPhase::Falling;
                 if (access.coverPhase == SectorDuctCoverPhase::Removing) {
-                    object.currentSectorId = access.removalSide
-                                    == SectorDuctCoverRemovalSide::Outside
-                            ? access.outsideSectorId
-                            : access.crawlspaceSectorId;
+                    object.currentSectorId = access.outsideSectorId;
                     const float pop = access.cover.thickness + 0.05f;
                     const float slide = access.width + 0.05f;
                     const float duration = std::max(pop, slide)
@@ -1997,35 +2011,24 @@ void UpdateSectorRuntimeObjects(
                                     / std::max(0.01f, duration),
                             0.0f, 1.0f);
                     const float eased = raw * raw * (3.0f - 2.0f * raw);
-                    const float towardActor = access.removalSide
-                                    == SectorDuctCoverRemovalSide::Outside
-                            ? -1.0f : 1.0f;
                     const float along = access.cover.slideSide
                                     == SectorDuctCoverSlideSide::PortalStart
                             ? -1.0f : 1.0f;
                     access.coverOffset = Vector3{
-                            access.outsideToCrawlspaceNormal.x
-                                            * towardActor * pop * eased
+                            -access.outsideToCrawlspaceNormal.x * pop * eased
                                     + access.tangent.x * along * slide * eased,
                             0.0f,
-                            access.outsideToCrawlspaceNormal.y
-                                            * towardActor * pop * eased
+                            -access.outsideToCrawlspaceNormal.y * pop * eased
                                     + access.tangent.y * along * slide * eased};
                     if (raw >= 1.0f) {
                         access.coverPhase = SectorDuctCoverPhase::Falling;
                         access.coverMotionElapsedSeconds = 0.0f;
                     }
                 } else if (access.coverPhase == SectorDuctCoverPhase::Falling) {
-                    object.currentSectorId = access.removalSide
-                                    == SectorDuctCoverRemovalSide::Outside
-                            ? access.outsideSectorId
-                            : access.crawlspaceSectorId;
+                    object.currentSectorId = access.outsideSectorId;
                     access.coverMotionElapsedSeconds += std::max(0.0f, dt);
-                    const int floorSectorId = access.removalSide
-                                    == SectorDuctCoverRemovalSide::Outside
-                            ? access.outsideSectorId : access.crawlspaceSectorId;
                     const SectorTopologySector* sector =
-                            FindSectorTopologySector(map, floorSectorId);
+                            FindSectorTopologySector(map, access.outsideSectorId);
                     const float floorY = sector != nullptr
                             ? SectorAuthoringToWorldDistance(sector->floorZ)
                             : access.openingBottom;

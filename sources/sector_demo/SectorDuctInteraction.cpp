@@ -20,13 +20,6 @@ float SmoothStep(float value)
     return value * value * (3.0f - 2.0f * value);
 }
 
-Vector3 Lerp(Vector3 a, Vector3 b, float t)
-{
-    return Vector3{a.x + (b.x - a.x) * t,
-            a.y + (b.y - a.y) * t,
-            a.z + (b.z - a.z) * t};
-}
-
 float LerpAngle(float a, float b, float t)
 {
     return a + std::remainder(b - a, 2.0f * PI) * t;
@@ -74,19 +67,20 @@ void BeginExit(
         SectorFpsControllerState& controller,
         const SectorDuctAccess& access,
         const SectorFpsControllerConfig& normalConfig,
-        const PlayerDuctTraversalApplicationSettings& settings)
+        float targetFeetY)
 {
-    const SectorFpsControllerConfig crawl = SectorDuctCrawlControllerConfig(
-            SectorFpsControllerConfig{}, settings);
+    const SectorFpsControllerConfig standing =
+            EffectiveSectorFpsControllerConfig(controller, normalConfig);
     const float offset = access.thickness * 0.5f
-            + crawl.playerRadius + 0.05f;
+            + standing.playerRadius + 0.05f;
     traversal.phase = SectorDuctTraversalPhase::Exiting;
     traversal.accessEntity = engine::NullEntity();
+    traversal.transitionTargetSectorId = access.outsideSectorId;
     traversal.transitionStartFeet = controller.feetPosition;
     traversal.transitionTargetFeet = Vector3{
             access.centerXZ.x
                     - access.outsideToCrawlspaceNormal.x * offset,
-            controller.feetPosition.y,
+            targetFeetY,
             access.centerXZ.y
                     - access.outsideToCrawlspaceNormal.y * offset};
     traversal.transitionStartYawRadians = controller.yawRadians;
@@ -95,9 +89,7 @@ void BeginExit(
             -access.outsideToCrawlspaceNormal.x,
             -access.outsideToCrawlspaceNormal.y});
     traversal.transitionStartEyeHeightWorld = traversal.viewEyeHeightWorld;
-    traversal.transitionTargetEyeHeightWorld =
-            EffectiveSectorFpsControllerConfig(
-                    controller, normalConfig).eyeHeight;
+    traversal.transitionTargetEyeHeightWorld = standing.eyeHeight;
     traversal.transitionElapsedSeconds = 0.0f;
     controller.verticalVelocity = 0.0f;
     controller.grounded = false;
@@ -171,6 +163,7 @@ bool BeginSectorDuctTraversal(
     traversal.phase = SectorDuctTraversalPhase::Entering;
     traversal.accessEntity = accessEntity;
     traversal.crawlspaceSectorId = access.crawlspaceSectorId;
+    traversal.transitionTargetSectorId = access.crawlspaceSectorId;
     traversal.transitionStartFeet = controller.feetPosition;
     traversal.transitionTargetFeet = Vector3{
             access.centerXZ.x
@@ -241,35 +234,53 @@ bool UpdateSectorDuctTraversal(
         const float duration = entering ? settings.enterTransitionSeconds
                                         : settings.exitTransitionSeconds;
         traversal.transitionElapsedSeconds += std::max(0.0f, dt);
-        const float progress = SmoothStep(
-                traversal.transitionElapsedSeconds / duration);
-        controller.feetPosition = Lerp(traversal.transitionStartFeet,
-                traversal.transitionTargetFeet, progress);
+        const float rawProgress = std::clamp(
+                traversal.transitionElapsedSeconds / duration,
+                0.0f, 1.0f);
+        const float travelProgress = entering
+                ? SmoothStep(rawProgress)
+                : SmoothStep(rawProgress * 2.0f);
+        const float stanceProgress = entering
+                ? travelProgress
+                : SmoothStep((rawProgress - 0.5f) * 2.0f);
+        controller.feetPosition = Vector3{
+                traversal.transitionStartFeet.x
+                        + (traversal.transitionTargetFeet.x
+                                - traversal.transitionStartFeet.x)
+                                * travelProgress,
+                traversal.transitionStartFeet.y
+                        + (traversal.transitionTargetFeet.y
+                                - traversal.transitionStartFeet.y)
+                                * stanceProgress,
+                traversal.transitionStartFeet.z
+                        + (traversal.transitionTargetFeet.z
+                                - traversal.transitionStartFeet.z)
+                                * travelProgress};
         controller.yawRadians = LerpAngle(
                 traversal.transitionStartYawRadians,
-                traversal.transitionTargetYawRadians, progress);
+                traversal.transitionTargetYawRadians, travelProgress);
         controller.pitchRadians = traversal.transitionStartPitchRadians
-                + (0.0f - traversal.transitionStartPitchRadians) * progress;
+                + (0.0f - traversal.transitionStartPitchRadians)
+                        * travelProgress;
         traversal.viewEyeHeightWorld =
                 traversal.transitionStartEyeHeightWorld
                 + (traversal.transitionTargetEyeHeightWorld
-                        - traversal.transitionStartEyeHeightWorld) * progress;
+                        - traversal.transitionStartEyeHeightWorld)
+                        * stanceProgress;
         controller.verticalVelocity = 0.0f;
         controller.grounded = false;
-        if (progress >= 1.0f) {
+        if (rawProgress >= 1.0f) {
             if (entering) {
                 traversal.phase = SectorDuctTraversalPhase::Crawling;
                 controller.currentSectorId = traversal.crawlspaceSectorId;
+                traversal.transitionTargetSectorId = 0;
                 controller.grounded = true;
             } else {
                 traversal.phase = SectorDuctTraversalPhase::Inactive;
                 traversal.crawlspaceSectorId = 0;
-                controller.currentSectorId = collisionWorld != nullptr
-                        ? collisionWorld->FindSectorContainingPointPreferCurrent(
-                                Vector2{controller.feetPosition.x,
-                                        controller.feetPosition.z},
-                                controller.currentSectorId)
-                        : controller.currentSectorId;
+                controller.currentSectorId =
+                        traversal.transitionTargetSectorId;
+                traversal.transitionTargetSectorId = 0;
             }
         }
         return true;
@@ -314,22 +325,53 @@ bool UpdateSectorDuctTraversal(
         }
     }
     if (exitAccess != nullptr) {
+        const SectorFpsControllerConfig standing =
+                EffectiveSectorFpsControllerConfig(controller, normalConfig);
         const Vector3 target{
                 exitAccess->centerXZ.x
                         - exitAccess->outsideToCrawlspaceNormal.x
-                                * (normalConfig.playerRadius + 0.05f),
-                controller.feetPosition.y,
+                                * (exitAccess->thickness * 0.5f
+                                        + standing.playerRadius + 0.05f),
+                controller.feetPosition.y
+                        + traversal.viewEyeHeightWorld - standing.eyeHeight,
                 exitAccess->centerXZ.y
                         - exitAccess->outsideToCrawlspaceNormal.y
-                                * (normalConfig.playerRadius + 0.05f)};
-        const bool clear = collisionWorld == nullptr
-                || collisionWorld->AllowsPrismPlacement(
-                        Vector2{target.x, target.z}, normalConfig.playerRadius,
-                        target.y, target.y + normalConfig.playerHeight,
-                        exitAccess->outsideSectorId);
+                                * (exitAccess->thickness * 0.5f
+                                        + standing.playerRadius + 0.05f)};
+        float targetFeetY = target.y;
+        bool clear = true;
+        if (collisionWorld != nullptr) {
+            SectorCollisionHeights heights;
+            clear = collisionWorld->ResolveActorVerticalContext(
+                    exitAccess->outsideSectorId,
+                    SectorCollisionVerticalQuery{
+                            Vector2{target.x, target.z},
+                            targetFeetY,
+                            standing.playerRadius,
+                            standing.playerHeight,
+                            standing.stepHeight,
+                            false},
+                    &heights);
+            if (clear) {
+                const float highestFeetY =
+                        heights.ceilingZ - standing.playerHeight;
+                clear = highestFeetY >= heights.floorZ;
+                if (clear) {
+                    targetFeetY = std::clamp(
+                            targetFeetY, heights.floorZ, highestFeetY);
+                    clear = collisionWorld->AllowsPrismPlacement(
+                            Vector2{target.x, target.z},
+                            standing.playerRadius,
+                            targetFeetY,
+                            targetFeetY + standing.playerHeight,
+                            exitAccess->outsideSectorId);
+                }
+            }
+        }
         if (clear) {
             traversal.accessEntity = exitAccessEntity;
-            BeginExit(traversal, controller, *exitAccess, normalConfig, settings);
+            BeginExit(traversal, controller, *exitAccess, normalConfig,
+                    targetFeetY);
         }
         return traversal.phase == SectorDuctTraversalPhase::Exiting;
     }

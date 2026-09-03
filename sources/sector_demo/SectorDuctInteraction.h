@@ -23,6 +23,7 @@ struct SectorDuctTraversalState {
     SectorDuctTraversalPhase phase = SectorDuctTraversalPhase::Inactive;
     engine::Entity accessEntity = engine::NullEntity();
     int crawlspaceSectorId = 0;
+    int transitionTargetSectorId = 0;
     Vector3 transitionStartFeet = {};
     Vector3 transitionTargetFeet = {};
     float transitionStartYawRadians = 0.0f;

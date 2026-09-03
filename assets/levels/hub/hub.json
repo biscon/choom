@@ -3518,8 +3518,8 @@
         "height": 0.9750000238418579,
         "cover": {
           "enabled": true,
-          "frameMaterialId": "worn_gray_metal_step_512",
-          "louverMaterialId": "worn_gray_metal_step_512"
+          "frameMaterialId": "worn_steel_512",
+          "louverMaterialId": "worn_steel_512"
         }
       },
       "position": [
@@ -3552,8 +3552,8 @@
         "height": 0.9750000238418579,
         "cover": {
           "enabled": true,
-          "frameMaterialId": "worn_gray_metal_step_512",
-          "louverMaterialId": "worn_gray_metal_step_512"
+          "frameMaterialId": "worn_steel_512",
+          "louverMaterialId": "worn_steel_512"
         }
       },
       "position": [
@@ -5487,23 +5487,6 @@
             }
           }
         }
-      }
-    },
-    {
-      "id": 63,
-      "position": [
-        -340.0,
-        5.0,
-        -40.0
-      ],
-      "radius": 24.0,
-      "sourceRadius": 1.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 250,
-        "b": 241,
-        "a": 255
       }
     }
   ],
@@ -7801,9 +7784,9 @@
       "id": 14,
       "instanceId": "light_point_14",
       "position": [
-        -339.0,
-        -2.6000003814697266,
-        -108.0
+        -340.0,
+        12.0,
+        -90.0
       ],
       "radius": 64.0,
       "intensity": 1.0,
@@ -7813,6 +7796,24 @@
         "b": 255,
         "a": 255
       }
+    },
+    {
+      "id": 63,
+      "instanceId": "light_point_63",
+      "position": [
+        -340.0,
+        5.0,
+        -40.0
+      ],
+      "radius": 24.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": true
     }
   ],
   "dynamicSpotLights": [
@@ -8453,8 +8454,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -8555,7 +8555,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "f30601c72387efe6",
+    "sourceHash": "89f6833b803b1bb7",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -8563,19 +8563,19 @@
         0.0
       ],
       "rgbMax": [
-        2.203125,
-        1.564453125,
-        1.564453125
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 195
+      "rgbChannelsAboveOne": 839
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "f30601c72387efe6",
+      "sourceHash": "89f6833b803b1bb7",
       "count": 3772,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -8588,20 +8588,20 @@
           0.0
         ],
         "rgbMax": [
-          2.204270601272583,
-          1.935850739479065,
-          1.8489267826080322
+          2.192941665649414,
+          1.9389466047286987,
+          1.8518656492233276
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 22632,
-        "rgbChannelsAboveOne": 35
+        "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "f30601c72387efe6",
+      "sourceHash": "89f6833b803b1bb7",
       "modelCount": 53,
       "objectCount": 160,
       "format": "staticModelUvRemapF32LE"
@@ -8610,7 +8610,7 @@
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
     "version": 1,
-    "count": 12,
+    "count": 13,
     "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
@@ -29186,6 +29186,49 @@
             ]
           }
         }
+      },
+      {
+        "lineId": 628,
+        "side": "front",
+        "wall": {
+          "materialId": "worn_steel_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
       }
     ],
     "faceAnchors": [
@@ -33831,7 +33874,7 @@
         },
         "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
-          "materialId": "wall",
+          "materialId": "worn_steel_512",
           "uv": {
             "scale": [
               1.0,
@@ -33844,7 +33887,7 @@
           }
         },
         "defaultLower": {
-          "materialId": "wall",
+          "materialId": "worn_steel_512",
           "uv": {
             "scale": [
               1.0,
@@ -33857,7 +33900,7 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
+          "materialId": "worn_steel_512",
           "uv": {
             "scale": [
               1.0,
@@ -36662,6 +36705,22 @@
           4.5,
           2.0,
           3.0
+        ]
+      },
+      {
+        "id": 14,
+        "x": -5440,
+        "z": -640,
+        "yWorld": 0.48750001192092896,
+        "influenceOffsetWorld": [
+          1.5,
+          0.0,
+          -2.25
+        ],
+        "halfExtentsWorld": [
+          2.0,
+          0.48750001192092896,
+          2.75
         ]
       }
     ],

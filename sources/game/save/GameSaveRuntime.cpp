@@ -376,34 +376,16 @@ void ApplyGameSaveLevelRuntimeState(
         if (!saved.coverRemoved) continue;
         access.removalSide = saved.removalSide;
         if (world.Has<SectorObject>(entity)) {
-            world.Get<SectorObject>(entity).currentSectorId = saved.removalSide
-                            == SectorDuctCoverRemovalSide::Outside
-                    ? access.outsideSectorId
-                    : access.crawlspaceSectorId;
+            world.Get<SectorObject>(entity).currentSectorId =
+                    access.outsideSectorId;
         }
         access.coverPhase = SectorDuctCoverPhase::Settled;
-        const int floorSectorId = saved.removalSide
-                        == SectorDuctCoverRemovalSide::Outside
-                ? access.outsideSectorId : access.crawlspaceSectorId;
         const SectorTopologySector* floorSector = FindSectorTopologySector(
-                map, floorSectorId);
+                map, access.outsideSectorId);
         const float floorY = floorSector != nullptr
                 ? SectorAuthoringToWorldDistance(floorSector->floorZ)
                 : access.openingBottom;
-        const float along = access.cover.slideSide
-                        == SectorDuctCoverSlideSide::PortalStart
-                ? -1.0f : 1.0f;
-        const float towardActor = saved.removalSide
-                        == SectorDuctCoverRemovalSide::Outside
-                ? -1.0f : 1.0f;
-        access.coverOffset = Vector3{
-                access.outsideToCrawlspaceNormal.x * towardActor
-                                * (access.cover.thickness + 0.05f)
-                        + access.tangent.x * along * (access.width + 0.05f),
-                floorY - access.openingBottom,
-                access.outsideToCrawlspaceNormal.y * towardActor
-                                * (access.cover.thickness + 0.05f)
-                        + access.tangent.y * along * (access.width + 0.05f)};
+        access.coverOffset = SectorDuctCoverSettledOffset(access, floorY);
     }
     for (const GameSavePropState& saved : state.props) {
         const engine::Entity entity = FindRuntimeEntity(runtimeObjects, saved.placedObjectId);

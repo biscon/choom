@@ -10,7 +10,7 @@
     "landingNoiseRadiusWorld": 12.0
   },
   "graphics": {
-    "renderScale": 1.5,
+    "renderScale": 1.25,
     "fxaa": true,
     "shadowQuality": "high",
     "maxDynamicLights": 32,
@@ -178,10 +178,10 @@
     }
   },
   "playerDucts": {
-    "interactionDistanceWorld": 1.75,
+    "interactionDistanceWorld": 1.5,
     "enterTransitionSeconds": 0.550000011920929,
     "exitTransitionSeconds": 0.44999998807907104,
-    "crawlSpeedWorld": 1.5,
+    "crawlSpeedWorld": 1.0,
     "crawlRadiusWorld": 0.3499999940395355,
     "crawlHeightWorld": 0.6499999761581421,
     "crawlEyeHeightWorld": 0.550000011920929
