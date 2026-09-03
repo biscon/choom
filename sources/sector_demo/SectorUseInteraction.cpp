@@ -297,7 +297,9 @@ SectorUseTarget FindSectorUseTarget(
         Vector3 forward,
         const SectorCollisionWorld* collisionWorld,
         bool includeDynamicProps,
-        const SectorTopologyMap* topologyMap)
+        const SectorTopologyMap* topologyMap,
+        float ductInteractionDistanceWorld,
+        int viewerSectorId)
 {
     SectorUseTarget best;
     if (!Finite(eyePosition) || !Finite(forward)
@@ -411,6 +413,33 @@ SectorUseTarget FindSectorUseTarget(
                         collisionWorld,
                         best);
             });
+    world.ForEach<SectorDuctAccess>(
+            [&](engine::Entity entity, SectorDuctAccess& access) {
+                if (!std::isfinite(ductInteractionDistanceWorld)
+                        || ductInteractionDistanceWorld <= 0.0f) return;
+                if (viewerSectorId == access.crawlspaceSectorId
+                        && !IsSectorDuctCoverBlocking(access)) return;
+                if (access.cover.enabled
+                        && access.coverPhase != SectorDuctCoverPhase::Attached
+                        && access.coverPhase != SectorDuctCoverPhase::Settled) return;
+                const Vector2 eyeXZ{eyePosition.x, eyePosition.z};
+                const Vector2 delta{eyeXZ.x - access.centerXZ.x,
+                        eyeXZ.y - access.centerXZ.y};
+                const float tangentDistance = std::clamp(
+                        Vector2DotProduct(delta, access.tangent),
+                        -access.width * 0.5f, access.width * 0.5f);
+                const Vector2 closestXZ{
+                        access.centerXZ.x + access.tangent.x * tangentDistance,
+                        access.centerXZ.y + access.tangent.y * tangentDistance};
+                const Vector3 point{
+                        closestXZ.x,
+                        std::clamp(eyePosition.y,
+                                access.openingBottom, access.openingTop),
+                        closestXZ.y};
+                ConsiderTarget(entity, SectorUseTargetKind::DuctAccess,
+                        point, ductInteractionDistanceWorld, eyePosition,
+                        forward, collisionWorld, best);
+            });
     if (topologyMap != nullptr) {
         for (const SectorCompiledStructuralPrimitive& compiled
                 : topologyMap->compiledStructuralPrimitives) {
@@ -511,6 +540,12 @@ std::string_view SectorUseTargetTitle(
     if (target.kind == SectorUseTargetKind::Door
             && world.Has<SectorDoorInteraction>(target.entity)) {
         return world.Get<SectorDoorInteraction>(target.entity).useTitle;
+    }
+    if (target.kind == SectorUseTargetKind::DuctAccess
+            && world.Has<SectorDuctAccess>(target.entity)) {
+        return IsSectorDuctCoverBlocking(
+                world.Get<SectorDuctAccess>(target.entity))
+                ? "Vent Cover" : "Duct Access";
     }
     return {};
 }

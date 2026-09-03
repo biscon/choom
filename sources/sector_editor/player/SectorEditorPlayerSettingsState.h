@@ -18,7 +18,8 @@ enum class SectorEditorPlayerSettingsTab {
     Health,
     Sneaking,
     Lighting,
-    Liquids
+    Liquids,
+    Ducts
 };
 
 enum class SectorEditorPlayerLiquidAudioPickerTarget {
@@ -65,6 +66,7 @@ struct SectorEditorPlayerSettingsState {
     engine::UIScrollState sneakingScroll;
     engine::UIScrollState lightingScroll;
     engine::UIScrollState liquidsScroll;
+    engine::UIScrollState ductsScroll;
     std::string errorMessage;
 
     engine::UIFloatInputState staminaMaximumInput;
@@ -99,6 +101,14 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState underwaterMufflingInput;
     engine::UIFloatInputState roomtoneSubmergeFadeInput;
     engine::UIFloatInputState roomtoneResurfaceFadeInput;
+
+    engine::UIFloatInputState ductInteractionDistanceInput;
+    engine::UIFloatInputState ductEnterDurationInput;
+    engine::UIFloatInputState ductExitDurationInput;
+    engine::UIFloatInputState ductCrawlSpeedInput;
+    engine::UIFloatInputState ductCrawlRadiusInput;
+    engine::UIFloatInputState ductCrawlHeightInput;
+    engine::UIFloatInputState ductCrawlEyeHeightInput;
 
     engine::UIFloatInputState inventoryWeightInput;
     engine::UIIntInputState inventorySlotsInput;

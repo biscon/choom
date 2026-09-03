@@ -358,8 +358,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 576,
-          "backSideDefId": 577,
+          "frontSideDefId": 585,
+          "backSideDefId": 586,
           "endpointA": [
             -704,
             1296
@@ -398,8 +398,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 532,
-          "backSideDefId": 552,
+          "frontSideDefId": 541,
+          "backSideDefId": 561,
           "endpointA": [
             -992,
             1456
@@ -469,8 +469,8 @@
           "lineDefId": 127,
           "frontSectorId": 33,
           "backSectorId": 26,
-          "frontSideDefId": 232,
-          "backSideDefId": 259,
+          "frontSideDefId": 241,
+          "backSideDefId": 268,
           "endpointA": [
             -2560,
             1376
@@ -1499,8 +1499,8 @@
           "lineDefId": 234,
           "frontSectorId": 50,
           "backSectorId": 43,
-          "frontSideDefId": 200,
-          "backSideDefId": 213,
+          "frontSideDefId": 209,
+          "backSideDefId": 222,
           "endpointA": [
             -2944,
             592
@@ -2181,8 +2181,8 @@
           "lineDefId": 269,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 385,
-          "backSideDefId": 364,
+          "frontSideDefId": 394,
+          "backSideDefId": 373,
           "endpointA": [
             -2048,
             -720
@@ -2421,8 +2421,8 @@
           "lineDefId": 255,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 379,
-          "backSideDefId": 325,
+          "frontSideDefId": 388,
+          "backSideDefId": 334,
           "endpointA": [
             -2432,
             -560
@@ -2500,23 +2500,6 @@
       },
       "position": [
         -280.0,
-        -17.0,
-        -40.0
-      ],
-      "yawDegrees": 90.0
-    },
-    {
-      "id": 150,
-      "kind": "dynamic_model",
-      "dynamicModel": {
-        "instanceId": "prop_150",
-        "modelPath": "assets/models/environment/vent.glb",
-        "heightOffsetWorld": 2.5999999046325684,
-        "collision": true,
-        "shadowMode": "none"
-      },
-      "position": [
-        -312.0,
         -17.0,
         -40.0
       ],
@@ -2839,11 +2822,11 @@
       "kind": "window",
       "window": {
         "anchor": {
-          "lineDefId": 325,
+          "lineDefId": 324,
           "frontSectorId": 63,
           "backSectorId": 66,
-          "frontSideDefId": 405,
-          "backSideDefId": 341,
+          "frontSideDefId": 414,
+          "backSideDefId": 350,
           "endpointA": [
             -2432,
             -2688
@@ -3304,11 +3287,11 @@
       "door": {
         "instanceId": "door_200",
         "anchor": {
-          "lineDefId": 297,
+          "lineDefId": 296,
           "frontSectorId": 52,
           "backSectorId": 61,
-          "frontSideDefId": 382,
-          "backSideDefId": 344,
+          "frontSideDefId": 391,
+          "backSideDefId": 353,
           "endpointA": [
             -2320,
             -1920
@@ -3396,11 +3379,11 @@
       "kind": "window",
       "window": {
         "anchor": {
-          "lineDefId": 438,
+          "lineDefId": 437,
           "frontSectorId": 85,
           "backSectorId": 92,
-          "frontSideDefId": 458,
-          "backSideDefId": 586,
+          "frontSideDefId": 467,
+          "backSideDefId": 595,
           "endpointA": [
             -768,
             -2688
@@ -3434,11 +3417,11 @@
       "door": {
         "instanceId": "door_205",
         "anchor": {
-          "lineDefId": 410,
+          "lineDefId": 409,
           "frontSectorId": 63,
           "backSectorId": 83,
-          "frontSideDefId": 410,
-          "backSideDefId": 450,
+          "frontSideDefId": 419,
+          "backSideDefId": 459,
           "endpointA": [
             -1664,
             -2640
@@ -3476,11 +3459,11 @@
       "door": {
         "instanceId": "door_206",
         "anchor": {
-          "lineDefId": 400,
+          "lineDefId": 399,
           "frontSectorId": 70,
           "backSectorId": 81,
-          "frontSideDefId": 496,
-          "backSideDefId": 560,
+          "frontSideDefId": 505,
+          "backSideDefId": 569,
           "endpointA": [
             -896,
             -4240
@@ -3509,6 +3492,74 @@
         -56.0,
         -9.25,
         -260.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 207,
+      "kind": "duct_access",
+      "ductAccess": {
+        "anchor": {
+          "lineDefId": 291,
+          "frontSectorId": 60,
+          "backSectorId": 55,
+          "frontSideDefId": 110,
+          "backSideDefId": 256,
+          "endpointA": [
+            -4992,
+            -704
+          ],
+          "endpointB": [
+            -4992,
+            -576
+          ]
+        },
+        "width": 1.0,
+        "height": 0.9750000238418579,
+        "cover": {
+          "enabled": true,
+          "frameMaterialId": "worn_gray_metal_step_512",
+          "louverMaterialId": "worn_gray_metal_step_512"
+        }
+      },
+      "position": [
+        -312.0,
+        3.9000000953674316,
+        -40.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 208,
+      "kind": "duct_access",
+      "ductAccess": {
+        "anchor": {
+          "lineDefId": 442,
+          "frontSectorId": 93,
+          "backSectorId": 60,
+          "frontSideDefId": 112,
+          "backSideDefId": 107,
+          "endpointA": [
+            -5376,
+            -1280
+          ],
+          "endpointB": [
+            -5504,
+            -1280
+          ]
+        },
+        "width": 1.0,
+        "height": 0.9750000238418579,
+        "cover": {
+          "enabled": true,
+          "frameMaterialId": "worn_gray_metal_step_512",
+          "louverMaterialId": "worn_gray_metal_step_512"
+        }
+      },
+      "position": [
+        -340.0,
+        3.9000000953674316,
+        -80.0
       ],
       "yawDegrees": 0.0
     }
@@ -5441,13 +5492,13 @@
     {
       "id": 63,
       "position": [
-        -316.0,
-        14.399999618530273,
+        -340.0,
+        5.0,
         -40.0
       ],
-      "radius": 8.0,
+      "radius": 24.0,
       "sourceRadius": 1.0,
-      "intensity": 0.25,
+      "intensity": 1.0,
       "color": {
         "r": 255,
         "g": 250,
@@ -7745,6 +7796,23 @@
         "b": 255,
         "a": 255
       }
+    },
+    {
+      "id": 14,
+      "instanceId": "light_point_14",
+      "position": [
+        -339.0,
+        -2.6000003814697266,
+        -108.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
     }
   ],
   "dynamicSpotLights": [
@@ -8385,11 +8453,13 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
     "runSpeed": 5.0,
+    "swimSpeed": 6.0,
     "mouseSensitivity": 0.5,
     "eyeHeight": 1.75,
     "gravity": 25.0,
@@ -8485,7 +8555,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "1290e00c47922ddb",
+    "sourceHash": "f30601c72387efe6",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -8493,20 +8563,20 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.203125,
+        1.564453125,
+        1.564453125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 839
+      "rgbChannelsAboveOne": 195
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "1290e00c47922ddb",
-      "count": 3663,
+      "sourceHash": "f30601c72387efe6",
+      "count": 3772,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -8518,20 +8588,20 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.204270601272583,
+          1.935850739479065,
+          1.8489267826080322
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 21978,
-        "rgbChannelsAboveOne": 33
+        "sampleCount": 22632,
+        "rgbChannelsAboveOne": 35
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "1290e00c47922ddb",
+      "sourceHash": "f30601c72387efe6",
       "modelCount": 53,
       "objectCount": 160,
       "format": "staticModelUvRemapF32LE"
@@ -8540,7 +8610,7 @@
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
     "version": 1,
-    "count": 11,
+    "count": 12,
     "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
@@ -10337,6 +10407,41 @@
         "id": 372,
         "x": -768,
         "y": -2688
+      },
+      {
+        "id": 373,
+        "x": -5504,
+        "y": -1280
+      },
+      {
+        "id": 374,
+        "x": -5376,
+        "y": -704
+      },
+      {
+        "id": 375,
+        "x": -5376,
+        "y": -1280
+      },
+      {
+        "id": 376,
+        "x": -6016,
+        "y": -1280
+      },
+      {
+        "id": 377,
+        "x": -6016,
+        "y": -2048
+      },
+      {
+        "id": 378,
+        "x": -4864,
+        "y": -2048
+      },
+      {
+        "id": 379,
+        "x": -4864,
+        "y": -1280
       }
     ],
     "lines": [
@@ -11792,11 +11897,6 @@
         "endVertexId": 256
       },
       {
-        "id": 418,
-        "startVertexId": 256,
-        "endVertexId": 257
-      },
-      {
         "id": 419,
         "startVertexId": 257,
         "endVertexId": 258
@@ -12540,6 +12640,51 @@
         "id": 617,
         "startVertexId": 371,
         "endVertexId": 372
+      },
+      {
+        "id": 619,
+        "startVertexId": 373,
+        "endVertexId": 257
+      },
+      {
+        "id": 620,
+        "startVertexId": 256,
+        "endVertexId": 374
+      },
+      {
+        "id": 622,
+        "startVertexId": 374,
+        "endVertexId": 375
+      },
+      {
+        "id": 623,
+        "startVertexId": 375,
+        "endVertexId": 373
+      },
+      {
+        "id": 624,
+        "startVertexId": 373,
+        "endVertexId": 376
+      },
+      {
+        "id": 625,
+        "startVertexId": 376,
+        "endVertexId": 377
+      },
+      {
+        "id": 626,
+        "startVertexId": 377,
+        "endVertexId": 378
+      },
+      {
+        "id": 627,
+        "startVertexId": 378,
+        "endVertexId": 379
+      },
+      {
+        "id": 628,
+        "startVertexId": 379,
+        "endVertexId": 375
       }
     ],
     "lineSides": [
@@ -21733,49 +21878,6 @@
         }
       },
       {
-        "lineId": 418,
-        "side": "back",
-        "wall": {
-          "materialId": "worn_gray_metal_step_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "lower": {
-          "materialId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "materialId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 419,
         "side": "back",
         "wall": {
@@ -28912,6 +29014,178 @@
             ]
           }
         }
+      },
+      {
+        "lineId": 619,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 620,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 622,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 623,
+        "side": "back",
+        "wall": {
+          "materialId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
       }
     ],
     "faceAnchors": [
@@ -33555,7 +33829,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.0,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -33594,7 +33868,8 @@
               0.0
             ]
           }
-        }
+        },
+        "crawlspace": true
       },
       {
         "id": 61,
@@ -36032,6 +36307,83 @@
             ]
           }
         }
+      },
+      {
+        "id": 93,
+        "name": "Sector 93",
+        "x": -5621,
+        "y": -1666,
+        "floorZ": -17.0,
+        "ceilingZ": 15.0,
+        "floorMaterialId": "worn_office_oak_floor_512",
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "beige_wall_001",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "footstepSet": "Parquet_Floor_Mono"
       }
     ],
     "fogVolumes": [
@@ -36299,6 +36651,17 @@
           2.5,
           1.6875,
           1.375
+        ]
+      },
+      {
+        "id": 13,
+        "x": -5440,
+        "z": -1664,
+        "yWorld": -0.125,
+        "halfExtentsWorld": [
+          4.5,
+          2.0,
+          3.0
         ]
       }
     ],

@@ -674,9 +674,11 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         if (previewState.controller.previewControlMode
                 == SectorPreviewControlMode::Gameplay) {
             const SectorFpsControllerConfig obstacleConfig =
-                    EffectiveSectorFpsControllerConfig(
-                            previewState.controller.fpsControllerState,
-                            previewState.controller.fpsControllerConfig);
+                    SectorDuctViewControllerConfig(
+                            EffectiveSectorFpsControllerConfig(
+                                    previewState.controller.fpsControllerState,
+                                    previewState.controller.fpsControllerConfig),
+                            previewState.controller.ductTraversal);
             playerObstacle = SectorDoorPlayerObstacle{
                     previewState.controller.fpsControllerState.feetPosition,
                     obstacleConfig.playerRadius,
@@ -723,14 +725,20 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 && previewState.controller.freeflyController.mouseLookEnabled
                 && !uiState.keyboardCaptured
                 && !IsSectorLadderTraversalActive(
-                        previewState.controller.ladderTraversal);
+                        previewState.controller.ladderTraversal)
+                && (previewState.controller.ductTraversal.phase
+                                == SectorDuctTraversalPhase::Inactive
+                        || previewState.controller.ductTraversal.phase
+                                == SectorDuctTraversalPhase::Crawling);
         UpdatePreview3D(input, assets, dt);
         previewUseTarget = {};
         previewUsePromptTitle = {};
         if (canInteractWithDoors) {
             const SectorViewPose pose = SectorFpsControllerPose(
                     previewState.controller.fpsControllerState,
-                    previewState.controller.fpsControllerConfig);
+                    SectorDuctViewControllerConfig(
+                            previewState.controller.fpsControllerConfig,
+                            previewState.controller.ductTraversal));
             previewUseTarget = FindSectorUseTarget(
                     context.world,
                     &assets,
@@ -739,7 +747,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                     previewState.collision.sectorCollisionWorldValid
                             ? &previewState.collision.sectorCollisionWorld : nullptr,
                     false,
-                    &TopologyMap());
+                    &TopologyMap(),
+                    applicationSettings.playerDucts.interactionDistanceWorld,
+                    previewState.controller.fpsControllerState.currentSectorId);
             const std::string_view title = SectorUseTargetTitle(
                     context.world, previewUseTarget);
             if (!title.empty()) {
@@ -773,6 +783,33 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                             }
                             return;
                         }
+                        if (previewUseTarget.kind == SectorUseTargetKind::DuctAccess
+                                && context.world.IsAlive(previewUseTarget.entity)
+                                && context.world.Has<SectorDuctAccess>(
+                                        previewUseTarget.entity)) {
+                            SectorDuctAccess& access = context.world.Get<SectorDuctAccess>(
+                                    previewUseTarget.entity);
+                            bool handled = BeginSectorDuctCoverRemoval(
+                                    access,
+                                    previewState.controller.fpsControllerState
+                                            .feetPosition);
+                            if (!handled) {
+                                handled = BeginSectorDuctTraversal(
+                                        previewState.controller.ductTraversal,
+                                        previewState.controller.fpsControllerState,
+                                        previewState.controller.fpsControllerConfig,
+                                        access,
+                                        previewUseTarget.entity,
+                                        applicationSettings.playerDucts);
+                                if (handled) {
+                                    fpsPlayer.HolsterForTraversal();
+                                    previewState.controller.ductTraversal
+                                            .weaponHolsterInitialized = true;
+                                }
+                            }
+                            if (handled) engine::ConsumeEvent(event);
+                            return;
+                        }
                         if (previewUseTarget.kind != SectorUseTargetKind::Door
                                 || !context.world.IsAlive(previewUseTarget.entity)
                                 || !context.world.Has<SectorDoorMotion>(previewUseTarget.entity)) {
@@ -790,10 +827,27 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         if (state.mode == SectorEditorMode::Preview3D) {
             if (!IsSectorLadderTraversalActive(
                         previewState.controller.ladderTraversal)
+                    && !IsSectorDuctTraversalActive(
+                        previewState.controller.ductTraversal)
                     && ProcessFpsWeaponFire(input)) {
                 ApplyGameplayPoseToPreview();
             }
             UpdateFpsViewmodelTransformsAndLight(dt);
+            if (IsSectorDuctTraversalActive(
+                        previewState.controller.ductTraversal)
+                    && !previewState.controller.ductTraversal
+                            .weaponHolsterInitialized) {
+                fpsPlayer.HolsterForTraversal();
+                previewState.controller.ductTraversal
+                        .weaponHolsterInitialized = true;
+            }
+            if (previewState.controller.ductTraversal.phase
+                            == SectorDuctTraversalPhase::Inactive
+                    && previewState.controller.ductTraversal
+                            .weaponHolsterInitialized) {
+                previewState.controller.ductTraversal
+                        .weaponHolsterInitialized = false;
+            }
             UpdatePreview3DSelection(input);
             const Camera3D& camera = sceneRuntime.Renderer().RenderCamera();
             context.audio.SetListener(engine::AudioListener{
@@ -2159,6 +2213,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                if (state.currentTool == SectorEditorTool::DuctAccess) {
+                    AddDuctAccessAtPortal(event.mouseClick.releasePosition);
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (state.currentTool == SectorEditorTool::Move) {
                     statusText = "Move: click a topology light";
                     engine::ConsumeEvent(event);
@@ -3071,15 +3131,19 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                         }
                 );
             }
+            if (engineContext == nullptr) return;
             UpdateSectorEditorGameplayPreview(
+                    engineContext->world,
                     sceneRuntime.RuntimeObjects().dynamicDoorColliders,
                     sceneRuntime.RuntimeObjects().physicalModelColliders,
+                    sceneRuntime.RuntimeObjects().ductAccessGateColliders,
                     previewState.collision,
                     previewState.controller,
                     &TopologyMap(),
                     state.previewSettingsModal.open,
                     controllerInput,
                     applicationSettings.playerLiquids,
+                    applicationSettings.playerDucts,
                     previousVisualEyeY,
                     dt,
                     &sceneRuntime.NpcNavigation().collisionCylinders);
@@ -4394,6 +4458,25 @@ void SectorEditor::AddWindowAtPortal(Vector2 screenPoint)
     SectorEditorRuntimeObjectEditingService editing =
             BuildRuntimeObjectEditingService(&selection);
     editing.AddWindow(lineDefId);
+}
+
+void SectorEditor::AddDuctAccessAtPortal(Vector2 screenPoint)
+{
+    const Vector2 mapPoint = ScreenToMap(screenPoint);
+    int lineDefId = -1;
+    int sideDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+    bool preferredMissing = false;
+    if (!FindTopologyLineNearScreenPoint(
+                screenPoint, mapPoint, lineDefId, sideDefId, side,
+                preferredMissing)) {
+        statusText = "Duct Access placement failed: click a two-sided portal";
+        return;
+    }
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddDuctAccess(lineDefId);
 }
 
 bool SectorEditor::DeleteSelectedRuntimeObject()
@@ -6412,6 +6495,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Door: click a two-sided portal line";
         } else if (tool == SectorEditorTool::Window) {
             statusText = "Window: click a two-sided portal line";
+        } else if (tool == SectorEditorTool::DuctAccess) {
+            statusText = "Duct Access: click a portal adjoining exactly one Crawlspace sector";
         } else if (tool == SectorEditorTool::AuthoringFogVolume) {
             statusText = "Fog Volume: click strictly inside a sector";
         } else if (tool == SectorEditorTool::ReflectionProbe) {
@@ -6474,6 +6559,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::Npc,
             SectorEditorTool::Door,
             SectorEditorTool::Window,
+            SectorEditorTool::DuctAccess,
             SectorEditorTool::Trigger,
             SectorEditorTool::LevelMarker,
             SectorEditorTool::SoundEmitter,
@@ -8222,7 +8308,9 @@ void SectorEditor::ApplyGameplayPoseToPreview()
 {
     const SectorViewPose basePose = SectorFpsControllerVisualPose(
             previewState.controller.fpsControllerState,
-            previewState.controller.fpsControllerConfig,
+            SectorDuctViewControllerConfig(
+                    previewState.controller.fpsControllerConfig,
+                    previewState.controller.ductTraversal),
             previewState.controller.visualStepOffsetY,
             previewState.controller.headBobState.offset,
             previewState.controller.landingDipState.offsetY);
@@ -8627,6 +8715,11 @@ void SectorEditor::ApplyLiquidSettingsModal()
             || anchor->ceilingZ <= anchor->floorZ) {
         state.liquidSettingsModal.errorMessage =
                 "The sector must have a valid positive height";
+        return;
+    }
+    if (anchor->crawlspace) {
+        state.liquidSettingsModal.errorMessage =
+                "Crawlspace sectors cannot contain liquid";
         return;
     }
 
@@ -9943,7 +10036,9 @@ void SectorEditor::OpenDoorTextureSettingsModal()
 
 void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 {
-    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
+    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor
+            || state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDuctFrame
+            || state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDuctLouvers) {
         TexturePickerState& picker = state.texturePicker;
         const SectorEditorSelectedTexture selected = CurrentSectorEditorTexturePickerSelection(picker);
         if (!selected.valid) {
@@ -9954,25 +10049,40 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
 
         const int targetObjectId = picker.runtimeObjectId;
         const std::string selectedTexture = selected.materialId;
+        const TopologyTexturePickerTargetKind targetKind =
+                picker.topologyTargetKind;
         CloseSectorEditorTexturePicker(picker);
 
         if (selectionState.selectedRuntimeObjectId != targetObjectId) {
-            statusText = "Door texture target unavailable";
+            statusText = "Runtime material target unavailable";
             return;
         }
 
         const bool changed = MutateSelectedRuntimeObject(
-                "Updated door texture",
-                [&selectedTexture](SectorPlacedRuntimeObject& object) {
-                    if (object.kind != "door" || object.door.materialId == selectedTexture) {
+                targetKind == TopologyTexturePickerTargetKind::RuntimeDoor
+                        ? "Updated door texture"
+                        : "Updated vent cover material",
+                [&selectedTexture, targetKind](SectorPlacedRuntimeObject& object) {
+                    if (targetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
+                        if (object.kind != "door"
+                                || object.door.materialId == selectedTexture) return false;
+                        object.door.materialId = selectedTexture;
+                        return true;
+                    }
+                    if (object.kind != "duct_access") {
                         return false;
                     }
-                    object.door.materialId = selectedTexture;
+                    std::string& material = targetKind
+                                    == TopologyTexturePickerTargetKind::RuntimeDuctLouvers
+                            ? object.ductAccess.cover.louverMaterialId
+                            : object.ductAccess.cover.frameMaterialId;
+                    if (material == selectedTexture) return false;
+                    material = selectedTexture;
                     return true;
                 });
         statusText = changed
-                ? TextFormat("Selected door texture %s", selectedTexture.c_str())
-                : "Door texture unchanged";
+                ? TextFormat("Selected material %s", selectedTexture.c_str())
+                : "Material unchanged";
         return;
     }
 

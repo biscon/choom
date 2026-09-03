@@ -80,10 +80,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             font, "Player Settings");
 
     const char* tabNames[] = {
-            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting", "Liquids"};
+            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting", "Liquids", "Ducts"};
     const float tabY = modal.y + 70.0f;
-    const float tabWidth = (modal.width - 56.0f - 48.0f) / 7.0f;
-    for (int i = 0; i < 7; ++i) {
+    const float tabWidth = (modal.width - 56.0f - 56.0f) / 8.0f;
+    for (int i = 0; i < 8; ++i) {
         const bool active = static_cast<int>(state.activeTab) == i;
         if (engine::ToolButton(
                     ui, config, input, assets,
@@ -135,6 +135,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         case SectorEditorPlayerSettingsTab::Liquids:
             scrollState = &state.liquidsScroll;
             contentHeight = 1260.0f;
+            break;
+        case SectorEditorPlayerSettingsTab::Ducts:
+            scrollState = &state.ductsScroll;
+            contentHeight = 540.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -260,6 +264,45 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                 "Pickup target height (world)",
                 inventory.pickupVacuumTargetHeightWorld,
                 state.inventoryVacuumHeightInput, 0.0f, 1000.0f, 3);
+    } else if (state.activeTab == SectorEditorPlayerSettingsTab::Ducts) {
+        PlayerDuctTraversalApplicationSettings& ducts = state.draft.playerDucts;
+        section("Duct traversal");
+        drawFloat("player_duct_interaction_distance", "Interaction distance (m)",
+                ducts.interactionDistanceWorld,
+                state.ductInteractionDistanceInput, 0.1f, 20.0f, 2);
+        drawFloat("player_duct_enter_duration", "Entry duration (seconds)",
+                ducts.enterTransitionSeconds,
+                state.ductEnterDurationInput, 0.05f, 10.0f, 2);
+        drawFloat("player_duct_exit_duration", "Exit duration (seconds)",
+                ducts.exitTransitionSeconds,
+                state.ductExitDurationInput, 0.05f, 10.0f, 2);
+        drawFloat("player_duct_crawl_speed", "Crawl speed (m/s)",
+                ducts.crawlSpeedWorld,
+                state.ductCrawlSpeedInput, 0.05f, 20.0f, 2);
+        section("Crawl collider");
+        drawFloat("player_duct_crawl_radius", "Radius (m)",
+                ducts.crawlRadiusWorld,
+                state.ductCrawlRadiusInput, 0.05f, 2.0f, 2);
+        drawFloat("player_duct_crawl_height", "Height (m)",
+                ducts.crawlHeightWorld,
+                state.ductCrawlHeightInput, 0.1f, 3.0f, 2);
+        drawFloat("player_duct_crawl_eye_height", "Eye height (m)",
+                ducts.crawlEyeHeightWorld,
+                state.ductCrawlEyeHeightInput, 0.02f, 3.0f, 2);
+        const bool eyeHeightInvalid =
+                ducts.crawlEyeHeightWorld >= ducts.crawlHeightWorld;
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, y, scroll.viewport.width, 42.0f},
+                smallFont,
+                eyeHeightInvalid
+                        ? "Eye height must be lower than collider height."
+                        : "Radius is horizontal; height is independent.",
+                engine::UITextJustify::Left,
+                eyeHeightInvalid ? Color{255, 120, 120, 255}
+                                 : config.mutedTextColor,
+                true);
+        y += 42.0f;
     } else if (state.activeTab == SectorEditorPlayerSettingsTab::Liquids) {
         PlayerLiquidApplicationSettings& liquids = state.draft.playerLiquids;
         section("Oxygen and drowning");

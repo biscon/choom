@@ -109,6 +109,8 @@ struct SectorDoorOpaqueShaderLocations {
     int environmentYaw = -1;
     int environmentMaxLod = -1;
     int pbrDiagnosticMode = -1;
+    int useObjectAmbientCube = -1;
+    int objectAmbientCube = -1;
     int useStaticSpecularLighting = -1;
     int dynamicLightCount = -1;
     int dynamicLightPositions = -1;

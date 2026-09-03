@@ -356,6 +356,38 @@ struct SectorPlacedWindow {
     bool collision = true;
 };
 
+using SectorDuctAccessAnchor = SectorDoorAnchor;
+
+enum class SectorDuctCoverSlideSide {
+    PortalStart,
+    PortalEnd
+};
+
+struct SectorDuctCoverSettings {
+    bool enabled = false;
+    float thickness = 0.06f;
+    float frameBorderWidthWorld = 0.08f;
+    int louverCount = 6;
+    float louverAngleDegrees = 35.0f;
+    std::string frameMaterialId;
+    std::string louverMaterialId;
+    SectorDuctCoverSlideSide slideSide = SectorDuctCoverSlideSide::PortalEnd;
+    float removalSpeedWorld = 1.0f;
+};
+
+struct SectorPlacedDuctAccess {
+    SectorDuctAccessAnchor anchor;
+    // Zero width/height resolve to the current portal opening dimensions.
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.08f;
+    float horizontalOffsetWorld = 0.0f;
+    float verticalOffsetWorld = 0.0f;
+    // Positive values move from the ordinary sector into the crawlspace.
+    float normalOffset = 0.0f;
+    SectorDuctCoverSettings cover;
+};
+
 struct SectorResolvedDoorAnchor {
     bool valid = false;
     std::string diagnostic;
@@ -383,6 +415,13 @@ struct SectorResolvedDoorAnchor {
 
 using SectorResolvedWindowAnchor = SectorResolvedDoorAnchor;
 
+struct SectorResolvedDuctAccessAnchor : SectorResolvedDoorAnchor {
+    int crawlspaceSectorId = 0;
+    int outsideSectorId = 0;
+    // Points from the ordinary sector into the crawlspace.
+    Vector2 outsideToCrawlspaceNormal = {0.0f, -1.0f};
+};
+
 struct SectorPlacedRuntimeObject {
     int id = 0;
     std::string definitionId;
@@ -396,6 +435,7 @@ struct SectorPlacedRuntimeObject {
     SectorPlacedNpc npc;
     SectorPlacedDoor door;
     SectorPlacedWindow window;
+    SectorPlacedDuctAccess ductAccess;
 };
 
 struct SectorTopologyMap {
@@ -559,6 +599,9 @@ SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
 SectorResolvedWindowAnchor ResolveSectorWindowAnchor(
         const SectorTopologyMap& map,
         const SectorPlacedWindow& window);
+SectorResolvedDuctAccessAnchor ResolveSectorDuctAccessAnchor(
+        const SectorTopologyMap& map,
+        const SectorPlacedDuctAccess& access);
 
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(
         const SectorTopologyMap& map,

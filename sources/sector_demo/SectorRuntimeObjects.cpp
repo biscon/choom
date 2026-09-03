@@ -60,11 +60,75 @@ Matrix BuildSectorWindowModelMatrix(
             0.0f, 0.0f, 0.0f, 1.0f};
 }
 
+SectorDuctCoverRenderBasis BuildSectorDuctCoverRenderBasis(
+        const SectorDuctAccess& access)
+{
+    Vector3 outward{
+            -access.outsideToCrawlspaceNormal.x,
+            0.0f,
+            -access.outsideToCrawlspaceNormal.y};
+    if (Vector3LengthSqr(outward) <= 0.000001f) {
+        outward = Vector3{0.0f, 0.0f, 1.0f};
+    } else {
+        outward = Vector3Normalize(outward);
+    }
+    // Cross(horizontal, up) == outward, so both portal orientations remain
+    // right-handed and the grille front always faces the outside sector.
+    const Vector3 horizontal{outward.z, 0.0f, -outward.x};
+    return SectorDuctCoverRenderBasis{
+            horizontal, Vector3{0.0f, 1.0f, 0.0f}, outward};
+}
+
+Matrix BuildSectorDuctCoverModelMatrix(
+        const SectorDuctAccess& access,
+        Vector3 position)
+{
+    const SectorDuctCoverRenderBasis basis =
+            BuildSectorDuctCoverRenderBasis(access);
+    return Matrix{
+            basis.horizontal.x, basis.up.x, basis.outward.x, position.x,
+            basis.horizontal.y, basis.up.y, basis.outward.y, position.y,
+            basis.horizontal.z, basis.up.z, basis.outward.z, position.z,
+            0.0f, 0.0f, 0.0f, 1.0f};
+}
+
+bool IsSectorDuctCoverBlocking(const SectorDuctAccess& access)
+{
+    return access.cover.enabled
+            && access.coverPhase == SectorDuctCoverPhase::Attached;
+}
+
+bool IsSectorDuctCoverClear(const SectorDuctAccess& access)
+{
+    return !access.cover.enabled
+            || access.coverPhase == SectorDuctCoverPhase::Falling
+            || access.coverPhase == SectorDuctCoverPhase::Settled;
+}
+
+bool BeginSectorDuctCoverRemoval(
+        SectorDuctAccess& access,
+        Vector3 actorPosition)
+{
+    if (!IsSectorDuctCoverBlocking(access)) return false;
+    const Vector2 actorOffset{
+            actorPosition.x - access.centerXZ.x,
+            actorPosition.z - access.centerXZ.y};
+    const float side = actorOffset.x * access.outsideToCrawlspaceNormal.x
+            + actorOffset.y * access.outsideToCrawlspaceNormal.y;
+    access.removalSide = side <= 0.0f
+            ? SectorDuctCoverRemovalSide::Outside
+            : SectorDuctCoverRemovalSide::Crawlspace;
+    access.coverPhase = SectorDuctCoverPhase::Removing;
+    access.coverMotionElapsedSeconds = 0.0f;
+    access.coverOffset = {};
+    return true;
+}
+
 
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(34);
+    world.ReserveComponentTypes(35);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -73,6 +137,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
     world.ReserveComponent<SectorItem>(objectCapacity);
     world.ReserveComponent<SectorWindow>(objectCapacity);
+    world.ReserveComponent<SectorDuctAccess>(objectCapacity);
     world.ReserveComponent<NpcRuntimeInstance>(objectCapacity);
     world.ReserveComponent<NpcPatrolState>(objectCapacity);
     world.ReserveComponent<NpcAiState>(objectCapacity);
@@ -985,6 +1050,8 @@ void SpawnPlacedRuntimeObjects(
     state.dynamicModelColliders.reserve(map.runtimeObjects.size());
     state.windowColliders.clear();
     state.windowColliders.reserve(map.runtimeObjects.size());
+    state.ductAccessGateColliders.clear();
+    state.ductAccessGateColliders.reserve(map.runtimeObjects.size());
     state.physicalModelColliders.clear();
     state.physicalModelColliders.reserve(map.runtimeObjects.size() * 2u);
     state.placedObjectCount = map.runtimeObjects.size();
@@ -1310,6 +1377,85 @@ void SpawnPlacedRuntimeObjects(
                 collider.entity = entity;
                 world.Add(entity, collider);
             }
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
+        if (placedObject.kind == "duct_access") {
+            const SectorResolvedDuctAccessAnchor resolved =
+                    ResolveSectorDuctAccessAnchor(map, placedObject.ductAccess);
+            if (!resolved.valid) {
+                const std::string warning = TextFormat(
+                        "Duct Access %d on linedef %d is invalid: %s",
+                        placedObject.id,
+                        placedObject.ductAccess.anchor.lineDefId,
+                        resolved.diagnostic.c_str());
+                std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n",
+                        warning.c_str());
+                recordWarning(warning);
+                ++skippedCount;
+                continue;
+            }
+            const Vector2 centerXZ{
+                    resolved.midpoint.x
+                            + resolved.tangent.x
+                                    * placedObject.ductAccess.horizontalOffsetWorld
+                            + resolved.outsideToCrawlspaceNormal.x
+                                    * placedObject.ductAccess.normalOffset,
+                    resolved.midpoint.y
+                            + resolved.tangent.y
+                                    * placedObject.ductAccess.horizontalOffsetWorld
+                            + resolved.outsideToCrawlspaceNormal.y
+                                    * placedObject.ductAccess.normalOffset};
+            const float centerY = resolved.openBottom
+                    + resolved.height * 0.5f
+                    + placedObject.ductAccess.verticalOffsetWorld;
+            SectorObject object;
+            object.currentSectorId = resolved.outsideSectorId;
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{
+                    Vector3{centerXZ.x, centerY, centerXZ.y},
+                    SectorDoorAnchorYawRadians(resolved)});
+            world.Add(entity, object);
+            world.Add(entity, SampleSectorObjectLighting(
+                    state.objectLightProbes,
+                    Vector3{centerXZ.x, centerY, centerXZ.y},
+                    resolved.outsideSectorId, &map));
+            SectorDuctAccess access;
+            access.placedObjectId = placedObject.id;
+            access.lineDefId = resolved.lineDefId;
+            access.outsideSectorId = resolved.outsideSectorId;
+            access.crawlspaceSectorId = resolved.crawlspaceSectorId;
+            access.centerXZ = centerXZ;
+            access.tangent = resolved.tangent;
+            access.outsideToCrawlspaceNormal =
+                    resolved.outsideToCrawlspaceNormal;
+            access.openingBottom = resolved.openBottom
+                    + placedObject.ductAccess.verticalOffsetWorld;
+            access.openingTop = access.openingBottom + resolved.height;
+            access.width = resolved.width;
+            access.height = resolved.height;
+            access.thickness = placedObject.ductAccess.thickness;
+            access.cover = placedObject.ductAccess.cover;
+            world.Add(entity, std::move(access));
+            SectorStaticModelCollider gate;
+            gate.placedObjectId = placedObject.id;
+            gate.center = centerXZ;
+            gate.axisX = resolved.tangent;
+            gate.axisZ = resolved.normal;
+            gate.halfExtents = Vector2{
+                    resolved.portalWidth * 0.5f,
+                    std::max(0.01f, placedObject.ductAccess.thickness * 0.5f)};
+            gate.bottom = resolved.openBottom;
+            gate.top = resolved.openTop;
+            gate.resolvedPosition = Vector3{centerXZ.x, centerY, centerXZ.y};
+            gate.resolvedYawRadians = SectorDoorAnchorYawRadians(resolved);
+            gate.resolvedScale = 1.0f;
+            gate.resolved = true;
+            gate.entity = entity;
+            state.ductAccessGateColliders.push_back(gate);
             state.placedObjectEntities.push_back(
                     SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
             ++spawnedCount;
@@ -1823,6 +1969,85 @@ void UpdateSectorRuntimeObjects(
         const SectorDoorPlayerObstacle* playerObstacle,
         const std::vector<SectorDoorPlayerObstacle>* doorObstacles)
 {
+    world.ForEach<
+            SectorDuctAccess,
+            SectorObject,
+            SectorObjectTransform,
+            SectorObjectLighting>(
+            [dt, &map, &state](engine::Entity,
+                    SectorDuctAccess& access,
+                    SectorObject& object,
+                    SectorObjectTransform& transform,
+                    SectorObjectLighting& lighting) {
+                const bool coverMoved =
+                        access.coverPhase == SectorDuctCoverPhase::Removing
+                        || access.coverPhase == SectorDuctCoverPhase::Falling;
+                if (access.coverPhase == SectorDuctCoverPhase::Removing) {
+                    object.currentSectorId = access.removalSide
+                                    == SectorDuctCoverRemovalSide::Outside
+                            ? access.outsideSectorId
+                            : access.crawlspaceSectorId;
+                    const float pop = access.cover.thickness + 0.05f;
+                    const float slide = access.width + 0.05f;
+                    const float duration = std::max(pop, slide)
+                            / std::max(0.05f, access.cover.removalSpeedWorld);
+                    access.coverMotionElapsedSeconds += std::max(0.0f, dt);
+                    const float raw = std::clamp(
+                            access.coverMotionElapsedSeconds
+                                    / std::max(0.01f, duration),
+                            0.0f, 1.0f);
+                    const float eased = raw * raw * (3.0f - 2.0f * raw);
+                    const float towardActor = access.removalSide
+                                    == SectorDuctCoverRemovalSide::Outside
+                            ? -1.0f : 1.0f;
+                    const float along = access.cover.slideSide
+                                    == SectorDuctCoverSlideSide::PortalStart
+                            ? -1.0f : 1.0f;
+                    access.coverOffset = Vector3{
+                            access.outsideToCrawlspaceNormal.x
+                                            * towardActor * pop * eased
+                                    + access.tangent.x * along * slide * eased,
+                            0.0f,
+                            access.outsideToCrawlspaceNormal.y
+                                            * towardActor * pop * eased
+                                    + access.tangent.y * along * slide * eased};
+                    if (raw >= 1.0f) {
+                        access.coverPhase = SectorDuctCoverPhase::Falling;
+                        access.coverMotionElapsedSeconds = 0.0f;
+                    }
+                } else if (access.coverPhase == SectorDuctCoverPhase::Falling) {
+                    object.currentSectorId = access.removalSide
+                                    == SectorDuctCoverRemovalSide::Outside
+                            ? access.outsideSectorId
+                            : access.crawlspaceSectorId;
+                    access.coverMotionElapsedSeconds += std::max(0.0f, dt);
+                    const int floorSectorId = access.removalSide
+                                    == SectorDuctCoverRemovalSide::Outside
+                            ? access.outsideSectorId : access.crawlspaceSectorId;
+                    const SectorTopologySector* sector =
+                            FindSectorTopologySector(map, floorSectorId);
+                    const float floorY = sector != nullptr
+                            ? SectorAuthoringToWorldDistance(sector->floorZ)
+                            : access.openingBottom;
+                    const float startBottom = access.openingBottom;
+                    const float drop = 0.5f * 25.0f
+                            * access.coverMotionElapsedSeconds
+                            * access.coverMotionElapsedSeconds;
+                    access.coverOffset.y = std::max(
+                            floorY - startBottom, -drop);
+                    if (startBottom + access.coverOffset.y <= floorY + 0.0001f) {
+                        access.coverOffset.y = floorY - startBottom;
+                        access.coverPhase = SectorDuctCoverPhase::Settled;
+                    }
+                }
+                if (coverMoved) {
+                    lighting = SampleSectorObjectLighting(
+                            state.objectLightProbes,
+                            Vector3Add(transform.position, access.coverOffset),
+                            object.currentSectorId,
+                            &map);
+                }
+            });
     AdvanceSectorBillboardAnimatorSystem(world, dt);
     ResolveDynamicModelAnimations(world, assets);
     if (playerPosition != nullptr) {

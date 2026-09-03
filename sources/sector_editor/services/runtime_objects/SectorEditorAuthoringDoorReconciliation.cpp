@@ -119,19 +119,28 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
     for (SectorPlacedRuntimeObject object : candidateMapData.runtimeObjects) {
         const bool isDoor = object.kind == "door";
         const bool isWindow = object.kind == "window";
-        if (!isDoor && !isWindow) {
+        const bool isDuctAccess = object.kind == "duct_access";
+        if (!isDoor && !isWindow && !isDuctAccess) {
             reconciled.push_back(std::move(object));
             continue;
         }
 
-        const char* objectName = isWindow ? "window" : "door";
+        const char* objectName = isWindow
+                ? "window" : (isDuctAccess ? "duct access" : "door");
         const SectorDoorAnchor& currentAnchor = isWindow
-                ? object.window.anchor : object.door.anchor;
+                ? object.window.anchor
+                : (isDuctAccess
+                        ? object.ductAccess.anchor
+                        : object.door.anchor);
 
         const SectorResolvedDoorAnchor currentResolved =
                 isWindow
                 ? ResolveSectorWindowAnchor(currentMap, object.window)
-                : ResolveSectorDoorAnchor(currentMap, object.door);
+                : (isDuctAccess
+                        ? static_cast<const SectorResolvedDoorAnchor&>(
+                                ResolveSectorDuctAccessAnchor(
+                                        currentMap, object.ductAccess))
+                        : ResolveSectorDoorAnchor(currentMap, object.door));
         const SectorAuthoringDerivedLineMapping* currentLineMapping =
                 currentResolved.valid
                 ? FindLineMappingForTopologyLine(
@@ -143,13 +152,17 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
                 : currentLineMapping->authoringLineId;
         if (rejectDoorAuthoringLineIds.find(authoringLineId)
                 != rejectDoorAuthoringLineIds.end()) {
-            outError = isWindow
+            outError = isDuctAccess
                     ? TextFormat(
-                            "Cannot dissolve vertex: window %d is attached to an incident portal; remove the window first",
+                            "Cannot dissolve vertex: Duct Access %d is attached to an incident portal; remove it first",
                             object.id)
-                    : TextFormat(
-                            "Cannot dissolve vertex: door %d is attached to an incident portal; remove the door first",
-                            object.id);
+                    : isWindow
+                            ? TextFormat(
+                                    "Cannot dissolve vertex: window %d is attached to an incident portal; remove the window first",
+                                    object.id)
+                            : TextFormat(
+                                    "Cannot dissolve vertex: door %d is attached to an incident portal; remove the door first",
+                                    object.id);
             return false;
         }
         if (removedAuthoringLineIds.find(authoringLineId)
@@ -237,7 +250,10 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
         }
 
         SectorDoorAnchor& candidateAnchor = isWindow
-                ? object.window.anchor : object.door.anchor;
+                ? object.window.anchor
+                : (isDuctAccess
+                        ? object.ductAccess.anchor
+                        : object.door.anchor);
         candidateAnchor.lineDefId = candidateLine->id;
         candidateAnchor.frontSideDefId = front->id;
         candidateAnchor.backSideDefId = back->id;
@@ -252,8 +268,13 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
                 isWindow
                 ? ResolveSectorWindowAnchor(
                         candidateDerivation.topology, object.window)
-                : ResolveSectorDoorAnchor(
-                        candidateDerivation.topology, object.door);
+                : (isDuctAccess
+                        ? static_cast<const SectorResolvedDoorAnchor&>(
+                                ResolveSectorDuctAccessAnchor(
+                                        candidateDerivation.topology,
+                                        object.ductAccess))
+                        : ResolveSectorDoorAnchor(
+                                candidateDerivation.topology, object.door));
         if (!candidateResolved.valid) {
             outError = TextFormat(
                     "Authoring edit unavailable: %s %d cannot be rebound to its surviving portal",
@@ -266,6 +287,10 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
                         ? candidateResolved.openBottom
                                 + candidateResolved.portalHeight * 0.5f
                                 + object.window.verticalOffsetWorld
+                        : isDuctAccess
+                                ? candidateResolved.openBottom
+                                        + candidateResolved.portalHeight * 0.5f
+                                        + object.ductAccess.verticalOffsetWorld
                         : candidateResolved.openBottom),
                 SectorWorldToAuthoringDistance(candidateResolved.midpoint.y)};
         reconciled.push_back(std::move(object));
@@ -285,18 +310,27 @@ bool ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
     for (const SectorPlacedRuntimeObject& object : currentMap.runtimeObjects) {
         const bool isDoor = object.kind == "door";
         const bool isWindow = object.kind == "window";
-        if (!isDoor && !isWindow) {
+        const bool isDuctAccess = object.kind == "duct_access";
+        if (!isDoor && !isWindow && !isDuctAccess) {
             continue;
         }
 
-        const char* objectName = isWindow ? "window" : "door";
+        const char* objectName = isWindow
+                ? "window" : (isDuctAccess ? "duct access" : "door");
         const SectorDoorAnchor& anchor = isWindow
-                ? object.window.anchor : object.door.anchor;
+                ? object.window.anchor
+                : (isDuctAccess
+                        ? object.ductAccess.anchor
+                        : object.door.anchor);
 
         const SectorResolvedDoorAnchor resolved =
                 isWindow
                 ? ResolveSectorWindowAnchor(currentMap, object.window)
-                : ResolveSectorDoorAnchor(currentMap, object.door);
+                : (isDuctAccess
+                        ? static_cast<const SectorResolvedDoorAnchor&>(
+                                ResolveSectorDuctAccessAnchor(
+                                        currentMap, object.ductAccess))
+                        : ResolveSectorDoorAnchor(currentMap, object.door));
         if (!resolved.valid) {
             continue;
         }
@@ -362,13 +396,17 @@ bool ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
             }
         }
         if (!spanSurvives) {
-            outError = isWindow
+            outError = isDuctAccess
                     ? TextFormat(
-                            "Cannot split portal containing window %d; remove the window first",
+                            "Cannot split portal containing Duct Access %d; remove it first",
                             object.id)
-                    : TextFormat(
-                            "Cannot split portal containing door %d; remove the door first",
-                            object.id);
+                    : isWindow
+                            ? TextFormat(
+                                    "Cannot split portal containing window %d; remove the window first",
+                                    object.id)
+                            : TextFormat(
+                                    "Cannot split portal containing door %d; remove the door first",
+                                    object.id);
             return false;
         }
     }

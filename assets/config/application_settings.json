@@ -176,5 +176,14 @@
       "causticsScaleMultiplier": 2.5,
       "causticsSpeedMultiplier": 2.0
     }
+  },
+  "playerDucts": {
+    "interactionDistanceWorld": 1.75,
+    "enterTransitionSeconds": 0.550000011920929,
+    "exitTransitionSeconds": 0.44999998807907104,
+    "crawlSpeedWorld": 1.5,
+    "crawlRadiusWorld": 0.3499999940395355,
+    "crawlHeightWorld": 0.6499999761581421,
+    "crawlEyeHeightWorld": 0.550000011920929
   }
 }

@@ -1478,9 +1478,11 @@ void SectorGameSession::Update(
                     playerCrouchBlend)
             : 1.0f;
     const SectorFpsControllerConfig obstacleConfig =
-            EffectiveSectorFpsControllerConfig(
-                    controller.fpsControllerState,
-                    controller.fpsControllerConfig);
+            SectorDuctViewControllerConfig(
+                    EffectiveSectorFpsControllerConfig(
+                            controller.fpsControllerState,
+                            controller.fpsControllerConfig),
+                    controller.ductTraversal);
     const SectorDoorPlayerObstacle playerObstacle{
             controller.fpsControllerState.feetPosition,
             obstacleConfig.playerRadius,
@@ -1712,8 +1714,10 @@ void SectorGameSession::Update(
                         &scriptedFacingYaw));
     }
     UpdateSectorEditorGameplayPreview(
+            context.world,
             objects.dynamicDoorColliders,
             objects.physicalModelColliders,
+            objects.ductAccessGateColliders,
             collision,
             controller,
             &topologyMap,
@@ -1722,9 +1726,21 @@ void SectorGameSession::Update(
             applicationSettings != nullptr
                     ? applicationSettings->playerLiquids
                     : PlayerLiquidApplicationSettings{},
+            applicationSettings != nullptr
+                    ? applicationSettings->playerDucts
+                    : PlayerDuctTraversalApplicationSettings{},
             previousVisualEyeY,
             dt,
             &scene.NpcNavigation().collisionCylinders);
+    if (IsSectorDuctTraversalActive(controller.ductTraversal)
+            && !controller.ductTraversal.weaponHolsterInitialized) {
+        fpsPlayer.HolsterForTraversal();
+        controller.ductTraversal.weaponHolsterInitialized = true;
+    }
+    if (controller.ductTraversal.phase == SectorDuctTraversalPhase::Inactive
+            && controller.ductTraversal.weaponHolsterInitialized) {
+        controller.ductTraversal.weaponHolsterInitialized = false;
+    }
     if (playerAudio != nullptr) {
         const bool swimControlHeld = input.moveForward
                 || input.moveBackward
@@ -1868,10 +1884,16 @@ void SectorGameSession::Update(
         UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
     } else if (heldObjectUse.phase == ItemHeldUsePhase::Inactive
             && !inventoryUi.open && cutscene.controlsEnabled
-            && !IsSectorLadderTraversalActive(controller.ladderTraversal)) {
+            && !IsSectorLadderTraversalActive(controller.ladderTraversal)
+            && (controller.ductTraversal.phase
+                            == SectorDuctTraversalPhase::Inactive
+                    || controller.ductTraversal.phase
+                            == SectorDuctTraversalPhase::Crawling)) {
         const SectorViewPose interactionPose = SectorFpsControllerPose(
                 controller.fpsControllerState,
-                controller.fpsControllerConfig);
+                SectorDuctViewControllerConfig(
+                        controller.fpsControllerConfig,
+                        controller.ductTraversal));
         useTarget = FindSectorUseTarget(
                 context.world,
                 &context.assets,
@@ -1880,7 +1902,12 @@ void SectorGameSession::Update(
                 collision.sectorCollisionWorldValid
                         ? &collision.sectorCollisionWorld : nullptr,
                 true,
-                &topologyMap);
+                &topologyMap,
+                applicationSettings != nullptr
+                        ? applicationSettings->playerDucts.interactionDistanceWorld
+                        : PlayerDuctTraversalApplicationSettings{}
+                                .interactionDistanceWorld,
+                controller.fpsControllerState.currentSectorId);
         UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
         const std::string_view promptTitle = SectorUseTargetTitle(
                 context.world, useTarget);
@@ -1956,6 +1983,28 @@ void SectorGameSession::Update(
                             useTarget.ladderPrimitiveId,
                             useTarget.ladderEndpoint);
                     if (handled) fpsPlayer.HolsterForTraversal();
+                } else if (useTarget.kind == SectorUseTargetKind::DuctAccess
+                        && context.world.IsAlive(useTarget.entity)
+                        && context.world.Has<SectorDuctAccess>(useTarget.entity)) {
+                    SectorDuctAccess& access = context.world.Get<SectorDuctAccess>(
+                            useTarget.entity);
+                    handled = BeginSectorDuctCoverRemoval(
+                            access, controller.fpsControllerState.feetPosition);
+                    if (!handled) {
+                        handled = BeginSectorDuctTraversal(
+                                controller.ductTraversal,
+                                controller.fpsControllerState,
+                                controller.fpsControllerConfig,
+                                access,
+                                useTarget.entity,
+                                applicationSettings != nullptr
+                                        ? applicationSettings->playerDucts
+                                        : PlayerDuctTraversalApplicationSettings{});
+                        if (handled) {
+                            fpsPlayer.HolsterForTraversal();
+                            controller.ductTraversal.weaponHolsterInitialized = true;
+                        }
+                    }
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
                         && context.world.IsAlive(useTarget.entity)
                         && context.world.Has<SectorDynamicModel>(useTarget.entity)) {
@@ -2055,7 +2104,8 @@ void SectorGameSession::Update(
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
         const bool weaponInputCaptured = gameplayInputCaptured
                 || IsSectorLadderTraversalActive(
-                        controller.ladderTraversal);
+                        controller.ladderTraversal)
+                || IsSectorDuctTraversalActive(controller.ductTraversal);
         acceptedShot = fpsPlayer.HandleInput(
                 context.input,
                 *weaponRegistry,
@@ -2230,6 +2280,7 @@ bool SectorGameSession::ActivateLoadedMap(
                 context.world,
                 context.assets,
                 scene,
+                topologyMap,
                 scriptHost,
                 *pendingLevelRestore);
     }
@@ -2710,7 +2761,9 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
 {
     const SectorViewPose basePose = SectorFpsControllerVisualPose(
             controller.fpsControllerState,
-            controller.fpsControllerConfig,
+            SectorDuctViewControllerConfig(
+                    controller.fpsControllerConfig,
+                    controller.ductTraversal),
             controller.visualStepOffsetY,
             controller.headBobState.offset,
             controller.landingDipState.offsetY);

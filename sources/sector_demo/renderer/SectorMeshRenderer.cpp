@@ -1633,6 +1633,11 @@ bool SectorMeshRenderer::RebuildRendererResources(
         error = "Preview failed: could not load window transparency shader";
         return false;
     }
+    if (!ductCoverRenderer.Initialize()) {
+        error = "Failed to initialize Duct Access cover renderer";
+        Shutdown(assets);
+        return false;
+    }
     if (!liquidRenderer.Initialize(map.sectors.size())) {
         Shutdown(assets);
         error = "Preview failed: could not load liquid transparency shader";
@@ -1867,6 +1872,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     staticModelRenderer.Shutdown();
     doorRenderer.ShutdownOpaqueResources();
     windowRenderer.Shutdown();
+    ductCoverRenderer.Shutdown();
     liquidRenderer.Shutdown();
 
     if (!engine::IsNull(assetScope)) {
@@ -2263,6 +2269,7 @@ void SectorMeshRenderer::DrawScene(
         doorDrawContext.defaultMaterialTexture = &defaultMaterialTexture;
         doorDrawContext.renderDebugText = &renderDebugText;
         doorRenderer.Draw(doorDrawContext);
+        ductCoverRenderer.Draw(doorDrawContext, doorRenderer);
 
         const SectorBillboardDynamicLightContext billboardLightContext = BuildBillboardDynamicLightContext();
         const TextureCubemap* pbrEnvironmentTexture = environmentReady

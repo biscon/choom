@@ -71,6 +71,7 @@ public:
     bool AddBillboard(int sectorId, Vector2 mapPoint);
     bool AddDoor(int lineDefId);
     bool AddWindow(int lineDefId);
+    bool AddDuctAccess(int lineDefId);
     bool AddStaticModel(Vector2 mapPoint);
     bool AddDynamicModel(Vector2 mapPoint);
     bool AddItem(Vector2 mapPoint, const std::string& definitionId);

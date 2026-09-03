@@ -1020,6 +1020,10 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
     }
 
     for (const SectorTopologySector& sector : map.sectors) {
+        if (sector.crawlspace && sector.liquid.enabled) {
+            AddIssue(&issues, SectorTopologyObjectKind::Sector, sector.id,
+                    "cannot be both a crawlspace and a liquid sector");
+        }
         const SectorRoomtoneSettings& roomtone = sector.roomtone;
         if ((roomtone.mode != SectorRoomtoneMode::Inherit
                     && roomtone.mode != SectorRoomtoneMode::Play

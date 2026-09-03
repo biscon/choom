@@ -3,6 +3,7 @@
 #include "sector_editor/tools/billboards/SectorEditorBillboardInspector.h"
 #include "sector_editor/tools/doors/SectorEditorDoorInspector.h"
 #include "sector_editor/tools/windows/SectorEditorWindowInspector.h"
+#include "sector_editor/tools/duct_access/SectorEditorDuctAccessInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorStaticModelInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorDynamicModelInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorNpcInspector.h"
@@ -27,6 +28,9 @@ float MeasureSectorEditorPlacedObjectInspectorContentHeight(
   }
   if (object->kind == "window") {
     return MeasureSectorEditorWindowInspectorContentHeight(context, *object);
+  }
+  if (object->kind == "duct_access") {
+    return MeasureSectorEditorDuctAccessInspectorContentHeight(context, *object);
   }
   if (object->kind == "billboard") {
     return MeasureSectorEditorBillboardInspectorContentHeight(context, *object);
@@ -70,6 +74,7 @@ void DrawSectorEditorPlacedObjectInspector(
   const bool isBillboard = selectedObject->kind == "billboard";
   const bool isDoor = selectedObject->kind == "door";
   const bool isWindow = selectedObject->kind == "window";
+  const bool isDuctAccess = selectedObject->kind == "duct_access";
   const bool isStaticModel = selectedObject->kind == "static_model";
   const bool isDynamicModel = selectedObject->kind == "dynamic_model";
   const bool isNpc = selectedObject->kind == "npc";
@@ -81,10 +86,11 @@ void DrawSectorEditorPlacedObjectInspector(
                : isNpc ? "Type: NPC"
                : isItem ? "Type: Item"
                : isWindow ? "Type: Window"
+               : isDuctAccess ? "Type: Duct Access"
                : isDoor    ? "Type: Door"
                            : "Type: Unsupported object",
                engine::UITextJustify::Left,
-               isBillboard || isStaticModel || isDynamicModel || isNpc || isItem || isDoor || isWindow ? config.mutedTextColor
+               isBillboard || isStaticModel || isDynamicModel || isNpc || isItem || isDoor || isWindow || isDuctAccess ? config.mutedTextColor
                                      : config.invalidColor);
   y += 34.0f;
 
@@ -94,6 +100,10 @@ void DrawSectorEditorPlacedObjectInspector(
   }
   if (isWindow) {
     DrawSectorEditorWindowInspector(context, y);
+    return;
+  }
+  if (isDuctAccess) {
+    DrawSectorEditorDuctAccessInspector(context, y);
     return;
   }
   if (isBillboard) {

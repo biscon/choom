@@ -53,6 +53,7 @@ struct SectorEditorAddDoorResult {
 };
 
 using SectorEditorAddWindowResult = SectorEditorAddDoorResult;
+using SectorEditorAddDuctAccessResult = SectorEditorAddDoorResult;
 
 SectorEditorAddStaticLightResult AddStaticLightToSector(
         SectorTopologyMap& map,
@@ -109,6 +110,10 @@ SectorEditorAddDoorResult AddDoorToPortal(
         int lineDefId);
 
 SectorEditorAddWindowResult AddWindowToPortal(
+        SectorTopologyMap& map,
+        int lineDefId);
+
+SectorEditorAddDuctAccessResult AddDuctAccessToPortal(
         SectorTopologyMap& map,
         int lineDefId);
 

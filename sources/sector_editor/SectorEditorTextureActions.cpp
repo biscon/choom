@@ -210,6 +210,16 @@ std::string CurrentTextureForPickerTarget(
                 FindSectorPlacedRuntimeObject(topologyMap, state.texturePicker.runtimeObjectId);
         return object != nullptr && object->kind == "door" ? object->door.materialId : std::string{};
     }
+    if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDuctFrame
+            || state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDuctLouvers) {
+        const SectorPlacedRuntimeObject* object =
+                FindSectorPlacedRuntimeObject(topologyMap, state.texturePicker.runtimeObjectId);
+        if (object == nullptr || object->kind != "duct_access") return {};
+        return state.texturePicker.topologyTargetKind
+                        == TopologyTexturePickerTargetKind::RuntimeDuctLouvers
+                ? object->ductAccess.cover.louverMaterialId
+                : object->ductAccess.cover.frameMaterialId;
+    }
 
     return std::string{};
 }
@@ -276,6 +286,44 @@ bool OpenRuntimeDoorTexturePicker(
     return true;
 }
 
+bool OpenRuntimeDuctTexturePicker(
+        SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        SectorEditorTextureCatalogService& textureCatalog,
+        int runtimeObjectId,
+        bool louvers)
+{
+    (void)authoringGraph;
+    TexturePickerState& picker = state.texturePicker;
+    const SectorPlacedRuntimeObject* object =
+            FindSectorPlacedRuntimeObject(topologyMap, runtimeObjectId);
+    if (object == nullptr || object->kind != "duct_access") {
+        CloseSectorEditorTexturePicker(picker);
+        return false;
+    }
+
+    picker.rebuildPreviewOnApply = false;
+    picker.topologyTargetKind = louvers
+            ? TopologyTexturePickerTargetKind::RuntimeDuctLouvers
+            : TopologyTexturePickerTargetKind::RuntimeDuctFrame;
+    picker.topologyLayer = TopologyMaterialLayer::Base;
+    picker.topologySectorId = -1;
+    picker.topologyField = TopologySectorTextureField::None;
+    picker.topologySideDefId = -1;
+    picker.topologyWallPart = TopologyWallPart::Wall;
+    picker.authoringFaceAnchorId = -1;
+    picker.authoringLineId = -1;
+    picker.runtimeObjectId = runtimeObjectId;
+    OpenSectorEditorTexturePicker(
+            picker,
+            textureCatalog.TextureIds(),
+            louvers
+                    ? object->ductAccess.cover.louverMaterialId
+                    : object->ductAccess.cover.frameMaterialId);
+    return true;
+}
+
 SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,
@@ -322,6 +370,25 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(
             object->door.materialId = selectedTexture;
             result.changed = true;
             result.status = "Selected door texture.";
+        }
+        CloseSectorEditorTexturePicker(picker);
+        return result;
+    }
+
+    if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDuctFrame
+            || picker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDuctLouvers) {
+        SectorPlacedRuntimeObject* object =
+                FindSectorPlacedRuntimeObject(topologyMap, picker.runtimeObjectId);
+        if (object != nullptr && object->kind == "duct_access") {
+            std::string& material = picker.topologyTargetKind
+                            == TopologyTexturePickerTargetKind::RuntimeDuctLouvers
+                    ? object->ductAccess.cover.louverMaterialId
+                    : object->ductAccess.cover.frameMaterialId;
+            if (material != selectedTexture) {
+                material = selectedTexture;
+                result.changed = true;
+                result.status = "Selected vent cover material.";
+            }
         }
         CloseSectorEditorTexturePicker(picker);
         return result;

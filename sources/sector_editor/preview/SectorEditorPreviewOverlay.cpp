@@ -738,21 +738,25 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                                 : (controllerState.fpsControllerState.crouchTargeted
                                         ? "crouching"
                                         : "standing up"));
+                const bool crawling = IsSectorDuctCrawling(
+                        controllerState.ductTraversal);
                 const SectorFpsControllerConfig effectiveConfig =
-                        EffectiveSectorFpsControllerConfig(
-                                controllerState.fpsControllerState,
-                                controllerState.fpsControllerConfig);
+                        SectorDuctViewControllerConfig(
+                                EffectiveSectorFpsControllerConfig(
+                                        controllerState.fpsControllerState,
+                                        controllerState.fpsControllerConfig),
+                                controllerState.ductTraversal);
                 collisionStatus = TextFormat(
                         "mode: gameplay collision | sector: %d | vertical: %s / %s | stance: %s %.2fm | block: %s | radius: %.2f | step: %.2f | jump: %.2f",
                         controllerState.fpsControllerState.currentSectorId,
                         verticalState,
                         VerticalTransitionName(collisionState.previewVerticalResult.transition),
-                        stance,
+                        crawling ? "crawling" : stance,
                         effectiveConfig.playerHeight,
                         blockText.c_str(),
-                        controllerState.fpsControllerConfig.playerRadius,
-                        controllerState.fpsControllerConfig.stepHeight,
-                        controllerState.fpsControllerConfig.jumpHeight);
+                        effectiveConfig.playerRadius,
+                        effectiveConfig.stepHeight,
+                        effectiveConfig.jumpHeight);
             }
         } else {
             collisionStatus = "mode: gameplay collision | status: unavailable";

@@ -116,6 +116,11 @@ struct RuntimeObjectEditingUiState {
     engine::UIFloatInputState roughnessInput;
     engine::UIFloatInputState surfaceHazeInput;
     engine::UIFloatInputState imperfectionStrengthInput;
+    engine::UIFloatInputState ductCoverThicknessInput;
+    engine::UIFloatInputState ductFrameBorderInput;
+    engine::UIIntInputState ductLouverCountInput;
+    engine::UIFloatInputState ductLouverAngleInput;
+    engine::UIFloatInputState ductRemovalSpeedInput;
     engine::UIIntInputState windowTintRedInput;
     engine::UIIntInputState windowTintGreenInput;
     engine::UIIntInputState windowTintBlueInput;

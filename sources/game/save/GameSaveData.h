@@ -5,6 +5,7 @@
 #include "game/PlayerStamina.h"
 #include "game/PlayerOxygen.h"
 #include "game/items/ItemInventory.h"
+#include "sector_demo/SectorTopologyTypes.h"
 
 #include <raylib.h>
 
@@ -44,6 +45,13 @@ struct GameSaveDoorState {
     float openFraction = 0.0f;
     float targetOpenFraction = 0.0f;
     bool enabled = true;
+};
+
+struct GameSaveDuctAccessState {
+    int placedObjectId = 0;
+    bool coverRemoved = false;
+    SectorDuctCoverRemovalSide removalSide =
+            SectorDuctCoverRemovalSide::Outside;
 };
 
 struct GameSavePropState {
@@ -117,6 +125,7 @@ struct GameSaveTriggerState {
 struct GameSaveLevelState {
     std::string levelId;
     std::vector<GameSaveDoorState> doors;
+    std::vector<GameSaveDuctAccessState> ductAccesses;
     std::vector<GameSavePropState> props;
     std::vector<GameSaveNpcState> npcs;
     std::vector<GameSaveBillboardState> billboards;

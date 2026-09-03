@@ -11153,6 +11153,54 @@ void TestEditorWindowPlacementCreatesSelectablePortalGlass()
           "window placement rejects one-sided walls without mutation");
 }
 
+void TestEditorDuctAccessPlacementRequiresCrawlspacePortal()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    game::SectorTopologySector* crawlspace =
+            game::FindSectorTopologySector(map, 201);
+    Check(crawlspace != nullptr, "Duct Access fixture has a second sector");
+    if (crawlspace == nullptr) return;
+    crawlspace->crawlspace = true;
+
+    const game::SectorEditorAddDuctAccessResult added =
+            game::AddDuctAccessToPortal(map, 11);
+    Check(added.changed && map.runtimeObjects.size() == 1,
+            "Duct Access placement accepts a portal with exactly one crawlspace side");
+    if (map.runtimeObjects.empty()) return;
+    const game::SectorPlacedRuntimeObject& object = map.runtimeObjects.front();
+    const game::SectorResolvedDuctAccessAnchor resolved =
+            game::ResolveSectorDuctAccessAnchor(map, object.ductAccess);
+    Check(object.kind == "duct_access"
+                  && !object.ductAccess.cover.enabled
+                  && resolved.valid
+                  && resolved.crawlspaceSectorId == 201
+                  && resolved.outsideSectorId == 200,
+            "Duct Access stores a portal anchor, defaults unobstructed, and resolves traversal sides");
+
+    const game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    map, game::SectorAuthoringGraph{},
+                    game::SectorAuthoringDerivationResult{}, 1);
+    Check(cache.runtimeObjects.size() == 1
+                  && cache.runtimeObjects[0].definitionKnown
+                  && cache.runtimeObjects[0].isDuctAccess
+                  && cache.runtimeObjects[0].doorFootprintValid,
+            "Duct Access participates in cached 2D drawing and picking");
+
+    const game::SectorEditorAddDoorResult occupied =
+            game::AddDoorToPortal(map, 11);
+    Check(!occupied.changed && map.runtimeObjects.size() == 1,
+            "doors cannot share a portal with Duct Access");
+
+    game::SectorTopologyMap invalid = MakeAdjacentSectorMap();
+    Check(!game::AddDuctAccessToPortal(invalid, 11).changed,
+            "Duct Access rejects portals without exactly one crawlspace side");
+    game::FindSectorTopologySector(invalid, 201)->crawlspace = true;
+    game::FindSectorTopologySector(invalid, 201)->liquid.enabled = true;
+    Check(!game::AddDuctAccessToPortal(invalid, 11).changed,
+            "Duct Access rejects flooded crawlspaces");
+}
+
 game::SectorSwingDoorCatalog MakeEditorSwingDoorCatalog()
 {
     game::SectorSwingDoorCatalog catalog;
@@ -15541,6 +15589,7 @@ int main()
     TestEditorSwingDoorDefaultsCachedFootprintGuidesAndPicking();
     TestEditorDoorPlacementRejectsOneSidedWall();
     TestEditorWindowPlacementCreatesSelectablePortalGlass();
+    TestEditorDuctAccessPlacementRequiresCrawlspacePortal();
     TestEditorUnifiedSelectPickOrderingCyclingAndDragGate();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
     TestEditorResetBlankMapClearsLifecyclePathAndDirtyState();

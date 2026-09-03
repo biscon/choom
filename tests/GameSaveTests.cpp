@@ -52,6 +52,10 @@ game::GameSaveData MakeSave()
     game::GameSaveLevelState level;
     level.levelId = "refinery";
     level.doors.push_back({10, "generator_door", 0.65f, 1.0f, true});
+    level.ductAccesses.push_back({
+            14,
+            true,
+            game::SectorDuctCoverRemovalSide::Crawlspace});
     game::GameSavePropState prop;
     prop.placedObjectId = 11;
     prop.instanceId = "generator_lever";
@@ -111,6 +115,10 @@ void SerializationRoundTripsStableState()
     assert(restored.itemCampaign.levels[0].droppedItems[0].item.sessionDrop);
     assert(restored.persistentScripts.bools.at("generator_started"));
     assert(restored.levels.size() == 1);
+    assert(restored.levels[0].ductAccesses.size() == 1);
+    assert(restored.levels[0].ductAccesses[0].coverRemoved);
+    assert(restored.levels[0].ductAccesses[0].removalSide
+            == game::SectorDuctCoverRemovalSide::Crawlspace);
     assert(restored.levels[0].props[0].animator.frame == 13.5f);
     assert(restored.levels[0].npcs[0].dead);
     assert(restored.levels[0].npcs[0].deathAnimationComplete);

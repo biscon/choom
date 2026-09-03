@@ -70,6 +70,7 @@ struct CachedRuntimeObjectDraw {
     bool definitionKnown = false;
     bool isDoor = false;
     bool isWindow = false;
+    bool isDuctAccess = false;
     bool isNpc = false;
     bool isItem = false;
     std::string itemLabel;

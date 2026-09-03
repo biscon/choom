@@ -56,6 +56,7 @@ struct SectorAuthoringFaceAnchor {
     // Empty uses the application-wide default footstep set.
     std::string footstepSet;
     bool ceilingSky = false;
+    bool crawlspace = false;
     SectorRoomtoneSettings roomtone;
     SectorLiquidSettings liquid;
 

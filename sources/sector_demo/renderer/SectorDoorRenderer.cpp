@@ -78,6 +78,8 @@ uniform vec3 environmentHalfExtents;
 uniform float environmentYaw;
 uniform float environmentMaxLod;
 uniform int pbrDiagnosticMode;
+uniform int useObjectAmbientCube;
+uniform vec3 objectAmbientCube[6];
 
 #define MAX_STATIC_SPECULAR_LIGHTS 4
 uniform int staticSpecularLightCount;
@@ -294,7 +296,14 @@ void main()
         }
     }
     vec4 sampled = texture(texture0, fragTexCoord);
-    vec3 staticProbeLighting = max(fragColor.rgb, vec3(0.0));
+    vec3 ambientWeights = geometricNormal * geometricNormal;
+    vec3 objectProbeLighting =
+            objectAmbientCube[geometricNormal.x >= 0.0 ? 0 : 1] * ambientWeights.x
+            + objectAmbientCube[geometricNormal.y >= 0.0 ? 2 : 3] * ambientWeights.y
+            + objectAmbientCube[geometricNormal.z >= 0.0 ? 4 : 5] * ambientWeights.z;
+    vec3 staticProbeLighting = useObjectAmbientCube != 0
+            ? max(objectProbeLighting, vec3(0.0))
+            : max(fragColor.rgb, vec3(0.0));
     vec3 tint = clamp(doorTint.rgb, 0.0, 1.0);
     vec3 surfaceRgb = sampled.rgb * tint;
     vec3 tangentNormalSample = hasNormalMap != 0
@@ -671,6 +680,10 @@ bool SectorDoorRenderer::LoadOpaqueResources()
     opaqueShaderLocations.environmentYaw = GetShaderLocation(opaqueShader, "environmentYaw");
     opaqueShaderLocations.environmentMaxLod = GetShaderLocation(opaqueShader, "environmentMaxLod");
     opaqueShaderLocations.pbrDiagnosticMode = GetShaderLocation(opaqueShader, "pbrDiagnosticMode");
+    opaqueShaderLocations.useObjectAmbientCube = GetShaderLocation(
+            opaqueShader, "useObjectAmbientCube");
+    opaqueShaderLocations.objectAmbientCube = GetShaderLocationArrayBase(
+            opaqueShader, "objectAmbientCube");
     opaqueShaderLocations.useStaticSpecularLighting = GetShaderLocation(
             opaqueShader, "useStaticSpecularLighting");
     opaqueShaderLocations.dynamicLightCount = GetShaderLocation(opaqueShader, "dynamicLightCount");
@@ -986,6 +999,12 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
             doorOpaqueMaterial.shader,
             doorOpaqueLocations.pbrDiagnosticMode,
             &pbrDiagnosticMode,
+            SHADER_UNIFORM_INT);
+    const int useObjectAmbientCube = 0;
+    if (doorOpaqueLocations.useObjectAmbientCube >= 0) SetShaderValue(
+            doorOpaqueMaterial.shader,
+            doorOpaqueLocations.useObjectAmbientCube,
+            &useObjectAmbientCube,
             SHADER_UNIFORM_INT);
 
     context.runtimeObjectWorld->ForEach<

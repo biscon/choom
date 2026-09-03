@@ -9,6 +9,7 @@
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorSceneRuntime.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -247,6 +248,14 @@ GameSaveLevelState CaptureGameSaveLevelState(
                     motion.targetOpenFraction, door.enabled});
             continue;
         }
+        if (world.Has<SectorDuctAccess>(entity)) {
+            const SectorDuctAccess& access = world.Get<SectorDuctAccess>(entity);
+            result.ductAccesses.push_back(GameSaveDuctAccessState{
+                    access.placedObjectId,
+                    access.coverPhase != SectorDuctCoverPhase::Attached,
+                    access.removalSide});
+            continue;
+        }
         if (world.Has<NpcRuntimeInstance>(entity)
                 && world.Has<SectorObjectTransform>(entity)
                 && world.Has<Health>(entity)
@@ -341,6 +350,7 @@ void ApplyGameSaveLevelRuntimeState(
         engine::World& world,
         engine::AssetManager& assets,
         SectorSceneRuntime& scene,
+        const SectorTopologyMap& map,
         SectorScriptHost& scriptHost,
         const GameSaveLevelState& state)
 {
@@ -355,6 +365,45 @@ void ApplyGameSaveLevelRuntimeState(
         SectorDoorMotion& motion = world.Get<SectorDoorMotion>(entity);
         motion.openFraction = saved.openFraction;
         motion.targetOpenFraction = saved.targetOpenFraction;
+    }
+    for (const GameSaveDuctAccessState& saved : state.ductAccesses) {
+        const engine::Entity entity = FindRuntimeEntity(
+                runtimeObjects, saved.placedObjectId);
+        if (!world.IsAlive(entity) || !world.Has<SectorDuctAccess>(entity)) {
+            continue;
+        }
+        SectorDuctAccess& access = world.Get<SectorDuctAccess>(entity);
+        if (!saved.coverRemoved) continue;
+        access.removalSide = saved.removalSide;
+        if (world.Has<SectorObject>(entity)) {
+            world.Get<SectorObject>(entity).currentSectorId = saved.removalSide
+                            == SectorDuctCoverRemovalSide::Outside
+                    ? access.outsideSectorId
+                    : access.crawlspaceSectorId;
+        }
+        access.coverPhase = SectorDuctCoverPhase::Settled;
+        const int floorSectorId = saved.removalSide
+                        == SectorDuctCoverRemovalSide::Outside
+                ? access.outsideSectorId : access.crawlspaceSectorId;
+        const SectorTopologySector* floorSector = FindSectorTopologySector(
+                map, floorSectorId);
+        const float floorY = floorSector != nullptr
+                ? SectorAuthoringToWorldDistance(floorSector->floorZ)
+                : access.openingBottom;
+        const float along = access.cover.slideSide
+                        == SectorDuctCoverSlideSide::PortalStart
+                ? -1.0f : 1.0f;
+        const float towardActor = saved.removalSide
+                        == SectorDuctCoverRemovalSide::Outside
+                ? -1.0f : 1.0f;
+        access.coverOffset = Vector3{
+                access.outsideToCrawlspaceNormal.x * towardActor
+                                * (access.cover.thickness + 0.05f)
+                        + access.tangent.x * along * (access.width + 0.05f),
+                floorY - access.openingBottom,
+                access.outsideToCrawlspaceNormal.y * towardActor
+                                * (access.cover.thickness + 0.05f)
+                        + access.tangent.y * along * (access.width + 0.05f)};
     }
     for (const GameSavePropState& saved : state.props) {
         const engine::Entity entity = FindRuntimeEntity(runtimeObjects, saved.placedObjectId);
@@ -492,6 +541,8 @@ void ApplyGameSaveLevelRuntimeState(
             trigger.remainingDelayMilliseconds = found->remainingDelayMilliseconds;
         }
     }
+    UpdateSectorObjectBakedLightingSystem(
+            world, runtimeObjects.objectLightProbes, &map);
     RefreshSectorDoorSpatialCaches(world, runtimeObjects);
 }
 

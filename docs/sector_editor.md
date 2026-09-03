@@ -97,12 +97,14 @@ views and maps to world Z for generated 3D geometry.
   linedef.
 - Window tool: place portal-attached procedural glass on a valid two-sided
   linedef.
+- Duct Access tool: place a crawl entrance on a portal adjoining exactly one
+  sector marked `Crawlspace`.
 - `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
 - `3D Mode` (`Ctrl+D`, under `View`): rebuild the 3D preview from the current
   in-memory topology map, or return to 2D from preview mode.
 - `Settings -> Player`: open the application-wide Player Settings modal. Its
-  Stamina, Inventory, Audio, Health, Sneaking, and Liquids tabs expose the
-  player-specific values stored in `assets/config/application_settings.json`
+  Stamina, Inventory, Audio, Health, Sneaking, Lighting, Liquids, and Ducts tabs
+  expose the player-specific values stored in `assets/config/application_settings.json`
   that do not belong in the end-user Graphics Settings screen. Apply validates
   and saves all player tabs;
   Cancel leaves both the live settings and the JSON file unchanged. Audio sets
@@ -178,6 +180,33 @@ renderer is visual-only and its persisted settings do not affect collision,
 lightmaps, bloom, picking, or generated surface metadata; collision still uses
 the sector's normal authored ceiling height for now. `ceilingSky` sectors are
 still required for sky to appear through omitted ceilings.
+
+## Duct access and crawlspaces
+
+Mark the narrow sector itself as `Crawlspace`, then place a **Duct Access** on
+each portal that connects it to a normal sector. The access derives which side
+is outside from that sector flag, so authors do not have to configure separate
+entrance/exit directions. In Gameplay preview and in game, E starts a short
+camera transition into an open access. While inside, ordinary sector collision
+and gravity continue to run with the globally configured compact crawl collider,
+eye height, and speed. Reaching another open access exits automatically; backing
+away from the entry immediately after entering exits through the same access.
+
+The optional procedural cover is disabled by default. Its inspector configures
+depth offset, thickness, frame width, louver count and angle, separate frame and
+louver materials, slide side, and removal speed. The generated frame and louvers
+fit the portal opening, keep world-scaled UVs, and use the normal opaque PBR path
+for material maps, baked probes, dynamic lights, reflections, and fog. E removes
+an attached cover with eased outward/sideways motion, after which it falls to
+the floor on the side from which it was removed. Covers can therefore be removed
+from either outside or inside. Weapons holster for the entire duct traversal and
+remain holstered after exiting until the player explicitly selects a weapon.
+
+`Settings -> Player -> Ducts` controls the global interaction distance, entry
+and exit transition times, crawl speed, collider radius and height, and eye
+height. Radius is horizontal and does not impose a minimum collider height; the
+eye height only has to remain below the collider height. Invalid values are
+reported inline rather than silently refusing Apply.
 
 ## Sector Collision Query Layer
 

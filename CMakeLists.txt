@@ -292,6 +292,7 @@ if(BUILD_TESTING)
             sources/game/FpsViewmodel.cpp
             sources/game/FpsWeaponPellets.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerDuctTraversal.cpp
             sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/FpsHudRenderer.cpp
@@ -394,6 +395,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerDuctTraversal.cpp
             sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
@@ -472,6 +474,7 @@ if(BUILD_TESTING)
             tests/SectorTopologySerializationTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerDuctTraversal.cpp
             sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
@@ -663,6 +666,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemIconLayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerDuctTraversal.cpp
             sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
@@ -712,6 +716,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDynamicModelShadowCasters.cpp
             sources/sector_demo/SectorBillboardRuntime.cpp
             sources/sector_demo/SectorDoorRuntime.cpp
+            sources/sector_demo/SectorDuctInteraction.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
             sources/sector_demo/SectorUseInteraction.cpp
@@ -772,6 +777,7 @@ if(BUILD_TESTING)
             tests/WeaponEditorServiceTests.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerDuctTraversal.cpp
             sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/FpsWeaponAudio.cpp
@@ -800,6 +806,7 @@ if(BUILD_TESTING)
             sources/game/items/ItemInventoryUILayout.cpp
             sources/game/items/ItemPresentation.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerDuctTraversal.cpp
             sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp
@@ -817,6 +824,7 @@ if(BUILD_TESTING)
     add_executable(player_sneak_tests
             tests/PlayerSneakTests.cpp
             sources/game/FpsWeaponRegistry.cpp
+            sources/game/PlayerDuctTraversal.cpp
             sources/engine/render/ToneMapping.cpp
             sources/game/PlayerHealthVisual.cpp
             sources/game/PlayerStamina.cpp

@@ -144,11 +144,19 @@ SectorEditorPlayerSettingsService::SaveAndClose(engine::EngineContext& context)
         return result;
     }
 
+    const std::string ductError = PlayerDuctTraversalSettingsError(
+            state_.draft.playerDucts);
+    if (!ductError.empty()) {
+        state_.errorMessage = "Duct settings: " + ductError;
+        return result;
+    }
+
     FpsApplicationSettings candidate = settings_;
     candidate.footsteps = state_.draft.footsteps;
     candidate.playerSounds = state_.draft.playerSounds;
     candidate.playerStamina = state_.draft.playerStamina;
     candidate.playerLiquids = state_.draft.playerLiquids;
+    candidate.playerDucts = state_.draft.playerDucts;
     candidate.playerInventory = state_.draft.playerInventory;
     candidate.playerHealth = state_.draft.playerHealth;
     candidate.playerSneak = state_.draft.playerSneak;
@@ -211,6 +219,9 @@ void SectorEditorPlayerSettingsService::ResetActiveTab()
             break;
         case SectorEditorPlayerSettingsTab::Liquids:
             state_.draft.playerLiquids = defaults.playerLiquids;
+            break;
+        case SectorEditorPlayerSettingsTab::Ducts:
+            state_.draft.playerDucts = defaults.playerDucts;
             break;
     }
     state_.errorMessage.clear();
