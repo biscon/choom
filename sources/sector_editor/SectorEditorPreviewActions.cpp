@@ -4,11 +4,13 @@
 
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorLiquidInteraction.h"
 #include "sector_demo/SectorStaticModelCollision.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include <raymath.h>
 
+#include <algorithm>
 #include <cmath>
 
 namespace game {
@@ -113,6 +115,380 @@ bool HasSectorEditorGameplayStandingClearance(
             standing.playerRadius,
             standing.playerHeight,
             dynamicDoorColliders);
+}
+
+SectorLiquidPhysicsConfig LiquidPhysicsConfig(
+        const PlayerLiquidApplicationSettings& settings)
+{
+    return SectorLiquidPhysicsConfig{
+            settings.entrySlowdownSeconds,
+            settings.waterDragPerSecond,
+            settings.surfaceRecoveryFrequencyHz};
+}
+
+bool NpcCylindersAllowPlayerPlacement(
+        Vector2 positionXZ,
+        float feetY,
+        const SectorFpsControllerConfig& config,
+        const std::vector<NpcCollisionCylinder>* obstacles)
+{
+    if (obstacles == nullptr) return true;
+    const float top = feetY + config.playerHeight;
+    for (const NpcCollisionCylinder& obstacle : *obstacles) {
+        if (obstacle.stableId == 0 || obstacle.radius <= 0.0f
+                || obstacle.height <= 0.0f) {
+            continue;
+        }
+        const float obstacleTop = obstacle.feetPosition.y + obstacle.height;
+        if (top <= obstacle.feetPosition.y + GameplayFloorSnapEpsilon
+                || feetY >= obstacleTop - GameplayFloorSnapEpsilon) {
+            continue;
+        }
+        const float dx = positionXZ.x - obstacle.feetPosition.x;
+        const float dz = positionXZ.y - obstacle.feetPosition.z;
+        const float combinedRadius = config.playerRadius + obstacle.radius;
+        if (dx * dx + dz * dz < combinedRadius * combinedRadius) {
+            return false;
+        }
+    }
+    return true;
+}
+
+SectorCollisionMoveConfig SectorLiquidCollisionMoveConfig(
+        const SectorFpsControllerConfig& config,
+        const SectorLiquidCollisionProxy& proxy)
+{
+    return SectorCollisionMoveConfig{
+            proxy.radius,
+            proxy.height,
+            config.stepHeight,
+            4};
+}
+
+SectorCollisionMoveState SectorLiquidCollisionMoveState(
+        const SectorFpsControllerState& state,
+        const SectorLiquidCollisionProxy& proxy)
+{
+    return SectorCollisionMoveState{
+            Vector2{state.feetPosition.x, state.feetPosition.z},
+            state.feetPosition.y + proxy.bottomOffsetFromFeet,
+            state.currentSectorId,
+            false};
+}
+
+SectorFpsVerticalContext BuildSectorLiquidVerticalContext(
+        const SectorEditorPreviewCollisionState& collisionState,
+        const SectorEditorPreviewControllerState& controllerState,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders,
+        const PlayerLiquidApplicationSettings& settings)
+{
+    if (!collisionState.sectorCollisionWorldValid) {
+        return SectorFpsVerticalContext{};
+    }
+    const SectorFpsControllerConfig config =
+            NormalizeSectorFpsControllerConfig(
+                    controllerState.fpsControllerConfig);
+    const SectorLiquidCollisionProxy proxy =
+            BuildSectorLiquidCollisionProxy(
+                    config, settings.swimCollisionHeightWorld);
+    const SectorCollisionMoveState moveState =
+            SectorLiquidCollisionMoveState(
+                    controllerState.fpsControllerState, proxy);
+    const SectorCollisionMoveConfig moveConfig =
+            SectorLiquidCollisionMoveConfig(config, proxy);
+    SectorFpsControllerConfig proxyConfig = config;
+    proxyConfig.playerRadius = proxy.radius;
+    proxyConfig.playerHeight = proxy.height;
+    return BuildSectorStaticModelVerticalContext(
+            BuildSectorOnlyVerticalContext(
+                    collisionState,
+                    moveState.currentSectorId,
+                    moveState.positionXZ,
+                    moveState.feetY,
+                    false,
+                    proxyConfig),
+            moveState,
+            moveConfig,
+            staticModelColliders);
+}
+
+bool SectorLiquidCanEnterDrySectorStanding(
+        const SectorTopologyMap* topologyMap,
+        const SectorEditorPreviewCollisionState& collisionState,
+        int sectorId,
+        Vector2 positionXZ,
+        float feetY,
+        const SectorFpsControllerConfig& config,
+        const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders,
+        const std::vector<NpcCollisionCylinder>* npcCollisionCylinders)
+{
+    if (topologyMap == nullptr) return true;
+    const SectorTopologySector* sector =
+            FindSectorTopologySector(*topologyMap, sectorId);
+    if (sector == nullptr || sector->liquid.enabled) return true;
+
+    int resolvedSectorId = 0;
+    return collisionState.sectorCollisionWorld.AllowsPrismPlacement(
+                   positionXZ,
+                   config.playerRadius,
+                   feetY,
+                   feetY + config.playerHeight,
+                   sectorId,
+                   &resolvedSectorId)
+            && resolvedSectorId == sectorId
+            && SectorStaticModelCollidersAllowPlayerHeight(
+                    positionXZ,
+                    feetY,
+                    config.playerRadius,
+                    config.playerHeight,
+                    staticModelColliders)
+            && SectorDoorDynamicCollidersAllowPlayerHeight(
+                    positionXZ,
+                    feetY,
+                    config.playerRadius,
+                    config.playerHeight,
+                    dynamicDoorColliders)
+            && NpcCylindersAllowPlayerPlacement(
+                    positionXZ,
+                    feetY,
+                    config,
+                    npcCollisionCylinders);
+}
+
+bool TryBeginSectorLiquidExit(
+        SectorEditorPreviewCollisionState& collisionState,
+        SectorEditorPreviewControllerState& controllerState,
+        const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders,
+        const std::vector<NpcCollisionCylinder>* npcCollisionCylinders,
+        const SectorFpsControllerInput& input,
+        const PlayerLiquidApplicationSettings& settings)
+{
+    SectorLiquidMovementState& liquid = controllerState.liquidMovement;
+    SectorFpsControllerState& player = controllerState.fpsControllerState;
+    const SectorFpsControllerConfig config =
+            NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
+    const float stableSurfaceFeetY = liquid.contact.surfaceY
+            + SectorLiquidSurfaceEyeOffsetWorld - config.eyeHeight;
+    if (!collisionState.sectorCollisionWorldValid
+            || !liquid.swimming || !liquid.surfaceLatched
+            || !liquid.contact.hasLiquid || liquid.exitingWater
+            || liquid.impactEntryActive
+            || player.feetPosition.y < stableSurfaceFeetY - 0.15f
+            || !input.swimUp || !input.moveForward || input.swimDown
+            || player.verticalVelocity < -0.5f) {
+        return false;
+    }
+
+    const float maximumHeight = std::clamp(
+            std::isfinite(settings.maximumExitLedgeHeightWorld)
+                    ? settings.maximumExitLedgeHeightWorld : 0.75f,
+            0.0f, 3.0f);
+    const Vector2 forward{
+            std::cos(player.yawRadians), std::sin(player.yawRadians)};
+    const Vector2 start{player.feetPosition.x, player.feetPosition.z};
+    const float maximumDistance = config.playerRadius * 2.0f + 0.75f;
+    constexpr int ProbeCount = 6;
+    for (int probe = 1; probe <= ProbeCount; ++probe) {
+        const float distance = maximumDistance
+                * static_cast<float>(probe) / static_cast<float>(ProbeCount);
+        const Vector2 candidate{
+                start.x + forward.x * distance,
+                start.y + forward.y * distance};
+        const int sectorId = collisionState.sectorCollisionWorld
+                .FindSectorContainingPointPreferCurrent(
+                        candidate, player.currentSectorId);
+        if (sectorId == 0) continue;
+
+        SectorCollisionHeights heights;
+        if (!collisionState.sectorCollisionWorld.ResolveActorVerticalContext(
+                    sectorId,
+                    SectorCollisionVerticalQuery{
+                            candidate,
+                            liquid.contact.surfaceY + maximumHeight,
+                            config.playerRadius,
+                            config.playerHeight,
+                            maximumHeight + GameplayFloorSnapEpsilon,
+                            true},
+                    &heights)) {
+            continue;
+        }
+        const float ledgeHeight = heights.floorZ - liquid.contact.surfaceY;
+        if (ledgeHeight < -GameplayFloorSnapEpsilon
+                || ledgeHeight > maximumHeight + GameplayFloorSnapEpsilon
+                || heights.floorZ + config.playerHeight
+                        > heights.ceilingZ + GameplayFloorSnapEpsilon) {
+            continue;
+        }
+        SectorCollisionHeights baseHeights;
+        collisionState.sectorCollisionWorld.GetSectorFloorCeiling(
+                sectorId, &baseHeights);
+        int resolvedSectorId = collisionState.sectorCollisionWorld
+                .FindSectorForPlayerFootprint(
+                        candidate,
+                        sectorId,
+                        heights.floorZ,
+                        true,
+                        SectorCollisionMoveConfig{
+                                config.playerRadius,
+                                config.playerHeight,
+                                config.stepHeight,
+                                4});
+        const bool structuralSupport = heights.floorZ
+                > baseHeights.floorZ + GameplayFloorSnapEpsilon;
+        if (resolvedSectorId == 0
+                || (!structuralSupport
+                        && !collisionState.sectorCollisionWorld
+                                .AllowsPrismPlacement(
+                                        candidate,
+                                        config.playerRadius,
+                                        heights.floorZ,
+                                        heights.floorZ + config.playerHeight,
+                                        sectorId,
+                                        &resolvedSectorId))
+                || !SectorStaticModelCollidersAllowPlayerHeight(
+                        candidate,
+                        heights.floorZ,
+                        config.playerRadius,
+                        config.playerHeight,
+                        staticModelColliders)
+                || !SectorDoorDynamicCollidersAllowPlayerHeight(
+                        candidate,
+                        heights.floorZ,
+                        config.playerRadius,
+                        config.playerHeight,
+                        dynamicDoorColliders)
+                || !NpcCylindersAllowPlayerPlacement(
+                        candidate,
+                        heights.floorZ,
+                        config,
+                        npcCollisionCylinders)) {
+            continue;
+        }
+
+        liquid.exitingWater = true;
+        liquid.impactEntryActive = false;
+        liquid.exitStartFeetPosition = player.feetPosition;
+        liquid.exitTargetFeetPosition = Vector3{
+                candidate.x, heights.floorZ, candidate.y};
+        liquid.exitTargetSectorId = resolvedSectorId;
+        liquid.exitElapsedSeconds = 0.0f;
+        player.verticalVelocity = 0.0f;
+        return true;
+    }
+    return false;
+}
+
+enum class SectorLiquidExitTransitionStatus {
+    InProgress,
+    Completed,
+    Aborted,
+};
+
+struct SectorLiquidExitTransitionUpdate {
+    SectorLiquidExitTransitionStatus status =
+            SectorLiquidExitTransitionStatus::InProgress;
+    float unusedSeconds = 0.0f;
+};
+
+SectorLiquidExitTransitionUpdate UpdateSectorLiquidExitTransition(
+        SectorEditorPreviewControllerState& controllerState,
+        const SectorCollisionWorld& collisionWorld,
+        const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders,
+        const std::vector<NpcCollisionCylinder>* npcCollisionCylinders,
+        const PlayerLiquidApplicationSettings& settings,
+        float dt)
+{
+    SectorLiquidMovementState& liquid = controllerState.liquidMovement;
+    SectorFpsControllerState& player = controllerState.fpsControllerState;
+    if (!liquid.exitingWater) {
+        return SectorLiquidExitTransitionUpdate{
+                SectorLiquidExitTransitionStatus::Completed,
+                std::max(0.0f, dt)};
+    }
+    const SectorFpsControllerConfig config =
+            NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
+    const Vector2 targetXZ{
+            liquid.exitTargetFeetPosition.x,
+            liquid.exitTargetFeetPosition.z};
+    SectorCollisionHeights targetHeights;
+    const bool targetClear = collisionWorld.ResolveActorVerticalContext(
+            liquid.exitTargetSectorId,
+            SectorCollisionVerticalQuery{
+                    targetXZ,
+                    liquid.exitTargetFeetPosition.y,
+                    config.playerRadius,
+                    config.playerHeight,
+                    config.stepHeight,
+                    true},
+            &targetHeights)
+            && std::fabs(
+                    targetHeights.floorZ
+                            - liquid.exitTargetFeetPosition.y)
+                    <= GameplayFloorSnapEpsilon
+            && targetHeights.floorZ + config.playerHeight
+                    <= targetHeights.ceilingZ + GameplayFloorSnapEpsilon
+            && SectorStaticModelCollidersAllowPlayerHeight(
+                    targetXZ,
+                    liquid.exitTargetFeetPosition.y,
+                    config.playerRadius,
+                    config.playerHeight,
+                    staticModelColliders)
+            && SectorDoorDynamicCollidersAllowPlayerHeight(
+                    targetXZ,
+                    liquid.exitTargetFeetPosition.y,
+                    config.playerRadius,
+                    config.playerHeight,
+                    dynamicDoorColliders)
+            && NpcCylindersAllowPlayerPlacement(
+                    targetXZ,
+                    liquid.exitTargetFeetPosition.y,
+                    config,
+                    npcCollisionCylinders);
+    if (!targetClear) {
+        player.feetPosition = liquid.exitStartFeetPosition;
+        player.verticalVelocity = 0.0f;
+        liquid.exitingWater = false;
+        liquid.surfaceLatched = true;
+        liquid.swimming = true;
+        return SectorLiquidExitTransitionUpdate{
+                SectorLiquidExitTransitionStatus::Aborted, 0.0f};
+    }
+    const float duration = std::clamp(
+            std::isfinite(settings.exitTransitionDurationSeconds)
+                    ? settings.exitTransitionDurationSeconds : 0.30f,
+            0.1f, 2.0f);
+    const float safeDt = std::max(0.0f, dt);
+    const float remainingDuration = std::max(
+            0.0f, duration - liquid.exitElapsedSeconds);
+    const float consumedSeconds = std::min(safeDt, remainingDuration);
+    liquid.exitElapsedSeconds += consumedSeconds;
+    const float progress = std::clamp(
+            liquid.exitElapsedSeconds / duration, 0.0f, 1.0f);
+    const float liftY = liquid.exitTargetFeetPosition.y
+            + GameplayFloorSnapEpsilon * 2.0f;
+    const Vector3 proposed = EvaluateSectorLiquidExitTrajectory(
+            liquid.exitStartFeetPosition,
+            liquid.exitTargetFeetPosition,
+            liftY,
+            progress);
+
+    player.feetPosition = proposed;
+    player.currentSectorId = liquid.exitTargetSectorId;
+    player.grounded = progress >= 1.0f;
+    player.verticalVelocity = 0.0f;
+    if (progress >= 1.0f) {
+        liquid.exitingWater = false;
+        liquid.swimming = false;
+        liquid.surfaceLatched = false;
+        return SectorLiquidExitTransitionUpdate{
+                SectorLiquidExitTransitionStatus::Completed,
+                std::max(0.0f, safeDt - consumedSeconds)};
+    }
+    return SectorLiquidExitTransitionUpdate{
+            SectorLiquidExitTransitionStatus::InProgress, 0.0f};
 }
 
 } // namespace
@@ -308,6 +684,7 @@ void UpdateSectorEditorGameplayPreview(
         const SectorTopologyMap* topologyMap,
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
+        const PlayerLiquidApplicationSettings& liquidSettings,
         float previousVisualEyeY,
         float dt,
         const std::vector<NpcCollisionCylinder>* npcCollisionCylinders)
@@ -338,34 +715,176 @@ void UpdateSectorEditorGameplayPreview(
         ClearPreviewGameplayVisualState(controllerState);
         RefreshSectorEditorGameplaySectorAndVerticalContext(
                 collisionState, controllerState);
+        UpdateSectorLadderLiquidState(
+                controllerState.liquidMovement,
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig,
+                *topologyMap,
+                controllerInput.swimDown);
+        if (controllerInput.ladderDetachPressed) {
+            TryDetachSectorLadderTraversal(
+                    controllerState.ladderTraversal,
+                    controllerState.fpsControllerState,
+                    controllerState.liquidMovement.cameraSubmerged);
+        }
         return;
+    }
+    SectorLiquidContact liquidContact;
+    if (topologyMap != nullptr) {
+        liquidContact = SampleSectorLiquidContact(
+                *topologyMap,
+                controllerState.fpsControllerState.currentSectorId,
+                controllerState.fpsControllerState.feetPosition,
+                controllerState.fpsControllerConfig);
+    }
+    const bool wasSwimming = controllerState.liquidMovement.swimming;
+    if (!controllerState.liquidMovement.exitingWater) {
+        UpdateSectorLiquidMovementState(
+                controllerState.liquidMovement,
+                liquidContact,
+                controllerInput.swimDown);
+    }
+    if (!wasSwimming && controllerState.liquidMovement.swimming) {
+        if (!controllerInput.swimDown
+                && controllerState.fpsControllerState.verticalVelocity < 0.0f) {
+            controllerState.liquidMovement.surfaceLatched = true;
+        }
+        const SectorLiquidCollisionProxy entryProxy =
+                BuildSectorLiquidCollisionProxy(
+                        controllerState.fpsControllerConfig,
+                        liquidSettings.swimCollisionHeightWorld);
+        const SectorFpsVerticalContext entryContext =
+                BuildSectorLiquidVerticalContext(
+                        collisionState,
+                        controllerState,
+                        staticModelColliders,
+                        liquidSettings);
+        BeginSectorLiquidImpactEntry(
+                controllerState.liquidMovement,
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig,
+                LiquidPhysicsConfig(liquidSettings),
+                entryContext.hasSector
+                        ? entryContext.floorZ
+                                - entryProxy.bottomOffsetFromFeet
+                        : controllerState.liquidMovement.contact.bottomY
+                                - entryProxy.bottomOffsetFromFeet);
+    }
+    if (controllerState.liquidMovement.impactEntryActive
+            && controllerInput.swimUp) {
+        controllerState.liquidMovement.impactEntryActive = false;
+        controllerState.fpsControllerState.verticalVelocity = 0.0f;
+    }
+    TryBeginSectorLiquidExit(
+            collisionState,
+            controllerState,
+            dynamicDoorColliders,
+            staticModelColliders,
+            npcCollisionCylinders,
+            controllerInput,
+            liquidSettings);
+    bool completedLiquidExitThisFrame = false;
+    if (controllerState.liquidMovement.exitingWater) {
+        const SectorLiquidExitTransitionUpdate exitUpdate =
+                UpdateSectorLiquidExitTransition(
+                        controllerState,
+                        collisionState.sectorCollisionWorld,
+                        dynamicDoorColliders,
+                        staticModelColliders,
+                        npcCollisionCylinders,
+                        liquidSettings,
+                        dt);
+        RefreshSectorEditorGameplaySectorAndVerticalContext(
+                collisionState, controllerState);
+        if (topologyMap != nullptr) {
+            liquidContact = SampleSectorLiquidContact(
+                    *topologyMap,
+                    controllerState.fpsControllerState.currentSectorId,
+                    controllerState.fpsControllerState.feetPosition,
+                    controllerState.fpsControllerConfig);
+            controllerState.liquidMovement.contact = liquidContact;
+            const float eyeY = SectorFpsControllerEyePosition(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig).y;
+            controllerState.liquidMovement.cameraSubmerged =
+                    UpdateSectorLiquidCameraSubmersion(
+                            controllerState.liquidMovement.cameraSubmerged,
+                            liquidContact,
+                            eyeY);
+        }
+        collisionState.previewMoveResult = {};
+        collisionState.previewVerticalResult = {};
+        ClearPreviewGameplayVisualState(controllerState);
+        if (exitUpdate.status != SectorLiquidExitTransitionStatus::Completed
+                || exitUpdate.unusedSeconds <= 0.0f) {
+            return;
+        }
+        completedLiquidExitThisFrame = true;
+        dt = exitUpdate.unusedSeconds;
+        previousVisualEyeY = SectorFpsControllerEyePosition(
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig).y;
+    }
+    const bool swimming = controllerState.liquidMovement.swimming;
+    if (swimming) {
+        ResetSectorFpsCrouch(controllerState.fpsControllerState);
+        controllerState.fpsControllerState.grounded = false;
     }
     const bool standingClearance = HasSectorEditorGameplayStandingClearance(
             collisionState,
             controllerState,
             dynamicDoorColliders,
             staticModelColliders);
-    if (controllerInput.crouchTogglePressed) {
+    if (!swimming && controllerInput.crouchTogglePressed) {
         TryToggleSectorFpsCrouch(
                 controllerState.fpsControllerState,
                 standingClearance);
     }
-    UpdateSectorFpsCrouch(
-            controllerState.fpsControllerState,
-            standingClearance,
-            dt);
+    if (!swimming) {
+        UpdateSectorFpsCrouch(
+                controllerState.fpsControllerState,
+                standingClearance,
+                dt);
+    }
     const SectorFpsControllerConfig effectiveConfig = EffectiveSectorFpsControllerConfig(
             controllerState.fpsControllerState,
             controllerState.fpsControllerConfig);
+    const SectorLiquidCollisionProxy swimCollisionProxy =
+            BuildSectorLiquidCollisionProxy(
+                    effectiveConfig,
+                    liquidSettings.swimCollisionHeightWorld);
+    SectorFpsControllerConfig collisionConfig = effectiveConfig;
+    if (swimming) {
+        collisionConfig.playerRadius = swimCollisionProxy.radius;
+        collisionConfig.playerHeight = swimCollisionProxy.height;
+    }
+    const SectorCollisionMoveConfig collisionMoveConfig = swimming
+            ? SectorLiquidCollisionMoveConfig(
+                    effectiveConfig, swimCollisionProxy)
+            : SectorCollisionMoveConfig{
+                    effectiveConfig.playerRadius,
+                    effectiveConfig.playerHeight,
+                    effectiveConfig.stepHeight,
+                    4};
     const float previousStepVisualEyeY =
             previousVisualEyeY
             - controllerState.landingDipState.offsetY
             + (effectiveConfig.eyeHeight - previousStanceEyeHeight);
-    const Vector2 desiredHorizontalMovement = ComputeSectorFpsHorizontalMovementDelta(
-            controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig,
-            controllerInput,
-            dt);
+    const Vector3 swimMovement = swimming
+            ? ComputeSectorLiquidSwimMovementDelta(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig,
+                    controllerInput,
+                    controllerState.liquidMovement.surfaceLatched,
+                    dt)
+            : Vector3{};
+    const Vector2 desiredHorizontalMovement = swimming
+            ? Vector2{swimMovement.x, swimMovement.z}
+            : ComputeSectorFpsHorizontalMovementDelta(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig,
+                    controllerInput,
+                    dt);
     const Vector2 previousFeetXZ{
             controllerState.fpsControllerState.feetPosition.x,
             controllerState.fpsControllerState.feetPosition.z};
@@ -383,71 +902,65 @@ void UpdateSectorEditorGameplayPreview(
         const int previousSectorId = controllerState.fpsControllerState.currentSectorId;
         const float previousFeetY = controllerState.fpsControllerState.feetPosition.y;
         const bool wasGrounded = controllerState.fpsControllerState.grounded;
+        const SectorCollisionMoveState collisionMoveState = swimming
+                ? SectorLiquidCollisionMoveState(
+                        controllerState.fpsControllerState,
+                        swimCollisionProxy)
+                : SectorCollisionMoveState{
+                        feetXZ,
+                        controllerState.fpsControllerState.feetPosition.y,
+                        controllerState.fpsControllerState.currentSectorId,
+                        controllerState.fpsControllerState.grounded};
 
         if (controllerState.fpsControllerState.currentSectorId != 0) {
             SectorCollisionMoveResult moveResult =
                     collisionState.sectorCollisionWorld.ResolveMovement(
-                            SectorCollisionMoveState{
-                                    feetXZ,
-                                    controllerState.fpsControllerState.feetPosition.y,
-                                    controllerState.fpsControllerState.currentSectorId,
-                                    controllerState.fpsControllerState.grounded},
+                            collisionMoveState,
                             desiredHorizontalMovement,
-                            SectorCollisionMoveConfig{
-                                    effectiveConfig.playerRadius,
-                                    effectiveConfig.playerHeight,
-                                    effectiveConfig.stepHeight,
-                                    4});
+                            collisionMoveConfig);
             moveResult = ResolveSectorDoorDynamicCollidersForPlayerMovement(
-                    SectorCollisionMoveState{
-                            feetXZ,
-                            controllerState.fpsControllerState.feetPosition.y,
-                            controllerState.fpsControllerState.currentSectorId,
-                            controllerState.fpsControllerState.grounded},
+                    collisionMoveState,
                     moveResult,
-                    SectorCollisionMoveConfig{
-                            effectiveConfig.playerRadius,
-                            effectiveConfig.playerHeight,
-                            effectiveConfig.stepHeight,
-                            4},
+                    collisionMoveConfig,
                     dynamicDoorColliders);
             moveResult = ResolveSectorStaticModelCollidersForPlayerMovement(
-                    SectorCollisionMoveState{
-                            feetXZ,
-                            controllerState.fpsControllerState.feetPosition.y,
-                            controllerState.fpsControllerState.currentSectorId,
-                            controllerState.fpsControllerState.grounded},
+                    collisionMoveState,
                     moveResult,
-                    SectorCollisionMoveConfig{
-                            effectiveConfig.playerRadius,
-                            effectiveConfig.playerHeight,
-                            effectiveConfig.stepHeight,
-                            4},
+                    collisionMoveConfig,
                     BuildSectorOnlyVerticalContext(
                             collisionState,
                             moveResult.currentSectorId,
                             moveResult.positionXZ,
-                            controllerState.fpsControllerState.feetPosition.y,
-                            controllerState.fpsControllerState.grounded,
-                            effectiveConfig),
+                            collisionMoveState.feetY,
+                            collisionMoveState.grounded,
+                            collisionConfig),
                     staticModelColliders);
             if (npcCollisionCylinders != nullptr
                     && !npcCollisionCylinders->empty()) {
                 moveResult = ResolveNpcCollisionCylindersForMovement(
-                        SectorCollisionMoveState{
-                                feetXZ,
-                                controllerState.fpsControllerState.feetPosition.y,
-                                controllerState.fpsControllerState.currentSectorId,
-                                controllerState.fpsControllerState.grounded},
+                        collisionMoveState,
                         moveResult,
-                        SectorCollisionMoveConfig{
-                                effectiveConfig.playerRadius,
-                                effectiveConfig.playerHeight,
-                                effectiveConfig.stepHeight,
-                                4},
+                        collisionMoveConfig,
                         -2,
                         npcCollisionCylinders->data(),
                         npcCollisionCylinders->size());
+            }
+            if (swimming
+                    && moveResult.currentSectorId != previousSectorId
+                    && !SectorLiquidCanEnterDrySectorStanding(
+                            topologyMap,
+                            collisionState,
+                            moveResult.currentSectorId,
+                            moveResult.positionXZ,
+                            controllerState.fpsControllerState.feetPosition.y,
+                            effectiveConfig,
+                            dynamicDoorColliders,
+                            staticModelColliders,
+                            npcCollisionCylinders)) {
+                moveResult.positionXZ = feetXZ;
+                moveResult.currentSectorId = previousSectorId;
+                moveResult.hitWall = true;
+                moveResult.blockedByStep = true;
             }
             SectorCollisionHeights movedHeights;
             if (wasGrounded
@@ -475,9 +988,16 @@ void UpdateSectorEditorGameplayPreview(
         controllerState.fpsControllerState.feetPosition.x += desiredHorizontalMovement.x;
         controllerState.fpsControllerState.feetPosition.z += desiredHorizontalMovement.y;
     }
-    RefreshSectorEditorGameplaySectorAndVerticalContext(collisionState, controllerState);
+    if (swimming) {
+        collisionState.previewCollisionSectorId =
+                controllerState.fpsControllerState.currentSectorId;
+    } else {
+        RefreshSectorEditorGameplaySectorAndVerticalContext(
+                collisionState, controllerState);
+    }
     bool startedJump = false;
-    if (controllerInput.jumpPressed) {
+    if (!swimming && !completedLiquidExitThisFrame
+            && controllerInput.jumpPressed) {
         startedJump = TryStartSectorFpsJump(
                 controllerState.fpsControllerState,
                 controllerState.fpsControllerConfig);
@@ -485,18 +1005,122 @@ void UpdateSectorEditorGameplayPreview(
             ClearSectorFpsLandingDip(controllerState.landingDipState);
         }
     }
-    collisionState.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
-            controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig,
-            BuildSectorEditorGameplayVerticalContext(
-                    collisionState,
-                    controllerState,
-                    staticModelColliders),
-            dt);
+    if (swimming) {
+        if (topologyMap != nullptr) {
+            liquidContact = SampleSectorLiquidContact(
+                    *topologyMap,
+                    controllerState.fpsControllerState.currentSectorId,
+                    controllerState.fpsControllerState.feetPosition,
+                    controllerState.fpsControllerConfig);
+            controllerState.liquidMovement.contact = liquidContact;
+        }
+        const SectorFpsVerticalContext verticalContext =
+                BuildSectorLiquidVerticalContext(
+                        collisionState,
+                        controllerState,
+                        staticModelColliders,
+                        liquidSettings);
+        const float desiredVerticalVelocity = dt > 0.0f
+                ? swimMovement.y / dt : 0.0f;
+        bool cannotFit = false;
+        if (verticalContext.hasSector) {
+            const float minimumFeetY = verticalContext.floorZ
+                    - swimCollisionProxy.bottomOffsetFromFeet;
+            const float maximumFeetY = verticalContext.ceilingZ
+                    - swimCollisionProxy.bottomOffsetFromFeet
+                    - swimCollisionProxy.height;
+            cannotFit = maximumFeetY + GameplayFloorSnapEpsilon
+                    < minimumFeetY;
+            if (cannotFit) {
+                controllerState.fpsControllerState.verticalVelocity = 0.0f;
+            } else {
+                UpdateSectorLiquidSwimmingVerticalMotion(
+                        controllerState.fpsControllerState,
+                        controllerState.fpsControllerConfig,
+                        controllerState.liquidMovement,
+                        LiquidPhysicsConfig(liquidSettings),
+                        desiredVerticalVelocity,
+                        minimumFeetY,
+                        maximumFeetY,
+                        dt);
+            }
+        } else {
+            UpdateSectorLiquidSwimmingVerticalMotion(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig,
+                    controllerState.liquidMovement,
+                    LiquidPhysicsConfig(liquidSettings),
+                    desiredVerticalVelocity,
+                    -INFINITY,
+                    INFINITY,
+                    dt);
+        }
+        controllerState.fpsControllerState.grounded = false;
+        collisionState.previewVerticalResult = SectorFpsVerticalResult{
+                verticalContext.hasSector,
+                cannotFit,
+                verticalContext.floorZ,
+                verticalContext.ceilingZ,
+                0.0f,
+                SectorFpsVerticalTransition::None};
+        if (topologyMap != nullptr) {
+            liquidContact = SampleSectorLiquidContact(
+                    *topologyMap,
+                    controllerState.fpsControllerState.currentSectorId,
+                    controllerState.fpsControllerState.feetPosition,
+                    controllerState.fpsControllerConfig);
+            controllerState.liquidMovement.contact = liquidContact;
+            const float eyeY = SectorFpsControllerEyePosition(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig).y;
+            if (!controllerInput.swimDown
+                    && !controllerState.liquidMovement.surfaceLatched
+                    && liquidContact.hasLiquid
+                    && eyeY >= liquidContact.surfaceY
+                            - SectorLiquidSurfaceEyeOffsetWorld) {
+                controllerState.liquidMovement.surfaceLatched = true;
+            }
+            controllerState.liquidMovement.cameraSubmerged =
+                    UpdateSectorLiquidCameraSubmersion(
+                            controllerState.liquidMovement.cameraSubmerged,
+                            liquidContact,
+                            eyeY);
+        }
+    } else {
+        collisionState.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig,
+                BuildSectorEditorGameplayVerticalContext(
+                        collisionState,
+                        controllerState,
+                        staticModelColliders),
+                dt);
+        if (topologyMap != nullptr) {
+            liquidContact = SampleSectorLiquidContact(
+                    *topologyMap,
+                    controllerState.fpsControllerState.currentSectorId,
+                    controllerState.fpsControllerState.feetPosition,
+                    controllerState.fpsControllerConfig);
+            controllerState.liquidMovement.contact = liquidContact;
+        }
+        const float eyeY = SectorFpsControllerEyePosition(
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig).y;
+        controllerState.liquidMovement.cameraSubmerged =
+                UpdateSectorLiquidCameraSubmersion(
+                        controllerState.liquidMovement.cameraSubmerged,
+                        liquidContact,
+                        eyeY);
+    }
     controllerState.frameEvents = BuildSectorFpsFrameEvents(
             startedJump,
             collisionState.previewVerticalResult);
-    if (collisionState.previewCollisionNoclipFallback || !collisionState.previewVerticalResult.hasSector) {
+    if (swimming) {
+        controllerState.visualStepOffsetY = 0.0f;
+        ClearSectorFpsLandingDip(controllerState.landingDipState);
+        ClearSectorFpsHeadBob(controllerState.headBobState);
+        ClearSectorFpsFootstepCadence(controllerState.footstepCadenceState);
+    } else if (collisionState.previewCollisionNoclipFallback || !collisionState.previewVerticalResult.hasSector) {
         controllerState.visualStepOffsetY = 0.0f;
         ClearSectorFpsLandingDip(controllerState.landingDipState);
     } else if (startedJump) {
@@ -524,7 +1148,8 @@ void UpdateSectorEditorGameplayPreview(
     controllerState.frameEvents.sprinting =
             SectorFpsInputUsesRunSpeed(controllerInput)
             && Vector2Length(resolvedHorizontalMovement) > 0.0001f;
-    const bool headBobActive = !collisionState.previewCollisionNoclipFallback
+    const bool headBobActive = !swimming
+            && !collisionState.previewCollisionNoclipFallback
             && collisionState.previewVerticalResult.hasSector
             && controllerState.fpsControllerState.grounded
             && !previewSettingsModalOpen;

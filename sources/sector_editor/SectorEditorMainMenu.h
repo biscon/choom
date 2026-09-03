@@ -46,7 +46,8 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     OpenLevelSettings,
     OpenColorSettings,
     OpenPlayerSettings,
-    OpenSneakSettings
+    OpenSneakSettings,
+    OpenLiquidGameplaySettings
 };
 
 SectorEditorMainMenuCommand DrawSectorEditorMainMenu(

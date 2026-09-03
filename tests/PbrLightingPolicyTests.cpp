@@ -908,7 +908,7 @@ void TestHdrEffectShaderAndPassPolicies()
                             !=std::string::npos,
           "decal-only bloom redraw is retired in favor of visible emissive radiance");
     const std::size_t atmosphere=mainGraph.find("Apply3DWorldAtmosphere");
-    const std::size_t glass=mainGraph.find("Apply3DGlass");
+    const std::size_t glass=mainGraph.find("Apply3DTransparentSurfaces");
     const std::size_t viewmodel=mainGraph.find("Render3DViewmodel");
     const std::size_t sceneBloom=mainGraph.find("Apply3DHdrBloom");
     const std::size_t overlays=mainGraph.find("Render3DOverlays");
@@ -932,6 +932,62 @@ void TestHdrEffectShaderAndPassPolicies()
                             ==std::string::npos
                     &&glassShader.find("advancedTransmission")!=std::string::npos,
           "the retained refraction backend uses depth-aware scene transmission and box-projected probes");
+    const std::string liquidShader=ReadSource(LIQUID_SHADER_SOURCE_PATH);
+    Check(liquidShader.find("#version 330")!=std::string::npos
+                    &&liquidShader.find("uniform sampler2D sceneColor")!=std::string::npos
+                    &&liquidShader.find("uniform sampler2D sceneDepth")!=std::string::npos
+                    &&liquidShader.find("ProceduralNormal")!=std::string::npos
+                    &&liquidShader.find("ReconstructWorldPosition")!=std::string::npos
+                    &&liquidShader.find("OpaqueDepthEpsilon = 0.000001")!=std::string::npos
+                    &&liquidShader.find("0.0005")==std::string::npos
+                    &&liquidShader.find("environmentBoxProjection")!=std::string::npos
+                    &&liquidShader.find("textureLod(environmentTexture")!=std::string::npos
+                    &&liquidShader.find("ToneMap")==std::string::npos
+                    &&liquidShader.find("LinearToSrgb")==std::string::npos,
+          "liquid shader is procedural, depth-aware, probe-reflective, and linear HDR");
+    Check(liquidShader.find("if (dot(normal, viewDirection) < 0.0) normal = -normal")
+                            !=std::string::npos
+                    &&liquidShader.find("rlDisableBackfaceCulling()")
+                            !=std::string::npos,
+          "liquid surfaces render from below with view-facing procedural normals");
+    const std::string underwaterShader = ReadSource(
+            UNDERWATER_SHADER_SOURCE_PATH);
+    Check(underwaterShader.find("gl_FragCoord.xy / max(viewportSize")
+                            != std::string::npos
+                    && underwaterShader.find("sceneDistance = forwardDistance")
+                            != std::string::npos
+                    && underwaterShader.find(
+                               "/ max(dot(rayDirection, cameraForward)")
+                            != std::string::npos
+                    && underwaterShader.find("expectedPixelWorld * 18.0")
+                            != std::string::npos,
+          "underwater caustics reconstruct proven camera rays and reject depth discontinuities");
+    Check(underwaterShader.find("projectionWeights = pow(absoluteNormal")
+                            != std::string::npos
+                    && underwaterShader.find("world.zy,")
+                            != std::string::npos
+                    && underwaterShader.find("world.xz,")
+                            != std::string::npos
+                    && underwaterShader.find("world.xy,")
+                            != std::string::npos,
+          "underwater caustics use stable triplanar world projection");
+    Check(underwaterShader.find("pattern - 0.38") != std::string::npos
+                    && underwaterShader.find("smoothstep(0.80, 1.25, luminance)")
+                            != std::string::npos
+                    && underwaterShader.find(
+                               "clamp(1.0 + signedModulation, 0.75, 1.35)")
+                            != std::string::npos
+                    && underwaterShader.find(
+                               "1.0 - smoothstep(0.08, 0.30, luminance)")
+                            != std::string::npos
+                    && underwaterShader.find(
+                               "positivePattern * effectStrength * 0.10 * darkSurfaceFactor")
+                            != std::string::npos
+                    && underwaterShader.find("0.04);")
+                            != std::string::npos
+                    && underwaterShader.find("scene.rgb) * (1.0 + contribution)")
+                            == std::string::npos,
+          "underwater caustics are energy-centered, dark-surface visible, bounded, and bloom-safe");
     Check(glassShader.find("rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY)")
                             !=std::string::npos
                     &&glassShader.find("float fresnel = clamp(0.04 + 0.96")
@@ -990,15 +1046,21 @@ void TestHdrEffectShaderAndPassPolicies()
                             !=std::string::npos
                     &&sectorRenderer.find("? hdrSceneColorView : sceneTarget.native")
                             !=std::string::npos,
-          "advanced glass snapshots color without flipping and renders through the depth-detached scene color view");
-    Check(sectorRenderer.find("bool requestRefraction")!=std::string::npos
-                    &&sectorRenderer.find("bool refractionReady = requestRefraction")
+          "refractive liquids snapshot color without flipping and render through the depth-detached scene color view");
+    Check(sectorRenderer.find("bool refractionReady = visibleLiquids")!=std::string::npos
+                    &&sectorRenderer.find("liquidRenderer.Draw(liquidContext)")
+                            !=std::string::npos
+                    &&sectorRenderer.find("underwaterRenderer.ApplyCaustics")
+                            !=std::string::npos
+                    &&sectorRenderer.find("underwaterRenderer.DrawParticles")
+                            !=std::string::npos
+                    &&sectorRenderer.find("windowContext.advancedTransmission = false")
                             !=std::string::npos
                     &&sectorRenderer.find("preGlassLightEffectsRendered = true")
                             !=std::string::npos
                     &&sectorRenderer.find("dynamicLightState.LightingVisibility()")
                             !=std::string::npos,
-          "flat windows skip refraction snapshots while halos and shafts use stable blocker-aware visibility before glass");
+          "liquids own the refraction snapshot while flat windows and blocker-aware pre-transparent effects keep their established paths");
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos

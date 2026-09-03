@@ -39,6 +39,20 @@ bool ContainsMessage(
     return false;
 }
 
+bool ContainsMessageWithSeverity(
+        const std::vector<SectorTopologyValidationIssue>& issues,
+        const std::string& text,
+        game::SectorTopologyValidationSeverity severity)
+{
+    for (const auto& issue : issues) {
+        if (issue.severity == severity
+                && issue.message.find(text) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void AddSectorLoop(
         SectorTopologyMap& map,
         int sectorId,
@@ -296,6 +310,50 @@ void TestLoopGeometryFailures()
     Check(ContainsMessage(issues, "nested holes"), "nested holes are diagnosed");
 }
 
+void TestRoomtoneReferencesWarnWithoutInvalidatingTopology()
+{
+    SectorTopologyMap map = MakeSquare();
+    map.sectors[0].roomtone.mode = game::SectorRoomtoneMode::Play;
+
+    auto issues = game::ValidateSectorTopologyMap(map);
+    Check(ContainsMessageWithSeverity(
+                  issues,
+                  "no Music map sound ID",
+                  game::SectorTopologyValidationSeverity::Warning),
+          "empty Play roomtone is a warning");
+    Check(!game::HasSectorTopologyValidationErrors(issues),
+          "empty Play roomtone does not invalidate topology");
+
+    map.sectors[0].roomtone.soundId = "missing_music";
+    issues = game::ValidateSectorTopologyMap(map);
+    Check(ContainsMessageWithSeverity(
+                  issues,
+                  "missing map sound ID",
+                  game::SectorTopologyValidationSeverity::Warning),
+          "missing Play roomtone is a warning");
+    Check(!game::HasSectorTopologyValidationErrors(issues),
+          "missing Play roomtone does not invalidate topology");
+
+    map.audioSettings.soundsById.emplace(
+            "buffered_sound",
+            game::SectorSoundDefinition{
+                    "buffered_sound", "sfx/buffered.wav", game::SectorSoundType::Sound});
+    map.sectors[0].roomtone.soundId = "buffered_sound";
+    issues = game::ValidateSectorTopologyMap(map);
+    Check(ContainsMessageWithSeverity(
+                  issues,
+                  "non-Music map sound ID",
+                  game::SectorTopologyValidationSeverity::Warning),
+          "buffered Play roomtone is a warning");
+    Check(!game::HasSectorTopologyValidationErrors(issues),
+          "buffered Play roomtone does not invalidate topology");
+
+    map.sectors[0].roomtone.volume = 2.0f;
+    issues = game::ValidateSectorTopologyMap(map);
+    Check(game::HasSectorTopologyValidationErrors(issues),
+          "invalid roomtone numeric settings remain topology errors");
+}
+
 } // namespace
 
 int main()
@@ -310,6 +368,7 @@ int main()
     TestIntersections();
     TestWindingAndContainmentFailures();
     TestLoopGeometryFailures();
+    TestRoomtoneReferencesWarnWithoutInvalidatingTopology();
 
     if (failures != 0) {
         std::cerr << failures << " topology validation test(s) failed\n";

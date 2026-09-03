@@ -520,8 +520,8 @@ void TestMainMenuWorkspaceAndToolsLayouts()
     Check(Near(itemExpanded - collapsed, rowH + gap),
           "tools content height includes the conditional Item definition row");
     Check(Near(collapsed, 26.0f + 5.0f * (rowH + gap)
-                  + 22.0f + 26.0f + 19.0f * (rowH + gap)
-                  + 22.0f + 2.0f * (rowH + gap)
+                  + 22.0f + 26.0f + 20.0f * (rowH + gap)
+                  + 22.0f + 26.0f + gap + 2.0f * (rowH + gap)
                   + 22.0f + (rowH + gap) + 12.0f),
           "tools content height reaches the final Grid control with padding");
 }
@@ -579,8 +579,8 @@ void TestAuthoringFaceInspectorHeightIncludesAllSections()
                     rowH,
                     gap,
                     anchorSummaryHeight);
-    Check(Near(height, 1626.0f),
-          "authoring face height includes roomtone, merge, ceiling sky, audio, materials, decals, and padding");
+    Check(Near(height, 1766.0f),
+          "authoring face height includes liquid, roomtone, merge, ceiling sky, audio, materials, decals, and padding");
 
     anchor.roomtone.fadeMilliseconds = 500;
     const float overriddenFadeHeight =

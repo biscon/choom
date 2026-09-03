@@ -172,6 +172,7 @@ void SectorEditorAudioAssetPickerService::UpdatePreview(
         if (!context_.assets.IsReady(preview.music)) return;
         engine::MusicPlaybackSettings settings;
         settings.looping = false;
+        settings.affectedByListenerEffects = false;
         preview.pending = false;
         state.previewMessage = context_.audio.PlayMusic(
                 context_.assets, preview.music, settings)
@@ -185,8 +186,10 @@ void SectorEditorAudioAssetPickerService::UpdatePreview(
         return;
     }
     if (!context_.assets.IsReady(preview.sound)) return;
+    engine::SoundPlaybackSettings settings;
+    settings.affectedByListenerEffects = false;
     preview.soundPlayback = context_.audio.PlaySound(
-            context_.assets, preview.sound);
+            context_.assets, preview.sound, settings);
     preview.pending = false;
     state.previewMessage = engine::IsNull(preview.soundPlayback)
             ? "Preview could not start"

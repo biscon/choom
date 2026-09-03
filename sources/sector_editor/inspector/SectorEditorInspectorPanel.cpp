@@ -3,6 +3,7 @@
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorLightInspector.h"
+#include "sector_editor/SectorEditorLiquidSettingsModal.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
@@ -1158,6 +1159,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                     }
                                     anchor.floorZ = floorZ;
                                     anchor.ceilingZ = ceilingZ;
+                                    anchor.liquid = NormalizeSectorLiquidSettingsForSpan(
+                                            anchor.liquid, floorZ, ceilingZ);
                                     return true;
                                 })) {
                         return true;
@@ -2126,6 +2129,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 }
                                 anchor.floorZ = nextFloor;
                                 anchor.ceilingZ = nextCeiling;
+                                anchor.liquid = NormalizeSectorLiquidSettingsForSpan(
+                                        anchor.liquid, nextFloor, nextCeiling);
                                 return true;
                             });
                 }
@@ -2157,6 +2162,78 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     });
         }
         y += rowH + gap;
+
+        engine::Separator(config, Rectangle{
+                scroll.viewport.x,
+                scroll.viewport.y - uiState.inspectorScroll.offset.y + y,
+                contentW,
+                12.0f});
+        y += 18.0f;
+        engine::Text(ui, config, assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font, "Liquid", engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+
+        bool liquidEnabled = selectedAuthoringFaceAnchor->liquid.enabled;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_face_liquid_enabled",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    "Contains Liquid",
+                    liquidEnabled)) {
+            if (liquidEnabled) {
+                OpenSectorEditorLiquidSettingsModal(
+                        state.liquidSettingsModal, *selectedAuthoringFaceAnchor);
+            } else {
+                if (mutateFaceAnchor(
+                        "Disabled sector liquid",
+                        [](SectorAuthoringFaceAnchor& anchor) {
+                            if (!anchor.liquid.enabled) return false;
+                            anchor.liquid.enabled = false;
+                            return true;
+                        })) {
+                    AppendRequest(result,
+                            SectorEditorInspectorPanelRequestKind::RefreshPreviewSurfaceGeometry,
+                            "Disabled sector liquid");
+                }
+            }
+        }
+        y += rowH + gap;
+
+        const char* liquidSummary = selectedAuthoringFaceAnchor->liquid.enabled
+                ? TextFormat(
+                        "%s + %.2f  |  flow %.2f m/s",
+                        selectedAuthoringFaceAnchor->liquid.surfaceReference
+                                        == SectorLiquidSurfaceReference::Ceiling
+                                ? "Ceiling"
+                                : "Floor",
+                        selectedAuthoringFaceAnchor->liquid.surfaceOffset,
+                        selectedAuthoringFaceAnchor->liquid.flowSpeedWorld)
+                : "No liquid volume";
+        const float liquidButtonW = 116.0f;
+        engine::Text(ui, smallConfig, assets,
+                Rectangle{0.0f, y, contentW - liquidButtonW - gap, 36.0f},
+                smallFont, liquidSummary, engine::UITextJustify::Left,
+                config.mutedTextColor);
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_face_liquid_configure",
+                    Rectangle{contentW - liquidButtonW, y, liquidButtonW, 36.0f},
+                    smallFont,
+                    selectedAuthoringFaceAnchor->liquid.enabled
+                            ? "Configure..."
+                            : "Configure")) {
+            OpenSectorEditorLiquidSettingsModal(
+                    state.liquidSettingsModal, *selectedAuthoringFaceAnchor);
+        }
+        y += 36.0f + gap;
 
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
@@ -2222,12 +2299,19 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     ? SectorRoomtoneMode::Inherit
                     : playClicked ? SectorRoomtoneMode::Play
                                   : SectorRoomtoneMode::Silence;
-            mutateFaceAnchor("Updated authoring face roomtone mode",
-                    [nextMode](SectorAuthoringFaceAnchor& anchor) {
-                if (anchor.roomtone.mode == nextMode) return false;
-                anchor.roomtone.mode = nextMode;
-                return true;
-            });
+            std::string roomtoneStatus;
+            SetSectorEditorAuthoringFaceRoomtoneMode(
+                    state,
+                    context.lifecycle,
+                    context.topologyMap,
+                    authoringGraph,
+                    context.derivation,
+                    faceAnchorId,
+                    nextMode,
+                    &roomtoneStatus);
+            if (!roomtoneStatus.empty()) {
+                statusText = std::move(roomtoneStatus);
+            }
         }
         y += rowH + gap;
 
@@ -2243,17 +2327,18 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 engine::UITextJustify::Left);
         if (roomtoneSoundResult.submitted) {
             const std::string soundId{uiState.roomtoneSoundIdBuffer};
-            const SectorSoundDefinition* definition = context.sounds.Find(soundId);
-            if (!soundId.empty()
-                    && (definition == nullptr || definition->type != SectorSoundType::Music)) {
-                statusText = "Roomtone must reference a Music map sound ID";
-            } else {
-                mutateFaceAnchor("Updated authoring face roomtone sound",
-                        [&soundId](SectorAuthoringFaceAnchor& anchor) {
-                    if (anchor.roomtone.soundId == soundId) return false;
-                    anchor.roomtone.soundId = soundId;
-                    return true;
-                });
+            std::string roomtoneStatus;
+            SetSectorEditorAuthoringFaceRoomtoneSoundId(
+                    state,
+                    context.lifecycle,
+                    context.topologyMap,
+                    authoringGraph,
+                    context.derivation,
+                    faceAnchorId,
+                    soundId,
+                    &roomtoneStatus);
+            if (!roomtoneStatus.empty()) {
+                statusText = std::move(roomtoneStatus);
             }
         }
         y += rowH + gap;

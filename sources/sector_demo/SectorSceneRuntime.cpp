@@ -3,6 +3,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorAudioOcclusion.h"
 #include "engine/systems/AnimatedModelSystem.h"
+#include "game/PlayerAudio.h"
 #include "game/npc/NpcBoneImpactSystem.h"
 
 #include <raylib.h>
@@ -246,11 +247,19 @@ void SectorSceneRuntime::Update(
         float dt,
         const Vector3* playerPosition,
         int playerSectorId,
+        bool playerCameraSubmerged,
+        const PlayerLiquidAudioApplicationSettings& liquidAudioSettings,
         const SectorDoorPlayerObstacle* playerObstacle,
         const NpcAiGameplayContext* npcGameplay,
         int externalDoorHoldId)
 {
-    UpdateLevelAudio(context, map, dt, playerSectorId);
+    UpdateLevelAudio(
+            context,
+            map,
+            dt,
+            playerSectorId,
+            playerCameraSubmerged,
+            liquidAudioSettings);
     PrepareNpcDoorTraversalAndHoldsSystem(
             context.world,
             navigation,
@@ -597,6 +606,7 @@ void SectorSceneRuntime::StopLevelAudio(engine::EngineContext& context)
     lastRoomtoneSectorId = -1;
     roomtoneTransitionElapsedSeconds = 0.0f;
     roomtoneTransitionDurationSeconds = 0.0f;
+    roomtoneSubmersionGain = 1.0f;
     soundEmitterPlaybacks.clear();
 }
 
@@ -969,9 +979,21 @@ void SectorSceneRuntime::UpdateLevelAudio(
         engine::EngineContext& context,
         const SectorTopologyMap& map,
         float rawDt,
-        int playerSectorId)
+        int playerSectorId,
+        bool playerCameraSubmerged,
+        const PlayerLiquidAudioApplicationSettings& liquidAudioSettings)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    const SectorTopologySector* listenerSector = FindSectorTopologySector(
+            map, playerSectorId);
+    const bool roomtoneSubmerged = playerCameraSubmerged
+            && listenerSector != nullptr
+            && listenerSector->liquid.enabled;
+    roomtoneSubmersionGain = AdvancePlayerLiquidRoomtoneGain(
+            roomtoneSubmersionGain,
+            roomtoneSubmerged,
+            liquidAudioSettings,
+            dt);
 
     if (playerSectorId != lastRoomtoneSectorId) {
         lastRoomtoneSectorId = playerSectorId;
@@ -1041,7 +1063,7 @@ void SectorSceneRuntime::UpdateLevelAudio(
                             * std::cos(transitionT * HalfPi);
         }
         engine::MusicPlaybackSettings settings;
-        settings.volume = playback.currentVolume;
+        settings.volume = playback.currentVolume * roomtoneSubmersionGain;
         if (context.assets.IsReady(playback.music)) {
             if (context.audio.PlayMusic(context.assets, playback.music, settings)) {
             }
@@ -1152,22 +1174,25 @@ void SectorSceneRuntime::RenderScene(
 void SectorSceneRuntime::ApplyWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     renderer.ApplyWorldAtmosphere(
             sceneTarget,
             map,
             runtimeObjects.objectLightProbes,
+            underwater,
             collectGpuDiagnostics);
 }
 
-void SectorSceneRuntime::ApplyGlass(
+void SectorSceneRuntime::ApplyTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::EngineContext& context,
         const SectorTopologyMap& map,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
-    renderer.ApplyGlass(
+    renderer.ApplyTransparentSurfaces(
             sceneTarget,
             context.assets,
             &context.world,
@@ -1176,6 +1201,7 @@ void SectorSceneRuntime::ApplyGlass(
                     &map,
                     runtimeObjects.staticLightingRevision},
             map.fogSettings,
+            underwater,
             collectGpuDiagnostics);
 }
 

@@ -22,6 +22,7 @@ game::GameSaveData MakeSave()
     save.player.pitchRadians = -0.2f;
     save.player.health = {100, 125, 73};
     save.player.stamina = {120.0f, 41.5f, true};
+    save.player.oxygen = {100.0f, 140.0f, 37.5f, 0.25f};
 
     save.itemCampaign.inventory.entries.push_back(
             {7, "medkit", 2, "useMedkit", 4});
@@ -102,6 +103,10 @@ void SerializationRoundTripsStableState()
     assert(restored.name == source.name);
     assert(restored.player.health.current == 73);
     assert(!restored.player.flashlightEnabled);
+    assert(restored.player.oxygen.baseMaximum == 100.0f);
+    assert(restored.player.oxygen.maximum == 140.0f);
+    assert(restored.player.oxygen.current == 37.5f);
+    assert(restored.player.oxygen.drowningTimerSeconds == 0.25f);
     assert(restored.itemCampaign.inventory.entries.size() == 1);
     assert(restored.itemCampaign.levels[0].droppedItems[0].item.sessionDrop);
     assert(restored.persistentScripts.bools.at("generator_started"));

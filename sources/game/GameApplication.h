@@ -80,7 +80,7 @@ public:
     void Render2D(engine::AssetManager& assets);
     void Render3DShadowMaps(engine::EngineContext& context);
     void Render3DScene(engine::EngineContext& context);
-    void Apply3DGlass(
+    void Apply3DTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::EngineContext& context,
             bool collectGpuDiagnostics = false);
@@ -97,6 +97,7 @@ public:
     const engine::RenderTarget* HdrDebugPresentationSource() const;
     const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const;
     engine::ScenePresentationEffectParameters ScenePresentationEffects() const;
+    float UnderwaterAudioMuffling() const;
     float WorldFadeOpacity() const;
     void Render3DHud(
             const engine::World& world,
@@ -125,6 +126,7 @@ private:
     void EndGameToMainMenu(engine::EngineContext& context);
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
+    SectorUnderwaterRenderContext ActiveUnderwaterRenderContext() const;
     bool DebugConsoleAvailable() const;
     void ApplyPerspectiveFov();
 

@@ -3,6 +3,7 @@
 #include "engine/ui/UI.h"
 #include "game/FpsWeaponRegistry.h"
 #include "game/SoundSetAudio.h"
+#include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
 
 #include <array>
 #include <string>
@@ -16,7 +17,15 @@ enum class SectorEditorPlayerSettingsTab {
     Audio,
     Health,
     Sneaking,
-    Lighting
+    Lighting,
+    Liquids
+};
+
+enum class SectorEditorPlayerLiquidAudioPickerTarget {
+    None,
+    Splash,
+    Exit,
+    SwimLoop
 };
 
 struct SectorEditorPlayerSoundEventDraft {
@@ -46,12 +55,16 @@ struct SectorEditorPlayerSettingsState {
     std::vector<std::string> playerSoundLabelStorage;
     std::vector<const char*> playerSoundLabels;
     SectorEditorPlayerAudioPreviewState audioPreview;
+    SectorEditorAudioAssetPickerState liquidAudioPicker;
+    SectorEditorPlayerLiquidAudioPickerTarget liquidAudioPickerTarget =
+            SectorEditorPlayerLiquidAudioPickerTarget::None;
     engine::UIScrollState staminaScroll;
     engine::UIScrollState inventoryScroll;
     engine::UIScrollState audioScroll;
     engine::UIScrollState healthScroll;
     engine::UIScrollState sneakingScroll;
     engine::UIScrollState lightingScroll;
+    engine::UIScrollState liquidsScroll;
     std::string errorMessage;
 
     engine::UIFloatInputState staminaMaximumInput;
@@ -67,6 +80,25 @@ struct SectorEditorPlayerSettingsState {
     engine::UIFloatInputState breathingThresholdInput;
     engine::UIFloatInputState breathingVolumeInput;
     engine::UIFloatInputState breathingFadeOutInput;
+
+    engine::UIFloatInputState oxygenMaximumInput;
+    engine::UIFloatInputState oxygenDepletionInput;
+    engine::UIFloatInputState oxygenRegenerationInput;
+    engine::UIIntInputState drowningDamageInput;
+    engine::UIFloatInputState drowningIntervalInput;
+    engine::UIFloatInputState entrySlowdownInput;
+    engine::UIFloatInputState swimCollisionHeightInput;
+    engine::UIFloatInputState waterDragInput;
+    engine::UIFloatInputState surfaceRecoveryInput;
+    engine::UIFloatInputState maximumExitLedgeHeightInput;
+    engine::UIFloatInputState exitTransitionDurationInput;
+    engine::UIFloatInputState underwaterDistortionStrengthInput;
+    engine::UIFloatInputState underwaterCausticsStrengthInput;
+    engine::UIFloatInputState underwaterCausticsScaleInput;
+    engine::UIFloatInputState underwaterCausticsSpeedInput;
+    engine::UIFloatInputState underwaterMufflingInput;
+    engine::UIFloatInputState roomtoneSubmergeFadeInput;
+    engine::UIFloatInputState roomtoneResurfaceFadeInput;
 
     engine::UIFloatInputState inventoryWeightInput;
     engine::UIIntInputState inventorySlotsInput;

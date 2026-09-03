@@ -689,6 +689,19 @@ std::optional<bool> OptionalBoolean(
     return Boolean(object, name, context);
 }
 
+std::optional<std::string> OptionalStringAllowEmpty(
+        const Json& object,
+        const char* name,
+        const std::string& context)
+{
+    const auto value = object.find(name);
+    if (value == object.end()) return std::nullopt;
+    if (!value->is_string()) {
+        Fail(context + "." + name + " must be a string");
+    }
+    return value->get<std::string>();
+}
+
 std::string PlayerStaminaSettingsError(
         const PlayerStaminaApplicationSettings& settings)
 {
@@ -750,6 +763,108 @@ std::string PlayerStaminaSettingsError(
     if (!finite(breathing.fadeOutSeconds)
             || breathing.fadeOutSeconds <= 0.0f) {
         return "breathingAudio.fadeOutSeconds must be greater than zero";
+    }
+    return {};
+}
+
+std::string PlayerLiquidSettingsError(
+        const PlayerLiquidApplicationSettings& settings)
+{
+    const auto finite = [](float value) { return std::isfinite(value); };
+    if (!finite(settings.oxygenMaximum) || settings.oxygenMaximum <= 0.0f) {
+        return "oxygenMaximum must be greater than zero";
+    }
+    if (!finite(settings.oxygenDepletionPerSecond)
+            || settings.oxygenDepletionPerSecond < 0.0f) {
+        return "oxygenDepletionPerSecond must be non-negative";
+    }
+    if (!finite(settings.oxygenRegenerationPerSecond)
+            || settings.oxygenRegenerationPerSecond < 0.0f) {
+        return "oxygenRegenerationPerSecond must be non-negative";
+    }
+    if (settings.drowningDamage < 0) {
+        return "drowningDamage must be non-negative";
+    }
+    if (!finite(settings.drowningDamageIntervalSeconds)
+            || settings.drowningDamageIntervalSeconds <= 0.0f) {
+        return "drowningDamageIntervalSeconds must be greater than zero";
+    }
+    if (!finite(settings.entrySlowdownSeconds)
+            || settings.entrySlowdownSeconds < 0.0f
+            || settings.entrySlowdownSeconds > 2.0f) {
+        return "entrySlowdownSeconds must be between 0 and 2";
+    }
+    if (!finite(settings.swimCollisionHeightWorld)
+            || settings.swimCollisionHeightWorld < 0.1f
+            || settings.swimCollisionHeightWorld > 3.0f) {
+        return "swimCollisionHeightWorld must be between 0.1 and 3";
+    }
+    if (!finite(settings.waterDragPerSecond)
+            || settings.waterDragPerSecond < 0.0f
+            || settings.waterDragPerSecond > 40.0f) {
+        return "waterDragPerSecond must be between 0 and 40";
+    }
+    if (!finite(settings.surfaceRecoveryFrequencyHz)
+            || settings.surfaceRecoveryFrequencyHz < 0.1f
+            || settings.surfaceRecoveryFrequencyHz > 10.0f) {
+        return "surfaceRecoveryFrequencyHz must be between 0.1 and 10";
+    }
+    if (!finite(settings.maximumExitLedgeHeightWorld)
+            || settings.maximumExitLedgeHeightWorld < 0.0f
+            || settings.maximumExitLedgeHeightWorld > 3.0f) {
+        return "maximumExitLedgeHeightWorld must be between 0 and 3";
+    }
+    if (!finite(settings.exitTransitionDurationSeconds)
+            || settings.exitTransitionDurationSeconds < 0.1f
+            || settings.exitTransitionDurationSeconds > 2.0f) {
+        return "exitTransitionDurationSeconds must be between 0.1 and 2";
+    }
+    if (!settings.audio.splashSoundPath.empty()
+            && !ValidAudioPath(settings.audio.splashSoundPath)) {
+        return "audio.splashSoundPath must be an empty or relative .ogg, .wav, or .mp3 path";
+    }
+    if (!settings.audio.exitSoundPath.empty()
+            && !ValidAudioPath(settings.audio.exitSoundPath)) {
+        return "audio.exitSoundPath must be an empty or relative .ogg, .wav, or .mp3 path";
+    }
+    if (!settings.audio.swimLoopSoundPath.empty()
+            && !ValidAudioPath(settings.audio.swimLoopSoundPath)) {
+        return "audio.swimLoopSoundPath must be an empty or relative .ogg, .wav, or .mp3 path";
+    }
+    if (!finite(settings.audio.underwaterMuffling)
+            || settings.audio.underwaterMuffling < 0.0f
+            || settings.audio.underwaterMuffling > 1.0f) {
+        return "audio.underwaterMuffling must be between 0 and 1";
+    }
+    if (!finite(settings.audio.roomtoneSubmergeFadeSeconds)
+            || settings.audio.roomtoneSubmergeFadeSeconds < 0.0f
+            || settings.audio.roomtoneSubmergeFadeSeconds > 60.0f) {
+        return "audio.roomtoneSubmergeFadeSeconds must be between 0 and 60";
+    }
+    if (!finite(settings.audio.roomtoneResurfaceFadeSeconds)
+            || settings.audio.roomtoneResurfaceFadeSeconds < 0.0f
+            || settings.audio.roomtoneResurfaceFadeSeconds > 60.0f) {
+        return "audio.roomtoneResurfaceFadeSeconds must be between 0 and 60";
+    }
+    if (!finite(settings.visuals.screenDistortionStrength)
+            || settings.visuals.screenDistortionStrength < 0.0f
+            || settings.visuals.screenDistortionStrength > 4.0f) {
+        return "visuals.screenDistortionStrength must be between 0 and 4";
+    }
+    if (!finite(settings.visuals.causticsStrength)
+            || settings.visuals.causticsStrength < 0.0f
+            || settings.visuals.causticsStrength > 1.0f) {
+        return "visuals.causticsStrength must be between 0 and 1";
+    }
+    if (!finite(settings.visuals.causticsScaleMultiplier)
+            || settings.visuals.causticsScaleMultiplier < 0.1f
+            || settings.visuals.causticsScaleMultiplier > 10.0f) {
+        return "visuals.causticsScaleMultiplier must be between 0.1 and 10";
+    }
+    if (!finite(settings.visuals.causticsSpeedMultiplier)
+            || settings.visuals.causticsSpeedMultiplier < 0.0f
+            || settings.visuals.causticsSpeedMultiplier > 10.0f) {
+        return "visuals.causticsSpeedMultiplier must be between 0 and 10";
     }
     return {};
 }
@@ -2050,6 +2165,118 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail(staminaContext + "." + staminaError);
             }
         }
+        const auto playerLiquids = root.find("playerLiquids");
+        if (playerLiquids != root.end()) {
+            const std::string liquidContext = "application settings.playerLiquids";
+            if (!playerLiquids->is_object()) {
+                Fail(liquidContext + " must be an object");
+            }
+            parsed.playerLiquids.oxygenMaximum = OptionalNumber(
+                    *playerLiquids, "oxygenMaximum", liquidContext)
+                    .value_or(parsed.playerLiquids.oxygenMaximum);
+            parsed.playerLiquids.oxygenDepletionPerSecond = OptionalNumber(
+                    *playerLiquids, "oxygenDepletionPerSecond", liquidContext)
+                    .value_or(parsed.playerLiquids.oxygenDepletionPerSecond);
+            parsed.playerLiquids.oxygenRegenerationPerSecond = OptionalNumber(
+                    *playerLiquids, "oxygenRegenerationPerSecond", liquidContext)
+                    .value_or(parsed.playerLiquids.oxygenRegenerationPerSecond);
+            parsed.playerLiquids.drowningDamage = OptionalInteger(
+                    *playerLiquids, "drowningDamage", liquidContext)
+                    .value_or(parsed.playerLiquids.drowningDamage);
+            parsed.playerLiquids.drowningDamageIntervalSeconds = OptionalNumber(
+                    *playerLiquids, "drowningDamageIntervalSeconds", liquidContext)
+                    .value_or(parsed.playerLiquids.drowningDamageIntervalSeconds);
+            parsed.playerLiquids.entrySlowdownSeconds = OptionalNumber(
+                    *playerLiquids, "entrySlowdownSeconds", liquidContext)
+                    .value_or(parsed.playerLiquids.entrySlowdownSeconds);
+            parsed.playerLiquids.swimCollisionHeightWorld = OptionalNumber(
+                    *playerLiquids, "swimCollisionHeightWorld", liquidContext)
+                    .value_or(parsed.playerLiquids.swimCollisionHeightWorld);
+            parsed.playerLiquids.waterDragPerSecond = OptionalNumber(
+                    *playerLiquids, "waterDragPerSecond", liquidContext)
+                    .value_or(parsed.playerLiquids.waterDragPerSecond);
+            parsed.playerLiquids.surfaceRecoveryFrequencyHz = OptionalNumber(
+                    *playerLiquids, "surfaceRecoveryFrequencyHz", liquidContext)
+                    .value_or(parsed.playerLiquids.surfaceRecoveryFrequencyHz);
+            parsed.playerLiquids.maximumExitLedgeHeightWorld = OptionalNumber(
+                    *playerLiquids, "maximumExitLedgeHeightWorld", liquidContext)
+                    .value_or(parsed.playerLiquids.maximumExitLedgeHeightWorld);
+            parsed.playerLiquids.exitTransitionDurationSeconds = OptionalNumber(
+                    *playerLiquids, "exitTransitionDurationSeconds", liquidContext)
+                    .value_or(parsed.playerLiquids.exitTransitionDurationSeconds);
+            const auto audio = playerLiquids->find("audio");
+            if (audio != playerLiquids->end()) {
+                const std::string audioContext = liquidContext + ".audio";
+                if (!audio->is_object()) {
+                    Fail(audioContext + " must be an object");
+                }
+                parsed.playerLiquids.audio.splashSoundPath =
+                        OptionalStringAllowEmpty(
+                                *audio, "splashSoundPath", audioContext)
+                                .value_or(parsed.playerLiquids.audio.splashSoundPath);
+                parsed.playerLiquids.audio.exitSoundPath =
+                        OptionalStringAllowEmpty(
+                                *audio, "exitSoundPath", audioContext)
+                                .value_or(parsed.playerLiquids.audio.exitSoundPath);
+                parsed.playerLiquids.audio.swimLoopSoundPath =
+                        OptionalStringAllowEmpty(
+                                *audio, "swimLoopSoundPath", audioContext)
+                                .value_or(parsed.playerLiquids.audio.swimLoopSoundPath);
+                parsed.playerLiquids.audio.underwaterMuffling = OptionalNumber(
+                        *audio, "underwaterMuffling", audioContext)
+                        .value_or(parsed.playerLiquids.audio.underwaterMuffling);
+                parsed.playerLiquids.audio.roomtoneSubmergeFadeSeconds =
+                        OptionalNumber(
+                                *audio,
+                                "roomtoneSubmergeFadeSeconds",
+                                audioContext).value_or(
+                                        parsed.playerLiquids.audio
+                                                .roomtoneSubmergeFadeSeconds);
+                parsed.playerLiquids.audio.roomtoneResurfaceFadeSeconds =
+                        OptionalNumber(
+                                *audio,
+                                "roomtoneResurfaceFadeSeconds",
+                                audioContext).value_or(
+                                        parsed.playerLiquids.audio
+                                                .roomtoneResurfaceFadeSeconds);
+            }
+            const auto visuals = playerLiquids->find("visuals");
+            if (visuals != playerLiquids->end()) {
+                const std::string visualsContext = liquidContext + ".visuals";
+                if (!visuals->is_object()) {
+                    Fail(visualsContext + " must be an object");
+                }
+                parsed.playerLiquids.visuals.screenDistortionStrength =
+                        OptionalNumber(
+                                *visuals,
+                                "screenDistortionStrength",
+                                visualsContext).value_or(
+                                        parsed.playerLiquids.visuals
+                                                .screenDistortionStrength);
+                parsed.playerLiquids.visuals.causticsStrength = OptionalNumber(
+                        *visuals, "causticsStrength", visualsContext)
+                        .value_or(parsed.playerLiquids.visuals.causticsStrength);
+                parsed.playerLiquids.visuals.causticsScaleMultiplier =
+                        OptionalNumber(
+                                *visuals,
+                                "causticsScaleMultiplier",
+                                visualsContext).value_or(
+                                        parsed.playerLiquids.visuals
+                                                .causticsScaleMultiplier);
+                parsed.playerLiquids.visuals.causticsSpeedMultiplier =
+                        OptionalNumber(
+                                *visuals,
+                                "causticsSpeedMultiplier",
+                                visualsContext).value_or(
+                                        parsed.playerLiquids.visuals
+                                                .causticsSpeedMultiplier);
+            }
+            const std::string liquidError = PlayerLiquidSettingsError(
+                    parsed.playerLiquids);
+            if (!liquidError.empty()) {
+                Fail(liquidContext + "." + liquidError);
+            }
+        }
         const auto overrides = root.find("viewmodelOverrides");
         if (overrides != root.end()) {
             if (!overrides->is_object()) Fail("application settings.viewmodelOverrides must be an object");
@@ -2243,6 +2470,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             settings.playerStamina);
     if (!staminaError.empty()) {
         SetError(error, "application settings playerStamina." + staminaError);
+        return false;
+    }
+    const std::string liquidError = PlayerLiquidSettingsError(
+            settings.playerLiquids);
+    if (!liquidError.empty()) {
+        SetError(error, "application settings playerLiquids." + liquidError);
         return false;
     }
     const std::string sneakError = PlayerSneakSettingsError(
@@ -2461,6 +2694,53 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"fadeOutSeconds",
                             settings.playerStamina.breathingAudio
                                     .fadeOutSeconds}}}};
+    root["playerLiquids"] = {
+            {"oxygenMaximum", settings.playerLiquids.oxygenMaximum},
+            {"oxygenDepletionPerSecond",
+                    settings.playerLiquids.oxygenDepletionPerSecond},
+            {"oxygenRegenerationPerSecond",
+                    settings.playerLiquids.oxygenRegenerationPerSecond},
+            {"drowningDamage", settings.playerLiquids.drowningDamage},
+            {"drowningDamageIntervalSeconds",
+                    settings.playerLiquids.drowningDamageIntervalSeconds},
+            {"entrySlowdownSeconds",
+                    settings.playerLiquids.entrySlowdownSeconds},
+            {"swimCollisionHeightWorld",
+                    settings.playerLiquids.swimCollisionHeightWorld},
+            {"waterDragPerSecond", settings.playerLiquids.waterDragPerSecond},
+            {"surfaceRecoveryFrequencyHz",
+                    settings.playerLiquids.surfaceRecoveryFrequencyHz},
+            {"maximumExitLedgeHeightWorld",
+                    settings.playerLiquids.maximumExitLedgeHeightWorld},
+            {"exitTransitionDurationSeconds",
+                    settings.playerLiquids.exitTransitionDurationSeconds},
+            {"audio", {
+                    {"splashSoundPath",
+                            settings.playerLiquids.audio.splashSoundPath},
+                    {"exitSoundPath",
+                            settings.playerLiquids.audio.exitSoundPath},
+                    {"swimLoopSoundPath",
+                            settings.playerLiquids.audio.swimLoopSoundPath},
+                    {"underwaterMuffling",
+                            settings.playerLiquids.audio.underwaterMuffling},
+                    {"roomtoneSubmergeFadeSeconds",
+                            settings.playerLiquids.audio
+                                    .roomtoneSubmergeFadeSeconds},
+                    {"roomtoneResurfaceFadeSeconds",
+                            settings.playerLiquids.audio
+                                    .roomtoneResurfaceFadeSeconds}}},
+            {"visuals", {
+                    {"screenDistortionStrength",
+                            settings.playerLiquids.visuals
+                                    .screenDistortionStrength},
+                    {"causticsStrength",
+                            settings.playerLiquids.visuals.causticsStrength},
+                    {"causticsScaleMultiplier",
+                            settings.playerLiquids.visuals
+                                    .causticsScaleMultiplier},
+                    {"causticsSpeedMultiplier",
+                            settings.playerLiquids.visuals
+                                    .causticsSpeedMultiplier}}}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

@@ -142,6 +142,7 @@ SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
     SectorFpsControllerConfig config;
     config.walkSpeed = settings.walkSpeed;
     config.runSpeed = settings.runSpeed;
+    config.swimSpeed = settings.swimSpeed;
     config.mouseSensitivity = settings.mouseSensitivity;
     config.eyeHeight = settings.eyeHeight;
     config.gravity = settings.gravity;
@@ -160,6 +161,7 @@ SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
     SectorPreviewSettings settings;
     settings.walkSpeed = config.walkSpeed;
     settings.runSpeed = config.runSpeed;
+    settings.swimSpeed = config.swimSpeed;
     settings.mouseSensitivity = config.mouseSensitivity;
     settings.eyeHeight = config.eyeHeight;
     settings.gravity = config.gravity;

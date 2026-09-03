@@ -348,6 +348,10 @@ Vector2 ToStructuralLocalPoint(
     return Vector2{Dot(relative, shape.axisX), Dot(relative, shape.axisZ)};
 }
 
+bool PointInsideStructuralFootprint(
+        Vector2 position,
+        const StructuralCollisionShape& shape);
+
 bool CircleOverlapsStructuralFootprint(
         Vector2 position,
         float radius,
@@ -365,6 +369,30 @@ bool CircleOverlapsStructuralFootprint(
             std::clamp(local.y, -shape.halfExtents.y, shape.halfExtents.y)};
     return DistanceSquared(local, closest)
             <= radius * radius + CollisionMoveEpsilon;
+}
+
+bool CirclePenetratesStructuralFootprint(
+        Vector2 position,
+        float radius,
+        const StructuralCollisionShape& shape)
+{
+    if (PointInsideStructuralFootprint(position, shape)) {
+        return true;
+    }
+    if (shape.kind == SectorStructuralPrimitiveKind::Cylinder
+            || shape.kind == SectorStructuralPrimitiveKind::Sphere) {
+        const float combined = std::max(
+                0.0f, radius + shape.radius - CollisionMoveEpsilon);
+        return DistanceSquared(position, shape.center) < combined * combined;
+    }
+    const Vector2 local = ToStructuralLocalPoint(position, shape);
+    const Vector2 closest{
+            std::clamp(local.x, -shape.halfExtents.x, shape.halfExtents.x),
+            std::clamp(local.y, -shape.halfExtents.y, shape.halfExtents.y)};
+    const float penetrationRadius = std::max(
+            0.0f, radius - CollisionMoveEpsilon);
+    return DistanceSquared(local, closest)
+            < penetrationRadius * penetrationRadius;
 }
 
 float StructuralSupportHeight(
@@ -1065,6 +1093,12 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                             > out->floorZ + CollisionPointEpsilon) {
                 out->floorZ = primitive.maximumY;
                 out->continuousFloor = false;
+                out->supportingStructuralPrimitiveId = primitive.authored.id;
+            } else if (primitive.maximumY <= maximumSupport
+                    && std::fabs(primitive.maximumY - out->floorZ)
+                            <= CollisionPointEpsilon
+                    && out->supportingStructuralPrimitiveId <= 0) {
+                out->supportingStructuralPrimitiveId = primitive.authored.id;
             }
             if (primitive.minimumY
                     > query.feetY + CollisionPointEpsilon) {
@@ -1099,6 +1133,7 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                 if (canLand && upperSurface >= out->floorZ) {
                     out->floorZ = upperSurface;
                     out->continuousFloor = false;
+                    out->supportingStructuralPrimitiveId = primitive.authored.id;
                 }
                 if (lowerSurface > query.feetY + CollisionPointEpsilon) {
                     out->ceilingZ = std::min(out->ceilingZ, lowerSurface);
@@ -1136,14 +1171,24 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                 if (support > out->floorZ + CollisionPointEpsilon) {
                     out->floorZ = support;
                     out->continuousFloor = continuous;
+                    out->supportingStructuralPrimitiveId = primitive.authored.id;
                 } else if (continuous
                         && std::fabs(support - out->floorZ)
                                 <= CollisionPointEpsilon) {
                     out->continuousFloor = true;
+                    if (out->supportingStructuralPrimitiveId <= 0) {
+                        out->supportingStructuralPrimitiveId = primitive.authored.id;
+                    }
+                } else if (std::fabs(support - out->floorZ)
+                                <= CollisionPointEpsilon
+                        && out->supportingStructuralPrimitiveId <= 0) {
+                    out->supportingStructuralPrimitiveId = primitive.authored.id;
                 }
             }
         }
-        if (shape.bottom > query.feetY + CollisionPointEpsilon) {
+        if (shape.bottom > query.feetY + CollisionPointEpsilon
+                && CirclePenetratesStructuralFootprint(
+                        query.positionXZ, radius, shape)) {
             out->ceilingZ = std::min(out->ceilingZ, shape.bottom);
         }
     }
@@ -1766,7 +1811,9 @@ bool SectorCollisionWorld::AllowsPrismPlacement(
         float bottom,
         float top,
         int preferredSectorId,
-        int* resolvedSectorId) const
+        int* resolvedSectorId,
+        int ignoredStructuralPrimitiveId,
+        int ignoredSupportingStructuralPrimitiveId) const
 {
     if (resolvedSectorId != nullptr) *resolvedSectorId = 0;
     if (!IsFinite(center) || !std::isfinite(radius)
@@ -1781,6 +1828,13 @@ bool SectorCollisionWorld::AllowsPrismPlacement(
     if (start == nullptr) return false;
     if (resolvedSectorId != nullptr) *resolvedSectorId = startSectorId;
     for (const SectorCompiledStructuralSurface& surface : structuralSurfaces) {
+        if ((ignoredStructuralPrimitiveId > 0
+                    && surface.face.primitiveId == ignoredStructuralPrimitiveId)
+                || (ignoredSupportingStructuralPrimitiveId > 0
+                    && surface.face.primitiveId
+                            == ignoredSupportingStructuralPrimitiveId)) {
+            continue;
+        }
         for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {
             const Vector3 a = surface.vertices[index].position;
             const Vector3 b = surface.vertices[index + 1].position;

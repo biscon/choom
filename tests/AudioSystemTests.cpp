@@ -1,6 +1,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/audio/AudioSystem.h"
 #include "game/FootstepAudio.h"
+#include "game/PlayerAudio.h"
 
 #include <cassert>
 #include <cmath>
@@ -276,6 +277,108 @@ void PlayerSoundCatalogAndPlaybackSelection()
     std::filesystem::remove_all(root, ignored);
 }
 
+void ListenerLowPassMappingAndTransition()
+{
+    assert(Near(
+            engine::AudioListenerLowPassCutoffHz(0.0f),
+            engine::AudioUnfilteredLowPassCutoffHz));
+    assert(Near(
+            engine::AudioListenerLowPassCutoffHz(1.0f),
+            engine::AudioMinimumListenerLowPassCutoffHz));
+    const float defaultCutoff = engine::AudioListenerLowPassCutoffHz(0.65f);
+    assert(defaultCutoff > 1150.0f && defaultCutoff < 1170.0f);
+    assert(Near(
+            engine::CombineAudioLowPassCutoffs(2000.0f, defaultCutoff),
+            defaultCutoff));
+    assert(Near(
+            engine::CombineAudioLowPassCutoffs(1000.0f, defaultCutoff),
+            1000.0f));
+
+    engine::AssetManager assets;
+    engine::AudioSystem audio;
+    audio.SetListenerLowPassStrength(1.0f);
+    audio.Update(assets, 0.1f);
+    assert(Near(audio.ListenerLowPassStrength(), 0.5f));
+    audio.Update(assets, 0.1f);
+    assert(Near(audio.ListenerLowPassStrength(), 1.0f));
+    audio.SetListenerLowPassStrength(0.0f);
+    audio.Update(assets, 0.05f);
+    assert(Near(audio.ListenerLowPassStrength(), 0.75f));
+}
+
+void PlayerLiquidAudioTransitions()
+{
+    game::PlayerLiquidAudioFrameState state;
+    game::PlayerLiquidAudioFrameDecision decision =
+            game::AdvancePlayerLiquidAudioFrame(
+                    state, true, false, false);
+    assert(!decision.playEntrySplash && !decision.playExitSound);
+    assert(decision.loopShouldExist && !decision.loopShouldPlay);
+
+    decision = game::AdvancePlayerLiquidAudioFrame(
+            state, true, false, true);
+    assert(!decision.playEntrySplash && !decision.playExitSound);
+    assert(decision.loopShouldExist && decision.loopShouldPlay);
+
+    decision = game::AdvancePlayerLiquidAudioFrame(
+            state, true, true, true);
+    assert(!decision.playEntrySplash && !decision.playExitSound);
+    assert(!decision.loopShouldExist && !decision.loopShouldPlay);
+
+    decision = game::AdvancePlayerLiquidAudioFrame(
+            state, true, false, true);
+    assert(!decision.playEntrySplash && !decision.playExitSound);
+    assert(decision.loopShouldPlay);
+
+    decision = game::AdvancePlayerLiquidAudioFrame(
+            state, false, false, false);
+    assert(!decision.playEntrySplash && decision.playExitSound);
+    assert(!decision.loopShouldExist);
+
+    decision = game::AdvancePlayerLiquidAudioFrame(
+            state, true, false, true);
+    assert(decision.playEntrySplash && !decision.playExitSound);
+    assert(decision.loopShouldPlay);
+}
+
+void PlayerLiquidRoomtoneGainTransitions()
+{
+    game::PlayerLiquidAudioApplicationSettings settings;
+    assert(Near(settings.roomtoneSubmergeFadeSeconds, 0.10f));
+    assert(Near(settings.roomtoneResurfaceFadeSeconds, 0.20f));
+
+    float gain = 1.0f;
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, true, settings, 0.025f);
+    assert(Near(gain, 0.75f));
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, true, settings, 0.075f);
+    assert(Near(gain, 0.0f));
+
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, false, settings, 0.05f);
+    assert(Near(gain, 0.25f));
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, false, settings, 0.15f);
+    assert(Near(gain, 1.0f));
+
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, true, settings, 0.05f);
+    assert(Near(gain, 0.5f));
+    gain = game::AdvancePlayerLiquidRoomtoneGain(
+            gain, false, settings, 0.10f);
+    assert(Near(gain, 1.0f));
+
+    settings.roomtoneSubmergeFadeSeconds = 0.0f;
+    settings.roomtoneResurfaceFadeSeconds = 0.0f;
+    assert(Near(game::AdvancePlayerLiquidRoomtoneGain(
+                        1.0f, true, settings, 0.0f),
+            0.0f));
+    assert(Near(game::AdvancePlayerLiquidRoomtoneGain(
+                        0.0f, false, settings, 0.0f),
+            1.0f));
+}
+
 } // namespace
 
 int main()
@@ -286,5 +389,8 @@ int main()
     FootstepCatalogDiscovery();
     FootstepShuffleAndPitch();
     PlayerSoundCatalogAndPlaybackSelection();
+    ListenerLowPassMappingAndTransition();
+    PlayerLiquidAudioTransitions();
+    PlayerLiquidRoomtoneGainTransitions();
     std::cout << "Audio system tests passed\n";
 }

@@ -47,15 +47,16 @@ inline float MeasureSectorEditorToolsContentHeight(
 {
     constexpr float sectionLabelHeight = 26.0f;
     constexpr float separatorHeight = 22.0f;
+    constexpr float roomtoneFadeLabelHeight = 26.0f;
     constexpr float trailingPadding = 12.0f;
     const auto rowsHeight = [rowHeight, gap](int count) {
         return static_cast<float>(count) * (rowHeight + gap);
     };
     return sectionLabelHeight + rowsHeight(5)
             + separatorHeight + sectionLabelHeight
-            + rowsHeight(19 + (triggerModeRowVisible ? 1 : 0)
+            + rowsHeight(20 + (triggerModeRowVisible ? 1 : 0)
                     + (itemDefinitionRowVisible ? 1 : 0))
-            + separatorHeight + rowsHeight(2)
+            + separatorHeight + roomtoneFadeLabelHeight + gap + rowsHeight(2)
             + separatorHeight + rowsHeight(1)
             + trailingPadding;
 }

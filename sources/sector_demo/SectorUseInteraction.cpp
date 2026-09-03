@@ -451,13 +451,25 @@ SectorUseTarget FindSectorUseTarget(
                 const Vector3 offset = Vector3Subtract(anchor.second, eyePosition);
                 const float distance = Vector3Length(offset);
                 if (!std::isfinite(distance) || distance > 2.0f) continue;
-                const float facing = distance > 0.0001f
+                const float side = anchor.first == SectorLadderEndpoint::Bottom
+                        ? 1.0f : -1.0f;
+                const Vector3 target{
+                        center.x + front.x * side * depth * 0.5f,
+                        eyePosition.y,
+                        center.y + front.y * side * depth * 0.5f};
+                const Vector3 targetOffset = Vector3Subtract(target, eyePosition);
+                const float targetDistance = Vector3Length(targetOffset);
+                const float facing = targetDistance > 0.0001f
                         ? Vector3DotProduct(
-                                forward, Vector3Scale(offset, 1.0f / distance))
+                                forward,
+                                Vector3Scale(targetOffset, 1.0f / targetDistance))
                         : 1.0f;
                 if (facing < UseFacingDotThreshold
                         || !IsVisible(
-                                collisionWorld, eyePosition, anchor.second, distance)) {
+                                collisionWorld,
+                                eyePosition,
+                                target,
+                                targetDistance)) {
                     continue;
                 }
                 const bool better = best.kind == SectorUseTargetKind::None
@@ -471,7 +483,7 @@ SectorUseTarget FindSectorUseTarget(
                 if (!better) continue;
                 best = {};
                 best.kind = SectorUseTargetKind::Ladder;
-                best.targetPosition = anchor.second;
+                best.targetPosition = target;
                 best.facingDot = facing;
                 best.distance = distance;
                 best.ladderPrimitiveId = ladder.id;

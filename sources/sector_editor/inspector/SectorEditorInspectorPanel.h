@@ -39,6 +39,7 @@ enum class SectorEditorInspectorPanelRequestKind {
     RebuildSectorCollisionWorld,
     RefreshStructuralPreviewRuntime,
     RefreshStructuralPreviewMaterials,
+    RefreshPreviewSurfaceGeometry,
     BeginAuthoringInsertVertex,
     DeleteSelectedAuthoringVertex,
     DeleteSelectedRuntimeObject,
@@ -140,6 +141,10 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
     height += anchorSummaryHeight;
     height += 36.0f + gap; // Merge Selected Into.
     height += 4.0f * (rowHeight + gap); // Void, floor, ceiling, and ceiling sky.
+
+    height += 18.0f + 30.0f; // Liquid separator/title.
+    height += rowHeight + gap; // Enabled.
+    height += 36.0f + gap; // Summary/configure.
 
     height += 18.0f + 30.0f; // Audio separator/title.
     height += SectorEditorInspectorTextureRowHeight() + gap; // Footsteps.

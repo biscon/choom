@@ -21,6 +21,7 @@ public:
             SectorEditorPlayerSettingsState& state,
             FpsApplicationSettings& settings,
             std::string& statusText,
+            SectorEditorAudioAssetPickerSessionState& audioPickerSession,
             std::filesystem::path settingsPath);
 
     void Open(
@@ -39,6 +40,15 @@ public:
             engine::EngineContext& context,
             std::string_view setId);
     void UpdateAudioPreview(engine::EngineContext& context);
+    void OpenLiquidAudioPicker(
+            engine::EngineContext& context,
+            SectorEditorPlayerLiquidAudioPickerTarget target);
+    SectorEditorAudioAssetPickerResult DrawLiquidAudioPicker(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::FontHandle font,
+            engine::EngineContext& context);
 
     SectorEditorPlayerSettingsState& State() { return state_; }
 
@@ -50,6 +60,7 @@ private:
     SectorEditorPlayerSettingsState& state_;
     FpsApplicationSettings& settings_;
     std::string& statusText_;
+    SectorEditorAudioAssetPickerSessionState& audioPickerSession_;
     std::filesystem::path settingsPath_;
 };
 

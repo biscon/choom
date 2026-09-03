@@ -4,6 +4,7 @@
 #include "engine/render/ColorTransfer.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorColorSettingsModal.h"
+#include "sector_editor/SectorEditorLiquidSettingsModal.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
@@ -317,6 +318,7 @@ bool SectorEditor::Init(engine::EngineContext& context)
     RequestPlayerAudioAssets(
             context.assets,
             applicationSettings.playerSounds,
+            applicationSettings.playerLiquids.audio,
             playerAudio);
     sceneRuntime.SetItemRuntimeAssets(&itemRegistry, &itemModelAssets);
     ResetToBlankMap(context);
@@ -451,6 +453,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     triggerEditingService.reset();
     structuralPrimitiveEditingService.reset();
     playerAudio = PlayerAudioRuntime{};
+    liquidAudio = PlayerLiquidAudioPlaybackState{};
     canvasRect = {};
     statusText.clear();
     gameSessionExists = false;
@@ -657,6 +660,15 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 
     if (state.mode == SectorEditorMode::Preview3D) {
         const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
+        int playerSectorId =
+                previewState.controller.fpsControllerState.currentSectorId;
+        if (previewState.controller.previewControlMode
+                        == SectorPreviewControlMode::FreeFly
+                && previewState.collision.sectorCollisionWorldValid) {
+            playerSectorId = previewState.collision.sectorCollisionWorld
+                    .FindSectorContainingPoint(
+                            Vector2{playerPosition.x, playerPosition.z});
+        }
         SectorDoorPlayerObstacle playerObstacle;
         const SectorDoorPlayerObstacle* playerObstaclePtr = nullptr;
         if (previewState.controller.previewControlMode
@@ -676,7 +688,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 TopologyMap(),
                 dt,
                 &playerPosition,
-                previewState.controller.fpsControllerState.currentSectorId,
+                playerSectorId,
+                previewState.controller.liquidMovement.cameraSubmerged,
+                applicationSettings.playerLiquids.audio,
                 playerObstaclePtr);
         UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
@@ -754,6 +768,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                                                 : nullptr,
                                         previewUseTarget.ladderPrimitiveId,
                                         previewUseTarget.ladderEndpoint)) {
+                                fpsPlayer.HolsterForTraversal();
                                 engine::ConsumeEvent(event);
                             }
                             return;
@@ -922,6 +937,12 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
+        if (state.liquidSettingsModal.open) {
+            DrawLiquidSettingsModal(ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         if (playerSettingsState.open) {
             DrawPlayerSettingsModal(
                     ui, config, input, assets, font, smallFont);
@@ -999,7 +1020,8 @@ void SectorEditor::RenderUI(
                 && !runtimeObjectEditingState.staticModelPicker.open
                 && !state.decalTintModal.open
                 && !state.doorTextureSettingsModal.open
-                && !state.previewSettingsModal.open) {
+                && !state.previewSettingsModal.open
+                && !state.liquidSettingsModal.open) {
             DrawPreviewUvPanel(ui, config, input, assets, font);
         }
         if (state.decalTintModal.open) {
@@ -1025,7 +1047,8 @@ void SectorEditor::RenderUI(
                 || runtimeObjectEditingState.staticModelPicker.open
                 || state.decalTintModal.open
                 || state.doorTextureSettingsModal.open
-                || state.previewSettingsModal.open) {
+                || state.previewSettingsModal.open
+                || state.liquidSettingsModal.open) {
             uiState.keyboardCaptured = true;
         }
         engine::EndUI(ui, config, input, assets);
@@ -1047,6 +1070,12 @@ void SectorEditor::RenderUI(
     if (state.colorSettingsModal.open) {
         DrawColorSettingsModal(
                 ui, config, input, assets, font, smallFont);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.liquidSettingsModal.open) {
+        DrawLiquidSettingsModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -1614,6 +1643,13 @@ void SectorEditor::HandleMainMenuCommand(
                 BuildPlayerSettingsService().Open(
                         *engineContext,
                         SectorEditorPlayerSettingsTab::Sneaking);
+            }
+            break;
+        case SectorEditorMainMenuCommand::OpenLiquidGameplaySettings:
+            if (engineContext != nullptr) {
+                BuildPlayerSettingsService().Open(
+                        *engineContext,
+                        SectorEditorPlayerSettingsTab::Liquids);
             }
             break;
         case SectorEditorMainMenuCommand::None:
@@ -2814,7 +2850,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
     const bool gameplayWeaponInput = state.mode == SectorEditorMode::Preview3D
             && previewState.controller.previewControlMode
                     == SectorPreviewControlMode::Gameplay;
-    const bool weaponInputCaptured = uiState.keyboardCaptured
+    const bool previewInputCaptured = uiState.keyboardCaptured
             || state.texturePicker.open
             || state.soundPicker.open
             || state.decalTintModal.open
@@ -2822,6 +2858,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             || itemEditorState.open
             || patrolEditorState.open
             || weaponEditorState.open;
+    const bool weaponInputCaptured = previewInputCaptured
+            || IsSectorLadderTraversalActive(
+                    previewState.controller.ladderTraversal);
     fpsPlayer.HandleWeaponSlotInput(
             input,
             weaponRegistry,
@@ -2832,10 +2871,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             true,
             [this, &assets, &controlModeToggled,
                     gameplayWeaponInput,
+                    previewInputCaptured,
                     weaponInputCaptured](engine::InputEvent& event) {
                 if (event.key.key == KEY_F
                         && gameplayWeaponInput
-                        && !weaponInputCaptured) {
+                        && !previewInputCaptured) {
                     TogglePlayerFlashlight(flashlight);
                     statusText = flashlight.enabled
                             ? "Flashlight enabled"
@@ -2905,7 +2945,10 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                         }
                         return;
                     }
-                    if (ToggleFpsViewmodelHolster(fpsPlayer.State(), true, uiState.keyboardCaptured)) {
+                    if (ToggleFpsViewmodelHolster(
+                                fpsPlayer.State(),
+                                true,
+                                weaponInputCaptured)) {
                         statusText = fpsPlayer.State().equipState
                                         == FpsViewmodelEquipState::Holstering
                                 ? "Viewmodel holstering"
@@ -2951,6 +2994,26 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             sceneRuntime.Renderer().ApplyRendererPose(
                     previewState.controller.freeflyController.pose,
                     false);
+            const SectorViewPose& pose =
+                    previewState.controller.freeflyController.pose;
+            const int liquidSectorId = previewState.collision.sectorCollisionWorldValid
+                    ? previewState.collision.sectorCollisionWorld.FindSectorContainingPoint(
+                            Vector2{pose.position.x, pose.position.z})
+                    : 0;
+            const SectorFpsControllerConfig liquidConfig =
+                    previewState.controller.fpsControllerConfig;
+            const Vector3 liquidFeet{
+                    pose.position.x,
+                    pose.position.y - liquidConfig.eyeHeight,
+                    pose.position.z};
+            const SectorLiquidContact liquidContact = SampleSectorLiquidContact(
+                    TopologyMap(), liquidSectorId, liquidFeet, liquidConfig);
+            previewState.controller.liquidMovement.contact = liquidContact;
+            previewState.controller.liquidMovement.cameraSubmerged =
+                    UpdateSectorLiquidCameraSubmersion(
+                            previewState.controller.liquidMovement.cameraSubmerged,
+                            liquidContact,
+                            pose.position.y);
         } else {
             const float previousVisualEyeY = sceneRuntime.Renderer().RendererPose().position.y;
             input.ForEachEvent(
@@ -2974,6 +3037,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             controllerInput.strafeLeft = input.IsKeyDown(KEY_A);
             controllerInput.strafeRight = input.IsKeyDown(KEY_D);
             controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
+            controllerInput.swimUp = input.IsKeyDown(KEY_SPACE);
+            controllerInput.swimDown = input.IsKeyDown(KEY_LEFT_CONTROL)
+                    || input.IsKeyDown(KEY_RIGHT_CONTROL);
             controllerInput.mouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
             controllerInput.mouseDelta = input.MouseDelta();
             const bool canConsumeGameplayActions =
@@ -2988,12 +3054,16 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 input.ForEachEvent(
                         engine::InputEventType::KeyPressed,
                         true,
-                        [&controllerInput](engine::InputEvent& event) {
+                        [this, &controllerInput](engine::InputEvent& event) {
                             if (event.key.key == KEY_SPACE) {
                                 controllerInput.jumpPressed = true;
                             } else if (event.key.key == KEY_LEFT_CONTROL
                                     || event.key.key == KEY_RIGHT_CONTROL) {
                                 controllerInput.crouchTogglePressed = true;
+                            } else if (event.key.key == KEY_E
+                                    && IsSectorLadderTraversalActive(
+                                            previewState.controller.ladderTraversal)) {
+                                controllerInput.ladderDetachPressed = true;
                             } else {
                                 return;
                             }
@@ -3009,9 +3079,26 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     &TopologyMap(),
                     state.previewSettingsModal.open,
                     controllerInput,
+                    applicationSettings.playerLiquids,
                     previousVisualEyeY,
                     dt,
                     &sceneRuntime.NpcNavigation().collisionCylinders);
+            if (engineContext != nullptr) {
+                const bool swimControlHeld = controllerInput.moveForward
+                        || controllerInput.moveBackward
+                        || controllerInput.strafeLeft
+                        || controllerInput.strafeRight
+                        || controllerInput.swimUp
+                        || controllerInput.swimDown;
+                UpdatePlayerLiquidAudio(
+                        engineContext->assets,
+                        engineContext->audio,
+                        playerAudio,
+                        liquidAudio,
+                        previewState.controller.liquidMovement.swimming,
+                        previewState.controller.liquidMovement.exitingWater,
+                        swimControlHeld);
+            }
             if (previewState.controller.frameEvents.footstep
                     && engineContext != nullptr) {
                 sceneRuntime.PlayFootstepForSector(
@@ -4829,6 +4916,7 @@ void SectorEditor::RenderPreview3DViewmodel(
 }
 void SectorEditor::ApplyPreview3DWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     if (state.mode != SectorEditorMode::Preview3D) {
@@ -4837,17 +4925,20 @@ void SectorEditor::ApplyPreview3DWorldAtmosphere(
     sceneRuntime.ApplyWorldAtmosphere(
             sceneTarget,
             TopologyMap(),
+            underwater,
             collectGpuDiagnostics);
 }
 
-void SectorEditor::ApplyPreview3DGlass(
+void SectorEditor::ApplyPreview3DTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::EngineContext& context,
+        const SectorUnderwaterRenderContext& underwater,
         bool collectGpuDiagnostics)
 {
     if (state.mode != SectorEditorMode::Preview3D) return;
-    sceneRuntime.ApplyGlass(
-            sceneTarget, context, TopologyMap(), collectGpuDiagnostics);
+    sceneRuntime.ApplyTransparentSurfaces(
+            sceneTarget, context, TopologyMap(), underwater,
+            collectGpuDiagnostics);
 }
 
 void SectorEditor::ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget)
@@ -6459,13 +6550,14 @@ void SectorEditor::DrawToolsPanel(
     }
 
     separator();
-    const float roomtoneFadeLabelW = 150.0f;
+    const SectorEditorInspectorStackedOptionRowLayout roomtoneFadeLayout =
+            BuildSectorEditorInspectorStackedOptionRowLayout(
+                    y, contentW, rowH, gap);
     const SectorEditorIntInputResult roomtoneFadeResult = DrawLabeledIntInput(
             ui, config, input, assets, font,
             "sector_editor_roomtone_map_fade", "Roomtone Fade ms",
-            {0.0f, y, roomtoneFadeLabelW, rowH},
-            {roomtoneFadeLabelW + gap, y,
-                    std::max(0.0f, contentW - roomtoneFadeLabelW - gap), rowH},
+            roomtoneFadeLayout.labelRect,
+            roomtoneFadeLayout.fieldRect,
             engine::UITextJustify::Left,
             AuthoringGraph().audioSettings.roomtoneFadeMilliseconds,
             uiState.roomtoneMapFadeInput, 0, 60000, 50);
@@ -6473,7 +6565,7 @@ void SectorEditor::DrawToolsPanel(
         BuildSoundEditorService().SetRoomtoneFadeMilliseconds(
                 roomtoneFadeResult.value);
     }
-    y += rowH + gap;
+    y += roomtoneFadeLayout.height + gap;
 
     if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         OpenLightmapBakeSetup();
@@ -6608,6 +6700,19 @@ void SectorEditor::DrawSectorsPanel(
                     && sceneRuntime.Renderer().IsRendererReady()
                     && engineContext != nullptr) {
                 RefreshPreviewSurfaceMaterials(*engineContext);
+            }
+            break;
+        case SectorEditorInspectorPanelRequestKind::RefreshPreviewSurfaceGeometry:
+            if (state.mode == SectorEditorMode::Preview3D
+                    && sceneRuntime.Renderer().IsRendererReady()
+                    && engineContext != nullptr) {
+                std::string refreshError;
+                if (!RefreshPreviewSurfaceGeometry(TopologyMap(), &refreshError)) {
+                    TraceLog(LOG_WARNING,
+                            "Liquid preview refresh failed: %s",
+                            refreshError.empty() ? "unknown error" : refreshError.c_str());
+                    RebuildPreviewMeshesPreservingView(*engineContext);
+                }
             }
             break;
         case SectorEditorInspectorPanelRequestKind::BeginAuthoringInsertVertex:
@@ -7389,6 +7494,35 @@ void SectorEditor::DrawColorSettingsModal(
     }
 }
 
+void SectorEditor::DrawLiquidSettingsModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    const SectorEditorLiquidSettingsModalAction action =
+            DrawSectorEditorLiquidSettingsModal(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    smallFont,
+                    state.liquidSettingsModal);
+    switch (action) {
+        case SectorEditorLiquidSettingsModalAction::Cancel:
+            state.liquidSettingsModal = {};
+            break;
+        case SectorEditorLiquidSettingsModalAction::Apply:
+            ApplyLiquidSettingsModal();
+            break;
+        case SectorEditorLiquidSettingsModalAction::None:
+            break;
+    }
+}
+
 void SectorEditor::DrawPlayerSettingsModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -7411,9 +7545,14 @@ void SectorEditor::DrawPlayerSettingsModal(
             service);
     if (!result.saved) return;
     if (result.playerAudioChanged) {
+        StopPlayerLiquidAudio(
+                engineContext->assets,
+                engineContext->audio,
+                liquidAudio);
         RequestPlayerAudioAssets(
                 engineContext->assets,
                 applicationSettings.playerSounds,
+                applicationSettings.playerLiquids.audio,
                 playerAudio);
         playerAudioSettingsChanged = true;
     }
@@ -7922,6 +8061,7 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.lightmapBakeSetupModal.open
             || state.previewSettingsModal.open
             || state.colorSettingsModal.open
+            || state.liquidSettingsModal.open
             || playerSettingsState.open;
 }
 
@@ -8056,6 +8196,10 @@ void SectorEditor::LeavePreview3D()
     previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
     if (engineContext != nullptr) {
+        StopPlayerLiquidAudio(
+                engineContext->assets,
+                engineContext->audio,
+                liquidAudio);
         engineContext->audio.StopAll(engineContext->assets);
         sceneRuntime.StopLevelAudio(*engineContext);
         EndFpsViewmodel(engineContext->assets);
@@ -8099,6 +8243,13 @@ void SectorEditor::TogglePreviewControlMode()
                 sceneRuntime.RuntimeObjects().physicalModelColliders,
                 sceneRuntime.Renderer())) {
         return;
+    }
+
+    if (engineContext != nullptr) {
+        StopPlayerLiquidAudio(
+                engineContext->assets,
+                engineContext->audio,
+                liquidAudio);
     }
 
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(previewState.controller.previewControlMode));
@@ -8461,6 +8612,62 @@ void SectorEditor::ApplyColorSettingsModal()
     state.colorSettingsModal = {};
 }
 
+void SectorEditor::ApplyLiquidSettingsModal()
+{
+    if (!state.liquidSettingsModal.open) return;
+    SectorAuthoringFaceAnchor* anchor = FindSectorAuthoringFaceAnchor(
+            AuthoringGraph(), state.liquidSettingsModal.faceAnchorId);
+    if (anchor == nullptr) {
+        state.liquidSettingsModal.errorMessage =
+                "The edited authoring face no longer exists";
+        return;
+    }
+    if (!std::isfinite(anchor->floorZ)
+            || !std::isfinite(anchor->ceilingZ)
+            || anchor->ceilingZ <= anchor->floorZ) {
+        state.liquidSettingsModal.errorMessage =
+                "The sector must have a valid positive height";
+        return;
+    }
+
+    SectorLiquidSettings liquid = NormalizeSectorLiquidSettingsForSpan(
+            state.liquidSettingsModal.draft,
+            anchor->floorZ,
+            anchor->ceilingZ);
+    liquid.enabled = true;
+    const int faceAnchorId = anchor->id;
+    const bool changed = MutateSectorEditorAuthoringFaceAnchorById(
+            state,
+            Lifecycle(),
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveDerivationAccess(documentState.derivation),
+            faceAnchorId,
+            "Updated sector liquid",
+            [liquid](SectorAuthoringFaceAnchor& target) {
+                target.liquid = liquid;
+                return true;
+            });
+    if (!changed) {
+        state.liquidSettingsModal.errorMessage =
+                "Could not update the liquid settings";
+        return;
+    }
+
+    state.liquidSettingsModal = {};
+    if (state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        std::string refreshError;
+        if (!RefreshPreviewSurfaceGeometry(TopologyMap(), &refreshError)) {
+            TraceLog(LOG_WARNING, "Liquid preview refresh failed: %s",
+                    refreshError.empty() ? "unknown error" : refreshError.c_str());
+            if (engineContext != nullptr) {
+                RebuildPreviewMeshesPreservingView(*engineContext);
+            }
+        }
+    }
+}
+
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
 {
     if (!state.previewSettingsModal.open) {
@@ -8633,6 +8840,7 @@ SectorEditorPlayerSettingsService SectorEditor::BuildPlayerSettingsService()
             playerSettingsState,
             applicationSettings,
             statusText,
+            audioAssetPickerSessionState,
             applicationSettingsPath};
 }
 

@@ -13,6 +13,22 @@ void ResetFpsViewmodelRuntime(FpsViewmodelRuntimeState& state)
     state = {};
 }
 
+bool RequestFpsViewmodelHolster(FpsViewmodelRuntimeState& state)
+{
+    if (state.activeWeaponId.empty()) return false;
+    if (state.equipState == FpsViewmodelEquipState::Holstered
+            || state.equipProgress <= 0.0f) {
+        state.equipState = FpsViewmodelEquipState::Holstered;
+        state.equipProgress = 0.0f;
+        state.holsterPose = EvaluateFpsViewmodelHolsterPose(
+                state.holsterTransition,
+                state.equipProgress);
+        return true;
+    }
+    state.equipState = FpsViewmodelEquipState::Holstering;
+    return true;
+}
+
 float FpsWeaponShotPitch(uint64_t shotSequence, uint32_t randomState)
 {
     uint32_t value = randomState

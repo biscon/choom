@@ -2,7 +2,42 @@
   "formatVersion": 4,
   "topology": "authoringGraph",
   "coordSubdivisions": 16,
-  "staticLights": [],
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        8.0,
+        38.73739242553711,
+        88.0
+      ],
+      "radius": 84.0,
+      "sourceRadius": 2.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    },
+    {
+      "id": 2,
+      "position": [
+        16.0,
+        30.0,
+        8.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "staticSpotLights": [],
   "staticRectLights": [],
   "dynamicPointLights": [
@@ -10,9 +45,9 @@
       "id": 1,
       "instanceId": "light_point_1",
       "position": [
-        0.0,
-        14.399999618530273,
-        -0.0
+        7.685684680938721,
+        40.405181884765625,
+        -56.21576690673828
       ],
       "radius": 100.0,
       "intensity": 3.0,
@@ -27,17 +62,19 @@
   "dynamicSpotLights": [],
   "dynamicRectLights": [],
   "lightmapSettings": {
-    "ambientOcclusionRadius": 10.0,
+    "ambientOcclusionRadius": 12.0,
     "ambientOcclusionStrength": 0.550000011920929,
-    "indirectBounceRadius": 32.0,
-    "indirectBounceStrength": 0.20000000298023224,
-    "objectProbeSpacingWorld": 4.0,
+    "indirectBounceRadius": 64.0,
+    "indirectBounceStrength": 0.4000000059604645,
+    "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
     "runSpeed": 6.0,
+    "swimSpeed": 2.0,
     "mouseSensitivity": 0.5,
     "eyeHeight": 1.7000000476837158,
     "gravity": 25.0,
@@ -65,13 +102,21 @@
     },
     "intensity": 1.0
   },
+  "audio": {
+    "sounds": {
+      "damp_cavern": {
+        "path": "ambience/damp-cavern-ambience.ogg",
+        "type": "music"
+      }
+    }
+  },
   "bakedLightmap": {
     "path": "assets/levels/tunnel/tunnel.lightmap.bin",
     "width": 2048,
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "0bf4dc780116b7ec",
+    "sourceHash": "6f10336e0a35d72b",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -79,41 +124,50 @@
         0.0
       ],
       "rgbMax": [
-        0.0,
-        0.0,
-        0.0
+        1.111328125,
+        1.111328125,
+        1.111328125
       ],
-      "auxiliaryMin": 0.50244140625,
+      "auxiliaryMin": 0.4560546875,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 0
+      "rgbChannelsAboveOne": 2250
     },
     "objectProbes": {
       "path": "assets/levels/tunnel/tunnel.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "0bf4dc780116b7ec",
-      "count": 24,
-      "probeSpacingWorld": 4.0,
+      "sourceHash": "6f10336e0a35d72b",
+      "count": 896,
+      "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
       "format": "layeredAmbientCubeLinearHdrF32LE",
       "storedStatistics": {
         "rgbMin": [
-          0.4000000059604645,
-          0.4000000059604645,
-          0.4000000059604645
+          0.05000000074505806,
+          0.05000000074505806,
+          0.05000000074505806
         ],
         "rgbMax": [
-          0.4000000059604645,
-          0.4000000059604645,
-          0.4000000059604645
+          0.4639386534690857,
+          0.4639386534690857,
+          0.4639386534690857
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 144,
+        "sampleCount": 5376,
         "rgbChannelsAboveOne": 0
       }
     }
+  },
+  "bakedReflectionProbes": {
+    "path": "assets/levels/tunnel/tunnel.reflection-probes.bin",
+    "version": 1,
+    "count": 1,
+    "format": "rgba16f-cubemap-mips"
+  },
+  "editorSettings": {
+    "gridSize": 1
   },
   "authoringGraph": {
     "vertices": [
@@ -262,10 +316,268 @@
     ],
     "lineSides": [
       {
+        "lineId": 2,
+        "side": "front",
+        "wall": {
+          "materialId": "seamless_worn_concrete",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 4,
+        "side": "front",
+        "wall": {
+          "materialId": "seamless_worn_concrete",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 5,
+        "side": "front",
+        "wall": {
+          "materialId": "seamless_worn_concrete",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 8,
+        "side": "front",
+        "wall": {
+          "materialId": "seamless_worn_concrete",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 11,
+        "side": "front",
+        "wall": {
+          "materialId": "seamless_worn_concrete",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 12,
+        "side": "front",
+        "wall": {
+          "materialId": "seamless_worn_concrete",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
         "lineId": 15,
         "side": "front",
         "wall": {
-          "materialId": "dirty_gray_concrete_wall_512",
+          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -308,7 +620,7 @@
         "lineId": 18,
         "side": "front",
         "wall": {
-          "materialId": "dirty_gray_concrete_wall_512",
+          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -364,7 +676,7 @@
           }
         },
         "lower": {
-          "materialId": "dirty_gray_concrete_wall_512",
+          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -394,7 +706,7 @@
         "lineId": 21,
         "side": "front",
         "wall": {
-          "materialId": "dirty_gray_concrete_wall_512",
+          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -437,7 +749,7 @@
         "lineId": 22,
         "side": "front",
         "wall": {
-          "materialId": "dirty_gray_concrete_wall_512",
+          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -493,7 +805,7 @@
           }
         },
         "lower": {
-          "materialId": "dirty_gray_concrete_wall_512",
+          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -526,10 +838,10 @@
         "name": "Sector 1",
         "x": -1,
         "y": -1538,
-        "floorZ": -20.0,
+        "floorZ": -50.0,
         "ceilingZ": 60.0,
-        "floorMaterialId": "dirty_gray_concrete_wall_512",
-        "ceilingMaterialId": "dirty_gray_concrete_wall_512",
+        "floorMaterialId": "seamless_worn_concrete",
+        "ceilingMaterialId": "seamless_worn_concrete",
         "floorUv": {
           "scale": [
             1.0,
@@ -556,9 +868,9 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
-          "materialId": "dirty_gray_concrete_wall_512",
+          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -594,6 +906,33 @@
               0.0,
               0.0
             ]
+          }
+        },
+        "liquid": {
+          "enabled": true,
+          "surfaceOffset": 50.0,
+          "shallowColor": {
+            "r": 112,
+            "g": 110,
+            "b": 73,
+            "a": 255
+          },
+          "deepColor": {
+            "r": 35,
+            "g": 31,
+            "b": 18,
+            "a": 255
+          },
+          "visibilityDepthWorld": 1.7999999523162842,
+          "roughness": 0.20000000298023224,
+          "refractionStrength": 0.017999999225139618,
+          "rippleScaleWorld": 1.2000000476837158,
+          "rippleStrength": 1.0,
+          "rippleSpeed": 0.550000011920929,
+          "flowDirectionDegrees": 90.0,
+          "flowSpeedWorld": 0.25,
+          "particulates": {
+            "opacity": 0.18000000715255737
           }
         }
       },
@@ -604,8 +943,8 @@
         "y": -1922,
         "floorZ": 10.0,
         "ceilingZ": 45.0,
-        "floorMaterialId": "dirty_gray_concrete_wall_512",
-        "ceilingMaterialId": "dirty_gray_concrete_wall_512",
+        "floorMaterialId": "seamless_worn_concrete",
+        "ceilingMaterialId": "seamless_worn_concrete",
         "floorUv": {
           "scale": [
             1.0,
@@ -632,7 +971,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "dirty_gray_concrete_wall_512",
           "uv": {
@@ -671,6 +1010,10 @@
               0.0
             ]
           }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "damp_cavern"
         }
       },
       {
@@ -680,8 +1023,8 @@
         "y": -1922,
         "floorZ": 10.0,
         "ceilingZ": 45.0,
-        "floorMaterialId": "dirty_gray_concrete_wall_512",
-        "ceilingMaterialId": "dirty_gray_concrete_wall_512",
+        "floorMaterialId": "seamless_worn_concrete",
+        "ceilingMaterialId": "seamless_worn_concrete",
         "floorUv": {
           "scale": [
             1.0,
@@ -708,7 +1051,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "dirty_gray_concrete_wall_512",
           "uv": {
@@ -746,6 +1089,17 @@
               0.0,
               0.0
             ]
+          }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "damp_cavern"
+        },
+        "liquid": {
+          "surfaceOffset": 17.5,
+          "particulates": {
+            "amount": 132,
+            "opacity": 0.2199999988079071
           }
         }
       },
@@ -784,7 +1138,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -823,6 +1177,10 @@
               0.0
             ]
           }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "damp_cavern"
         }
       },
       {
@@ -860,7 +1218,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.4000000059604645,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "materialId": "wall",
           "uv": {
@@ -899,7 +1257,25 @@
               0.0
             ]
           }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "damp_cavern"
         }
+      }
+    ],
+    "reflectionProbes": [
+      {
+        "id": 1,
+        "x": 128,
+        "z": 0,
+        "yWorld": 2.5,
+        "halfExtentsWorld": [
+          7.0,
+          5.0,
+          16.0
+        ],
+        "resolution": 256
       }
     ],
     "structuralPrimitives": [
@@ -910,7 +1286,7 @@
         "z": 0,
         "yawDegrees": 90.0,
         "material": {
-          "materialId": "dirty_gray_concrete_wall_512"
+          "materialId": "seamless_worn_concrete"
         },
         "ramp": {
           "width": 4096,
@@ -928,7 +1304,7 @@
         "yawDegrees": 90.0,
         "rollDegrees": 180.0,
         "material": {
-          "materialId": "dirty_gray_concrete_wall_512"
+          "materialId": "seamless_worn_concrete"
         },
         "ramp": {
           "width": 4096,
@@ -945,7 +1321,7 @@
         "z": 0,
         "yawDegrees": 270.0,
         "material": {
-          "materialId": "dirty_gray_concrete_wall_512"
+          "materialId": "seamless_worn_concrete"
         },
         "ramp": {
           "width": 4096,
@@ -963,7 +1339,7 @@
         "yawDegrees": 270.0,
         "rollDegrees": 180.0,
         "material": {
-          "materialId": "dirty_gray_concrete_wall_512"
+          "materialId": "seamless_worn_concrete"
         },
         "ramp": {
           "width": 4096,
@@ -971,6 +1347,21 @@
           "solidBottom": 45.0,
           "low": 48.0,
           "high": 60.0
+        }
+      },
+      {
+        "id": 5,
+        "kind": "ladder",
+        "x": -251,
+        "z": -896,
+        "yawDegrees": 270.0,
+        "material": {
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "ladder": {
+          "width": 80,
+          "bottom": -27.200002670288086,
+          "height": 31.0
         }
       }
     ]

@@ -341,6 +341,13 @@ bool FpsPlayerRuntime::EquipWeapon(
     return true;
 }
 
+bool FpsPlayerRuntime::HolsterForTraversal()
+{
+    pendingWeaponSlot = 0;
+    state.reload = {};
+    return RequestFpsViewmodelHolster(state);
+}
+
 bool FpsPlayerRuntime::QueueUnequip(
         PlayerWeaponCampaignState* weaponCampaign)
 {
@@ -1227,7 +1234,9 @@ void FpsPlayerRuntime::RenderHud(
         const Health* health,
         const PlayerStamina* stamina,
         std::uint64_t reserveRounds,
-        bool showAmmo) const
+        bool showAmmo,
+        const PlayerOxygen* oxygen,
+        float oxygenAlpha) const
 {
     const int displayedLoaded = IsFpsWeaponReloading(state)
             ? state.reload.loadedRoundsBefore
@@ -1240,6 +1249,8 @@ void FpsPlayerRuntime::RenderHud(
             font,
             health,
             stamina,
+            oxygen,
+            oxygenAlpha,
             displayedLoaded,
             reserveRounds,
             showAmmo});

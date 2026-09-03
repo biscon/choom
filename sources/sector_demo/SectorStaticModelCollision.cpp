@@ -768,25 +768,46 @@ SectorFpsVerticalContext BuildSectorStaticModelVerticalContext(
         const SectorFpsControllerConfig& playerConfig,
         const std::vector<SectorStaticModelCollider>& colliders)
 {
+    const SectorFpsControllerConfig config =
+            NormalizeSectorFpsControllerConfig(playerConfig);
+    return BuildSectorStaticModelVerticalContext(
+            sectorContext,
+            SectorCollisionMoveState{
+                    Vector2{
+                            playerState.feetPosition.x,
+                            playerState.feetPosition.z},
+                    playerState.feetPosition.y,
+                    playerState.currentSectorId,
+                    playerState.grounded},
+            SectorCollisionMoveConfig{
+                    config.playerRadius,
+                    config.playerHeight,
+                    config.stepHeight,
+                    4},
+            colliders);
+}
+
+SectorFpsVerticalContext BuildSectorStaticModelVerticalContext(
+        const SectorFpsVerticalContext& sectorContext,
+        const SectorCollisionMoveState& moveState,
+        const SectorCollisionMoveConfig& moveConfig,
+        const std::vector<SectorStaticModelCollider>& colliders)
+{
     SectorFpsVerticalContext result = sectorContext;
     if (!result.hasSector || colliders.empty()) {
         return result;
     }
 
-    const SectorFpsControllerConfig config =
-            NormalizeSectorFpsControllerConfig(playerConfig);
-    const Vector2 playerXZ{
-            playerState.feetPosition.x,
-            playerState.feetPosition.z};
-    const float reachableFloor = playerState.feetPosition.y
-            + (playerState.grounded ? config.stepHeight : 0.0f)
+    const SectorCollisionMoveConfig config = NormalizeMoveConfig(moveConfig);
+    const float reachableFloor = moveState.feetY
+            + (moveState.grounded ? config.stepHeight : 0.0f)
             + StaticModelCollisionEpsilon;
-    const float playerTop = playerState.feetPosition.y + config.playerHeight;
+    const float playerTop = moveState.feetY + config.playerHeight;
     for (const SectorStaticModelCollider& collider : colliders) {
         if (!IsValidCollider(collider)
                 || !CircleOverlapsCollider(
-                        playerXZ,
-                        config.playerRadius,
+                        moveState.positionXZ,
+                        config.radius,
                         collider)) {
             continue;
         }

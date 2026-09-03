@@ -119,6 +119,7 @@ struct SectorEditorState {
     SectorLightmapBakeSetupModalState lightmapBakeSetupModal;
     SectorPreviewSettingsModalState previewSettingsModal;
     SectorEditorColorSettingsModalState colorSettingsModal;
+    SectorEditorLiquidSettingsModalState liquidSettingsModal;
 };
 
 struct SectorEditorUiState {

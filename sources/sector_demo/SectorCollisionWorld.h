@@ -16,6 +16,7 @@ struct SectorCollisionHeights {
     float floorZ = 0.0f;
     float ceilingZ = 0.0f;
     bool continuousFloor = false;
+    int supportingStructuralPrimitiveId = -1;
 };
 
 enum class SectorCollisionEdgeKind {
@@ -152,7 +153,9 @@ public:
             float bottom,
             float top,
             int preferredSectorId,
-            int* resolvedSectorId = nullptr) const;
+            int* resolvedSectorId = nullptr,
+            int ignoredStructuralPrimitiveId = -1,
+            int ignoredSupportingStructuralPrimitiveId = -1) const;
 
 private:
     bool SectorContainsPoint(const SectorCollisionSector& sector, Vector2 xz) const;

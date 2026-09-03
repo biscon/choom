@@ -24,6 +24,8 @@
 
 namespace game {
 
+struct PlayerLiquidAudioApplicationSettings;
+
 class SectorSceneRuntime {
 public:
     void SetItemRuntimeAssets(
@@ -64,6 +66,8 @@ public:
             float dt,
             const Vector3* playerPosition,
             int playerSectorId,
+            bool playerCameraSubmerged,
+            const PlayerLiquidAudioApplicationSettings& liquidAudioSettings,
             const SectorDoorPlayerObstacle* playerObstacle = nullptr,
             const NpcAiGameplayContext* npcGameplay = nullptr,
             int externalDoorHoldId = 0);
@@ -98,11 +102,13 @@ public:
     void ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
-    void ApplyGlass(
+    void ApplyTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::EngineContext& context,
             const SectorTopologyMap& map,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
     void ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
@@ -180,7 +186,9 @@ private:
             engine::EngineContext& context,
             const SectorTopologyMap& map,
             float dt,
-            int playerSectorId);
+            int playerSectorId,
+            bool playerCameraSubmerged,
+            const PlayerLiquidAudioApplicationSettings& liquidAudioSettings);
     void BindRuntimeObjectAudio(engine::World& world);
     void PlayPendingNpcFootsteps(engine::EngineContext& context);
 
@@ -216,6 +224,7 @@ private:
     int lastRoomtoneSectorId = -1;
     float roomtoneTransitionElapsedSeconds = 0.0f;
     float roomtoneTransitionDurationSeconds = 0.0f;
+    float roomtoneSubmersionGain = 1.0f;
 
     struct SoundEmitterPlayback {
         std::string id;

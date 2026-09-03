@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_editor/preview/SectorEditorPreviewState.h"
+#include "game/PlayerOxygen.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 
@@ -48,6 +49,7 @@ void UpdateSectorEditorGameplayPreview(
         const SectorTopologyMap* topologyMap,
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
+        const PlayerLiquidApplicationSettings& liquidSettings,
         float previousVisualEyeY,
         float dt,
         const std::vector<NpcCollisionCylinder>* npcCollisionCylinders = nullptr);

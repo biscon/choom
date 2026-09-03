@@ -114,6 +114,9 @@ public:
     void SetGameSessionExists(bool exists) { gameSessionExists = exists; }
     bool ConsumeClearGameSessionRequest();
     bool ConsumePlayerAudioSettingsChanged();
+    const SectorLiquidMovementState& PreviewLiquidMovementState() const {
+        return previewState.controller.liquidMovement;
+    }
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::EngineContext& context);
@@ -125,10 +128,12 @@ public:
             Rectangle playableViewport) const;
     void ApplyPreview3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
-    void ApplyPreview3DGlass(
+    void ApplyPreview3DTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::EngineContext& context,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
     void ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget);
     bool CompositePreview3DViewmodel(
@@ -393,6 +398,13 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
+    void DrawLiquidSettingsModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawPlayerSettingsModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -487,6 +499,7 @@ private:
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void OpenColorSettingsModal();
     void ApplyColorSettingsModal();
+    void ApplyLiquidSettingsModal();
     void OpenDoorTextureSettingsModal();
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();
@@ -668,6 +681,7 @@ private:
     ItemModelAssetState& itemModelAssets;
     FpsApplicationSettings& applicationSettings;
     PlayerAudioRuntime playerAudio;
+    PlayerLiquidAudioPlaybackState liquidAudio;
     std::string applicationSettingsPath;
     std::string weaponRegistryPath;
     std::string itemRegistryPath;

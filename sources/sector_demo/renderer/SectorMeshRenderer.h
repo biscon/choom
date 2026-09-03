@@ -18,9 +18,11 @@
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLightDustRenderer.h"
 #include "sector_demo/renderer/SectorLightProxyRenderer.h"
+#include "sector_demo/renderer/SectorLiquidRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
+#include "sector_demo/renderer/SectorUnderwaterRenderer.h"
 #include "sector_demo/renderer/SectorWindowRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
@@ -46,11 +48,13 @@ struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
 
 struct SectorAtmosphereDiagnostics {
+    double causticsGpuMilliseconds = 0.0;
     double distanceFogGpuMilliseconds = 0.0;
     double analyticFogGpuMilliseconds = 0.0;
     double analyticShaftGpuMilliseconds = 0.0;
     double lightHaloGpuMilliseconds = 0.0;
     double dustGpuMilliseconds = 0.0;
+    double underwaterParticlesGpuMilliseconds = 0.0;
     int dynamicLightCount = 0;
     int analyticFogEligibleCount = 0;
     int analyticFogActiveCount = 0;
@@ -66,6 +70,7 @@ struct SectorAtmosphereDiagnostics {
     int dustEligibleEmitterCount = 0;
     int dustActiveEmitterCount = 0;
     int dustVisibleParticleCount = 0;
+    int underwaterVisibleParticleCount = 0;
 };
 
 class SectorMeshRenderer {
@@ -124,15 +129,16 @@ public:
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+            const SectorUnderwaterRenderContext& underwater,
             bool collectGpuDiagnostics = false);
-    bool ApplyGlass(
+    bool ApplyTransparentSurfaces(
             engine::RenderTarget& sceneTarget,
             engine::AssetManager& assets,
             engine::World* runtimeObjectWorld,
             SectorRuntimeDoorLightingContext doorLighting,
             const SectorTopologyFogSettings& fogSettings,
-            bool collectGpuDiagnostics = false,
-            bool requestRefraction = false);
+            const SectorUnderwaterRenderContext& underwater,
+            bool collectGpuDiagnostics = false);
     bool ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
@@ -257,6 +263,8 @@ public:
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
     size_t WindowConsideredCount() const { return windowRenderer.ConsideredCount(); }
     size_t WindowDrawnCount() const { return windowRenderer.DrawnCount(); }
+    size_t LiquidSurfaceCount() const { return liquidRenderer.SurfaceCount(); }
+    size_t LiquidDrawnCount() const { return liquidRenderer.DrawnCount(); }
     SectorPbrContributionSettings PbrContributionSettings() const
     {
         return pbrContributionSettings;
@@ -300,7 +308,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t AtmosphereGpuPassCount = 5;
+    static constexpr std::size_t AtmosphereGpuPassCount = 7;
     static constexpr std::size_t AtmosphereGpuQueryLatency = 4;
 
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -426,7 +434,7 @@ private:
     int shadowSoftnessLoc = -1;
     int shadowAtlasTilesPerRowLoc = -1;
     bool depthPrepassEnabled = false;
-    bool glassRefractionFallbackLogged = false;
+    bool liquidRefractionFallbackLogged = false;
     bool atmosphereGpuFramePrepared = false;
     bool preGlassLightEffectsRendered = false;
     bool preGlassShaftApplied = false;
@@ -437,6 +445,7 @@ private:
     SectorAnalyticLightShaftRenderer analyticLightShaftRenderer;
     SectorLightProxyRenderer lightProxyRenderer;
     SectorLightDustRenderer lightDustRenderer;
+    SectorUnderwaterRenderer underwaterRenderer;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
@@ -477,6 +486,7 @@ private:
     SectorPbrContributionSettings pbrContributionSettings;
     SectorDoorRenderer doorRenderer;
     SectorWindowRenderer windowRenderer;
+    SectorLiquidRenderer liquidRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;

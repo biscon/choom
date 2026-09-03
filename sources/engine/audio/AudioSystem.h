@@ -21,6 +21,7 @@ struct SoundPlaybackSettings {
     float pitch = 1.0f;
     float pan = 0.0f;
     bool looping = false;
+    bool affectedByListenerEffects = true;
 };
 
 struct PositionalSoundSettings {
@@ -34,6 +35,7 @@ struct MusicPlaybackSettings {
     float pitch = 1.0f;
     float pan = 0.0f;
     bool looping = true;
+    bool affectedByListenerEffects = true;
 };
 
 struct AudioSpatialization {
@@ -42,6 +44,11 @@ struct AudioSpatialization {
 };
 
 inline constexpr float AudioUnfilteredLowPassCutoffHz = 20000.0f;
+inline constexpr float AudioMinimumListenerLowPassCutoffHz = 250.0f;
+inline constexpr float AudioListenerEffectTransitionSeconds = 0.20f;
+
+float AudioListenerLowPassCutoffHz(float normalizedStrength);
+float CombineAudioLowPassCutoffs(float firstHz, float secondHz);
 
 struct PositionalSoundPropagation {
     Vector3 apparentPosition{};
@@ -78,11 +85,13 @@ public:
 
     void SetListener(const AudioListener& value);
     const AudioListener& Listener() const { return listener; }
+    void SetListenerLowPassStrength(float normalizedStrength);
+    float ListenerLowPassStrength() const { return listenerLowPassStrength; }
     void UpdatePositionalSoundPropagation(
             float dt,
             void* queryContext,
             PositionalSoundPropagationQuery query);
-    void Update(AssetManager& assets);
+    void Update(AssetManager& assets, float dt);
 
     SoundPlaybackHandle PlaySound(
             AssetManager& assets,
@@ -100,6 +109,10 @@ public:
             AssetManager& assets,
             SoundPlaybackHandle playback,
             const SoundPlaybackSettings& settings);
+    bool SetSoundPlaybackPaused(
+            AssetManager& assets,
+            SoundPlaybackHandle playback,
+            bool paused);
     bool StopSound(AssetManager& assets, SoundPlaybackHandle playback);
     void StopSoundAsset(AssetManager& assets, SoundHandle sound);
     bool IsSoundPlaying(SoundPlaybackHandle playback) const;
@@ -127,6 +140,7 @@ private:
         bool active = false;
         bool positional = false;
         bool pausedBySystem = false;
+        bool pausedByCaller = false;
         SoundHandle sound = NullSoundHandle();
         size_t voiceIndex = 0;
         uint64_t sequence = 0;
@@ -179,6 +193,8 @@ private:
     bool suspended = false;
     uint64_t nextSequence = 1;
     AudioListener listener;
+    float listenerLowPassStrength = 0.0f;
+    float listenerLowPassTargetStrength = 0.0f;
     std::vector<SoundPlaybackSlot> soundPlaybacks;
     std::vector<MusicPlaybackSlot> musicPlaybacks;
 };

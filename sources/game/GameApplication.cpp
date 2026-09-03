@@ -88,6 +88,7 @@ bool GameApplication::Init(
     RequestPlayerAudioAssets(
             context.assets,
             applicationSettings.playerSounds,
+            applicationSettings.playerLiquids.audio,
             playerAudio);
     std::string materialError;
     if (!LoadSectorMaterialRegistry(
@@ -526,6 +527,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         RequestPlayerAudioAssets(
                 context.assets,
                 applicationSettings.playerSounds,
+                applicationSettings.playerLiquids.audio,
                 playerAudio);
     }
     if (editor.IsPreview3DActive()) {
@@ -634,17 +636,20 @@ void GameApplication::Render3DViewmodel(engine::AssetManager& assets)
     }
 }
 
-void GameApplication::Apply3DGlass(
+void GameApplication::Apply3DTransparentSurfaces(
         engine::RenderTarget& sceneTarget,
         engine::EngineContext& context,
         bool collectGpuDiagnostics)
 {
+    const SectorUnderwaterRenderContext underwater =
+            ActiveUnderwaterRenderContext();
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameScene.ApplyGlass(
-                sceneTarget, context, gameSession.Map(), collectGpuDiagnostics);
+        gameScene.ApplyTransparentSurfaces(
+                sceneTarget, context, gameSession.Map(), underwater,
+                collectGpuDiagnostics);
     } else {
-        editor.ApplyPreview3DGlass(
-                sceneTarget, context, collectGpuDiagnostics);
+        editor.ApplyPreview3DTransparentSurfaces(
+                sceneTarget, context, underwater, collectGpuDiagnostics);
     }
 }
 
@@ -673,16 +678,45 @@ void GameApplication::Apply3DWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
         bool collectGpuDiagnostics)
 {
+    const SectorUnderwaterRenderContext underwater =
+            ActiveUnderwaterRenderContext();
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameScene.ApplyWorldAtmosphere(
                 sceneTarget,
                 gameSession.Map(),
+                underwater,
                 collectGpuDiagnostics);
     } else {
         editor.ApplyPreview3DWorldAtmosphere(
                 sceneTarget,
+                underwater,
                 collectGpuDiagnostics);
     }
+}
+
+SectorUnderwaterRenderContext
+GameApplication::ActiveUnderwaterRenderContext() const
+{
+    SectorUnderwaterRenderContext result;
+    const SectorLiquidMovementState* state = nullptr;
+    if (BackgroundScreen() == ApplicationScreen::Game
+            && gameSession.IsRunning()) {
+        state = &gameSession.LiquidMovementState();
+    } else if (BackgroundScreen() == ApplicationScreen::Editor
+            && editor.IsPreview3DActive()) {
+        state = &editor.PreviewLiquidMovementState();
+    }
+    if (state != nullptr) {
+        result.cameraSubmerged = state->cameraSubmerged;
+        result.contact = state->contact;
+    }
+    result.causticsStrength =
+            applicationSettings.playerLiquids.visuals.causticsStrength;
+    result.causticsScaleMultiplier = applicationSettings.playerLiquids.visuals
+            .causticsScaleMultiplier;
+    result.causticsSpeedMultiplier = applicationSettings.playerLiquids.visuals
+            .causticsSpeedMultiplier;
+    return result;
 }
 
 const SectorAtmosphereDiagnostics& GameApplication::AtmosphereDiagnostics() const
@@ -697,30 +731,69 @@ engine::ScenePresentationEffectParameters
 GameApplication::ScenePresentationEffects() const
 {
     engine::ScenePresentationEffectParameters result;
-    if (BackgroundScreen() != ApplicationScreen::Game
-            || !gameSession.IsRunning()
-            || IsSectorBloomDiagnosticView(
+    result.runtimeSeconds = static_cast<float>(GetTime());
+    const SectorLiquidMovementState* liquidState = nullptr;
+    if (BackgroundScreen() == ApplicationScreen::Game
+            && gameSession.IsRunning()
+            && !IsSectorBloomDiagnosticView(
                     gameScene.Renderer().BloomDebugView())) {
-        return result;
+        liquidState = &gameSession.LiquidMovementState();
+        const PlayerLowHealthVisualApplicationSettings& settings =
+                applicationSettings.playerHealth.lowHealthVisual;
+        const float strength = PlayerLowHealthVisualStrength(
+                gameSession.PlayerHealth(), settings);
+        const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
+                settings.vignetteColor);
+        result.desaturation = settings.maximumDesaturation * strength;
+        result.vignetteOpacity = PlayerLowHealthVignetteOpacity(
+                gameSession.PlayerHealth(), settings);
+        result.vignetteColorLinear = {
+                vignetteColor.x,
+                vignetteColor.y,
+                vignetteColor.z};
+        result.vignetteInnerRadius = settings.vignetteInnerRadius;
+        result.vignetteOuterRadius = settings.vignetteOuterRadius;
+    } else if (BackgroundScreen() == ApplicationScreen::Editor
+            && editor.IsPreview3DActive()) {
+        liquidState = &editor.PreviewLiquidMovementState();
     }
-
-    const PlayerLowHealthVisualApplicationSettings& settings =
-            applicationSettings.playerHealth.lowHealthVisual;
-    const float strength = PlayerLowHealthVisualStrength(
-            gameSession.PlayerHealth(),
-            settings);
-    const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
-            settings.vignetteColor);
-    result.desaturation = settings.maximumDesaturation * strength;
-    result.vignetteOpacity = PlayerLowHealthVignetteOpacity(
-            gameSession.PlayerHealth(), settings);
-    result.vignetteColorLinear = {
-            vignetteColor.x,
-            vignetteColor.y,
-            vignetteColor.z};
-    result.vignetteInnerRadius = settings.vignetteInnerRadius;
-    result.vignetteOuterRadius = settings.vignetteOuterRadius;
+    if (liquidState != nullptr
+            && liquidState->cameraSubmerged
+            && liquidState->contact.hasLiquid) {
+        const SectorLiquidSettings& liquid = liquidState->contact.settings;
+        result.underwaterAmount = 1.0f;
+        result.underwaterShallowColorLinear =
+                engine::SrgbColorBytesToLinearSceneRgb(liquid.shallowColor);
+        result.underwaterDeepColorLinear =
+                engine::SrgbColorBytesToLinearSceneRgb(liquid.deepColor);
+        result.underwaterVisibilityDepthWorld = liquid.visibilityDepthWorld;
+        result.underwaterRippleScaleWorld = liquid.rippleScaleWorld;
+        result.underwaterRippleStrength = liquid.rippleStrength;
+        result.underwaterRippleSpeed = liquid.rippleSpeed;
+        result.underwaterDistortionStrength = applicationSettings
+                .playerLiquids.visuals.screenDistortionStrength;
+        result.underwaterFlowDirectionRadians =
+                liquid.flowDirectionDegrees * DEG2RAD;
+        result.underwaterFlowSpeedWorld = liquid.flowSpeedWorld;
+    }
     return result;
+}
+
+float GameApplication::UnderwaterAudioMuffling() const
+{
+    const SectorLiquidMovementState* liquidState = nullptr;
+    if (BackgroundScreen() == ApplicationScreen::Game
+            && gameSession.IsRunning()) {
+        liquidState = &gameSession.LiquidMovementState();
+    } else if (BackgroundScreen() == ApplicationScreen::Editor
+            && editor.IsPreview3DActive()) {
+        liquidState = &editor.PreviewLiquidMovementState();
+    }
+    return liquidState != nullptr
+                    && liquidState->cameraSubmerged
+                    && liquidState->contact.hasLiquid
+            ? applicationSettings.playerLiquids.audio.underwaterMuffling
+            : 0.0f;
 }
 
 void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)

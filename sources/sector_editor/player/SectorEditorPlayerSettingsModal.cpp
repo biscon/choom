@@ -40,6 +40,11 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
 {
     SectorEditorPlayerSettingsState& state = service.State();
     if (!state.open) return {};
+    if (state.liquidAudioPicker.open) {
+        service.DrawLiquidAudioPicker(
+                ui, config, input, font, engineContext);
+        return {};
+    }
     service.UpdateAudioPreview(engineContext);
 
     bool cancelRequested = false;
@@ -75,10 +80,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             font, "Player Settings");
 
     const char* tabNames[] = {
-            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting"};
+            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting", "Liquids"};
     const float tabY = modal.y + 70.0f;
-    const float tabWidth = (modal.width - 56.0f - 40.0f) / 6.0f;
-    for (int i = 0; i < 6; ++i) {
+    const float tabWidth = (modal.width - 56.0f - 48.0f) / 7.0f;
+    for (int i = 0; i < 7; ++i) {
         const bool active = static_cast<int>(state.activeTab) == i;
         if (engine::ToolButton(
                     ui, config, input, assets,
@@ -126,6 +131,10 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         case SectorEditorPlayerSettingsTab::Lighting:
             scrollState = &state.lightingScroll;
             contentHeight = 980.0f;
+            break;
+        case SectorEditorPlayerSettingsTab::Liquids:
+            scrollState = &state.liquidsScroll;
+            contentHeight = 1260.0f;
             break;
     }
     const float contentWidth = std::max(
@@ -251,6 +260,151 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                 "Pickup target height (world)",
                 inventory.pickupVacuumTargetHeightWorld,
                 state.inventoryVacuumHeightInput, 0.0f, 1000.0f, 3);
+    } else if (state.activeTab == SectorEditorPlayerSettingsTab::Liquids) {
+        PlayerLiquidApplicationSettings& liquids = state.draft.playerLiquids;
+        section("Oxygen and drowning");
+        drawFloat("player_liquids_oxygen_maximum", "Maximum oxygen",
+                liquids.oxygenMaximum, state.oxygenMaximumInput,
+                0.001f, 100000.0f, 2);
+        drawFloat("player_liquids_oxygen_depletion", "Depletion / second",
+                liquids.oxygenDepletionPerSecond, state.oxygenDepletionInput,
+                0.0f, 100000.0f, 2);
+        drawFloat("player_liquids_oxygen_regeneration", "Regeneration / second",
+                liquids.oxygenRegenerationPerSecond, state.oxygenRegenerationInput,
+                0.0f, 100000.0f, 2);
+        drawInt("player_liquids_drowning_damage", "Drowning damage",
+                liquids.drowningDamage, state.drowningDamageInput, 0, 100000);
+        drawFloat("player_liquids_drowning_interval", "Damage interval (seconds)",
+                liquids.drowningDamageIntervalSeconds, state.drowningIntervalInput,
+                0.001f, 1000.0f, 3);
+        section("Movement and water exit");
+        drawFloat("player_liquids_entry_slowdown", "Entry slowdown (seconds)",
+                liquids.entrySlowdownSeconds, state.entrySlowdownInput,
+                0.0f, 2.0f, 2);
+        drawFloat("player_liquids_collision_height", "Swim collision height (world)",
+                liquids.swimCollisionHeightWorld,
+                state.swimCollisionHeightInput, 0.1f, 3.0f, 2);
+        drawFloat("player_liquids_water_drag", "Swim coasting drag / second",
+                liquids.waterDragPerSecond, state.waterDragInput,
+                0.0f, 40.0f, 2);
+        drawFloat("player_liquids_surface_recovery", "Surface recovery (Hz)",
+                liquids.surfaceRecoveryFrequencyHz, state.surfaceRecoveryInput,
+                0.1f, 10.0f, 2);
+        drawFloat("player_liquids_exit_height", "Maximum exit ledge height (world)",
+                liquids.maximumExitLedgeHeightWorld,
+                state.maximumExitLedgeHeightInput, 0.0f, 3.0f, 2);
+        drawFloat("player_liquids_exit_duration", "Exit duration (seconds)",
+                liquids.exitTransitionDurationSeconds,
+                state.exitTransitionDurationInput, 0.1f, 2.0f, 2);
+        section("Underwater visuals");
+        drawFloat(
+                "player_liquids_distortion_strength",
+                "Screen distortion strength",
+                liquids.visuals.screenDistortionStrength,
+                state.underwaterDistortionStrengthInput,
+                0.0f,
+                4.0f,
+                2);
+        drawFloat(
+                "player_liquids_caustics_strength",
+                "Caustics strength",
+                liquids.visuals.causticsStrength,
+                state.underwaterCausticsStrengthInput,
+                0.0f,
+                1.0f,
+                2);
+        drawFloat(
+                "player_liquids_caustics_scale",
+                "Caustics scale multiplier",
+                liquids.visuals.causticsScaleMultiplier,
+                state.underwaterCausticsScaleInput,
+                0.1f,
+                10.0f,
+                2);
+        drawFloat(
+                "player_liquids_caustics_speed",
+                "Caustics speed multiplier",
+                liquids.visuals.causticsSpeedMultiplier,
+                state.underwaterCausticsSpeedInput,
+                0.0f,
+                10.0f,
+                2);
+        section("Audio");
+        const auto drawSoundPath = [&] (
+                const char* idPrefix,
+                const char* label,
+                std::string& path,
+                SectorEditorPlayerLiquidAudioPickerTarget target) {
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{0.0f, y, LabelWidth, RowHeight},
+                    smallFont, label,
+                    engine::UITextJustify::Left,
+                    config.textColor);
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{fieldX, y, 370.0f, RowHeight},
+                    smallFont,
+                    path.empty() ? "<None>" : path.c_str(),
+                    engine::UITextJustify::Left,
+                    path.empty() ? config.mutedTextColor : config.textColor,
+                    true);
+            if (engine::Button(
+                        ui, config, input, assets,
+                        TextFormat("%s_pick", idPrefix),
+                        Rectangle{fieldX + 386.0f, y, 112.0f, RowHeight},
+                        smallFont, "Pick")) {
+                service.OpenLiquidAudioPicker(engineContext, target);
+            }
+            if (engine::Button(
+                        ui, config, input, assets,
+                        TextFormat("%s_clear", idPrefix),
+                        Rectangle{fieldX + 510.0f, y, 112.0f, RowHeight},
+                        smallFont, "Clear")) {
+                path.clear();
+                state.errorMessage.clear();
+            }
+            y += RowHeight + RowGap;
+        };
+        drawSoundPath(
+                "player_liquids_splash_sound",
+                "Entry splash",
+                liquids.audio.splashSoundPath,
+                SectorEditorPlayerLiquidAudioPickerTarget::Splash);
+        drawSoundPath(
+                "player_liquids_exit_sound",
+                "Liquid exit",
+                liquids.audio.exitSoundPath,
+                SectorEditorPlayerLiquidAudioPickerTarget::Exit);
+        drawSoundPath(
+                "player_liquids_swim_loop",
+                "Swimming loop",
+                liquids.audio.swimLoopSoundPath,
+                SectorEditorPlayerLiquidAudioPickerTarget::SwimLoop);
+        drawFloat(
+                "player_liquids_underwater_muffling",
+                "Underwater muffling (0-1)",
+                liquids.audio.underwaterMuffling,
+                state.underwaterMufflingInput,
+                0.0f,
+                1.0f,
+                2);
+        drawFloat(
+                "player_liquids_roomtone_submerge_fade",
+                "Roomtone submerge fade (seconds)",
+                liquids.audio.roomtoneSubmergeFadeSeconds,
+                state.roomtoneSubmergeFadeInput,
+                0.0f,
+                60.0f,
+                3);
+        drawFloat(
+                "player_liquids_roomtone_resurface_fade",
+                "Roomtone resurface fade (seconds)",
+                liquids.audio.roomtoneResurfaceFadeSeconds,
+                state.roomtoneResurfaceFadeInput,
+                0.0f,
+                60.0f,
+                3);
     } else if (state.activeTab == SectorEditorPlayerSettingsTab::Audio) {
         FootstepApplicationSettings& footsteps = state.draft.footsteps;
         section("Footsteps and movement noise");

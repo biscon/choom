@@ -296,6 +296,7 @@ if(BUILD_TESTING)
             sources/game/PlayerHealthVisual.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/PlayerStamina.cpp
+            sources/game/PlayerOxygen.cpp
             sources/game/FpsViewmodelEffectsRenderer.cpp
             sources/engine/render/ColorTransfer.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -322,6 +323,8 @@ if(BUILD_TESTING)
             SECTOR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorMeshRenderer.cpp"
             DOOR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDoorRenderer.cpp"
             WINDOW_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorWindowRenderer.cpp"
+            LIQUID_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLiquidRenderer.cpp"
+            UNDERWATER_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorUnderwaterRenderer.cpp"
             BILLBOARD_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBillboardRenderer.cpp"
             FLASHLIGHT_PROFILE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorFlashlightProfileSampling.h"
             DYNAMIC_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicShadowSampling.h"
@@ -628,7 +631,9 @@ if(BUILD_TESTING)
             tests/SectorFpsControllerTests.cpp
             sources/game/PlayerHitCamera.cpp
             sources/game/PlayerStamina.cpp
+            sources/game/PlayerOxygen.cpp
             sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorLiquidInteraction.cpp
             sources/sector_demo/SectorTopologyMap.cpp
     )
     target_include_directories(sector_fps_controller_tests PRIVATE sources)
@@ -640,6 +645,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorLadderInteraction.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorLiquidInteraction.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp

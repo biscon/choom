@@ -7,6 +7,7 @@
 #include "game/PlayerFlashlightSettings.h"
 #include "game/PlayerSneak.h"
 #include "game/PlayerStamina.h"
+#include "game/PlayerOxygen.h"
 
 #include <raylib.h>
 
@@ -342,6 +343,7 @@ struct FpsApplicationSettings {
     PlayerFlashlightApplicationSettings playerFlashlight;
     PlayerSneakApplicationSettings playerSneak;
     PlayerStaminaApplicationSettings playerStamina;
+    PlayerLiquidApplicationSettings playerLiquids;
     PlayerInventoryApplicationSettings playerInventory;
     FpsGraphicsSettings graphics;
     engine::HdrBloomSettings hdrBloom;

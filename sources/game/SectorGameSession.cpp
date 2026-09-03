@@ -1030,11 +1030,15 @@ bool SectorGameSession::StartNew(
     aiDebugVisible = false;
     gameOver = false;
     playerStamina = MakePlayerStamina(settings.playerStamina);
+    playerOxygen = MakePlayerOxygen(settings.playerLiquids);
+    playerOxygenModifiers = PlayerOxygenModifiers{};
+    oxygenHudAlpha = 0.0f;
     ClearPlayerWindedCamera(windedCamera);
     ClearPlayerLowHealthCamera(lowHealthCamera);
     ClearPlayerHitCamera(hitCamera);
     breathingAudio = PlayerBreathingAudioRuntime{};
     heartbeatAudio = PlayerHeartbeatAudioRuntime{};
+    liquidAudio = PlayerLiquidAudioPlaybackState{};
     flashlight = PlayerFlashlightState{};
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
@@ -1210,9 +1214,14 @@ void SectorGameSession::Shutdown(
                 context.assets,
                 context.audio,
                 heartbeatAudio);
+        StopPlayerLiquidAudio(
+                context.assets,
+                context.audio,
+                liquidAudio);
     } else {
         breathingAudio = PlayerBreathingAudioRuntime{};
         heartbeatAudio = PlayerHeartbeatAudioRuntime{};
+        liquidAudio = PlayerLiquidAudioPlaybackState{};
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
@@ -1227,6 +1236,9 @@ void SectorGameSession::Shutdown(
     collision = SectorEditorPreviewCollisionState{};
     navigationDebug = SectorGameNavigationDebugState{};
     playerStamina = PlayerStamina{};
+    playerOxygen = PlayerOxygen{};
+    playerOxygenModifiers = PlayerOxygenModifiers{};
+    oxygenHudAlpha = 0.0f;
     flashlight = PlayerFlashlightState{};
     playerKnockbackVelocity = {};
     playerStunRemainingSeconds = 0.0f;
@@ -1273,6 +1285,7 @@ void SectorGameSession::Shutdown(
 
 void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
 {
+    StopPlayerLiquidAudio(context.assets, context.audio, liquidAudio);
     if (levelSaveStates != nullptr && running
             && scriptHost.runtimeObjects != nullptr) {
         UpsertGameSaveLevelState(
@@ -1371,6 +1384,8 @@ GameSavePlayerState SectorGameSession::CapturePlayerSaveState() const
     result.pitchRadians = controller.fpsControllerState.pitchRadians;
     result.health = playerHealth;
     result.stamina = playerStamina;
+    result.oxygen = playerOxygen;
+    result.hasOxygenState = true;
     result.flashlightEnabled = flashlight.enabled;
     return result;
 }
@@ -1585,6 +1600,10 @@ void SectorGameSession::Update(
             dt,
             &playerPosition,
             controller.fpsControllerState.currentSectorId,
+            controller.liquidMovement.cameraSubmerged,
+            applicationSettings != nullptr
+                    ? applicationSettings->playerLiquids.audio
+                    : PlayerLiquidAudioApplicationSettings{},
             &playerObstacle,
             &npcGameplay,
             SectorCutscenePlayerDoorHoldId(cutscene));
@@ -1595,6 +1614,10 @@ void SectorGameSession::Update(
                 context.assets,
                 context.audio,
                 heartbeatAudio);
+        StopPlayerLiquidAudio(
+                context.assets,
+                context.audio,
+                liquidAudio);
         SetInventoryOpen(false);
         ClearHeldObjectUse();
         LeaveSectorFreeflyController();
@@ -1621,6 +1644,9 @@ void SectorGameSession::Update(
         input.strafeRight = context.input.IsKeyDown(KEY_D);
         input.run = context.input.IsKeyDown(KEY_LEFT_SHIFT)
                 || context.input.IsKeyDown(KEY_RIGHT_SHIFT);
+        input.swimUp = context.input.IsKeyDown(KEY_SPACE);
+        input.swimDown = context.input.IsKeyDown(KEY_LEFT_CONTROL)
+                || context.input.IsKeyDown(KEY_RIGHT_CONTROL);
         input.mouseLookEnabled =
                 AdvanceSectorFreeflyMouseLookCapture(
                         controller.freeflyController);
@@ -1631,12 +1657,16 @@ void SectorGameSession::Update(
     if (!gameplayInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [&input](engine::InputEvent& event) {
+            [this, &input](engine::InputEvent& event) {
                 if (event.key.key == KEY_SPACE) {
                     input.jumpPressed = true;
                 } else if (event.key.key == KEY_LEFT_CONTROL
                         || event.key.key == KEY_RIGHT_CONTROL) {
                     input.crouchTogglePressed = true;
+                } else if (event.key.key == KEY_E
+                        && IsSectorLadderTraversalActive(
+                                controller.ladderTraversal)) {
+                    input.ladderDetachPressed = true;
                 } else {
                     return;
                 }
@@ -1689,9 +1719,28 @@ void SectorGameSession::Update(
             &topologyMap,
             false,
             input,
+            applicationSettings != nullptr
+                    ? applicationSettings->playerLiquids
+                    : PlayerLiquidApplicationSettings{},
             previousVisualEyeY,
             dt,
             &scene.NpcNavigation().collisionCylinders);
+    if (playerAudio != nullptr) {
+        const bool swimControlHeld = input.moveForward
+                || input.moveBackward
+                || input.strafeLeft
+                || input.strafeRight
+                || input.swimUp
+                || input.swimDown;
+        UpdatePlayerLiquidAudio(
+                context.assets,
+                context.audio,
+                *playerAudio,
+                liquidAudio,
+                controller.liquidMovement.swimming,
+                controller.liquidMovement.exitingWater,
+                swimControlHeld);
+    }
     FinishSectorCutscenePlayerMoveFrame(
             cutscene,
             scene.Navigation(),
@@ -1723,6 +1772,30 @@ void SectorGameSession::Update(
         playerKnockbackVelocity = {};
     }
     if (applicationSettings != nullptr) {
+        const bool submerged = controller.liquidMovement.cameraSubmerged;
+        const PlayerOxygenUpdateResult oxygenResult = UpdatePlayerOxygen(
+                playerOxygen,
+                applicationSettings->playerLiquids,
+                playerOxygenModifiers,
+                submerged,
+                dt);
+        if (submerged || !oxygenResult.fullyRegenerated) {
+            oxygenHudAlpha = 1.0f;
+        } else {
+            oxygenHudAlpha = std::max(
+                    0.0f, oxygenHudAlpha - std::max(0.0f, dt) / 0.6f);
+        }
+        if (oxygenResult.drowningDamage > 0 && !godMode) {
+            const int applied = ApplyDamage(
+                    playerHealth, oxygenResult.drowningDamage);
+            if (applied > 0 && playerAudio != nullptr) {
+                PlayPlayerSound(
+                        context.assets,
+                        context.audio,
+                        *playerAudio,
+                        "pain");
+            }
+        }
         UpdatePlayerStamina(
                 playerStamina,
                 applicationSettings->playerStamina,
@@ -1882,6 +1955,7 @@ void SectorGameSession::Update(
                                     ? &collision.sectorCollisionWorld : nullptr,
                             useTarget.ladderPrimitiveId,
                             useTarget.ladderEndpoint);
+                    if (handled) fpsPlayer.HolsterForTraversal();
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
                         && context.world.IsAlive(useTarget.entity)
                         && context.world.Has<SectorDynamicModel>(useTarget.entity)) {
@@ -1979,6 +2053,9 @@ void SectorGameSession::Update(
     }
     ApplyPlayerPose(scene);
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
+        const bool weaponInputCaptured = gameplayInputCaptured
+                || IsSectorLadderTraversalActive(
+                        controller.ladderTraversal);
         acceptedShot = fpsPlayer.HandleInput(
                 context.input,
                 *weaponRegistry,
@@ -1990,7 +2067,7 @@ void SectorGameSession::Update(
                 scene.Renderer(),
                 true,
                 !gameplayInputCaptured,
-                gameplayInputCaptured,
+                weaponInputCaptured,
                 itemRegistry,
                 itemCampaign);
         if (fpsPlayer.ConsumeReloadOutOfAmmoRequest()) {
@@ -2165,6 +2242,9 @@ bool SectorGameSession::ActivateLoadedMap(
                 pendingPlayerRestore->pitchRadians;
         playerHealth = pendingPlayerRestore->health;
         playerStamina = pendingPlayerRestore->stamina;
+        playerOxygen = pendingPlayerRestore->hasOxygenState
+                ? pendingPlayerRestore->oxygen
+                : MakePlayerOxygen(applicationSettings->playerLiquids);
         SetPlayerFlashlightEnabled(
                 flashlight,
                 pendingPlayerRestore->flashlightEnabled);
@@ -2232,7 +2312,9 @@ void SectorGameSession::RenderHud(
                 &playerHealth,
                 &playerStamina,
                 reserveRounds,
-                showAmmo);
+                showAmmo,
+                oxygenHudAlpha > 0.0f ? &playerOxygen : nullptr,
+                oxygenHudAlpha);
         if (itemMessage[0] != '\0') {
             DrawSectorUseMessage(
                     playableViewport,
@@ -2444,6 +2526,7 @@ bool SectorGameSession::ReloadCurrentMap(
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
     std::vector<GameSaveLevelState>* savedLevelStates = levelSaveStates;
     const Health savedHealth = playerHealth;
+    const PlayerOxygen savedOxygen = playerOxygen;
     const bool savedFlashlightEnabled = flashlight.enabled;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
@@ -2476,6 +2559,7 @@ bool SectorGameSession::ReloadCurrentMap(
     }
     if (remainPaused) Pause();
     playerHealth = savedHealth;
+    playerOxygen = savedOxygen;
     SetPlayerFlashlightEnabled(flashlight, savedFlashlightEnabled);
     error.clear();
     return true;
@@ -2530,6 +2614,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     std::vector<GameSaveLevelState>* savedLevelStates = levelSaveStates;
     const Health savedHealth = playerHealth;
     const PlayerStamina savedStamina = playerStamina;
+    const PlayerOxygen savedOxygen = playerOxygen;
     const bool savedFlashlightEnabled = flashlight.enabled;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedItemRegistry == nullptr
@@ -2570,6 +2655,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     } else {
         playerHealth = savedHealth;
         playerStamina = savedStamina;
+        playerOxygen = savedOxygen;
         SetPlayerFlashlightEnabled(flashlight, savedFlashlightEnabled);
     }
 }

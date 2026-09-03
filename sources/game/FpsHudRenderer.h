@@ -4,6 +4,7 @@
 #include "game/FpsWeaponRegistry.h"
 #include "game/Health.h"
 #include "game/PlayerStamina.h"
+#include "game/PlayerOxygen.h"
 #include "engine/assets/FontAssets.h"
 
 #include <raylib.h>
@@ -30,6 +31,7 @@ struct FpsStatusBarLayout {
 struct FpsVitalsLayout {
     FpsStatusBarLayout health;
     FpsStatusBarLayout stamina;
+    FpsStatusBarLayout oxygen;
 };
 
 struct FpsReloadIndicatorLayout {
@@ -47,6 +49,8 @@ struct FpsHudContext {
     const engine::FontAsset* font = nullptr;
     const Health* health = nullptr;
     const PlayerStamina* stamina = nullptr;
+    const PlayerOxygen* oxygen = nullptr;
+    float oxygenAlpha = 0.0f;
     int loadedRounds = 0;
     std::uint64_t reserveRounds = 0;
     bool showAmmo = false;
@@ -63,7 +67,8 @@ FpsVitalsLayout BuildFpsVitalsLayout(
         Rectangle playableViewport,
         float uiScale,
         int fontPixelSize,
-        bool includeStamina);
+        bool includeStamina,
+        bool includeOxygen = false);
 FpsReloadIndicatorLayout BuildFpsReloadIndicatorLayout(
         const FpsCrosshairLayout& crosshair,
         float uiScale,
@@ -72,7 +77,8 @@ Vector2 BuildFpsAmmoCounterPosition(
         const FpsVitalsLayout& vitals,
         float uiScale,
         int fontPixelSize,
-        bool includeStamina);
+        bool includeStamina,
+        bool includeOxygen = false);
 void DrawFpsHud(const FpsHudContext& context);
 
 } // namespace game

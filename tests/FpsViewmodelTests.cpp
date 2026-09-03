@@ -813,6 +813,24 @@ void SettingsResolutionAndPersistence()
     assert(settings.toneMapping.toneMapper
             == engine::ToneMappingOperator::KhronosPbrNeutral);
     assert(Near(settings.toneMapping.exposureCompensationEv, 0.0f));
+    assert(Near(settings.playerLiquids.entrySlowdownSeconds, 0.20f));
+    assert(Near(settings.playerLiquids.swimCollisionHeightWorld, 0.60f));
+    assert(settings.playerLiquids.audio.splashSoundPath
+            == "player/water_splash.wav");
+    assert(settings.playerLiquids.audio.exitSoundPath.empty());
+    assert(settings.playerLiquids.audio.swimLoopSoundPath
+            == "player/swimming_loop.ogg");
+    assert(Near(settings.playerLiquids.audio.underwaterMuffling, 0.65f));
+    assert(Near(
+            settings.playerLiquids.audio.roomtoneSubmergeFadeSeconds,
+            0.10f));
+    assert(Near(
+            settings.playerLiquids.audio.roomtoneResurfaceFadeSeconds,
+            0.20f));
+    assert(Near(settings.playerLiquids.visuals.screenDistortionStrength, 1.35f));
+    assert(Near(settings.playerLiquids.visuals.causticsStrength, 0.16f));
+    assert(Near(settings.playerLiquids.visuals.causticsScaleMultiplier, 1.0f));
+    assert(Near(settings.playerLiquids.visuals.causticsSpeedMultiplier, 1.0f));
     game::FpsApplicationSettings parsedToneMapping;
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1,"toneMapping":{"operator":"acesFilmicFitted","exposureCompensationEv":-1.25}})",
@@ -980,6 +998,25 @@ void SettingsResolutionAndPersistence()
     settings.playerStamina.breathingAudio.thresholdRatio = 0.3f;
     settings.playerStamina.breathingAudio.volume = 0.6f;
     settings.playerStamina.breathingAudio.fadeOutSeconds = 3.0f;
+    settings.playerLiquids.entrySlowdownSeconds = 0.3f;
+    settings.playerLiquids.swimCollisionHeightWorld = 0.8f;
+    settings.playerLiquids.waterDragPerSecond = 7.5f;
+    settings.playerLiquids.surfaceRecoveryFrequencyHz = 2.25f;
+    settings.playerLiquids.maximumExitLedgeHeightWorld = 1.1f;
+    settings.playerLiquids.exitTransitionDurationSeconds = 0.45f;
+    settings.playerLiquids.audio.splashSoundPath =
+            "player/custom_splash.wav";
+    settings.playerLiquids.audio.exitSoundPath =
+            "player/custom_exit.wav";
+    settings.playerLiquids.audio.swimLoopSoundPath =
+            "player/custom_swim.ogg";
+    settings.playerLiquids.audio.underwaterMuffling = 0.42f;
+    settings.playerLiquids.audio.roomtoneSubmergeFadeSeconds = 0.35f;
+    settings.playerLiquids.audio.roomtoneResurfaceFadeSeconds = 0.60f;
+    settings.playerLiquids.visuals.screenDistortionStrength = 2.1f;
+    settings.playerLiquids.visuals.causticsStrength = 0.27f;
+    settings.playerLiquids.visuals.causticsScaleMultiplier = 1.4f;
+    settings.playerLiquids.visuals.causticsSpeedMultiplier = 0.8f;
     settings.playerHealth.lowHealthVisual.enabled = true;
     settings.playerHealth.lowHealthVisual.thresholdRatio = 0.45f;
     settings.playerHealth.lowHealthVisual.vignetteColor = Color{55, 4, 9, 255};
@@ -1038,6 +1075,29 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerStamina.maximum, 120.0f));
     assert(Near(loaded.playerStamina.sprintDrainPerSecond, 18.0f));
     assert(Near(loaded.playerStamina.jumpCost, 24.0f));
+    assert(Near(loaded.playerLiquids.entrySlowdownSeconds, 0.3f));
+    assert(Near(loaded.playerLiquids.swimCollisionHeightWorld, 0.8f));
+    assert(Near(loaded.playerLiquids.waterDragPerSecond, 7.5f));
+    assert(Near(loaded.playerLiquids.surfaceRecoveryFrequencyHz, 2.25f));
+    assert(Near(loaded.playerLiquids.maximumExitLedgeHeightWorld, 1.1f));
+    assert(Near(loaded.playerLiquids.exitTransitionDurationSeconds, 0.45f));
+    assert(loaded.playerLiquids.audio.splashSoundPath
+            == "player/custom_splash.wav");
+    assert(loaded.playerLiquids.audio.exitSoundPath
+            == "player/custom_exit.wav");
+    assert(loaded.playerLiquids.audio.swimLoopSoundPath
+            == "player/custom_swim.ogg");
+    assert(Near(loaded.playerLiquids.audio.underwaterMuffling, 0.42f));
+    assert(Near(
+            loaded.playerLiquids.audio.roomtoneSubmergeFadeSeconds,
+            0.35f));
+    assert(Near(
+            loaded.playerLiquids.audio.roomtoneResurfaceFadeSeconds,
+            0.60f));
+    assert(Near(loaded.playerLiquids.visuals.screenDistortionStrength, 2.1f));
+    assert(Near(loaded.playerLiquids.visuals.causticsStrength, 0.27f));
+    assert(Near(loaded.playerLiquids.visuals.causticsScaleMultiplier, 1.4f));
+    assert(Near(loaded.playerLiquids.visuals.causticsSpeedMultiplier, 0.8f));
     assert(Near(loaded.playerStamina.regenerationPerSecond, 14.0f));
     assert(Near(loaded.playerStamina.exhaustedRecoveryRatio, 0.25f));
     assert(!loaded.playerStamina.windedCamera.enabled);
@@ -1283,6 +1343,62 @@ void SettingsResolutionAndPersistence()
             R"({"version":1,"graphics":{"horizontalFovDegrees":121}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"horizontalFovDegrees":90.5}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"swimCollisionHeightWorld":0.05}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"splashSoundPath":"../escape.wav"}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"swimLoopSoundPath":"loop.flac"}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"exitSoundPath":"../escape.wav"}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"underwaterMuffling":1.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"roomtoneSubmergeFadeSeconds":-0.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"roomtoneResurfaceFadeSeconds":60.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"roomtoneSubmergeFadeSeconds":"quick"}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"visuals":{"screenDistortionStrength":4.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"visuals":{"causticsStrength":-0.01}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"visuals":{"causticsScaleMultiplier":0.09}}})",
+            loaded,
+            &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"visuals":{"causticsSpeedMultiplier":10.01}}})",
+            loaded,
+            &error));
+    assert(game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerLiquids":{"audio":{"splashSoundPath":"","exitSoundPath":"","swimLoopSoundPath":"","underwaterMuffling":0}}})",
+            loaded,
+            &error));
+    assert(loaded.playerLiquids.audio.splashSoundPath.empty());
+    assert(loaded.playerLiquids.audio.exitSoundPath.empty());
+    assert(loaded.playerLiquids.audio.swimLoopSoundPath.empty());
+    assert(Near(loaded.playerLiquids.audio.underwaterMuffling, 0.0f));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"consoleEnabled":"yes"})",loaded,&error));
     assert(game::ParseFpsApplicationSettings(
@@ -1725,6 +1841,35 @@ void HolsterTransitionStateAndMath()
     assert(!game::QueueFpsWeaponSlotSwitch(switchState, 0, pendingSlot));
 }
 
+void RequestedHolsterState()
+{
+    game::FpsViewmodelRuntimeState state;
+    assert(!game::RequestFpsViewmodelHolster(state));
+
+    state.activeWeaponId = "pistol";
+    state.equipState = game::FpsViewmodelEquipState::Equipped;
+    state.equipProgress = 1.0f;
+    assert(game::RequestFpsViewmodelHolster(state));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstering);
+    assert(Near(state.equipProgress, 1.0f));
+
+    state.equipState = game::FpsViewmodelEquipState::Unholstering;
+    state.equipProgress = 0.45f;
+    assert(game::RequestFpsViewmodelHolster(state));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstering);
+    assert(Near(state.equipProgress, 0.45f));
+
+    assert(game::RequestFpsViewmodelHolster(state));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstering);
+    assert(Near(state.equipProgress, 0.45f));
+
+    state.equipState = game::FpsViewmodelEquipState::Holstered;
+    state.equipProgress = 0.0f;
+    assert(game::RequestFpsViewmodelHolster(state));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(Near(state.holsterPose.hiddenAmount, 1.0f));
+}
+
 void AnimationTiming()
 {
     float a=0,b=0,c=0;
@@ -2041,6 +2186,13 @@ void CrosshairVisibilityAndLayout()
             22,
             false);
     assert(SameRectangle(healthOnly.health.border, vitals.stamina.border));
+    const game::FpsVitalsLayout withOxygen = game::BuildFpsVitalsLayout(
+            Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
+            1.0f, 22, true, true);
+    assert(withOxygen.oxygen.border.y < withOxygen.health.border.y);
+    const Vector2 oxygenAmmoPosition = game::BuildFpsAmmoCounterPosition(
+            withOxygen, 1.0f, 22, true, true);
+    assert(oxygenAmmoPosition.y < withOxygen.oxygen.textPosition.y);
 
     runtime.attachment.handModelTransform = MatrixTranslate(10.0f, 20.0f, 30.0f);
     runtime.attachment.attachmentWorldTransform = MatrixRotateY(1.25f);
@@ -2649,7 +2801,8 @@ int main()
     RegistryValidation(); WeaponSlotSchemaAndKeys();
     SettingsResolutionAndPersistence();
     PreviewSettingsOverrideDeltaCoverage();
-    CameraMath(); HolsterTransitionStateAndMath(); AnimationTiming();
+    CameraMath(); HolsterTransitionStateAndMath(); RequestedHolsterState();
+    AnimationTiming();
     AttachmentMathAndBoneResolution();
     PreparedPistolFrameTwentyFit(); BrightnessMapping();
     MaterialOverrideApplication(); CrosshairVisibilityAndLayout();

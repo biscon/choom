@@ -384,6 +384,17 @@ void ExpectSaveRejected(const SectorTopologyMap& map, const char* description)
     Check(!error.empty(), "rejected save reports an error");
 }
 
+void ExpectAuthoringSaveRejected(
+        const game::SectorAuthoringDocument& document,
+        const char* description)
+{
+    std::string text;
+    std::string error;
+    Check(!game::SaveSectorAuthoringDocumentToJsonString(document, text, &error),
+          description);
+    Check(!error.empty(), "rejected authoring save reports an error");
+}
+
 void TestRoundTrip()
 {
     const SectorTopologyMap original = MakeSquare();
@@ -484,6 +495,114 @@ void TestCeilingSkySerialization()
     Json invalid = saved;
     invalid["sectors"][0]["ceilingSky"] = "yes";
     ExpectRejected(invalid, "non-boolean ceilingSky is rejected");
+}
+
+void TestLiquidSerializationAndValidation()
+{
+    SectorTopologyMap map = MakeSquare();
+    game::SectorLiquidSettings& liquid = map.sectors[0].liquid;
+    liquid.enabled = true;
+    liquid.surfaceReference = game::SectorLiquidSurfaceReference::Ceiling;
+    liquid.surfaceOffset = 6.0f;
+    liquid.shallowColor = Color{20, 80, 120, 255};
+    liquid.deepColor = Color{2, 12, 30, 255};
+    liquid.visibilityDepthWorld = 2.5f;
+    liquid.roughness = 0.22f;
+    liquid.refractionStrength = 0.04f;
+    liquid.rippleScaleWorld = 1.4f;
+    liquid.rippleStrength = 0.31f;
+    liquid.rippleSpeed = 0.7f;
+    liquid.flowDirectionDegrees = 450.0f;
+    liquid.flowSpeedWorld = 1.25f;
+    liquid.particulates.amount = 123;
+    liquid.particulates.sizeWorld = 0.018f;
+    liquid.particulates.opacity = 0.46f;
+    liquid.particulates.flowInfluence = 0.37f;
+    liquid.particulates.wakeInfluence = 0.72f;
+
+    const Json saved = Json::parse(SaveText(map));
+    Check(saved["sectors"][0].contains("liquid")
+                  && saved["sectors"][0]["liquid"]["enabled"] == true
+                  && saved["sectors"][0]["liquid"]["surfaceReference"] == "ceiling"
+                  && Near(saved["sectors"][0]["liquid"]["flowDirectionDegrees"].get<float>(), 90.0f)
+                  && saved["sectors"][0]["liquid"]["particulates"]["amount"] == 123,
+          "liquid settings serialize with normalized flow direction");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "liquid settings deserialize");
+    Check(loaded.sectors[0].liquid.enabled
+                  && loaded.sectors[0].liquid.surfaceReference
+                          == game::SectorLiquidSurfaceReference::Ceiling
+                  && Near(loaded.sectors[0].liquid.surfaceOffset, 6.0f)
+                  && loaded.sectors[0].liquid.shallowColor.g == 80
+                  && Near(loaded.sectors[0].liquid.visibilityDepthWorld, 2.5f)
+                  && Near(loaded.sectors[0].liquid.flowDirectionDegrees, 90.0f)
+                  && Near(loaded.sectors[0].liquid.flowSpeedWorld, 1.25f)
+                  && loaded.sectors[0].liquid.particulates.amount == 123
+                  && Near(loaded.sectors[0].liquid.particulates.sizeWorld, 0.018f)
+                  && Near(loaded.sectors[0].liquid.particulates.opacity, 0.46f)
+                  && Near(loaded.sectors[0].liquid.particulates.flowInfluence, 0.37f)
+                  && Near(loaded.sectors[0].liquid.particulates.wakeInfluence, 0.72f),
+          "liquid settings round-trip without preset identity");
+
+    Json legacyFoam = saved;
+    legacyFoam["sectors"][0]["liquid"]["foamColor"] = Json{
+            {"r", 180}, {"g", 200}, {"b", 190}, {"a", 255}};
+    legacyFoam["sectors"][0]["liquid"]["foamAmount"] = 0.6f;
+    Check(LoadText(legacyFoam.dump(), loaded, error),
+          "legacy liquid foam fields remain load-compatible");
+    const Json migratedFoam = Json::parse(SaveText(loaded));
+    Check(!migratedFoam["sectors"][0]["liquid"].contains("foamColor")
+                  && !migratedFoam["sectors"][0]["liquid"].contains("foamAmount"),
+          "retired liquid foam fields are omitted when resaved");
+
+    const Json defaults = Json::parse(SaveText(MakeSquare()));
+    Check(!defaults["sectors"][0].contains("liquid"),
+          "default disabled liquid settings are omitted");
+
+    Json invalid = saved;
+    invalid["sectors"][0]["liquid"]["surfaceReference"] = "middle";
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "invalid liquid surface reference is rejected");
+    invalid = saved;
+    invalid["sectors"][0]["liquid"]["surfaceOffset"] = 40.0f;
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "liquid surface offset outside the sector is rejected");
+    invalid = saved;
+    invalid["sectors"][0]["liquid"]["roughness"] = 2.0f;
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "out-of-range liquid appearance values are rejected");
+    invalid = saved;
+    invalid["sectors"][0]["liquid"]["particulates"]["amount"] = 193;
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "liquid particulate amount above the fixed pool is rejected");
+    invalid = saved;
+    invalid["sectors"][0]["liquid"]["particulates"]["opacity"] = -0.1f;
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "out-of-range liquid particulate appearance is rejected");
+
+    SectorTopologyMap fullHeight = MakeSquare();
+    fullHeight.sectors[0].liquid.enabled = true;
+    fullHeight.sectors[0].liquid.surfaceReference =
+            game::SectorLiquidSurfaceReference::Ceiling;
+    fullHeight.sectors[0].liquid.surfaceOffset = 0.0f;
+    Check(LoadText(SaveText(fullHeight), loaded, error)
+                  && Near(game::ResolveSectorLiquidSurfaceHeight(
+                                  loaded.sectors[0].liquid,
+                                  loaded.sectors[0].floorZ,
+                                  loaded.sectors[0].ceilingZ),
+                          loaded.sectors[0].ceilingZ),
+          "zero ceiling offset represents a full-height liquid volume");
+
+    map.sectors[0].liquid.enabled = false;
+    const Json disabledCustomized = Json::parse(SaveText(map));
+    Check(disabledCustomized["sectors"][0].contains("liquid")
+                  && !disabledCustomized["sectors"][0]["liquid"].contains("enabled")
+                  && LoadText(disabledCustomized.dump(), loaded, error)
+                  && !loaded.sectors[0].liquid.enabled
+                  && Near(loaded.sectors[0].liquid.flowSpeedWorld, 1.25f),
+          "disabled liquids retain customized settings for later re-enabling");
 }
 
 void TestStaticLightRoundTrip()
@@ -3036,6 +3155,16 @@ void TestAudioSettingsRoundTripAndValidation()
     SectorTopologyMap invalidSave = original;
     invalidSave.audioSettings.roomtoneFadeMilliseconds = -1;
     ExpectSaveRejected(invalidSave, "invalid roomtone fade is rejected on save");
+    invalidSave = original;
+    invalidSave.sectors[0].roomtone.soundId = "missing_music";
+    ExpectSaveRejected(invalidSave, "missing roomtone reference is rejected on save");
+
+    game::SectorAuthoringDocument invalidAuthoring =
+            MakeAuthoringDocumentFromMap(original);
+    invalidAuthoring.graph.faceAnchors[0].roomtone.soundId = "missing_music";
+    ExpectAuthoringSaveRejected(
+            invalidAuthoring,
+            "missing authoring roomtone reference is rejected on save");
 }
 
 void TestSkySettingsRoundTripAndValidation()
@@ -4494,6 +4623,10 @@ void TestGraphNativeValidGraphDerivesTopologyAndProperties()
     source.sectors[0].floorZ = -4.0f;
     source.sectors[0].ceilingZ = 30.0f;
     source.sectors[0].ambientIntensity = 0.5f;
+    source.sectors[0].liquid.enabled = true;
+    source.sectors[0].liquid.surfaceOffset = 9.0f;
+    source.sectors[0].liquid.flowDirectionDegrees = 135.0f;
+    source.sectors[0].liquid.flowSpeedWorld = 0.8f;
 
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     Check(original.derivation.success, "imported square graph derives before save");
@@ -4502,6 +4635,8 @@ void TestGraphNativeValidGraphDerivesTopologyAndProperties()
           "authoring side middle settings are persisted");
     Check(saved["authoringGraph"]["faceAnchors"][0]["ceilingSky"] == true,
           "face anchor ceilingSky is persisted");
+    Check(saved["authoringGraph"]["faceAnchors"][0]["liquid"]["enabled"] == true,
+          "face anchor liquid settings are persisted");
     Check(!saved.contains("bakedLightmap"),
           "graph-native save omits absent baked lightmap metadata");
 
@@ -4524,7 +4659,10 @@ void TestGraphNativeValidGraphDerivesTopologyAndProperties()
             game::FindSectorTopologySector(loaded.derivation.topology, 1);
     Check(sector != nullptr && sector->name == "atrium" && sector->ceilingSky
                   && Near(sector->floorZ, -4.0f)
-                  && Near(sector->ambientIntensity, 0.5f),
+                  && Near(sector->ambientIntensity, 0.5f)
+                  && sector->liquid.enabled
+                  && Near(sector->liquid.surfaceOffset, 9.0f)
+                  && Near(sector->liquid.flowSpeedWorld, 0.8f),
           "face anchor properties project after graph-native load");
 }
 
@@ -5517,6 +5655,7 @@ int main()
     TestRoundTrip();
     TestTextureFilterSerialization();
     TestCeilingSkySerialization();
+    TestLiquidSerializationAndValidation();
     TestStaticLightRoundTrip();
     TestStaticSpotLightRoundTrip();
     TestDynamicPointLightRoundTrip();

@@ -3,6 +3,7 @@
 #include "engine/scripting/ScriptData.h"
 #include "game/Health.h"
 #include "game/PlayerStamina.h"
+#include "game/PlayerOxygen.h"
 #include "game/items/ItemInventory.h"
 
 #include <raylib.h>
@@ -129,6 +130,8 @@ struct GameSavePlayerState {
     float pitchRadians = 0.0f;
     Health health;
     PlayerStamina stamina;
+    PlayerOxygen oxygen;
+    bool hasOxygenState = false;
     bool flashlightEnabled = false;
 };
 

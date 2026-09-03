@@ -422,6 +422,9 @@ void TestPortalStepAndCeilingRules()
     result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true, 0.0f, 0.25f, 1.0f);
     Check(result.currentSectorId == 20 && !result.blockedByCeiling,
           "crouched-height collider passes through the same low portal");
+    result = Move(world, start, Vector2{2.0f, 0.0f}, 10, false, 0.2f, 0.25f, 0.6f);
+    Check(result.currentSectorId == 20 && !result.blockedByCeiling,
+          "compact camera-centered swim collider passes through a submerged low portal");
 }
 
 void TestBlocksPlayerPortalMovement()
@@ -1399,6 +1402,23 @@ void TestStructuralPrimitiveCollision()
                   && Near(rampHeights.floorZ, 0.5f)
                   && rampHeights.continuousFloor,
           "ramp exposes its inclined support height");
+    game::SectorCollisionHeights tangentBankHeights;
+    game::SectorCollisionHeights rampSectorHeights;
+    Check(rampWorld.GetSectorFloorCeiling(10, &rampSectorHeights)
+                  && rampWorld.ResolveActorVerticalContext(
+                          10,
+                          game::SectorCollisionVerticalQuery{
+                                  {2.75f, 4.0f},
+                                  -1.12f,
+                                  0.25f,
+                                  1.6f,
+                                  0.25f,
+                                  false},
+                          &tangentBankHeights)
+                  && Near(
+                          tangentBankHeights.ceilingZ,
+                          rampSectorHeights.ceilingZ),
+          "tangent ramp-bank contact does not become an overhead ceiling");
     game::SectorCollisionHeights rampSideHeights;
     Check(rampWorld.ResolveActorVerticalContext(
                   10,

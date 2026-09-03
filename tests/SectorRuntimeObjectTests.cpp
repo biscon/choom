@@ -151,6 +151,16 @@ void TestSectorUseTargetFindsBothLadderEndpoints()
                   && game::SectorUseTargetTitle(world, bottom) == "Ladder",
           "use targeting finds the bottom/front ladder endpoint without an ECS entity");
 
+    const game::SectorUseTarget closeBottom = game::FindSectorUseTarget(
+            world, nullptr,
+            Vector3{0.0f, 1.2f, 0.32f},
+            Vector3{0.0f, 0.0f, -1.0f},
+            nullptr, false, &map);
+    Check(closeBottom.kind == game::SectorUseTargetKind::Ladder
+                  && closeBottom.ladderEndpoint
+                          == game::SectorLadderEndpoint::Bottom,
+          "bottom ladder targeting remains available inside the offset interaction anchor");
+
     const game::SectorUseTarget top = game::FindSectorUseTarget(
             world, nullptr,
             Vector3{0.0f, 3.7f, -1.0f},
@@ -159,6 +169,15 @@ void TestSectorUseTargetFindsBothLadderEndpoints()
     Check(top.kind == game::SectorUseTargetKind::Ladder
                   && top.ladderEndpoint == game::SectorLadderEndpoint::Top,
           "use targeting finds the top/rear ladder endpoint for descent");
+
+    const game::SectorUseTarget closeTop = game::FindSectorUseTarget(
+            world, nullptr,
+            Vector3{0.0f, 3.7f, -0.32f},
+            Vector3{0.0f, 0.0f, 1.0f},
+            nullptr, false, &map);
+    Check(closeTop.kind == game::SectorUseTargetKind::Ladder
+                  && closeTop.ladderEndpoint == game::SectorLadderEndpoint::Top,
+          "top ladder targeting remains available inside the offset interaction anchor");
 
     const game::SectorUseTarget facingAway = game::FindSectorUseTarget(
             world, nullptr,

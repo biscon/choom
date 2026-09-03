@@ -150,12 +150,14 @@ public:
         }
         const int detailY = topOffset + 70 + static_cast<int>(PassCount) * 20;
         DrawText(TextFormat(
-                         "atmo GPU dist/fog/shaft/haze/dust %.2f/%.2f/%.2f/%.2f/%.2f",
+                         "atmo GPU caust/dist/fog/shaft/haze/dust/marine %.2f/%.2f/%.2f/%.2f/%.2f/%.2f/%.2f",
+                         atmosphere.causticsGpuMilliseconds,
                          atmosphere.distanceFogGpuMilliseconds,
                          atmosphere.analyticFogGpuMilliseconds,
                          atmosphere.analyticShaftGpuMilliseconds,
                          atmosphere.lightHaloGpuMilliseconds,
-                         atmosphere.dustGpuMilliseconds),
+                         atmosphere.dustGpuMilliseconds,
+                         atmosphere.underwaterParticlesGpuMilliseconds),
                 16, detailY, 16, SKYBLUE);
         DrawText(TextFormat(
                          "fog %d/%d S%.2f  shaft %d/%d D%d  haze %d S%.2f D%d  lights %d",
@@ -171,10 +173,11 @@ public:
                          atmosphere.dynamicLightCount),
                 16, detailY + 20, 16, SKYBLUE);
         DrawText(TextFormat(
-                         "dust %d/%d particles %d",
+                         "dust %d/%d particles %d  marine particles %d",
                          atmosphere.dustActiveEmitterCount,
                          atmosphere.dustEligibleEmitterCount,
-                         atmosphere.dustVisibleParticleCount),
+                         atmosphere.dustVisibleParticleCount,
+                         atmosphere.underwaterVisibleParticleCount),
                 16, detailY + 40, 16, SKYBLUE);
     }
 
@@ -318,12 +321,14 @@ public:
                 profiler.GpuMilliseconds(RenderProfilePass::FinalComposite));
         std::fprintf(
                 output,
-                " %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %.4f %d %d %d %d",
+                " %.3f %.3f %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %.4f %d %d %d %d %d",
+                atmosphere.causticsGpuMilliseconds,
                 atmosphere.distanceFogGpuMilliseconds,
                 atmosphere.analyticFogGpuMilliseconds,
                 atmosphere.analyticShaftGpuMilliseconds,
                 atmosphere.lightHaloGpuMilliseconds,
                 atmosphere.dustGpuMilliseconds,
+                atmosphere.underwaterParticlesGpuMilliseconds,
                 atmosphere.analyticFogEligibleCount,
                 atmosphere.analyticFogActiveCount,
                 atmosphere.analyticFogScissorCoverage,
@@ -338,6 +343,7 @@ public:
                 atmosphere.dustActiveEmitterCount,
                 atmosphere.dustEligibleEmitterCount,
                 atmosphere.dustVisibleParticleCount,
+                atmosphere.underwaterVisibleParticleCount,
                 atmosphere.dynamicLightCount);
         std::fputc('\n', output);
         std::fflush(output);
@@ -600,6 +606,20 @@ int main(int argc, char** argv)
             scenePresentationShader, "presentationVignetteInnerRadius");
     const int presentationVignetteOuterRadiusLoc = GetShaderLocation(
             scenePresentationShader, "presentationVignetteOuterRadius");
+    const int presentationUnderwaterAmountLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterAmount");
+    const int presentationUnderwaterShallowColorLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterShallowColorLinear");
+    const int presentationUnderwaterDeepColorLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterDeepColorLinear");
+    const int presentationUnderwaterVisibilityLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterVisibilityDepthWorld");
+    const int presentationUnderwaterRippleLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterRipple");
+    const int presentationUnderwaterFlowLoc = GetShaderLocation(
+            scenePresentationShader, "presentationUnderwaterFlow");
+    const int presentationRuntimeSecondsLoc = GetShaderLocation(
+            scenePresentationShader, "presentationRuntimeSeconds");
     if (!IsShaderValid(scenePresentationShader)) {
         TraceLog(LOG_ERROR, "RENDER: required tone-map/sRGB presentation shader unavailable");
         if (IsShaderValid(fxaaShader)) UnloadShader(fxaaShader);
@@ -908,7 +928,9 @@ int main(int argc, char** argv)
                 }
             }
         }
-        context.audio.Update(assets);
+        context.audio.SetListenerLowPassStrength(
+                application.UnderwaterAudioMuffling());
+        context.audio.Update(assets, dt);
 
         BeginTextureMode(consoleTarget);
         ClearBackground(BLANK);
@@ -938,7 +960,7 @@ int main(int argc, char** argv)
             ClearLinearSceneBackground(Color{8, 10, 14, 255});
             application.Render3DScene(context);
             EndTextureMode();
-            application.Apply3DGlass(
+            application.Apply3DTransparentSurfaces(
                     worldTargetResource,
                     context,
                     collectPerformanceDiagnostics);
@@ -1021,6 +1043,42 @@ int main(int argc, char** argv)
                     scenePresentationShader,
                     presentationVignetteOuterRadiusLoc,
                     &presentationEffects.vignetteOuterRadius,
+                    SHADER_UNIFORM_FLOAT);
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterAmountLoc,
+                    &presentationEffects.underwaterAmount,
+                    SHADER_UNIFORM_FLOAT);
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterShallowColorLoc,
+                    &presentationEffects.underwaterShallowColorLinear,
+                    SHADER_UNIFORM_VEC3);
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterDeepColorLoc,
+                    &presentationEffects.underwaterDeepColorLinear,
+                    SHADER_UNIFORM_VEC3);
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterVisibilityLoc,
+                    &presentationEffects.underwaterVisibilityDepthWorld,
+                    SHADER_UNIFORM_FLOAT);
+            const Vector4 underwaterRipple{
+                    presentationEffects.underwaterRippleScaleWorld,
+                    presentationEffects.underwaterRippleStrength,
+                    presentationEffects.underwaterRippleSpeed,
+                    presentationEffects.underwaterDistortionStrength};
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterRippleLoc,
+                    &underwaterRipple,
+                    SHADER_UNIFORM_VEC4);
+            const Vector2 underwaterFlow{
+                    presentationEffects.underwaterFlowDirectionRadians,
+                    presentationEffects.underwaterFlowSpeedWorld};
+            SetShaderValue(scenePresentationShader,
+                    presentationUnderwaterFlowLoc,
+                    &underwaterFlow,
+                    SHADER_UNIFORM_VEC2);
+            SetShaderValue(scenePresentationShader,
+                    presentationRuntimeSecondsLoc,
+                    &presentationEffects.runtimeSeconds,
                     SHADER_UNIFORM_FLOAT);
             BeginShaderMode(scenePresentationShader);
             DrawTexturePro(
