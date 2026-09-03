@@ -293,8 +293,9 @@ void TestTopExitResolution()
             &landingWorld,
             SectorLadderTransitionSeconds);
     Require(!IsSectorLadderTraversalActive(traversal)
-                    && Near(controller.feetPosition.y, 1.25f),
-            "reachable landing dismount completes at the resolved floor height");
+                    && Near(controller.feetPosition.y, 1.25f)
+                    && controller.grounded,
+            "reachable landing dismount completes grounded at the resolved floor height");
 
     SectorTopologyMap rampMap = MakeSquare();
     const SectorAuthoringStructuralPrimitive rampLadder =
@@ -318,6 +319,34 @@ void TestTopExitResolution()
                     && traversal.topY - traversal.transitionTargetFeet.y
                             <= rampConfig.stepHeight + 0.0001f,
             "a nearby ramp supports a top exit below the ladder top");
+    const Vector3 rampExit = traversal.transitionTargetFeet;
+    UpdateSectorLadderTraversal(
+            traversal,
+            controller,
+            rampConfig,
+            input,
+            rampMap,
+            &rampWorld,
+            SectorLadderTransitionSeconds);
+    Require(!IsSectorLadderTraversalActive(traversal)
+                    && controller.grounded
+                    && Near(controller.feetPosition.y, rampExit.y),
+            "ramp dismount preserves grounded support for the movement handoff");
+    const SectorCollisionMoveResult rampMove = rampWorld.ResolveMovement(
+            SectorCollisionMoveState{
+                    {controller.feetPosition.x, controller.feetPosition.z},
+                    controller.feetPosition.y,
+                    controller.currentSectorId,
+                    controller.grounded},
+            Vector2{-0.10f, 0.0f},
+            SectorCollisionMoveConfig{
+                    rampConfig.playerRadius,
+                    rampConfig.playerHeight,
+                    rampConfig.stepHeight,
+                    4});
+    Require(rampMove.positionXZ.x
+                    < controller.feetPosition.x - 0.05f,
+            "first grounded movement frame advances farther onto the ramp");
 
     SectorTopologyMap blockedRampMap = MakeSquare();
     SectorAuthoringStructuralPrimitive blocker =

@@ -184,6 +184,9 @@ void BeginDismount(
     traversal.transitionStartYawRadians = controller.yawRadians;
     traversal.transitionStartPitchRadians = controller.pitchRadians;
     traversal.transitionElapsedSeconds = 0.0f;
+    traversal.transitionEndsGrounded =
+            endpoint == SectorLadderEndpoint::Top
+            && collisionWorld != nullptr;
 }
 
 } // namespace
@@ -334,7 +337,9 @@ bool UpdateSectorLadderTraversal(
             if (traversal.phase == SectorLadderTraversalPhase::Mounting) {
                 traversal.phase = SectorLadderTraversalPhase::Climbing;
             } else {
+                const bool endsGrounded = traversal.transitionEndsGrounded;
                 ResetSectorLadderTraversal(traversal);
+                controller.grounded = endsGrounded;
             }
         }
         return true;

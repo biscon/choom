@@ -36,6 +36,7 @@ struct SectorLadderTraversalState {
     float transitionStartYawRadians = 0.0f;
     float transitionStartPitchRadians = 0.0f;
     float transitionElapsedSeconds = 0.0f;
+    bool transitionEndsGrounded = false;
 };
 
 inline constexpr float SectorLadderTransitionSeconds = 0.30f;

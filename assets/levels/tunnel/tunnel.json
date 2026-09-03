@@ -62,13 +62,14 @@
   "dynamicSpotLights": [],
   "dynamicRectLights": [],
   "lightmapSettings": {
-    "ambientOcclusionRadius": 10.0,
+    "ambientOcclusionRadius": 12.0,
     "ambientOcclusionStrength": 0.550000011920929,
-    "indirectBounceRadius": 32.0,
-    "indirectBounceStrength": 0.20000000298023224,
-    "objectProbeSpacingWorld": 4.0,
+    "indirectBounceRadius": 64.0,
+    "indirectBounceStrength": 0.4000000059604645,
+    "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -115,7 +116,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "b5556d88de7556e1",
+    "sourceHash": "6f10336e0a35d72b",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -123,21 +124,21 @@
         0.0
       ],
       "rgbMax": [
-        1.109375,
-        1.109375,
-        1.109375
+        1.111328125,
+        1.111328125,
+        1.111328125
       ],
-      "auxiliaryMin": 0.48486328125,
+      "auxiliaryMin": 0.4560546875,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 564
+      "rgbChannelsAboveOne": 2250
     },
     "objectProbes": {
       "path": "assets/levels/tunnel/tunnel.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "b5556d88de7556e1",
-      "count": 24,
-      "probeSpacingWorld": 4.0,
+      "sourceHash": "6f10336e0a35d72b",
+      "count": 896,
+      "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
       "format": "layeredAmbientCubeLinearHdrF32LE",
@@ -148,13 +149,13 @@
           0.05000000074505806
         ],
         "rgbMax": [
-          0.2542141377925873,
-          0.2542141377925873,
-          0.2542141377925873
+          0.4639386534690857,
+          0.4639386534690857,
+          0.4639386534690857
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 144,
+        "sampleCount": 5376,
         "rgbChannelsAboveOne": 0
       }
     }
@@ -1360,7 +1361,7 @@
         "ladder": {
           "width": 80,
           "bottom": -27.200002670288086,
-          "height": 33.0
+          "height": 31.0
         }
       }
     ]
