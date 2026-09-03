@@ -714,6 +714,30 @@ void TestHdrEffectShaderAndPassPolicies()
             DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH);
     const std::string dynamicShadowSampling=ReadSource(
             DYNAMIC_SHADOW_SAMPLING_SOURCE_PATH);
+    const auto usesImmediateAtmospherePass = [](const std::string& source) {
+        return source.find(
+                           "gl_Position = vec4(vertexPosition.xy, 0.0, 1.0);")
+                            != std::string::npos
+                && source.find(
+                           "shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneDepthLoc;")
+                            != std::string::npos
+                && source.find(
+                           "material.maps[MATERIAL_MAP_DIFFUSE].texture = sceneTarget.depth;")
+                            != std::string::npos
+                && source.find(
+                           "DrawMesh(screenTriangle, material, MatrixIdentity());")
+                            != std::string::npos
+                && source.find(
+                           "material.maps[MATERIAL_MAP_DIFFUSE].texture = {};")
+                            != std::string::npos
+                && source.find("any(isnan(") != std::string::npos
+                && source.find("any(isinf(") != std::string::npos
+                && source.find("SceneDepthTextureSlot") == std::string::npos
+                && source.find("SetShaderValueTexture(shader, sceneDepthLoc")
+                            == std::string::npos
+                && source.find("DrawRectangle(0, 0, width, height, WHITE)")
+                            == std::string::npos;
+    };
     Check(!bloom.empty()&&!distanceFog.empty()&&!analyticFog.empty()
                     &&!analyticShaft.empty()&&!lightProxy.empty()&&!dust.empty()
                     &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty()
@@ -748,7 +772,6 @@ void TestHdrEffectShaderAndPassPolicies()
                     && lightProxy.find("proxy.halo.maxExtinction <= 0.0f") == std::string::npos
                     && lightProxy.find("mappedSoftness = clamp(haloParams.x * 2.0")
                             != std::string::npos
-                    && lightProxy.find("DrawMesh") == std::string::npos
                     && lightProxy.find("proxy.shaft") == std::string::npos
                     && analyticShaft.find("float shaftOpticalProfileAt(")
                             != std::string::npos
@@ -795,16 +818,10 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find("shaftRadiance * scatterWeight") != std::string::npos
                     && analyticShaft.find("float extinction = clamp(shaftParams.y") != std::string::npos
                     && analyticShaft.find("settings.maxExtinction <= 0.0f") == std::string::npos
-                    && analyticShaft.find(
-                            "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
-                            != std::string::npos
-                    && analyticFog.find(
-                            "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
-                            != std::string::npos
-                    && lightProxy.find(
-                            "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
-                            != std::string::npos,
-          "fog, haze, and shaft effects preserve depth bindings across render-batch flushes");
+                    && usesImmediateAtmospherePass(analyticShaft)
+                    && usesImmediateAtmospherePass(analyticFog)
+                    && usesImmediateAtmospherePass(lightProxy),
+          "fog, haze, and shaft effects use immediate depth-backed triangles with finite output guards");
     Check(analyticFog.find("bool intersectBox(") != std::string::npos
                     && analyticFog.find("uniform int fogShape") != std::string::npos
                     && analyticFog.find("uniform int fogStyle") != std::string::npos

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace game {
 namespace {
@@ -15,8 +16,7 @@ namespace {
 const char* ScreenVs = R"(
 #version 330
 in vec3 vertexPosition;
-uniform mat4 mvp;
-void main() { gl_Position = mvp * vec4(vertexPosition, 1.0); }
+void main() { gl_Position = vec4(vertexPosition.xy, 0.0, 1.0); }
 )";
 
 const char* AnalyticHaloFs = R"(
@@ -121,9 +121,35 @@ void main() {
     float extinction = clamp(haloParams.y, 0.0, 1.0) * opticalThickness;
     if (scatterWeight <= 0.00001 && extinction <= 0.00001) discard;
     vec3 inScattering = min(max(haloRadiance * scatterWeight, vec3(0.0)), vec3(65504.0));
+    if (any(isnan(inScattering)) || any(isinf(inScattering))
+            || isnan(extinction) || isinf(extinction)) discard;
     finalColor = vec4(inScattering, extinction);
 }
 )";
+
+bool EnsureScreenTriangle(Mesh& mesh)
+{
+    if (mesh.vaoId != 0) return true;
+    constexpr float vertices[] = {
+            -1.0f, -1.0f, 0.0f,
+             3.0f, -1.0f, 0.0f,
+            -1.0f,  3.0f, 0.0f};
+    mesh.vertexCount = 3;
+    mesh.triangleCount = 1;
+    mesh.vertices = static_cast<float*>(MemAlloc(sizeof(vertices)));
+    if (mesh.vertices == nullptr) {
+        mesh = {};
+        return false;
+    }
+    std::memcpy(mesh.vertices, vertices, sizeof(vertices));
+    UploadMesh(&mesh, false);
+    if (mesh.vaoId == 0) {
+        UnloadMesh(mesh);
+        mesh = {};
+        return false;
+    }
+    return true;
+}
 
 int FindDynamicIndex(
         const SectorLightAtmosphereSource& source,
@@ -151,9 +177,10 @@ void SectorLightProxyRenderer::Reserve(std::size_t sourceCount)
     visibleHalos.reserve(sourceCount);
 }
 
-bool SectorLightProxyRenderer::EnsureShader()
+bool SectorLightProxyRenderer::EnsureResources()
 {
-    if (shader.id != 0) return true;
+    if (shader.id != 0 && screenTriangle.vaoId != 0
+            && material.maps != nullptr) return true;
     if (shaderFailed) return false;
     shader = LoadShaderFromMemory(ScreenVs, AnalyticHaloFs);
     if (shader.id == 0) { shaderFailed = true; return false; }
@@ -167,6 +194,23 @@ bool SectorLightProxyRenderer::EnsureShader()
     LOC(haloRadianceLoc, "haloRadiance"); LOC(haloParamsLoc, "haloParams");
     LOC(fogParamsALoc, "fogParamsA"); LOC(fogParamsBLoc, "fogParamsB");
 #undef LOC
+    shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneDepthLoc;
+    if (!EnsureScreenTriangle(screenTriangle)) {
+        UnloadShader(shader);
+        shader = {};
+        shaderFailed = true;
+        return false;
+    }
+    material = LoadMaterialDefault();
+    if (material.maps == nullptr) {
+        UnloadMesh(screenTriangle);
+        screenTriangle = {};
+        UnloadShader(shader);
+        shader = {};
+        shaderFailed = true;
+        return false;
+    }
+    material.shader = shader;
     return true;
 }
 
@@ -184,7 +228,7 @@ bool SectorLightProxyRenderer::Apply(
     scissorCoverage = 0.0f;
     visibleHalos.clear();
     if (sources.empty()
-            || sceneTarget.depth.id == 0 || colorOnlyTarget.id == 0 || !EnsureShader()) return false;
+            || sceneTarget.depth.id == 0 || colorOnlyTarget.id == 0 || !EnsureResources()) return false;
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
     if (!std::isfinite(nearPlane) || !std::isfinite(farPlane)
@@ -259,7 +303,6 @@ bool SectorLightProxyRenderer::Apply(
     const Vector4 fogB{fog.falloffExponent, fog.referenceHeightWorld, fog.heightFalloff, 0.0f};
     rlDrawRenderBatchActive();
     BeginTextureMode(colorOnlyTarget);
-    BeginShaderMode(shader);
     SetShaderValue(shader, viewportSizeLoc, &viewport, SHADER_UNIFORM_VEC2);
     SetShaderValue(shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
     SetShaderValue(shader, cameraForwardLoc, &forward, SHADER_UNIFORM_VEC3);
@@ -271,36 +314,40 @@ bool SectorLightProxyRenderer::Apply(
     SetShaderValue(shader, farPlaneLoc, &farPlane, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, fogParamsALoc, &fogA, SHADER_UNIFORM_VEC4);
     SetShaderValue(shader, fogParamsBLoc, &fogB, SHADER_UNIFORM_VEC4);
+    material.maps[MATERIAL_MAP_DIFFUSE].texture = sceneTarget.depth;
     BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
     rlColorMask(true, true, true, false);
     rlEnableScissorTest();
     for (const VisibleHalo& visible : visibleHalos) {
         const SectorLightProxyHaloSettings& settings = visible.source->atmosphere.proxy.halo;
         const Vector2 haloParams{settings.edgeSoftness, settings.maxExtinction};
-        // rlDrawRenderBatchActive() clears raylib's auxiliary sampler slots.
-        // Register sceneDepth after the flush so it remains bound for this draw.
-        rlDrawRenderBatchActive();
-        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);
         SetShaderValue(shader, sphereCenterLoc, &visible.centerWorld, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, sphereRadiusLoc, &settings.radiusWorld, SHADER_UNIFORM_FLOAT);
         SetShaderValue(shader, haloRadianceLoc, &visible.radiance, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, haloParamsLoc, &haloParams, SHADER_UNIFORM_VEC2);
         rlScissor(visible.scissor.x, visible.scissor.y,
                 visible.scissor.width, visible.scissor.height);
-        DrawRectangle(0, 0, width, height, WHITE);
+        DrawMesh(screenTriangle, material, MatrixIdentity());
         ++drawCallCount;
     }
-    rlDrawRenderBatchActive();
     rlDisableScissorTest();
     rlColorMask(true, true, true, true);
     EndBlendMode();
-    EndShaderMode();
     EndTextureMode();
+    material.maps[MATERIAL_MAP_DIFFUSE].texture = {};
     return true;
 }
 
 void SectorLightProxyRenderer::Shutdown()
 {
+    if (material.maps != nullptr) {
+        material.maps[MATERIAL_MAP_DIFFUSE].texture = {};
+        material.shader = {};
+        UnloadMaterial(material);
+    }
+    material = {};
+    if (screenTriangle.vaoId != 0) UnloadMesh(screenTriangle);
+    screenTriangle = {};
     if (shader.id != 0) UnloadShader(shader);
     shader = {};
     shaderFailed = false;
