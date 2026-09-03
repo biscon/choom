@@ -1093,6 +1093,12 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                             > out->floorZ + CollisionPointEpsilon) {
                 out->floorZ = primitive.maximumY;
                 out->continuousFloor = false;
+                out->supportingStructuralPrimitiveId = primitive.authored.id;
+            } else if (primitive.maximumY <= maximumSupport
+                    && std::fabs(primitive.maximumY - out->floorZ)
+                            <= CollisionPointEpsilon
+                    && out->supportingStructuralPrimitiveId <= 0) {
+                out->supportingStructuralPrimitiveId = primitive.authored.id;
             }
             if (primitive.minimumY
                     > query.feetY + CollisionPointEpsilon) {
@@ -1127,6 +1133,7 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                 if (canLand && upperSurface >= out->floorZ) {
                     out->floorZ = upperSurface;
                     out->continuousFloor = false;
+                    out->supportingStructuralPrimitiveId = primitive.authored.id;
                 }
                 if (lowerSurface > query.feetY + CollisionPointEpsilon) {
                     out->ceilingZ = std::min(out->ceilingZ, lowerSurface);
@@ -1164,10 +1171,18 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                 if (support > out->floorZ + CollisionPointEpsilon) {
                     out->floorZ = support;
                     out->continuousFloor = continuous;
+                    out->supportingStructuralPrimitiveId = primitive.authored.id;
                 } else if (continuous
                         && std::fabs(support - out->floorZ)
                                 <= CollisionPointEpsilon) {
                     out->continuousFloor = true;
+                    if (out->supportingStructuralPrimitiveId <= 0) {
+                        out->supportingStructuralPrimitiveId = primitive.authored.id;
+                    }
+                } else if (std::fabs(support - out->floorZ)
+                                <= CollisionPointEpsilon
+                        && out->supportingStructuralPrimitiveId <= 0) {
+                    out->supportingStructuralPrimitiveId = primitive.authored.id;
                 }
             }
         }
@@ -1797,7 +1812,8 @@ bool SectorCollisionWorld::AllowsPrismPlacement(
         float top,
         int preferredSectorId,
         int* resolvedSectorId,
-        int ignoredStructuralPrimitiveId) const
+        int ignoredStructuralPrimitiveId,
+        int ignoredSupportingStructuralPrimitiveId) const
 {
     if (resolvedSectorId != nullptr) *resolvedSectorId = 0;
     if (!IsFinite(center) || !std::isfinite(radius)
@@ -1812,8 +1828,11 @@ bool SectorCollisionWorld::AllowsPrismPlacement(
     if (start == nullptr) return false;
     if (resolvedSectorId != nullptr) *resolvedSectorId = startSectorId;
     for (const SectorCompiledStructuralSurface& surface : structuralSurfaces) {
-        if (ignoredStructuralPrimitiveId > 0
-                && surface.face.primitiveId == ignoredStructuralPrimitiveId) {
+        if ((ignoredStructuralPrimitiveId > 0
+                    && surface.face.primitiveId == ignoredStructuralPrimitiveId)
+                || (ignoredSupportingStructuralPrimitiveId > 0
+                    && surface.face.primitiveId
+                            == ignoredSupportingStructuralPrimitiveId)) {
             continue;
         }
         for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {

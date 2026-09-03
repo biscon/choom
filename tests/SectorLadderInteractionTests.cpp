@@ -114,17 +114,24 @@ game::SectorTopologyMap MakeAdjacent(float leftFloor, float rightFloor)
     return map;
 }
 
+void CompileStructures(
+        game::SectorTopologyMap& map,
+        const std::vector<game::SectorAuthoringStructuralPrimitive>& structures)
+{
+    std::vector<game::SectorStructuralDiagnostic> diagnostics;
+    Require(game::CompileSectorStructuralPrimitives(
+                    structures,
+                    map,
+                    map.compiledStructuralPrimitives,
+                    diagnostics),
+            "generated structural fixture compiles");
+}
+
 void CompileLadder(
         game::SectorTopologyMap& map,
         const game::SectorAuthoringStructuralPrimitive& ladder)
 {
-    std::vector<game::SectorStructuralDiagnostic> diagnostics;
-    Require(game::CompileSectorStructuralPrimitives(
-                    {ladder},
-                    map,
-                    map.compiledStructuralPrimitives,
-                    diagnostics),
-            "generated ladder fixture compiles");
+    CompileStructures(map, {ladder});
 }
 
 game::SectorCollisionWorld BuildWorld(const game::SectorTopologyMap& map)
@@ -195,6 +202,35 @@ game::SectorAuthoringStructuralPrimitive MakePortalLadder()
     return ladder;
 }
 
+game::SectorAuthoringStructuralPrimitive MakeRampLandingLadder()
+{
+    game::SectorAuthoringStructuralPrimitive ladder =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 42;
+    ladder.x = Coord(32.0f);
+    ladder.z = Coord(32.0f);
+    ladder.yawDegrees = 270.0f;
+    ladder.ladder.height = 5.8f;
+    return ladder;
+}
+
+game::SectorAuthoringStructuralPrimitive MakeRampLanding()
+{
+    game::SectorAuthoringStructuralPrimitive ramp =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Ramp);
+    ramp.id = 43;
+    ramp.x = Coord(24.0f);
+    ramp.z = Coord(32.0f);
+    ramp.yawDegrees = 90.0f;
+    ramp.ramp.width = Coord(64.0f);
+    ramp.ramp.run = Coord(16.0f);
+    ramp.ramp.low = 2.0f;
+    ramp.ramp.high = 10.0f;
+    return ramp;
+}
+
 void ClimbFromBottomToTop(
         game::SectorLadderTraversalState& traversal,
         game::SectorFpsControllerState& controller,
@@ -260,6 +296,58 @@ void TestTopExitResolution()
                     && Near(controller.feetPosition.y, 1.25f),
             "reachable landing dismount completes at the resolved floor height");
 
+    SectorTopologyMap rampMap = MakeSquare();
+    const SectorAuthoringStructuralPrimitive rampLadder =
+            MakeRampLandingLadder();
+    const SectorAuthoringStructuralPrimitive ramp = MakeRampLanding();
+    CompileStructures(rampMap, {ramp, rampLadder});
+    const SectorCollisionWorld rampWorld = BuildWorld(rampMap);
+    controller = {};
+    controller.currentSectorId = 10;
+    controller.feetPosition = {
+            SectorCoordToWorldDistance(rampLadder.x) + 1.0f,
+            SectorAuthoringToWorldDistance(rampLadder.ladder.bottom),
+            SectorCoordToWorldDistance(rampLadder.z)};
+    traversal = {};
+    SectorFpsControllerConfig rampConfig = config;
+    rampConfig.stepHeight = 0.4f;
+    ClimbFromBottomToTop(
+            traversal, controller, rampConfig, rampMap, rampWorld);
+    Require(traversal.phase == SectorLadderTraversalPhase::Dismounting
+                    && traversal.transitionTargetFeet.y < traversal.topY
+                    && traversal.topY - traversal.transitionTargetFeet.y
+                            <= rampConfig.stepHeight + 0.0001f,
+            "a nearby ramp supports a top exit below the ladder top");
+
+    SectorTopologyMap blockedRampMap = MakeSquare();
+    SectorAuthoringStructuralPrimitive blocker =
+            DefaultSectorAuthoringStructuralPrimitive(
+                    SectorStructuralPrimitiveKind::Box);
+    blocker.id = 44;
+    blocker.x = Coord(28.0f);
+    blocker.z = Coord(32.0f);
+    blocker.box.width = Coord(4.0f);
+    blocker.box.depth = Coord(4.0f);
+    blocker.box.bottom = 8.0f;
+    blocker.box.top = 20.0f;
+    CompileStructures(blockedRampMap, {ramp, blocker, rampLadder});
+    const SectorCollisionWorld blockedRampWorld = BuildWorld(blockedRampMap);
+    controller = {};
+    controller.currentSectorId = 10;
+    controller.feetPosition = {
+            SectorCoordToWorldDistance(rampLadder.x) + 1.0f,
+            SectorAuthoringToWorldDistance(rampLadder.ladder.bottom),
+            SectorCoordToWorldDistance(rampLadder.z)};
+    traversal = {};
+    ClimbFromBottomToTop(
+            traversal,
+            controller,
+            rampConfig,
+            blockedRampMap,
+            blockedRampWorld);
+    Require(traversal.phase == SectorLadderTraversalPhase::Climbing,
+            "an obstacle above a structural landing still blocks the top exit");
+
     SectorTopologyMap highMap = MakeAdjacent(16.0f, -50.0f);
     const SectorAuthoringStructuralPrimitive highLadder = MakePortalLadder();
     CompileLadder(highMap, highLadder);
@@ -277,12 +365,14 @@ void TestTopExitResolution()
             "a landing above ladder exit reach keeps the player attached");
 
     SectorTopologyMap unsupportedMap = MakeSquare();
+    unsupportedMap.sectors.front().ceilingZ = 54.0f;
     SectorAuthoringStructuralPrimitive unsupportedLadder =
             DefaultSectorAuthoringStructuralPrimitive(
                     SectorStructuralPrimitiveKind::Ladder);
     unsupportedLadder.id = 42;
     unsupportedLadder.x = Coord(32.0f);
     unsupportedLadder.z = Coord(32.0f);
+    unsupportedLadder.ladder.height = 40.0f;
     CompileLadder(unsupportedMap, unsupportedLadder);
     const SectorCollisionWorld unsupportedWorld = BuildWorld(unsupportedMap);
     controller = {};
@@ -292,23 +382,22 @@ void TestTopExitResolution()
             0.0f,
             SectorCoordToWorldDistance(unsupportedLadder.z) + 1.0f};
     traversal = {};
+    SectorFpsControllerConfig unsupportedConfig = config;
+    unsupportedConfig.eyeHeight = 1.75f;
+    unsupportedConfig.playerHeight = 1.8f;
     ClimbFromBottomToTop(
-            traversal, controller, config, unsupportedMap, unsupportedWorld);
-    Require(traversal.phase == SectorLadderTraversalPhase::Dismounting
-                    && Near(
-                            traversal.transitionTargetFeet.y,
-                            traversal.topY),
-            "a clear unsupported ladder top begins an airborne dismount");
-    UpdateSectorLadderTraversal(
             traversal,
             controller,
-            config,
-            input,
+            unsupportedConfig,
             unsupportedMap,
-            &unsupportedWorld,
-            SectorLadderTransitionSeconds);
-    Require(!IsSectorLadderTraversalActive(traversal) && !controller.grounded,
-            "unsupported ladder top releases into ordinary airborne physics");
+            unsupportedWorld);
+    Require(!IsSectorLadderTraversalActive(traversal)
+                    && !controller.grounded
+                    && Near(
+                            controller.feetPosition.y,
+                            SectorAuthoringToWorldDistance(
+                                    unsupportedLadder.ladder.height)),
+            "an unsupported ladder top detaches immediately into falling physics");
 }
 
 } // namespace
