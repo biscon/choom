@@ -6538,13 +6538,14 @@ void SectorEditor::DrawToolsPanel(
     }
 
     separator();
-    const float roomtoneFadeLabelW = 150.0f;
+    const SectorEditorInspectorStackedOptionRowLayout roomtoneFadeLayout =
+            BuildSectorEditorInspectorStackedOptionRowLayout(
+                    y, contentW, rowH, gap);
     const SectorEditorIntInputResult roomtoneFadeResult = DrawLabeledIntInput(
             ui, config, input, assets, font,
             "sector_editor_roomtone_map_fade", "Roomtone Fade ms",
-            {0.0f, y, roomtoneFadeLabelW, rowH},
-            {roomtoneFadeLabelW + gap, y,
-                    std::max(0.0f, contentW - roomtoneFadeLabelW - gap), rowH},
+            roomtoneFadeLayout.labelRect,
+            roomtoneFadeLayout.fieldRect,
             engine::UITextJustify::Left,
             AuthoringGraph().audioSettings.roomtoneFadeMilliseconds,
             uiState.roomtoneMapFadeInput, 0, 60000, 50);
@@ -6552,7 +6553,7 @@ void SectorEditor::DrawToolsPanel(
         BuildSoundEditorService().SetRoomtoneFadeMilliseconds(
                 roomtoneFadeResult.value);
     }
-    y += rowH + gap;
+    y += roomtoneFadeLayout.height + gap;
 
     if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         OpenLightmapBakeSetup();

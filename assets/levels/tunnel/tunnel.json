@@ -115,7 +115,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "5bc60e64ac887687",
+    "sourceHash": "b5556d88de7556e1",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -127,7 +127,7 @@
         1.109375,
         1.109375
       ],
-      "auxiliaryMin": 0.50244140625,
+      "auxiliaryMin": 0.48486328125,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
       "rgbChannelsAboveOne": 564
@@ -135,7 +135,7 @@
     "objectProbes": {
       "path": "assets/levels/tunnel/tunnel.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "5bc60e64ac887687",
+      "sourceHash": "b5556d88de7556e1",
       "count": 24,
       "probeSpacingWorld": 4.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -164,6 +164,9 @@
     "version": 1,
     "count": 1,
     "format": "rgba16f-cubemap-mips"
+  },
+  "editorSettings": {
+    "gridSize": 1
   },
   "authoringGraph": {
     "vertices": [
@@ -1343,6 +1346,21 @@
           "solidBottom": 45.0,
           "low": 48.0,
           "high": 60.0
+        }
+      },
+      {
+        "id": 5,
+        "kind": "ladder",
+        "x": -251,
+        "z": -896,
+        "yawDegrees": 270.0,
+        "material": {
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "ladder": {
+          "width": 80,
+          "bottom": -27.200002670288086,
+          "height": 30.0
         }
       }
     ]
