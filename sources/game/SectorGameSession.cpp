@@ -1955,6 +1955,7 @@ void SectorGameSession::Update(
                                     ? &collision.sectorCollisionWorld : nullptr,
                             useTarget.ladderPrimitiveId,
                             useTarget.ladderEndpoint);
+                    if (handled) fpsPlayer.HolsterForTraversal();
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
                         && context.world.IsAlive(useTarget.entity)
                         && context.world.Has<SectorDynamicModel>(useTarget.entity)) {
@@ -2052,6 +2053,9 @@ void SectorGameSession::Update(
     }
     ApplyPlayerPose(scene);
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
+        const bool weaponInputCaptured = gameplayInputCaptured
+                || IsSectorLadderTraversalActive(
+                        controller.ladderTraversal);
         acceptedShot = fpsPlayer.HandleInput(
                 context.input,
                 *weaponRegistry,
@@ -2063,7 +2067,7 @@ void SectorGameSession::Update(
                 scene.Renderer(),
                 true,
                 !gameplayInputCaptured,
-                gameplayInputCaptured,
+                weaponInputCaptured,
                 itemRegistry,
                 itemCampaign);
         if (fpsPlayer.ConsumeReloadOutOfAmmoRequest()) {

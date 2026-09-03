@@ -220,6 +220,7 @@ struct FpsViewmodelRuntimeState {
 };
 
 void ResetFpsViewmodelRuntime(FpsViewmodelRuntimeState& state);
+bool RequestFpsViewmodelHolster(FpsViewmodelRuntimeState& state);
 bool ToggleFpsViewmodelHolster(
         FpsViewmodelRuntimeState& state,
         bool preview3DActive,

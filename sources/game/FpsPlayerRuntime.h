@@ -106,6 +106,7 @@ public:
             const FpsApplicationSettings& settings,
             std::string_view weaponId,
             PlayerWeaponCampaignState* weaponCampaign = nullptr);
+    bool HolsterForTraversal();
     bool QueueUnequip(PlayerWeaponCampaignState* weaponCampaign = nullptr);
     bool ConsumeReloadOutOfAmmoRequest();
     void UpdateTransformsAndLight(

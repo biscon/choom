@@ -768,6 +768,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                                                 : nullptr,
                                         previewUseTarget.ladderPrimitiveId,
                                         previewUseTarget.ladderEndpoint)) {
+                                fpsPlayer.HolsterForTraversal();
                                 engine::ConsumeEvent(event);
                             }
                             return;
@@ -2849,7 +2850,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
     const bool gameplayWeaponInput = state.mode == SectorEditorMode::Preview3D
             && previewState.controller.previewControlMode
                     == SectorPreviewControlMode::Gameplay;
-    const bool weaponInputCaptured = uiState.keyboardCaptured
+    const bool previewInputCaptured = uiState.keyboardCaptured
             || state.texturePicker.open
             || state.soundPicker.open
             || state.decalTintModal.open
@@ -2857,6 +2858,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             || itemEditorState.open
             || patrolEditorState.open
             || weaponEditorState.open;
+    const bool weaponInputCaptured = previewInputCaptured
+            || IsSectorLadderTraversalActive(
+                    previewState.controller.ladderTraversal);
     fpsPlayer.HandleWeaponSlotInput(
             input,
             weaponRegistry,
@@ -2867,10 +2871,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             true,
             [this, &assets, &controlModeToggled,
                     gameplayWeaponInput,
+                    previewInputCaptured,
                     weaponInputCaptured](engine::InputEvent& event) {
                 if (event.key.key == KEY_F
                         && gameplayWeaponInput
-                        && !weaponInputCaptured) {
+                        && !previewInputCaptured) {
                     TogglePlayerFlashlight(flashlight);
                     statusText = flashlight.enabled
                             ? "Flashlight enabled"
@@ -2940,7 +2945,10 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                         }
                         return;
                     }
-                    if (ToggleFpsViewmodelHolster(fpsPlayer.State(), true, uiState.keyboardCaptured)) {
+                    if (ToggleFpsViewmodelHolster(
+                                fpsPlayer.State(),
+                                true,
+                                weaponInputCaptured)) {
                         statusText = fpsPlayer.State().equipState
                                         == FpsViewmodelEquipState::Holstering
                                 ? "Viewmodel holstering"

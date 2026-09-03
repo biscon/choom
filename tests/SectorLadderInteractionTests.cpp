@@ -429,6 +429,130 @@ void TestTopExitResolution()
             "an unsupported ladder top detaches immediately into falling physics");
 }
 
+void TestBottomExitGrounding()
+{
+    using namespace game;
+    SectorTopologyMap map = MakeSquare();
+    SectorAuthoringStructuralPrimitive ladder =
+            DefaultSectorAuthoringStructuralPrimitive(
+                    SectorStructuralPrimitiveKind::Ladder);
+    ladder.id = 42;
+    ladder.x = Coord(32.0f);
+    ladder.z = Coord(32.0f);
+    CompileLadder(map, ladder);
+    const SectorCollisionWorld world = BuildWorld(map);
+    const SectorFpsControllerConfig config =
+            DefaultSectorFpsControllerConfig();
+    SectorFpsControllerState controller;
+    controller.currentSectorId = 10;
+    controller.feetPosition = {
+            SectorCoordToWorldDistance(ladder.x),
+            SectorAuthoringToWorldDistance(
+                    ladder.ladder.bottom + ladder.ladder.height),
+            SectorCoordToWorldDistance(ladder.z) - 1.0f};
+    SectorLadderTraversalState traversal;
+    Require(BeginSectorLadderTraversal(
+                    traversal,
+                    controller,
+                    config,
+                    map,
+                    &world,
+                    ladder.id,
+                    SectorLadderEndpoint::Top),
+            "generated ladder begins traversal from the top");
+    SectorFpsControllerInput input;
+    UpdateSectorLadderTraversal(
+            traversal,
+            controller,
+            config,
+            input,
+            map,
+            &world,
+            SectorLadderTransitionSeconds);
+    input.moveBackward = true;
+    UpdateSectorLadderTraversal(
+            traversal, controller, config, input, map, &world, 10.0f);
+    Require(traversal.phase == SectorLadderTraversalPhase::Dismounting
+                    && Near(traversal.transitionTargetFeet.y, 0.0f),
+            "a floor-supported bottom exit resolves to the floor height");
+    UpdateSectorLadderTraversal(
+            traversal,
+            controller,
+            config,
+            input,
+            map,
+            &world,
+            SectorLadderTransitionSeconds);
+    Require(!IsSectorLadderTraversalActive(traversal)
+                    && controller.grounded
+                    && Near(controller.feetPosition.y, 0.0f)
+                    && Near(controller.verticalVelocity, 0.0f),
+            "a floor-supported bottom exit completes grounded");
+
+    const SectorFpsVerticalResult vertical = UpdateSectorFpsVerticalPhysics(
+            controller,
+            config,
+            SectorFpsVerticalContext{true, 0.0f, 5.0f, false},
+            1.0f / 60.0f);
+    const SectorFpsFrameEvents events = BuildSectorFpsFrameEvents(
+            false, vertical);
+    Require(vertical.transition == SectorFpsVerticalTransition::StayedGrounded
+                    && !events.landed,
+            "the frame after a supported bottom exit does not report a landing");
+
+    SectorTopologyMap dropMap = MakeSquare();
+    dropMap.sectors.front().ceilingZ = 80.0f;
+    ladder.ladder.bottom = 16.0f;
+    CompileLadder(dropMap, ladder);
+    const SectorCollisionWorld dropWorld = BuildWorld(dropMap);
+    controller = {};
+    controller.currentSectorId = 10;
+    controller.feetPosition = {
+            SectorCoordToWorldDistance(ladder.x),
+            SectorAuthoringToWorldDistance(
+                    ladder.ladder.bottom + ladder.ladder.height),
+            SectorCoordToWorldDistance(ladder.z) - 1.0f};
+    traversal = {};
+    Require(BeginSectorLadderTraversal(
+                    traversal,
+                    controller,
+                    config,
+                    dropMap,
+                    &dropWorld,
+                    ladder.id,
+                    SectorLadderEndpoint::Top),
+            "raised-bottom ladder begins traversal from the top");
+    input = {};
+    UpdateSectorLadderTraversal(
+            traversal,
+            controller,
+            config,
+            input,
+            dropMap,
+            &dropWorld,
+            SectorLadderTransitionSeconds);
+    input.moveBackward = true;
+    UpdateSectorLadderTraversal(
+            traversal, controller, config, input, dropMap, &dropWorld, 10.0f);
+    Require(traversal.phase == SectorLadderTraversalPhase::Dismounting,
+            "an unsupported bottom still begins its outward dismount");
+    UpdateSectorLadderTraversal(
+            traversal,
+            controller,
+            config,
+            input,
+            dropMap,
+            &dropWorld,
+            SectorLadderTransitionSeconds);
+    Require(!IsSectorLadderTraversalActive(traversal)
+                    && !controller.grounded
+                    && Near(
+                            controller.feetPosition.y,
+                            SectorAuthoringToWorldDistance(
+                                    ladder.ladder.bottom)),
+            "a genuine drop below the ladder bottom remains airborne");
+}
+
 } // namespace
 
 int main()
@@ -502,6 +626,7 @@ int main()
 
     TestLiquidStateAndDetach();
     TestTopExitResolution();
+    TestBottomExitGrounding();
 
     std::cout << "Sector ladder interaction tests passed\n";
     return 0;

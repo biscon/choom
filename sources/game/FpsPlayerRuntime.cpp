@@ -341,6 +341,13 @@ bool FpsPlayerRuntime::EquipWeapon(
     return true;
 }
 
+bool FpsPlayerRuntime::HolsterForTraversal()
+{
+    pendingWeaponSlot = 0;
+    state.reload = {};
+    return RequestFpsViewmodelHolster(state);
+}
+
 bool FpsPlayerRuntime::QueueUnequip(
         PlayerWeaponCampaignState* weaponCampaign)
 {

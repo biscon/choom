@@ -69,13 +69,13 @@ bool ExitClear(
             ignoredSupportingStructuralPrimitiveId);
 }
 
-enum class TopExitResolution {
+enum class ExitResolution {
     Supported,
     Unsupported,
     Blocked
 };
 
-TopExitResolution ResolveTopExit(
+ExitResolution ResolveTopExit(
         const SectorCollisionWorld* world,
         Vector3 target,
         const SectorFpsControllerState& controller,
@@ -85,18 +85,18 @@ TopExitResolution ResolveTopExit(
         int* supportingStructuralPrimitiveId)
 {
     if (targetFeetY == nullptr || supportingStructuralPrimitiveId == nullptr) {
-        return TopExitResolution::Blocked;
+        return ExitResolution::Blocked;
     }
     *targetFeetY = ladderTopY;
     *supportingStructuralPrimitiveId = -1;
-    if (world == nullptr) return TopExitResolution::Supported;
+    if (world == nullptr) return ExitResolution::Supported;
 
     const SectorFpsControllerConfig effective =
             EffectiveSectorFpsControllerConfig(controller, config);
     const Vector2 targetXZ{target.x, target.z};
     const int sectorId = world->FindSectorContainingPointPreferCurrent(
             targetXZ, controller.currentSectorId);
-    if (sectorId == 0) return TopExitResolution::Unsupported;
+    if (sectorId == 0) return ExitResolution::Unsupported;
 
     SectorCollisionHeights heights;
     if (!world->ResolveActorVerticalContext(
@@ -109,19 +109,68 @@ TopExitResolution ResolveTopExit(
                         effective.eyeHeight,
                         true},
                 &heights)) {
-        return TopExitResolution::Blocked;
+        return ExitResolution::Blocked;
     }
     const float rise = heights.floorZ - ladderTopY;
     if (rise > effective.eyeHeight + 0.0001f) {
-        return TopExitResolution::Blocked;
+        return ExitResolution::Blocked;
     }
     if (rise < -effective.stepHeight - 0.0001f) {
-        return TopExitResolution::Unsupported;
+        return ExitResolution::Unsupported;
     }
     *targetFeetY = heights.floorZ;
     *supportingStructuralPrimitiveId =
             heights.supportingStructuralPrimitiveId;
-    return TopExitResolution::Supported;
+    return ExitResolution::Supported;
+}
+
+ExitResolution ResolveBottomExit(
+        const SectorCollisionWorld* world,
+        Vector3 target,
+        const SectorFpsControllerState& controller,
+        const SectorFpsControllerConfig& config,
+        float ladderBottomY,
+        float* targetFeetY,
+        int* supportingStructuralPrimitiveId)
+{
+    if (targetFeetY == nullptr || supportingStructuralPrimitiveId == nullptr) {
+        return ExitResolution::Blocked;
+    }
+    *targetFeetY = ladderBottomY;
+    *supportingStructuralPrimitiveId = -1;
+    if (world == nullptr) return ExitResolution::Unsupported;
+
+    const SectorFpsControllerConfig effective =
+            EffectiveSectorFpsControllerConfig(controller, config);
+    const Vector2 targetXZ{target.x, target.z};
+    const int sectorId = world->FindSectorContainingPointPreferCurrent(
+            targetXZ, controller.currentSectorId);
+    if (sectorId == 0) return ExitResolution::Unsupported;
+
+    SectorCollisionHeights heights;
+    if (!world->ResolveActorVerticalContext(
+                sectorId,
+                SectorCollisionVerticalQuery{
+                        targetXZ,
+                        ladderBottomY,
+                        effective.playerRadius,
+                        effective.playerHeight,
+                        effective.stepHeight,
+                        true},
+                &heights)) {
+        return ExitResolution::Blocked;
+    }
+    const float rise = heights.floorZ - ladderBottomY;
+    if (rise > effective.stepHeight + 0.0001f) {
+        return ExitResolution::Blocked;
+    }
+    if (rise < -effective.stepHeight - 0.0001f) {
+        return ExitResolution::Unsupported;
+    }
+    *targetFeetY = heights.floorZ;
+    *supportingStructuralPrimitiveId =
+            heights.supportingStructuralPrimitiveId;
+    return ExitResolution::Supported;
 }
 
 void DetachForFall(
@@ -153,8 +202,9 @@ void BeginDismount(
             traversal.ladderCenterXZ.y
                     + traversal.front.y * direction * exitOffset};
     int supportingStructuralPrimitiveId = -1;
+    bool endsGrounded = false;
     if (endpoint == SectorLadderEndpoint::Top) {
-        const TopExitResolution resolution = ResolveTopExit(
+        const ExitResolution resolution = ResolveTopExit(
                 collisionWorld,
                 target,
                 controller,
@@ -162,11 +212,23 @@ void BeginDismount(
                 traversal.topY,
                 &target.y,
                 &supportingStructuralPrimitiveId);
-        if (resolution == TopExitResolution::Unsupported) {
+        if (resolution == ExitResolution::Unsupported) {
             DetachForFall(traversal, controller);
             return;
         }
-        if (resolution == TopExitResolution::Blocked) return;
+        if (resolution == ExitResolution::Blocked) return;
+        endsGrounded = collisionWorld != nullptr;
+    } else {
+        const ExitResolution resolution = ResolveBottomExit(
+                collisionWorld,
+                target,
+                controller,
+                config,
+                traversal.bottomY,
+                &target.y,
+                &supportingStructuralPrimitiveId);
+        if (resolution == ExitResolution::Blocked) return;
+        endsGrounded = resolution == ExitResolution::Supported;
     }
     if (!ExitClear(
                 collisionWorld,
@@ -184,9 +246,7 @@ void BeginDismount(
     traversal.transitionStartYawRadians = controller.yawRadians;
     traversal.transitionStartPitchRadians = controller.pitchRadians;
     traversal.transitionElapsedSeconds = 0.0f;
-    traversal.transitionEndsGrounded =
-            endpoint == SectorLadderEndpoint::Top
-            && collisionWorld != nullptr;
+    traversal.transitionEndsGrounded = endsGrounded;
 }
 
 } // namespace
