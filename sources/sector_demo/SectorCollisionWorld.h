@@ -152,7 +152,8 @@ public:
             float bottom,
             float top,
             int preferredSectorId,
-            int* resolvedSectorId = nullptr) const;
+            int* resolvedSectorId = nullptr,
+            int ignoredStructuralPrimitiveId = -1) const;
 
 private:
     bool SectorContainsPoint(const SectorCollisionSector& sector, Vector2 xz) const;

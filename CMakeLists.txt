@@ -645,6 +645,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorLadderInteraction.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorFpsController.cpp
+            sources/sector_demo/SectorLiquidInteraction.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp

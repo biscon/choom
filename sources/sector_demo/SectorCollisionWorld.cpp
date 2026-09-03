@@ -1796,7 +1796,8 @@ bool SectorCollisionWorld::AllowsPrismPlacement(
         float bottom,
         float top,
         int preferredSectorId,
-        int* resolvedSectorId) const
+        int* resolvedSectorId,
+        int ignoredStructuralPrimitiveId) const
 {
     if (resolvedSectorId != nullptr) *resolvedSectorId = 0;
     if (!IsFinite(center) || !std::isfinite(radius)
@@ -1811,6 +1812,10 @@ bool SectorCollisionWorld::AllowsPrismPlacement(
     if (start == nullptr) return false;
     if (resolvedSectorId != nullptr) *resolvedSectorId = startSectorId;
     for (const SectorCompiledStructuralSurface& surface : structuralSurfaces) {
+        if (ignoredStructuralPrimitiveId > 0
+                && surface.face.primitiveId == ignoredStructuralPrimitiveId) {
+            continue;
+        }
         for (size_t index = 0; index + 2 < surface.vertices.size(); index += 3) {
             const Vector3 a = surface.vertices[index].position;
             const Vector3 b = surface.vertices[index + 1].position;

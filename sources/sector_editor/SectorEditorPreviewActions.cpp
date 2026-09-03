@@ -715,6 +715,18 @@ void UpdateSectorEditorGameplayPreview(
         ClearPreviewGameplayVisualState(controllerState);
         RefreshSectorEditorGameplaySectorAndVerticalContext(
                 collisionState, controllerState);
+        UpdateSectorLadderLiquidState(
+                controllerState.liquidMovement,
+                controllerState.fpsControllerState,
+                controllerState.fpsControllerConfig,
+                *topologyMap,
+                controllerInput.swimDown);
+        if (controllerInput.ladderDetachPressed) {
+            TryDetachSectorLadderTraversal(
+                    controllerState.ladderTraversal,
+                    controllerState.fpsControllerState,
+                    controllerState.liquidMovement.cameraSubmerged);
+        }
         return;
     }
     SectorLiquidContact liquidContact;

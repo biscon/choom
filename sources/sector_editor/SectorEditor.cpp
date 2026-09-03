@@ -3046,12 +3046,16 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 input.ForEachEvent(
                         engine::InputEventType::KeyPressed,
                         true,
-                        [&controllerInput](engine::InputEvent& event) {
+                        [this, &controllerInput](engine::InputEvent& event) {
                             if (event.key.key == KEY_SPACE) {
                                 controllerInput.jumpPressed = true;
                             } else if (event.key.key == KEY_LEFT_CONTROL
                                     || event.key.key == KEY_RIGHT_CONTROL) {
                                 controllerInput.crouchTogglePressed = true;
+                            } else if (event.key.key == KEY_E
+                                    && IsSectorLadderTraversalActive(
+                                            previewState.controller.ladderTraversal)) {
+                                controllerInput.ladderDetachPressed = true;
                             } else {
                                 return;
                             }

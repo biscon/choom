@@ -5,6 +5,7 @@
 namespace game {
 
 class SectorCollisionWorld;
+struct SectorLiquidMovementState;
 struct SectorTopologyMap;
 
 enum class SectorLadderEndpoint {
@@ -43,6 +44,16 @@ inline constexpr float SectorLadderLookYawArcRadians = 60.0f * DEG2RAD;
 
 bool IsSectorLadderTraversalActive(const SectorLadderTraversalState& state);
 void ResetSectorLadderTraversal(SectorLadderTraversalState& state);
+bool TryDetachSectorLadderTraversal(
+        SectorLadderTraversalState& traversal,
+        SectorFpsControllerState& controller,
+        bool cameraSubmerged);
+void UpdateSectorLadderLiquidState(
+        SectorLiquidMovementState& liquid,
+        const SectorFpsControllerState& controller,
+        const SectorFpsControllerConfig& config,
+        const SectorTopologyMap& map,
+        bool diveHeld);
 bool BeginSectorLadderTraversal(
         SectorLadderTraversalState& traversal,
         SectorFpsControllerState& controller,

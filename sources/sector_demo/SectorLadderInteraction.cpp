@@ -1,6 +1,7 @@
 #include "sector_demo/SectorLadderInteraction.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorLiquidInteraction.h"
 #include "sector_demo/SectorStructuralPrimitives.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
@@ -50,7 +51,8 @@ bool ExitClear(
         const SectorCollisionWorld* world,
         Vector3 feet,
         const SectorFpsControllerState& controller,
-        const SectorFpsControllerConfig& config)
+        const SectorFpsControllerConfig& config,
+        int ignoredStructuralPrimitiveId)
 {
     if (world == nullptr) return true;
     const SectorFpsControllerConfig effective =
@@ -61,7 +63,46 @@ bool ExitClear(
             feet.y,
             feet.y + effective.playerHeight,
             controller.currentSectorId,
-            nullptr);
+            nullptr,
+            ignoredStructuralPrimitiveId);
+}
+
+bool ResolveTopExitFeetY(
+        const SectorCollisionWorld* world,
+        Vector3 target,
+        const SectorFpsControllerState& controller,
+        const SectorFpsControllerConfig& config,
+        float ladderTopY,
+        float* targetFeetY)
+{
+    if (targetFeetY == nullptr) return false;
+    *targetFeetY = ladderTopY;
+    if (world == nullptr) return true;
+
+    const SectorFpsControllerConfig effective =
+            EffectiveSectorFpsControllerConfig(controller, config);
+    const Vector2 targetXZ{target.x, target.z};
+    const int sectorId = world->FindSectorContainingPointPreferCurrent(
+            targetXZ, controller.currentSectorId);
+    if (sectorId == 0) return true;
+
+    SectorCollisionHeights heights;
+    if (!world->ResolveActorVerticalContext(
+                sectorId,
+                SectorCollisionVerticalQuery{
+                        targetXZ,
+                        ladderTopY,
+                        effective.playerRadius,
+                        effective.playerHeight,
+                        effective.eyeHeight,
+                        true},
+                &heights)) {
+        return false;
+    }
+    const float rise = heights.floorZ - ladderTopY;
+    if (rise > effective.eyeHeight + 0.0001f) return false;
+    if (rise > 0.0001f) *targetFeetY = heights.floorZ;
+    return true;
 }
 
 void BeginDismount(
@@ -83,7 +124,24 @@ void BeginDismount(
                     ? traversal.topY : traversal.bottomY,
             traversal.ladderCenterXZ.y
                     + traversal.front.y * direction * exitOffset};
-    if (!ExitClear(collisionWorld, target, controller, config)) return;
+    if (endpoint == SectorLadderEndpoint::Top
+            && !ResolveTopExitFeetY(
+                    collisionWorld,
+                    target,
+                    controller,
+                    config,
+                    traversal.topY,
+                    &target.y)) {
+        return;
+    }
+    if (!ExitClear(
+                collisionWorld,
+                target,
+                controller,
+                config,
+                traversal.ladderPrimitiveId)) {
+        return;
+    }
     traversal.phase = SectorLadderTraversalPhase::Dismounting;
     traversal.mountEndpoint = endpoint;
     traversal.transitionStartFeet = controller.feetPosition;
@@ -103,6 +161,42 @@ bool IsSectorLadderTraversalActive(const SectorLadderTraversalState& state)
 void ResetSectorLadderTraversal(SectorLadderTraversalState& state)
 {
     state = SectorLadderTraversalState{};
+}
+
+bool TryDetachSectorLadderTraversal(
+        SectorLadderTraversalState& traversal,
+        SectorFpsControllerState& controller,
+        bool cameraSubmerged)
+{
+    if (!cameraSubmerged
+            || traversal.phase == SectorLadderTraversalPhase::Inactive
+            || traversal.phase == SectorLadderTraversalPhase::Dismounting) {
+        return false;
+    }
+    ResetSectorLadderTraversal(traversal);
+    controller.grounded = false;
+    controller.verticalVelocity = 0.0f;
+    return true;
+}
+
+void UpdateSectorLadderLiquidState(
+        SectorLiquidMovementState& liquid,
+        const SectorFpsControllerState& controller,
+        const SectorFpsControllerConfig& config,
+        const SectorTopologyMap& map,
+        bool diveHeld)
+{
+    liquid.exitingWater = false;
+    liquid.impactEntryActive = false;
+    const SectorLiquidContact contact = SampleSectorLiquidContact(
+            map,
+            controller.currentSectorId,
+            controller.feetPosition,
+            config);
+    UpdateSectorLiquidMovementState(liquid, contact, diveHeld);
+    const float eyeY = SectorFpsControllerEyePosition(controller, config).y;
+    liquid.cameraSubmerged = UpdateSectorLiquidCameraSubmersion(
+            liquid.cameraSubmerged, contact, eyeY);
 }
 
 bool BeginSectorLadderTraversal(
@@ -138,7 +232,14 @@ bool BeginSectorLadderTraversal(
     Vector3 target{rail.x,
             endpoint == SectorLadderEndpoint::Top ? topY : bottomY,
             rail.y};
-    if (!ExitClear(collisionWorld, target, controller, config)) return false;
+    if (!ExitClear(
+                collisionWorld,
+                target,
+                controller,
+                config,
+                ladderPrimitiveId)) {
+        return false;
+    }
 
     traversal = SectorLadderTraversalState{};
     traversal.phase = SectorLadderTraversalPhase::Mounting;

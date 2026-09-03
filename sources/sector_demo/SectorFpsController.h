@@ -41,6 +41,7 @@ struct SectorFpsControllerInput {
     bool run = false;
     bool jumpPressed = false;
     bool crouchTogglePressed = false;
+    bool ladderDetachPressed = false;
     bool swimUp = false;
     bool swimDown = false;
     bool mouseLookEnabled = false;

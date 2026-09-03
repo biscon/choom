@@ -1657,12 +1657,16 @@ void SectorGameSession::Update(
     if (!gameplayInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [&input](engine::InputEvent& event) {
+            [this, &input](engine::InputEvent& event) {
                 if (event.key.key == KEY_SPACE) {
                     input.jumpPressed = true;
                 } else if (event.key.key == KEY_LEFT_CONTROL
                         || event.key.key == KEY_RIGHT_CONTROL) {
                     input.crouchTogglePressed = true;
+                } else if (event.key.key == KEY_E
+                        && IsSectorLadderTraversalActive(
+                                controller.ladderTraversal)) {
+                    input.ladderDetachPressed = true;
                 } else {
                     return;
                 }
