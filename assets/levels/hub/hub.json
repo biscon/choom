@@ -3848,7 +3848,7 @@
               0.002703070640563965,
               -0.23997211456298828
             ],
-            "brightness": 0.07500000298023224,
+            "brightness": 0.05000000074505806,
             "maxExtinction": 0.05000000074505806,
             "edgeSoftness": 0.75,
             "scatteringTint": {
@@ -3895,7 +3895,7 @@
               -0.00267791748046875,
               -0.24466991424560547
             ],
-            "brightness": 0.07500000298023224,
+            "brightness": 0.05000000074505806,
             "maxExtinction": 0.05000000074505806,
             "edgeSoftness": 0.75,
             "scatteringTint": {
@@ -3942,7 +3942,7 @@
               0.006481170654296875,
               -0.22909832000732422
             ],
-            "brightness": 0.07500000298023224,
+            "brightness": 0.05000000074505806,
             "maxExtinction": 0.05000000074505806,
             "edgeSoftness": 0.75,
             "scatteringTint": {
@@ -3989,7 +3989,7 @@
               -0.002492070198059082,
               0.24714279174804688
             ],
-            "brightness": 0.07500000298023224,
+            "brightness": 0.05000000074505806,
             "maxExtinction": 0.05000000074505806,
             "edgeSoftness": 0.75,
             "scatteringTint": {
@@ -4036,7 +4036,7 @@
               0.0018597841262817383,
               0.2285299301147461
             ],
-            "brightness": 0.07500000298023224,
+            "brightness": 0.05000000074505806,
             "maxExtinction": 0.05000000074505806,
             "edgeSoftness": 0.75,
             "scatteringTint": {
@@ -4083,7 +4083,7 @@
               0.0024870634078979492,
               0.22940349578857422
             ],
-            "brightness": 0.07500000298023224,
+            "brightness": 0.05000000074505806,
             "maxExtinction": 0.05000000074505806,
             "edgeSoftness": 0.75,
             "scatteringTint": {
@@ -7853,7 +7853,7 @@
             ],
             "lengthScale": 0.44999998807907104,
             "widthScale": 1.0,
-            "brightness": 0.014999999664723873,
+            "brightness": 0.009999999776482582,
             "maxExtinction": 0.0,
             "edgeSoftness": 0.75,
             "scatteringTint": {
@@ -8461,10 +8461,10 @@
     "runSpeed": 5.0,
     "swimSpeed": 6.0,
     "mouseSensitivity": 0.5,
-    "eyeHeight": 1.75,
+    "eyeHeight": 1.649999976158142,
     "gravity": 25.0,
     "playerRadius": 0.25,
-    "playerHeight": 1.7999999523162842,
+    "playerHeight": 1.75,
     "stepHeight": 0.4000000059604645,
     "jumpHeight": 1.2000000476837158,
     "headBobStrength": 0.019999999552965164,
