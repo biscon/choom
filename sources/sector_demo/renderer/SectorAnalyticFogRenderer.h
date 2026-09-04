@@ -49,7 +49,7 @@ private:
         SectorLocalFogStaticLightingSamples samples;
     };
 
-    bool EnsureShader();
+    bool EnsureResources();
     const SectorLocalFogStaticLightingSamples& StaticLightingForVolume(
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
@@ -60,6 +60,8 @@ private:
     void ClearStaticLightingCache();
 
     Shader shader = {};
+    Mesh screenTriangle = {};
+    Material material = {};
     int sceneDepthLoc = -1;
     int viewportSizeLoc = -1;
     int cameraPositionLoc = -1;

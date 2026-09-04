@@ -2277,6 +2277,35 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail(liquidContext + "." + liquidError);
             }
         }
+        const auto playerDucts = root.find("playerDucts");
+        if (playerDucts != root.end()) {
+            const std::string ductContext = "application settings.playerDucts";
+            if (!playerDucts->is_object()) Fail(ductContext + " must be an object");
+            parsed.playerDucts.interactionDistanceWorld = OptionalNumber(
+                    *playerDucts, "interactionDistanceWorld", ductContext)
+                    .value_or(parsed.playerDucts.interactionDistanceWorld);
+            parsed.playerDucts.enterTransitionSeconds = OptionalNumber(
+                    *playerDucts, "enterTransitionSeconds", ductContext)
+                    .value_or(parsed.playerDucts.enterTransitionSeconds);
+            parsed.playerDucts.exitTransitionSeconds = OptionalNumber(
+                    *playerDucts, "exitTransitionSeconds", ductContext)
+                    .value_or(parsed.playerDucts.exitTransitionSeconds);
+            parsed.playerDucts.crawlSpeedWorld = OptionalNumber(
+                    *playerDucts, "crawlSpeedWorld", ductContext)
+                    .value_or(parsed.playerDucts.crawlSpeedWorld);
+            parsed.playerDucts.crawlRadiusWorld = OptionalNumber(
+                    *playerDucts, "crawlRadiusWorld", ductContext)
+                    .value_or(parsed.playerDucts.crawlRadiusWorld);
+            parsed.playerDucts.crawlHeightWorld = OptionalNumber(
+                    *playerDucts, "crawlHeightWorld", ductContext)
+                    .value_or(parsed.playerDucts.crawlHeightWorld);
+            parsed.playerDucts.crawlEyeHeightWorld = OptionalNumber(
+                    *playerDucts, "crawlEyeHeightWorld", ductContext)
+                    .value_or(parsed.playerDucts.crawlEyeHeightWorld);
+            const std::string ductError = PlayerDuctTraversalSettingsError(
+                    parsed.playerDucts);
+            if (!ductError.empty()) Fail(ductContext + "." + ductError);
+        }
         const auto overrides = root.find("viewmodelOverrides");
         if (overrides != root.end()) {
             if (!overrides->is_object()) Fail("application settings.viewmodelOverrides must be an object");
@@ -2476,6 +2505,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             settings.playerLiquids);
     if (!liquidError.empty()) {
         SetError(error, "application settings playerLiquids." + liquidError);
+        return false;
+    }
+    const std::string ductError = PlayerDuctTraversalSettingsError(
+            settings.playerDucts);
+    if (!ductError.empty()) {
+        SetError(error, "application settings playerDucts." + ductError);
         return false;
     }
     const std::string sneakError = PlayerSneakSettingsError(
@@ -2741,6 +2776,18 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"causticsSpeedMultiplier",
                             settings.playerLiquids.visuals
                                     .causticsSpeedMultiplier}}}};
+    root["playerDucts"] = {
+            {"interactionDistanceWorld",
+                    settings.playerDucts.interactionDistanceWorld},
+            {"enterTransitionSeconds",
+                    settings.playerDucts.enterTransitionSeconds},
+            {"exitTransitionSeconds",
+                    settings.playerDucts.exitTransitionSeconds},
+            {"crawlSpeedWorld", settings.playerDucts.crawlSpeedWorld},
+            {"crawlRadiusWorld", settings.playerDucts.crawlRadiusWorld},
+            {"crawlHeightWorld", settings.playerDucts.crawlHeightWorld},
+            {"crawlEyeHeightWorld",
+                    settings.playerDucts.crawlEyeHeightWorld}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

@@ -24,7 +24,8 @@ enum class SectorUseTargetKind {
     StaticProp,
     DynamicProp,
     Door,
-    Ladder
+    Ladder,
+    DuctAccess
 };
 
 struct SectorUseTarget {
@@ -62,7 +63,9 @@ SectorUseTarget FindSectorUseTarget(
         Vector3 forward,
         const SectorCollisionWorld* collisionWorld,
         bool includeDynamicProps = true,
-        const SectorTopologyMap* topologyMap = nullptr);
+        const SectorTopologyMap* topologyMap = nullptr,
+        float ductInteractionDistanceWorld = 1.75f,
+        int viewerSectorId = 0);
 
 void ConsiderSectorObjectUseBounds(
         SectorObjectUseTargetAccumulator& accumulator,

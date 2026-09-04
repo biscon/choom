@@ -40,6 +40,7 @@ void ApplyGameSaveLevelRuntimeState(
         engine::World& world,
         engine::AssetManager& assets,
         SectorSceneRuntime& scene,
+        const SectorTopologyMap& map,
         SectorScriptHost& scriptHost,
         const GameSaveLevelState& state);
 

@@ -22,6 +22,7 @@ struct SectorEditorSectorInspectorCallbacks {
     std::function<void(const char*)> markTopologyDocumentEdited;
     std::function<bool(float, float)> applySectorHeights;
     std::function<bool(bool)> applySectorCeilingSky;
+    std::function<bool(bool)> applySectorCrawlspace;
     std::function<bool(float)> applySectorAmbientIntensity;
     std::function<bool(Color)> applySectorAmbientColor;
     std::function<bool(TopologySectorTextureField, const SectorTopologyUvSettings&)> applySectorUv;

@@ -188,8 +188,8 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 19: structural primitive charts and independent receiver/occluder state.
-constexpr int kSectorLightmapBakeVersion = 19;
+// Version 20: corrected structural primitive sector membership.
+constexpr int kSectorLightmapBakeVersion = 20;
 constexpr int kSectorLightmapArtifactVersion = 2;
 constexpr const char* kSectorLightmapArtifactFormat =
         "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE";

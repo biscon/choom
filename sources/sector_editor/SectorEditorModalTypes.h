@@ -47,7 +47,9 @@ enum class TopologyTexturePickerTargetKind {
     AuthoringSide,
     AuthoringStructuralPrimitive,
     MapSky,
-    RuntimeDoor
+    RuntimeDoor,
+    RuntimeDuctFrame,
+    RuntimeDuctLouvers
 };
 
 enum class PreviewSettingsTab {

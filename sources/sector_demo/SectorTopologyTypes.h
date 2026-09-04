@@ -205,6 +205,11 @@ enum class SectorTopologySideKind {
     Back
 };
 
+enum class SectorDuctCoverRemovalSide {
+    Outside,
+    Crawlspace
+};
+
 struct SectorTopologyUvSettings {
     Vector2 scale = {1.0f, 1.0f};
     Vector2 offset = {0.0f, 0.0f};
@@ -288,6 +293,8 @@ struct SectorTopologySector {
     // Empty uses the application-wide default footstep set.
     std::string footstepSet;
     bool ceilingSky = false;
+    // Gameplay-only marker for sectors that use the prone duct traversal proxy.
+    bool crawlspace = false;
     SectorRoomtoneSettings roomtone;
     SectorLiquidSettings liquid;
 

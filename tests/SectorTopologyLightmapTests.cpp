@@ -1512,6 +1512,25 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(windowMap) == hash,
           "window appearance and physical settings do not stale baked lightmaps");
 
+    game::SectorTopologyMap ductMap = base;
+    ductMap.sectors[0].crawlspace = true;
+    game::SectorPlacedRuntimeObject ductAccess;
+    ductAccess.id = 75;
+    ductAccess.kind = "duct_access";
+    ductAccess.ductAccess.anchor.lineDefId = 1;
+    ductAccess.ductAccess.cover.enabled = true;
+    ductAccess.ductAccess.cover.louverCount = 9;
+    ductAccess.ductAccess.cover.frameMaterialId = "metal/frame";
+    ductAccess.ductAccess.cover.louverMaterialId = "metal/louvers";
+    ductMap.runtimeObjects.push_back(ductAccess);
+    Check(game::ComputeSectorLightmapSourceHash(ductMap) == hash,
+          "hash excludes crawlspace gameplay state and procedural Duct Access covers");
+    ductMap.runtimeObjects[0].ductAccess.cover.enabled = false;
+    ductMap.runtimeObjects[0].ductAccess.cover.louverCount = 3;
+    ductMap.runtimeObjects[0].ductAccess.normalOffset = 0.25f;
+    Check(game::ComputeSectorLightmapSourceHash(ductMap) == hash,
+          "Duct Access cover and placement edits do not stale baked lightmaps");
+
     game::SectorTopologyMap itemMap = base;
     game::SectorPlacedRuntimeObject item;
     item.id = 79;
@@ -2134,8 +2153,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 19,
-          "lightmap bake version includes structural primitive geometry and lighting inputs");
+    Check(game::kSectorLightmapBakeVersion == 20,
+          "lightmap bake version includes corrected structural primitive sector membership");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);

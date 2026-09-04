@@ -263,6 +263,20 @@ bool SectorEditorRuntimeObjectEditingService::AddWindow(int lineDefId)
     return true;
 }
 
+bool SectorEditorRuntimeObjectEditingService::AddDuctAccess(int lineDefId)
+{
+    const SectorEditorAddDuctAccessResult result =
+            AddDuctAccessToPortal(context_.map, lineDefId);
+    if (!result.changed) {
+        context_.statusText = result.status;
+        return false;
+    }
+    SelectObject(result.objectId);
+    MarkEdited(result.status.c_str());
+    RefreshPreviewObjects();
+    return true;
+}
+
 bool SectorEditorRuntimeObjectEditingService::CopySelectedConfig(
         SectorEditorConfigClipboardState& clipboard) const
 {
@@ -1130,10 +1144,13 @@ bool SectorEditorRuntimeObjectEditingService::BeginDrag(int objectId)
     if (object == nullptr) {
         return false;
     }
-    if (object->kind == "door" || object->kind == "window") {
+    if (object->kind == "door" || object->kind == "window"
+            || object->kind == "duct_access") {
         context_.statusText =
                 object->kind == "window"
                 ? "Window movement unavailable: windows stay anchored to portal lines"
+                : object->kind == "duct_access"
+                        ? "Duct Access movement unavailable: accesses stay anchored to portal lines"
                 : "Door movement unavailable: doors stay anchored to portal lines";
         return false;
     }

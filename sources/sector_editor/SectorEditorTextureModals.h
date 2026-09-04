@@ -96,6 +96,13 @@ bool OpenRuntimeDoorTexturePicker(
         const SectorAuthoringGraph& authoringGraph,
         SectorEditorTextureCatalogService& textureCatalog,
         int runtimeObjectId);
+bool OpenRuntimeDuctTexturePicker(
+        SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        SectorEditorTextureCatalogService& textureCatalog,
+        int runtimeObjectId,
+        bool louvers);
 std::string CurrentTextureForPickerTarget(
         const SectorEditorState& state,
         const SectorTopologyMap& topologyMap,

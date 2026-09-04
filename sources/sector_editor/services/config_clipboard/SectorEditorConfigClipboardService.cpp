@@ -61,6 +61,7 @@ bool SameSectorConfig(
             && a.ceilingMaterialId == b.ceilingMaterialId
             && a.footstepSet == b.footstepSet
             && a.ceilingSky == b.ceilingSky
+            && a.crawlspace == b.crawlspace
             && a.roomtone.mode == b.roomtone.mode
             && a.roomtone.soundId == b.roomtone.soundId
             && a.roomtone.volume == b.roomtone.volume

@@ -18,6 +18,7 @@
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorAudioOcclusion.h"
 #include "sector_demo/SectorDynamicModelShadowCasters.h"
+#include "sector_demo/SectorDuctInteraction.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorStaticModelTransform.h"
@@ -1698,6 +1699,15 @@ int CountWindowObjects(engine::World& world)
     return count;
 }
 
+int CountDuctAccessObjects(engine::World& world)
+{
+    int count = 0;
+    world.ForEach<game::SectorObject, game::SectorDuctAccess>(
+            [&count](engine::Entity, game::SectorObject&,
+                    game::SectorDuctAccess&) { ++count; });
+    return count;
+}
+
 engine::Entity FindPlacedObjectEntity(
         const game::SectorRuntimeObjectState& state,
         int placedObjectId)
@@ -1873,6 +1883,435 @@ void TestSpawnPlacedWindowBuildsGlassAndPhysicalCollider()
                   && shot.targetEntity == entity
                   && impactEvent.kind == game::WeaponImpactKind::SurfaceDebris,
           "weapon raycasts identify physical glass before geometry behind it");
+}
+
+void TestSpawnedDuctAccessCoverRemovesAndFalls()
+{
+    for (const bool crawlspaceOnFront : {false, true}) {
+        for (const bool removeFromInside : {false, true}) {
+            engine::World world;
+            engine::AssetManager assets;
+            game::SectorRuntimeObjectState state;
+            game::SectorTopologyMap map = MakeDoorPortalMap();
+            map.sectors[crawlspaceOnFront ? 0 : 1].crawlspace = true;
+            game::SectorPlacedRuntimeObject object;
+            object.id = 39;
+            object.kind = "duct_access";
+            object.ductAccess.anchor = MakeDoorOnPortal().anchor;
+            object.ductAccess.cover.enabled = true;
+            object.ductAccess.cover.removalSpeedWorld = 100.0f;
+            map.runtimeObjects.push_back(object);
+
+            game::RefreshSectorRuntimeObjectMapData(state, map);
+            game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+            Check(CountDuctAccessObjects(world) == 1
+                          && state.ductAccessGateColliders.size() == 1,
+                    "valid Duct Access spawns traversal data and a player-only portal gate");
+            if (state.placedObjectEntities.empty()) continue;
+            const engine::Entity entity =
+                    state.placedObjectEntities.front().entity;
+            game::SectorDuctAccess& access =
+                    world.Get<game::SectorDuctAccess>(entity);
+            const float actorSide = removeFromInside ? 1.0f : -1.0f;
+            const Vector3 actor{
+                    access.centerXZ.x
+                            + access.outsideToCrawlspaceNormal.x * actorSide,
+                    access.openingBottom,
+                    access.centerXZ.y
+                            + access.outsideToCrawlspaceNormal.y * actorSide};
+            Check(game::IsSectorDuctCoverBlocking(access)
+                          && !game::IsSectorDuctCoverClear(access)
+                          && game::BeginSectorDuctCoverRemoval(access, actor)
+                          && access.removalSide
+                                     == (removeFromInside
+                                                     ? game::SectorDuctCoverRemovalSide::Crawlspace
+                                                     : game::SectorDuctCoverRemovalSide::Outside),
+                    "attached vent cover records which side initiated removal");
+            game::UpdateSectorRuntimeObjects(
+                    world, assets, state, map, 1.0f);
+            const Vector2 removalOffset{
+                    access.coverOffset.x, access.coverOffset.z};
+            Check(access.coverPhase == game::SectorDuctCoverPhase::Falling
+                          && Vector2DotProduct(
+                                     removalOffset,
+                                     access.outsideToCrawlspaceNormal) < 0.0f
+                          && world.Get<game::SectorObject>(entity).currentSectorId
+                                     == access.outsideSectorId,
+                    "vent cover always pops outside for either portal orientation and interaction side");
+            game::UpdateSectorRuntimeObjects(
+                    world, assets, state, map, 1.0f);
+            const game::SectorTopologySector* outside =
+                    game::FindSectorTopologySector(
+                            map, access.outsideSectorId);
+            const float expectedFloorY = outside != nullptr
+                    ? game::SectorAuthoringToWorldDistance(outside->floorZ)
+                    : access.openingBottom;
+            const Vector3 restoredOffset =
+                    game::SectorDuctCoverSettledOffset(
+                            access, expectedFloorY);
+            Check(access.coverPhase == game::SectorDuctCoverPhase::Settled
+                          && game::IsSectorDuctCoverClear(access)
+                          && Near(access.openingBottom + access.coverOffset.y,
+                                  expectedFloorY)
+                          && Near(access.coverOffset, restoredOffset),
+                    "removed and restored vent covers share the outside-room resting position");
+        }
+    }
+}
+
+void TestDuctTraversalEntersCrawlsAndAutoExits()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState runtime;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    map.sectors[1].crawlspace = true;
+    game::SectorPlacedRuntimeObject object;
+    object.id = 40;
+    object.kind = "duct_access";
+    object.ductAccess.anchor = MakeDoorOnPortal().anchor;
+    map.runtimeObjects.push_back(object);
+    game::RefreshSectorRuntimeObjectMapData(runtime, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, runtime, map);
+    Check(!runtime.placedObjectEntities.empty(),
+            "Duct traversal fixture spawns an access entity");
+    if (runtime.placedObjectEntities.empty()) return;
+    const engine::Entity entity = runtime.placedObjectEntities.front().entity;
+    const game::SectorDuctAccess& access =
+            world.Get<game::SectorDuctAccess>(entity);
+
+    game::SectorDuctTraversalState traversal;
+    game::SectorFpsControllerState player;
+    player.feetPosition = Vector3{
+            access.centerXZ.x
+                    - access.outsideToCrawlspaceNormal.x * 0.7f,
+            access.openingBottom,
+            access.centerXZ.y
+                    - access.outsideToCrawlspaceNormal.y * 0.7f};
+    player.currentSectorId = access.outsideSectorId;
+    game::PlayerDuctTraversalApplicationSettings settings;
+    game::SectorFpsControllerConfig normalConfig;
+    Check(game::BeginSectorDuctTraversal(
+                  traversal, player, normalConfig, access, entity, settings)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Entering,
+            "using an unobstructed Duct Access starts the on-rails entry");
+    Check(game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  game::SectorFpsControllerInput{}, settings,
+                  map, nullptr, 1.0f)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Crawling
+                  && player.currentSectorId == access.crawlspaceSectorId,
+            "entry easing places the crawl collider inside the crawlspace");
+    const Vector2 entryFacing{
+            std::cos(player.yawRadians), std::sin(player.yawRadians)};
+    Check(Vector2DotProduct(
+                  entryFacing, access.outsideToCrawlspaceNormal) > 0.999f,
+            "entry animation leaves the player looking straight into the duct");
+    const game::SectorFpsControllerConfig crawl =
+            game::SectorDuctCrawlControllerConfig(normalConfig, settings);
+    Check(Near(crawl.playerRadius, settings.crawlRadiusWorld)
+                  && Near(crawl.playerHeight, settings.crawlHeightWorld)
+                  && Near(crawl.eyeHeight, settings.crawlEyeHeightWorld)
+                  && Near(crawl.walkSpeed, settings.crawlSpeedWorld),
+            "crawl locomotion uses the globally configured compact collider and speed");
+    Check(!game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  game::SectorFpsControllerInput{}, settings,
+                  map, nullptr, 0.01f)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Crawling,
+            "entry access does not immediately eject the player");
+    player.feetPosition.x = access.centerXZ.x
+            + access.outsideToCrawlspaceNormal.x * 1.0f;
+    player.feetPosition.z = access.centerXZ.y
+            + access.outsideToCrawlspaceNormal.y * 1.0f;
+    Check(!game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  game::SectorFpsControllerInput{}, settings,
+                  map, nullptr, 0.01f)
+                  && traversal.exitArmed,
+            "moving away from the entry arms automatic crawlspace exits");
+    player.feetPosition.x = access.centerXZ.x
+            + access.outsideToCrawlspaceNormal.x * 0.25f;
+    player.feetPosition.z = access.centerXZ.y
+            + access.outsideToCrawlspaceNormal.y * 0.25f;
+    Check(game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  game::SectorFpsControllerInput{}, settings,
+                  map, nullptr, 0.01f)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Exiting,
+            "reaching an unobstructed access from inside starts automatic exit");
+    Check(game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  game::SectorFpsControllerInput{}, settings,
+                  map, nullptr, 1.0f)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Inactive,
+            "exit easing restores ordinary locomotion outside the crawlspace");
+
+    player.feetPosition = Vector3{
+            access.centerXZ.x
+                    - access.outsideToCrawlspaceNormal.x * 0.7f,
+            access.openingBottom,
+            access.centerXZ.y
+                    - access.outsideToCrawlspaceNormal.y * 0.7f};
+    player.currentSectorId = access.outsideSectorId;
+    Check(game::BeginSectorDuctTraversal(
+                  traversal, player, normalConfig, access, entity, settings),
+            "Duct traversal can be entered again after an exit");
+    game::UpdateSectorDuctTraversal(
+            world, traversal, player, normalConfig,
+            game::SectorFpsControllerInput{}, settings, map, nullptr, 1.0f);
+    game::SectorFpsControllerInput reverseInput;
+    reverseInput.moveBackward = true;
+    Check(game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  reverseInput, settings, map, nullptr, 0.01f)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Exiting,
+            "backing out immediately after entry starts an exit without requiring deeper travel");
+}
+
+void TestDuctExitMovesOutsideBeforeRestoringStandingHeight()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState runtime;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    for (game::SectorTopologyVertex& vertex : map.vertices) {
+        vertex.x *= 2;
+        vertex.y *= 2;
+    }
+    map.sectors[0].floorZ = -17.0f;
+    map.sectors[0].ceilingZ = 15.0f;
+    map.sectors[1].floorZ = 0.0f;
+    map.sectors[1].ceilingZ = 7.8f;
+    map.sectors[1].crawlspace = true;
+    game::SectorPlacedRuntimeObject object;
+    object.id = 41;
+    object.kind = "duct_access";
+    object.ductAccess.anchor = MakeDoorOnPortal().anchor;
+    object.ductAccess.anchor.endpointAX *= 2;
+    object.ductAccess.anchor.endpointAY *= 2;
+    object.ductAccess.anchor.endpointBX *= 2;
+    object.ductAccess.anchor.endpointBY *= 2;
+    map.runtimeObjects.push_back(object);
+    game::RefreshSectorRuntimeObjectMapData(runtime, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, runtime, map);
+    Check(!runtime.placedObjectEntities.empty(),
+            "raised crawlspace exit fixture spawns a Duct Access");
+    if (runtime.placedObjectEntities.empty()) return;
+    const engine::Entity entity = runtime.placedObjectEntities.front().entity;
+    const game::SectorDuctAccess& access =
+            world.Get<game::SectorDuctAccess>(entity);
+
+    game::SectorCollisionWorld collision;
+    std::string error;
+    Check(collision.BuildFromTopology(map, &error),
+            "raised crawlspace exit fixture builds collision");
+    game::PlayerDuctTraversalApplicationSettings settings;
+    game::SectorFpsControllerConfig normalConfig;
+    normalConfig.eyeHeight = 1.75f;
+    normalConfig.playerHeight = 1.8f;
+    game::SectorFpsControllerState player;
+    player.feetPosition = Vector3{
+            access.centerXZ.x
+                    + access.outsideToCrawlspaceNormal.x * 0.25f,
+            access.openingBottom,
+            access.centerXZ.y
+                    + access.outsideToCrawlspaceNormal.y * 0.25f};
+    player.currentSectorId = access.crawlspaceSectorId;
+    player.grounded = true;
+    game::SectorDuctTraversalState traversal;
+    traversal.phase = game::SectorDuctTraversalPhase::Crawling;
+    traversal.crawlspaceSectorId = access.crawlspaceSectorId;
+    traversal.crawlRadiusWorld = settings.crawlRadiusWorld;
+    traversal.crawlHeightWorld = settings.crawlHeightWorld;
+    traversal.viewEyeHeightWorld = settings.crawlEyeHeightWorld;
+    traversal.exitArmed = true;
+    const float crawlEyeY = player.feetPosition.y
+            + traversal.viewEyeHeightWorld;
+    const game::SectorFpsControllerConfig expectedStanding =
+            game::EffectiveSectorFpsControllerConfig(player, normalConfig);
+    const float exitOffset = access.thickness * 0.5f
+            + expectedStanding.playerRadius + 0.05f;
+    const Vector2 exitPosition{
+            access.centerXZ.x
+                    - access.outsideToCrawlspaceNormal.x * exitOffset,
+            access.centerXZ.y
+                    - access.outsideToCrawlspaceNormal.y * exitOffset};
+    Check(collision.FindSectorContainingPointPreferCurrent(
+                  exitPosition, access.outsideSectorId)
+                          == access.outsideSectorId,
+            "raised crawlspace exit target lies in the ordinary sector");
+    game::SectorCollisionHeights expectedExitHeights;
+    const bool resolvedExitHeights = collision.ResolveActorVerticalContext(
+            access.outsideSectorId,
+            game::SectorCollisionVerticalQuery{
+                    exitPosition,
+                    player.feetPosition.y + traversal.viewEyeHeightWorld
+                            - expectedStanding.eyeHeight,
+                    expectedStanding.playerRadius,
+                    expectedStanding.playerHeight,
+                    expectedStanding.stepHeight,
+                    false},
+            &expectedExitHeights);
+    const float expectedExitFeetY = resolvedExitHeights
+            ? std::clamp(
+                    player.feetPosition.y + traversal.viewEyeHeightWorld
+                            - expectedStanding.eyeHeight,
+                    expectedExitHeights.floorZ,
+                    expectedExitHeights.ceilingZ
+                            - expectedStanding.playerHeight)
+            : 0.0f;
+    Check(resolvedExitHeights
+                  && expectedExitHeights.ceilingZ
+                                  - expectedStanding.playerHeight
+                             >= expectedExitHeights.floorZ,
+            "raised crawlspace outside sector has standing clearance");
+    const bool expectedPlacementAllowed = collision.AllowsPrismPlacement(
+                  exitPosition,
+                  expectedStanding.playerRadius,
+                  expectedExitFeetY,
+                  expectedExitFeetY + expectedStanding.playerHeight,
+                  access.outsideSectorId);
+    Check(expectedPlacementAllowed,
+            "raised crawlspace outside target accepts the standing capsule");
+
+    Check(game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  game::SectorFpsControllerInput{}, settings,
+                  map, &collision, 0.01f)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Exiting,
+            "a raised crawlspace begins an exit into a valid standing position");
+    Check(game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  game::SectorFpsControllerInput{}, settings,
+                  map, &collision, settings.exitTransitionSeconds * 0.5f)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Exiting
+                  && Near(player.feetPosition.y, access.openingBottom)
+                  && Near(player.feetPosition.y
+                                  + traversal.viewEyeHeightWorld,
+                          crawlEyeY),
+            "the first exit stage crosses the portal at crawl height");
+    const Vector2 outsideOffset{
+            player.feetPosition.x - access.centerXZ.x,
+            player.feetPosition.z - access.centerXZ.y};
+    Check(Vector2DotProduct(
+                  outsideOffset, access.outsideToCrawlspaceNormal) < 0.0f,
+            "the crawl collider is fully outside before standing restoration starts");
+
+    Check(game::UpdateSectorDuctTraversal(
+                  world, traversal, player, normalConfig,
+                  game::SectorFpsControllerInput{}, settings,
+                  map, &collision, settings.exitTransitionSeconds * 0.5f)
+                  && traversal.phase
+                             == game::SectorDuctTraversalPhase::Inactive
+                  && player.currentSectorId == access.outsideSectorId,
+            "the second exit stage restores ordinary locomotion in the outside sector");
+    const game::SectorFpsControllerConfig standing =
+            game::EffectiveSectorFpsControllerConfig(player, normalConfig);
+    game::SectorCollisionHeights outsideHeights;
+    Check(collision.GetSectorFloorCeiling(
+                  access.outsideSectorId, &outsideHeights)
+                  && player.feetPosition.y >= outsideHeights.floorZ
+                  && player.feetPosition.y + standing.playerHeight
+                             <= outsideHeights.ceilingZ
+                  && player.feetPosition.y + standing.eyeHeight
+                             <= outsideHeights.ceilingZ,
+            "the restored standing capsule and camera fit below the outside ceiling");
+    Check(collision.AllowsPrismPlacement(
+                  Vector2{player.feetPosition.x, player.feetPosition.z},
+                  standing.playerRadius,
+                  player.feetPosition.y,
+                  player.feetPosition.y + standing.playerHeight,
+                  access.outsideSectorId),
+            "duct exit completion uses a collision-valid standing placement");
+}
+
+void TestDuctUsePromptIsSuppressedInsideOpenCrawlspace()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity entity = world.CreateEntity();
+    game::SectorDuctAccess access;
+    access.centerXZ = Vector2{0.0f, 0.0f};
+    access.tangent = Vector2{1.0f, 0.0f};
+    access.width = 1.0f;
+    access.height = 1.0f;
+    access.openingBottom = 0.0f;
+    access.openingTop = 1.0f;
+    access.outsideSectorId = 1;
+    access.crawlspaceSectorId = 2;
+    world.Add(entity, access);
+
+    const Vector3 eye{0.0f, 0.5f, 0.5f};
+    const Vector3 facingPortal{0.0f, 0.0f, -1.0f};
+    const game::SectorUseTarget openInside = game::FindSectorUseTarget(
+            world, nullptr, eye, facingPortal, nullptr, true, nullptr,
+            1.75f, access.crawlspaceSectorId);
+    Check(openInside.kind == game::SectorUseTargetKind::None,
+            "an open Duct Access does not show the outside entry prompt while crawling");
+
+    game::SectorDuctAccess& attached = world.Get<game::SectorDuctAccess>(entity);
+    attached.cover.enabled = true;
+    attached.coverPhase = game::SectorDuctCoverPhase::Attached;
+    const game::SectorUseTarget coveredInside = game::FindSectorUseTarget(
+            world, nullptr, eye, facingPortal, nullptr, true, nullptr,
+            1.75f, access.crawlspaceSectorId);
+    Check(coveredInside.kind == game::SectorUseTargetKind::DuctAccess,
+            "an attached cover remains usable from inside a crawlspace");
+}
+
+void TestDuctSettingsAndCoverBasisAllowCompactSymmetricAccesses()
+{
+    game::PlayerDuctTraversalApplicationSettings compact;
+    compact.crawlRadiusWorld = 0.35f;
+    compact.crawlHeightWorld = 0.20f;
+    compact.crawlEyeHeightWorld = 0.10f;
+    Check(game::PlayerDuctTraversalSettingsError(compact).empty(),
+            "crawl height is validated independently from horizontal radius");
+    const game::PlayerDuctTraversalApplicationSettings normalized =
+            game::NormalizePlayerDuctTraversalSettings(compact);
+    Check(Near(normalized.crawlRadiusWorld, 0.35f)
+                  && Near(normalized.crawlHeightWorld, 0.20f)
+                  && Near(normalized.crawlEyeHeightWorld, 0.10f),
+            "valid compact crawl collider and eye settings are preserved");
+    compact.crawlEyeHeightWorld = compact.crawlHeightWorld;
+    Check(!game::PlayerDuctTraversalSettingsError(compact).empty(),
+            "duct settings explain the actual eye-height relationship");
+
+    for (const Vector2 insideDirection
+            : {Vector2{1.0f, 0.0f}, Vector2{-1.0f, 0.0f}}) {
+        game::SectorDuctAccess access;
+        access.outsideToCrawlspaceNormal = insideDirection;
+        const game::SectorDuctCoverRenderBasis basis =
+                game::BuildSectorDuctCoverRenderBasis(access);
+        const Vector3 expectedOutward{
+                -insideDirection.x, 0.0f, -insideDirection.y};
+        Check(Vector3DotProduct(basis.outward, expectedOutward) > 0.999f
+                      && Vector3DotProduct(
+                              Vector3CrossProduct(
+                                      basis.horizontal, basis.up),
+                              basis.outward) > 0.999f,
+                "vent cover basis faces outside and stays right-handed at either portal end");
+        const Vector3 position{3.0f, 4.0f, 5.0f};
+        const Matrix model = game::BuildSectorDuctCoverModelMatrix(
+                access, position);
+        const Vector3 origin = Vector3Transform(Vector3{}, model);
+        const Vector3 modelOutward = Vector3Subtract(
+                Vector3Transform(Vector3{0.0f, 0.0f, 1.0f}, model),
+                origin);
+        Check(Near(origin, position)
+                      && Vector3DotProduct(modelOutward, expectedOutward)
+                              > 0.999f,
+                "vent cover model transform preserves semantic outside orientation");
+    }
 }
 
 void TestSectorWindowModelMatrixPreservesVolumeAndFaceOrientation()
@@ -11655,6 +12094,11 @@ int main()
     TestSpawnPlacedDoorCopiesResolvedPayloadToEcs();
     TestSpawnPlacedDoorRefreshDoesNotDuplicate();
     TestSpawnPlacedWindowBuildsGlassAndPhysicalCollider();
+    TestSpawnedDuctAccessCoverRemovesAndFalls();
+    TestDuctTraversalEntersCrawlsAndAutoExits();
+    TestDuctExitMovesOutsideBeforeRestoringStandingHeight();
+    TestDuctUsePromptIsSuppressedInsideOpenCrawlspace();
+    TestDuctSettingsAndCoverBasisAllowCompactSymmetricAccesses();
     TestSectorWindowModelMatrixPreservesVolumeAndFaceOrientation();
     TestUnknownModelSwingDoorUsesAnimatedProceduralFallback();
     TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions();

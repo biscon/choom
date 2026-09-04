@@ -135,6 +135,57 @@ struct SectorWindow {
     bool visible = true;
 };
 
+enum class SectorDuctCoverPhase {
+    Attached,
+    Removing,
+    Falling,
+    Settled
+};
+
+struct SectorDuctAccess {
+    int placedObjectId = 0;
+    int lineDefId = 0;
+    int outsideSectorId = 0;
+    int crawlspaceSectorId = 0;
+    Vector2 centerXZ = {};
+    Vector2 tangent = {1.0f, 0.0f};
+    Vector2 outsideToCrawlspaceNormal = {0.0f, -1.0f};
+    float openingBottom = 0.0f;
+    float openingTop = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    float thickness = 0.08f;
+    SectorDuctCoverSettings cover;
+    SectorDuctCoverPhase coverPhase = SectorDuctCoverPhase::Attached;
+    // Records which side initiated removal. The wall-mounted cover itself
+    // always moves into and settles in the outside sector.
+    SectorDuctCoverRemovalSide removalSide =
+            SectorDuctCoverRemovalSide::Outside;
+    float coverMotionElapsedSeconds = 0.0f;
+    Vector3 coverOffset = {};
+};
+
+struct SectorDuctCoverRenderBasis {
+    Vector3 horizontal = {1.0f, 0.0f, 0.0f};
+    Vector3 up = {0.0f, 1.0f, 0.0f};
+    Vector3 outward = {0.0f, 0.0f, 1.0f};
+};
+
+SectorDuctCoverRenderBasis BuildSectorDuctCoverRenderBasis(
+        const SectorDuctAccess& access);
+Matrix BuildSectorDuctCoverModelMatrix(
+        const SectorDuctAccess& access,
+        Vector3 position);
+
+bool IsSectorDuctCoverBlocking(const SectorDuctAccess& access);
+bool IsSectorDuctCoverClear(const SectorDuctAccess& access);
+bool BeginSectorDuctCoverRemoval(
+        SectorDuctAccess& access,
+        Vector3 actorPosition);
+Vector3 SectorDuctCoverSettledOffset(
+        const SectorDuctAccess& access,
+        float outsideFloorY);
+
 Matrix BuildSectorWindowModelMatrix(
         const SectorObjectTransform& transform,
         const SectorWindow& window);
@@ -172,6 +223,8 @@ struct SectorRuntimeObjectState {
     // Kept separate so physical glass can block movement and weapons without
     // becoming opaque to perception, audio, or light queries.
     std::vector<SectorStaticModelCollider> windowColliders;
+    // Player-only invisible portal gates for controlled Duct Access transitions.
+    std::vector<SectorStaticModelCollider> ductAccessGateColliders;
     std::vector<SectorStaticModelCollider> physicalModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
     size_t placedObjectCount = 0;

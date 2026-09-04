@@ -1241,6 +1241,7 @@ void CopyTopologySectorDefaultsToFaceAnchor(
     anchor.floorMaterialId = sector.floorMaterialId;
     anchor.ceilingMaterialId = sector.ceilingMaterialId;
     anchor.ceilingSky = sector.ceilingSky;
+    anchor.crawlspace = sector.crawlspace;
     anchor.floorUv = sector.floorUv;
     anchor.ceilingUv = sector.ceilingUv;
     anchor.floorDecal = sector.floorDecal;

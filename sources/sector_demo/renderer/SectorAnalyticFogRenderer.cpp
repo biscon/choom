@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <string>
 
@@ -17,8 +18,7 @@ namespace {
 const char* ScreenVs = R"(
 #version 330
 in vec3 vertexPosition;
-uniform mat4 mvp;
-void main() { gl_Position = mvp * vec4(vertexPosition, 1.0); }
+void main() { gl_Position = vec4(vertexPosition.xy, 0.0, 1.0); }
 )";
 
 const char* AnalyticFogFs = R"(
@@ -320,11 +320,38 @@ void main() {
     if (opacity <= 0.00001) discard;
     vec3 midpointNormalized = normalizedLocalPosition(midpoint);
     vec3 staticLighting = interpolateFogLighting(midpointNormalized.xz);
-    finalColor = vec4(
-            min(max(fogColor * staticLighting, vec3(0.0)), vec3(65504.0)),
-            opacity);
+    vec3 resultColor = min(
+            max(fogColor * staticLighting, vec3(0.0)),
+            vec3(65504.0));
+    if (any(isnan(resultColor)) || any(isinf(resultColor))
+            || isnan(opacity) || isinf(opacity)) discard;
+    finalColor = vec4(resultColor, opacity);
 }
 )";
+
+bool EnsureScreenTriangle(Mesh& mesh)
+{
+    if (mesh.vaoId != 0) return true;
+    constexpr float vertices[] = {
+            -1.0f, -1.0f, 0.0f,
+             3.0f, -1.0f, 0.0f,
+            -1.0f,  3.0f, 0.0f};
+    mesh.vertexCount = 3;
+    mesh.triangleCount = 1;
+    mesh.vertices = static_cast<float*>(MemAlloc(sizeof(vertices)));
+    if (mesh.vertices == nullptr) {
+        mesh = {};
+        return false;
+    }
+    std::memcpy(mesh.vertices, vertices, sizeof(vertices));
+    UploadMesh(&mesh, false);
+    if (mesh.vaoId == 0) {
+        UnloadMesh(mesh);
+        mesh = {};
+        return false;
+    }
+    return true;
+}
 
 bool SameVector3(Vector3 left, Vector3 right)
 {
@@ -344,9 +371,10 @@ void SectorAnalyticFogRenderer::Reserve(std::size_t volumeCount)
     visibleVolumes.reserve(volumeCount);
 }
 
-bool SectorAnalyticFogRenderer::EnsureShader()
+bool SectorAnalyticFogRenderer::EnsureResources()
 {
-    if (shader.id != 0) return true;
+    if (shader.id != 0 && screenTriangle.vaoId != 0
+            && material.maps != nullptr) return true;
     if (shaderFailed) return false;
     shader = LoadShaderFromMemory(ScreenVs, AnalyticFogFs);
     if (shader.id == 0) { shaderFailed = true; return false; }
@@ -367,6 +395,23 @@ bool SectorAnalyticFogRenderer::EnsureShader()
     LOC(fogLightingLocs[2], "fogLighting2");
     LOC(fogLightingLocs[3], "fogLighting3");
 #undef LOC
+    shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneDepthLoc;
+    if (!EnsureScreenTriangle(screenTriangle)) {
+        UnloadShader(shader);
+        shader = {};
+        shaderFailed = true;
+        return false;
+    }
+    material = LoadMaterialDefault();
+    if (material.maps == nullptr) {
+        UnloadMesh(screenTriangle);
+        screenTriangle = {};
+        UnloadShader(shader);
+        shader = {};
+        shaderFailed = true;
+        return false;
+    }
+    material.shader = shader;
     return true;
 }
 
@@ -464,7 +509,7 @@ bool SectorAnalyticFogRenderer::Apply(
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
     if (!std::isfinite(nearPlane) || !std::isfinite(farPlane)
-            || nearPlane <= 0.0f || farPlane <= nearPlane || !EnsureShader()) return false;
+            || nearPlane <= 0.0f || farPlane <= nearPlane || !EnsureResources()) return false;
     const int width = sceneTarget.texture.width;
     const int height = sceneTarget.texture.height;
     const float aspect = static_cast<float>(width) / std::max(height, 1);
@@ -518,7 +563,6 @@ bool SectorAnalyticFogRenderer::Apply(
     const Vector2 viewport{static_cast<float>(width), static_cast<float>(height)};
     rlDrawRenderBatchActive();
     BeginTextureMode(colorOnlyTarget);
-    BeginShaderMode(shader);
     SetShaderValue(shader, viewportSizeLoc, &viewport, SHADER_UNIFORM_VEC2);
     SetShaderValue(shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
     SetShaderValue(shader, cameraForwardLoc, &forward, SHADER_UNIFORM_VEC3);
@@ -528,6 +572,7 @@ bool SectorAnalyticFogRenderer::Apply(
     SetShaderValue(shader, aspectRatioLoc, &aspect, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, nearPlaneLoc, &nearPlane, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, farPlaneLoc, &farPlane, SHADER_UNIFORM_FLOAT);
+    material.maps[MATERIAL_MAP_DIFFUSE].texture = sceneTarget.depth;
     BeginBlendMode(BLEND_ALPHA);
     rlEnableScissorTest();
     for (const VisibleVolume& entry : visibleVolumes) {
@@ -560,10 +605,6 @@ bool SectorAnalyticFogRenderer::Apply(
                                 volume.noiseAmount)};
         const SectorLocalFogStaticLightingSamples& lighting =
                 StaticLightingForVolume(map, objectLightProbes, volume);
-        // rlDrawRenderBatchActive() clears raylib's auxiliary sampler slots.
-        // Register sceneDepth after the flush so it remains bound for this draw.
-        rlDrawRenderBatchActive();
-        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);
         SetShaderValue(shader, centerLoc, &volume.centerWorld, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, radiiLoc, &volume.radiiWorld, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, colorLoc, &color, SHADER_UNIFORM_VEC3);
@@ -586,18 +627,25 @@ bool SectorAnalyticFogRenderer::Apply(
                 entry.scissor.y,
                 entry.scissor.width,
                 entry.scissor.height);
-        DrawRectangle(0, 0, width, height, WHITE);
+        DrawMesh(screenTriangle, material, MatrixIdentity());
     }
-    rlDrawRenderBatchActive();
     rlDisableScissorTest();
     EndBlendMode();
-    EndShaderMode();
     EndTextureMode();
+    material.maps[MATERIAL_MAP_DIFFUSE].texture = {};
     return true;
 }
 
 void SectorAnalyticFogRenderer::Shutdown()
 {
+    if (material.maps != nullptr) {
+        material.maps[MATERIAL_MAP_DIFFUSE].texture = {};
+        material.shader = {};
+        UnloadMaterial(material);
+    }
+    material = {};
+    if (screenTriangle.vaoId != 0) UnloadMesh(screenTriangle);
+    screenTriangle = {};
     if (shader.id != 0) UnloadShader(shader);
     shader = {};
     shaderFailed = false;

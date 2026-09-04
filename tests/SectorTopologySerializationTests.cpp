@@ -235,6 +235,31 @@ SectorPlacedRuntimeObject MakeWindowRuntimeObject(int id)
     return object;
 }
 
+SectorPlacedRuntimeObject MakeDuctAccessRuntimeObject(int id)
+{
+    SectorPlacedRuntimeObject object;
+    object.id = id;
+    object.kind = "duct_access";
+    object.ductAccess.anchor = MakeWindowRuntimeObject(id).window.anchor;
+    object.ductAccess.width = 3.25f;
+    object.ductAccess.height = 1.25f;
+    object.ductAccess.thickness = 0.12f;
+    object.ductAccess.horizontalOffsetWorld = 0.2f;
+    object.ductAccess.verticalOffsetWorld = 0.3f;
+    object.ductAccess.normalOffset = -0.04f;
+    object.ductAccess.cover.enabled = true;
+    object.ductAccess.cover.thickness = 0.08f;
+    object.ductAccess.cover.frameBorderWidthWorld = 0.11f;
+    object.ductAccess.cover.louverCount = 9;
+    object.ductAccess.cover.louverAngleDegrees = 28.0f;
+    object.ductAccess.cover.frameMaterialId = "front_wall";
+    object.ductAccess.cover.louverMaterialId = "back_wall";
+    object.ductAccess.cover.slideSide =
+            game::SectorDuctCoverSlideSide::PortalStart;
+    object.ductAccess.cover.removalSpeedWorld = 1.75f;
+    return object;
+}
+
 SectorTopologyMap MakeAdjacentSquares()
 {
     SectorTopologyMap map;
@@ -332,8 +357,12 @@ std::string SaveAuthoringText(const game::SectorAuthoringDocument& document)
 {
     std::string text;
     std::string error;
-    Check(game::SaveSectorAuthoringDocumentToJsonString(document, text, &error),
-          "test authoring document serializes");
+    const bool saved = game::SaveSectorAuthoringDocumentToJsonString(
+            document, text, &error);
+    if (!saved) {
+        std::cerr << "Authoring serialization error: " << error << '\n';
+    }
+    Check(saved, "test authoring document serializes");
     Check(error.empty(), "successful authoring serialization clears error");
     return text;
 }
@@ -2284,6 +2313,73 @@ void TestRuntimeObjectsRoundTripAndValidation()
     invalidDoor = doorSaved;
     invalidDoor["runtimeObjects"][0].erase("door");
     ExpectRejected(invalidDoor, "missing door payload is rejected");
+}
+
+void TestDuctAccessRoundTripAndLightmapExclusion()
+{
+    SectorTopologyMap map = MakeAdjacentSquares();
+    map.sectors[1].crawlspace = true;
+    map.runtimeObjects.push_back(MakeDuctAccessRuntimeObject(51));
+
+    const Json saved = Json::parse(SaveText(map));
+    Check(saved["sectors"][1]["crawlspace"] == true
+                  && saved["runtimeObjects"][0]["kind"] == "duct_access"
+                  && saved["runtimeObjects"][0]["ductAccess"]["cover"]["enabled"] == true
+                  && saved["runtimeObjects"][0]["ductAccess"]["cover"]["louverCount"] == 9
+                  && saved["runtimeObjects"][0]["ductAccess"]["cover"]["slideSide"] == "portal_start",
+            "crawlspace and art-directable Duct Access cover fields serialize");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error),
+            "Duct Access topology JSON reloads");
+    const SectorPlacedRuntimeObject* object =
+            game::FindSectorPlacedRuntimeObject(loaded, 51);
+    Check(object != nullptr && loaded.sectors[1].crawlspace
+                  && object->kind == "duct_access"
+                  && object->ductAccess.cover.enabled
+                  && object->ductAccess.cover.louverCount == 9
+                  && Near(object->ductAccess.cover.removalSpeedWorld, 1.75f)
+                  && game::ResolveSectorDuctAccessAnchor(
+                             loaded, object->ductAccess).valid,
+            "Duct Access and crawlspace state round-trip with a valid portal anchor");
+
+    game::SectorAuthoringDocument authoring =
+            MakeAuthoringDocumentFromMap(map);
+    SectorPlacedRuntimeObject& authoringObject =
+            authoring.mapData.runtimeObjects.front();
+    const SectorTopologyLineDef* derivedLine =
+            game::FindSectorTopologyLineDef(
+                    authoring.derivation.topology,
+                    authoringObject.ductAccess.anchor.lineDefId);
+    Check(derivedLine != nullptr,
+            "graph-native Duct Access fixture retains its portal linedef");
+    if (derivedLine != nullptr) {
+        authoringObject.ductAccess.anchor.frontSideDefId =
+                derivedLine->frontSideDefId;
+        authoringObject.ductAccess.anchor.backSideDefId =
+                derivedLine->backSideDefId;
+    }
+    const std::string authoringText = SaveAuthoringText(authoring);
+    game::SectorAuthoringDocument loadedAuthoring;
+    Check(LoadAuthoringText(authoringText, loadedAuthoring, error),
+            "graph-native authoring document with Duct Access reloads");
+    const SectorPlacedRuntimeObject* authoringAccess =
+            game::FindSectorPlacedRuntimeObject(
+                    loadedAuthoring.mapData, 51);
+    Check(authoringAccess != nullptr
+                  && loadedAuthoring.derivation.success
+                  && game::ResolveSectorDuctAccessAnchor(
+                             loadedAuthoring.derivation.topology,
+                             authoringAccess->ductAccess).valid,
+            "graph-native save validates Duct Access anchors against derived topology");
+
+    SectorTopologyMap invalid = MakeAdjacentSquares();
+    invalid.sectors[1].crawlspace = true;
+    invalid.sectors[1].liquid.enabled = true;
+    std::string ignored;
+    Check(!game::SaveSectorTopologyMapToJsonString(invalid, ignored, &error),
+            "crawlspace sectors cannot also contain liquid");
 }
 
 void TestDynamicModelRoundTripAndDefaultOmission()
@@ -5663,6 +5759,7 @@ int main()
     TestRectLightRoundTrip();
     TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
+    TestDuctAccessRoundTripAndLightmapExclusion();
     TestDynamicModelRoundTripAndDefaultOmission();
     TestItemRoundTripDefaultsValidationAndLightmapExclusion();
     TestNpcRoundTripDefaultsAndValidation();

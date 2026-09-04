@@ -527,6 +527,7 @@ void CopySectorPropertiesToFaceAnchor(
     anchor.ceilingMaterialId = sector.ceilingMaterialId;
     anchor.footstepSet = sector.footstepSet;
     anchor.ceilingSky = sector.ceilingSky;
+    anchor.crawlspace = sector.crawlspace;
     anchor.roomtone = sector.roomtone;
     anchor.liquid = sector.liquid;
     anchor.floorUv = sector.floorUv;
@@ -551,6 +552,7 @@ void CopyFaceAnchorPropertiesToTopologySector(
     sector.ceilingMaterialId = anchor.ceilingMaterialId;
     sector.footstepSet = anchor.footstepSet;
     sector.ceilingSky = anchor.ceilingSky;
+    sector.crawlspace = anchor.crawlspace;
     sector.roomtone = anchor.roomtone;
     sector.liquid = NormalizeSectorLiquidSettingsForSpan(
             anchor.liquid, anchor.floorZ, anchor.ceilingZ);

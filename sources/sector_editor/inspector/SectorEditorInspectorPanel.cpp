@@ -1191,6 +1191,28 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     return reportAuthoringFaceAnchorUnavailable();
                 },
                 [mutateSelectedAuthoringFaceAnchor,
+                 reportAuthoringFaceAnchorUnavailable,
+                 &statusText,
+                 selectedTopologySector](bool crawlspace) {
+                    const SectorTopologySector* sector =
+                            selectedTopologySector();
+                    if (crawlspace && sector != nullptr
+                            && sector->liquid.enabled) {
+                        statusText = "Crawlspace sectors cannot contain liquid";
+                        return false;
+                    }
+                    if (mutateSelectedAuthoringFaceAnchor(
+                                "Updated sector crawlspace",
+                                [crawlspace](SectorAuthoringFaceAnchor& anchor) {
+                                    if (anchor.crawlspace == crawlspace) return false;
+                                    anchor.crawlspace = crawlspace;
+                                    return true;
+                                })) {
+                        return true;
+                    }
+                    return reportAuthoringFaceAnchorUnavailable();
+                },
+                [mutateSelectedAuthoringFaceAnchor,
                  selectedAuthoringFaceAnchorUnavailable,
                  reportAuthoringFaceAnchorUnavailable](float intensity) {
                     const char* status = "Updated sector ambient intensity";
@@ -2163,6 +2185,26 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         y += rowH + gap;
 
+        bool crawlspace = selectedAuthoringFaceAnchor->crawlspace;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_authoring_face_crawlspace",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font, "Crawlspace", crawlspace)) {
+            if (crawlspace && selectedAuthoringFaceAnchor->liquid.enabled) {
+                statusText = "Crawlspace sectors cannot contain liquid";
+            } else {
+                mutateFaceAnchor(
+                        "Updated authoring face crawlspace",
+                        [crawlspace](SectorAuthoringFaceAnchor& anchor) {
+                            if (anchor.crawlspace == crawlspace) return false;
+                            anchor.crawlspace = crawlspace;
+                            return true;
+                        });
+            }
+        }
+        y += rowH + gap;
+
         engine::Separator(config, Rectangle{
                 scroll.viewport.x,
                 scroll.viewport.y - uiState.inspectorScroll.offset.y + y,
@@ -2186,8 +2228,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     "Contains Liquid",
                     liquidEnabled)) {
             if (liquidEnabled) {
-                OpenSectorEditorLiquidSettingsModal(
-                        state.liquidSettingsModal, *selectedAuthoringFaceAnchor);
+                if (selectedAuthoringFaceAnchor->crawlspace) {
+                    statusText = "Crawlspace sectors cannot contain liquid";
+                } else {
+                    OpenSectorEditorLiquidSettingsModal(
+                            state.liquidSettingsModal,
+                            *selectedAuthoringFaceAnchor);
+                }
             } else {
                 if (mutateFaceAnchor(
                         "Disabled sector liquid",

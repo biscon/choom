@@ -131,7 +131,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "78a6bea05e527a80",
+    "sourceHash": "9334d8a200490058",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -151,8 +151,8 @@
     "objectProbes": {
       "path": "assets/levels/test/test.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "78a6bea05e527a80",
-      "count": 1134,
+      "sourceHash": "9334d8a200490058",
+      "count": 1308,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -170,16 +170,10 @@
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 6804,
+        "sampleCount": 7848,
         "rgbChannelsAboveOne": 364
       }
     }
-  },
-  "bakedReflectionProbes": {
-    "path": "assets/levels/test/test.reflection-probes.bin",
-    "version": 1,
-    "count": 1,
-    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
@@ -225,6 +219,46 @@
         "id": 8,
         "x": 512,
         "y": 1536
+      },
+      {
+        "id": 9,
+        "x": 3968,
+        "y": 384
+      },
+      {
+        "id": 10,
+        "x": 5120,
+        "y": 384
+      },
+      {
+        "id": 11,
+        "x": 5120,
+        "y": 1536
+      },
+      {
+        "id": 12,
+        "x": 3968,
+        "y": 1536
+      },
+      {
+        "id": 13,
+        "x": 3584,
+        "y": 1152
+      },
+      {
+        "id": 14,
+        "x": 3968,
+        "y": 1152
+      },
+      {
+        "id": 15,
+        "x": 3584,
+        "y": 1408
+      },
+      {
+        "id": 16,
+        "x": 3968,
+        "y": 1408
       }
     ],
     "lines": [
@@ -232,11 +266,6 @@
         "id": 1,
         "startVertexId": 1,
         "endVertexId": 2
-      },
-      {
-        "id": 2,
-        "startVertexId": 2,
-        "endVertexId": 3
       },
       {
         "id": 3,
@@ -267,6 +296,56 @@
         "id": 8,
         "startVertexId": 8,
         "endVertexId": 5
+      },
+      {
+        "id": 9,
+        "startVertexId": 9,
+        "endVertexId": 10
+      },
+      {
+        "id": 10,
+        "startVertexId": 10,
+        "endVertexId": 11
+      },
+      {
+        "id": 11,
+        "startVertexId": 11,
+        "endVertexId": 12
+      },
+      {
+        "id": 13,
+        "startVertexId": 2,
+        "endVertexId": 13
+      },
+      {
+        "id": 14,
+        "startVertexId": 13,
+        "endVertexId": 3
+      },
+      {
+        "id": 16,
+        "startVertexId": 14,
+        "endVertexId": 9
+      },
+      {
+        "id": 17,
+        "startVertexId": 13,
+        "endVertexId": 14
+      },
+      {
+        "id": 18,
+        "startVertexId": 12,
+        "endVertexId": 16
+      },
+      {
+        "id": 19,
+        "startVertexId": 16,
+        "endVertexId": 14
+      },
+      {
+        "id": 20,
+        "startVertexId": 15,
+        "endVertexId": 16
       }
     ],
     "lineSides": [
@@ -301,6 +380,49 @@
         },
         "upper": {
           "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 19,
+        "side": "front",
+        "wall": {
+          "materialId": "seamless_worn_concrete",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -473,6 +595,158 @@
           "rippleStrength": 1.0,
           "rippleSpeed": 0.30000001192092896
         }
+      },
+      {
+        "id": 3,
+        "name": "Sector 3",
+        "x": 4671,
+        "y": 1358,
+        "floorZ": 20.0,
+        "ceilingZ": 300.0,
+        "floorMaterialId": "seamless_worn_concrete",
+        "ceilingMaterialId": "seamless_worn_concrete",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.30000001192092896,
+        "defaultWall": {
+          "materialId": "brick_repair_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 4,
+        "name": "Sector 4",
+        "x": 3715,
+        "y": 1278,
+        "floorZ": 20.0,
+        "ceilingZ": 45.0,
+        "floorMaterialId": "seamless_worn_concrete",
+        "ceilingMaterialId": "seamless_worn_concrete",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "materialId": "seamless_worn_concrete",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "materialId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
       }
     ],
     "reflectionProbes": [
@@ -606,6 +880,144 @@
           "height": 40.0,
           "thicknessScale": 1.2000000476837158,
           "rungCount": 16
+        }
+      },
+      {
+        "id": 8,
+        "kind": "stairs",
+        "x": 4160,
+        "z": 960,
+        "yawDegrees": 180.0,
+        "material": {
+          "materialId": "seamless_worn_concrete"
+        },
+        "stairs": {
+          "width": 384,
+          "run": 384,
+          "bottom": 20.0,
+          "rise": 20.0
+        }
+      },
+      {
+        "id": 9,
+        "kind": "box",
+        "x": 4160,
+        "z": 576,
+        "material": {
+          "materialId": "seamless_worn_concrete"
+        },
+        "box": {
+          "width": 384,
+          "depth": 384,
+          "bottom": 31.999988555908203,
+          "top": 40.00002670288086
+        }
+      },
+      {
+        "id": 10,
+        "kind": "stairs",
+        "x": 4544,
+        "z": 576,
+        "yawDegrees": 270.0,
+        "material": {
+          "materialId": "seamless_worn_concrete"
+        },
+        "stairs": {
+          "width": 384,
+          "run": 384,
+          "bottom": 37.5200080871582,
+          "rise": 20.0
+        }
+      },
+      {
+        "id": 11,
+        "kind": "box",
+        "x": 4928,
+        "z": 576,
+        "material": {
+          "materialId": "seamless_worn_concrete"
+        },
+        "box": {
+          "width": 384,
+          "depth": 384,
+          "bottom": 49.52005386352539,
+          "top": 57.52009201049805
+        }
+      },
+      {
+        "id": 12,
+        "kind": "stairs",
+        "x": 4928,
+        "z": 960,
+        "material": {
+          "materialId": "seamless_worn_concrete"
+        },
+        "stairs": {
+          "width": 384,
+          "run": 384,
+          "bottom": 55.040077209472656,
+          "rise": 20.0
+        }
+      },
+      {
+        "id": 13,
+        "kind": "box",
+        "x": 4928,
+        "z": 1344,
+        "material": {
+          "materialId": "seamless_worn_concrete"
+        },
+        "box": {
+          "width": 384,
+          "depth": 384,
+          "bottom": 67.04000091552734,
+          "top": 75.04000091552734
+        }
+      },
+      {
+        "id": 14,
+        "kind": "stairs",
+        "x": 4544,
+        "z": 1344,
+        "yawDegrees": 90.0,
+        "material": {
+          "materialId": "seamless_worn_concrete"
+        },
+        "stairs": {
+          "width": 384,
+          "run": 384,
+          "bottom": 72.56001281738281,
+          "rise": 20.0
+        }
+      },
+      {
+        "id": 15,
+        "kind": "box",
+        "x": 4160,
+        "z": 1344,
+        "material": {
+          "materialId": "seamless_worn_concrete"
+        },
+        "box": {
+          "width": 384,
+          "depth": 384,
+          "bottom": 84.55998229980469,
+          "top": 92.55998229980469
+        }
+      },
+      {
+        "id": 16,
+        "kind": "box",
+        "x": 4544,
+        "z": 960,
+        "material": {
+          "materialId": "wall"
+        },
+        "box": {
+          "width": 384,
+          "depth": 384,
+          "bottom": 20.0,
+          "top": 300.0
         }
       }
     ]

@@ -337,6 +337,13 @@
       "roughnessFactor": 0.4000000059604645,
       "normalStrength": 1.0
     },
+    "worn_steel_512": {
+      "albedoTexturePath": "assets/images/worn_steel_512.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.75,
+      "roughnessFactor": 0.20000000298023224,
+      "normalStrength": 1.0
+    },
     "worn_white_ceiling_512": {
       "albedoTexturePath": "assets/images/ceilings/worn_white_ceiling_512.png",
       "filter": "anisotropic8x",

@@ -44,9 +44,11 @@ private:
         float distanceSquared = 0.0f;
     };
 
-    bool EnsureShader();
+    bool EnsureResources();
 
     Shader shader = {};
+    Mesh screenTriangle = {};
+    Material material = {};
     int sceneDepthLoc = -1;
     int viewportSizeLoc = -1;
     int cameraPositionLoc = -1;

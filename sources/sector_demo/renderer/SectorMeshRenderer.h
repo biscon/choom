@@ -24,6 +24,7 @@
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/renderer/SectorUnderwaterRenderer.h"
 #include "sector_demo/renderer/SectorWindowRenderer.h"
+#include "sector_demo/renderer/SectorDuctCoverRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 #include "sector_demo/SectorUseInteraction.h"
@@ -486,6 +487,7 @@ private:
     SectorPbrContributionSettings pbrContributionSettings;
     SectorDoorRenderer doorRenderer;
     SectorWindowRenderer windowRenderer;
+    SectorDuctCoverRenderer ductCoverRenderer;
     SectorLiquidRenderer liquidRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;

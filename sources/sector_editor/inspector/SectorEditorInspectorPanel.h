@@ -140,7 +140,7 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
     float height = 38.0f; // Face title.
     height += anchorSummaryHeight;
     height += 36.0f + gap; // Merge Selected Into.
-    height += 4.0f * (rowHeight + gap); // Void, floor, ceiling, and ceiling sky.
+    height += 5.0f * (rowHeight + gap); // Void, floor, ceiling, sky, and crawlspace.
 
     height += 18.0f + 30.0f; // Liquid separator/title.
     height += rowHeight + gap; // Enabled.

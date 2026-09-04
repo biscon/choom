@@ -574,6 +574,38 @@ void PopulateCachedWindowDraw(
             && object.window.thickness > 0.0f;
 }
 
+void PopulateCachedDuctAccessDraw(
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& object,
+        CachedRuntimeObjectDraw& cached)
+{
+    cached.isDuctAccess = true;
+    cached.windowTint = Color{82, 210, 190, 255};
+    const SectorResolvedDuctAccessAnchor resolved =
+            ResolveSectorDuctAccessAnchor(map, object.ductAccess);
+    if (!resolved.valid) {
+        cached.definitionKnown = false;
+        return;
+    }
+    cached.doorEndpointA = DoorWorldToCachedMap(resolved.endpointA);
+    cached.doorEndpointB = DoorWorldToCachedMap(resolved.endpointB);
+    const Vector2 midpoint{
+            resolved.midpoint.x
+                    + resolved.tangent.x * object.ductAccess.horizontalOffsetWorld
+                    + resolved.outsideToCrawlspaceNormal.x
+                            * object.ductAccess.normalOffset,
+            resolved.midpoint.y
+                    + resolved.tangent.y * object.ductAccess.horizontalOffsetWorld
+                    + resolved.outsideToCrawlspaceNormal.y
+                            * object.ductAccess.normalOffset};
+    SetCachedDoorCorners(
+            midpoint, resolved.tangent, resolved.normal, resolved.width,
+            object.ductAccess.thickness, cached.doorCorners);
+    cached.map = DoorWorldToCachedMap(midpoint);
+    cached.doorFootprintValid = resolved.width > 0.0f
+            && object.ductAccess.thickness > 0.0f;
+}
+
 } // namespace
 
 Vector2 SectorEditorLevelMarkerOrientationDirection(float orientationDegrees)
@@ -599,11 +631,13 @@ void UpdateCachedSectorEditorRuntimeObjectDraw(
         cached.definitionKnown = object.kind == "billboard"
                 || object.kind == "door"
                 || object.kind == "window"
+                || object.kind == "duct_access"
                 || object.kind == "static_model"
                 || object.kind == "dynamic_model"
                 || object.kind == "npc";
         cached.isDoor = object.kind == "door";
         cached.isWindow = object.kind == "window";
+        cached.isDuctAccess = object.kind == "duct_access";
         cached.isNpc = object.kind == "npc";
         cached.isItem = object.kind == "item";
         if (cached.isItem) {
@@ -1029,11 +1063,13 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cached.definitionKnown = object.kind == "billboard"
                 || object.kind == "door"
                 || object.kind == "window"
+                || object.kind == "duct_access"
                 || object.kind == "static_model"
                 || object.kind == "dynamic_model"
                 || object.kind == "npc";
         cached.isDoor = object.kind == "door";
         cached.isWindow = object.kind == "window";
+        cached.isDuctAccess = object.kind == "duct_access";
         cached.isNpc = object.kind == "npc";
         cached.isItem = object.kind == "item";
         if (cached.isItem) {
@@ -1049,6 +1085,8 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
             PopulateCachedDoorDraw(map, object, swingDoorCatalog, cached);
         } else if (cached.isWindow) {
             PopulateCachedWindowDraw(map, object, cached);
+        } else if (cached.isDuctAccess) {
+            PopulateCachedDuctAccessDraw(map, object, cached);
         }
         cache.runtimeObjects.push_back(cached);
     }
@@ -1210,7 +1248,7 @@ void AppendCachedRuntimeObjectPickCandidates(
         const float centerDy = center.y - screenPoint.y;
         float distance2 = centerDx * centerDx + centerDy * centerDy;
 
-        if ((object.isDoor || object.isWindow) && object.doorFootprintValid) {
+        if ((object.isDoor || object.isWindow || object.isDuctAccess) && object.doorFootprintValid) {
             Vector2 corners[4];
             for (int i = 0; i < 4; ++i) {
                 corners[i] = CachedMapToScreen(context, object.doorCorners[i]);
@@ -1845,7 +1883,7 @@ void DrawCachedRuntimeObjects(
                 : object.isItem ? itemFill : objectFill;
 
         const float radius = selected ? 8.0f : 6.0f;
-        if ((object.isDoor || object.isWindow) && object.doorFootprintValid) {
+        if ((object.isDoor || object.isWindow || object.isDuctAccess) && object.doorFootprintValid) {
             const Color guideColor = object.doorSwingIntoBack
                     ? Color{95, 166, 255, 185}
                     : Color{255, 174, 72, 185};
@@ -1896,8 +1934,8 @@ void DrawCachedRuntimeObjects(
             const Vector2 c2 = CachedMapToScreen(context, object.doorCorners[2]);
             const Vector2 c3 = CachedMapToScreen(context, object.doorCorners[3]);
             const Color activeDoorLine = selected ? selectedFill
-                    : object.isWindow ? windowLine : doorLine;
-            const Color footprintFill = object.isWindow ? windowFill : doorFill;
+                    : (object.isWindow || object.isDuctAccess) ? windowLine : doorLine;
+            const Color footprintFill = (object.isWindow || object.isDuctAccess) ? windowFill : doorFill;
             DrawTriangle(c0, c1, c2, selected ? WithAlpha(selectedFill, 76) : footprintFill);
             DrawTriangle(c0, c2, c3, selected ? WithAlpha(selectedFill, 76) : footprintFill);
             DrawLineEx(c0, c1, selected ? 3.5f : 2.5f, outline);
@@ -1978,14 +2016,14 @@ void DrawCachedRuntimeObjects(
                     Vector2{center.x + half, center.y},
                     Vector2{center.x - half, center.y},
                     fill);
-            DrawText(object.isWindow ? "W" : "I", static_cast<int>(center.x - 3.0f),
+            DrawText(object.isDuctAccess ? "D" : object.isWindow ? "W" : "I", static_cast<int>(center.x - 3.0f),
                     static_cast<int>(center.y - 5.0f), 10, outline);
         } else {
             DrawEditorMarkerDisc(center, radius + 3.0f, outline);
             DrawEditorMarkerDisc(center, radius, fill);
         }
 
-        if (!object.isDoor && !object.isWindow && !object.isNpc && !object.isItem) {
+        if (!object.isDoor && !object.isWindow && !object.isDuctAccess && !object.isNpc && !object.isItem) {
             const Vector2 direction{
                     std::cos(object.yawRadians),
                     std::sin(object.yawRadians)

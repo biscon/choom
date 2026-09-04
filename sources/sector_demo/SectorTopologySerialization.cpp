@@ -36,6 +36,7 @@ constexpr const char* RuntimeObjectKindItem = "item";
 constexpr const char* RuntimeObjectKindNpc = "npc";
 constexpr const char* RuntimeObjectKindDoor = "door";
 constexpr const char* RuntimeObjectKindWindow = "window";
+constexpr const char* RuntimeObjectKindDuctAccess = "duct_access";
 
 [[noreturn]] void Fail(const std::string& message);
 float ReadOptionalFloat(
@@ -822,6 +823,46 @@ void ValidatePlacedWindowForSerialization(
     }
 }
 
+void ValidatePlacedDuctAccessForSerialization(
+        const SectorPlacedDuctAccess& access,
+        const std::string& context)
+{
+    const SectorDoorAnchor& anchor = access.anchor;
+    if (!IsValidSectorTopologyId(anchor.lineDefId)
+            || !IsValidSectorTopologyId(anchor.frontSectorId)
+            || !IsValidSectorTopologyId(anchor.backSectorId)
+            || !IsValidSectorTopologyId(anchor.frontSideDefId)
+            || !IsValidSectorTopologyId(anchor.backSideDefId)) {
+        Fail(context + ".anchor IDs must be positive integers");
+    }
+    if (!std::isfinite(access.width) || !std::isfinite(access.height)
+            || !std::isfinite(access.thickness)
+            || !std::isfinite(access.horizontalOffsetWorld)
+            || !std::isfinite(access.verticalOffsetWorld)
+            || !std::isfinite(access.normalOffset)
+            || !std::isfinite(access.cover.thickness)
+            || !std::isfinite(access.cover.frameBorderWidthWorld)
+            || !std::isfinite(access.cover.louverAngleDegrees)
+            || !std::isfinite(access.cover.removalSpeedWorld)) {
+        Fail(context + " numeric values must be finite");
+    }
+    if (access.width < 0.0f || access.height < 0.0f) {
+        Fail(context + ".width and .height must be non-negative");
+    }
+    if (access.thickness <= 0.0f || access.cover.thickness <= 0.0f
+            || access.cover.frameBorderWidthWorld <= 0.0f
+            || access.cover.removalSpeedWorld <= 0.0f) {
+        Fail(context + " thickness, frame border, and removal speed must be positive");
+    }
+    if (access.cover.louverCount < 1 || access.cover.louverCount > 64) {
+        Fail(context + ".cover.louverCount must be between 1 and 64");
+    }
+    if (access.cover.louverAngleDegrees <= -80.0f
+            || access.cover.louverAngleDegrees >= 80.0f) {
+        Fail(context + ".cover.louverAngleDegrees must be between -80 and 80");
+    }
+}
+
 float ReadOptionalPositiveFloat(
         const Json& object,
         const char* field,
@@ -1115,6 +1156,68 @@ SectorPlacedWindow ReadPlacedWindow(const Json& value, const std::string& contex
     return window;
 }
 
+SectorPlacedDuctAccess ReadPlacedDuctAccess(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) Fail(context + " must be an object");
+    SectorPlacedDuctAccess access;
+    access.anchor = ReadSectorDoorAnchor(
+            RequireObjectField(value, "anchor", context), context + ".anchor");
+    access.width = ReadOptionalFloat(value, "width", context, access.width);
+    access.height = ReadOptionalFloat(value, "height", context, access.height);
+    access.thickness = ReadOptionalFloat(
+            value, "thickness", context, access.thickness);
+    access.horizontalOffsetWorld = ReadOptionalFloat(
+            value, "horizontalOffsetWorld", context,
+            access.horizontalOffsetWorld);
+    access.verticalOffsetWorld = ReadOptionalFloat(
+            value, "verticalOffsetWorld", context,
+            access.verticalOffsetWorld);
+    access.normalOffset = ReadOptionalFloat(
+            value, "normalOffset", context, access.normalOffset);
+
+    const auto coverIt = value.find("cover");
+    if (coverIt != value.end()) {
+        if (!coverIt->is_object()) Fail(context + ".cover must be an object");
+        const std::string coverContext = context + ".cover";
+        access.cover.enabled = ReadOptionalBool(
+                *coverIt, "enabled", coverContext, access.cover.enabled);
+        access.cover.thickness = ReadOptionalFloat(
+                *coverIt, "thickness", coverContext, access.cover.thickness);
+        access.cover.frameBorderWidthWorld = ReadOptionalFloat(
+                *coverIt, "frameBorderWidthWorld", coverContext,
+                access.cover.frameBorderWidthWorld);
+        if (coverIt->contains("louverCount")) {
+            access.cover.louverCount = ReadInt(
+                    *coverIt, "louverCount", coverContext);
+        }
+        access.cover.louverAngleDegrees = ReadOptionalFloat(
+                *coverIt, "louverAngleDegrees", coverContext,
+                access.cover.louverAngleDegrees);
+        access.cover.frameMaterialId = ReadOptionalString(
+                *coverIt, "frameMaterialId", coverContext,
+                access.cover.frameMaterialId);
+        access.cover.louverMaterialId = ReadOptionalString(
+                *coverIt, "louverMaterialId", coverContext,
+                access.cover.louverMaterialId);
+        const std::string slideSide = ReadOptionalString(
+                *coverIt, "slideSide", coverContext, "portal_end");
+        if (slideSide == "portal_start") {
+            access.cover.slideSide = SectorDuctCoverSlideSide::PortalStart;
+        } else if (slideSide == "portal_end") {
+            access.cover.slideSide = SectorDuctCoverSlideSide::PortalEnd;
+        } else {
+            Fail(coverContext + ".slideSide must be 'portal_start' or 'portal_end'");
+        }
+        access.cover.removalSpeedWorld = ReadOptionalFloat(
+                *coverIt, "removalSpeedWorld", coverContext,
+                access.cover.removalSpeedWorld);
+    }
+    ValidatePlacedDuctAccessForSerialization(access, context);
+    return access;
+}
+
 SectorPlacedBillboard ReadPlacedBillboard(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -1337,14 +1440,18 @@ SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string
             object.window = ReadPlacedWindow(
                     RequireObjectField(value, "window", context),
                     context + ".window");
+        } else if (object.kind == RuntimeObjectKindDuctAccess) {
+            object.ductAccess = ReadPlacedDuctAccess(
+                    RequireObjectField(value, "ductAccess", context),
+                    context + ".ductAccess");
         } else {
-            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
+            Fail(context + ".kind is not a supported runtime object kind");
         }
     } else {
         if (value.contains("definitionId")) {
             Fail(context + ".definitionId-only runtime objects are legacy unsupported data; use kind 'billboard'");
         }
-        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
+        Fail(context + ".kind is not a supported runtime object kind");
     }
     object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
     object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
@@ -2356,6 +2463,59 @@ Json WritePlacedWindow(
     return json;
 }
 
+Json WritePlacedDuctAccess(
+        const SectorPlacedDuctAccess& access,
+        const std::string& context)
+{
+    ValidatePlacedDuctAccessForSerialization(access, context);
+    const SectorPlacedDuctAccess defaults;
+    Json json{{"anchor", WriteSectorDoorAnchor(access.anchor)}};
+    if (access.width != defaults.width) json["width"] = access.width;
+    if (access.height != defaults.height) json["height"] = access.height;
+    if (access.thickness != defaults.thickness) json["thickness"] = access.thickness;
+    if (access.horizontalOffsetWorld != defaults.horizontalOffsetWorld) {
+        json["horizontalOffsetWorld"] = access.horizontalOffsetWorld;
+    }
+    if (access.verticalOffsetWorld != defaults.verticalOffsetWorld) {
+        json["verticalOffsetWorld"] = access.verticalOffsetWorld;
+    }
+    if (access.normalOffset != defaults.normalOffset) {
+        json["normalOffset"] = access.normalOffset;
+    }
+    const SectorDuctCoverSettings& cover = access.cover;
+    const SectorDuctCoverSettings coverDefaults;
+    if (cover.enabled
+            || cover.thickness != coverDefaults.thickness
+            || cover.frameBorderWidthWorld != coverDefaults.frameBorderWidthWorld
+            || cover.louverCount != coverDefaults.louverCount
+            || cover.louverAngleDegrees != coverDefaults.louverAngleDegrees
+            || !cover.frameMaterialId.empty()
+            || !cover.louverMaterialId.empty()
+            || cover.slideSide != coverDefaults.slideSide
+            || cover.removalSpeedWorld != coverDefaults.removalSpeedWorld) {
+        Json coverJson = Json::object();
+        if (cover.enabled) coverJson["enabled"] = true;
+        if (cover.thickness != coverDefaults.thickness) coverJson["thickness"] = cover.thickness;
+        if (cover.frameBorderWidthWorld != coverDefaults.frameBorderWidthWorld) {
+            coverJson["frameBorderWidthWorld"] = cover.frameBorderWidthWorld;
+        }
+        if (cover.louverCount != coverDefaults.louverCount) coverJson["louverCount"] = cover.louverCount;
+        if (cover.louverAngleDegrees != coverDefaults.louverAngleDegrees) {
+            coverJson["louverAngleDegrees"] = cover.louverAngleDegrees;
+        }
+        if (!cover.frameMaterialId.empty()) coverJson["frameMaterialId"] = cover.frameMaterialId;
+        if (!cover.louverMaterialId.empty()) coverJson["louverMaterialId"] = cover.louverMaterialId;
+        if (cover.slideSide == SectorDuctCoverSlideSide::PortalStart) {
+            coverJson["slideSide"] = "portal_start";
+        }
+        if (cover.removalSpeedWorld != coverDefaults.removalSpeedWorld) {
+            coverJson["removalSpeedWorld"] = cover.removalSpeedWorld;
+        }
+        json["cover"] = std::move(coverJson);
+    }
+    return json;
+}
+
 Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::string& context)
 {
     if (!IsValidSectorTopologyId(object.id)) {
@@ -2369,7 +2529,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             {"id", object.id}
     };
     if (object.kind.empty()) {
-        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', 'window', or 'duct_access'");
     } else {
         if (object.kind == RuntimeObjectKindBillboard) {
             json["kind"] = object.kind;
@@ -2563,8 +2723,12 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             json["kind"] = object.kind;
             json["window"] = WritePlacedWindow(
                     object.window, context + ".window");
+        } else if (object.kind == RuntimeObjectKindDuctAccess) {
+            json["kind"] = object.kind;
+            json["ductAccess"] = WritePlacedDuctAccess(
+                    object.ductAccess, context + ".ductAccess");
         } else {
-            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
+            Fail(context + ".kind is not a supported runtime object kind");
         }
     }
     json["position"] = WriteVector3(object.position, context + ".position");
@@ -3549,7 +3713,10 @@ void ValidateAuthoringMapData(const SectorTopologyMap& map)
     }
 }
 
-void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& context)
+void ValidateRuntimeObjects(
+        const SectorTopologyMap& map,
+        const std::string& context,
+        bool validateTopologyAnchors)
 {
     std::vector<int> objectIds;
     objectIds.reserve(map.runtimeObjects.size());
@@ -3563,7 +3730,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             Fail(objectContext + ".id must be a positive integer");
         }
         if (object.kind.empty()) {
-            Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
+            Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', 'window', or 'duct_access'");
         } else {
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
@@ -3696,8 +3863,19 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             } else if (object.kind == RuntimeObjectKindWindow) {
                 ValidatePlacedWindowForSerialization(
                         object.window, objectContext + ".window");
+            } else if (object.kind == RuntimeObjectKindDuctAccess) {
+                ValidatePlacedDuctAccessForSerialization(
+                        object.ductAccess, objectContext + ".ductAccess");
+                if (validateTopologyAnchors) {
+                    const SectorResolvedDuctAccessAnchor resolved =
+                            ResolveSectorDuctAccessAnchor(map, object.ductAccess);
+                    if (!resolved.valid) {
+                        Fail(objectContext + ".ductAccess is invalid: "
+                                + resolved.diagnostic);
+                    }
+                }
             } else {
-                Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'item', 'npc', 'door', or 'window'");
+                Fail(objectContext + ".kind is not a supported runtime object kind");
             }
         }
         if (!std::isfinite(object.position.x)
@@ -4308,7 +4486,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
     map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
     map.directionalLight = NormalizeSectorTopologyDirectionalLightSettings(map.directionalLight);
     map.fogSettings = NormalizeSectorTopologyFogSettings(map.fogSettings);
-    ValidateRuntimeObjects(map, "root");
+    ValidateRuntimeObjects(map, "root", false);
 }
 
 SectorStructuralPrimitiveKind ReadStructuralPrimitiveKind(
@@ -4438,6 +4616,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         anchor.footstepSet = ReadOptionalString(faceAnchors[i], "footstepSet", context);
         ValidateOptionalFootstepSet(anchor.footstepSet, context + ".footstepSet");
         anchor.ceilingSky = ReadOptionalBool(faceAnchors[i], "ceilingSky", context, false);
+        anchor.crawlspace = ReadOptionalBool(faceAnchors[i], "crawlspace", context, false);
         anchor.roomtone = ReadRoomtoneSettings(faceAnchors[i], context);
         anchor.liquid = ReadLiquidSettings(
                 faceAnchors[i], context, anchor.floorZ, anchor.ceilingZ);
@@ -4895,6 +5074,9 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
     ValidateAuthoringPatrolAssignments(document.graph, document.mapData);
     document.derivation = DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
     CopyMapLevelFieldsToDerivedTopology(document);
+    if (document.derivation.success) {
+        ValidateRuntimeObjects(document.derivation.topology, "root", true);
+    }
     return document;
 }
 
@@ -4922,7 +5104,7 @@ void WriteTextureFields(Json& root, const SectorTopologyMap& map)
 
 void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeBakedLightmap)
 {
-    ValidateRuntimeObjects(map, "root");
+    ValidateRuntimeObjects(map, "root", false);
 
     if (!map.runtimeObjects.empty()) {
         root["runtimeObjects"] = Json::array();
@@ -5093,6 +5275,7 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         if (anchor->ceilingSky) {
             anchorJson["ceilingSky"] = true;
         }
+        if (anchor->crawlspace) anchorJson["crawlspace"] = true;
         if (!anchor->footstepSet.empty()) {
             ValidateOptionalFootstepSet(anchor->footstepSet, context + ".footstepSet");
             anchorJson["footstepSet"] = anchor->footstepSet;
@@ -5449,6 +5632,11 @@ Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
     ValidateAuthoringMapData(normalizedMap);
     ValidateAuthoringSoundReferences(document.graph);
     ValidateAuthoringPatrolAssignments(document.graph, normalizedMap);
+    if (document.derivation.success) {
+        SectorTopologyMap derived = document.derivation.topology;
+        derived.runtimeObjects = normalizedMap.runtimeObjects;
+        ValidateRuntimeObjects(derived, "root", true);
+    }
 
     Json root;
     root["formatVersion"] = 4;
@@ -5544,6 +5732,7 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.footstepSet = ReadOptionalString(value, "footstepSet", context);
         ValidateOptionalFootstepSet(sector.footstepSet, context + ".footstepSet");
         sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
+        sector.crawlspace = ReadOptionalBool(value, "crawlspace", context, false);
         sector.roomtone = ReadRoomtoneSettings(value, context);
         sector.liquid = ReadLiquidSettings(value, context, sector.floorZ, sector.ceilingZ);
         sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
@@ -5564,6 +5753,7 @@ SectorTopologyMap ParseMap(const Json& root)
 
     ReadMapLevelFields(root, map, true);
     ValidateForSerialization(map);
+    ValidateRuntimeObjects(map, "root", true);
     return map;
 }
 
@@ -5575,7 +5765,7 @@ Json SerializeMap(const SectorTopologyMap& sourceMap)
     AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
     const SectorTopologyMap& map = normalizedMap;
     ValidateForSerialization(map);
-    ValidateRuntimeObjects(map, "root");
+    ValidateRuntimeObjects(map, "root", true);
 
     Json root;
     root["formatVersion"] = 2;
@@ -5679,6 +5869,7 @@ Json SerializeMap(const SectorTopologyMap& sourceMap)
         if (sector->ceilingSky) {
             sectorJson["ceilingSky"] = true;
         }
+        if (sector->crawlspace) sectorJson["crawlspace"] = true;
         if (!sector->footstepSet.empty()) {
             ValidateOptionalFootstepSet(sector->footstepSet, context + ".footstepSet");
             sectorJson["footstepSet"] = sector->footstepSet;

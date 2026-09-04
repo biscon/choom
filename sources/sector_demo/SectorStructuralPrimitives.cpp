@@ -825,16 +825,33 @@ float Cross2(Vector2 a, Vector2 b, Vector2 c)
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
+int CrossSign(float value)
+{
+    if (value > GeometryEpsilon) return 1;
+    if (value < -GeometryEpsilon) return -1;
+    return 0;
+}
+
+bool PointOnSegment(Vector2 point, Vector2 a, Vector2 b)
+{
+    return std::fabs(Cross2(a, b, point)) <= GeometryEpsilon
+            && point.x >= std::min(a.x, b.x) - GeometryEpsilon
+            && point.x <= std::max(a.x, b.x) + GeometryEpsilon
+            && point.y >= std::min(a.y, b.y) - GeometryEpsilon
+            && point.y <= std::max(a.y, b.y) + GeometryEpsilon;
+}
+
 bool SegmentsIntersect(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
 {
-    const float abC = Cross2(a, b, c);
-    const float abD = Cross2(a, b, d);
-    const float cdA = Cross2(c, d, a);
-    const float cdB = Cross2(c, d, b);
-    return ((abC <= GeometryEpsilon && abD >= -GeometryEpsilon)
-                    || (abD <= GeometryEpsilon && abC >= -GeometryEpsilon))
-            && ((cdA <= GeometryEpsilon && cdB >= -GeometryEpsilon)
-                    || (cdB <= GeometryEpsilon && cdA >= -GeometryEpsilon));
+    const int abC = CrossSign(Cross2(a, b, c));
+    const int abD = CrossSign(Cross2(a, b, d));
+    const int cdA = CrossSign(Cross2(c, d, a));
+    const int cdB = CrossSign(Cross2(c, d, b));
+    if (abC == 0 && PointOnSegment(c, a, b)) return true;
+    if (abD == 0 && PointOnSegment(d, a, b)) return true;
+    if (cdA == 0 && PointOnSegment(a, c, d)) return true;
+    if (cdB == 0 && PointOnSegment(b, c, d)) return true;
+    return abC * abD < 0 && cdA * cdB < 0;
 }
 
 std::vector<Vector2> LoopWorldPoints(const SectorTopologyMap& map, const SectorTopologyLoop& loop)

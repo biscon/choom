@@ -27,6 +27,30 @@ SectorEditorTopologyActionResult Changed(std::string status)
     return result;
 }
 
+bool PortalHasDuctAccess(const SectorTopologyMap& map, int lineDefId)
+{
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        if (object.kind == "duct_access"
+                && object.ductAccess.anchor.lineDefId == lineDefId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PortalHasExclusiveObject(const SectorTopologyMap& map, int lineDefId)
+{
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        if ((object.kind == "door" && object.door.anchor.lineDefId == lineDefId)
+                || (object.kind == "window" && object.window.anchor.lineDefId == lineDefId)
+                || (object.kind == "duct_access"
+                        && object.ductAccess.anchor.lineDefId == lineDefId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 SectorEditorAddStaticLightResult AddStaticLightToSector(
@@ -274,6 +298,10 @@ SectorEditorAddDoorResult AddDoorToPortal(
         SectorTopologyMap& map,
         int lineDefId)
 {
+    if (PortalHasDuctAccess(map, lineDefId)) {
+        return {false, -1,
+                "Door placement failed: portal already has a Duct Access"};
+    }
     const SectorTopologyLineDef* lineDef = FindSectorTopologyLineDef(map, lineDefId);
     if (lineDef == nullptr) {
         return SectorEditorAddDoorResult{
@@ -361,6 +389,10 @@ SectorEditorAddWindowResult AddWindowToPortal(
         SectorTopologyMap& map,
         int lineDefId)
 {
+    if (PortalHasDuctAccess(map, lineDefId)) {
+        return {false, -1,
+                "Window placement failed: portal already has a Duct Access"};
+    }
     const SectorTopologyLineDef* lineDef =
             FindSectorTopologyLineDef(map, lineDefId);
     if (lineDef == nullptr) {
@@ -419,6 +451,73 @@ SectorEditorAddWindowResult AddWindowToPortal(
             SectorWorldToAuthoringDistance(resolved.midpoint.y)};
     map.runtimeObjects.push_back(std::move(object));
     return {true, objectId, TextFormat("Added window %d", objectId)};
+}
+
+SectorEditorAddDuctAccessResult AddDuctAccessToPortal(
+        SectorTopologyMap& map,
+        int lineDefId)
+{
+    if (PortalHasExclusiveObject(map, lineDefId)) {
+        return {false, -1,
+                "Duct Access placement failed: portal already has a door, window, or Duct Access"};
+    }
+    const SectorTopologyLineDef* lineDef =
+            FindSectorTopologyLineDef(map, lineDefId);
+    if (lineDef == nullptr) {
+        return {false, -1,
+                "Duct Access placement failed: click a two-sided portal"};
+    }
+    const SectorTopologySideDef* front =
+            FindSectorTopologySideDef(map, lineDef->frontSideDefId);
+    const SectorTopologySideDef* back =
+            FindSectorTopologySideDef(map, lineDef->backSideDefId);
+    if (front == nullptr || back == nullptr) {
+        return {false, -1,
+                "Duct Access placement failed: clicked line is not a two-sided portal"};
+    }
+    const SectorTopologyVertex* start = nullptr;
+    const SectorTopologyVertex* end = nullptr;
+    if (!GetSectorTopologyLineVertices(map, *lineDef, start, end)) {
+        return {false, -1,
+                "Duct Access placement failed: portal endpoints are invalid"};
+    }
+    const int objectId = AllocateSectorPlacedRuntimeObjectId(map);
+    if (!IsValidSectorTopologyId(objectId)) {
+        return {false, -1,
+                "Duct Access placement failed: no runtime object IDs available"};
+    }
+
+    SectorPlacedRuntimeObject object;
+    object.id = objectId;
+    object.kind = "duct_access";
+    object.ductAccess.anchor.lineDefId = lineDef->id;
+    object.ductAccess.anchor.frontSectorId = front->sectorId;
+    object.ductAccess.anchor.backSectorId = back->sectorId;
+    object.ductAccess.anchor.frontSideDefId = front->id;
+    object.ductAccess.anchor.backSideDefId = back->id;
+    object.ductAccess.anchor.endpointAX = start->x;
+    object.ductAccess.anchor.endpointAY = start->y;
+    object.ductAccess.anchor.endpointBX = end->x;
+    object.ductAccess.anchor.endpointBY = end->y;
+
+    const SectorResolvedDuctAccessAnchor resolved =
+            ResolveSectorDuctAccessAnchor(map, object.ductAccess);
+    if (!resolved.valid) {
+        return {false, -1,
+                resolved.diagnostic.empty()
+                        ? "Duct Access placement failed: portal cannot resolve a valid access"
+                        : std::string{"Duct Access placement failed: "}
+                                + resolved.diagnostic};
+    }
+    object.ductAccess.width = resolved.width;
+    object.ductAccess.height = resolved.height;
+    object.position = Vector3{
+            SectorWorldToAuthoringDistance(resolved.midpoint.x),
+            SectorWorldToAuthoringDistance(
+                    resolved.openBottom + resolved.height * 0.5f),
+            SectorWorldToAuthoringDistance(resolved.midpoint.y)};
+    map.runtimeObjects.push_back(std::move(object));
+    return {true, objectId, TextFormat("Added Duct Access %d", objectId)};
 }
 
 SectorEditorTopologyActionResult DeleteStaticLight(

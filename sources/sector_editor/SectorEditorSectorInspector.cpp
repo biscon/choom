@@ -32,7 +32,7 @@ float SectorInspectorContentHeight(float rowH, float gap, bool hasIdError)
         height += 36.0f;
     }
     height += 3.0f * (rowH + gap); // Delete/insert/cut.
-    height += 2.0f * (rowH + gap); // Floor/ceiling heights.
+    height += 4.0f * (rowH + gap); // Floor/ceiling, sky, and crawlspace.
     height += 18.0f + 30.0f; // Lighting separator/title.
     height += rowH + gap; // Ambient intensity.
     height += 3.0f * (rowH + gap); // RGB.
@@ -183,6 +183,16 @@ bool DrawTopologySectorInspector(
                 "Ceiling Sky",
                 ceilingSky)) {
         callbacks.applySectorCeilingSky(ceilingSky);
+    }
+    y += rowH + gap;
+
+    bool crawlspace = sector.crawlspace;
+    if (engine::Checkbox(
+                ui, config, input, assets,
+                "sector_editor_topology_crawlspace",
+                Rectangle{0.0f, y, contentW, rowH},
+                font, "Crawlspace", crawlspace)) {
+        callbacks.applySectorCrawlspace(crawlspace);
     }
     y += rowH + gap;
 

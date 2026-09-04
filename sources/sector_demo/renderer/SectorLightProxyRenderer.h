@@ -35,7 +35,7 @@ public:
     int DrawCallCount() const { return drawCallCount; }
 
 private:
-    bool EnsureShader();
+    bool EnsureResources();
 
     struct VisibleHalo {
         const SectorLightAtmosphereSource* source = nullptr;
@@ -46,6 +46,8 @@ private:
     };
 
     Shader shader = {};
+    Mesh screenTriangle = {};
+    Material material = {};
     int sceneDepthLoc = -1;
     int viewportSizeLoc = -1;
     int cameraPositionLoc = -1;

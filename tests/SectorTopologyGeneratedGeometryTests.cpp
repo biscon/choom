@@ -110,6 +110,40 @@ game::SectorTopologyMap MakeSquare()
     return map;
 }
 
+game::SectorTopologyMap MakeSeparatedAlignedSquares()
+{
+    game::SectorTopologyMap map;
+    map.vertices = {
+            {1, 0, 0}, {2, 64, 0}, {3, 64, 64}, {4, 0, 64},
+            {5, 128, 64}, {6, 256, 64}, {7, 256, 192}, {8, 128, 192}};
+    for (int index = 0; index < 4; ++index) {
+        const int lineId = index + 1;
+        const int startVertexId = index + 1;
+        const int endVertexId = index == 3 ? 1 : index + 2;
+        map.lineDefs.push_back({
+                lineId, startVertexId, endVertexId, lineId, -1});
+        AddSide(
+                map, lineId, lineId,
+                game::SectorTopologySideKind::Front, 10, "distant");
+    }
+    for (int index = 0; index < 4; ++index) {
+        const int lineId = index + 5;
+        const int startVertexId = index + 5;
+        const int endVertexId = index == 3 ? 5 : index + 6;
+        map.lineDefs.push_back({
+                lineId, startVertexId, endVertexId, lineId, -1});
+        AddSide(
+                map, lineId, lineId,
+                game::SectorTopologySideKind::Front, 20, "target");
+    }
+    game::SectorTopologySector distant = Sector(10);
+    distant.ambientColor = Color{255, 255, 255, 255};
+    distant.ambientIntensity = 0.05f;
+    map.sectors.push_back(distant);
+    map.sectors.push_back(Sector(20));
+    return map;
+}
+
 game::SectorTopologyMap MakeAdjacent(float leftFloor, float leftCeiling,
                                      float rightFloor, float rightCeiling)
 {
@@ -718,19 +752,38 @@ void TestTranslatedFlatDecalsUseLocalUvs()
 
 void TestStructuralPrimitiveUsesOwningSectorAmbient()
 {
-    game::SectorTopologyMap map = MakeSquare();
-    game::SectorAuthoringStructuralPrimitive box =
-            game::DefaultSectorAuthoringStructuralPrimitive(
-                    game::SectorStructuralPrimitiveKind::Box);
-    box.id = 91;
-    box.x = 32;
-    box.z = 32;
-    box.materials.defaultSurface.materialId = "structural-ambient";
+    game::SectorTopologyMap map = MakeSeparatedAlignedSquares();
+    const game::SectorStructuralPrimitiveKind kinds[] = {
+            game::SectorStructuralPrimitiveKind::Box,
+            game::SectorStructuralPrimitiveKind::Ramp,
+            game::SectorStructuralPrimitiveKind::Stairs,
+            game::SectorStructuralPrimitiveKind::Cylinder,
+            game::SectorStructuralPrimitiveKind::Sphere,
+            game::SectorStructuralPrimitiveKind::Ladder};
+    std::vector<game::SectorAuthoringStructuralPrimitive> primitives;
+    for (int index = 0; index < 6; ++index) {
+        game::SectorAuthoringStructuralPrimitive primitive =
+                game::DefaultSectorAuthoringStructuralPrimitive(kinds[index]);
+        primitive.id = 91 + index;
+        primitive.x = 192;
+        primitive.z = index < 3 ? 72 : 96;
+        primitive.materials.defaultSurface.materialId = "structural-ambient";
+        primitives.push_back(std::move(primitive));
+    }
 
     std::vector<game::SectorStructuralDiagnostic> diagnostics;
     Check(game::CompileSectorStructuralPrimitives(
-                  {box}, map, map.compiledStructuralPrimitives, diagnostics),
+                  primitives, map, map.compiledStructuralPrimitives, diagnostics),
           "structural ambient fixture compiles");
+    bool allPrimitivesUseOnlyTargetSector =
+            map.compiledStructuralPrimitives.size() == primitives.size();
+    for (const game::SectorCompiledStructuralPrimitive& primitive
+            : map.compiledStructuralPrimitives) {
+        allPrimitivesUseOnlyTargetSector = allPrimitivesUseOnlyTargetSector
+                && primitive.owningSectorIds == std::vector<int>{20};
+    }
+    Check(allPrimitivesUseOnlyTargetSector,
+          "separated collinear sector edges do not create false structural ownership");
 
     game::SectorGeneratedGeometry geometry;
     std::string error;
@@ -747,8 +800,8 @@ void TestStructuralPrimitiveUsesOwningSectorAmbient()
         }
         foundStructuralSurface = true;
         allVerticesUseSectorAmbient = allVerticesUseSectorAmbient
-                && surface.ref.topologySectorId == 10
-                && surface.owningSectorIds == std::vector<int>{10};
+                && surface.ref.topologySectorId == 20
+                && surface.owningSectorIds == std::vector<int>{20};
         for (const game::SectorGeneratedVertex& vertex : surface.vertices) {
             allVerticesUseSectorAmbient = allVerticesUseSectorAmbient
                     && vertex.color.r == expected.r
@@ -760,7 +813,7 @@ void TestStructuralPrimitiveUsesOwningSectorAmbient()
     Check(foundStructuralSurface,
           "structural ambient fixture emits structural surfaces");
     Check(allVerticesUseSectorAmbient,
-          "structural surfaces inherit their primary owning sector ambient");
+          "every structural primitive kind inherits its primary owning sector ambient");
 }
 
 void TestInvalidAndEmptyMaps()

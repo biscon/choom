@@ -1182,6 +1182,55 @@ SectorResolvedWindowAnchor ResolveSectorWindowAnchor(
     return resolved;
 }
 
+SectorResolvedDuctAccessAnchor ResolveSectorDuctAccessAnchor(
+        const SectorTopologyMap& map,
+        const SectorPlacedDuctAccess& access)
+{
+    SectorPlacedDoor portalObject;
+    portalObject.anchor = access.anchor;
+    portalObject.width = access.width;
+    portalObject.height = access.height;
+    const SectorResolvedDoorAnchor base = ResolveSectorDoorAnchor(map, portalObject);
+
+    SectorResolvedDuctAccessAnchor resolved;
+    static_cast<SectorResolvedDoorAnchor&>(resolved) = base;
+    if (!resolved.valid) {
+        const std::string prefix = "door anchor";
+        if (resolved.diagnostic.compare(0, prefix.size(), prefix) == 0) {
+            resolved.diagnostic.replace(0, prefix.size(), "duct access anchor");
+        }
+        return resolved;
+    }
+
+    const SectorTopologySector* front =
+            FindSectorTopologySector(map, resolved.frontSectorId);
+    const SectorTopologySector* back =
+            FindSectorTopologySector(map, resolved.backSectorId);
+    const bool frontCrawlspace = front != nullptr && front->crawlspace;
+    const bool backCrawlspace = back != nullptr && back->crawlspace;
+    if (frontCrawlspace == backCrawlspace) {
+        resolved.valid = false;
+        resolved.diagnostic =
+                "duct access portal must have exactly one crawlspace sector";
+        return resolved;
+    }
+    if ((frontCrawlspace && front->liquid.enabled)
+            || (backCrawlspace && back->liquid.enabled)) {
+        resolved.valid = false;
+        resolved.diagnostic = "crawlspace sectors cannot contain liquid";
+        return resolved;
+    }
+
+    resolved.crawlspaceSectorId = frontCrawlspace
+            ? resolved.frontSectorId : resolved.backSectorId;
+    resolved.outsideSectorId = frontCrawlspace
+            ? resolved.backSectorId : resolved.frontSectorId;
+    resolved.outsideToCrawlspaceNormal = frontCrawlspace
+            ? Vector2{-resolved.normal.x, -resolved.normal.y}
+            : resolved.normal;
+    return resolved;
+}
+
 const SectorTopologySideDef* FindOppositeSectorTopologySideDef(
         const SectorTopologyMap& map,
         int sideDefId)

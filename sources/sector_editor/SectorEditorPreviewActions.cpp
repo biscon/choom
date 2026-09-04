@@ -500,7 +500,9 @@ SectorViewPose ActiveSectorEditorPreviewPose(
     if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
         return SectorFpsControllerVisualPose(
                 controllerState.fpsControllerState,
-                controllerState.fpsControllerConfig,
+                SectorDuctViewControllerConfig(
+                        controllerState.fpsControllerConfig,
+                        controllerState.ductTraversal),
                 controllerState.visualStepOffsetY,
                 controllerState.headBobState.offset,
                 controllerState.landingDipState.offsetY);
@@ -515,7 +517,9 @@ void ApplySectorEditorGameplayPoseToPreview(
 {
     preview.ApplyRendererPose(SectorFpsControllerVisualPose(
             controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig,
+            SectorDuctViewControllerConfig(
+                    controllerState.fpsControllerConfig,
+                    controllerState.ductTraversal),
             controllerState.visualStepOffsetY,
             controllerState.headBobState.offset,
             controllerState.landingDipState.offsetY));
@@ -595,14 +599,12 @@ bool RebuildSectorEditorCollisionWorld(
     return true;
 }
 
-SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
+SectorFpsVerticalContext BuildGameplayVerticalContextForConfig(
         const SectorEditorPreviewCollisionState& collisionState,
         const SectorEditorPreviewControllerState& controllerState,
-        const std::vector<SectorStaticModelCollider>& staticModelColliders)
+        const std::vector<SectorStaticModelCollider>& staticModelColliders,
+        const SectorFpsControllerConfig& config)
 {
-    const SectorFpsControllerConfig config = EffectiveSectorFpsControllerConfig(
-            controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig);
     const SectorFpsControllerState& state = controllerState.fpsControllerState;
     return BuildSectorStaticModelVerticalContext(
             BuildSectorOnlyVerticalContext(
@@ -617,6 +619,20 @@ SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
             staticModelColliders);
 }
 
+SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
+        const SectorEditorPreviewCollisionState& collisionState,
+        const SectorEditorPreviewControllerState& controllerState,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders)
+{
+    return BuildGameplayVerticalContextForConfig(
+            collisionState,
+            controllerState,
+            staticModelColliders,
+            EffectiveSectorFpsControllerConfig(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig));
+}
+
 void RefreshSectorEditorGameplaySectorAndVerticalContext(
         SectorEditorPreviewCollisionState& collisionState,
         SectorEditorPreviewControllerState& controllerState)
@@ -627,9 +643,11 @@ void RefreshSectorEditorGameplaySectorAndVerticalContext(
     }
 
     const SectorFpsControllerConfig normalizedConfig =
-            EffectiveSectorFpsControllerConfig(
+            SectorDuctViewControllerConfig(
+                    EffectiveSectorFpsControllerConfig(
                     controllerState.fpsControllerState,
-                    controllerState.fpsControllerConfig);
+                    controllerState.fpsControllerConfig),
+                    controllerState.ductTraversal);
     controllerState.fpsControllerState.currentSectorId =
             collisionState.sectorCollisionWorld.FindSectorForPlayerFootprint(
                     Vector2{
@@ -677,14 +695,17 @@ void InitializeSectorEditorGameplayVerticalState(
 }
 
 void UpdateSectorEditorGameplayPreview(
+        engine::World& world,
         const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
         const std::vector<SectorStaticModelCollider>& staticModelColliders,
+        const std::vector<SectorStaticModelCollider>& ductAccessGateColliders,
         SectorEditorPreviewCollisionState& collisionState,
         SectorEditorPreviewControllerState& controllerState,
         const SectorTopologyMap* topologyMap,
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
         const PlayerLiquidApplicationSettings& liquidSettings,
+        const PlayerDuctTraversalApplicationSettings& ductSettings,
         float previousVisualEyeY,
         float dt,
         const std::vector<NpcCollisionCylinder>* npcCollisionCylinders)
@@ -700,6 +721,26 @@ void UpdateSectorEditorGameplayPreview(
             controllerState.fpsControllerState,
             controllerState.fpsControllerConfig,
             controllerInput);
+    if (topologyMap != nullptr
+            && UpdateSectorDuctTraversal(
+                    world,
+                    controllerState.ductTraversal,
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig,
+                    controllerInput,
+                    ductSettings,
+                    *topologyMap,
+                    collisionState.sectorCollisionWorldValid
+                            ? &collisionState.sectorCollisionWorld : nullptr,
+                    dt)) {
+        collisionState.previewMoveResult = {};
+        collisionState.previewVerticalResult = {};
+        collisionState.previewCollisionNoclipFallback = false;
+        ClearPreviewGameplayVisualState(controllerState);
+        RefreshSectorEditorGameplaySectorAndVerticalContext(
+                collisionState, controllerState);
+        return;
+    }
     if (topologyMap != nullptr
             && UpdateSectorLadderTraversal(
                     controllerState.ladderTraversal,
@@ -825,7 +866,10 @@ void UpdateSectorEditorGameplayPreview(
                 controllerState.fpsControllerState,
                 controllerState.fpsControllerConfig).y;
     }
-    const bool swimming = controllerState.liquidMovement.swimming;
+    const bool ductCrawling = IsSectorDuctCrawling(
+            controllerState.ductTraversal);
+    const bool swimming = controllerState.liquidMovement.swimming
+            && !ductCrawling;
     if (swimming) {
         ResetSectorFpsCrouch(controllerState.fpsControllerState);
         controllerState.fpsControllerState.grounded = false;
@@ -835,20 +879,23 @@ void UpdateSectorEditorGameplayPreview(
             controllerState,
             dynamicDoorColliders,
             staticModelColliders);
-    if (!swimming && controllerInput.crouchTogglePressed) {
+    if (!swimming && !ductCrawling && controllerInput.crouchTogglePressed) {
         TryToggleSectorFpsCrouch(
                 controllerState.fpsControllerState,
                 standingClearance);
     }
-    if (!swimming) {
+    if (!swimming && !ductCrawling) {
         UpdateSectorFpsCrouch(
                 controllerState.fpsControllerState,
                 standingClearance,
                 dt);
     }
-    const SectorFpsControllerConfig effectiveConfig = EffectiveSectorFpsControllerConfig(
-            controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig);
+    const SectorFpsControllerConfig effectiveConfig = ductCrawling
+            ? SectorDuctCrawlControllerConfig(
+                    controllerState.fpsControllerConfig, ductSettings)
+            : EffectiveSectorFpsControllerConfig(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig);
     const SectorLiquidCollisionProxy swimCollisionProxy =
             BuildSectorLiquidCollisionProxy(
                     effectiveConfig,
@@ -882,7 +929,7 @@ void UpdateSectorEditorGameplayPreview(
             ? Vector2{swimMovement.x, swimMovement.z}
             : ComputeSectorFpsHorizontalMovementDelta(
                     controllerState.fpsControllerState,
-                    controllerState.fpsControllerConfig,
+                    effectiveConfig,
                     controllerInput,
                     dt);
     const Vector2 previousFeetXZ{
@@ -935,6 +982,23 @@ void UpdateSectorEditorGameplayPreview(
                             collisionMoveState.grounded,
                             collisionConfig),
                     staticModelColliders);
+            if (controllerState.ductTraversal.phase
+                        != SectorDuctTraversalPhase::Entering
+                    && controllerState.ductTraversal.phase
+                        != SectorDuctTraversalPhase::Exiting) {
+                moveResult = ResolveSectorStaticModelCollidersForPlayerMovement(
+                        collisionMoveState,
+                        moveResult,
+                        collisionMoveConfig,
+                        BuildSectorOnlyVerticalContext(
+                                collisionState,
+                                moveResult.currentSectorId,
+                                moveResult.positionXZ,
+                                collisionMoveState.feetY,
+                                collisionMoveState.grounded,
+                                collisionConfig),
+                        ductAccessGateColliders);
+            }
             if (npcCollisionCylinders != nullptr
                     && !npcCollisionCylinders->empty()) {
                 moveResult = ResolveNpcCollisionCylindersForMovement(
@@ -996,7 +1060,7 @@ void UpdateSectorEditorGameplayPreview(
                 collisionState, controllerState);
     }
     bool startedJump = false;
-    if (!swimming && !completedLiquidExitThisFrame
+    if (!swimming && !ductCrawling && !completedLiquidExitThisFrame
             && controllerInput.jumpPressed) {
         startedJump = TryStartSectorFpsJump(
                 controllerState.fpsControllerState,
@@ -1089,11 +1153,12 @@ void UpdateSectorEditorGameplayPreview(
     } else {
         collisionState.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
                 controllerState.fpsControllerState,
-                controllerState.fpsControllerConfig,
-                BuildSectorEditorGameplayVerticalContext(
+                effectiveConfig,
+                BuildGameplayVerticalContextForConfig(
                         collisionState,
                         controllerState,
-                        staticModelColliders),
+                        staticModelColliders,
+                        effectiveConfig),
                 dt);
         if (topologyMap != nullptr) {
             liquidContact = SampleSectorLiquidContact(
@@ -1115,7 +1180,7 @@ void UpdateSectorEditorGameplayPreview(
     controllerState.frameEvents = BuildSectorFpsFrameEvents(
             startedJump,
             collisionState.previewVerticalResult);
-    if (swimming) {
+    if (swimming || ductCrawling) {
         controllerState.visualStepOffsetY = 0.0f;
         ClearSectorFpsLandingDip(controllerState.landingDipState);
         ClearSectorFpsHeadBob(controllerState.headBobState);
@@ -1146,23 +1211,23 @@ void UpdateSectorEditorGameplayPreview(
             ? Vector2Length(resolvedHorizontalMovement) / dt
             : 0.0f;
     controllerState.frameEvents.sprinting =
-            SectorFpsInputUsesRunSpeed(controllerInput)
+            !ductCrawling && SectorFpsInputUsesRunSpeed(controllerInput)
             && Vector2Length(resolvedHorizontalMovement) > 0.0001f;
-    const bool headBobActive = !swimming
+    const bool headBobActive = !swimming && !ductCrawling
             && !collisionState.previewCollisionNoclipFallback
             && collisionState.previewVerticalResult.hasSector
             && controllerState.fpsControllerState.grounded
             && !previewSettingsModalOpen;
     UpdateSectorFpsHeadBob(
             controllerState.headBobState,
-            controllerState.fpsControllerConfig,
+            effectiveConfig,
             headBobActive,
             resolvedHorizontalSpeed,
             controllerState.fpsControllerState.yawRadians,
             dt);
     controllerState.frameEvents.footstep = UpdateSectorFpsFootstepCadence(
             controllerState.footstepCadenceState,
-            controllerState.fpsControllerConfig,
+            effectiveConfig,
             headBobActive && !controllerState.frameEvents.landed,
             Vector2Length(resolvedHorizontalMovement),
             resolvedHorizontalSpeed);

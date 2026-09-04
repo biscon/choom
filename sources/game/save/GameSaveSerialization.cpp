@@ -354,6 +354,7 @@ engine::PersistentScriptStore ReadPersistent(const Json& root)
 Json LevelJson(const GameSaveLevelState& level)
 {
     Json root{{"levelId", level.levelId}, {"doors", Json::array()},
+            {"ductAccesses", Json::array()},
             {"props", Json::array()}, {"npcs", Json::array()},
             {"billboards", Json::array()}, {"dynamicLights", Json::array()},
             {"triggers", Json::array()}};
@@ -361,6 +362,14 @@ Json LevelJson(const GameSaveLevelState& level)
         root["doors"].push_back(Json{{"placedObjectId", value.placedObjectId},
                 {"instanceId", value.instanceId}, {"openFraction", value.openFraction},
                 {"targetOpenFraction", value.targetOpenFraction}, {"enabled", value.enabled}});
+    }
+    for (const GameSaveDuctAccessState& value : level.ductAccesses) {
+        root["ductAccesses"].push_back(Json{
+                {"placedObjectId", value.placedObjectId},
+                {"coverRemoved", value.coverRemoved},
+                {"removalSide", value.removalSide
+                                == SectorDuctCoverRemovalSide::Outside
+                        ? "outside" : "crawlspace"}});
     }
     for (const GameSavePropState& value : level.props) {
         Json json{{"placedObjectId", value.placedObjectId}, {"instanceId", value.instanceId},
@@ -438,6 +447,26 @@ GameSaveLevelState ReadLevel(const Json& root)
                         && state.targetOpenFraction <= 1.0f,
                 "door fractions must be between zero and one");
         level.doors.push_back(std::move(state));
+    }
+    const auto ductAccesses = root.find("ductAccesses");
+    if (ductAccesses != root.end()) {
+        Require(ductAccesses->is_array(), "ductAccesses must be an array");
+        for (const Json& value : *ductAccesses) {
+            GameSaveDuctAccessState state;
+            state.placedObjectId = value.at("placedObjectId").get<int>();
+            state.coverRemoved = value.value("coverRemoved", false);
+            const std::string side = value.value("removalSide", "outside");
+            Require(side == "outside" || side == "crawlspace"
+                            || side == "front" || side == "back",
+                    "duct access removalSide must be outside or crawlspace");
+            state.removalSide = side == "outside" || side == "front"
+                    ? SectorDuctCoverRemovalSide::Outside
+                    : SectorDuctCoverRemovalSide::Crawlspace;
+            Require(state.placedObjectId > 0
+                            && objectIds.insert(state.placedObjectId).second,
+                    "duplicate or invalid saved Duct Access ID");
+            level.ductAccesses.push_back(state);
+        }
     }
     for (const Json& value : root.at("props")) {
         GameSavePropState state;

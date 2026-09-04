@@ -7,6 +7,8 @@
 
 #include <vector>
 
+namespace engine { class World; }
+
 namespace game {
 
 class SectorMeshRenderer;
@@ -42,14 +44,17 @@ void InitializeSectorEditorGameplayVerticalState(
         SectorEditorPreviewControllerState& controllerState,
         const std::vector<SectorStaticModelCollider>& staticModelColliders);
 void UpdateSectorEditorGameplayPreview(
+        engine::World& world,
         const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
         const std::vector<SectorStaticModelCollider>& staticModelColliders,
+        const std::vector<SectorStaticModelCollider>& ductAccessGateColliders,
         SectorEditorPreviewCollisionState& collisionState,
         SectorEditorPreviewControllerState& controllerState,
         const SectorTopologyMap* topologyMap,
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
         const PlayerLiquidApplicationSettings& liquidSettings,
+        const PlayerDuctTraversalApplicationSettings& ductSettings,
         float previousVisualEyeY,
         float dt,
         const std::vector<NpcCollisionCylinder>* npcCollisionCylinders = nullptr);

@@ -521,6 +521,13 @@ bool PointInsideStructuralFootprint(
             && std::fabs(local.y) <= shape.halfExtents.y + CollisionMoveEpsilon;
 }
 
+bool FlatStructuralTopUsesFootprintSupport(
+        const StructuralCollisionShape& shape)
+{
+    return shape.kind == SectorStructuralPrimitiveKind::Box
+            || shape.kind == SectorStructuralPrimitiveKind::Cylinder;
+}
+
 bool CanTraverseContinuousStructuralSupport(
         const StructuralCollisionShape& shape,
         Vector2 previousPosition,
@@ -1149,6 +1156,11 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
         const bool continuous =
                 shape.kind == SectorStructuralPrimitiveKind::Ramp
                 || shape.kind == SectorStructuralPrimitiveKind::Stairs;
+        const bool followsContinuousSupport = continuous
+                && (!query.grounded
+                        || std::fabs(query.feetY - support)
+                                <= std::max(query.stepHeight, 0.0f)
+                                        + CollisionPointEpsilon);
         if (continuous && !centerInside) {
             const Vector2 local = ToStructuralLocalPoint(
                     query.positionXZ, shape);
@@ -1166,13 +1178,20 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                 && query.grounded
                 && std::fabs(query.feetY - support)
                         <= retentionTolerance;
-        if (centerInside || retainsSupport) {
+        // Flat platforms contact the actor at the capsule edge. Acquire their
+        // reachable tops there as well so an adjoining slope can hand support
+        // off before the actor center crosses the platform boundary.
+        const bool acquiresFootprintSupport = !centerInside
+                && query.grounded
+                && FlatStructuralTopUsesFootprintSupport(shape)
+                && support <= maximumSupport;
+        if (centerInside || retainsSupport || acquiresFootprintSupport) {
             if (retainsSupport || support <= maximumSupport) {
                 if (support > out->floorZ + CollisionPointEpsilon) {
                     out->floorZ = support;
-                    out->continuousFloor = continuous;
+                    out->continuousFloor = followsContinuousSupport;
                     out->supportingStructuralPrimitiveId = primitive.authored.id;
-                } else if (continuous
+                } else if (followsContinuousSupport
                         && std::fabs(support - out->floorZ)
                                 <= CollisionPointEpsilon) {
                     out->continuousFloor = true;
