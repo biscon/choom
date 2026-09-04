@@ -1718,6 +1718,113 @@ void TestStructuralPrimitiveCollision()
     Check(!boxToStairBlocked && stairToBoxState.feetPosition.z > 3.5f,
           "the box-to-stair direction remains traversable");
 
+    game::SectorAuthoringStructuralPrimitive lowerStaircase = stairToBox;
+    lowerStaircase.id = 32;
+    lowerStaircase.stairs.bottom = 20.0f;
+    game::SectorAuthoringStructuralPrimitive highLanding = lowerLanding;
+    highLanding.id = 33;
+    highLanding.z = Coord(60.0f);
+    highLanding.box.bottom = 84.0f;
+    highLanding.box.top = 92.0f;
+    SectorTopologyMap highLandingMap = MakeSquare(0.0f, 96.0f);
+    AddStructuralPrimitives(
+            highLandingMap, {lowerStaircase, highLanding});
+    const game::SectorCollisionWorld highLandingWorld =
+            BuildWorld(highLandingMap);
+    const float highLandingTop = game::SectorAuthoringToWorldDistance(
+            highLanding.box.top);
+    const Vector2 retainedHighLandingPosition{4.0f, 5.8f};
+    game::SectorCollisionHeights retainedHighLandingHeights;
+    Check(highLandingWorld.ResolveActorVerticalContext(
+                  10,
+                  game::SectorCollisionVerticalQuery{
+                          retainedHighLandingPosition,
+                          highLandingTop,
+                          0.25f,
+                          1.8f,
+                          0.25f,
+                          true},
+                  &retainedHighLandingHeights)
+                  && Near(retainedHighLandingHeights.floorZ, highLandingTop),
+          "high box retains support while its edge overlaps a lower staircase");
+
+    const Vector2 clearedHighLandingPosition{4.0f, 5.7f};
+    game::SectorCollisionHeights lowerStaircaseHeights;
+    Check(highLandingWorld.ResolveActorVerticalContext(
+                  10,
+                  game::SectorCollisionVerticalQuery{
+                          clearedHighLandingPosition,
+                          highLandingTop,
+                          0.25f,
+                          1.8f,
+                          0.25f,
+                          true},
+                  &lowerStaircaseHeights)
+                  && lowerStaircaseHeights.floorZ
+                          < highLandingTop - 0.25f
+                  && !lowerStaircaseHeights.continuousFloor,
+          "distant staircase below a high box is not immediate continuous support");
+    game::SectorFpsControllerConfig highLandingFpsConfig;
+    highLandingFpsConfig.playerHeight = 1.8f;
+    game::SectorFpsControllerState highLandingState;
+    highLandingState.feetPosition = {
+            clearedHighLandingPosition.x,
+            highLandingTop,
+            clearedHighLandingPosition.y};
+    highLandingState.currentSectorId = 10;
+    highLandingState.grounded = true;
+    const game::SectorFpsVerticalResult startedHighLandingDrop =
+            game::UpdateSectorFpsVerticalPhysics(
+                    highLandingState,
+                    highLandingFpsConfig,
+                    game::SectorFpsVerticalContext{
+                            true,
+                            lowerStaircaseHeights.floorZ,
+                            lowerStaircaseHeights.ceilingZ,
+                            lowerStaircaseHeights.continuousFloor},
+                    0.0f);
+    Check(startedHighLandingDrop.transition
+                          == game::SectorFpsVerticalTransition::StartedDrop
+                  && !highLandingState.grounded
+                  && Near(highLandingState.feetPosition.y, highLandingTop),
+          "walking from a high box over lower stairs starts a fall without snapping");
+
+    bool landedOnLowerStaircase = false;
+    for (int frame = 0; frame < 120; ++frame) {
+        game::SectorCollisionHeights fallingHeights;
+        if (!highLandingWorld.ResolveActorVerticalContext(
+                    10,
+                    game::SectorCollisionVerticalQuery{
+                            clearedHighLandingPosition,
+                            highLandingState.feetPosition.y,
+                            0.25f,
+                            1.8f,
+                            0.25f,
+                            highLandingState.grounded},
+                    &fallingHeights)) {
+            break;
+        }
+        const game::SectorFpsVerticalResult falling =
+                game::UpdateSectorFpsVerticalPhysics(
+                        highLandingState,
+                        highLandingFpsConfig,
+                        game::SectorFpsVerticalContext{
+                                true,
+                                fallingHeights.floorZ,
+                                fallingHeights.ceilingZ,
+                                fallingHeights.continuousFloor},
+                        1.0f / 60.0f);
+        if (falling.transition
+                == game::SectorFpsVerticalTransition::Landed) {
+            landedOnLowerStaircase = Near(
+                    highLandingState.feetPosition.y,
+                    fallingHeights.floorZ);
+            break;
+        }
+    }
+    Check(landedOnLowerStaircase,
+          "falling from a high box lands normally on the lower staircase");
+
     game::SectorAuthoringStructuralPrimitive cylinder =
             game::DefaultSectorAuthoringStructuralPrimitive(
                     game::SectorStructuralPrimitiveKind::Cylinder);

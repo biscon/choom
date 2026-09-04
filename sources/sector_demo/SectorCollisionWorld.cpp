@@ -1156,6 +1156,11 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
         const bool continuous =
                 shape.kind == SectorStructuralPrimitiveKind::Ramp
                 || shape.kind == SectorStructuralPrimitiveKind::Stairs;
+        const bool followsContinuousSupport = continuous
+                && (!query.grounded
+                        || std::fabs(query.feetY - support)
+                                <= std::max(query.stepHeight, 0.0f)
+                                        + CollisionPointEpsilon);
         if (continuous && !centerInside) {
             const Vector2 local = ToStructuralLocalPoint(
                     query.positionXZ, shape);
@@ -1184,9 +1189,9 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
             if (retainsSupport || support <= maximumSupport) {
                 if (support > out->floorZ + CollisionPointEpsilon) {
                     out->floorZ = support;
-                    out->continuousFloor = continuous;
+                    out->continuousFloor = followsContinuousSupport;
                     out->supportingStructuralPrimitiveId = primitive.authored.id;
-                } else if (continuous
+                } else if (followsContinuousSupport
                         && std::fabs(support - out->floorZ)
                                 <= CollisionPointEpsilon) {
                     out->continuousFloor = true;
