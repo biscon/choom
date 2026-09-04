@@ -521,6 +521,13 @@ bool PointInsideStructuralFootprint(
             && std::fabs(local.y) <= shape.halfExtents.y + CollisionMoveEpsilon;
 }
 
+bool FlatStructuralTopUsesFootprintSupport(
+        const StructuralCollisionShape& shape)
+{
+    return shape.kind == SectorStructuralPrimitiveKind::Box
+            || shape.kind == SectorStructuralPrimitiveKind::Cylinder;
+}
+
 bool CanTraverseContinuousStructuralSupport(
         const StructuralCollisionShape& shape,
         Vector2 previousPosition,
@@ -1166,7 +1173,14 @@ bool SectorCollisionWorld::ResolveActorVerticalContext(
                 && query.grounded
                 && std::fabs(query.feetY - support)
                         <= retentionTolerance;
-        if (centerInside || retainsSupport) {
+        // Flat platforms contact the actor at the capsule edge. Acquire their
+        // reachable tops there as well so an adjoining slope can hand support
+        // off before the actor center crosses the platform boundary.
+        const bool acquiresFootprintSupport = !centerInside
+                && query.grounded
+                && FlatStructuralTopUsesFootprintSupport(shape)
+                && support <= maximumSupport;
+        if (centerInside || retainsSupport || acquiresFootprintSupport) {
             if (retainsSupport || support <= maximumSupport) {
                 if (support > out->floorZ + CollisionPointEpsilon) {
                     out->floorZ = support;

@@ -226,14 +226,14 @@ game::SectorCollisionWorld BuildWorld(const SectorTopologyMap& map)
     return world;
 }
 
-bool AddStructuralPrimitive(
+bool AddStructuralPrimitives(
         SectorTopologyMap& map,
-        const game::SectorAuthoringStructuralPrimitive& primitive)
+        const std::vector<game::SectorAuthoringStructuralPrimitive>& primitives)
 {
     std::vector<game::SectorCompiledStructuralPrimitive> compiled;
     std::vector<game::SectorStructuralDiagnostic> diagnostics;
     if (!game::CompileSectorStructuralPrimitives(
-                {primitive}, map, compiled, diagnostics)) {
+                primitives, map, compiled, diagnostics)) {
         for (const game::SectorStructuralDiagnostic& diagnostic : diagnostics) {
             std::fprintf(stderr, "structural fixture diagnostic: %s\n",
                     diagnostic.message.c_str());
@@ -243,6 +243,13 @@ bool AddStructuralPrimitive(
     }
     map.compiledStructuralPrimitives = std::move(compiled);
     return true;
+}
+
+bool AddStructuralPrimitive(
+        SectorTopologyMap& map,
+        const game::SectorAuthoringStructuralPrimitive& primitive)
+{
+    return AddStructuralPrimitives(map, {primitive});
 }
 
 game::SectorCollisionMoveResult Move(
@@ -1569,6 +1576,148 @@ void TestStructuralPrimitiveCollision()
                   && !clearedStairHeights.continuousFloor,
           "staircase high-edge support ends after the full radius clears");
 
+    game::SectorAuthoringStructuralPrimitive stairToBox =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Stairs);
+    stairToBox.id = 30;
+    stairToBox.x = Coord(32.0f);
+    stairToBox.z = Coord(36.0f);
+    stairToBox.stairs.width = Coord(24.0f);
+    stairToBox.stairs.run = Coord(24.0f);
+    stairToBox.stairs.bottom = 0.0f;
+    stairToBox.stairs.rise = 20.0f;
+    game::SectorAuthoringStructuralPrimitive lowerLanding =
+            game::DefaultSectorAuthoringStructuralPrimitive(
+                    game::SectorStructuralPrimitiveKind::Box);
+    lowerLanding.id = 31;
+    lowerLanding.x = Coord(32.0f);
+    lowerLanding.z = Coord(12.0f);
+    lowerLanding.box.width = Coord(24.0f);
+    lowerLanding.box.depth = Coord(24.0f);
+    lowerLanding.box.bottom = 0.0f;
+    lowerLanding.box.top = stairToBox.stairs.rise
+            / static_cast<float>(stairToBox.stairs.stepCount);
+    SectorTopologyMap stairToBoxMap = MakeSquare(0.0f, 48.0f);
+    AddStructuralPrimitives(stairToBoxMap, {stairToBox, lowerLanding});
+    const game::SectorCollisionWorld stairToBoxWorld = BuildWorld(stairToBoxMap);
+    const game::SectorCollisionMoveConfig stairToBoxMoveConfig{
+            0.25f, 1.8f, 0.25f, 4};
+    game::SectorFpsControllerConfig stairToBoxFpsConfig;
+    stairToBoxFpsConfig.playerRadius = stairToBoxMoveConfig.radius;
+    stairToBoxFpsConfig.playerHeight = stairToBoxMoveConfig.playerHeight;
+    stairToBoxFpsConfig.stepHeight = stairToBoxMoveConfig.stepHeight;
+    game::SectorFpsControllerState stairToBoxState;
+    stairToBoxState.feetPosition = {4.0f, 5.0f / 6.0f, 4.0f};
+    stairToBoxState.currentSectorId = 10;
+    stairToBoxState.grounded = true;
+    bool stairToBoxBlocked = false;
+    bool stairToBoxMovedBackward = false;
+    float previousStairToBoxZ = stairToBoxState.feetPosition.z;
+    for (int frame = 0; frame < 80; ++frame) {
+        const game::SectorCollisionMoveResult move =
+                stairToBoxWorld.ResolveMovement(
+                        game::SectorCollisionMoveState{
+                                {stairToBoxState.feetPosition.x,
+                                        stairToBoxState.feetPosition.z},
+                                stairToBoxState.feetPosition.y,
+                                stairToBoxState.currentSectorId,
+                                stairToBoxState.grounded},
+                        {0.0f, -0.03f},
+                        stairToBoxMoveConfig);
+        stairToBoxBlocked = stairToBoxBlocked
+                || move.hitWall || move.blockedByStep;
+        stairToBoxMovedBackward = stairToBoxMovedBackward
+                || move.positionXZ.y > previousStairToBoxZ + 0.0001f;
+        stairToBoxState.feetPosition.x = move.positionXZ.x;
+        stairToBoxState.feetPosition.z = move.positionXZ.y;
+        stairToBoxState.currentSectorId = move.currentSectorId;
+        previousStairToBoxZ = move.positionXZ.y;
+        game::SectorCollisionHeights heights;
+        if (!stairToBoxWorld.ResolveActorVerticalContext(
+                    move.currentSectorId,
+                    game::SectorCollisionVerticalQuery{
+                            move.positionXZ,
+                            stairToBoxState.feetPosition.y,
+                            stairToBoxMoveConfig.radius,
+                            stairToBoxMoveConfig.playerHeight,
+                            stairToBoxMoveConfig.stepHeight,
+                            stairToBoxState.grounded},
+                    &heights)) {
+            stairToBoxBlocked = true;
+            break;
+        }
+        const game::SectorFpsVerticalResult vertical =
+                game::UpdateSectorFpsVerticalPhysics(
+                        stairToBoxState,
+                        stairToBoxFpsConfig,
+                        game::SectorFpsVerticalContext{
+                                true,
+                                heights.floorZ,
+                                heights.ceilingZ,
+                                heights.continuousFloor},
+                        0.0f);
+        stairToBoxBlocked = stairToBoxBlocked
+                || vertical.cannotFit
+                || vertical.transition
+                        == game::SectorFpsVerticalTransition::BlockedStep;
+    }
+    const float lowerLandingTop = game::SectorAuthoringToWorldDistance(
+            lowerLanding.box.top);
+    Check(!stairToBoxBlocked && !stairToBoxMovedBackward
+                  && stairToBoxState.feetPosition.z < 2.0f
+                  && Near(stairToBoxState.feetPosition.y, lowerLandingTop),
+          "descending stairs hand off to a first-tread-height box without blocking or jitter");
+
+    stairToBoxState.feetPosition = {4.0f, lowerLandingTop, 1.6f};
+    stairToBoxState.grounded = true;
+    bool boxToStairBlocked = false;
+    for (int frame = 0; frame < 80; ++frame) {
+        const game::SectorCollisionMoveResult move =
+                stairToBoxWorld.ResolveMovement(
+                        game::SectorCollisionMoveState{
+                                {stairToBoxState.feetPosition.x,
+                                        stairToBoxState.feetPosition.z},
+                                stairToBoxState.feetPosition.y,
+                                stairToBoxState.currentSectorId,
+                                stairToBoxState.grounded},
+                        {0.0f, 0.03f},
+                        stairToBoxMoveConfig);
+        boxToStairBlocked = boxToStairBlocked
+                || move.hitWall || move.blockedByStep;
+        stairToBoxState.feetPosition.x = move.positionXZ.x;
+        stairToBoxState.feetPosition.z = move.positionXZ.y;
+        game::SectorCollisionHeights heights;
+        if (!stairToBoxWorld.ResolveActorVerticalContext(
+                    move.currentSectorId,
+                    game::SectorCollisionVerticalQuery{
+                            move.positionXZ,
+                            stairToBoxState.feetPosition.y,
+                            stairToBoxMoveConfig.radius,
+                            stairToBoxMoveConfig.playerHeight,
+                            stairToBoxMoveConfig.stepHeight,
+                            stairToBoxState.grounded},
+                    &heights)) {
+            boxToStairBlocked = true;
+            break;
+        }
+        const game::SectorFpsVerticalResult vertical =
+                game::UpdateSectorFpsVerticalPhysics(
+                        stairToBoxState,
+                        stairToBoxFpsConfig,
+                        game::SectorFpsVerticalContext{
+                                true,
+                                heights.floorZ,
+                                heights.ceilingZ,
+                                heights.continuousFloor},
+                        0.0f);
+        boxToStairBlocked = boxToStairBlocked
+                || vertical.cannotFit
+                || vertical.transition
+                        == game::SectorFpsVerticalTransition::BlockedStep;
+    }
+    Check(!boxToStairBlocked && stairToBoxState.feetPosition.z > 3.5f,
+          "the box-to-stair direction remains traversable");
+
     game::SectorAuthoringStructuralPrimitive cylinder =
             game::DefaultSectorAuthoringStructuralPrimitive(
                     game::SectorStructuralPrimitiveKind::Cylinder);
@@ -1585,6 +1734,42 @@ void TestStructuralPrimitiveCollision()
             {1.5f, 4.0f}, {3.0f, 0.0f}, 10, true);
     Check(cylinderBlocked.hitWall && cylinderBlocked.positionXZ.x <= 2.751f,
           "cylinder uses its circular collision footprint");
+
+    cylinder.cylinder.top = 2.0f;
+    SectorTopologyMap stepCylinderMap = MakeSquare();
+    AddStructuralPrimitive(stepCylinderMap, cylinder);
+    const game::SectorCollisionWorld stepCylinderWorld =
+            BuildWorld(stepCylinderMap);
+    game::SectorCollisionHeights stepCylinderHeights;
+    Check(stepCylinderWorld.ResolveActorVerticalContext(
+                  10,
+                  game::SectorCollisionVerticalQuery{
+                          {2.8f, 4.0f},
+                          0.0f,
+                          0.25f,
+                          1.6f,
+                          0.25f,
+                          true},
+                  &stepCylinderHeights)
+                  && Near(stepCylinderHeights.floorZ, 0.25f),
+          "reachable cylinder top support is acquired across the player footprint");
+
+    cylinder.cylinder.top = 4.0f;
+    SectorTopologyMap tallCylinderMap = MakeSquare();
+    AddStructuralPrimitive(tallCylinderMap, cylinder);
+    game::SectorCollisionHeights tallCylinderHeights;
+    Check(BuildWorld(tallCylinderMap).ResolveActorVerticalContext(
+                  10,
+                  game::SectorCollisionVerticalQuery{
+                          {2.8f, 4.0f},
+                          0.0f,
+                          0.25f,
+                          1.6f,
+                          0.25f,
+                          true},
+                  &tallCylinderHeights)
+                  && Near(tallCylinderHeights.floorZ, 0.0f),
+          "unreachable cylinder top is not acquired across the player footprint");
 
     game::SectorAuthoringStructuralPrimitive ceilingPipe = cylinder;
     ceilingPipe.id = 7;
