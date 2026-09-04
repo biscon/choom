@@ -373,6 +373,8 @@ private:
     std::vector<engine::TextureHandle> lightmapTextures;
     std::vector<engine::TextureHandle> directionalLightmapTextures;
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
+    engine::TextureHandle defaultMaterialTextureHandle =
+            engine::NullTextureHandle();
     engine::TextureHandle flashlightCookieTexture =
             engine::NullTextureHandle();
     Material material = {};

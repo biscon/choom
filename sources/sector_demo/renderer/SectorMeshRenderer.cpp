@@ -38,6 +38,9 @@ namespace game {
 
 namespace {
 
+constexpr const char* kSectorDefaultMaterialTextureAssetPath =
+        "assets/engine/default_material.png";
+
 engine::TextureHandle CreatePlayerFlashlightCookie(
         engine::AssetManager& assets,
         engine::AssetScopeHandle scope)
@@ -1397,6 +1400,14 @@ bool SectorMeshRenderer::RebuildRendererResources(
         error = "Preview failed: could not create asset scope";
         return false;
     }
+    const std::string defaultMaterialTexturePath =
+            ResolveSectorAssetPath(kSectorDefaultMaterialTextureAssetPath);
+    defaultMaterialTextureHandle = assets.RequestTexture(
+            assetScope,
+            "sector_builtin_default_material",
+            defaultMaterialTexturePath.c_str(),
+            engine::TextureColorUsage::SceneSrgb,
+            SectorMaterialTextureLoadFlags(SectorMaterialFilter::Anisotropic8x));
     flashlightCookieTexture = CreatePlayerFlashlightCookie(
             assets, assetScope);
     EnsureSurfaceMaterialResources(assets, map, generatedGeometry);
@@ -1773,6 +1784,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     surfaceLightmapBakeCurrent = false;
     objectProbeBakeCurrent = false;
     lightAtmosphereSources.clear();
+    defaultMaterialTextureHandle = engine::NullTextureHandle();
     flashlightCookieTexture = engine::NullTextureHandle();
     doorRenderer.ClearPreparedShadowCasters();
     dynamicModelShadowRenderer.ClearPreparedShadowCasters();
@@ -2016,6 +2028,12 @@ void SectorMeshRenderer::DrawScene(
             shadowLocations,
             fallbackLightContext.shadowUniforms);
     int uploadedLightSectorId = std::numeric_limits<int>::min();
+    const Texture2D* loadedDefaultMaterialTexture =
+            assets.GetTexture(defaultMaterialTextureHandle);
+    const Texture2D& activeDefaultMaterialTexture =
+            loadedDefaultMaterialTexture != nullptr
+            ? *loadedDefaultMaterialTexture
+            : defaultMaterialTexture;
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
             continue;
@@ -2099,7 +2117,7 @@ void SectorMeshRenderer::DrawScene(
         const Texture2D* texture = assets.GetTexture(textureHandle);
         material.maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
                 ? *texture
-                : defaultMaterialTexture;
+                : activeDefaultMaterialTexture;
 
         const Texture2D* normalTexture = assets.GetTexture(
                 NormalTextureForId(batch.materialId));
@@ -2266,7 +2284,7 @@ void SectorMeshRenderer::DrawScene(
                 && objectProbeBakeCurrent
                 && doorLighting.objectLightProbes != nullptr
                 && !doorLighting.objectLightProbes->probes.empty();
-        doorDrawContext.defaultMaterialTexture = &defaultMaterialTexture;
+        doorDrawContext.defaultMaterialTexture = &activeDefaultMaterialTexture;
         doorDrawContext.renderDebugText = &renderDebugText;
         doorRenderer.Draw(doorDrawContext);
         ductCoverRenderer.Draw(doorDrawContext, doorRenderer);

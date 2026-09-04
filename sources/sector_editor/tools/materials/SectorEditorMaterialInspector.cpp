@@ -259,6 +259,9 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
 
     auto drawTextureRow = [&](const char* id, const char* label, const std::string& materialId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
         const float buttonW = 38.0f;
+        const bool canUseDefault = wallPart != TopologyWallPart::Middle
+                && layer == TopologyMaterialLayer::Base;
+        const float defaultW = canUseDefault ? 72.0f : 0.0f;
         const float labelColumnW = 74.0f;
         const Rectangle row{0.0f, y, contentW, 36.0f};
         const bool missing = !materialId.empty() && !textureCatalog.HasTexture(materialId);
@@ -267,11 +270,32 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 ui,
                 smallConfig,
                 assets,
-                Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
+                Rectangle{row.x + labelColumnW, row.y,
+                        row.width - labelColumnW - buttonW - defaultW
+                                - gap * (canUseDefault ? 2.0f : 1.0f),
+                        row.height},
                 smallFont,
-                materialId.empty() ? "<none>" : materialId.c_str(),
+                materialId.empty()
+                        ? (canUseDefault ? "Default" : "<none>")
+                        : materialId.c_str(),
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
+        if (canUseDefault
+                && engine::Button(
+                        ui, config, input, assets,
+                        TextFormat("%s_default", id),
+                        Rectangle{row.x + row.width - buttonW - gap - defaultW,
+                                row.y, defaultW, row.height},
+                        font, "Default")) {
+            materialEditing.UseDefaultSurfaceMaterial(
+                    TopologySurfaceEditTarget{
+                            TopologyWallPartEditTargetKind(wallPart),
+                            sideDef->sectorId,
+                            sideDef->lineDefId,
+                            sideDef->id,
+                            sideDef->side},
+                    &assets);
+        }
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
             if (!materialEditing.OpenMaterialPickerForDerivedSideDef(sideDef->id, wallPart, layer)) {
                 statusText = HasAuthoringGraphData(authoringGraph)

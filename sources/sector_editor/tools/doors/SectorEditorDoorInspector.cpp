@@ -1027,13 +1027,14 @@ void DrawSectorEditorDoorInspector(
 
     if (SectorEditorDoorInspectorShowsProceduralMaterialControls(
                 selectedObject->door)) {
+        const float materialButtonW = (contentW - gap) * 0.5f;
         if (engine::Button(
                     ui,
                     config,
                     input,
                     assets,
                     "sector_editor_door_pick_texture",
-                    Rectangle{0.0f, y, contentW, rowH},
+                    Rectangle{0.0f, y, materialButtonW, rowH},
                     font,
                     "Pick Material")) {
             if (!OpenRuntimeDoorTexturePicker(
@@ -1044,6 +1045,25 @@ void DrawSectorEditorDoorInspector(
                         selectedObject->id)) {
                 context.statusText = "No door texture target";
             }
+        }
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_door_default_texture",
+                    Rectangle{materialButtonW + gap, y, materialButtonW, rowH},
+                    font,
+                    "Use Default")) {
+            editing.MutateSelected(
+                    "Using built-in default door material",
+                    [](SectorPlacedRuntimeObject& object) {
+                        if (object.kind != "door" || object.door.materialId.empty()) {
+                            return false;
+                        }
+                        object.door.materialId.clear();
+                        return true;
+                    });
         }
         y += rowH + gap;
     }

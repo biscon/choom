@@ -3638,6 +3638,64 @@ void TestDecalDefaultsAndOmission()
           "empty texture wall decal with stray data is omitted");
 }
 
+void TestBaseMaterialDefaultsAndOmission()
+{
+    SectorTopologyMap map = MakeSquare();
+    map.sectors[0].floorMaterialId.clear();
+    map.sectors[0].ceilingMaterialId.clear();
+    map.sectors[0].defaultWall.materialId.clear();
+    map.sectors[0].defaultLower.materialId.clear();
+    map.sectors[0].defaultUpper.materialId.clear();
+    for (SectorTopologySideDef& sideDef : map.sideDefs) {
+        sideDef.wall.materialId.clear();
+        sideDef.lower.materialId.clear();
+        sideDef.upper.materialId.clear();
+    }
+
+    const Json saved = Json::parse(SaveText(map));
+    Check(!saved["sectors"][0].contains("floorMaterialId")
+                  && !saved["sectors"][0].contains("ceilingMaterialId"),
+          "default floor and ceiling material IDs are omitted");
+    Check(!saved["sectors"][0]["defaultWall"].contains("materialId")
+                  && !saved["sectors"][0]["defaultLower"].contains("materialId")
+                  && !saved["sectors"][0]["defaultUpper"].contains("materialId"),
+          "default sector wall material IDs are omitted");
+    Check(!saved["sidedefs"][0]["wall"].contains("materialId")
+                  && !saved["sidedefs"][0]["lower"].contains("materialId")
+                  && !saved["sidedefs"][0]["upper"].contains("materialId"),
+          "default sidedef material IDs are omitted");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error)
+                  && loaded.sectors[0].floorMaterialId.empty()
+                  && loaded.sectors[0].ceilingMaterialId.empty()
+                  && loaded.sectors[0].defaultWall.materialId.empty()
+                  && loaded.sideDefs[0].wall.materialId.empty(),
+          "omitted topology base material IDs load as built-in defaults");
+
+    const game::SectorAuthoringDocument document =
+            MakeAuthoringDocumentFromMap(map);
+    const Json authoringSaved = Json::parse(SaveAuthoringText(document));
+    const Json& anchor = authoringSaved["authoringGraph"]["faceAnchors"][0];
+    const Json& side = authoringSaved["authoringGraph"]["lineSides"][0];
+    Check(!anchor.contains("floorMaterialId")
+                  && !anchor.contains("ceilingMaterialId")
+                  && !anchor["defaultWall"].contains("materialId")
+                  && !side["wall"].contains("materialId"),
+          "graph-native save omits built-in default material IDs");
+
+    game::SectorAuthoringDocument authoringLoaded;
+    Check(LoadAuthoringText(authoringSaved.dump(), authoringLoaded, error)
+                  && !authoringLoaded.graph.faceAnchors.empty()
+                  && authoringLoaded.graph.faceAnchors[0].floorMaterialId.empty()
+                  && authoringLoaded.graph.faceAnchors[0].defaultWall.materialId.empty()
+                  && authoringLoaded.derivation.success
+                  && authoringLoaded.derivation.topology.sectors[0]
+                             .floorMaterialId.empty(),
+          "omitted graph-native material IDs load and derive as built-in defaults");
+}
+
 void TestMiddleDefaultsAndOmission()
 {
     SectorTopologyMap map = MakeSquare();
@@ -3660,7 +3718,7 @@ void TestMiddleDefaultsAndOmission()
     map.sideDefs[0].middle.uv.scale = {2.0f, 3.0f};
     const Json savedUvOnly = Json::parse(SaveText(map));
     Check(savedUvOnly["sidedefs"][0].contains("middle")
-                  && savedUvOnly["sidedefs"][0]["middle"]["materialId"].get<std::string>().empty()
+                  && !savedUvOnly["sidedefs"][0]["middle"].contains("materialId")
                   && savedUvOnly["sidedefs"][0]["middle"]["uv"]["scale"][0].get<float>() == 2.0f,
           "non-default middle UV is saved even without a texture");
 
@@ -5369,7 +5427,7 @@ void TestGlobalMaterialRegistryAndReferenceRefactor()
   "formatVersion": 1,
   "materials": {
     "old_wall": {
-      "albedoTexturePath": "assets/images/wall.png",
+      "albedoTexturePath": "assets/images/test_wall.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.25,
       "roughnessFactor": 0.65,
@@ -5771,6 +5829,7 @@ int main()
     TestDirectionalLightRoundTripAndValidation();
     TestFogSettingsRoundTripAndValidation();
     TestDecalDefaultsAndOmission();
+    TestBaseMaterialDefaultsAndOmission();
     TestMiddleDefaultsAndOmission();
     TestMiddleRoundTrip();
     TestLineDefFlagsRoundTripAndDefaults();

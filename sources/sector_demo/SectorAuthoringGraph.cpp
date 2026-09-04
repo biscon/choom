@@ -1413,11 +1413,6 @@ void CopyFaceDefaultsToTopologySector(
 {
     sector.id = topologySectorId;
     sector.name = "Sector " + std::to_string(face.id);
-    sector.floorMaterialId = "floor";
-    sector.ceilingMaterialId = "ceiling";
-    sector.defaultWall.materialId = "wall";
-    sector.defaultLower.materialId = "wall";
-    sector.defaultUpper.materialId = "wall";
 }
 
 int AllocateDerivedSectorId(

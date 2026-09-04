@@ -85,27 +85,4 @@ engine::TextureHandle SectorEditorTextureCatalogService::EnsureTextureHandleForI
     return handle;
 }
 
-void SectorEditorTextureCatalogService::RefreshDefaultTextureIds()
-{
-    auto findTexture = [this](const char* preferred, const std::string& fallback = std::string{}) {
-        const auto preferredIt = context_.registry.materialsById.find(preferred);
-        if (preferredIt != context_.registry.materialsById.end()) {
-            return preferredIt->first;
-        }
-        if (!fallback.empty()) {
-            return fallback;
-        }
-        const std::vector<std::string> materialIds = TextureIds();
-        return materialIds.empty() ? std::string{} : materialIds.front();
-    };
-
-    context_.defaultWallTextureId = findTexture("wall");
-    context_.defaultFloorTextureId = findTexture("floor");
-    context_.defaultCeilingTextureId = findTexture("ceiling");
-    context_.defaultLowerWallTextureId =
-            findTexture("step_wall", context_.defaultWallTextureId);
-    context_.defaultUpperWallTextureId =
-            findTexture("upper_wall", context_.defaultWallTextureId);
-}
-
 } // namespace game

@@ -173,9 +173,7 @@ bool SectorEditorMaterialRegistryEditorService::SelectIndex(int index)
 void SectorEditorMaterialRegistryEditorService::AddMaterial()
 {
     SectorEditorMaterialRegistryDraft draft;
-    draft.definition.path = "assets/images/wall.png";
-    const std::string generatedId = GeneratedTextureIdBase(draft.definition.path);
-    draft.definition.id = UniqueMaterialId(state_.drafts, generatedId.c_str());
+    draft.definition.id = UniqueMaterialId(state_.drafts, "material");
     draft.definition.filter = SectorMaterialFilter::Anisotropic8x;
     draft.definition.roughnessFactor = 0.8f;
     state_.drafts.push_back(std::move(draft));
@@ -519,6 +517,16 @@ void SectorEditorMaterialRegistryEditorService::EnsurePreview(engine::AssetManag
 {
     const SectorEditorMaterialRegistryDraft* draft = SelectedDraft();
     if (draft == nullptr) return;
+    if (draft->definition.path.empty()) {
+        if (!engine::IsNull(state_.previewScope)) {
+            assets.UnloadScope(state_.previewScope);
+        }
+        state_.previewScope = engine::NullAssetScopeHandle();
+        state_.previewTexture = engine::NullTextureHandle();
+        state_.previewPath.clear();
+        state_.previewFilter = draft->definition.filter;
+        return;
+    }
     if (state_.previewPath == draft->definition.path
             && state_.previewFilter == draft->definition.filter
             && !engine::IsNull(state_.previewTexture)) return;
@@ -526,6 +534,7 @@ void SectorEditorMaterialRegistryEditorService::EnsurePreview(engine::AssetManag
     state_.previewScope = assets.CreateScope("sector_editor_material_registry_preview");
     state_.previewPath = draft->definition.path;
     state_.previewFilter = draft->definition.filter;
+    state_.previewTexture = engine::NullTextureHandle();
     state_.previewTexture = assets.RequestTexture(
             state_.previewScope,
             (draft->definition.path + "|material-editor").c_str(),

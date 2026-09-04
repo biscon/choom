@@ -7384,7 +7384,6 @@ void SectorEditor::DrawMaterialRegistryEditor(
     if (result == SectorEditorMaterialRegistryEditorResult::Saved) {
         SectorEditorTextureCatalogService catalog = MakeTextureCatalogService();
         catalog.RefreshTextureHandles(assets);
-        catalog.RefreshDefaultTextureIds();
         RefreshResolvedMaterials();
         state.lightmapSourceHashRevision = 0;
     }
@@ -7828,7 +7827,6 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     state.viewZoom = 48.0f;
     state.gridSize = SectorAuthoringEditorGridSizeDefault;
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
     BuildSoundService().RefreshCatalogHandles();
     ReloadSectorSwingDoorCatalog(sceneRuntime.RuntimeObjects());
@@ -7972,7 +7970,6 @@ bool SectorEditor::LoadLevel(
     surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     lightEditingState = LightEditingState{};
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
     BuildSoundService().RefreshCatalogHandles();
     sceneRuntime.RefreshMapRuntimeObjects(context, topologyMap);
@@ -8884,12 +8881,7 @@ SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
     return SectorEditorTextureCatalogService{
             SectorEditorTextureCatalogServiceContext{
                     materialRegistry,
-                    textureCatalogState,
-                    state.defaultFloorTextureId,
-                    state.defaultCeilingTextureId,
-                    state.defaultWallTextureId,
-                    state.defaultLowerWallTextureId,
-                    state.defaultUpperWallTextureId}};
+                    textureCatalogState}};
 }
 
 SectorEditorNpcEditorService SectorEditor::BuildNpcEditorService()

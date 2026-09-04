@@ -14,11 +14,6 @@ namespace game {
 struct SectorEditorTextureCatalogServiceContext {
     SectorMaterialRegistry& registry;
     TextureCatalogState& textureState;
-    std::string& defaultFloorTextureId;
-    std::string& defaultCeilingTextureId;
-    std::string& defaultWallTextureId;
-    std::string& defaultLowerWallTextureId;
-    std::string& defaultUpperWallTextureId;
 };
 
 class SectorEditorTextureCatalogService {
@@ -36,7 +31,6 @@ public:
             const std::string& materialId,
             engine::AssetManager& assets);
     void RefreshTextureHandles(engine::AssetManager& assets);
-    void RefreshDefaultTextureIds();
 
 private:
     SectorEditorTextureCatalogServiceContext context_;

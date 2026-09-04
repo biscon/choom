@@ -284,9 +284,10 @@ void DrawSectorEditorDuctAccessInspector(
             materialText.c_str(), engine::UITextJustify::Left,
             context.config.mutedTextColor, true);
     y += 56.0f;
+    const float materialButtonW = (contentW - gap) * 0.5f;
     if (engine::Button(context.ui, context.config, context.input,
                 context.assets, "duct_cover_pick_frame_material",
-                Rectangle{0.0f, y, contentW, rowH}, context.font,
+                Rectangle{0.0f, y, materialButtonW, rowH}, context.font,
                 "Pick Frame Material")) {
         if (!OpenRuntimeDuctTexturePicker(
                     context.state, context.topologyMap,
@@ -295,10 +296,25 @@ void DrawSectorEditorDuctAccessInspector(
             context.statusText = "No vent cover material target";
         }
     }
+    if (engine::Button(context.ui, context.config, context.input,
+                context.assets, "duct_cover_default_frame_material",
+                Rectangle{materialButtonW + gap, y, materialButtonW, rowH},
+                context.font, "Use Default")) {
+        context.editing.MutateSelected(
+                "Using built-in default vent frame material",
+                [](SectorPlacedRuntimeObject& object) {
+                    if (object.kind != "duct_access"
+                            || object.ductAccess.cover.frameMaterialId.empty()) {
+                        return false;
+                    }
+                    object.ductAccess.cover.frameMaterialId.clear();
+                    return true;
+                });
+    }
     y += rowH + gap;
     if (engine::Button(context.ui, context.config, context.input,
                 context.assets, "duct_cover_pick_louver_material",
-                Rectangle{0.0f, y, contentW, rowH}, context.font,
+                Rectangle{0.0f, y, materialButtonW, rowH}, context.font,
                 "Pick Louver Material")) {
         if (!OpenRuntimeDuctTexturePicker(
                     context.state, context.topologyMap,
@@ -306,6 +322,21 @@ void DrawSectorEditorDuctAccessInspector(
                     selected->id, true)) {
             context.statusText = "No vent cover material target";
         }
+    }
+    if (engine::Button(context.ui, context.config, context.input,
+                context.assets, "duct_cover_default_louver_material",
+                Rectangle{materialButtonW + gap, y, materialButtonW, rowH},
+                context.font, "Use Default")) {
+        context.editing.MutateSelected(
+                "Using built-in default vent louver material",
+                [](SectorPlacedRuntimeObject& object) {
+                    if (object.kind != "duct_access"
+                            || object.ductAccess.cover.louverMaterialId.empty()) {
+                        return false;
+                    }
+                    object.ductAccess.cover.louverMaterialId.clear();
+                    return true;
+                });
     }
     y += rowH + gap;
 

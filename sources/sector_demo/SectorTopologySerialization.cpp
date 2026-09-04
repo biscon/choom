@@ -1554,7 +1554,7 @@ SectorTopologyWallPartSettings ReadWallPart(const Json& value, const std::string
         Fail(context + " must be an object");
     }
     SectorTopologyWallPartSettings part;
-    part.materialId = ReadString(value, "materialId", context);
+    part.materialId = ReadOptionalString(value, "materialId", context);
     part.uv = ReadUv(RequireField(value, "uv", context), context + ".uv");
     ReadOptionalDecal(value, "decal", context, part.decal);
     return part;
@@ -2820,9 +2820,11 @@ Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& contex
 Json WriteWallPart(const SectorTopologyWallPartSettings& part, const std::string& context)
 {
     Json value{
-            {"materialId", part.materialId},
             {"uv", WriteUv(part.uv, context + ".uv")}
     };
+    if (!part.materialId.empty()) {
+        value["materialId"] = part.materialId;
+    }
     if (HasDecal(part.decal)) {
         value["decal"] = WriteDecal(part.decal, context + ".decal");
     }
@@ -4611,8 +4613,8 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         anchor.isVoid = ReadOptionalBool(faceAnchors[i], "isVoid", context, false);
         anchor.floorZ = ReadFloat(faceAnchors[i], "floorZ", context);
         anchor.ceilingZ = ReadFloat(faceAnchors[i], "ceilingZ", context);
-        anchor.floorMaterialId = ReadString(faceAnchors[i], "floorMaterialId", context);
-        anchor.ceilingMaterialId = ReadString(faceAnchors[i], "ceilingMaterialId", context);
+        anchor.floorMaterialId = ReadOptionalString(faceAnchors[i], "floorMaterialId", context);
+        anchor.ceilingMaterialId = ReadOptionalString(faceAnchors[i], "ceilingMaterialId", context);
         anchor.footstepSet = ReadOptionalString(faceAnchors[i], "footstepSet", context);
         ValidateOptionalFootstepSet(anchor.footstepSet, context + ".footstepSet");
         anchor.ceilingSky = ReadOptionalBool(faceAnchors[i], "ceilingSky", context, false);
@@ -5262,8 +5264,6 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
                 {"y", anchor->y},
                 {"floorZ", anchor->floorZ},
                 {"ceilingZ", anchor->ceilingZ},
-                {"floorMaterialId", anchor->floorMaterialId},
-                {"ceilingMaterialId", anchor->ceilingMaterialId},
                 {"floorUv", WriteUv(anchor->floorUv, context + ".floorUv")},
                 {"ceilingUv", WriteUv(anchor->ceilingUv, context + ".ceilingUv")},
                 {"ambientColor", WriteColor(anchor->ambientColor)},
@@ -5272,6 +5272,12 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
                 {"defaultLower", WriteWallPart(anchor->defaultLower, context + ".defaultLower")},
                 {"defaultUpper", WriteWallPart(anchor->defaultUpper, context + ".defaultUpper")}
         };
+        if (!anchor->floorMaterialId.empty()) {
+            anchorJson["floorMaterialId"] = anchor->floorMaterialId;
+        }
+        if (!anchor->ceilingMaterialId.empty()) {
+            anchorJson["ceilingMaterialId"] = anchor->ceilingMaterialId;
+        }
         if (anchor->ceilingSky) {
             anchorJson["ceilingSky"] = true;
         }
@@ -5727,8 +5733,8 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.name = ReadString(value, "name", context);
         sector.floorZ = ReadFloat(value, "floorZ", context);
         sector.ceilingZ = ReadFloat(value, "ceilingZ", context);
-        sector.floorMaterialId = ReadString(value, "floorMaterialId", context);
-        sector.ceilingMaterialId = ReadString(value, "ceilingMaterialId", context);
+        sector.floorMaterialId = ReadOptionalString(value, "floorMaterialId", context);
+        sector.ceilingMaterialId = ReadOptionalString(value, "ceilingMaterialId", context);
         sector.footstepSet = ReadOptionalString(value, "footstepSet", context);
         ValidateOptionalFootstepSet(sector.footstepSet, context + ".footstepSet");
         sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
@@ -5849,8 +5855,6 @@ Json SerializeMap(const SectorTopologyMap& sourceMap)
                 {"name", sector->name},
                 {"floorZ", sector->floorZ},
                 {"ceilingZ", sector->ceilingZ},
-                {"floorMaterialId", sector->floorMaterialId},
-                {"ceilingMaterialId", sector->ceilingMaterialId},
                 {"floorUv", WriteUv(sector->floorUv, context + ".floorUv")},
                 {"ceilingUv", WriteUv(sector->ceilingUv, context + ".ceilingUv")},
                 {"ambientColor", WriteColor(sector->ambientColor)},
@@ -5859,6 +5863,12 @@ Json SerializeMap(const SectorTopologyMap& sourceMap)
                 {"defaultLower", WriteWallPart(sector->defaultLower, context + ".defaultLower")},
                 {"defaultUpper", WriteWallPart(sector->defaultUpper, context + ".defaultUpper")}
         };
+        if (!sector->floorMaterialId.empty()) {
+            sectorJson["floorMaterialId"] = sector->floorMaterialId;
+        }
+        if (!sector->ceilingMaterialId.empty()) {
+            sectorJson["ceilingMaterialId"] = sector->ceilingMaterialId;
+        }
         if (HasDecal(sector->floorDecal)) {
             sectorJson["floorDecal"] = WriteDecal(sector->floorDecal, context + ".floorDecal");
         }

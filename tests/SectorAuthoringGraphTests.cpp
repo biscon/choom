@@ -2942,17 +2942,17 @@ void TestFreshDerivedTopologyUsesDefaultMaterials()
     Check(result.topology.sectors.size() == 1, "fresh material default graph derives one sector");
     if (!result.topology.sectors.empty()) {
         const game::SectorTopologySector& sector = result.topology.sectors.front();
-        Check(sector.floorMaterialId == "floor", "fresh derived sector gets default floor texture");
-        Check(sector.ceilingMaterialId == "ceiling", "fresh derived sector gets default ceiling texture");
-        Check(sector.defaultWall.materialId == "wall", "fresh derived sector gets default wall texture");
-        Check(sector.defaultLower.materialId == "wall", "fresh derived sector gets default lower wall texture");
-        Check(sector.defaultUpper.materialId == "wall", "fresh derived sector gets default upper wall texture");
+        Check(sector.floorMaterialId.empty(), "fresh derived sector uses default floor material");
+        Check(sector.ceilingMaterialId.empty(), "fresh derived sector uses default ceiling material");
+        Check(sector.defaultWall.materialId.empty(), "fresh derived sector uses default wall material");
+        Check(sector.defaultLower.materialId.empty(), "fresh derived sector uses default lower wall material");
+        Check(sector.defaultUpper.materialId.empty(), "fresh derived sector uses default upper wall material");
     }
 
     for (const game::SectorTopologySideDef& sideDef : result.topology.sideDefs) {
-        Check(sideDef.wall.materialId == "wall", "fresh derived sidedef gets default wall texture");
-        Check(sideDef.lower.materialId == "wall", "fresh derived sidedef gets default lower wall texture");
-        Check(sideDef.upper.materialId == "wall", "fresh derived sidedef gets default upper wall texture");
+        Check(sideDef.wall.materialId.empty(), "fresh derived sidedef uses default wall material");
+        Check(sideDef.lower.materialId.empty(), "fresh derived sidedef uses default lower wall material");
+        Check(sideDef.upper.materialId.empty(), "fresh derived sidedef uses default upper wall material");
     }
 
     game::SectorGeneratedGeometry geometry;
@@ -2962,20 +2962,17 @@ void TestFreshDerivedTopologyUsesDefaultMaterials()
     bool sawFloor = false;
     bool sawCeiling = false;
     bool sawWall = false;
-    bool sawEmptyTexture = false;
     for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
-        sawEmptyTexture = sawEmptyTexture || surface.materialId.empty();
         sawFloor = sawFloor || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Floor
-                && surface.materialId == "floor");
+                && surface.materialId.empty());
         sawCeiling = sawCeiling || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Ceiling
-                && surface.materialId == "ceiling");
+                && surface.materialId.empty());
         sawWall = sawWall || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Wall
-                && surface.materialId == "wall");
+                && surface.materialId.empty());
     }
-    Check(!sawEmptyTexture, "fresh derived generated geometry surfaces have non-empty textures");
-    Check(sawFloor, "fresh derived generated geometry has default floor texture");
-    Check(sawCeiling, "fresh derived generated geometry has default ceiling texture");
-    Check(sawWall, "fresh derived generated geometry has default wall texture");
+    Check(sawFloor, "fresh derived generated geometry has an implicit default floor material");
+    Check(sawCeiling, "fresh derived generated geometry has an implicit default ceiling material");
+    Check(sawWall, "fresh derived generated geometry has an implicit default wall material");
 }
 
 void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
@@ -2998,19 +2995,12 @@ void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
     Check(anchor != nullptr && anchor->name == "Sector 1",
           "fresh outer synthesized anchor gets first generated label");
     Check(anchor != nullptr
-                  && !anchor->floorMaterialId.empty()
-                  && !anchor->ceilingMaterialId.empty()
-                  && !anchor->defaultWall.materialId.empty()
-                  && !anchor->defaultLower.materialId.empty()
-                  && !anchor->defaultUpper.materialId.empty(),
-          "fresh outer synthesized anchor gets non-empty default materials");
-    Check(anchor != nullptr
-                  && anchor->floorMaterialId == "floor"
-                  && anchor->ceilingMaterialId == "ceiling"
-                  && anchor->defaultWall.materialId == "wall"
-                  && anchor->defaultLower.materialId == "wall"
-                  && anchor->defaultUpper.materialId == "wall",
-          "fresh outer synthesized anchor uses normal graph-authored defaults");
+                  && anchor->floorMaterialId.empty()
+                  && anchor->ceilingMaterialId.empty()
+                  && anchor->defaultWall.materialId.empty()
+                  && anchor->defaultLower.materialId.empty()
+                  && anchor->defaultUpper.materialId.empty(),
+          "fresh outer synthesized anchor uses implicit built-in defaults");
     Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
                   authoringGraph,
                   documentState.derivation.authoringDerivation),
@@ -3020,12 +3010,12 @@ void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
     std::string error;
     Check(game::BuildSectorGeneratedGeometry(documentState.map.topologyMap, geometry, &error),
           "fresh outer reconciled topology builds generated geometry");
-    bool sawEmptyTexture = false;
+    bool sawDefaultMaterial = false;
     for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
-        sawEmptyTexture = sawEmptyTexture || surface.materialId.empty();
+        sawDefaultMaterial = sawDefaultMaterial || surface.materialId.empty();
     }
-    Check(!sawEmptyTexture,
-          "fresh outer reconciled generated geometry does not rely on empty texture IDs");
+    Check(sawDefaultMaterial,
+          "fresh outer reconciled generated geometry uses implicit default material IDs");
 }
 
 void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
@@ -3121,12 +3111,12 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
     Check(innerAnchor != nullptr && innerAnchor->name == "Sector 2",
           "inner synthesized anchor gets next generated label");
     Check(innerAnchor != nullptr
-                  && !innerAnchor->floorMaterialId.empty()
-                  && !innerAnchor->ceilingMaterialId.empty()
-                  && !innerAnchor->defaultWall.materialId.empty()
-                  && !innerAnchor->defaultLower.materialId.empty()
-                  && !innerAnchor->defaultUpper.materialId.empty(),
-          "inner synthesized anchor gets valid material defaults");
+                  && innerAnchor->floorMaterialId.empty()
+                  && innerAnchor->ceilingMaterialId.empty()
+                  && innerAnchor->defaultWall.materialId.empty()
+                  && innerAnchor->defaultLower.materialId.empty()
+                  && innerAnchor->defaultUpper.materialId.empty(),
+          "inner synthesized anchor uses implicit built-in defaults");
 }
 
 void TestEditorAuthoringGraphMutationMarksDirtyAndStale()
@@ -3376,7 +3366,10 @@ void TestEditorAuthoringSuccessfulDerivationUpdatesState()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.resolvedMaterialsById.emplace("wall", game::SectorMaterialDefinition{"wall", "assets/images/wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace(
+            "test_material",
+            game::SectorMaterialDefinition{
+                    "test_material", "assets/images/test_material.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -3394,7 +3387,7 @@ void TestEditorAuthoringSuccessfulDerivationUpdatesState()
           "successful editor derivation updates current derived topology");
     Check(documentState.derivation.authoringDerivation.mapping.sectors.size() == 1,
           "successful editor derivation preserves mapping for editor state");
-    Check(documentState.map.topologyMap.resolvedMaterialsById.find("wall") != documentState.map.topologyMap.resolvedMaterialsById.end(),
+    Check(documentState.map.topologyMap.resolvedMaterialsById.find("test_material") != documentState.map.topologyMap.resolvedMaterialsById.end(),
           "successful editor derivation preserves map-level texture data");
 }
 
@@ -4459,6 +4452,106 @@ void TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide()
           "service sidedef base UV apply marks document dirty");
     Check(!previewRebuildRequested,
           "service sidedef base UV apply does not rebuild preview for non-middle wall part");
+}
+
+void TestEditorMaterialEditingServiceResetsBaseMaterialsToBuiltInDefault()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
+    Check(anchor != nullptr, "default material reset setup has a face anchor");
+    if (anchor == nullptr) return;
+    anchor->floorMaterialId = "custom_floor";
+    anchor->defaultWall.materialId = "custom_wall_default";
+
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{
+            10, game::SectorTopologySideKind::Front};
+    side.wall.materialId = "custom_wall";
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation)),
+          "default material reset setup derives valid topology");
+    const game::SectorTopologySideDef* derivedSide =
+            FindDerivedSideDefForAuthoringSide(
+                    documentState.derivation.authoringDerivation,
+                    side.id.lineId,
+                    side.id.side);
+    Check(derivedSide != nullptr,
+          "default material reset setup maps the authored side");
+    if (derivedSide == nullptr || documentState.map.topologyMap.sectors.empty()) {
+        return;
+    }
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    state.topologyRenderCache.valid = true;
+    const uint64_t revisionBefore = state.topologyRenderRevision;
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    bool previewRebuildRequested = false;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(
+                    state,
+                    documentState,
+                    authoringGraph,
+                    uiState,
+                    statusText,
+                    &previewRebuildRequested);
+
+    const int sectorId = documentState.map.topologyMap.sectors.front().id;
+    Check(service.UseDefaultSurfaceMaterial(
+                  game::TopologySurfaceEditTarget{
+                          game::TopologySurfaceEditTargetKind::SectorFloor,
+                          sectorId},
+                  &assets),
+          "derived floor can reset to the built-in default material");
+    anchor = game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
+    const game::SectorTopologySector* derivedSector =
+            game::FindSectorTopologySector(
+                    documentState.map.topologyMap, sectorId);
+    Check(anchor != nullptr && anchor->floorMaterialId.empty()
+                  && derivedSector != nullptr
+                  && derivedSector->floorMaterialId.empty(),
+          "derived floor reset clears the authored and projected material IDs");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && !state.topologyRenderCache.valid
+                  && state.topologyRenderRevision > revisionBefore,
+          "default material reset dirties the document and invalidates the topology cache");
+    Check(previewRebuildRequested,
+          "default material reset requests a preview material rebuild");
+
+    Check(service.UseDefaultAuthoringFaceMaterial(
+                  200,
+                  game::TopologySectorTextureField::DefaultWall,
+                  &assets),
+          "authoring face wall default can reset to the built-in material");
+    anchor = game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
+    Check(anchor != nullptr && anchor->defaultWall.materialId.empty(),
+          "authoring face wall reset clears its material ID");
+
+    Check(service.UseDefaultAuthoringSideMaterial(
+                  side.id, game::TopologyWallPart::Wall, &assets),
+          "authoring sidedef wall can reset to the built-in material");
+    const game::SectorAuthoringLineSide* editedSide =
+            game::FindSectorAuthoringLineSide(authoringGraph, side.id);
+    Check(editedSide != nullptr && editedSide->wall.materialId.empty(),
+          "authoring sidedef wall reset clears its material ID");
 }
 
 void TestEditorMaterialEditingServiceNoAuthoringMaterialEditFailsWithoutMutatingTopology()
@@ -7126,12 +7219,7 @@ void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
     game::SectorEditorTextureCatalogService catalog{
             game::SectorEditorTextureCatalogServiceContext{
                     materialRegistry,
-                    textureCatalogState,
-                    state.defaultFloorTextureId,
-                    state.defaultCeilingTextureId,
-                    state.defaultWallTextureId,
-                    state.defaultLowerWallTextureId,
-                    state.defaultUpperWallTextureId}};
+                    textureCatalogState}};
 
     Check(game::OpenRuntimeDoorTexturePicker(state, documentState.map.topologyMap, authoringGraph, catalog, 77),
           "runtime door texture picker opens for authored door");
@@ -7175,12 +7263,7 @@ void TestEditorMaterialCatalogUsesGlobalRegistry()
     game::SectorEditorTextureCatalogService catalog{
             game::SectorEditorTextureCatalogServiceContext{
                     materialRegistry,
-                    textureCatalogState,
-                    state.defaultFloorTextureId,
-                    state.defaultCeilingTextureId,
-                    state.defaultWallTextureId,
-                    state.defaultLowerWallTextureId,
-                    state.defaultUpperWallTextureId}};
+                    textureCatalogState}};
     const game::SectorMaterialDefinition* material = catalog.FindTexture("imported_wall");
     Check(catalog.HasTexture("imported_wall")
                   && material != nullptr
@@ -8714,10 +8797,10 @@ void TestAuthoringRectangleHelperDerivesValidTopology()
             ? nullptr
             : &authoringGraph.faceAnchors.front();
     Check(anchor != nullptr
-                  && anchor->floorMaterialId == "floor"
-                  && anchor->ceilingMaterialId == "ceiling"
-                  && anchor->defaultWall.materialId == "wall",
-          "authoring rectangle synthesized face anchor gets normal default materials");
+                  && anchor->floorMaterialId.empty()
+                  && anchor->ceilingMaterialId.empty()
+                  && anchor->defaultWall.materialId.empty(),
+          "authoring rectangle synthesized face anchor uses built-in default materials");
 
     game::SectorGeneratedGeometry geometry;
     std::string error;
@@ -15459,6 +15542,7 @@ int main()
     TestEditorLightEditingServiceDynamicEditPreservesDirtyBehavior();
     TestEditorLightEditingServiceNoOpDoesNotDirtyOrUpdateStatus();
     TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceResetsBaseMaterialsToBuiltInDefault();
     TestEditorMaterialEditingServiceNoAuthoringMaterialEditFailsWithoutMutatingTopology();
     TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide();
     TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSide();

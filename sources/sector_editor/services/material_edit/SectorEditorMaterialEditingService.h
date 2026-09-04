@@ -91,6 +91,17 @@ public:
 
     bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool ClearMiddleTexture(TopologySurfaceEditTarget target, engine::AssetManager* assets);
+    bool UseDefaultSurfaceMaterial(
+            TopologySurfaceEditTarget target,
+            engine::AssetManager* assets);
+    bool UseDefaultAuthoringFaceMaterial(
+            int faceAnchorId,
+            TopologySectorTextureField field,
+            engine::AssetManager* assets);
+    bool UseDefaultAuthoringSideMaterial(
+            SectorAuthoringSideId sideId,
+            TopologyWallPart wallPart,
+            engine::AssetManager* assets);
     bool FitSelectedDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool FitSelectedFlatDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
     bool FitSelectedWallMaterial(
@@ -141,6 +152,9 @@ public:
             int surfaceGroup,
             int component,
             float value);
+    bool UseDefaultAuthoringStructuralPrimitiveMaterial(
+            int primitiveId,
+            int surfaceGroup = -1);
     bool SetAuthoringStructuralMaterialOverrideEnabled(
             int primitiveId,
             SectorStructuralSurfaceGroup group,

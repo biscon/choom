@@ -519,16 +519,27 @@ void DrawStructuralPrimitiveInspector(
                     primitive.kind == SectorStructuralPrimitiveKind::Ladder
                             ? "Frame" : "Default",
                     primitive.materials.defaultSurface.materialId.empty()
-                            ? "(none)" : primitive.materials.defaultSurface.materialId.c_str()),
+                            ? "Default" : primitive.materials.defaultSurface.materialId.c_str()),
             engine::UITextJustify::Left, context.config.textColor);
     y += 32.0f;
+    const float materialButtonW = (contentW - gap) * 0.5f;
     if (engine::Button(context.ui, context.config, context.input, context.assets,
-                "structure_default_material", Rectangle{0.0f, y, contentW, rowH},
+                "structure_default_material", Rectangle{0.0f, y, materialButtonW, rowH},
                 context.font,
                 primitive.kind == SectorStructuralPrimitiveKind::Ladder
                         ? "Choose Frame Material" : "Choose Default Material")) {
         context.materialEditing.OpenMaterialPickerForAuthoringStructuralPrimitive(
                 primitive.id);
+    }
+    if (engine::Button(context.ui, context.config, context.input, context.assets,
+                "structure_use_default_material",
+                Rectangle{materialButtonW + gap, y, materialButtonW, rowH},
+                context.font, "Use Built-in Default")) {
+        if (context.materialEditing.UseDefaultAuthoringStructuralPrimitiveMaterial(
+                    primitive.id)) {
+            AppendRequest(panelResult,
+                    SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials);
+        }
     }
     y += rowH + gap;
     const auto drawDefaultUv = [&](const char* id, const char* label,
@@ -610,12 +621,22 @@ void DrawStructuralPrimitiveInspector(
         if (!override.enabled) continue;
         if (engine::Button(context.ui, context.config, context.input, context.assets,
                     TextFormat("structure_override_material_%zu", slot),
-                    Rectangle{0.0f, y, contentW, rowH}, context.font,
+                    Rectangle{0.0f, y, materialButtonW, rowH}, context.font,
                     primitive.kind == SectorStructuralPrimitiveKind::Ladder
                             ? "Choose Rung Material"
                             : TextFormat("Choose %s Material", SectorStructuralSurfaceGroupName(group)))) {
             context.materialEditing.OpenMaterialPickerForAuthoringStructuralPrimitive(
                     primitive.id, static_cast<int>(group));
+        }
+        if (engine::Button(context.ui, context.config, context.input, context.assets,
+                    TextFormat("structure_override_default_%zu", slot),
+                    Rectangle{materialButtonW + gap, y, materialButtonW, rowH},
+                    context.font, "Use Built-in Default")) {
+            if (context.materialEditing.UseDefaultAuthoringStructuralPrimitiveMaterial(
+                        primitive.id, static_cast<int>(group))) {
+                AppendRequest(panelResult,
+                        SectorEditorInspectorPanelRequestKind::RefreshStructuralPreviewMaterials);
+            }
         }
         y += rowH + gap;
         const size_t baseInput = 16 + slot * 4;
@@ -1701,11 +1722,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     const auto drawTextureRow =
                             [&](const char* suffix, const char* label, TopologyWallPart part) {
                                 const float buttonW = 38.0f;
-                                const bool canClear = part == TopologyWallPart::Middle;
-                                const float clearW = canClear ? 58.0f : 0.0f;
+                                const bool isMiddle = part == TopologyWallPart::Middle;
+                                const float actionW = isMiddle ? 58.0f : 72.0f;
                                 const std::string materialId = textureForPart(part);
                                 const SectorEditorInspectorTextureRowLayout row =
-                                        BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
+                                        BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, actionW);
                                 const bool missing = !materialId.empty()
                                         && !textureCatalog.HasTexture(materialId);
                                 engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
@@ -1715,11 +1736,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                         assets,
                                         row.valueRect,
                                         smallFont,
-                                        materialId.empty() ? "<none>" : materialId.c_str(),
+                                        materialId.empty()
+                                                ? (isMiddle ? "<none>" : "Default")
+                                                : materialId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
-                                if (canClear
-                                        && engine::Button(
+                                if (engine::Button(
                                                 ui,
                                                 config,
                                                 input,
@@ -1727,18 +1749,23 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                                 TextFormat("%s_%s_clear", idPrefix, suffix),
                                                 row.clearButtonRect,
                                                 font,
-                                                "Clear")) {
-                                    mutateSide(
-                                            "Cleared authoring middle texture",
-                                            [part](SectorAuthoringLineSide& side) {
-                                                SectorTopologyWallPartSettings& settings =
-                                                        TopologyWallPartSettingsFor(side, part);
-                                                if (IsDefaultWallPartSettings(settings)) {
-                                                    return false;
-                                                }
-                                                settings = SectorTopologyWallPartSettings{};
-                                                return true;
-                                            });
+                                                isMiddle ? "Clear" : "Default")) {
+                                    if (isMiddle) {
+                                        mutateSide(
+                                                "Cleared authoring middle texture",
+                                                [part](SectorAuthoringLineSide& side) {
+                                                    SectorTopologyWallPartSettings& settings =
+                                                            TopologyWallPartSettingsFor(side, part);
+                                                    if (IsDefaultWallPartSettings(settings)) {
+                                                        return false;
+                                                    }
+                                                    settings = SectorTopologyWallPartSettings{};
+                                                    return true;
+                                                });
+                                    } else {
+                                        materialEditing.UseDefaultAuthoringSideMaterial(
+                                                sideId, part, &assets);
+                                    }
                                 }
                                 if (engine::Button(
                                             ui,
@@ -2529,8 +2556,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
         const auto drawTextureRow = [&](const char* id, const char* label, const std::string& materialId, TopologySectorTextureField field) {
             const float buttonW = 38.0f;
+            const float defaultW = 72.0f;
             const SectorEditorInspectorTextureRowLayout row =
-                    BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, 0.0f);
+                    BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, defaultW);
             const bool missing = !materialId.empty() && !textureCatalog.HasTexture(materialId);
             engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
             engine::Text(
@@ -2539,9 +2567,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     assets,
                     row.valueRect,
                     smallFont,
-                    materialId.empty() ? "<none>" : materialId.c_str(),
+                    materialId.empty() ? "Default" : materialId.c_str(),
                     engine::UITextJustify::Left,
                     missing ? config.invalidColor : config.mutedTextColor);
+            if (engine::Button(
+                        ui, config, input, assets,
+                        TextFormat("%s_default", id), row.clearButtonRect,
+                        font, "Default")) {
+                materialEditing.UseDefaultAuthoringFaceMaterial(
+                        faceAnchorId, field, &assets);
+            }
             if (engine::Button(ui, config, input, assets, id, row.pickerButtonRect, font, ">")) {
                 if (!materialEditing.OpenMaterialPickerForAuthoringFaceAnchor(
                             faceAnchorId,

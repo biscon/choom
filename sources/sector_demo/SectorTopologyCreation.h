@@ -17,8 +17,8 @@ struct SectorTopologyCreatePolygonOptions {
     float floorZ = 0.0f;
     float ceilingZ = 24.0f;
 
-    std::string floorMaterialId = "floor";
-    std::string ceilingMaterialId = "ceiling";
+    std::string floorMaterialId;
+    std::string ceilingMaterialId;
 
     SectorTopologyUvSettings floorUv;
     SectorTopologyUvSettings ceilingUv;

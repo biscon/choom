@@ -131,7 +131,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "9334d8a200490058",
+    "sourceHash": "e4a722b1b7d098a0",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -151,7 +151,7 @@
     "objectProbes": {
       "path": "assets/levels/test/test.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "9334d8a200490058",
+      "sourceHash": "e4a722b1b7d098a0",
       "count": 1308,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -353,7 +353,6 @@
         "lineId": 8,
         "side": "front",
         "wall": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -366,7 +365,6 @@
           }
         },
         "lower": {
-          "materialId": "beige_wall_001",
           "uv": {
             "scale": [
               1.0,
@@ -376,10 +374,10 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "beige_wall_001"
         },
         "upper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -396,7 +394,6 @@
         "lineId": 19,
         "side": "front",
         "wall": {
-          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -406,10 +403,10 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "seamless_worn_concrete"
         },
         "lower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -422,7 +419,6 @@
           }
         },
         "upper": {
-          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -444,8 +440,6 @@
         "y": 1638,
         "floorZ": 0.0,
         "ceilingZ": 54.0,
-        "floorMaterialId": "large_industrial_tiles_512",
-        "ceilingMaterialId": "concrete_wall_009",
         "floorUv": {
           "scale": [
             1.0,
@@ -474,7 +468,6 @@
         },
         "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
-          "materialId": "dirty_gray_concrete_wall_512",
           "uv": {
             "scale": [
               1.0,
@@ -484,10 +477,10 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "dirty_gray_concrete_wall_512"
         },
         "defaultLower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -500,7 +493,6 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -511,7 +503,9 @@
               0.0
             ]
           }
-        }
+        },
+        "floorMaterialId": "large_industrial_tiles_512",
+        "ceilingMaterialId": "concrete_wall_009"
       },
       {
         "id": 2,
@@ -520,8 +514,6 @@
         "y": 1150,
         "floorZ": -50.0,
         "ceilingZ": 54.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
         "floorUv": {
           "scale": [
             1.0,
@@ -550,7 +542,6 @@
         },
         "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -563,7 +554,6 @@
           }
         },
         "defaultLower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -576,7 +566,6 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -603,8 +592,6 @@
         "y": 1358,
         "floorZ": 20.0,
         "ceilingZ": 300.0,
-        "floorMaterialId": "seamless_worn_concrete",
-        "ceilingMaterialId": "seamless_worn_concrete",
         "floorUv": {
           "scale": [
             1.0,
@@ -633,7 +620,6 @@
         },
         "ambientIntensity": 0.30000001192092896,
         "defaultWall": {
-          "materialId": "brick_repair_512",
           "uv": {
             "scale": [
               1.0,
@@ -646,7 +632,6 @@
           }
         },
         "defaultLower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -659,7 +644,6 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -679,8 +663,6 @@
         "y": 1278,
         "floorZ": 20.0,
         "ceilingZ": 45.0,
-        "floorMaterialId": "seamless_worn_concrete",
-        "ceilingMaterialId": "seamless_worn_concrete",
         "floorUv": {
           "scale": [
             1.0,
@@ -709,7 +691,6 @@
         },
         "ambientIntensity": 1.0,
         "defaultWall": {
-          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -719,10 +700,10 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "seamless_worn_concrete"
         },
         "defaultLower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -735,7 +716,6 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -746,7 +726,9 @@
               0.0
             ]
           }
-        }
+        },
+        "floorMaterialId": "seamless_worn_concrete",
+        "ceilingMaterialId": "seamless_worn_concrete"
       }
     ],
     "reflectionProbes": [
@@ -1010,9 +992,6 @@
         "kind": "box",
         "x": 4544,
         "z": 960,
-        "material": {
-          "materialId": "wall"
-        },
         "box": {
           "width": 384,
           "depth": 384,
