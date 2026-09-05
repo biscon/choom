@@ -68,6 +68,13 @@ void HashAssetFile(std::uint64_t& hash, const std::string& assetPath)
     }
 }
 
+bool AssetFileExists(const std::string& assetPath)
+{
+    if (assetPath.empty()) return false;
+    std::ifstream input(ResolveSectorAssetPath(assetPath), std::ios::binary);
+    return static_cast<bool>(input);
+}
+
 void WriteU32(std::ostream& output, std::uint32_t value)
 {
     const unsigned char bytes[4]{
@@ -279,8 +286,26 @@ std::string ComputeSectorReflectionProbeSourceHash(
         const std::string normalPath = SectorMaterialNormalMapPath(material.path);
         HashString(hash, normalPath);
         HashAssetFile(hash, normalPath);
-        HashValue(hash, material.metallicFactor);
-        HashValue(hash, material.roughnessFactor);
+        SectorMaterialPropertyMapKind propertyMapKind =
+                SectorMaterialPropertyMapKind::Orm;
+        std::string propertyPath = SectorMaterialOrmMapPath(material.path);
+        if (!AssetFileExists(propertyPath)) {
+            propertyMapKind = SectorMaterialPropertyMapKind::Roughness;
+            propertyPath = SectorMaterialRoughnessMapPath(material.path);
+            if (!AssetFileExists(propertyPath)) {
+                propertyMapKind = SectorMaterialPropertyMapKind::None;
+                propertyPath.clear();
+            }
+        }
+        HashValue(hash, propertyMapKind);
+        HashString(hash, propertyPath);
+        if (!propertyPath.empty()) HashAssetFile(hash, propertyPath);
+        if (propertyMapKind != SectorMaterialPropertyMapKind::Orm) {
+            HashValue(hash, material.metallicFactor);
+        }
+        if (propertyMapKind == SectorMaterialPropertyMapKind::None) {
+            HashValue(hash, material.roughnessFactor);
+        }
         HashValue(hash, material.normalStrength);
     }
     std::vector<const SectorPlacedRuntimeObject*> captureObjects;

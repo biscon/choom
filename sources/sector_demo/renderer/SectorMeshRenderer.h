@@ -26,6 +26,7 @@
 #include "sector_demo/renderer/SectorWindowRenderer.h"
 #include "sector_demo/renderer/SectorDuctCoverRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorViewPose.h"
 #include "sector_demo/SectorUseInteraction.h"
 
@@ -343,6 +344,9 @@ private:
             const std::string& currentSourceHash);
     engine::TextureHandle TextureForId(const std::string& materialId) const;
     engine::TextureHandle NormalTextureForId(const std::string& materialId) const;
+    engine::TextureHandle PropertyTextureForId(const std::string& materialId) const;
+    SectorMaterialPropertyMapKind PropertyMapKindForId(
+            const std::string& materialId) const;
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawDepthPrepass(engine::AssetManager& assets, engine::World* runtimeObjectWorld);
@@ -367,6 +371,8 @@ private:
     bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     std::unordered_map<std::string, engine::TextureHandle> normalTextureHandlesById;
+    std::unordered_map<std::string, engine::TextureHandle> propertyTextureHandlesById;
+    std::unordered_map<std::string, SectorMaterialPropertyMapKind> propertyMapKindsById;
     std::unordered_map<std::string, float> normalStrengthById;
     std::unordered_map<std::string, float> metallicFactorById;
     std::unordered_map<std::string, float> roughnessFactorById;
@@ -388,6 +394,7 @@ private:
     int hasDirectionalLightmapLoc = -1;
     int hasNormalMapLoc = -1;
     int normalStrengthLoc = -1;
+    int materialPropertiesKindLoc = -1;
     int metallicFactorLoc = -1;
     int roughnessFactorLoc = -1;
     int cameraPositionLoc = -1;

@@ -311,7 +311,7 @@ std::vector<std::string> ScanAssetImagePngs(
             ec.clear();
             continue;
         }
-        if (IsSectorMaterialNormalMapPath(entry.path().filename().string())) {
+        if (IsSectorMaterialCompanionMapPath(entry.path().filename().string())) {
             continue;
         }
 

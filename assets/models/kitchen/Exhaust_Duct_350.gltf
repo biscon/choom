@@ -1,0 +1,181 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "extras": {
+        "asset_id": "Exhaust_Duct_350",
+        "units": "meters",
+        "front_axis": "-Y",
+        "pivot": "bottom-center; mounting assembly bottom for wall assets",
+        "texture_resolution": 1024,
+        "kit": "Cafeteria industrial kitchen / v1"
+      },
+      "mesh": 0,
+      "name": "Exhaust_Duct_350_Export"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Satin stainless",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.30000001192092896
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Exhaust_Duct_350_Mesh.002",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "steel_normal",
+      "uri": "textures/steel_normal.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "steel_basecolor",
+      "uri": "textures/steel_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "steel_roughness",
+      "uri": "textures/steel_metallic_roughness.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 144,
+      "max": [
+        0.3774999976158142,
+        0.33399999141693115,
+        0.3075000047683716
+      ],
+      "min": [
+        -0.3774999976158142,
+        0,
+        -0.3075000047683716
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 144,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 144,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 144,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 396,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 1728,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1728,
+      "byteOffset": 1728,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1152,
+      "byteOffset": 3456,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2304,
+      "byteOffset": 4608,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 792,
+      "byteOffset": 6912,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 7704,
+      "uri": "Exhaust_Duct_350.bin"
+    }
+  ]
+}

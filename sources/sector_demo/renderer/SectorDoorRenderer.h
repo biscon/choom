@@ -3,6 +3,7 @@
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -43,6 +44,9 @@ struct SectorDoorRenderStats {
 struct SectorDoorResolvedMaterial {
     const Texture2D* albedo = nullptr;
     const Texture2D* normal = nullptr;
+    const Texture2D* properties = nullptr;
+    SectorMaterialPropertyMapKind propertyMapKind =
+            SectorMaterialPropertyMapKind::None;
     float normalStrength = 1.0f;
     float metallicFactor = 0.0f;
     float roughnessFactor = 0.8f;
@@ -93,6 +97,8 @@ struct SectorDoorDrawContext {
 struct SectorDoorOpaqueShaderLocations {
     int texture = -1;
     int normalTexture = -1;
+    int materialPropertiesTexture = -1;
+    int materialPropertiesKind = -1;
     int hasNormalMap = -1;
     int normalStrength = -1;
     int metallicFactor = -1;

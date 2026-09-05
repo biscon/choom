@@ -358,8 +358,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 585,
-          "backSideDefId": 586,
+          "frontSideDefId": 605,
+          "backSideDefId": 606,
           "endpointA": [
             -704,
             1296
@@ -398,8 +398,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 541,
-          "backSideDefId": 561,
+          "frontSideDefId": 553,
+          "backSideDefId": 581,
           "endpointA": [
             -992,
             1456
@@ -2181,8 +2181,8 @@
           "lineDefId": 269,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 394,
-          "backSideDefId": 373,
+          "frontSideDefId": 398,
+          "backSideDefId": 377,
           "endpointA": [
             -2048,
             -720
@@ -2421,8 +2421,8 @@
           "lineDefId": 255,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 388,
-          "backSideDefId": 334,
+          "frontSideDefId": 392,
+          "backSideDefId": 338,
           "endpointA": [
             -2432,
             -560
@@ -2825,8 +2825,8 @@
           "lineDefId": 324,
           "frontSectorId": 63,
           "backSectorId": 66,
-          "frontSideDefId": 414,
-          "backSideDefId": 350,
+          "frontSideDefId": 418,
+          "backSideDefId": 354,
           "endpointA": [
             -2432,
             -2688
@@ -3290,8 +3290,8 @@
           "lineDefId": 296,
           "frontSectorId": 52,
           "backSectorId": 61,
-          "frontSideDefId": 391,
-          "backSideDefId": 353,
+          "frontSideDefId": 395,
+          "backSideDefId": 357,
           "endpointA": [
             -2320,
             -1920
@@ -3379,11 +3379,11 @@
       "kind": "window",
       "window": {
         "anchor": {
-          "lineDefId": 437,
+          "lineDefId": 436,
           "frontSectorId": 85,
           "backSectorId": 92,
-          "frontSideDefId": 467,
-          "backSideDefId": 595,
+          "frontSideDefId": 471,
+          "backSideDefId": 615,
           "endpointA": [
             -768,
             -2688
@@ -3417,11 +3417,11 @@
       "door": {
         "instanceId": "door_205",
         "anchor": {
-          "lineDefId": 409,
+          "lineDefId": 408,
           "frontSectorId": 63,
           "backSectorId": 83,
-          "frontSideDefId": 419,
-          "backSideDefId": 459,
+          "frontSideDefId": 423,
+          "backSideDefId": 463,
           "endpointA": [
             -1664,
             -2640
@@ -3459,11 +3459,11 @@
       "door": {
         "instanceId": "door_206",
         "anchor": {
-          "lineDefId": 399,
+          "lineDefId": 398,
           "frontSectorId": 70,
           "backSectorId": 81,
-          "frontSideDefId": 505,
-          "backSideDefId": 569,
+          "frontSideDefId": 517,
+          "backSideDefId": 589,
           "endpointA": [
             -896,
             -4240
@@ -3534,7 +3534,7 @@
       "kind": "duct_access",
       "ductAccess": {
         "anchor": {
-          "lineDefId": 442,
+          "lineDefId": 441,
           "frontSectorId": 93,
           "backSectorId": 60,
           "frontSideDefId": 112,
@@ -3560,6 +3560,21 @@
         -340.0,
         3.9000000953674316,
         -80.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 209,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_209",
+        "modelPath": "assets/models/kitchen/Extractor_Hood_2800.gltf",
+        "heightOffsetWorld": 1.0
+      },
+      "position": [
+        -96.0,
+        -16.0,
+        -336.0
       ],
       "yawDegrees": 0.0
     }
@@ -8446,7 +8461,32 @@
       }
     }
   ],
-  "dynamicRectLights": [],
+  "dynamicRectLights": [
+    {
+      "id": 1,
+      "position": [
+        -96.0,
+        14.0,
+        -336.0
+      ],
+      "target": [
+        -96.0,
+        -8.0,
+        -336.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 84.0,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "instanceId": "light_rect_1"
+    }
+  ],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
     "ambientOcclusionStrength": 0.550000011920929,
@@ -8454,7 +8494,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -8555,7 +8596,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "734f35c2ee788e06",
+    "sourceHash": "54ea8f9913d1033b",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -8563,20 +8604,20 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.203125,
+        1.564453125,
+        1.564453125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 839
+      "rgbChannelsAboveOne": 195
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "734f35c2ee788e06",
-      "count": 3772,
+      "sourceHash": "54ea8f9913d1033b",
+      "count": 3955,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -8588,29 +8629,29 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.204270601272583,
+          1.935850739479065,
+          1.8489267826080322
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 22632,
-        "rgbChannelsAboveOne": 33
+        "sampleCount": 23730,
+        "rgbChannelsAboveOne": 35
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "734f35c2ee788e06",
-      "modelCount": 53,
-      "objectCount": 160,
+      "sourceHash": "54ea8f9913d1033b",
+      "modelCount": 54,
+      "objectCount": 161,
       "format": "staticModelUvRemapF32LE"
     }
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
     "version": 1,
-    "count": 13,
+    "count": 14,
     "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
@@ -10442,6 +10483,66 @@
         "id": 379,
         "x": -4864,
         "y": -1280
+      },
+      {
+        "id": 380,
+        "x": -1296,
+        "y": -4736
+      },
+      {
+        "id": 381,
+        "x": -1296,
+        "y": -4768
+      },
+      {
+        "id": 382,
+        "x": -1136,
+        "y": -4768
+      },
+      {
+        "id": 383,
+        "x": -1136,
+        "y": -4736
+      },
+      {
+        "id": 384,
+        "x": -1536,
+        "y": -4736
+      },
+      {
+        "id": 385,
+        "x": -1536,
+        "y": -4768
+      },
+      {
+        "id": 386,
+        "x": -1920,
+        "y": -4768
+      },
+      {
+        "id": 387,
+        "x": -1920,
+        "y": -4736
+      },
+      {
+        "id": 388,
+        "x": -2176,
+        "y": -4768
+      },
+      {
+        "id": 389,
+        "x": -2176,
+        "y": -5888
+      },
+      {
+        "id": 390,
+        "x": -896,
+        "y": -5888
+      },
+      {
+        "id": 391,
+        "x": -896,
+        "y": -4768
       }
     ],
     "lines": [
@@ -12152,11 +12253,6 @@
         "endVertexId": 307
       },
       {
-        "id": 497,
-        "startVertexId": 307,
-        "endVertexId": 291
-      },
-      {
         "id": 499,
         "startVertexId": 308,
         "endVertexId": 299
@@ -12685,6 +12781,91 @@
         "id": 628,
         "startVertexId": 379,
         "endVertexId": 375
+      },
+      {
+        "id": 631,
+        "startVertexId": 380,
+        "endVertexId": 381
+      },
+      {
+        "id": 632,
+        "startVertexId": 381,
+        "endVertexId": 382
+      },
+      {
+        "id": 633,
+        "startVertexId": 380,
+        "endVertexId": 383
+      },
+      {
+        "id": 634,
+        "startVertexId": 383,
+        "endVertexId": 291
+      },
+      {
+        "id": 635,
+        "startVertexId": 382,
+        "endVertexId": 383
+      },
+      {
+        "id": 637,
+        "startVertexId": 384,
+        "endVertexId": 380
+      },
+      {
+        "id": 638,
+        "startVertexId": 384,
+        "endVertexId": 385
+      },
+      {
+        "id": 639,
+        "startVertexId": 385,
+        "endVertexId": 386
+      },
+      {
+        "id": 640,
+        "startVertexId": 307,
+        "endVertexId": 387
+      },
+      {
+        "id": 641,
+        "startVertexId": 387,
+        "endVertexId": 384
+      },
+      {
+        "id": 642,
+        "startVertexId": 386,
+        "endVertexId": 387
+      },
+      {
+        "id": 643,
+        "startVertexId": 386,
+        "endVertexId": 388
+      },
+      {
+        "id": 644,
+        "startVertexId": 388,
+        "endVertexId": 389
+      },
+      {
+        "id": 645,
+        "startVertexId": 389,
+        "endVertexId": 390
+      },
+      {
+        "id": 646,
+        "startVertexId": 390,
+        "endVertexId": 391
+      },
+      {
+        "id": 647,
+        "startVertexId": 391,
+        "endVertexId": 382
+      },
+      {
+        "id": 648,
+        "startVertexId": 381,
+        "endVertexId": 385
       }
     ],
     "lineSides": [
@@ -23903,47 +24084,6 @@
         }
       },
       {
-        "lineId": 497,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -1.125
-            ]
-          },
-          "materialId": "worn_white_wall"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 499,
         "side": "front",
         "wall": {
@@ -28637,6 +28777,623 @@
             ]
           },
           "materialId": "beige_wall_001"
+        }
+      },
+      {
+        "lineId": 632,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              -0.9375,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        }
+      },
+      {
+        "lineId": 633,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 634,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 637,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 638,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 639,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.019999999552965164,
+              0.5450000166893005
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              -3.1875,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        }
+      },
+      {
+        "lineId": 640,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 641,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 642,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 643,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 644,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 645,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 646,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 647,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 648,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
         }
       }
     ],
@@ -35559,6 +36316,298 @@
         "floorMaterialId": "worn_office_oak_floor_512",
         "ceilingMaterialId": "worn_white_ceiling_512",
         "footstepSet": "Parquet_Floor_Mono"
+      },
+      {
+        "id": 94,
+        "name": "Sector 94",
+        "x": -1277,
+        "y": -4754,
+        "floorZ": -16.0,
+        "ceilingZ": 6.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "interior_tiles",
+        "ceilingMaterialId": "white_stucco"
+      },
+      {
+        "id": 95,
+        "name": "Sector 95",
+        "x": -1905,
+        "y": -4754,
+        "floorZ": -9.0,
+        "ceilingZ": 2.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "seamless_worn_concrete",
+        "ceilingMaterialId": "seamless_worn_concrete"
+      },
+      {
+        "id": 96,
+        "name": "Sector 96",
+        "x": -1457,
+        "y": -5314,
+        "floorZ": -16.0,
+        "ceilingZ": 16.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "floor_tiles",
+        "ceilingMaterialId": "white_stucco"
+      },
+      {
+        "id": 97,
+        "name": "Sector 97",
+        "x": -1521,
+        "y": -4754,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "isVoid": true
       }
     ],
     "fogVolumes": [
@@ -35853,6 +36902,22 @@
           2.0,
           0.48750001192092896,
           2.75
+        ]
+      },
+      {
+        "id": 15,
+        "x": -1536,
+        "z": -5312,
+        "yWorld": 0.0,
+        "influenceOffsetWorld": [
+          0.0,
+          0.0,
+          -0.125
+        ],
+        "halfExtentsWorld": [
+          5.0,
+          2.0,
+          4.375
         ]
       }
     ],

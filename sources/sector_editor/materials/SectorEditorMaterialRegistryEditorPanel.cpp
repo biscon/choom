@@ -327,6 +327,39 @@ SectorEditorMaterialRegistryEditorResult DrawSectorEditorMaterialRegistryEditor(
                 normalPresent ? config.mutedTextColor : config.invalidColor, true);
         y += normalStatusHeight + Gap;
 
+        const std::string ormPath = SectorMaterialOrmMapPath(draft->definition.path);
+        const bool ormPresent = FileExists(ResolveEditorAssetPath(ormPath).c_str());
+        const std::string roughnessPath =
+                SectorMaterialRoughnessMapPath(draft->definition.path);
+        const bool roughnessPresent = FileExists(
+                ResolveEditorAssetPath(roughnessPath).c_str());
+        const std::string propertyStatus = ormPresent
+                ? "ORM: " + ormPath
+                        + " (active: R=AO, G=roughness, B=metallic)"
+                        + (roughnessPresent
+                                ? " | Roughness map ignored while ORM is present"
+                                : "")
+                : (roughnessPresent
+                        ? "Roughness: " + roughnessPath + " (active: R channel)"
+                        : "Properties: missing (using metallic/roughness factors)");
+        const float propertyStatusHeight = MeasureSectorEditorWrappedTextHeight(
+                config,
+                assets,
+                smallFont,
+                propertyStatus.c_str(),
+                formScroll.viewport.width,
+                2);
+        engine::Text(ui, config, assets,
+                Rectangle{0.0f, y, formScroll.viewport.width, propertyStatusHeight},
+                smallFont,
+                propertyStatus.c_str(),
+                engine::UITextJustify::Left,
+                ormPresent || roughnessPresent
+                        ? config.mutedTextColor
+                        : config.invalidColor,
+                true);
+        y += propertyStatusHeight + Gap;
+
         engine::Text(ui, config, assets,
                 Rectangle{0.0f, y, formScroll.viewport.width, RowHeight},
                 font, "Albedo preview", engine::UITextJustify::Left, config.textColor);

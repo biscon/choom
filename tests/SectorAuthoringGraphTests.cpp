@@ -13977,6 +13977,8 @@ void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
     WriteTextFile(root / "images" / "floors" / "Office_Tile.PNG", "");
     WriteTextFile(root / "images" / "walls" / "brick.png", "");
     WriteTextFile(root / "images" / "walls" / "brick_normal.png", "");
+    WriteTextFile(root / "images" / "walls" / "brick_orm.png", "");
+    WriteTextFile(root / "images" / "walls" / "brick_roughness.png", "");
     WriteTextFile(root / "images" / "walls" / "notes.txt", "");
 
     game::SectorMaterialRegistry registry;

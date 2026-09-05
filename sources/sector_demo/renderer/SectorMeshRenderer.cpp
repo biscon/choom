@@ -228,6 +228,7 @@ uniform sampler2D texture0;
 uniform sampler2D texture1;
 uniform sampler2D decalTexture;
 uniform sampler2D normalTexture;
+uniform sampler2D materialPropertiesTexture;
 uniform sampler2D directionalLightmapTexture;
 uniform samplerCube environmentTexture;
 uniform float useLightmap;
@@ -236,6 +237,7 @@ uniform int hasLightmap;
 uniform int hasDirectionalLightmap;
 uniform int hasNormalMap;
 uniform float normalStrength;
+uniform int materialPropertiesKind;
 uniform float metallicFactor;
 uniform float roughnessFactor;
 uniform vec3 cameraPosition;
@@ -534,13 +536,24 @@ void main()
             geometricNormal, tangentNormalSample);
     vec3 viewDirection = SafeNormalize(
             cameraPosition - fragWorldPosition, geometricNormal);
+    float materialAo = 1.0;
     float metallic = clamp(metallicFactor, 0.0, 1.0);
     float roughness = clamp(roughnessFactor, 0.045, 1.0);
+    if (materialPropertiesKind == 1) {
+        roughness = clamp(
+                texture(materialPropertiesTexture, fragTexCoord).r,
+                0.045, 1.0);
+    } else if (materialPropertiesKind == 2) {
+        vec3 orm = texture(materialPropertiesTexture, fragTexCoord).rgb;
+        materialAo = clamp(orm.r, 0.0, 1.0);
+        roughness = clamp(orm.g, 0.045, 1.0);
+        metallic = clamp(orm.b, 0.0, 1.0);
+    }
     vec3 f0 = mix(vec3(0.04), surfaceRgb, metallic);
     vec3 correctedBakedLighting = ApplyDirectionalLightmap(
             bakedSample.rgb, geometricNormal, worldNormal);
     vec3 staticLighting = max(
-            fragColor.rgb * aoFactor + correctedBakedLighting,
+            fragColor.rgb * aoFactor * materialAo + correctedBakedLighting,
             vec3(0.0));
     vec3 staticDiffuse = surfaceRgb
             * (1.0 - metallic)
@@ -763,7 +776,7 @@ void main()
     else if (pbrDiagnosticMode == 4) surfaceOutput = staticDiffuse;
     else if (pbrDiagnosticMode == 5) surfaceOutput = environmentSpecular;
     else if (pbrDiagnosticMode == 6) surfaceOutput = emissiveRadiance;
-    else if (pbrDiagnosticMode == 7) surfaceOutput = vec3(1.0);
+    else if (pbrDiagnosticMode == 7) surfaceOutput = vec3(materialAo);
     else if (pbrDiagnosticMode == 8) {
         surfaceOutput = vec3(metallic, roughness, 0.0);
     }
@@ -966,6 +979,7 @@ bool LoadPreviewMaterial(
         int& hasDirectionalLightmapLoc,
         int& hasNormalMapLoc,
         int& normalStrengthLoc,
+        int& materialPropertiesKindLoc,
         int& metallicFactorLoc,
         int& roughnessFactorLoc,
         int& cameraPositionLoc,
@@ -1029,6 +1043,8 @@ bool LoadPreviewMaterial(
     material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
     material.shader.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(material.shader, "decalTexture");
     material.shader.locs[SHADER_LOC_MAP_HEIGHT] = GetShaderLocation(material.shader, "normalTexture");
+    material.shader.locs[SHADER_LOC_MAP_BRDF] =
+            GetShaderLocation(material.shader, "materialPropertiesTexture");
     material.shader.locs[SHADER_LOC_MAP_EMISSION] =
             GetShaderLocation(material.shader, "directionalLightmapTexture");
     material.shader.locs[SHADER_LOC_MAP_CUBEMAP] =
@@ -1042,6 +1058,8 @@ bool LoadPreviewMaterial(
             material.shader, "hasDirectionalLightmap");
     hasNormalMapLoc = GetShaderLocation(material.shader, "hasNormalMap");
     normalStrengthLoc = GetShaderLocation(material.shader, "normalStrength");
+    materialPropertiesKindLoc = GetShaderLocation(
+            material.shader, "materialPropertiesKind");
     metallicFactorLoc = GetShaderLocation(material.shader, "metallicFactor");
     roughnessFactorLoc = GetShaderLocation(material.shader, "roughnessFactor");
     cameraPositionLoc = GetShaderLocation(material.shader, "cameraPosition");
@@ -1186,6 +1204,8 @@ void SectorMeshRenderer::EnsureSurfaceMaterialResources(
                 == normalMappedMaterialIds.end()) {
             normalTextureHandlesById.erase(texture.id);
             normalStrengthById.erase(texture.id);
+            propertyTextureHandlesById.erase(texture.id);
+            propertyMapKindsById.erase(texture.id);
             continue;
         }
         normalStrengthById.insert_or_assign(
@@ -1201,18 +1221,56 @@ void SectorMeshRenderer::EnsureSurfaceMaterialResources(
                         resolvedNormalMapPath, normalMapError)
                 || normalMapError) {
             normalTextureHandlesById.erase(texture.id);
+        } else {
+            const std::string normalMapKey = resolvedNormalMapPath + "|linear|"
+                    + std::to_string(static_cast<int>(texture.filter));
+            normalTextureHandlesById.insert_or_assign(
+                    texture.id,
+                    assets.RequestTexture(
+                            assetScope,
+                            normalMapKey.c_str(),
+                            resolvedNormalMapPath.c_str(),
+                            engine::TextureColorUsage::LinearData,
+                            SectorMaterialTextureLoadFlags(texture.filter)));
+        }
+
+        SectorMaterialPropertyMapKind propertyMapKind =
+                SectorMaterialPropertyMapKind::None;
+        std::string propertyMapPath = SectorMaterialOrmMapPath(texture.path);
+        std::string resolvedPropertyMapPath = ResolveSectorAssetPath(propertyMapPath);
+        std::error_code propertyMapError;
+        if (!propertyMapPath.empty()
+                && std::filesystem::is_regular_file(
+                        resolvedPropertyMapPath, propertyMapError)
+                && !propertyMapError) {
+            propertyMapKind = SectorMaterialPropertyMapKind::Orm;
+        } else {
+            propertyMapError.clear();
+            propertyMapPath = SectorMaterialRoughnessMapPath(texture.path);
+            resolvedPropertyMapPath = ResolveSectorAssetPath(propertyMapPath);
+            if (!propertyMapPath.empty()
+                    && std::filesystem::is_regular_file(
+                            resolvedPropertyMapPath, propertyMapError)
+                    && !propertyMapError) {
+                propertyMapKind = SectorMaterialPropertyMapKind::Roughness;
+            }
+        }
+        if (propertyMapKind == SectorMaterialPropertyMapKind::None) {
+            propertyTextureHandlesById.erase(texture.id);
+            propertyMapKindsById.erase(texture.id);
             continue;
         }
-        const std::string normalMapKey = resolvedNormalMapPath + "|linear|"
+        const std::string propertyMapKey = resolvedPropertyMapPath + "|linear|"
                 + std::to_string(static_cast<int>(texture.filter));
-        normalTextureHandlesById.insert_or_assign(
+        propertyTextureHandlesById.insert_or_assign(
                 texture.id,
                 assets.RequestTexture(
                         assetScope,
-                        normalMapKey.c_str(),
-                        resolvedNormalMapPath.c_str(),
+                        propertyMapKey.c_str(),
+                        resolvedPropertyMapPath.c_str(),
                         engine::TextureColorUsage::LinearData,
                         SectorMaterialTextureLoadFlags(texture.filter)));
+        propertyMapKindsById.insert_or_assign(texture.id, propertyMapKind);
     }
 }
 
@@ -1672,6 +1730,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 hasDirectionalLightmapLoc,
                 hasNormalMapLoc,
                 normalStrengthLoc,
+                materialPropertiesKindLoc,
                 metallicFactorLoc,
                 roughnessFactorLoc,
                 cameraPositionLoc,
@@ -1846,6 +1905,8 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
     normalTextureHandlesById.clear();
+    propertyTextureHandlesById.clear();
+    propertyMapKindsById.clear();
     normalStrengthById.clear();
     metallicFactorById.clear();
     roughnessFactorById.clear();
@@ -1860,6 +1921,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
         material.maps[MATERIAL_MAP_HEIGHT].texture = Texture2D{};
         material.maps[MATERIAL_MAP_EMISSION].texture = Texture2D{};
         material.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
+        material.maps[MATERIAL_MAP_BRDF].texture = Texture2D{};
         UnloadMaterial(material);
         material = Material{};
         defaultMaterialTexture = Texture2D{};
@@ -1873,6 +1935,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
         dynamicLightProfileParametersLoc = -1;
         flashlightCookieLoc = -1;
         staticSpecularLocations = {};
+        materialPropertiesKindLoc = -1;
     }
     if (depthPrepassMaterialLoaded) {
         UnloadMaterial(depthPrepassMaterial);
@@ -2121,6 +2184,11 @@ void SectorMeshRenderer::DrawScene(
 
         const Texture2D* normalTexture = assets.GetTexture(
                 NormalTextureForId(batch.materialId));
+        const Texture2D* propertyTexture = assets.GetTexture(
+                PropertyTextureForId(batch.materialId));
+        const int propertyMapKind = propertyTexture != nullptr
+                ? static_cast<int>(PropertyMapKindForId(batch.materialId))
+                : static_cast<int>(SectorMaterialPropertyMapKind::None);
 
         const Texture2D* decalTexture = nullptr;
         if (!batch.decalMaterialId.empty()) {
@@ -2180,6 +2248,9 @@ void SectorMeshRenderer::DrawScene(
                 directionalLightmap != nullptr
                 ? *directionalLightmap
                 : Texture2D{};
+        material.maps[MATERIAL_MAP_BRDF].texture = propertyTexture != nullptr
+                ? *propertyTexture
+                : Texture2D{};
         if (useLightmapLoc >= 0) {
             SetShaderValue(
                     material.shader,
@@ -2207,6 +2278,9 @@ void SectorMeshRenderer::DrawScene(
                     &materialNormalStrength,
                     SHADER_UNIFORM_FLOAT);
         }
+        if (materialPropertiesKindLoc >= 0) SetShaderValue(
+                material.shader, materialPropertiesKindLoc,
+                &propertyMapKind, SHADER_UNIFORM_INT);
         if (metallicFactorLoc >= 0) SetShaderValue(
                 material.shader, metallicFactorLoc,
                 &materialMetallic, SHADER_UNIFORM_FLOAT);
@@ -3412,6 +3486,24 @@ engine::TextureHandle SectorMeshRenderer::NormalTextureForId(const std::string& 
     return it->second;
 }
 
+engine::TextureHandle SectorMeshRenderer::PropertyTextureForId(
+        const std::string& materialId) const
+{
+    const auto it = propertyTextureHandlesById.find(materialId);
+    return it == propertyTextureHandlesById.end()
+            ? engine::NullTextureHandle()
+            : it->second;
+}
+
+SectorMaterialPropertyMapKind SectorMeshRenderer::PropertyMapKindForId(
+        const std::string& materialId) const
+{
+    const auto it = propertyMapKindsById.find(materialId);
+    return it == propertyMapKindsById.end()
+            ? SectorMaterialPropertyMapKind::None
+            : it->second;
+}
+
 const Texture2D* SectorMeshRenderer::ResolveShadowCasterTexture(
         void* userData,
         engine::AssetManager& assets,
@@ -3438,6 +3530,11 @@ SectorDoorResolvedMaterial SectorMeshRenderer::ResolveDoorMaterial(
     SectorDoorResolvedMaterial result;
     result.albedo = assets.GetTexture(preview->TextureForId(materialId));
     result.normal = assets.GetTexture(preview->NormalTextureForId(materialId));
+    result.properties = assets.GetTexture(
+            preview->PropertyTextureForId(materialId));
+    if (result.properties != nullptr) {
+        result.propertyMapKind = preview->PropertyMapKindForId(materialId);
+    }
     const auto normalStrength = preview->normalStrengthById.find(materialId);
     if (normalStrength != preview->normalStrengthById.end()) {
         result.normalStrength = normalStrength->second;

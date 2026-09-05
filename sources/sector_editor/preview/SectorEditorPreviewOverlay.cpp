@@ -1052,7 +1052,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             "viewmodel static specular",
                             viewmodelStaticSpecular.str());
                 }
-                addWrappedLine("Metallic / Roughness uses R=metallic and G=effective roughness. Tangent-Space Normal shows raw normal RGB; magenta means missing or not ready. Shading Normal shows the final world-space normal. Diagnostics bypass fog and still pass through the shared HDR presentation transform.");
+                addWrappedLine("Material AO shows the effective ORM red channel (white when absent). Metallic / Roughness uses R=metallic and G=effective roughness. Tangent-Space Normal shows raw normal RGB; magenta means missing or not ready. Shading Normal shows the final world-space normal. Diagnostics bypass fog and still pass through the shared HDR presentation transform.");
                 break;
             }
             case PreviewDebugOverlayTab::Objects: {

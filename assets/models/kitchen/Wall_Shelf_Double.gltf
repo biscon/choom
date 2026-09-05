@@ -1,0 +1,283 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "extras": {
+        "asset_id": "Wall_Shelf_Double",
+        "units": "meters",
+        "front_axis": "-Y",
+        "pivot": "bottom-center; mounting assembly bottom for wall assets",
+        "texture_resolution": 1024,
+        "kit": "Cafeteria industrial kitchen / v1"
+      },
+      "mesh": 0,
+      "name": "Wall_Shelf_Double_Export"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Satin stainless",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.30000001192092896
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Polished stainless",
+      "normalTexture": {
+        "index": 3,
+        "scale": 0.30000001192092896
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 4
+        },
+        "roughnessFactor": 0.23999999463558197
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Wall_Shelf_Double_Mesh.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "steel_normal",
+      "uri": "textures/steel_normal.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "steel_basecolor",
+      "uri": "textures/steel_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "steel_roughness",
+      "uri": "textures/steel_metallic_roughness.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 384,
+      "max": [
+        0.800000011920929,
+        0.6219581961631775,
+        0.17499999701976776
+      ],
+      "min": [
+        -0.800000011920929,
+        0.04195822775363922,
+        -0.18700000643730164
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 384,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 384,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 384,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 1056,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 160,
+      "max": [
+        0.6309999823570251,
+        0.5239164233207703,
+        0.11967268586158752
+      ],
+      "min": [
+        -0.6309999823570251,
+        0,
+        -0.14967268705368042
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 160,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 160,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 160,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 336,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 4608,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4608,
+      "byteOffset": 4608,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3072,
+      "byteOffset": 9216,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6144,
+      "byteOffset": 12288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2112,
+      "byteOffset": 18432,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1920,
+      "byteOffset": 20544,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1920,
+      "byteOffset": 22464,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1280,
+      "byteOffset": 24384,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2560,
+      "byteOffset": 25664,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 672,
+      "byteOffset": 28224,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 28896,
+      "uri": "Wall_Shelf_Double.bin"
+    }
+  ]
+}

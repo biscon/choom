@@ -61,8 +61,10 @@ in vec4 fragColor;
 
 uniform sampler2D texture0;
 uniform sampler2D normalTexture;
+uniform sampler2D materialPropertiesTexture;
 uniform int hasNormalMap;
 uniform float normalStrength;
+uniform int materialPropertiesKind;
 uniform float metallicFactor;
 uniform float roughnessFactor;
 uniform vec3 cameraPosition;
@@ -313,13 +315,25 @@ void main()
             geometricNormal, tangentNormalSample);
     vec3 viewDirection = SafeNormalize(
             cameraPosition - fragWorldPosition, geometricNormal);
+    float materialAo = 1.0;
     float metallic = clamp(metallicFactor, 0.0, 1.0);
     float roughness = clamp(roughnessFactor, 0.045, 1.0);
+    if (materialPropertiesKind == 1) {
+        roughness = clamp(
+                texture(materialPropertiesTexture, fragTexCoord).r,
+                0.045, 1.0);
+    } else if (materialPropertiesKind == 2) {
+        vec3 orm = texture(materialPropertiesTexture, fragTexCoord).rgb;
+        materialAo = clamp(orm.r, 0.0, 1.0);
+        roughness = clamp(orm.g, 0.045, 1.0);
+        metallic = clamp(orm.b, 0.0, 1.0);
+    }
     vec3 f0 = mix(vec3(0.04), surfaceRgb, metallic);
     vec3 indirectDiffuse = surfaceRgb
             * (1.0 - metallic)
             * staticProbeLighting
-            * indirectDiffuseScale;
+            * indirectDiffuseScale
+            * materialAo;
     vec3 dynamicDirectDiffuse = vec3(0.0);
     vec3 dynamicDirectSpecular = vec3(0.0);
     for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
@@ -512,7 +526,7 @@ void main()
     else if (pbrDiagnosticMode == 4) outputRgb = indirectDiffuse;
     else if (pbrDiagnosticMode == 5) outputRgb = environmentSpecular;
     else if (pbrDiagnosticMode == 6) outputRgb = vec3(0.0);
-    else if (pbrDiagnosticMode == 7) outputRgb = vec3(1.0);
+    else if (pbrDiagnosticMode == 7) outputRgb = vec3(materialAo);
     else if (pbrDiagnosticMode == 8) {
         outputRgb = vec3(metallic, roughness, 0.0);
     }
@@ -658,12 +672,18 @@ bool SectorDoorRenderer::LoadOpaqueResources()
     opaqueShader.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(opaqueShader, "matNormal");
     opaqueShader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(opaqueShader, "texture0");
     opaqueShader.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(opaqueShader, "normalTexture");
+    opaqueShader.locs[SHADER_LOC_MAP_BRDF] =
+            GetShaderLocation(opaqueShader, "materialPropertiesTexture");
     opaqueShader.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(opaqueShader, "shadowMap0");
     opaqueShader.locs[SHADER_LOC_MAP_OCCLUSION] = GetShaderLocation(opaqueShader, "shadowMap1");
     opaqueShader.locs[SHADER_LOC_MAP_CUBEMAP] = GetShaderLocation(
             opaqueShader, "environmentTexture");
     opaqueShaderLocations.texture = opaqueShader.locs[SHADER_LOC_MAP_DIFFUSE];
     opaqueShaderLocations.normalTexture = opaqueShader.locs[SHADER_LOC_MAP_NORMAL];
+    opaqueShaderLocations.materialPropertiesTexture =
+            opaqueShader.locs[SHADER_LOC_MAP_BRDF];
+    opaqueShaderLocations.materialPropertiesKind = GetShaderLocation(
+            opaqueShader, "materialPropertiesKind");
     opaqueShaderLocations.hasNormalMap = GetShaderLocation(opaqueShader, "hasNormalMap");
     opaqueShaderLocations.normalStrength = GetShaderLocation(opaqueShader, "normalStrength");
     opaqueShaderLocations.metallicFactor = GetShaderLocation(opaqueShader, "metallicFactor");
@@ -737,6 +757,7 @@ void SectorDoorRenderer::ShutdownOpaqueResources()
         opaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
         opaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
         opaqueMaterial.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
+        opaqueMaterial.maps[MATERIAL_MAP_BRDF].texture = Texture2D{};
         UnloadMaterial(opaqueMaterial);
         opaqueMaterial = Material{};
         opaqueDefaultMaterialTexture = Texture2D{};
@@ -1072,6 +1093,8 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 }
                 const bool hasNormalMap = resolvedMaterial.normal != nullptr
                         && resolvedMaterial.normal->id != 0;
+                const bool hasPropertyMap = resolvedMaterial.properties != nullptr
+                        && resolvedMaterial.properties->id != 0;
                 resolvedMaterial.normalStrength = std::isfinite(
                             resolvedMaterial.normalStrength)
                         ? std::clamp(resolvedMaterial.normalStrength, 0.0f, 1.0f)
@@ -1153,6 +1176,14 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                         doorOpaqueLocations.normalStrength,
                         &resolvedMaterial.normalStrength,
                         SHADER_UNIFORM_FLOAT);
+                const int propertyMapKind = hasPropertyMap
+                        ? static_cast<int>(resolvedMaterial.propertyMapKind)
+                        : static_cast<int>(SectorMaterialPropertyMapKind::None);
+                if (doorOpaqueLocations.materialPropertiesKind >= 0) SetShaderValue(
+                        doorOpaqueMaterial.shader,
+                        doorOpaqueLocations.materialPropertiesKind,
+                        &propertyMapKind,
+                        SHADER_UNIFORM_INT);
                 if (doorOpaqueLocations.metallicFactor >= 0) SetShaderValue(
                         doorOpaqueMaterial.shader,
                         doorOpaqueLocations.metallicFactor,
@@ -1207,6 +1238,9 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 doorOpaqueMaterial.maps[MATERIAL_MAP_NORMAL].texture = hasNormalMap
                         ? *resolvedMaterial.normal
                         : Texture2D{};
+                doorOpaqueMaterial.maps[MATERIAL_MAP_BRDF].texture = hasPropertyMap
+                        ? *resolvedMaterial.properties
+                        : Texture2D{};
                 doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
                 DrawMesh(
                         cacheEntry->mesh,
@@ -1220,6 +1254,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
     doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
     doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
     doorOpaqueMaterial.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
+    doorOpaqueMaterial.maps[MATERIAL_MAP_BRDF].texture = Texture2D{};
     rlActiveTextureSlot(0);
     rlSetTexture(0);
     rlEnableColorBlend();

@@ -2891,6 +2891,11 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
           "normal-map convention preserves dotted stems and directories");
     Check(game::SectorMaterialNormalMapPath("stone") == "stone_normal",
           "normal-map convention supports extensionless texture paths");
+    Check(game::SectorMaterialOrmMapPath("assets/images/stone.png")
+                  == "assets/images/stone_orm.png"
+                  && game::SectorMaterialRoughnessMapPath("/tmp/stone.wall.png")
+                          == "/tmp/stone.wall_roughness.png",
+          "material property-map conventions insert suffixes before extensions");
     Check(game::IsSectorMaterialNormalMapPath("assets/images/stone_normal.png")
                   && game::IsSectorMaterialNormalMapPath("stone.wall_normal.PNG")
                   && game::IsSectorMaterialNormalMapPath("stone_normal_512.png")
@@ -2898,6 +2903,13 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
                   && !game::IsSectorMaterialNormalMapPath("assets/images/abnormal_stone.png")
                   && !game::IsSectorMaterialNormalMapPath("assets/images/stone.png"),
           "normal-map convention identifies the automatic filename marker");
+    Check(game::IsSectorMaterialOrmMapPath("stone_ORM.PNG")
+                  && game::IsSectorMaterialRoughnessMapPath("stone_roughness_512.png")
+                  && game::IsSectorMaterialCompanionMapPath("stone_normal.png")
+                  && game::IsSectorMaterialCompanionMapPath("stone_orm.png")
+                  && game::IsSectorMaterialCompanionMapPath("stone_roughness.png")
+                  && !game::IsSectorMaterialCompanionMapPath("stone.png"),
+          "material companion-map markers are recognized case-insensitively");
 
     const std::filesystem::path floorBasePath = root / "floor.png";
     const std::filesystem::path floorNormalPath = root / "floor_normal.png";
@@ -2964,6 +2976,40 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
     std::filesystem::remove(hashNormalPath);
     Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
           "removing a companion normal map restores the missing-map source hash");
+
+    const std::filesystem::path hashOrmPath = root / "hash_surface_orm.png";
+    const std::filesystem::path hashRoughnessPath =
+            root / "hash_surface_roughness.png";
+    WriteSolidRgbTexture(hashRoughnessPath, Color{80, 80, 80, 255});
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "standalone roughness maps do not change the lightmap source hash");
+    WriteSolidRgbTexture(hashOrmPath, Color{255, 128, 0, 255});
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "ORM maps do not change the lightmap source hash");
+
+    game::SectorCompiledReflectionProbe propertyProbe{
+            7, 10, true, Vector3{1.0f, 1.0f, 1.0f},
+            Vector3{1.0f, 1.0f, 1.0f}, Vector3{2.0f, 2.0f, 2.0f},
+            0.0f, 0, 1.0f, 64};
+    const std::string ormProbeHash =
+            game::ComputeSectorReflectionProbeSourceHash(hashMap, propertyProbe);
+    WriteSolidRgbTexture(hashRoughnessPath, Color{180, 180, 180, 255});
+    Check(game::ComputeSectorReflectionProbeSourceHash(hashMap, propertyProbe)
+                  == ormProbeHash,
+          "ignored roughness-map changes do not invalidate probes while ORM exists");
+    hashMap.resolvedMaterialsById["floor"].metallicFactor = 0.1f;
+    hashMap.resolvedMaterialsById["floor"].roughnessFactor = 0.9f;
+    Check(game::ComputeSectorReflectionProbeSourceHash(hashMap, propertyProbe)
+                  == ormProbeHash,
+          "ORM-overridden scalar changes do not invalidate reflection probes");
+    WriteSolidRgbTexture(hashOrmPath, Color{128, 220, 255, 255});
+    Check(game::ComputeSectorReflectionProbeSourceHash(hashMap, propertyProbe)
+                  != ormProbeHash,
+          "effective ORM content changes invalidate reflection probes");
+    std::filesystem::remove(hashOrmPath);
+    Check(game::ComputeSectorReflectionProbeSourceHash(hashMap, propertyProbe)
+                  != ormProbeHash,
+          "removing ORM selects roughness and invalidates reflection probes");
 
     const std::filesystem::path unusedBasePath = root / "unused.png";
     const std::filesystem::path unusedNormalPath = root / "unused_normal.png";
