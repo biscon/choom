@@ -127,6 +127,9 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
 
 void SectorDemo::Render(engine::EngineContext& context)
 {
+    preview.UpdateRuntimeReflections(context.assets,&context.world,
+            SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes,
+                    &topologyMap,runtimeObjects.staticLightingRevision});
     preview.DrawScene(
             context.assets,
             true,

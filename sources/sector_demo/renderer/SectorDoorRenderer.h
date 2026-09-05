@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorDynamicPointLightSelection.h"
@@ -71,6 +72,7 @@ struct SectorDoorDynamicLightContext {
 };
 
 struct SectorDoorDrawContext {
+    const SectorPbrEnvironment* reflectionEnvironment = nullptr;
     engine::AssetManager* assets = nullptr;
     engine::World* runtimeObjectWorld = nullptr;
     SectorRuntimeDoorLightingContext lighting;
@@ -95,6 +97,7 @@ struct SectorDoorDrawContext {
 };
 
 struct SectorDoorOpaqueShaderLocations {
+    SectorReflectionShaderLocations reflections;
     int texture = -1;
     int normalTexture = -1;
     int materialPropertiesTexture = -1;

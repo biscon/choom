@@ -2008,23 +2008,6 @@ SectorBakedStaticModelLightmapMetadata ReadBakedStaticModelLightmapMetadata(
     return metadata;
 }
 
-SectorBakedReflectionProbeMetadata ReadBakedReflectionProbeMetadata(
-        const Json& value,
-        const std::string& context)
-{
-    if (!value.is_object()) Fail(context + " must be an object");
-    SectorBakedReflectionProbeMetadata metadata;
-    metadata.path = ReadString(value, "path", context);
-    metadata.version = ReadInt(value, "version", context);
-    metadata.count = ReadInt(value, "count", context);
-    metadata.format = ReadString(value, "format", context);
-    if (metadata.path.empty()) Fail(context + ".path must not be empty");
-    if (metadata.version <= 0) Fail(context + ".version must be positive");
-    if (metadata.count < 0) Fail(context + ".count must not be negative");
-    if (metadata.format.empty()) Fail(context + ".format must not be empty");
-    return metadata;
-}
-
 SectorLightmapAtlasMetadata ReadLightmapAtlasMetadata(
         const Json& value,
         const std::string& context)
@@ -3544,16 +3527,6 @@ Json WriteBakedStaticModelLightmapMetadata(
     };
 }
 
-Json WriteBakedReflectionProbeMetadata(
-        const SectorBakedReflectionProbeMetadata& metadata)
-{
-    return Json{
-            {"path", metadata.path},
-            {"version", metadata.version},
-            {"count", metadata.count},
-            {"format", metadata.format}};
-}
-
 Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
 {
     std::vector<std::string> atlasPaths{metadata.path};
@@ -4477,13 +4450,6 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
     if (bakedLightmapIt != root.end() && allowBakedLightmap) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
     }
-    const auto bakedReflectionProbesIt = root.find("bakedReflectionProbes");
-    if (bakedReflectionProbesIt != root.end() && allowBakedLightmap) {
-        map.bakedReflectionProbes = ReadBakedReflectionProbeMetadata(
-                *bakedReflectionProbesIt,
-                "root.bakedReflectionProbes");
-    }
-
     map.previewSettings = NormalizeSectorPreviewSettings(map.previewSettings);
     map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
     map.directionalLight = NormalizeSectorTopologyDirectionalLightSettings(map.directionalLight);
@@ -4748,6 +4714,9 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
             }
             probe.priority = ReadOptionalClampedInt(
                     probeJson, "priority", context, probe.priority, -1000, 1000);
+            probe.blendDistanceWorld = ReadOptionalClampedFloat(
+                    probeJson, "blendDistanceWorld", context,
+                    probe.blendDistanceWorld, 0.0f, 16.0f);
             probe.intensity = ReadOptionalClampedFloat(
                     probeJson, "intensity", context, probe.intensity, 0.0f, 8.0f);
             probe.resolution = ReadOptionalClampedInt(
@@ -5046,8 +5015,6 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.audioSettings = document.graph.audioSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
-    document.derivation.topology.bakedReflectionProbes =
-            document.mapData.bakedReflectionProbes;
 }
 
 SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
@@ -5186,12 +5153,6 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
             && map.bakedLightmap.height > 0
             && !map.bakedLightmap.sourceHash.empty()) {
         root["bakedLightmap"] = WriteBakedLightmap(map.bakedLightmap);
-    }
-    if (includeBakedLightmap
-            && !map.bakedReflectionProbes.path.empty()
-            && map.bakedReflectionProbes.version > 0) {
-        root["bakedReflectionProbes"] =
-                WriteBakedReflectionProbeMetadata(map.bakedReflectionProbes);
     }
 }
 
@@ -5380,6 +5341,7 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             if (probe.priority != defaults.priority) probeJson["priority"] = probe.priority;
             if (probe.intensity != defaults.intensity) probeJson["intensity"] = probe.intensity;
             if (probe.resolution != defaults.resolution) probeJson["resolution"] = probe.resolution;
+            if (probe.blendDistanceWorld != defaults.blendDistanceWorld) probeJson["blendDistanceWorld"] = probe.blendDistanceWorld;
             graphJson["reflectionProbes"].push_back(std::move(probeJson));
         }
     }

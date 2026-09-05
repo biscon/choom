@@ -376,6 +376,10 @@ void SectorDuctCoverRenderer::Draw(
 
                 const Vector3 position = Vector3Add(
                         transform.position, access.coverOffset);
+                const auto reflectionBlend=context.reflectionEnvironment && !context.pbr.reflectionCapture
+                        ? SelectSectorPbrEnvironmentBlend(*context.reflectionEnvironment,position,object.currentSectorId)
+                        : SectorPbrEnvironmentBlend{};
+                UploadSectorReflectionBlend(material.shader,locations.reflections,reflectionBlend,*context.assets);
                 BakedObjectLightingSample baked =
                         ResolveBakedObjectLightingVerticalSample(
                                 lighting.vertical, position.y);

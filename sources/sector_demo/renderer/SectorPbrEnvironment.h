@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "sector_demo/SectorReflectionProbeTypes.h"
+#include "sector_demo/SectorPortalVisibility.h"
 
 #include <raylib.h>
 
@@ -21,8 +22,22 @@ struct SectorPbrEnvironment {
         SectorCompiledReflectionProbe definition;
         engine::TextureHandle cubemap = engine::NullTextureHandle();
         int mipCount = 1;
+        engine::TextureHandle inactive = engine::NullTextureHandle();
+        bool ready = false;
+        bool failed = false;
+        bool required = false;
+        bool dirty = true;
+        bool hasPrevious = false;
+        std::uint64_t revision = 1;
+        std::uint64_t discontinuity = 0;
+        double dirtySince = 0.0;
+        double lastStarted = -1.0;
+        double publishedAt = -1.0;
     };
     std::vector<LocalProbe> localProbes;
+    std::vector<RuntimePortalEdge> portals;
+    std::vector<RuntimePortalDynamicBlocker> blockers;
+    double seconds = 0.0;
     bool active = false;
     bool usedSky = false;
 };
@@ -37,7 +52,30 @@ struct SectorPbrEnvironmentSelection {
     float maxLod = 0.0f;
     bool boxProjection = false;
     bool localProbe = false;
+    int probeId = -1;
+    engine::TextureHandle previous = engine::NullTextureHandle();
+    float transition = 1.0f;
+    float blendDistance = 0.5f;
 };
+
+struct SectorPbrEnvironmentBlend {
+    SectorPbrEnvironmentSelection first;
+    SectorPbrEnvironmentSelection second;
+    // Plane points from the first probe's sector into the second's sector.
+    Vector4 portalPlane = {};
+    Vector2 portalWidths = {};
+    // Tangent x/z, projected start, aperture length; vertical aperture limits.
+    Vector4 portalAperture = {};
+    Vector2 portalHeights = {};
+    bool portal = false;
+};
+
+SectorPbrEnvironmentBlend SelectSectorPbrEnvironmentBlend(
+        const SectorPbrEnvironment& environment, Vector3 receiverPosition,
+        int receiverSectorId = -1, bool includeLocalProbes = true,
+        const BoundingBox* receiverBounds = nullptr);
+float SectorReflectionBlendWeight(const SectorPbrEnvironmentBlend& blend,
+        Vector3 position);
 
 inline bool IsSectorPbrEnvironmentActive(
         const SectorPbrEnvironment& environment,

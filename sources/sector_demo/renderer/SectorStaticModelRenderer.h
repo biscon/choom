@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "engine/assets/AssetHandles.h"
 #include "engine/assets/ModelAssets.h"
@@ -79,6 +80,7 @@ struct SectorPbrContributionSettings {
     SectorPbrDiagnosticMode diagnosticMode = SectorPbrDiagnosticMode::Full;
     float worldIndirectDiffuseScale = 1.0f;
     float worldEnvironmentSpecularScale = 1.0f;
+    bool reflectionCapture = false;
 };
 
 inline SectorPbrContributionSettings NormalizeSectorPbrContributionSettings(
@@ -221,6 +223,9 @@ struct SectorPbrDrawDiagnostics {
     SectorPbrDrawState state;
     engine::ModelMaterialAsset material;
     SectorStaticSpecularLightContext staticSpecularLights;
+    std::array<int,2> reflectionProbeIds{{-1,-1}};
+    float reflectionSecondWeight = 0;
+    Vector2 reflectionTransition{1,1};
 };
 
 inline void ConfigureSectorStaticModelAuxiliaryMaterialMaps(
@@ -311,6 +316,7 @@ public:
             SectorUseHighlight useHighlight = {});
 
     void DrawViewmodel(
+            engine::AssetManager& assets,
             const engine::ModelAsset& asset,
             engine::AnimatedModelInstance& instance,
             const Camera3D& camera,
@@ -341,6 +347,12 @@ public:
     void SetEnvironmentProjection(SectorPbrEnvironmentSelection selection)
     {
         environmentSelection = selection;
+        environmentBlend = {};
+        environmentBlend.first = selection;
+    }
+    void SetReflectionEnvironment(const SectorPbrEnvironment* environment) { reflectionEnvironment = environment; }
+    void SetEnvironmentBlend(SectorPbrEnvironmentBlend blend, Vector3 position) {
+        environmentBlend=blend;environmentSelection=blend.first;reflectionReceiverPosition=position;
     }
     const SectorPbrDrawDiagnostics& WorldPbrDiagnostics() const
     {
@@ -352,6 +364,12 @@ public:
     }
 
 private:
+    const SectorPbrEnvironment* reflectionEnvironment = nullptr;
+    engine::AssetManager* drawAssets = nullptr;
+    SectorPbrEnvironmentBlend environmentBlend;
+    SectorReflectionShaderLocations reflectionLocations;
+    void PrepareReceiverEnvironment(Vector3 position, int sector, const SectorReceiverBounds* bounds = nullptr);
+    Vector3 reflectionReceiverPosition{};
     Shader shader = {};
     struct CachedModel {
         engine::ModelHandle handle = engine::NullModelHandle();

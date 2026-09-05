@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -26,7 +27,6 @@ struct SectorWindowDrawContext {
     Camera3D camera = {};
     const RuntimePortalVisibilityResult* visibility = nullptr;
     const SectorPbrEnvironment* environment = nullptr;
-    bool localReflectionProbesCurrent = true;
     SectorPbrContributionSettings pbr;
     SectorTopologyDirectionalLightSettings directionalLight;
     SectorFogRenderContext fog;
@@ -52,6 +52,7 @@ public:
     std::size_t DrawnCount() const { return drawnCount; }
 
 private:
+    SectorReflectionShaderLocations reflectionLocations;
     struct DrawItem {
         engine::Entity entity = engine::NullEntity();
         int placedObjectId = 0;

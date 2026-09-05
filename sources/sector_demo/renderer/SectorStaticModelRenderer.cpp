@@ -576,41 +576,10 @@ void main()
             * staticLighting
             * materialAo
             * indirectDiffuseScale;
-    vec3 environmentSpecular = vec3(0.0);
-    if (hasEnvironment != 0) {
-        vec3 reflected = reflect(-viewDirection, worldNormal);
-        if (environmentBoxProjection != 0) {
-            float c = cos(-environmentYaw);
-            float s = sin(-environmentYaw);
-            vec3 origin = fragWorldPosition-environmentInfluenceCenter;
-            vec3 localOrigin = vec3(origin.x*c-origin.z*s, origin.y, origin.x*s+origin.z*c);
-            vec3 localDirection = vec3(reflected.x*c-reflected.z*s, reflected.y, reflected.x*s+reflected.z*c);
-            vec3 safeDirection = mix(vec3(-1.0), vec3(1.0), step(vec3(0.0), localDirection))
-                    * max(abs(localDirection), vec3(0.00001));
-            vec3 exitPlane = mix(-environmentHalfExtents, environmentHalfExtents, step(vec3(0.0), localDirection));
-            vec3 exitDistance = (exitPlane-localOrigin)/safeDirection;
-            float distanceToBox = min(exitDistance.x, min(exitDistance.y, exitDistance.z));
-            vec3 localHit = localOrigin+localDirection*max(distanceToBox, 0.0);
-            vec3 captureOffset = environmentCapturePosition-environmentInfluenceCenter;
-            vec3 localCapture = vec3(captureOffset.x*c-captureOffset.z*s, captureOffset.y, captureOffset.x*s+captureOffset.z*c);
-            vec3 localLookup = localHit-localCapture;
-            c = cos(environmentYaw); s = sin(environmentYaw);
-            reflected = normalize(vec3(localLookup.x*c-localLookup.z*s, localLookup.y, localLookup.x*s+localLookup.z*c));
-        }
-        vec3 environment = textureLod(
-                environmentTexture,
-                reflected,
-                roughness * max(environmentMaxLod, 0.0)).rgb;
-        vec2 environmentBrdf = EnvironmentBrdfApprox(
-                roughness,
-                max(dot(worldNormal, viewDirection), 0.0));
-        environmentSpecular = environment
-                * (f0 * environmentBrdf.x + environmentBrdf.y)
-                * environmentExposure
-                * environmentIntensity
-                * environmentSpecularScale
-                * materialAo;
-    }
+    vec3 environmentSpecular=SampleSectorEnvironment(fragWorldPosition,
+            reflect(-viewDirection,worldNormal),roughness);
+    vec2 brdf=EnvironmentBrdfApprox(roughness,max(dot(worldNormal,viewDirection),0.0));
+    environmentSpecular *= (f0*brdf.x+brdf.y)*environmentSpecularScale*materialAo;
     vec3 emissive = emissiveFactor;
     if (hasEmissiveTexture != 0) {
         emissive *= DecodeColorTexture(
@@ -628,7 +597,8 @@ void main()
             + staticDirectSpecular
             + environmentSpecular
             + emissive;
-    if (pbrDiagnosticMode == 1) linearColor = albedo;
+    if (pbrDiagnosticMode == 11) linearColor = indirectDiffuse + directDiffuse + emissive;
+    else if (pbrDiagnosticMode == 1) linearColor = albedo;
     else if (pbrDiagnosticMode == 2) linearColor = directDiffuse;
     else if (pbrDiagnosticMode == 3) {
         linearColor = dynamicDirectSpecular + staticDirectSpecular;
@@ -987,7 +957,9 @@ const char* SectorPbrIndirectSourceName(SectorPbrIndirectSource source)
 
 bool SectorStaticModelRenderer::Load()
 {
-    shader = LoadShaderFromMemory(SectorStaticModelVs, SectorStaticModelFs);
+    const std::string reflectionSource=AddSectorReflectionShaderSource(SectorStaticModelFs);
+    shader = LoadShaderFromMemory(SectorStaticModelVs, reflectionSource.c_str());
+    reflectionLocations=LoadSectorReflectionShaderLocations(shader);
     if (shader.id == 0) {
         shader = {};
         shaderLoaded = false;
@@ -1234,10 +1206,23 @@ void SectorStaticModelRenderer::ResetDebugState()
     viewmodelDiagnostics = {};
 }
 
+void SectorStaticModelRenderer::PrepareReceiverEnvironment(Vector3 position, int sector, const SectorReceiverBounds* bounds)
+{
+    if (!reflectionEnvironment) return;
+    reflectionReceiverPosition=position;
+    const BoundingBox box = bounds ? BoundingBox{bounds->min,bounds->max} : BoundingBox{position,position};
+    environmentBlend=SelectSectorPbrEnvironmentBlend(*reflectionEnvironment,position,sector,true,&box);
+    environmentSelection=environmentBlend.first;
+}
+
 void SectorStaticModelRenderer::UploadPbrDrawState(
         const SectorPbrDrawState& state)
 {
-    const int diagnosticMode = static_cast<int>(state.diagnosticMode);
+    const int diagnosticMode = contributionSettings.reflectionCapture ? 11 : static_cast<int>(state.diagnosticMode);
+    if (drawAssets) {
+        auto blend = contributionSettings.reflectionCapture ? SectorPbrEnvironmentBlend{} : environmentBlend;
+        UploadSectorReflectionBlend(shader,reflectionLocations,blend,*drawAssets,state.environmentExposure);
+    }
     const int useObjectProbe = state.useObjectProbe ? 1 : 0;
     const int useVerticalProbe = state.useVerticalObjectProbe ? 1 : 0;
     const int hasEnvironment = state.environmentActive ? 1 : 0;
@@ -1283,6 +1268,7 @@ void SectorStaticModelRenderer::RecordPbrDiagnostics(
         const engine::ModelMaterialAsset& material,
         const SectorStaticSpecularLightContext& staticSpecularLights)
 {
+    if (contributionSettings.reflectionCapture) return;
     diagnostics.valid = true;
     diagnostics.placedObjectId = placedObjectId;
     diagnostics.model = model;
@@ -1290,6 +1276,11 @@ void SectorStaticModelRenderer::RecordPbrDiagnostics(
     diagnostics.state = state;
     diagnostics.material = material;
     diagnostics.staticSpecularLights = staticSpecularLights;
+    diagnostics.reflectionProbeIds={environmentBlend.first.probeId,environmentBlend.second.probeId};
+    diagnostics.reflectionSecondWeight=SectorReflectionBlendWeight(environmentBlend,reflectionReceiverPosition);
+    diagnostics.reflectionTransition={environmentBlend.first.transition,environmentBlend.second.transition};
+    diagnostics.state.environmentActive=!engine::IsNull(environmentBlend.first.cubemap);
+    if (environmentBlend.first.localProbe) diagnostics.state.environmentExposure=environmentBlend.first.intensity;
 }
 
 void SectorStaticModelRenderer::SetLightmapData(
@@ -1454,6 +1445,7 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         float opacity,
         float interactionHighlightStrength)
 {
+    PrepareReceiverEnvironment(Vector3Scale(Vector3Add(receiverBounds.min,receiverBounds.max),0.5f),receiverSectorId,&receiverBounds);
     const int noStaticLightmap = 0;
     const int noBakedAo = 0;
     opacity = std::isfinite(opacity) ? std::clamp(opacity, 0.0f, 1.0f) : 1.0f;
@@ -1657,6 +1649,7 @@ void SectorStaticModelRenderer::Draw(
         bool staticCaptureOnly,
         SectorUseHighlight useHighlight)
 {
+    drawAssets=&assets;
     if (!shaderLoaded || shader.id == 0) {
         AppendStaticModelDebugText(renderDebugText, 0, 0, 0, 0);
         return;
@@ -1716,7 +1709,7 @@ void SectorStaticModelRenderer::Draw(
             ? static_cast<float>(viewWidth) / static_cast<float>(viewHeight)
             : 0.0f;
     const float viewNearPlane = static_cast<float>(rlGetCullDistanceNear());
-    worldDiagnostics = {};
+    if (!staticCaptureOnly) worldDiagnostics = {};
 
     size_t considered = 0;
     size_t drawn = 0;
@@ -1948,6 +1941,8 @@ void SectorStaticModelRenderer::Draw(
                                 object.currentSectorId,
                                 visibility,
                                 surfaceLightmapBakeCurrent && hasRemapData);
+                PrepareReceiverEnvironment(Vector3Scale(Vector3Add(receiverBounds.min,receiverBounds.max),0.5f),
+                        object.currentSectorId,&receiverBounds);
                 UploadSectorStaticSpecularLights(
                         shader,
                         staticSpecularLocations,
@@ -2352,6 +2347,7 @@ void SectorStaticModelRenderer::Draw(
 }
 
 void SectorStaticModelRenderer::DrawViewmodel(
+        engine::AssetManager& assets,
         const engine::ModelAsset& asset,
         engine::AnimatedModelInstance& instance,
         const Camera3D& camera,
@@ -2366,6 +2362,7 @@ void SectorStaticModelRenderer::DrawViewmodel(
         const SectorViewmodelLightingContext& lighting,
         const SectorViewmodelLightingContext& attachmentLighting)
 {
+    drawAssets=&assets;
     if (!shaderLoaded || !instance.poseReady || instance.poseFailed) return;
     const float opaque = 1.0f;
     if (modelOpacityLoc >= 0) {

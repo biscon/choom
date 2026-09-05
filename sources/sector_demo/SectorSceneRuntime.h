@@ -147,6 +147,7 @@ public:
             uint64_t expectedRequestId = 0);
     NpcMoveStatus GetNpcMoveStatus(std::string_view instanceId) const;
     bool IsReady() const { return renderer.IsRendererReady(); }
+    bool PrepareInitialReflections(engine::EngineContext& context, const SectorTopologyMap& map);
     engine::SoundHandle FindLevelSound(const std::string& id) const;
     engine::MusicHandle FindLevelMusic(const std::string& id) const;
     bool PlayLevelSound(

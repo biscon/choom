@@ -3354,6 +3354,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 selectedReflectionProbe->intensity, 10, 0.0f, 8.0f,
                 [](auto& probe, float value) { probe.intensity = value; });
 
+        drawFloat("sector_editor_reflection_blend_distance", "Blend distance",
+                selectedReflectionProbe->blendDistanceWorld, 11, 0.0f, 16.0f,
+                [](auto& probe, float value) { probe.blendDistanceWorld = value; });
         const auto priorityLayout = BuildSectorEditorInspectorRightIntRowLayout(
                 y, contentW, rowH, gap);
         const SectorEditorIntInputResult priority = DrawLabeledIntInput(

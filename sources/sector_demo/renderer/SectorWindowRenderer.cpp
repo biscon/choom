@@ -360,14 +360,8 @@ void main()
             * (1.0 - fresnel) * hazeVariation, 0.20);
     vec3 haze = clamp(glassTint, 0.0, 1.0) * hazeWeight;
 
-    vec3 reflection = vec3(0.0);
-    if (hasEnvironment != 0) {
-        vec3 reflected = BoxProjectedEnvironmentDirection(
-                reflect(-viewDirection, shadingNormal));
-        reflection = textureLod(environmentTexture, reflected,
-                roughness * max(environmentMaxLod, 0.0)).rgb
-                * environmentIntensity * environmentSpecularScale;
-    }
+    vec3 reflection = SampleSectorEnvironment(fragWorldPosition,
+            reflect(-viewDirection,shadingNormal),roughness)*environmentSpecularScale;
     vec3 direct = DirectionalSpecular(
             shadingNormal, viewDirection, roughness);
     vec3 rgb;
@@ -411,73 +405,6 @@ bool WindowVisible(
                     window.backSectorId, *visibility);
 }
 
-SectorPbrEnvironmentSelection SelectWindowEnvironment(
-        const SectorPbrEnvironment& environment,
-        const SectorObjectTransform& transform,
-        const SectorObject& object,
-        const SectorWindow& window,
-        Vector3 cameraPosition,
-        bool includeLocalProbes)
-{
-    const Vector3 portalNormal{window.normal.x, 0.0f, window.normal.y};
-    const float cameraSide = Vector3DotProduct(
-            Vector3Subtract(cameraPosition, transform.position), portalNormal);
-    const float direction = cameraSide > 0.0f ? 1.0f : -1.0f;
-    const int viewerSectorId = cameraSide > 0.0f
-            ? window.backSectorId : window.frontSectorId;
-    const Vector3 receiver = Vector3Add(
-            transform.position, Vector3Scale(portalNormal, direction * 0.25f));
-    SectorPbrEnvironmentSelection selection = SelectSectorPbrEnvironment(
-            environment, receiver, viewerSectorId, includeLocalProbes);
-    if (selection.localProbe) return selection;
-    const SectorPbrEnvironmentSelection centerSelection =
-            SelectSectorPbrEnvironment(
-                    environment,
-                    transform.position,
-                    object.currentSectorId,
-                    includeLocalProbes);
-    if (centerSelection.localProbe) return centerSelection;
-
-    const SectorPbrEnvironment::LocalProbe* nearestSectorProbe = nullptr;
-    float nearestDistanceSquared = 0.0f;
-    if (includeLocalProbes) {
-        for (const SectorPbrEnvironment::LocalProbe& candidate
-                : environment.localProbes) {
-            const SectorCompiledReflectionProbe& probe = candidate.definition;
-            if (!probe.enabled || engine::IsNull(candidate.cubemap)
-                    || probe.topologySectorId != viewerSectorId) continue;
-            const float distanceSquared = Vector3DistanceSqr(
-                    receiver, probe.influenceCenterWorld);
-            if (nearestSectorProbe == nullptr
-                    || probe.priority > nearestSectorProbe->definition.priority
-                    || (probe.priority
-                                    == nearestSectorProbe->definition.priority
-                            && (distanceSquared < nearestDistanceSquared
-                                    || (distanceSquared == nearestDistanceSquared
-                                            && probe.sourceAuthoringProbeId
-                                                    < nearestSectorProbe->definition
-                                                            .sourceAuthoringProbeId)))) {
-                nearestSectorProbe = &candidate;
-                nearestDistanceSquared = distanceSquared;
-            }
-        }
-    }
-    if (nearestSectorProbe != nullptr) {
-        const SectorCompiledReflectionProbe& probe =
-                nearestSectorProbe->definition;
-        return SectorPbrEnvironmentSelection{
-                nearestSectorProbe->cubemap,
-                probe.capturePositionWorld,
-                probe.influenceCenterWorld,
-                probe.halfExtentsWorld,
-                probe.yawRadians,
-                probe.intensity,
-                static_cast<float>(std::max(0, nearestSectorProbe->mipCount - 1)),
-                true,
-                true};
-    }
-    return selection;
-}
 
 } // namespace
 
@@ -485,7 +412,9 @@ bool SectorWindowRenderer::Initialize(std::size_t capacity)
 {
     Shutdown();
     Reserve(capacity);
-    shader = LoadShaderFromMemory(WindowVs, WindowFs);
+    const std::string reflectionSource=AddSectorReflectionShaderSource(WindowFs);
+    shader = LoadShaderFromMemory(WindowVs, reflectionSource.c_str());
+    reflectionLocations=LoadSectorReflectionShaderLocations(shader);
     if (shader.id == 0) return false;
     shader.locs[SHADER_LOC_VERTEX_POSITION] =
             GetShaderLocationAttrib(shader, "vertexPosition");
@@ -722,18 +651,16 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
                 shader, thicknessLoc, &window.thickness,
                 SHADER_UNIFORM_FLOAT);
 
-        SectorPbrEnvironmentSelection selection;
-        if (context.environment != nullptr) {
-            selection = SelectWindowEnvironment(
-                    *context.environment,
-                    transform,
-                    object,
-                    window,
-                    context.camera.position,
-                    context.localReflectionProbesCurrent);
+        SectorPbrEnvironmentBlend reflectionBlend;
+        if (context.environment) {
+            const Vector3 portalNormal{window.normal.x, 0.0f, window.normal.y};
+            const bool back=Vector3DotProduct(Vector3Subtract(context.camera.position,transform.position),portalNormal)>0;
+            const Vector3 receiver=Vector3Add(transform.position,Vector3Scale(portalNormal,back?0.25f:-0.25f));
+            reflectionBlend=SelectSectorPbrEnvironmentBlend(*context.environment,receiver,back?window.backSectorId:window.frontSectorId);
         }
-        const TextureCubemap* cubemap = context.assets->GetCubemap(
-                selection.cubemap);
+        UploadSectorReflectionBlend(shader,reflectionLocations,reflectionBlend,*context.assets);
+        const auto& selection = reflectionBlend.first;
+        const TextureCubemap* cubemap = context.assets->GetCubemap(selection.cubemap);
         const int hasEnvironment = cubemap != nullptr && cubemap->id != 0
                         && pbr.worldEnvironmentSpecularScale > 0.0f
                 ? 1 : 0;

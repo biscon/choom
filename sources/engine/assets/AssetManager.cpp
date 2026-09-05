@@ -180,6 +180,26 @@ TextureHandle AssetManager::CreateCubemapFromImage(
             scope, key, image, colorUsage, layout);
 }
 
+TextureHandle AssetManager::CreateRenderCubemap(
+        AssetScopeHandle scope, const char* key, int resolution)
+{
+    if (key == nullptr || resolution < 1 || resolution > 256
+            || (resolution & (resolution - 1)) != 0) return NullTextureHandle();
+    std::size_t count = 0;
+    int mips = 0;
+    for (int size = resolution; size > 0; size /= 2) {
+        count += static_cast<std::size_t>(size) * size * 6u * 4u;
+        ++mips;
+    }
+    std::vector<std::uint16_t> pixels(count, 0);
+    Image image{pixels.data(), resolution, resolution * 6, mips,
+            PIXELFORMAT_UNCOMPRESSED_R16G16B16A16};
+    const std::string storageKey = std::string(key) + "|render-cube|"
+            + std::to_string(resolution);
+    return CreateCubemapFromImage(scope, storageKey.c_str(), image,
+            TextureColorUsage::LinearData, CUBEMAP_LAYOUT_LINE_VERTICAL);
+}
+
 bool AssetManager::IsReady(TextureHandle handle) const
 {
     return textures.IsReady(handle);

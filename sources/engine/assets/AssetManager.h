@@ -89,6 +89,11 @@ public:
             const char* path,
             ModelLoadFlags flags = ModelLoad_None);
 
+    // Main-thread, explicit load phase only. Storage is linear RGBA16F, with
+    // every mip allocated; callers may attach individual faces to an FBO.
+    TextureHandle CreateRenderCubemap(AssetScopeHandle scope, const char* key,
+            int resolution);
+
     bool IsReady(ModelHandle handle) const;
     bool IsFinished(ModelHandle handle) const;
     bool HasFailed(ModelHandle handle) const;

@@ -1180,7 +1180,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::Window: return "Window: click a two-sided portal line to place procedural glass";
         case SectorEditorTool::DuctAccess: return "Duct Access: click a portal between a normal sector and a Crawlspace";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume: click strictly inside a sector to place local fog";
-        case SectorEditorTool::ReflectionProbe: return "Reflection Probe: click inside a sector to place a local baked reflection capture";
+        case SectorEditorTool::ReflectionProbe: return "Reflection Probe: click inside a sector to place a scheduled runtime reflection capture";
         case SectorEditorTool::Trigger: return "Trigger: choose Rectangle or Polygon, then draw snapped points; right click/Esc cancels";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";

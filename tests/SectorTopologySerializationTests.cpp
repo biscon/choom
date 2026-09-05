@@ -384,7 +384,6 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
     document.mapData.fogSettings = map.fogSettings;
     document.mapData.lightmapSettings = map.lightmapSettings;
     document.mapData.bakedLightmap = map.bakedLightmap;
-    document.mapData.bakedReflectionProbes = map.bakedReflectionProbes;
     document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
     return document;
 }
@@ -4928,12 +4927,7 @@ void TestGraphNativeMapLevelRoundTrip()
             Vector3{0.25f, 1.5f, 0.25f},
             Vector3{0.30f, 1.5f, 0.30f},
             Vector3{0.25f, 1.5f, 0.25f},
-            0.5f, 3, 1.25f, 128});
-    source.bakedReflectionProbes = game::SectorBakedReflectionProbeMetadata{
-            "assets/levels/test/test.reflection-probes.bin",
-            game::SectorReflectionProbeBakeVersion,
-            1,
-            "rgba16f-cubemap-mips"};
+            0.5f, 3, 1.25f, 128, 0.75f});
 
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     const Json saved = Json::parse(SaveAuthoringText(original));
@@ -4993,8 +4987,8 @@ void TestGraphNativeMapLevelRoundTrip()
           "graph-native baked object probe metadata is persisted");
     Check(saved["authoringGraph"]["reflectionProbes"].size() == 1
                   && saved["authoringGraph"]["reflectionProbes"][0]["id"] == 41
-                  && saved["bakedReflectionProbes"]["count"] == 1,
-          "graph-native reflection probe authoring and bake metadata are persisted");
+                  && !saved.contains("bakedReflectionProbes"),
+          "graph-native reflection probe authoring is persisted without baked captures");
     Check(saved["authoringGraph"]["faceAnchors"][0]["roomtone"]["soundId"]
                       == "great_hall"
                   && saved["authoringGraph"]["soundEmitters"][0]["id"] == "vent"
@@ -5080,8 +5074,9 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(loaded.graph.reflectionProbes.size() == 1
                   && loaded.graph.reflectionProbes[0].id == 41
                   && Near(loaded.graph.reflectionProbes[0].intensity, 1.25f)
+                  && Near(loaded.graph.reflectionProbes[0].blendDistanceWorld, 0.75f)
                   && loaded.derivation.topology.compiledReflectionProbes.size() == 1
-                  && loaded.mapData.bakedReflectionProbes.count == 1,
+                  && Near(loaded.derivation.topology.compiledReflectionProbes[0].blendDistanceWorld, 0.75f),
           "graph-native reflection probes round-trip and compile");
     Check(loaded.graph.faceAnchors[0].roomtone.soundId == "great_hall"
                   && loaded.graph.soundEmitters.size() == 1
@@ -5121,7 +5116,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.derivation.topology.bakedLightmap.objectProbes.count == 7
                   && loaded.derivation.topology.bakedLightmap.staticModels.path
                           == "assets/levels/test/test.lightmap.static_models.bin"
-                  && loaded.derivation.topology.bakedReflectionProbes.count == 1,
+,
           "derived topology receives map-level fields after load");
 
     const Json resaved = Json::parse(SaveAuthoringText(loaded));
@@ -5133,8 +5128,8 @@ void TestGraphNativeMapLevelRoundTrip()
                   && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"]
                   && resaved["bakedLightmap"]["staticModels"] == saved["bakedLightmap"]["staticModels"],
           "graph-native save/load/save preserves baked lightmap metadata");
-    Check(resaved["bakedReflectionProbes"] == saved["bakedReflectionProbes"],
-          "graph-native save/load/save preserves reflection probe bake metadata");
+    Check(!resaved.contains("bakedReflectionProbes"),
+          "graph-native save/load/save omits removed reflection probe bake metadata");
 
     Json legacyProbeMetadata = saved;
     legacyProbeMetadata["bakedLightmap"]["objectProbes"].erase("probeLowerHeightWorld");

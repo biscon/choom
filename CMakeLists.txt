@@ -343,6 +343,15 @@ if(BUILD_TESTING)
     target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib)
     add_test(NAME pbr_lighting_policy COMMAND pbr_lighting_policy_tests)
 
+    add_executable(sector_runtime_reflection_tests
+            tests/SectorRuntimeReflectionTests.cpp
+            sources/sector_demo/renderer/SectorReflectionSelection.cpp
+            sources/sector_demo/renderer/SectorReflectionProbePolicy.cpp
+            sources/sector_demo/SectorReflectionProbes.cpp)
+    target_include_directories(sector_runtime_reflection_tests PRIVATE sources)
+    target_link_libraries(sector_runtime_reflection_tests PRIVATE raylib)
+    add_test(NAME sector_runtime_reflections COMMAND sector_runtime_reflection_tests)
+
     add_executable(sector_atmosphere_culling_tests
             tests/SectorAtmosphereCullingTests.cpp
             sources/sector_demo/renderer/SectorAtmosphereCulling.cpp

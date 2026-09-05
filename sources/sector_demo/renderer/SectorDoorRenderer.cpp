@@ -481,44 +481,18 @@ void main()
         }
     }
 
-    vec3 environmentSpecular = vec3(0.0);
-    if (hasEnvironment != 0 && environmentSpecularScale > 0.0) {
-        vec3 reflected = reflect(-viewDirection, worldNormal);
-        if (environmentBoxProjection != 0) {
-            float c = cos(-environmentYaw);
-            float s = sin(-environmentYaw);
-            vec3 origin = fragWorldPosition - environmentInfluenceCenter;
-            vec3 localOrigin = vec3(origin.x*c-origin.z*s, origin.y, origin.x*s+origin.z*c);
-            vec3 localDirection = vec3(reflected.x*c-reflected.z*s, reflected.y, reflected.x*s+reflected.z*c);
-            vec3 safeDirection = mix(vec3(-1.0), vec3(1.0), step(vec3(0.0), localDirection))
-                    * max(abs(localDirection), vec3(0.00001));
-            vec3 exitPlane = mix(-environmentHalfExtents, environmentHalfExtents, step(vec3(0.0), localDirection));
-            vec3 exitDistance = (exitPlane-localOrigin)/safeDirection;
-            float distanceToBox = min(exitDistance.x, min(exitDistance.y, exitDistance.z));
-            vec3 localHit = localOrigin + localDirection * max(distanceToBox, 0.0);
-            vec3 captureOffset = environmentCapturePosition-environmentInfluenceCenter;
-            vec3 localCapture = vec3(captureOffset.x*c-captureOffset.z*s, captureOffset.y, captureOffset.x*s+captureOffset.z*c);
-            vec3 localLookup = localHit-localCapture;
-            c = cos(environmentYaw); s = sin(environmentYaw);
-            reflected = normalize(vec3(localLookup.x*c-localLookup.z*s, localLookup.y, localLookup.x*s+localLookup.z*c));
-        }
-        vec3 environment = textureLod(
-                environmentTexture, reflected, roughness * max(environmentMaxLod, 0.0)).rgb;
-        vec2 environmentBrdf = EnvironmentBrdfApprox(
-                roughness,
-                max(dot(worldNormal, viewDirection), 0.0));
-        environmentSpecular = environment
-                * (f0 * environmentBrdf.x + environmentBrdf.y)
-                * environmentExposure
-                * environmentSpecularScale;
-    }
+    vec3 environmentSpecular=SampleSectorEnvironment(fragWorldPosition,
+            reflect(-viewDirection,worldNormal),roughness);
+    vec2 brdf=EnvironmentBrdfApprox(roughness,max(dot(worldNormal,viewDirection),0.0));
+    environmentSpecular *= (f0*brdf.x+brdf.y)*environmentSpecularScale;
 
     vec3 outputRgb = indirectDiffuse
             + dynamicDirectDiffuse
             + dynamicDirectSpecular
             + staticDirectSpecular
             + environmentSpecular;
-    if (pbrDiagnosticMode == 1) outputRgb = surfaceRgb;
+    if (pbrDiagnosticMode == 11) outputRgb = indirectDiffuse + dynamicDirectDiffuse;
+    else if (pbrDiagnosticMode == 1) outputRgb = surfaceRgb;
     else if (pbrDiagnosticMode == 2) outputRgb = dynamicDirectDiffuse;
     else if (pbrDiagnosticMode == 3) {
         outputRgb = dynamicDirectSpecular + staticDirectSpecular;
@@ -655,7 +629,9 @@ void SectorDoorRenderer::ResetOpaqueShaderLocations()
 
 bool SectorDoorRenderer::LoadOpaqueResources()
 {
-    opaqueShader = LoadShaderFromMemory(SectorDoorOpaqueVs, SectorDoorOpaqueFs);
+    const std::string reflectionSource=AddSectorReflectionShaderSource(SectorDoorOpaqueFs);
+    opaqueShader = LoadShaderFromMemory(SectorDoorOpaqueVs, reflectionSource.c_str());
+    opaqueShaderLocations.reflections=LoadSectorReflectionShaderLocations(opaqueShader);
     if (opaqueShader.id == 0) {
         opaqueShader = Shader{};
         ResetOpaqueShaderLocations();
@@ -1015,7 +991,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
     if (doorOpaqueLocations.environmentMaxLod >= 0) SetShaderValue(
             doorOpaqueMaterial.shader, doorOpaqueLocations.environmentMaxLod,
             &context.environmentMaxLod, SHADER_UNIFORM_FLOAT);
-    const int pbrDiagnosticMode = static_cast<int>(pbr.diagnosticMode);
+    const int pbrDiagnosticMode = pbr.reflectionCapture ? 11 : static_cast<int>(pbr.diagnosticMode);
     if (doorOpaqueLocations.pbrDiagnosticMode >= 0) SetShaderValue(
             doorOpaqueMaterial.shader,
             doorOpaqueLocations.pbrDiagnosticMode,
@@ -1242,6 +1218,10 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                         ? *resolvedMaterial.properties
                         : Texture2D{};
                 doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+                const auto blend=context.reflectionEnvironment && !context.pbr.reflectionCapture
+                        ? SelectSectorPbrEnvironmentBlend(*context.reflectionEnvironment,transform.position,object.currentSectorId)
+                        : SectorPbrEnvironmentBlend{};
+                UploadSectorReflectionBlend(doorOpaqueMaterial.shader,doorOpaqueLocations.reflections,blend,*context.assets);
                 DrawMesh(
                         cacheEntry->mesh,
                         doorOpaqueMaterial,

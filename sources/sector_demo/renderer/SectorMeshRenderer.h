@@ -1,4 +1,6 @@
 #pragma once
+#include "sector_demo/renderer/SectorRuntimeReflectionProbes.h"
+#include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorCollisionWorld.h"
@@ -118,15 +120,15 @@ public:
             SectorRuntimeDoorLightingContext doorLighting = {},
             const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{},
             bool staticCaptureOnly = false,
-            SectorUseHighlight useHighlight = {});
-    bool CaptureReflectionProbe(
-            engine::AssetManager& assets,
-            Vector3 capturePosition,
-            int resolution,
-            engine::World* runtimeObjectWorld,
-            SectorRuntimeDoorLightingContext doorLighting,
-            std::vector<Vector4>& outFacePixels,
-            std::string& error);
+            SectorUseHighlight useHighlight = {},
+            SectorReflectionCaptureDrawContext* capture = nullptr);
+    void UpdateRuntimeReflections(engine::AssetManager& assets, engine::World* world,
+            SectorRuntimeDoorLightingContext doorLighting, bool preparing = false);
+    bool InitialReflectionsReady() const { return runtimeReflections.InitialReady(pbrEnvironment); }
+    const SectorRuntimeReflectionStats& ReflectionStats() const { return runtimeReflections.Stats(); }
+    void RefreshRuntimeReflections(bool discontinuity = true) { runtimeReflections.Invalidate(pbrEnvironment, discontinuity); }
+    void ToggleRuntimeReflectionsPaused() { runtimeReflections.paused = !runtimeReflections.paused; }
+    bool RuntimeReflectionsPaused() const { return runtimeReflections.paused; }
     bool ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
@@ -459,13 +461,21 @@ private:
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
-    bool localReflectionProbesCurrent = true;
-    std::string localReflectionProbeSurfaceHash;
+    SectorRuntimeReflectionProbes runtimeReflections;
+    bool reflectionPreparationStepPending = false;
+    engine::AssetManager* reflectionCaptureAssets = nullptr;
+    SectorReflectionShaderLocations reflectionLocations;
+    friend class SectorRuntimeReflectionProbes;
+    void PrepareReflectionCapture(SectorReflectionCaptureDrawContext& draw,
+            const SectorCompiledReflectionProbe& probe, engine::World* world);
+    void PrepareReflectionShadows(SectorReflectionCaptureDrawContext& draw, engine::World* world);
+    void DrawReflectionFace(engine::AssetManager& assets, SectorReflectionCaptureDrawContext& draw,
+            const SectorCompiledReflectionProbe& probe, int face, engine::RenderTarget& target,
+            engine::World* world, SectorRuntimeDoorLightingContext lighting);
     bool staticObjectAdjustmentBakedDataActive = false;
     int staticObjectAdjustmentOriginalLightmapStatus = 0;
     bool staticObjectAdjustmentOriginalSurfaceLightmapCurrent = false;
     bool staticObjectAdjustmentOriginalObjectProbeCurrent = false;
-    bool staticObjectAdjustmentOriginalLocalReflectionProbesCurrent = true;
     SectorBloomRenderer bloomRenderer;
     engine::RenderTarget hdrSceneScratch;
     RenderTexture2D hdrSceneColorView = {};

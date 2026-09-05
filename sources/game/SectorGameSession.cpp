@@ -1195,6 +1195,7 @@ bool SectorGameSession::StartNew(
     pendingLoadingSave = loadingSave;
     saveGameBlocked = false;
     saveGameBlockedReason.clear();
+    loadStateInitialized = false;
     BeginGameLevelLoading(loading);
     error.clear();
     return true;
@@ -2182,14 +2183,6 @@ void SectorGameSession::UpdateLoading(
 {
     if (loading.phase == GameLevelLoadPhase::Fading) {
         if (!AdvanceGameLevelLoadingFade(loading, dt)) return;
-        std::string error;
-        if (!ActivateLoadedMap(context, scene, error)) {
-            const std::string reason = error.empty()
-                    ? "Map script activation failed" : error;
-            Shutdown(context, scene);
-            failureError = reason;
-            return;
-        }
         ActivateGameLevel(loading);
         return;
     }
@@ -2253,14 +2246,42 @@ void SectorGameSession::UpdateLoading(
             && objects.staticModelPendingCount == 0;
     const bool viewmodelFinished = FpsViewmodelLoadFinished(
             fpsPlayer.State());
-    const bool complete = assetsFinished
+    bool complete = assetsFinished
             && runtimeObjectsFinished
             && viewmodelFinished
             && navigationGate == GameLevelNavigationGate::Ready
             && InitialNavigationObstaclesSettled(scene.Navigation());
+    if (complete && !loadStateInitialized) {
+        std::string error;
+        if (!ActivateLoadedMap(context, scene, error)) {
+            Shutdown(context, scene);
+            failureError=error.empty()?"Map script activation failed":error;
+            return;
+        }
+        loadStateInitialized=true;
+        scene.Renderer().RefreshDynamicLightSources(topologyMap);
+        scriptHost.dynamicLightsDirty=false;
+        ApplyPlayerPose(scene);
+        // Re-evaluate assets, derived door poses/blockers and navigation next
+        // frame after save restoration and script-created objects settle.
+        complete=false;
+    }
+    if (complete) {
+        SectorPreviewDynamicPointLightSource flashlightLight;
+        const bool flashlightVisible=applicationSettings && cutscene.controlsEnabled
+                && !cutscene.playerMove.active && UpdatePlayerFlashlight(flashlight,
+                        applicationSettings->playerFlashlight,scene.Renderer().RenderCamera(),
+                        controller.fpsControllerState.currentSectorId,0.0f,flashlightLight);
+        scene.Renderer().SetPlayerFlashlight(flashlightVisible ? &flashlightLight : nullptr);
+        scene.Renderer().UpdateVisibilityDebug(controller.fpsControllerState.currentSectorId,
+                ClampRuntimeVisibilitySeedRadiusWorld(controller.fpsControllerConfig.playerRadius),
+                true,&objects.dynamicPortalBlockers,&context.world);
+        complete=scene.PrepareInitialReflections(context,topologyMap);
+    }
     UpdateGameLevelLoadingProgress(
             loading,
-            assetProgress,
+            assetProgress * (0.75f + 0.25f * (scene.Renderer().ReflectionStats().required == 0 ? 0.0f
+                    : static_cast<float>(scene.Renderer().ReflectionStats().prepared) / scene.Renderer().ReflectionStats().required)),
             NavigationLoadProgress(scene.Navigation()),
             complete);
     if (complete) BeginGameLevelLoadingFade(loading);
@@ -2551,6 +2572,7 @@ bool SectorGameSession::RebuildFromMap(
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
     pendingLoadingSave = false;
+    loadStateInitialized = false;
     BeginGameLevelLoading(loading);
     error.clear();
     return true;

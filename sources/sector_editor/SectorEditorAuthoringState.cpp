@@ -56,7 +56,6 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.fogSettings = source.fogSettings;
     target.lightmapSettings = source.lightmapSettings;
     target.bakedLightmap = source.bakedLightmap;
-    target.bakedReflectionProbes = source.bakedReflectionProbes;
 }
 
 void InvalidateEditorTopologyRenderCache(

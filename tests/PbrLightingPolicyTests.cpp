@@ -512,8 +512,7 @@ void TestSectorRuntimeNormalMappingPolicy()
                             != std::string::npos
                     && source.find("mix(vec3(0.04), surfaceRgb, metallic)")
                             != std::string::npos
-                    && source.find("textureLod(\n"
-                               "                environmentTexture")
+                    && source.find("SampleSectorEnvironment(")
                             != std::string::npos,
           "sector material scalars drive metallic-roughness shading and environment specular");
     Check(source.find("vec3 orm = texture(materialPropertiesTexture, fragTexCoord).rgb")
@@ -540,7 +539,7 @@ void TestSectorRuntimeNormalMappingPolicy()
                                "doorDrawContext.staticSpecularEligible = !staticCaptureOnly")
                             != std::string::npos
                     && source.find(
-                               "!staticCaptureOnly && objectProbeBakeCurrent")
+                               "pbrDiagnosticMode == 11")
                             != std::string::npos,
           "reflection probe captures exclude view-dependent direct specular from sectors and objects");
 
@@ -579,8 +578,7 @@ void TestSectorRuntimeNormalMappingPolicy()
                     && door.find("staticDirectSpecular +=") != std::string::npos
                     && door.find("mix(vec3(0.04), surfaceRgb, metallic)")
                             != std::string::npos
-                    && door.find("textureLod(\n"
-                               "                environmentTexture")
+                    && door.find("SampleSectorEnvironment(")
                             != std::string::npos,
           "procedural door material scalars drive dynamic static and environment GGX lighting");
     Check(door.find("pbrDiagnosticMode == 8") != std::string::npos
@@ -974,7 +972,7 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&glassShader.find("refract(incident, facingNormal, 1.0 / ior)")
                             !=std::string::npos
                     &&glassShader.find("environmentBoxProjection")!=std::string::npos
-                    &&glassShader.find("probe.topologySectorId != viewerSectorId")
+                    &&glassShader.find("SelectSectorPbrEnvironmentBlend")
                             !=std::string::npos
                     &&glassShader.find("shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneColorLoc")
                             !=std::string::npos
@@ -995,7 +993,7 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&liquidShader.find("OpaqueDepthEpsilon = 0.000001")!=std::string::npos
                     &&liquidShader.find("0.0005")==std::string::npos
                     &&liquidShader.find("environmentBoxProjection")!=std::string::npos
-                    &&liquidShader.find("textureLod(environmentTexture")!=std::string::npos
+                    &&liquidShader.find("SampleSectorEnvironment(")!=std::string::npos
                     &&liquidShader.find("ToneMap")==std::string::npos
                     &&liquidShader.find("LinearToSrgb")==std::string::npos,
           "liquid shader is procedural, depth-aware, probe-reflective, and linear HDR");

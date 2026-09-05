@@ -948,6 +948,10 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             diagnostic.state.materialOverrideActive ? "on" : "off",
                             diagnostic.state.outputBrightnessMultiplier));
                     std::ostringstream staticSpecular;
+                    addKeyValue("receiver reflections",TextFormat("ids %d / %d | weights %.2f / %.2f | transition %.2f / %.2f",
+                            diagnostic.reflectionProbeIds[0],diagnostic.reflectionProbeIds[1],
+                            1.0f-diagnostic.reflectionSecondWeight,diagnostic.reflectionSecondWeight,
+                            diagnostic.reflectionTransition.x,diagnostic.reflectionTransition.y));
                     staticSpecular
                             << (diagnostic.state.staticSpecularEligible
                                     ? "eligible"
@@ -1091,10 +1095,15 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 const size_t totalProbeCount = context.runtimeObjects.objectLightProbes.probes.size();
                 addKeyValue("object probe count", TextFormat("%zu", totalProbeCount));
                 const std::size_t reflectionProbeCount = topologyMap.compiledReflectionProbes.size();
-                addKeyValue("reflection probes", TextFormat(
-                        "placed %zu | baked %d",
-                        reflectionProbeCount,
-                        topologyMap.bakedReflectionProbes.count));
+                const auto& reflectionStats=preview.ReflectionStats();
+                addKeyValue("reflection probes", TextFormat("placed %zu | ready %zu | queued %zu | failed %zu",
+                        reflectionProbeCount,reflectionStats.ready,reflectionStats.queued,reflectionStats.failed));
+                addKeyValue("capture",TextFormat("probe %d | face %d/6 | mip %d | %s",
+                        reflectionStats.activeProbeId,reflectionStats.face,reflectionStats.mip,
+                        preview.RuntimeReflectionsPaused()?"paused":"scheduled"));
+                addKeyValue("reflection cost",TextFormat("GPU %.3f ms | CPU %.3f ms | target 0.5 ms | overruns %zu",
+                        reflectionStats.gpuMilliseconds,reflectionStats.cpuMilliseconds,reflectionStats.overruns));
+                addKeyValue("reflection memory",TextFormat("%.1f MiB",reflectionStats.allocationBytes/1048576.0));
                 const bool selectedReflectionProbe =
                         selectionState.selectedAuthoring.kind
                                 == SectorAuthoringSelectionKind::ReflectionProbe;
@@ -2275,51 +2284,14 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
         y += rowH + 6.0f;
 
-        const bool selectedReflectionProbe =
-                selectionState.selectedAuthoring.kind
-                        == SectorAuthoringSelectionKind::ReflectionProbe;
-        const float bakeGap = 8.0f;
-        const float bakeWidth = (contentW - bakeGap) * 0.5f;
-        const Rectangle bakeSelectedRect{panel.x + padding, y, bakeWidth, rowH};
-        const Rectangle bakeAllRect{
-                bakeSelectedRect.x + bakeWidth + bakeGap, y, bakeWidth, rowH};
-        if (mouseInteractive && selectedReflectionProbe) {
-            if (engine::Button(
-                        ui, smallConfig, input, assets,
-                        "sector_editor_preview_bake_selected_reflection_probe",
-                        bakeSelectedRect, smallFont, "Bake Selected Reflection")) {
-                result.requestBakeSelectedReflectionProbe = true;
-            }
-        } else {
-            DrawRectangleRec(bakeSelectedRect, Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(
-                    bakeSelectedRect, config.borderThickness, config.borderColor);
-            engine::Text(
-                    smallConfig, assets, bakeSelectedRect, smallFont,
-                    selectedReflectionProbe
-                            ? "Bake Selected Reflection"
-                            : "Select Reflection in 2D",
-                    engine::UITextJustify::Center,
-                    smallConfig.mutedTextColor);
-        }
-        if (mouseInteractive && !topologyMap.compiledReflectionProbes.empty()) {
-            if (engine::Button(
-                        ui, smallConfig, input, assets,
-                        "sector_editor_preview_bake_all_reflection_probes",
-                        bakeAllRect, smallFont, "Bake All Reflections")) {
-                result.requestBakeAllReflectionProbes = true;
-            }
-        } else {
-            DrawRectangleRec(bakeAllRect, Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(
-                    bakeAllRect, config.borderThickness, config.borderColor);
-            engine::Text(
-                    smallConfig, assets, bakeAllRect, smallFont,
-                    "Bake All Reflections",
-                    engine::UITextJustify::Center,
-                    smallConfig.mutedTextColor);
-        }
-        y += rowH + 6.0f;
+        const float reflectionWidth=(contentW-8.0f)*0.5f;
+        if (mouseInteractive && engine::Button(ui,smallConfig,input,assets,
+                    "refresh_runtime_reflections",{panel.x+padding,y,reflectionWidth,rowH},smallFont,"Refresh Reflections"))
+            result.requestRefreshReflections=true;
+        if (mouseInteractive && engine::Button(ui,smallConfig,input,assets,
+                    "pause_runtime_reflections",{panel.x+padding+reflectionWidth+8,y,reflectionWidth,rowH},smallFont,"Pause / Resume Reflections"))
+            result.requestPauseReflections=true;
+        y+=rowH+6.0f;
 
         const float distanceLabelW = 144.0f;
         const float distanceInputW = 104.0f;

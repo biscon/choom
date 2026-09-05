@@ -8494,8 +8494,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -8596,7 +8595,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "54ea8f9913d1033b",
+    "sourceHash": "7270ca6676fffd5e",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -8604,19 +8603,19 @@
         0.0
       ],
       "rgbMax": [
-        2.203125,
-        1.564453125,
-        1.564453125
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 195
+      "rgbChannelsAboveOne": 839
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "54ea8f9913d1033b",
+      "sourceHash": "7270ca6676fffd5e",
       "count": 3955,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -8629,30 +8628,24 @@
           0.0
         ],
         "rgbMax": [
-          2.204270601272583,
-          1.935850739479065,
-          1.8489267826080322
+          2.192941665649414,
+          1.9389466047286987,
+          1.8518656492233276
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23730,
-        "rgbChannelsAboveOne": 35
+        "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "54ea8f9913d1033b",
+      "sourceHash": "7270ca6676fffd5e",
       "modelCount": 54,
       "objectCount": 161,
       "format": "staticModelUvRemapF32LE"
     }
-  },
-  "bakedReflectionProbes": {
-    "path": "assets/levels/hub/hub.reflection-probes.bin",
-    "version": 1,
-    "count": 14,
-    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
