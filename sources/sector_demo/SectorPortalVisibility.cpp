@@ -23,7 +23,6 @@ constexpr float PortalVisibilityNearDistance = 0.125f;
 constexpr float kMaxVisibilitySeedRadiusWorld = 0.5f;
 constexpr float VisibilitySeedVerticalToleranceWorld = 0.75f;
 constexpr float WindowEpsilon = 0.0001f;
-constexpr size_t MaxWindowsPerSector = 8;
 
 struct AngularWindow {
     float min = 0.0f;
@@ -34,12 +33,6 @@ struct PortalSpan {
     AngularWindow windows[2];
     size_t count = 0;
     bool full = false;
-};
-
-struct PortalVisibilityTest {
-    bool visible = false;
-    bool uncertain = false;
-    AngularWindow clippedWindow;
 };
 
 struct ViewTraversalItem {
@@ -393,88 +386,6 @@ bool IsFiniteWindow(AngularWindow window)
     return std::isfinite(window.min) && std::isfinite(window.max) && window.min <= window.max;
 }
 
-AngularWindow ClampToWindow(AngularWindow window, AngularWindow bounds)
-{
-    if (!IsFiniteWindow(window) || !IsFiniteWindow(bounds)) {
-        return window;
-    }
-
-    AngularWindow clamped{
-            std::max(window.min, bounds.min),
-            std::min(window.max, bounds.max)};
-    if (clamped.max + WindowEpsilon < clamped.min) {
-        return window;
-    }
-    if (clamped.max < clamped.min) {
-        const float center = (clamped.min + clamped.max) * 0.5f;
-        clamped.min = center;
-        clamped.max = center;
-    }
-    return clamped;
-}
-
-bool AngleInWindow(float angle, AngularWindow window, float margin)
-{
-    if (!std::isfinite(angle) || !IsFiniteWindow(window)) {
-        return true;
-    }
-    return angle + margin >= window.min && angle - margin <= window.max;
-}
-
-Vector2 DirectionAtRelativeAngle(Vector2 forward, float angle)
-{
-    const Vector2 right{-forward.y, forward.x};
-    return Vector2{
-            forward.x * std::cos(angle) + right.x * std::sin(angle),
-            forward.y * std::cos(angle) + right.y * std::sin(angle)};
-}
-
-bool SegmentIntersectsRay(Vector2 a, Vector2 b, Vector2 rayOrigin, Vector2 rayDirection)
-{
-    const Vector2 segment{b.x - a.x, b.y - a.y};
-    const float denominator = Cross(rayDirection, segment);
-    if (!std::isfinite(denominator)) {
-        return true;
-    }
-    if (std::fabs(denominator) <= WindowEpsilon) {
-        return false;
-    }
-
-    const Vector2 toSegment{a.x - rayOrigin.x, a.y - rayOrigin.y};
-    const float rayT = Cross(toSegment, segment) / denominator;
-    const float segmentT = Cross(toSegment, rayDirection) / denominator;
-    if (!std::isfinite(rayT) || !std::isfinite(segmentT)) {
-        return true;
-    }
-
-    return rayT >= -WindowEpsilon
-            && segmentT >= -WindowEpsilon
-            && segmentT <= 1.0f + WindowEpsilon;
-}
-
-bool PortalSegmentCrossesWindowBoundary(
-        Vector2 origin,
-        Vector2 forward,
-        const RuntimePortalEdge& edge,
-        AngularWindow window)
-{
-    if (!IsFiniteWindow(window)) {
-        return true;
-    }
-
-    const Vector2 minDirection = DirectionAtRelativeAngle(forward, window.min);
-    const Vector2 maxDirection = DirectionAtRelativeAngle(forward, window.max);
-    if (!std::isfinite(minDirection.x)
-            || !std::isfinite(minDirection.y)
-            || !std::isfinite(maxDirection.x)
-            || !std::isfinite(maxDirection.y)) {
-        return true;
-    }
-
-    return SegmentIntersectsRay(edge.a, edge.b, origin, minDirection)
-            || SegmentIntersectsRay(edge.a, edge.b, origin, maxDirection);
-}
-
 PortalSpan ComputePortalSpan(Vector2 origin, Vector2 forward, const RuntimePortalEdge& edge)
 {
     PortalSpan span;
@@ -538,43 +449,28 @@ PortalSpan ComputePortalSpan(Vector2 origin, Vector2 forward, const RuntimePorta
     return span;
 }
 
-bool IntersectWindows(AngularWindow a, AngularWindow b, AngularWindow& out, float margin = WindowEpsilon)
+bool IntersectWindows(AngularWindow a, AngularWindow b, AngularWindow& out)
 {
     if (!IsFiniteWindow(a) || !IsFiniteWindow(b)) {
-        out = WidenWindow(a, PortalVisibilityAngularMarginRadians);
+        out = a;
         return true;
     }
 
     out.min = std::max(a.min, b.min);
     out.max = std::min(a.max, b.max);
-    if (out.max + margin < out.min) {
-        return false;
-    }
-    if (out.max < out.min) {
-        const float center = (out.min + out.max) * 0.5f;
-        out.min = center;
-        out.max = center;
-    }
-    return true;
+    return out.min <= out.max;
 }
 
 bool ContainsWindow(AngularWindow outer, AngularWindow inner)
 {
-    return outer.min <= inner.min + WindowEpsilon
-            && outer.max + WindowEpsilon >= inner.max;
+    return outer.min <= inner.min && outer.max >= inner.max;
 }
 
 bool AddReachedWindow(
         std::unordered_map<int, std::vector<AngularWindow>>& windowsBySector,
         int sectorId,
-        AngularWindow window,
-        AngularWindow* outReachedWindow = nullptr,
-        bool* outCoalesced = nullptr)
+        AngularWindow window)
 {
-    if (outCoalesced != nullptr) {
-        *outCoalesced = false;
-    }
-
     std::vector<AngularWindow>& windows = windowsBySector[sectorId];
     for (const AngularWindow& existing : windows) {
         if (ContainsWindow(existing, window)) {
@@ -585,120 +481,127 @@ bool AddReachedWindow(
     AngularWindow reached = window;
     for (std::size_t i = 0; i < windows.size();) {
         const AngularWindow existing = windows[i];
-        if (reached.max + WindowEpsilon < existing.min
-                || existing.max + WindowEpsilon < reached.min) {
+        if (reached.max < existing.min || existing.max < reached.min) {
             ++i;
             continue;
         }
         reached.min = std::min(reached.min, existing.min);
         reached.max = std::max(reached.max, existing.max);
         windows.erase(windows.begin() + static_cast<std::ptrdiff_t>(i));
-    }
-
-    if (windows.size() >= MaxWindowsPerSector) {
-        for (const AngularWindow& existing : windows) {
-            reached.min = std::min(reached.min, existing.min);
-            reached.max = std::max(reached.max, existing.max);
-        }
-        windows.clear();
-        if (outCoalesced != nullptr) {
-            *outCoalesced = true;
-        }
+        i = 0; // The enlarged union may now overlap an earlier interval.
     }
 
     windows.push_back(reached);
-    if (outReachedWindow != nullptr) {
-        *outReachedWindow = reached;
-    }
     return true;
 }
 
-PortalVisibilityTest TestPortalAgainstWindow(
+PortalSpan TestPortalAgainstWindow(
         Vector2 origin,
         Vector2 forward,
         const RuntimePortalEdge& edge,
         AngularWindow currentWindow)
 {
-    PortalVisibilityTest result;
-    result.clippedWindow = currentWindow;
-
-    if (!IsFiniteWindow(currentWindow)
-            || !std::isfinite(edge.a.x)
-            || !std::isfinite(edge.a.y)
-            || !std::isfinite(edge.b.x)
-            || !std::isfinite(edge.b.y)) {
-        result.visible = true;
-        result.uncertain = true;
-        return result;
-    }
-
-    if (DistanceSquaredPointToSegment(origin, edge.a, edge.b)
-            <= PortalVisibilityNearDistance * PortalVisibilityNearDistance) {
-        result.visible = true;
-        return result;
-    }
-
-    const Vector2 toA{edge.a.x - origin.x, edge.a.y - origin.y};
-    const Vector2 toB{edge.b.x - origin.x, edge.b.y - origin.y};
-    if (LengthSquared(toA) <= PortalVisibilityNearDistance * PortalVisibilityNearDistance
-            || LengthSquared(toB) <= PortalVisibilityNearDistance * PortalVisibilityNearDistance) {
-        result.visible = true;
-        return result;
-    }
-
-    const float angleA = RelativeAngle(origin, forward, edge.a);
-    const float angleB = RelativeAngle(origin, forward, edge.b);
-    if (!std::isfinite(angleA) || !std::isfinite(angleB)) {
-        result.visible = true;
-        result.uncertain = true;
-        return result;
-    }
-
-    if (AngleInWindow(angleA, currentWindow, PortalVisibilityAngularMarginRadians)
-            || AngleInWindow(angleB, currentWindow, PortalVisibilityAngularMarginRadians)) {
-        result.visible = true;
-    }
-
+    PortalSpan result;
     const PortalSpan span = ComputePortalSpan(origin, forward, edge);
-    if (span.full) {
-        result.visible = true;
-        result.clippedWindow = currentWindow;
+    if (span.full || !IsFiniteWindow(currentWindow)) {
+        result.windows[0] = currentWindow;
+        result.count = 1;
         return result;
     }
 
-    AngularWindow bestClipped{};
-    bool hasClipped = false;
-    const AngularWindow paddedCurrent = WidenWindow(currentWindow, PortalVisibilityAngularMarginRadians);
     for (size_t i = 0; i < span.count; ++i) {
         AngularWindow candidate{};
-        const AngularWindow paddedSpan = WidenWindow(span.windows[i], PortalVisibilityAngularMarginRadians);
-        if (IntersectWindows(paddedCurrent, paddedSpan, candidate, PortalVisibilityAngularMarginRadians)) {
-            if (!hasClipped || (candidate.max - candidate.min) > (bestClipped.max - bestClipped.min)) {
-                bestClipped = candidate;
-            }
-            hasClipped = true;
+        // Numerical tolerance belongs to the tested portal, never the inherited
+        // window. Every child remains a subset of its parent's opening.
+        if (IntersectWindows(currentWindow, WidenWindow(span.windows[i], WindowEpsilon), candidate)) {
+            result.windows[result.count++] = candidate;
         }
     }
-
-    if (hasClipped) {
-        result.visible = true;
-        result.clippedWindow = ClampToWindow(bestClipped, currentWindow);
-        return result;
-    }
-
-    if (PortalSegmentCrossesWindowBoundary(origin, forward, edge, paddedCurrent)) {
-        result.visible = true;
-        result.clippedWindow = currentWindow;
-        return result;
-    }
-
-    if (span.count == 0) {
-        result.visible = true;
-        result.uncertain = true;
-        result.clippedWindow = currentWindow;
-    }
-
     return result;
+}
+
+bool PortalFacesCamera(Vector2 origin, const RuntimePortalEdge& edge)
+{
+    if (!edge.hasFacing) return true;
+    const Vector2 direction{edge.b.x - edge.a.x, edge.b.y - edge.a.y};
+    const Vector2 toEye{origin.x - edge.a.x, origin.y - edge.a.y};
+    const float side = Cross(direction, toEye);
+    // Crossing a doorway/footprint-seeding its neighbor remains conservative.
+    return !std::isfinite(side)
+            || side >= -PortalVisibilityNearDistance * std::sqrt(LengthSquared(direction));
+}
+
+// Clip the portal's segment parameter to a positive half-plane. Values are
+// signed world distances; inset the occluded region to preserve grazing views.
+bool ClipOccludedInterval(float a, float b, RuntimePortalSegmentInterval& interval)
+{
+    constexpr float inset = 0.0001f;
+    a -= inset;
+    b -= inset;
+    if (!std::isfinite(a) || !std::isfinite(b)) return false;
+    if (a < 0 && b < 0) return false;
+    if (a >= 0 && b >= 0) return true;
+    const float t = a / (a - b);
+    if (a < 0) interval.min = std::max(interval.min, t);
+    else interval.max = std::min(interval.max, t);
+    return interval.min < interval.max;
+}
+
+bool OccludedPortalInterval(Vector2 origin, float eyeY, const RuntimePortalEdge& edge,
+                            const RuntimeVisibilityWall& wall,
+                            RuntimePortalSegmentInterval& interval)
+{
+    // Only discard sightlines when the wall covers the entire vertical envelope
+    // from the eye to the aperture. Low walls / elevated cameras stay conservative.
+    if (!std::isfinite(eyeY) || !std::isfinite(wall.bottom) || !std::isfinite(wall.top)
+            || !std::isfinite(edge.openBottom) || !std::isfinite(edge.openTop)
+            || wall.bottom > std::min(eyeY, edge.openBottom)
+            || wall.top < std::max(eyeY, edge.openTop)) return false;
+
+    Vector2 rayA{}, rayB{}, wallDirection{};
+    if (!Normalize({wall.a.x - origin.x, wall.a.y - origin.y}, rayA)
+            || !Normalize({wall.b.x - origin.x, wall.b.y - origin.y}, rayB)
+            || !Normalize({wall.b.x - wall.a.x, wall.b.y - wall.a.y}, wallDirection))
+        return false;
+    const float side = Cross(wallDirection, {origin.x - wall.a.x, origin.y - wall.a.y});
+    const float winding = Cross(rayA, rayB);
+    if (std::fabs(side) <= PortalVisibilityNearDistance || std::fabs(winding) < WindowEpsilon)
+        return false;
+    const float sign = winding > 0 ? 1.0f : -1.0f;
+    const float farSign = side > 0 ? -1.0f : 1.0f;
+    const Vector2 toA{edge.a.x - origin.x, edge.a.y - origin.y};
+    const Vector2 toB{edge.b.x - origin.x, edge.b.y - origin.y};
+    interval = {0, 1};
+    return ClipOccludedInterval(sign * Cross(rayA, toA), sign * Cross(rayA, toB), interval)
+            && ClipOccludedInterval(sign * Cross(toA, rayB), sign * Cross(toB, rayB), interval)
+            && ClipOccludedInterval(
+                    farSign * Cross(wallDirection, {edge.a.x - wall.a.x, edge.a.y - wall.a.y}),
+                    farSign * Cross(wallDirection, {edge.b.x - wall.a.x, edge.b.y - wall.a.y}),
+                    interval);
+}
+
+void ClipPortalAgainstWalls(Vector2 origin, float eyeY, const RuntimePortalEdge& edge,
+                            const RuntimeSectorNode& node, RuntimePortalVisibilityScratch& scratch)
+{
+    scratch.fragments.clear();
+    scratch.fragments.push_back({0, 1});
+    for (const auto& wall : node.walls) {
+        RuntimePortalSegmentInterval hidden;
+        if (!OccludedPortalInterval(origin, eyeY, edge, wall, hidden)) continue;
+        scratch.nextFragments.clear();
+        for (const auto& fragment : scratch.fragments) {
+            if (hidden.max <= fragment.min || hidden.min >= fragment.max) {
+                scratch.nextFragments.push_back(fragment);
+                continue;
+            }
+            if (hidden.min > fragment.min)
+                scratch.nextFragments.push_back({fragment.min, hidden.min});
+            if (hidden.max < fragment.max)
+                scratch.nextFragments.push_back({hidden.max, fragment.max});
+        }
+        scratch.fragments.swap(scratch.nextFragments);
+        if (scratch.fragments.empty()) break;
+    }
 }
 
 bool AppendDirectedPortal(
@@ -733,9 +636,21 @@ bool AppendDirectedPortal(
     edge.openBottom = openBottom;
     edge.openTop = openTop;
     edge.open = openBottom < openTop;
+    edge.hasFacing = true;
 
     node->outgoingPortalEdgeIndices.push_back(static_cast<int>(graph.portals.size()));
     graph.portals.push_back(edge);
+    // Match generated lower/upper wall strips, including sky-sky suppression.
+    // A closed height interval alone is not proof of an opaque full-height wall.
+    if (toSector.floorZ > fromSector.floorZ) {
+        node->walls.push_back({a, b, SectorAuthoringToWorldDistance(fromSector.floorZ),
+                              SectorAuthoringToWorldDistance(toSector.floorZ)});
+    }
+    if (!(fromSector.ceilingSky && toSector.ceilingSky)
+            && toSector.ceilingZ < fromSector.ceilingZ) {
+        node->walls.push_back({a, b, SectorAuthoringToWorldDistance(toSector.ceilingZ),
+                              SectorAuthoringToWorldDistance(fromSector.ceilingZ)});
+    }
     return true;
 }
 
@@ -777,6 +692,15 @@ bool BuildLookupTables(
 }
 
 } // namespace
+
+void ReserveRuntimePortalVisibilityScratch(
+        const RuntimeSectorVisibilityGraph& graph, RuntimePortalVisibilityScratch& scratch)
+{
+    std::size_t capacity = 1;
+    for (const auto& node : graph.sectors) capacity = std::max(capacity, node.walls.size() + 1);
+    scratch.fragments.reserve(capacity);
+    scratch.nextFragments.reserve(capacity);
+}
 
 const RuntimeSectorNode* FindRuntimeSectorVisibilityNode(
         const RuntimeSectorVisibilityGraph& graph,
@@ -837,6 +761,18 @@ bool BuildRuntimeSectorVisibilityGraph(
                                       + " has no sidedefs");
         }
         if (!hasFront || !hasBack) {
+            const auto side = sideDefsById.find(hasFront ? lineDef.frontSideDefId : lineDef.backSideDefId);
+            if (side == sideDefsById.end() || side->second->lineDefId != lineDef.id
+                    || sectorsById.find(side->second->sectorId) == sectorsById.end()) {
+                outGraph = RuntimeSectorVisibilityGraph{};
+                return SetError(outError, "visibility wall has a missing or invalid sidedef/sector");
+            }
+            const auto& sector = *sectorsById.at(side->second->sectorId);
+            FindNode(outGraph, sector.id)->walls.push_back({
+                    SectorCoordToWorldPosition2(startIt->second->x, startIt->second->y),
+                    SectorCoordToWorldPosition2(endIt->second->x, endIt->second->y),
+                    SectorAuthoringToWorldDistance(sector.floorZ),
+                    SectorAuthoringToWorldDistance(sector.ceilingZ)});
             continue;
         }
 
@@ -1029,7 +965,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorCaptureVisibility(
         const RuntimeSectorVisibilityGraph& graph, const Camera3D& camera,
         const RuntimePortalVisibilityResult& connected,
         const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers,
-        size_t iterationCap)
+        size_t iterationCap,
+        RuntimePortalVisibilityScratch* scratch)
 {
     const Vector2 forward{camera.target.x - camera.position.x,
                           camera.target.z - camera.position.z};
@@ -1040,7 +977,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorCaptureVisibility(
         return connected;
     auto visible = ComputeRuntimeSectorVisibilityFromViewSeeds(graph,
             {camera.position.x, camera.position.z}, forward, camera.fovy * Pi / 180.0f,
-            connected.startSectorIds, connected.startSectorId, iterationCap, dynamicBlockers);
+            connected.startSectorIds, connected.startSectorId, iterationCap, dynamicBlockers,
+            camera.position.y, scratch);
     return !visible.validStartSector || visible.fallbackDrawAll ? connected : visible;
 }
 
@@ -1096,7 +1034,9 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         const std::vector<int>& startSectorIds,
         int preferredStartSectorId,
         size_t iterationCap,
-        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers,
+        float eyeYWorld,
+        RuntimePortalVisibilityScratch* scratch)
 {
     RuntimePortalVisibilityResult result;
     result.mode = "view-aware portal traversal";
@@ -1130,7 +1070,13 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
     result.fallbackDrawAll = false;
 
     const float clampedFov = std::clamp(horizontalFovRadians, WindowEpsilon, TwoPi);
-    const AngularWindow initialWindow{-clampedFov * 0.5f, clampedFov * 0.5f};
+    // A small FOV guard is applied once, never recursively at each doorway.
+    const AngularWindow initialWindow = WidenWindow(
+            {-clampedFov * 0.5f, clampedFov * 0.5f}, PortalVisibilityAngularMarginRadians);
+
+    RuntimePortalVisibilityScratch localScratch;
+    if (!scratch) scratch = &localScratch;
+    ReserveRuntimePortalVisibilityScratch(graph, *scratch);
 
     std::unordered_set<int> visible;
     std::unordered_map<int, std::vector<AngularWindow>> windowsBySector;
@@ -1147,7 +1093,6 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
             : iterationCap;
     size_t iterations = 0;
     bool hitIterationCap = false;
-    bool coalescedWindowCoverage = false;
 
     while (!pending.empty()) {
         if (++iterations > cap) {
@@ -1169,35 +1114,33 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
             }
 
             const RuntimePortalEdge& edge = graph.portals[static_cast<size_t>(edgeIndex)];
-            if (!edge.open) {
+            if (!edge.open || !PortalFacesCamera(xz, edge)) {
                 continue;
             }
 
-            const PortalVisibilityTest portalVisibility =
-                    TestPortalAgainstWindow(xz, normalizedForward, edge, item.window);
-            if (!portalVisibility.visible) {
+            if (TestPortalAgainstWindow(xz, normalizedForward, edge, item.window).count == 0)
                 continue;
-            }
-            if (IsRuntimePortalDynamicallyBlocked(edge, dynamicBlockers)) {
-                result.boundarySurfaceSectorIds.push_back(edge.toSectorId);
-                continue;
-            }
-
-            result.traversedPortalLineDefIds.push_back(edge.lineDefId);
-            visible.insert(edge.toSectorId);
-            AngularWindow reachedWindow = portalVisibility.clippedWindow;
-            bool coalescedForSector = false;
-            if (AddReachedWindow(
-                        windowsBySector,
-                        edge.toSectorId,
-                        portalVisibility.clippedWindow,
-                        &reachedWindow,
-                        &coalescedForSector)) {
-                coalescedWindowCoverage = coalescedWindowCoverage
-                        || coalescedForSector;
-                pending.push_back(ViewTraversalItem{
-                        edge.toSectorId,
-                        reachedWindow});
+            ClipPortalAgainstWalls(xz, eyeYWorld, edge, *node, *scratch);
+            for (const auto& fragment : scratch->fragments) {
+                RuntimePortalEdge clippedEdge = edge;
+                clippedEdge.a = {edge.a.x + (edge.b.x - edge.a.x) * fragment.min,
+                                 edge.a.y + (edge.b.y - edge.a.y) * fragment.min};
+                clippedEdge.b = {edge.a.x + (edge.b.x - edge.a.x) * fragment.max,
+                                 edge.a.y + (edge.b.y - edge.a.y) * fragment.max};
+                const auto windows = TestPortalAgainstWindow(xz, normalizedForward, clippedEdge, item.window);
+                if (windows.count == 0) continue;
+                if (IsRuntimePortalDynamicallyBlocked(edge, dynamicBlockers)) {
+                    result.boundarySurfaceSectorIds.push_back(edge.toSectorId);
+                    break;
+                }
+                result.traversedPortalLineDefIds.push_back(edge.lineDefId);
+                visible.insert(edge.toSectorId);
+                for (size_t i = 0; i < windows.count; ++i) {
+                    if (AddReachedWindow(windowsBySector, edge.toSectorId, windows.windows[i])) {
+                        // Enqueue this path only, not the accumulated sector-wide union.
+                        pending.push_back({edge.toSectorId, windows.windows[i]});
+                    }
+                }
             }
         }
     }
@@ -1216,9 +1159,7 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         return connected;
     } else {
         result.visibleSectorIds.assign(visible.begin(), visible.end());
-        result.status = coalescedWindowCoverage
-                ? "visibility traversal complete; angular windows coalesced"
-                : "visibility traversal complete";
+        result.status = "visibility traversal complete";
     }
 
     FinalizeVisibilitySectorSets(result);
@@ -1237,7 +1178,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         float visibilitySeedRadiusWorld,
         float eyeYWorld,
         bool validateEyeY,
-        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers,
+        RuntimePortalVisibilityScratch* scratch)
 {
     if (collisionWorld == nullptr
             && FindRuntimeSectorVisibilityNode(graph, preferredStartSectorId) == nullptr) {
@@ -1267,7 +1209,9 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
             seeds.sectorIds,
             seeds.primarySectorId,
             iterationCap,
-            dynamicBlockers);
+            dynamicBlockers,
+            eyeYWorld,
+            scratch);
 }
 
 bool IsRuntimePortalDynamicallyBlocked(

@@ -1337,6 +1337,7 @@ bool SectorMeshRenderer::RefreshSurfaceGeometryInternal(
     sectorCount = map.sectors.size();
     if (refreshVisibilityData) {
         visibilityGraph = std::move(candidateVisibilityGraph);
+        ReserveRuntimePortalVisibilityScratch(visibilityGraph, visibilityScratch);
         pbrEnvironment.portals = visibilityGraph.portals;
         visibilityGraphValid = candidateVisibilityGraphValid;
         visibilityLookupWorld = std::move(candidateVisibilityLookupWorld);
@@ -1401,6 +1402,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
 
     std::string visibilityError;
     visibilityGraphValid = BuildRuntimeSectorVisibilityGraph(map, visibilityGraph, &visibilityError);
+    ReserveRuntimePortalVisibilityScratch(visibilityGraph, visibilityScratch);
     if (!visibilityGraphValid) {
         std::fprintf(stderr, "[SectorDemo WARNING] Visibility graph build failed: %s\n", visibilityError.c_str());
         visibilityGraph = {};
@@ -2494,7 +2496,8 @@ void SectorMeshRenderer::DrawReflectionFace(engine::AssetManager& assets,
     draw.culling.nearPlane = rlGetCullDistanceNear();
     draw.culling.farPlane = rlGetCullDistanceFar();
     draw.visibility = ComputeRuntimeSectorCaptureVisibility(
-            visibilityGraph, draw.camera, draw.connectedVisibility, &pbrEnvironment.blockers);
+            visibilityGraph, draw.camera, draw.connectedVisibility, &pbrEnvironment.blockers,
+            0, &visibilityScratch);
     BeginTextureMode(target.native);ClearBackground(BLACK);
     DrawScene(assets,true,world,lighting,SectorTopologyFogSettings{},true,{},&draw);
     rlDrawRenderBatchActive();EndTextureMode();
@@ -3396,7 +3399,8 @@ void SectorMeshRenderer::UpdateVisibilityDebug(
                 visibilitySeedRadiusWorld,
                 camera.position.y,
                 validateEyeY,
-                dynamicPortalBlockers);
+                dynamicPortalBlockers,
+                &visibilityScratch);
     }
     portalVisibilityDebugText = FormatRuntimePortalVisibilityDebugText(visibilityResult);
     visibilityDebugText = portalVisibilityDebugText;

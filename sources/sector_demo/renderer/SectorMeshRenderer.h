@@ -364,6 +364,7 @@ private:
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
     RuntimeSectorVisibilityGraph visibilityGraph;
+    RuntimePortalVisibilityScratch visibilityScratch;
     RuntimePortalVisibilityResult visibilityResult;
     std::string portalVisibilityDebugText;
     std::string visibilityDebugText;

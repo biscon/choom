@@ -501,6 +501,39 @@ Portal screen-span clipping:
 - The first traversal result can still be useful for connected-component culling
   and debug validation.
 
+## Current View-Aware Clipping
+
+The current renderer goes beyond the initial connected-component design above:
+
+- Each portal clips its inherited horizontal angular window. The camera FOV
+  gets a one-time guard margin; recursive windows cannot expand or move outside
+  their parent opening. Both halves of a portal crossing the angle seam survive.
+- Separate windows remain separate. Only overlapping coverage is merged for
+  visited-state tracking; there is no eight-window coalescing across hidden gaps.
+- Directed topology portals reject reverse traversal, except for a conservative
+  near-plane allowance while crossing doorways.
+- Solid one-sided boundaries and the solid lower/upper strips of two-sided
+  boundaries are cached per sector when the visibility graph is built/refreshed. This includes
+  walls around holes and bends in concave rooms; authored sectors are not split.
+  Upper-wall suppression between sky sectors is respected.
+- A wall removes only portal-segment portions behind it, using its two angular
+  boundary planes and its depth plane. Partial occlusion can produce multiple
+  independent openings. Occlusion is used only if the wall covers the complete
+  vertical envelope from the camera eye to the portal aperture; low walls,
+  elevated cameras, grazing edges, and near-camera ambiguity remain conservative.
+- The new wall-fragment scratch buffers are reserved at renderer graph-build time
+  and reused for main-view and sequential reflection-face queries.
+
+This remains conservative sector-level visibility, not exact per-pixel or mesh
+occlusion: a visible sliver includes its whole authored sector. Dynamic door
+blockers still terminate traversal and retain the existing adjacent boundary
+geometry behavior. Invalid-input and explicit traversal-cap fallbacks remain
+reported in the debug status. Connectivity queries for lighting are unchanged.
+
+Wall-cache refresh follows the existing visibility-graph rebuild path. There are
+no authoring mutations, additional topology derivations during rendering, 2D
+cache invalidation changes, collision changes, or lightmap source-hash changes.
+
 ## Design: Debug Visibility Output
 
 Keep debug output simple and testable:
