@@ -1098,11 +1098,32 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 const auto& reflectionStats=preview.ReflectionStats();
                 addKeyValue("reflection probes", TextFormat("placed %zu | ready %zu | queued %zu | failed %zu",
                         reflectionProbeCount,reflectionStats.ready,reflectionStats.queued,reflectionStats.failed));
+                const auto probeIds = [](const std::vector<int>& ids) {
+                    std::string text;
+                    for (int id : ids) {
+                        if (!text.empty()) text += ",";
+                        text += std::to_string(id);
+                    }
+                    return text.empty() ? std::string("none") : text;
+                };
+                addKeyValue("demanded probes", probeIds(reflectionStats.demandedProbeIds));
+                addKeyValue("demanded dirty", probeIds(reflectionStats.demandedDirtyProbeIds));
+                addKeyValue("deferred dirty", probeIds(reflectionStats.deferredDirtyProbeIds));
+                const char* stages[] = {"idle", "shadows", "scene", "filter"};
+                addKeyValue("capture stage", TextFormat("%s | demand cancellations %zu",
+                        stages[static_cast<std::size_t>(reflectionStats.stage)], reflectionStats.cancelled));
                 addKeyValue("capture",TextFormat("probe %d | face %d/6 | mip %d | %s",
                         reflectionStats.activeProbeId,reflectionStats.face,reflectionStats.mip,
                         preview.RuntimeReflectionsPaused()?"paused":"scheduled"));
-                addKeyValue("reflection cost",TextFormat("GPU %.3f ms | CPU %.3f ms | target 0.5 ms | overruns %zu",
+                addKeyValue("reflection cost",TextFormat("last GPU %.3f ms | frame CPU %.3f ms | filter target 0.5 ms | overruns %zu",
                         reflectionStats.gpuMilliseconds,reflectionStats.cpuMilliseconds,reflectionStats.overruns));
+                for (std::size_t i = 1; i < 4; ++i) {
+                    addKeyValue(stages[i], TextFormat("frame CPU %.3f ms | last completed GPU %.3f ms",
+                            reflectionStats.stageCpuMilliseconds[i], reflectionStats.lastStageGpuMilliseconds[i]));
+                }
+                addKeyValue("capture geometry", TextFormat("batches draw/cull %zu/%zu | objects %zu/%zu",
+                        reflectionStats.batchesDrawn, reflectionStats.batchesCulled,
+                        reflectionStats.objectsDrawn, reflectionStats.objectsCulled));
                 addKeyValue("reflection memory",TextFormat("%.1f MiB",reflectionStats.allocationBytes/1048576.0));
                 const bool selectedReflectionProbe =
                         selectionState.selectedAuthoring.kind

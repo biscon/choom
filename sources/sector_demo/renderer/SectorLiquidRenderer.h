@@ -60,6 +60,7 @@ private:
         Mesh mesh = {};
         SectorLiquidSettings settings;
         Vector3 center = {};
+        BoundingBox bounds{};
         float surfaceY = 0.0f;
     };
 

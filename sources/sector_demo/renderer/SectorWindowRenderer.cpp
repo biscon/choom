@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorWindowRenderer.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/ecs/World.h"
@@ -656,7 +657,12 @@ void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
             const Vector3 portalNormal{window.normal.x, 0.0f, window.normal.y};
             const bool back=Vector3DotProduct(Vector3Subtract(context.camera.position,transform.position),portalNormal)>0;
             const Vector3 receiver=Vector3Add(transform.position,Vector3Scale(portalNormal,back?0.25f:-0.25f));
-            reflectionBlend=SelectSectorPbrEnvironmentBlend(*context.environment,receiver,back?window.backSectorId:window.frontSectorId);
+            const BoundingBox reflectionBounds = TransformSectorDoorModelBounds(
+                    {{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}},
+                    BuildSectorWindowModelMatrix(transform, window));
+            reflectionBlend=SelectSectorPbrEnvironmentBlend(*context.environment,receiver,back?window.backSectorId:window.frontSectorId,
+                    true, nullptr, SectorReflectionDemandForBounds(
+                            context.environment->demandCollector, reflectionBounds));
         }
         UploadSectorReflectionBlend(shader,reflectionLocations,reflectionBlend,*context.assets);
         const auto& selection = reflectionBlend.first;

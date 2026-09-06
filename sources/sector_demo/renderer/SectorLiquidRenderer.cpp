@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorLiquidRenderer.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/render/ColorTransfer.h"
@@ -355,6 +356,11 @@ bool SectorLiquidRenderer::Rebuild(
                         generated.vertices[i].position.x,
                         surfaceY,
                         generated.vertices[i].position.z};
+                if (i == 0) candidate.bounds = {position, position};
+                else {
+                    candidate.bounds.min = Vector3Min(candidate.bounds.min, position);
+                    candidate.bounds.max = Vector3Max(candidate.bounds.max, position);
+                }
                 candidate.mesh.vertices[i * 3 + 0] = position.x;
                 candidate.mesh.vertices[i * 3 + 1] = position.y;
                 candidate.mesh.vertices[i * 3 + 2] = position.z;
@@ -486,7 +492,9 @@ void SectorLiquidRenderer::Draw(const SectorLiquidDrawContext& context)
         if (flowParamsLoc >= 0) SetShaderValue(shader, flowParamsLoc, &flow, SHADER_UNIFORM_VEC2);
 
         const auto reflectionBlend=context.environment
-                ? SelectSectorPbrEnvironmentBlend(*context.environment,surface.center,surface.sectorId)
+                ? SelectSectorPbrEnvironmentBlend(*context.environment,surface.center,surface.sectorId,
+                        true, nullptr, SectorReflectionDemandForBounds(
+                                context.environment->demandCollector, surface.bounds))
                 : SectorPbrEnvironmentBlend{};
         UploadSectorReflectionBlend(shader,reflectionLocations,reflectionBlend,*context.assets);
         const auto& selection = reflectionBlend.first;

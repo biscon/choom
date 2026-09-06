@@ -16,6 +16,14 @@ namespace game {
 
 struct SectorTopologyMap;
 
+// Written only by main-view receiver draws, consumed at the next frame boundary.
+struct SectorReflectionDemand {
+    std::vector<unsigned char> collecting;
+    std::vector<unsigned char> requested;
+    Camera3D camera{};
+    float aspect = 1.0f, nearPlane = 0.01f, farPlane = 1000.0f;
+};
+
 struct SectorPbrEnvironment {
     engine::TextureHandle cubemap = engine::NullTextureHandle();
     struct LocalProbe {
@@ -37,6 +45,8 @@ struct SectorPbrEnvironment {
     std::vector<LocalProbe> localProbes;
     std::vector<RuntimePortalEdge> portals;
     std::vector<RuntimePortalDynamicBlocker> blockers;
+    // Explicit non-owning draw context; owned by the runtime capture backend.
+    SectorReflectionDemand* demandCollector = nullptr;
     double seconds = 0.0;
     bool active = false;
     bool usedSky = false;
@@ -73,7 +83,8 @@ struct SectorPbrEnvironmentBlend {
 SectorPbrEnvironmentBlend SelectSectorPbrEnvironmentBlend(
         const SectorPbrEnvironment& environment, Vector3 receiverPosition,
         int receiverSectorId = -1, bool includeLocalProbes = true,
-        const BoundingBox* receiverBounds = nullptr);
+        const BoundingBox* receiverBounds = nullptr,
+        SectorReflectionDemand* demand = nullptr);
 float SectorReflectionBlendWeight(const SectorPbrEnvironmentBlend& blend,
         Vector3 position);
 

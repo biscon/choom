@@ -72,6 +72,7 @@ struct SectorDoorDynamicLightContext {
 };
 
 struct SectorDoorDrawContext {
+    SectorReflectionCaptureCulling* captureCulling = nullptr;
     const SectorPbrEnvironment* reflectionEnvironment = nullptr;
     engine::AssetManager* assets = nullptr;
     engine::World* runtimeObjectWorld = nullptr;

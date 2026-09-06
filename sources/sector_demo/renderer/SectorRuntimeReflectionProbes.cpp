@@ -73,12 +73,21 @@ bool SectorRuntimeReflectionProbes::Initialize(
     std::size_t lightCapacity, std::size_t receiverCapacity, std::size_t objectCapacity)
 {
     Shutdown();
+    demand.collecting.assign(environment.localProbes.size(), 0);
+    demand.requested.assign(environment.localProbes.size(), 0);
+    environment.demandCollector = &demand;
+    stats.demandedProbeIds.reserve(environment.localProbes.size());
+    stats.demandedDirtyProbeIds.reserve(environment.localProbes.size());
+    stats.deferredDirtyProbeIds.reserve(environment.localProbes.size());
     observed.reserve(lightCapacity + 2);
     current.reserve(lightCapacity + 2);
     snapshot.reserve(lightCapacity + 2);
     doors.reserve(objectCapacity);
     environment.blockers.reserve(environment.portals.size());
     draw.visibility.visibleSectorIds.reserve(receiverCapacity);
+    draw.connectedVisibility.visibleSectorIds.reserve(receiverCapacity);
+    draw.connectedVisibility.startSectorIds.reserve(1);
+    draw.connectedVisibility.boundarySurfaceSectorIds.reserve(environment.portals.size());
     captureLights.ReserveReceiverBoundsCapacity(receiverCapacity, objectCapacity);
     captureLights.ReserveCaptureCapacity(lightCapacity + 2, receiverCapacity);
     captureLights.SetShadowMapResolution(256);
@@ -240,7 +249,7 @@ void SectorRuntimeReflectionProbes::Invalidate(SectorPbrEnvironment &e, bool dis
 
 void SectorRuntimeReflectionProbes::ObserveLights(SectorPbrEnvironment &e,
                                                   const SectorDynamicLightingRenderer &lights,
-                                                  float seconds)
+                                                  float /*seconds*/)
 {
     const std::size_t needed = lights.Sources().size() + 2;
     if (needed > current.capacity())
@@ -259,10 +268,7 @@ void SectorRuntimeReflectionProbes::ObserveLights(SectorPbrEnvironment &e,
         current.push_back(*p);
     for (auto &p : current)
     {
-        p.light.intensity = DynamicLightEffectiveUploadIntensity(p.light, seconds);
-        p.light.flicker = false;
-        p.light.selectionFadeEnabled = false;
-        p.light.selectionFadeMultiplier = 1;
+        p.light = NormalizeSectorReflectionLight(p.light);
     }
     const auto changed = [&](const auto *old, const auto *now)
     {
@@ -362,22 +368,59 @@ bool SectorRuntimeReflectionProbes::FilterTile(engine::AssetManager &assets, uns
     return glGetError() == GL_NO_ERROR;
 }
 
+void SectorRuntimeReflectionProbes::BeginMainViewFrame()
+{
+    AdvanceSectorReflectionDemandFrame(demand);
+}
+
 void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbrEnvironment &e,
                                          SectorMeshRenderer &renderer, engine::World *world,
                                          SectorRuntimeDoorLightingContext doorLighting,
                                          bool preparing)
 {
+    stats.cpuMilliseconds = 0;
+    stats.stageCpuMilliseconds.fill(0);
+    stats.stage = SectorReflectionCaptureStage::Idle;
+    stats.batchesDrawn = stats.batchesCulled = stats.objectsDrawn = stats.objectsCulled = 0;
     if (!initialized || e.localProbes.empty())
         return;
     const auto cpuStart = std::chrono::steady_clock::now();
     stats.ready = stats.failed = stats.queued = stats.required = stats.prepared = 0;
-    for (const auto &p : e.localProbes)
+    stats.demanded = stats.demandedDirty = stats.deferredDirty = 0;
+    stats.demandedProbeIds.clear();
+    stats.demandedDirtyProbeIds.clear();
+    stats.deferredDirtyProbeIds.clear();
+    const auto demanded = [&](std::size_t i) {
+        return IsSectorReflectionProbeDemanded(e, demand, i, preparing);
+    };
+    for (std::size_t i = 0; i < e.localProbes.size(); ++i)
     {
+        const auto &p = e.localProbes[i];
         stats.ready += p.ready;
         stats.failed += p.failed;
         stats.queued += p.dirty && !p.failed;
         stats.required += p.required;
         stats.prepared += p.required && (p.ready || p.failed);
+        const int id = p.definition.sourceAuthoringProbeId;
+        if (demanded(i)) {
+            ++stats.demanded;
+            stats.demandedProbeIds.push_back(id);
+            if (p.dirty && !p.failed) {
+                ++stats.demandedDirty;
+                stats.demandedDirtyProbeIds.push_back(id);
+            }
+        } else if (p.dirty && !p.failed) {
+            ++stats.deferredDirty;
+            stats.deferredDirtyProbeIds.push_back(id);
+        }
+    }
+    const int nextProbe = SelectSectorReflectionProbeUpdate(
+            e, demand, preparing, renderer.Position(), active);
+    if (active >= 0 && nextProbe != active) {
+        // The published cube remains untouched; a future request snapshots anew.
+        active = -1;
+        stats.activeProbeId = -1;
+        ++stats.cancelled;
     }
     if (paused)
         return;
@@ -391,6 +434,8 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
             glGetQueryObjectui64v(queries[querySlot * 2], GL_QUERY_RESULT, &begin);
             glGetQueryObjectui64v(queries[querySlot * 2 + 1], GL_QUERY_RESULT, &end);
             stats.gpuMilliseconds = (end - begin) / 1e6;
+            stats.lastStageGpuMilliseconds[static_cast<std::size_t>(timedStages[querySlot])] =
+                    stats.gpuMilliseconds;
             stats.overruns += stats.gpuMilliseconds > 0.5;
             if (timedTiles[querySlot] > 0)
                 estimatedTileMs = std::max(0.01, stats.gpuMilliseconds / timedTiles[querySlot]);
@@ -399,26 +444,7 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     }
     if (active < 0)
     {
-        double score = -1e30;
-        for (std::size_t i = 0; i < e.localProbes.size(); ++i)
-        {
-            const auto &p = e.localProbes[i];
-            if (!CanStartSectorReflectionProbe(p, e.seconds, preparing))
-                continue;
-            const double priority =
-                (preparing && p.required ? 10000 : 0) +
-                (ShouldDrawRuntimeSectorForVisibility(p.definition.topologySectorId,
-                                                      renderer.VisibilityResult())
-                     ? 100
-                     : 0) +
-                (e.seconds - p.dirtySince) * 10 -
-                Vector3Distance(renderer.Position(), p.definition.capturePositionWorld) * 0.01;
-            if (priority > score)
-            {
-                score = priority;
-                active = static_cast<int>(i);
-            }
-        }
+        active = nextProbe;
         if (active < 0)
         {
             stats.activeProbeId = -1;
@@ -447,6 +473,7 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     {
         ++stats.discarded;
         active = -1;
+        stats.activeProbeId = -1;
         return;
     }
     rlDrawRenderBatchActive();
@@ -493,9 +520,12 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
         glQueryCounter(queries[querySlot * 2], GL_TIMESTAMP);
     bool success = true;
     int tiles = 0;
+    draw.batchesDrawn = draw.batchesCulled = 0;
+    draw.culling.objectsDrawn = draw.culling.objectsCulled = 0;
     SwapDoorPoses(world);
     if (!shadowsReady)
     {
+        stats.stage = SectorReflectionCaptureStage::Shadows;
         renderer.PrepareReflectionShadows(draw, world);
         shadowsReady = !captureLights.HasPendingShadowFaces();
         // Missing/failed alpha assets must not keep a load gate alive forever.
@@ -505,6 +535,7 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     }
     else if (face < 6)
     {
+        stats.stage = SectorReflectionCaptureStage::Scene;
         const int resolution = p.definition.resolution;
         auto &target = targets[resolution == 64 ? 0 : resolution == 128 ? 1 : 2];
         renderer.DrawReflectionFace(assets, draw, p.definition, face, target, world, doorLighting);
@@ -521,6 +552,7 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     }
     else
     {
+        stats.stage = SectorReflectionCaptureStage::Filter;
         const auto *output = assets.GetCubemap(p.inactive);
         const int count = std::clamp(static_cast<int>(0.5 / estimatedTileMs), 1, 6);
         for (int i = 0; i < count && mip < p.mipCount && success; ++i)
@@ -553,6 +585,7 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
         glQueryCounter(queries[querySlot * 2 + 1], GL_TIMESTAMP);
         queryPending[querySlot] = true;
         timedTiles[querySlot] = tiles;
+        timedStages[querySlot] = stats.stage;
     }
     querySlot = (querySlot + 1) % queryPending.size();
     // Restore raylib's current-FBO dimensions as well as OpenGL: BeginMode3D
@@ -629,5 +662,11 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     stats.cpuMilliseconds =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - cpuStart)
             .count();
+    stats.stageCpuMilliseconds[static_cast<std::size_t>(stats.stage)] = stats.cpuMilliseconds;
+    stats.batchesDrawn = draw.batchesDrawn;
+    stats.batchesCulled = draw.batchesCulled;
+    stats.objectsDrawn = draw.culling.objectsDrawn;
+    stats.objectsCulled = draw.culling.objectsCulled;
+    if (active < 0) stats.activeProbeId = -1;
 }
 } // namespace game

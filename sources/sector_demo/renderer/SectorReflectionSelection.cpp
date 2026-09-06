@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 #include <raymath.h>
 #include <algorithm>
 #include <cmath>
@@ -17,10 +18,11 @@ Vector3 ToProbeLocal(Vector3 point, const SectorCompiledReflectionProbe &probe)
 }
 } // namespace
 
-SectorPbrEnvironmentSelection SelectSectorPbrEnvironment(const SectorPbrEnvironment &environment,
+static SectorPbrEnvironmentSelection SelectEnvironment(const SectorPbrEnvironment &environment,
                                                          Vector3 receiverPosition,
                                                          int receiverSectorId,
-                                                         bool includeLocalProbes)
+                                                         bool includeLocalProbes,
+                                                         bool requireReady)
 {
     const SectorPbrEnvironment::LocalProbe *best = nullptr;
     float bestDistanceSquared = 0.0f;
@@ -29,7 +31,7 @@ SectorPbrEnvironmentSelection SelectSectorPbrEnvironment(const SectorPbrEnvironm
         if (!includeLocalProbes)
             break;
         const SectorCompiledReflectionProbe &probe = candidate.definition;
-        if (!probe.enabled || !candidate.ready || engine::IsNull(candidate.cubemap))
+        if (!probe.enabled || (requireReady && (!candidate.ready || engine::IsNull(candidate.cubemap))))
             continue;
         const Vector3 local = ToProbeLocal(receiverPosition, probe);
         if (std::fabs(local.x) > probe.halfExtentsWorld.x ||
@@ -84,6 +86,12 @@ SectorPbrEnvironmentSelection SelectSectorPbrEnvironment(const SectorPbrEnvironm
     return {};
 }
 
+SectorPbrEnvironmentSelection SelectSectorPbrEnvironment(const SectorPbrEnvironment &environment,
+        Vector3 position, int sector, bool includeLocalProbes)
+{
+    return SelectEnvironment(environment, position, sector, includeLocalProbes, true);
+}
+
 namespace
 {
 SectorPbrEnvironmentSelection ProbeSelection(const SectorPbrEnvironment &environment,
@@ -106,12 +114,12 @@ SectorPbrEnvironmentSelection ProbeSelection(const SectorPbrEnvironment &environ
         p.blendDistanceWorld};
 }
 const SectorPbrEnvironment::LocalProbe *ProbeInSector(const SectorPbrEnvironment &environment,
-                                                      int sector, Vector3 position)
+                                                      int sector, Vector3 position, bool requireReady)
 {
     const SectorPbrEnvironment::LocalProbe *best = nullptr;
     for (const auto &p : environment.localProbes)
     {
-        if (!p.ready || !p.definition.enabled || engine::IsNull(p.cubemap) ||
+        if ((requireReady && (!p.ready || engine::IsNull(p.cubemap))) || !p.definition.enabled ||
             p.definition.topologySectorId != sector)
             continue;
         const float distance = Vector3DistanceSqr(position, p.definition.influenceCenterWorld);
@@ -128,17 +136,17 @@ const SectorPbrEnvironment::LocalProbe *ProbeInSector(const SectorPbrEnvironment
 }
 } // namespace
 
-SectorPbrEnvironmentBlend SelectSectorPbrEnvironmentBlend(const SectorPbrEnvironment &environment,
+static SectorPbrEnvironmentBlend SelectBlend(const SectorPbrEnvironment &environment,
                                                           Vector3 position, int sector,
                                                           bool includeLocalProbes,
-                                                          const BoundingBox *bounds)
+                                                          const BoundingBox *bounds, bool requireReady)
 {
     SectorPbrEnvironmentBlend result;
-    result.first = SelectSectorPbrEnvironment(environment, position, sector, includeLocalProbes);
+    result.first = SelectEnvironment(environment, position, sector, includeLocalProbes, requireReady);
     if (!includeLocalProbes)
         return result;
     // A receiver retains its own room's source when seen through another room.
-    const auto *own = ProbeInSector(environment, sector, position);
+    const auto *own = ProbeInSector(environment, sector, position, requireReady);
     if (own)
         result.first = ProbeSelection(environment, *own);
     else if (sector > 0)
@@ -157,7 +165,7 @@ SectorPbrEnvironmentBlend SelectSectorPbrEnvironmentBlend(const SectorPbrEnviron
                         { return b.lineDefId == portal.lineDefId && b.blocksPortal; });
         if (blocked)
             continue;
-        const auto *other = ProbeInSector(environment, portal.toSectorId, position);
+        const auto *other = ProbeInSector(environment, portal.toSectorId, position, requireReady);
         if (!own || !other)
             continue;
         const Vector2 edge = Vector2Subtract(portal.b, portal.a);
@@ -202,7 +210,7 @@ SectorPbrEnvironmentBlend SelectSectorPbrEnvironmentBlend(const SectorPbrEnviron
     float bestDistance = std::numeric_limits<float>::max();
     for (const auto &p : environment.localProbes)
     {
-        if (!p.ready || !p.definition.enabled || p.definition.topologySectorId != sector ||
+        if ((requireReady && !p.ready) || !p.definition.enabled || p.definition.topologySectorId != sector ||
             p.definition.sourceAuthoringProbeId == result.first.probeId)
             continue;
         const Vector3 local = ToProbeLocal(position, p.definition);
@@ -214,6 +222,28 @@ SectorPbrEnvironmentBlend SelectSectorPbrEnvironmentBlend(const SectorPbrEnviron
         {
             result.second = ProbeSelection(environment, p);
             bestDistance = distance;
+        }
+    }
+    return result;
+}
+
+SectorPbrEnvironmentBlend SelectSectorPbrEnvironmentBlend(const SectorPbrEnvironment &environment,
+        Vector3 position, int sector, bool includeLocalProbes, const BoundingBox *bounds,
+        SectorReflectionDemand* demand)
+{
+    const auto result = SelectBlend(environment, position, sector, includeLocalProbes, bounds, true);
+    if (demand && includeLocalProbes && (!bounds
+            || SectorReflectionBoundsInView(demand->camera, demand->aspect,
+                    demand->nearPlane, demand->farPlane, *bounds))) {
+        // Also request the sources that would be chosen once ready. Otherwise a
+        // room first seen after loading could never request its initial capture.
+        const auto potential = SelectBlend(environment, position, sector, true, bounds, false);
+        for (std::size_t i = 0; i < environment.localProbes.size()
+                && i < demand->collecting.size(); ++i) {
+            const int id = environment.localProbes[i].definition.sourceAuthoringProbeId;
+            if (id == result.first.probeId || id == result.second.probeId
+                    || id == potential.first.probeId || id == potential.second.probeId)
+                demand->collecting[i] = 1;
         }
     }
     return result;

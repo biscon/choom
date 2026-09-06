@@ -4,6 +4,7 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "engine/render/RenderTarget.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 #include <array>
 
 namespace game
@@ -15,9 +16,14 @@ struct SectorReflectionCaptureDrawContext
 {
     Camera3D camera{};
     RuntimePortalVisibilityResult visibility;
+    RuntimePortalVisibilityResult connectedVisibility;
     SectorDynamicLightingRenderer *lighting = nullptr;
     float seconds = 0;
+    std::size_t batchesDrawn = 0, batchesCulled = 0;
+    SectorReflectionCaptureCulling culling;
 };
+
+enum class SectorReflectionCaptureStage { Idle, Shadows, Scene, Filter, Count };
 
 struct SectorRuntimeReflectionStats
 {
@@ -25,6 +31,11 @@ struct SectorRuntimeReflectionStats
     int face = 0, mip = 0;
     std::size_t queued = 0, ready = 0, failed = 0, required = 0, prepared = 0;
     std::size_t completed = 0, discarded = 0, overruns = 0;
+    std::size_t demanded = 0, demandedDirty = 0, deferredDirty = 0, cancelled = 0;
+    std::size_t batchesDrawn = 0, batchesCulled = 0, objectsDrawn = 0, objectsCulled = 0;
+    SectorReflectionCaptureStage stage = SectorReflectionCaptureStage::Idle;
+    std::array<double, 4> stageCpuMilliseconds{}, lastStageGpuMilliseconds{};
+    std::vector<int> demandedProbeIds, demandedDirtyProbeIds, deferredDirtyProbeIds;
     double gpuMilliseconds = 0, cpuMilliseconds = 0;
     std::uint64_t allocationBytes = 0;
 };
@@ -52,6 +63,7 @@ class SectorRuntimeReflectionProbes
         return stats;
     }
     bool paused = false;
+    void BeginMainViewFrame();
 
   private:
     bool initialized = false, initialRequired = false;
@@ -70,6 +82,8 @@ class SectorRuntimeReflectionProbes
     std::size_t querySlot = 0;
     double estimatedTileMs = 0.1;
     std::array<int, 4> timedTiles{};
+    std::array<SectorReflectionCaptureStage, 4> timedStages{};
+    SectorReflectionDemand demand;
     struct DoorPose
     {
         engine::Entity entity;

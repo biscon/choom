@@ -31,6 +31,7 @@ struct ModelAsset;
 namespace game {
 
 struct RuntimePortalVisibilityResult;
+struct SectorReflectionCaptureCulling;
 
 constexpr size_t SectorStaticModelMaterialMapCount = 12;
 constexpr int SectorStaticModelLightmapMaterialMap =
@@ -313,7 +314,8 @@ public:
             bool useBakedAmbientOcclusion,
             std::string& renderDebugText,
             bool staticCaptureOnly = false,
-            SectorUseHighlight useHighlight = {});
+            SectorUseHighlight useHighlight = {},
+            SectorReflectionCaptureCulling* captureCulling = nullptr);
 
     void DrawViewmodel(
             engine::AssetManager& assets,
@@ -365,6 +367,7 @@ public:
 
 private:
     const SectorPbrEnvironment* reflectionEnvironment = nullptr;
+    SectorReflectionCaptureCulling* captureCulling = nullptr;
     engine::AssetManager* drawAssets = nullptr;
     SectorPbrEnvironmentBlend environmentBlend;
     SectorReflectionShaderLocations reflectionLocations;

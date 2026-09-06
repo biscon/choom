@@ -1025,6 +1025,25 @@ float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld)
     return std::min(playerRadiusWorld, kMaxVisibilitySeedRadiusWorld);
 }
 
+RuntimePortalVisibilityResult ComputeRuntimeSectorCaptureVisibility(
+        const RuntimeSectorVisibilityGraph& graph, const Camera3D& camera,
+        const RuntimePortalVisibilityResult& connected,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers,
+        size_t iterationCap)
+{
+    const Vector2 forward{camera.target.x - camera.position.x,
+                          camera.target.z - camera.position.z};
+    if (!connected.validStartSector || connected.fallbackDrawAll
+            || !std::isfinite(forward.x) || !std::isfinite(forward.y)
+            || forward.x * forward.x + forward.y * forward.y < 0.000001f
+            || !std::isfinite(camera.fovy) || camera.fovy <= 0 || camera.fovy >= 180)
+        return connected;
+    auto visible = ComputeRuntimeSectorVisibilityFromViewSeeds(graph,
+            {camera.position.x, camera.position.z}, forward, camera.fovy * Pi / 180.0f,
+            connected.startSectorIds, connected.startSectorId, iterationCap, dynamicBlockers);
+    return !visible.validStartSector || visible.fallbackDrawAll ? connected : visible;
+}
+
 float ComputeRuntimePortalVisibilityHorizontalFovRadians(
         float verticalFovRadians,
         float aspectRatio,

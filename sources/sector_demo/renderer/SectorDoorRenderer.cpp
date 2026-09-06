@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorDoorRenderer.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 
 #include "sector_demo/renderer/SectorDynamicShadowSampling.h"
 #include "sector_demo/renderer/SectorFlashlightProfileSampling.h"
@@ -1049,6 +1050,18 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                     return;
                 }
 
+                const int receiverSectorId = object.currentSectorId > 0
+                        ? object.currentSectorId
+                        : (anchor.frontSectorId > 0 ? anchor.frontSectorId : anchor.backSectorId);
+                SectorReceiverBounds receiverBounds{receiverSectorId, transform.position, transform.position};
+                BuildSectorDoorReceiverBounds(transform, object, door, anchor, render,
+                        receiverSectorId, receiverBounds);
+                const BoundingBox reflectionBounds{receiverBounds.min, receiverBounds.max};
+                if (!AcceptSectorReflectionObject(context.captureCulling, reflectionBounds)) {
+                    ++skippedCount;
+                    return;
+                }
+
                 SectorDoorResolvedMaterial resolvedMaterial;
                 if (!render.materialId.empty()
                         && context.materialResolver.resolve != nullptr) {
@@ -1171,23 +1184,6 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                         &resolvedMaterial.roughnessFactor,
                         SHADER_UNIFORM_FLOAT);
 
-                const int receiverSectorId = object.currentSectorId > 0
-                        ? object.currentSectorId
-                        : (anchor.frontSectorId > 0
-                                ? anchor.frontSectorId
-                                : anchor.backSectorId);
-                SectorReceiverBounds receiverBounds{
-                        receiverSectorId,
-                        transform.position,
-                        transform.position};
-                BuildSectorDoorReceiverBounds(
-                        transform,
-                        object,
-                        door,
-                        anchor,
-                        render,
-                        receiverSectorId,
-                        receiverBounds);
                 const SectorStaticSpecularLightContext staticSpecularContext =
                         SelectSectorStaticSpecularLights(
                                 staticSpecularLights,
@@ -1219,7 +1215,9 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                         : Texture2D{};
                 doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
                 const auto blend=context.reflectionEnvironment && !context.pbr.reflectionCapture
-                        ? SelectSectorPbrEnvironmentBlend(*context.reflectionEnvironment,transform.position,object.currentSectorId)
+                        ? SelectSectorPbrEnvironmentBlend(*context.reflectionEnvironment,transform.position,object.currentSectorId,
+                                true, nullptr, SectorReflectionDemandForBounds(
+                                        context.reflectionEnvironment->demandCollector, reflectionBounds))
                         : SectorPbrEnvironmentBlend{};
                 UploadSectorReflectionBlend(doorOpaqueMaterial.shader,doorOpaqueLocations.reflections,blend,*context.assets);
                 DrawMesh(

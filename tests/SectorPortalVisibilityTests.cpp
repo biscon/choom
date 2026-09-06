@@ -1607,8 +1607,53 @@ void TestMalformedReferencesFailCleanly()
 
 } // namespace
 
+void TestCaptureFaceVisibility()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeAdjacent(), graph, &error),
+          "capture fixture builds");
+    const auto connected = game::TraverseRuntimeSectorVisibility(graph, 10);
+    const auto xz = game::SectorCoordToWorldPosition2(32, 32);
+    Camera3D camera{{xz.x, 1, xz.y}, {xz.x + 1, 1, xz.y}, {0, 1, 0}, 90, CAMERA_PERSPECTIVE};
+    const auto toward = game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected);
+    Check(Contains(toward.visibleSectorIds, 20), "capture face toward portal includes neighbor");
+    camera.target.x = xz.x - 1;
+    const auto away = game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected);
+    Check(!Contains(away.visibleSectorIds, 20), "capture face away from portal excludes neighbor");
+    camera.target = {xz.x, 2, xz.y};
+    camera.up = {0, 0, -1};
+    Check(game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected).visibleSectorIds
+                  == connected.visibleSectorIds,
+          "upward capture conservatively retains component for 3D frustum culling");
+    camera.target.y = 0;
+    Check(game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected).visibleSectorIds
+                  == connected.visibleSectorIds,
+          "downward capture conservatively retains component for 3D frustum culling");
+    camera.target = {xz.x + 1, 1, xz.y};
+    camera.up = {0, 1, 0};
+    game::RuntimePortalDynamicBlocker blocker;
+    blocker.lineDefId = 2; blocker.fromSectorId = 10; blocker.toSectorId = 20;
+    blocker.blocksPortal = true;
+    const std::vector<game::RuntimePortalDynamicBlocker> blockers{blocker};
+    const auto closedConnected = game::TraverseRuntimeSectorVisibility(graph, 10, &blockers);
+    const auto closed = game::ComputeRuntimeSectorCaptureVisibility(graph, camera, closedConnected, &blockers);
+    Check(!Contains(closed.visibleSectorIds, 20), "closed door blocks capture traversal");
+    Check(Contains(closed.boundarySurfaceSectorIds, 20), "closed-door terminal boundary geometry is retained");
+    const auto limited = game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected, nullptr, 1);
+    Check(limited.visibleSectorIds == connected.visibleSectorIds && !limited.fallbackDrawAll,
+          "capture traversal cap falls back to component rather than dropping geometry");
+    auto invalidSeed = connected;
+    invalidSeed.startSectorId = 999;
+    invalidSeed.startSectorIds = {999};
+    Check(game::ComputeRuntimeSectorCaptureVisibility(graph, camera, invalidSeed).visibleSectorIds
+                  == connected.visibleSectorIds,
+          "invalid capture traversal uses conservative supplied component");
+}
+
 int main()
 {
+    TestCaptureFaceVisibility();
     TestOneSectorNoPortals();
     TestAdjacentCreatesDirectedEdges();
     TestOneSidedWallCreatesNoPortal();

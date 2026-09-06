@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <raymath.h>
+#include <limits>
 
 namespace
 {
@@ -174,6 +175,137 @@ void TestLightChanges()
     Check(!game::SectorReflectionLightAffectsProbe(a, p.definition),
           "distant changes leave probe clean");
 }
+
+void TestDemandScheduling()
+{
+    game::SectorPbrEnvironment e;
+    e.localProbes = {Probe(3, 1, 0), Probe(9, 2, 5)};
+    e.seconds = 1000;
+    game::SectorReflectionDemand demand;
+    demand.collecting.assign(2, 0);
+    demand.requested.assign(2, 0);
+    Check(game::SelectSectorReflectionProbeUpdate(e, demand, false, {}, -1) == -1,
+          "queue age never starts an unused dirty probe");
+    game::SelectSectorPbrEnvironmentBlend(e, {0, 1, 0}, 1, true, nullptr, &demand);
+    Check(demand.collecting[0] && !demand.collecting[1], "receiver requests only its probe");
+    game::AdvanceSectorReflectionDemandFrame(demand);
+    Check(demand.requested[0] && !demand.collecting[0], "demand crosses one frame boundary");
+    Check(game::SelectSectorReflectionProbeUpdate(e, demand, false, {}, -1) == 0,
+          "demanded dirty probe starts");
+    // Repeated invalidation does not interrupt a demanded continuous snapshot.
+    game::MarkSectorReflectionProbeDirty(e.localProbes[0], e.seconds, false);
+    Check(game::SelectSectorReflectionProbeUpdate(e, demand, false, {}, 0) == 0,
+          "demanded active probe continues");
+    game::SelectSectorPbrEnvironmentBlend(e, {5, 1, 0}, 2, true, nullptr, &demand);
+    game::AdvanceSectorReflectionDemandFrame(demand);
+    const auto original = e.localProbes[0].cubemap;
+    Check(game::SelectSectorReflectionProbeUpdate(e, demand, false, {}, 0) == 1,
+          "lost demand replaces incomplete job with newly demanded probe");
+    Check(e.localProbes[0].dirty && e.localProbes[0].cubemap.index == original.index,
+          "cancellation preserves dirty state and published cubemap");
+    game::AdvanceSectorReflectionDemandFrame(demand);
+    Check(game::SelectSectorReflectionProbeUpdate(e, demand, false, {}, 1) == -1,
+          "no receiver demand cancels the last active capture");
+    e.localProbes[0].required = true;
+    Check(game::SelectSectorReflectionProbeUpdate(e, demand, true, {}, -1) == 0,
+          "loading required probes bypass normal receiver demand");
+    e.localProbes[0].ready = false;
+    e.localProbes[0].cubemap = engine::NullTextureHandle();
+    const auto unready = game::SelectSectorPbrEnvironmentBlend(e, {0, 1, 0}, 1, true, nullptr, &demand);
+    Check(demand.collecting[0] && !unready.first.localProbe,
+          "unready probe is demanded without sampling unpublished textures");
+    game::AdvanceSectorReflectionDemandFrame(demand);
+    game::SelectSectorPbrEnvironmentBlend(e, {5, 1, 0}, 2);
+    Check(!demand.collecting[1], "diagnostic selection without collector never requests work");
+
+    e.localProbes = {Probe(3, 1, -1), Probe(9, 2, 1)};
+    game::RuntimePortalEdge portal;
+    portal.lineDefId = 7; portal.fromSectorId = 1; portal.toSectorId = 2;
+    portal.a = {0, -1}; portal.b = {0, 1}; portal.openBottom = 0; portal.openTop = 2;
+    portal.open = true;
+    e.portals = {portal};
+    e.localProbes[1].ready = false;
+    game::SelectSectorPbrEnvironmentBlend(e, {-0.1f, 1, 0}, 1, true, nullptr, &demand);
+    Check(demand.collecting[0] && demand.collecting[1],
+          "doorway receivers request both blend sources including unready neighbor");
+    game::AdvanceSectorReflectionDemandFrame(demand);
+    game::RuntimePortalDynamicBlocker blocker;
+    blocker.lineDefId = 7; blocker.blocksPortal = true;
+    e.blockers = {blocker};
+    game::SelectSectorPbrEnvironmentBlend(e, {-0.1f, 1, 0}, 1, true, nullptr, &demand);
+    Check(demand.collecting[0] && !demand.collecting[1], "closed doorway stops neighbor demand");
+    game::AdvanceSectorReflectionDemandFrame(demand);
+    e.localProbes[1] = Probe(9, 1, 1);
+    game::SelectSectorPbrEnvironmentBlend(e, {0, 1, 0}, 1, true, nullptr, &demand);
+    Check(demand.collecting[0] && demand.collecting[1], "overlapping same-room blend requests both sources");
+}
+
+void TestSteadyReflectedFlicker()
+{
+    game::SectorPreviewDynamicPointLightUniform light;
+    light.intensity = 3;
+    light.flicker = true;
+    light.selectionFadeEnabled = true;
+    light.selectionFadeMultiplier = 0.2f;
+    const auto capture = game::NormalizeSectorReflectionLight(light);
+    Check(capture.intensity == 3 && !capture.flicker && !capture.selectionFadeEnabled
+                  && capture.selectionFadeMultiplier == 1,
+          "capture preserves base intensity and omits direct-light flicker and selection fade");
+    light.flickerAmount = 0.99f;
+    light.flickerSpeed = 8;
+    Check(game::SectorReflectionLightsMatch(capture, game::NormalizeSectorReflectionLight(light)),
+          "flicker settings do not dirty steady reflection snapshots");
+    Check(light.flicker && light.selectionFadeMultiplier == 0.2f,
+          "normalization does not alter the direct-light source");
+    light.intensity = 2;
+    Check(!game::SectorReflectionLightsMatch(capture, game::NormalizeSectorReflectionLight(light)),
+          "scripted base-intensity edits still refresh reflections");
+    light.intensity = 0;
+    const auto off = game::NormalizeSectorReflectionLight(light);
+    Check(game::SectorReflectionLightDiscontinuity(&capture, &off), "off is never normalized to on");
+}
+
+void TestFaceBoundsCulling()
+{
+    for (int face = 0; face < 6; ++face) {
+        const auto camera = game::SectorReflectionFaceCamera({5, 2, -7}, face);
+        const Vector3 forward = Vector3Subtract(camera.target, camera.position);
+        const Vector3 center = Vector3Add(camera.position, Vector3Scale(forward, 4));
+        const Vector3 half{0.25f, 0.25f, 0.25f};
+        const BoundingBox visible{Vector3Subtract(center, half), Vector3Add(center, half)};
+        Check(game::SectorReflectionBoundsInView(camera, 1, 0.01f, 100, visible),
+              "each cube face includes geometry in front of its own camera");
+        const Vector3 behind = Vector3Subtract(camera.position, Vector3Scale(forward, 4));
+        Check(!game::SectorReflectionBoundsInView(camera, 1, 0.01f, 100,
+                {Vector3Subtract(behind, half), Vector3Add(behind, half)}),
+              "each cube face rejects geometry behind its own camera");
+        const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera.up));
+        const Vector3 edge = Vector3Add(center, Vector3Scale(right, 4.1f));
+        Check(game::SectorReflectionBoundsInView(camera, 1, 0.01f, 100,
+                {Vector3Subtract(edge, half), Vector3Add(edge, half)}),
+              "bounds crossing a face edge remain visible even if their center is outside");
+        Check(game::SectorReflectionBoundsInView(camera, 1, 0.01f, 100,
+                {Vector3Subtract(camera.position, half), Vector3Add(camera.position, half)}),
+              "bounds crossing the near plane remain visible");
+        game::SectorReflectionCaptureCulling culling{camera, 0.01f, 100};
+        Check(game::AcceptSectorReflectionObject(&culling, visible), "visible object is submitted");
+        Check(!game::AcceptSectorReflectionObject(&culling,
+                {Vector3Subtract(behind, half), Vector3Add(behind, half)}), "hidden object is culled");
+        Check(game::AcceptSectorReflectionObject(&culling, {}, false), "missing bounds keep object visible");
+        Check(culling.objectsDrawn == 2 && culling.objectsCulled == 1, "object diagnostics count submissions");
+    }
+    const auto camera = game::SectorReflectionFaceCamera({}, 0);
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    Check(game::SectorReflectionBoundsInView(camera, 1, 0.01f, 100, {{nan, 0, 0}, {1, 1, 1}}),
+          "invalid bounds fall back conservatively");
+    game::SectorPbrEnvironment e;
+    e.localProbes = {Probe(1, 1, -5)};
+    game::SectorReflectionDemand demand;
+    demand.collecting.assign(1, 0); demand.requested.assign(1, 0); demand.camera = camera;
+    const BoundingBox behind{{-6, 0, -1}, {-4, 2, 1}};
+    game::SelectSectorPbrEnvironmentBlend(e, {-5, 1, 0}, 1, true, &behind, &demand);
+    Check(!demand.collecting[0], "off-frustum receiver does not demand a probe");
+}
 } // namespace
 
 void TestFaceOrientation()
@@ -200,5 +332,8 @@ int main()
     TestScheduling();
     TestLightChanges();
     TestFaceOrientation();
+    TestDemandScheduling();
+    TestSteadyReflectedFlicker();
+    TestFaceBoundsCulling();
     std::cout << "Runtime reflection policy tests passed\n";
 }

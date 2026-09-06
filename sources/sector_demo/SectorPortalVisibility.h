@@ -143,6 +143,14 @@ bool IsRuntimePortalDynamicallyBlocked(
         const RuntimePortalEdge& edge,
         const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers);
 
+// Cubemap capture coarse visibility. Vertical faces retain connected membership;
+// all faces still require a 3D bounds/frustum test before draw submission.
+RuntimePortalVisibilityResult ComputeRuntimeSectorCaptureVisibility(
+        const RuntimeSectorVisibilityGraph& graph, const Camera3D& camera,
+        const RuntimePortalVisibilityResult& connected,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr,
+        size_t iterationCap = 0);
+
 float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld);
 
 float ComputeRuntimePortalVisibilityHorizontalFovRadians(

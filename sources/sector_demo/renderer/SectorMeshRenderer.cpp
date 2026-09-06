@@ -2079,8 +2079,15 @@ void SectorMeshRenderer::DrawScene(
             : defaultMaterialTexture;
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
+            if (capture) ++capture->batchesCulled;
             continue;
         }
+        if (capture && batch.hasBounds && !SectorReflectionBoundsInView(camera, 1.0f,
+                rlGetCullDistanceNear(), rlGetCullDistanceFar(), batch.bounds)) {
+            ++capture->batchesCulled;
+            continue;
+        }
+        if (capture) ++capture->batchesDrawn;
 
         if (batch.sectorId != uploadedLightSectorId) {
             const SectorBillboardDynamicLightContext* lightContext =
@@ -2169,7 +2176,11 @@ void SectorMeshRenderer::DrawScene(
         const auto reflectionBlend = capture ? SectorPbrEnvironmentBlend{} :
                 SelectSectorPbrEnvironmentBlend(pbrEnvironment,
                         Vector3Scale(Vector3Add(reflectionBox.min, reflectionBox.max), 0.5f),
-                        batch.sectorId, true, &reflectionBox);
+                        batch.sectorId, true, &reflectionBox,
+                        !batch.hasBounds || SectorReflectionBoundsInView(camera,
+                                static_cast<float>(rlGetFramebufferWidth()) / std::max(1, rlGetFramebufferHeight()),
+                                rlGetCullDistanceNear(), rlGetCullDistanceFar(), batch.bounds)
+                                ? pbrEnvironment.demandCollector : nullptr);
         UploadSectorReflectionBlend(material.shader, reflectionLocations, reflectionBlend, assets);
         const Texture2D* normalTexture = assets.GetTexture(
                 NormalTextureForId(batch.materialId));
@@ -2315,6 +2326,7 @@ void SectorMeshRenderer::DrawScene(
         const bool environmentReady = environmentTexture != nullptr
                 && environmentTexture->id != 0;
         SectorDoorDrawContext doorDrawContext;
+        doorDrawContext.captureCulling = capture ? &capture->culling : nullptr;
         doorDrawContext.reflectionEnvironment = capture ? nullptr : &pbrEnvironment;
         doorDrawContext.assets = &assets;
         doorDrawContext.runtimeObjectWorld = runtimeObjectWorld;
@@ -2331,7 +2343,9 @@ void SectorMeshRenderer::DrawScene(
         doorDrawContext.camera = camera;
         doorDrawContext.pbr = pbrContributionSettings;
         doorDrawContext.staticSpecularLights = &staticSpecularLightState;
-        doorDrawContext.visibility = &visibilityResult;
+        // Object bounds may straddle their owning sector or a portal aperture.
+        // Keep connected membership conservative, then cull the actual bounds.
+        doorDrawContext.visibility = capture ? &capture->connectedVisibility : &visibilityResult;
         doorDrawContext.environment = environmentReady
                 ? environmentTexture
                 : nullptr;
@@ -2370,13 +2384,14 @@ void SectorMeshRenderer::DrawScene(
                         && doorLighting.objectLightProbes != nullptr
                         && !doorLighting.objectLightProbes->probes.empty(),
                 fogContext,
-                visibilityResult,
+                capture ? capture->connectedVisibility : visibilityResult,
                 lightmapTextures,
                 pbrEnvironmentTexture,
                 useBakedAmbientOcclusion,
                 renderDebugText,
                 staticCaptureOnly,
-                useHighlight);
+                useHighlight,
+                capture ? &capture->culling : nullptr);
         if (!staticCaptureOnly) {
             SectorDynamicModelShadowDrawContext modelShadowContext;
             modelShadowContext.assets = &assets;
@@ -2402,6 +2417,14 @@ void SectorMeshRenderer::UpdateRuntimeReflections(engine::AssetManager& assets,
         engine::World* world, SectorRuntimeDoorLightingContext lighting, bool preparing)
 {
     if (!initialized) return;
+    if (!preparing) runtimeReflections.BeginMainViewFrame();
+    if (pbrEnvironment.demandCollector) {
+        auto& demand = *pbrEnvironment.demandCollector;
+        demand.camera = camera;
+        demand.aspect = static_cast<float>(rlGetFramebufferWidth()) / std::max(1, rlGetFramebufferHeight());
+        demand.nearPlane = rlGetCullDistanceNear();
+        demand.farPlane = rlGetCullDistanceFar();
+    }
     // Preview may reveal its main view in the same frame as the final loading
     // tile. Do not spend a second capture budget at that handoff.
     if (!preparing && reflectionPreparationStepPending) {
@@ -2419,20 +2442,32 @@ void SectorMeshRenderer::PrepareReflectionCapture(SectorReflectionCaptureDrawCon
         const SectorCompiledReflectionProbe& probe, engine::World* world)
 {
     // Reuse reserved storage for a flood of sectors reachable from the probe.
-    auto& v = draw.visibility;
+    auto& v = draw.connectedVisibility;
     v.visibleSectorIds.clear();
+    v.boundarySurfaceSectorIds.clear();
     v.visibleSectorIds.push_back(probe.topologySectorId);
     for (std::size_t i=0; i<v.visibleSectorIds.size(); ++i) {
         for (const auto& edge : pbrEnvironment.portals) {
             if (!edge.open || edge.fromSectorId!=v.visibleSectorIds[i]) continue;
             const bool blocked=std::any_of(pbrEnvironment.blockers.begin(),pbrEnvironment.blockers.end(),
                     [&](const auto& b){ return b.lineDefId==edge.lineDefId && b.blocksPortal; });
-            if (blocked || std::find(v.visibleSectorIds.begin(),v.visibleSectorIds.end(),edge.toSectorId)!=v.visibleSectorIds.end()) continue;
+            if (blocked) {
+                v.boundarySurfaceSectorIds.push_back(edge.toSectorId);
+                continue;
+            }
+            if (std::find(v.visibleSectorIds.begin(),v.visibleSectorIds.end(),edge.toSectorId)!=v.visibleSectorIds.end()) continue;
             v.visibleSectorIds.push_back(edge.toSectorId);
         }
     }
     std::sort(v.visibleSectorIds.begin(),v.visibleSectorIds.end());
+    auto& boundary = v.boundarySurfaceSectorIds;
+    std::sort(boundary.begin(), boundary.end());
+    boundary.erase(std::unique(boundary.begin(), boundary.end()), boundary.end());
+    boundary.erase(std::remove_if(boundary.begin(), boundary.end(), [&](int sector) {
+        return std::binary_search(v.visibleSectorIds.begin(), v.visibleSectorIds.end(), sector);
+    }), boundary.end());
     v.startSectorId=probe.topologySectorId;v.validStartSector=true;v.fallbackDrawAll=false;
+    v.startSectorIds.assign(1, probe.topologySectorId);
     draw.lighting->UpdateSelection(v,probe.topologySectorId,meshes.sectorReceiverBounds,world);
 }
 
@@ -2455,6 +2490,11 @@ void SectorMeshRenderer::DrawReflectionFace(engine::AssetManager& assets,
         int face,engine::RenderTarget& target,engine::World* world,SectorRuntimeDoorLightingContext lighting)
 {
     draw.camera=SectorReflectionFaceCamera(probe.capturePositionWorld,face);
+    draw.culling.camera = draw.camera;
+    draw.culling.nearPlane = rlGetCullDistanceNear();
+    draw.culling.farPlane = rlGetCullDistanceFar();
+    draw.visibility = ComputeRuntimeSectorCaptureVisibility(
+            visibilityGraph, draw.camera, draw.connectedVisibility, &pbrEnvironment.blockers);
     BeginTextureMode(target.native);ClearBackground(BLACK);
     DrawScene(assets,true,world,lighting,SectorTopologyFogSettings{},true,{},&draw);
     rlDrawRenderBatchActive();EndTextureMode();
@@ -2553,7 +2593,7 @@ void SectorMeshRenderer::DrawViewmodel(
                     pbrEnvironment,
                     viewmodelCamera.position,
                     receiverSectorId,
-                    true);
+                    true, nullptr, pbrEnvironment.demandCollector);
     const auto& viewmodelEnvironment = viewmodelBlend.first;
     const TextureCubemap* pbrEnvironmentTexture = assets.GetCubemap(
             viewmodelEnvironment.cubemap);

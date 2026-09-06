@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 
 #include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include "sector_demo/renderer/SectorDynamicShadowSampling.h"
@@ -1211,7 +1212,8 @@ void SectorStaticModelRenderer::PrepareReceiverEnvironment(Vector3 position, int
     if (!reflectionEnvironment) return;
     reflectionReceiverPosition=position;
     const BoundingBox box = bounds ? BoundingBox{bounds->min,bounds->max} : BoundingBox{position,position};
-    environmentBlend=SelectSectorPbrEnvironmentBlend(*reflectionEnvironment,position,sector,true,&box);
+    environmentBlend=SelectSectorPbrEnvironmentBlend(*reflectionEnvironment,position,sector,true,&box,
+            reflectionEnvironment->demandCollector);
     environmentSelection=environmentBlend.first;
 }
 
@@ -1445,6 +1447,9 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         float opacity,
         float interactionHighlightStrength)
 {
+    if (captureCulling && !AcceptSectorReflectionObject(captureCulling,
+            TransformSectorDoorModelBounds(modelAsset.localBounds, modelTransform),
+            modelAsset.hasLocalBounds)) return false;
     PrepareReceiverEnvironment(Vector3Scale(Vector3Add(receiverBounds.min,receiverBounds.max),0.5f),receiverSectorId,&receiverBounds);
     const int noStaticLightmap = 0;
     const int noBakedAo = 0;
@@ -1647,8 +1652,10 @@ void SectorStaticModelRenderer::Draw(
         bool useBakedAmbientOcclusion,
         std::string& renderDebugText,
         bool staticCaptureOnly,
-        SectorUseHighlight useHighlight)
+        SectorUseHighlight useHighlight,
+        SectorReflectionCaptureCulling* captureCulling)
 {
+    this->captureCulling = captureCulling;
     drawAssets=&assets;
     if (!shaderLoaded || shader.id == 0) {
         AppendStaticModelDebugText(renderDebugText, 0, 0, 0, 0);
@@ -1873,6 +1880,13 @@ void SectorStaticModelRenderer::Draw(
                     return;
                 }
                 const Model* model = &modelAsset->model;
+                const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
+                        transform.position, transform.rotationXRadians, transform.yawRadians,
+                        transform.rotationZRadians, staticModel.scale);
+                const Matrix modelTransform = MatrixMultiply(model->transform, authoredTransform);
+                if (this->captureCulling && !AcceptSectorReflectionObject(this->captureCulling,
+                        TransformSectorDoorModelBounds(modelAsset->localBounds, modelTransform),
+                        modelAsset->hasLocalBounds)) return;
 
                 const int useSkinning = 0;
                 if (useSkinningLoc >= 0) {
@@ -1896,17 +1910,6 @@ void SectorStaticModelRenderer::Draw(
                             &useAo,
                             SHADER_UNIFORM_INT);
                 }
-                const Matrix authoredTransform =
-                        BuildSectorStaticModelAuthoredTransform(
-                                transform.position,
-                                transform.rotationXRadians,
-                                transform.yawRadians,
-                                transform.rotationZRadians,
-                                staticModel.scale);
-                const Matrix modelTransform = MatrixMultiply(
-                        model->transform,
-                        authoredTransform);
-
                 const SectorStaticModelLightmapObject* lightmapObject =
                         FindLightmapObject(
                                 lightmapData,

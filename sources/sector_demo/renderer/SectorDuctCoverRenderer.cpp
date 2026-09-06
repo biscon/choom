@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorDuctCoverRenderer.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/ecs/World.h"
@@ -376,8 +377,23 @@ void SectorDuctCoverRenderer::Draw(
 
                 const Vector3 position = Vector3Add(
                         transform.position, access.coverOffset);
+                // Enclose the frame and tilted louvers in any cover orientation.
+                const float reflectionRadius = access.width + access.height + access.cover.thickness;
+                const Vector3 reflectionExtent{reflectionRadius, reflectionRadius, reflectionRadius};
+                const BoundingBox reflectionBounds{Vector3Subtract(position, reflectionExtent),
+                                                    Vector3Add(position, reflectionExtent)};
+                const bool receiverVisible = ShouldDrawRuntimeSectorForVisibility(object.currentSectorId, visibility);
+                if (context.captureCulling) {
+                    if (!receiverVisible) {
+                        ++context.captureCulling->objectsCulled;
+                        return;
+                    }
+                    if (!AcceptSectorReflectionObject(context.captureCulling, reflectionBounds)) return;
+                }
                 const auto reflectionBlend=context.reflectionEnvironment && !context.pbr.reflectionCapture
-                        ? SelectSectorPbrEnvironmentBlend(*context.reflectionEnvironment,position,object.currentSectorId)
+                        ? SelectSectorPbrEnvironmentBlend(*context.reflectionEnvironment,position,object.currentSectorId,
+                                true, nullptr, receiverVisible ? SectorReflectionDemandForBounds(
+                                        context.reflectionEnvironment->demandCollector, reflectionBounds) : nullptr)
                         : SectorPbrEnvironmentBlend{};
                 UploadSectorReflectionBlend(material.shader,locations.reflections,reflectionBlend,*context.assets);
                 BakedObjectLightingSample baked =

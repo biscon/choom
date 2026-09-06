@@ -23,10 +23,29 @@ and released before the graphics context closes. There is no runtime file IO,
 CPU filtering, image readback or cubemap upload.
 
 Light addition/removal, switching, dimming, color, movement, range, cone,
-shadow/profile changes and sampled flicker dirty intersecting probes. Flashlight
+shadow/profile changes dirty intersecting probes. Flashlight
 and transient runtime sources participate too. Door movement requests refreshes;
 portal-blocking changes invalidate obsolete jobs. Invalidation is conservative
 over the light radius and probe influence volume.
+
+Reflection captures use each enabled light's current base intensity. Flicker is
+still visible in direct lighting and atmosphere, but its time-varying modulation
+and flicker settings do not dirty probes or modulate captured lighting. Scripted
+dimming, switching off/on, and other real light edits still refresh captures.
+Camera-selection fades are also excluded from reflection snapshots.
+
+During normal rendering only probes requested by main-view receivers may run.
+Sector surfaces, models, doors/covers, windows, liquids and viewmodels collect
+demand using the same selection rules as their reflections, including both
+sources of a blend and sources awaiting their first capture. Bounds outside the
+main-view frustum do not request work where receiver bounds are available.
+The scheduler consumes the preceding frame's collected demand. Diagnostics and
+reflection captures themselves do not request probes. Unused dirty probes remain
+deferred regardless of queue age. If an active probe loses demand, its incomplete
+job is cancelled and its last complete cubemap remains available. It snapshots
+current scene state when requested again. Newly visible receivers may briefly
+use an older reflection, or the existing environment fallback before the first
+capture finishes; a completed replacement crossfades normally.
 
 One job snapshots lights, door render poses and reachable sectors. Its shadow
 selection/cache is separate from the player renderer. Work proceeds as follows:
@@ -37,11 +56,24 @@ selection/cache is separate from the player renderer. Work proceeds as follows:
 4. Publish only a complete cube, then crossfade from the previous complete cube
    over 100 ms. The previous cube cannot be reused until that transition ends.
 
+Connected-sector membership remains the lighting eligibility set. Geometry
+submission uses each cube face's own view: horizontal faces narrow the set with
+portal traversal, while vertical faces retain the component conservatively.
+All faces reject draw-record and object bounds outside the 3D face frustum.
+Static draw-record bounds are cached at mesh construction. Object membership
+stays conservative across sector boundaries and actual transformed bounds decide
+frustum rejection. Missing/invalid bounds and traversal limits preserve geometry.
+Shadow casters continue to use their light's volume and shadow face, independent
+of the scene capture camera. Each probe still captures all six directions, even
+directions behind the player.
+
 Asynchronous timestamp queries tune filtering toward a 0.5 ms GPU target.
 This is not a hard frame-time ceiling: a scene face or shadow face can exceed
 it. Queries are read only after availability is reported. Debug counters show
 CPU/GPU cost and overruns. New job starts for a given probe are at least 100 ms
-apart. Visible probes get priority; waiting age prevents permanent starvation.
+apart. Waiting age ranks only demanded probes; unused probes cannot become
+eligible through aging. Initial loading still prepares its required nearby probes
+without waiting for normal receiver demand.
 Continuous changes finish the current snapshot and queue a newer one. Discrete
 on/off/removal changes discard obsolete work before it can publish.
 
@@ -81,9 +113,14 @@ probes, displays progress, and permits Escape to cancel. Failed resources are
 terminal for preparation and fall back instead of hanging the load gate.
 
 The preview Probes tab exposes Refresh, Pause/Resume, queue/readiness/failure
-counts, active face/mip, GPU/CPU timings and memory. PBR receiver diagnostics
+counts, demanded/demanded-dirty/deferred-dirty IDs, demand cancellations, active
+stage/face/mip, per-face submitted/culled geometry, GPU/CPU timings and memory.
+CPU stage timings describe the current frame and clear while idle or paused;
+asynchronous GPU timings are labeled as the last completed stage measurement.
+The F9 world pass includes reflection work. PBR receiver diagnostics
 show selected probe IDs, center weights and temporal transitions. Refresh
-invalidates the current capture; it does not save or bake anything.
+invalidates the current capture and marks probes dirty, with normal rendering
+refreshing only demanded probes; it does not save or bake anything.
 
 Probe authoring continues through the existing authoring-graph editing service
 and document/cache invalidation. Runtime publications do not dirty the document
@@ -104,3 +141,10 @@ doorway and close it, and compare a prop seen from the neighboring room. Test
 preview cancel/re-entry, saved flashlight/door states, pause/refresh and level
 switches. Check the reported capture cost on the target GPU; no GUI or GPU
 performance claim follows from the CPU tests or offline shader validation.
+
+For the door-200 regression, open the other doors, compare door 200 open/closed
+while facing north in sector 96 and while viewing the hallway. After demanded
+captures settle, flicker alone must cause no new captures. Probes 3/9 must remain
+deferred when no visible receiver uses them. Compare normal operation with
+paused reflections, then approach those probes and verify on-demand refresh,
+light switches, and doorway blending.
