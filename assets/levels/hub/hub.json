@@ -3569,14 +3569,579 @@
       "staticModel": {
         "instanceId": "prop_209",
         "modelPath": "assets/models/kitchen/Extractor_Hood_2800.gltf",
-        "heightOffsetWorld": 1.0
+        "heightOffsetWorld": 2.279998779296875,
+        "collision": true
       },
       "position": [
         -96.0,
         -16.0,
-        -336.0
+        -363.7599792480469
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 210,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_210",
+        "modelPath": "assets/models/kitchen/Serving_Hatch_3000.gltf",
+        "heightOffsetWorld": -0.009999388828873634
+      },
+      "position": [
+        -107.51998901367188,
+        -8.0,
+        -296.2007751464844
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 211,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_211",
+        "modelPath": "assets/models/kitchen/Fryer_TwinBasket.gltf",
+        "collision": true
+      },
+      "position": [
+        -104.0,
+        -16.0,
+        -364.47991943359375
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 212,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_212",
+        "modelPath": "assets/models/kitchen/Griddle_800.gltf",
+        "collision": true
+      },
+      "position": [
+        -98.00000762939453,
+        -16.0,
+        -364.47998046875
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 213,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_213",
+        "modelPath": "assets/models/kitchen/Range_6Burner.gltf",
+        "collision": true
+      },
+      "position": [
+        -89.72006225585938,
+        -16.0,
+        -364.3999328613281
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 214,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_214",
+        "modelPath": "assets/models/kitchen/Exhaust_Duct_350.gltf",
+        "heightOffsetWorld": 3.1999988555908203,
+        "collision": true
+      },
+      "position": [
+        -96.0,
+        -16.0,
+        -365.0799865722656
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 215,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_215",
+        "modelPath": "assets/models/kitchen/Refrigerator_DoubleDoor.gltf",
+        "collision": true
+      },
+      "position": [
+        -132.39993286132813,
+        -16.0,
+        -349.79998779296875
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 216,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_216",
+        "modelPath": "assets/models/kitchen/Convection_Oven_Stand.gltf",
+        "collision": true
+      },
+      "position": [
+        -113.0,
+        -16.0,
+        -364.639892578125
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 217,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_217",
+        "modelPath": "assets/models/kitchen/Utility_Bin.gltf",
+        "collision": true
+      },
+      "position": [
+        -130.80001831054688,
+        -16.0,
+        -362.8000183105469
+      ],
+      "yawDegrees": 49.999996185302734
+    },
+    {
+      "id": 218,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_218",
+        "modelPath": "assets/models/kitchen/Tray_Rack_12.gltf",
+        "collision": true
+      },
+      "position": [
+        -130.20001220703125,
+        -16.0,
+        -303.8000183105469
+      ],
+      "yawDegrees": -10.999999046325684
+    },
+    {
+      "id": 219,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_219",
+        "modelPath": "assets/models/kitchen/Dishwasher_Undercounter.gltf",
+        "collision": true
+      },
+      "position": [
+        -59.0,
+        -16.0,
+        -336.0
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 220,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_220",
+        "modelPath": "assets/models/kitchen/Sink_Double_Drainboard.gltf",
+        "collision": true
+      },
+      "position": [
+        -58.99999237060547,
+        -16.0,
+        -346.0000915527344
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 221,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_221",
+        "modelPath": "assets/models/kitchen/Wall_Shelf_Double.gltf",
+        "heightOffsetWorld": 1.6500000953674316,
+        "collision": true
+      },
+      "position": [
+        -57.439971923828125,
+        -16.0,
+        -345.5997314453125
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 222,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_222",
+        "modelPath": "assets/models/kitchen/Plate_Stack.gltf",
+        "heightOffsetWorld": 1.8499993085861206
+      },
+      "position": [
+        -57.39997100830078,
+        -16.0,
+        -342.3199462890625
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 223,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_223",
+        "modelPath": "assets/models/kitchen/Stockpot_Small.gltf",
+        "heightOffsetWorld": 1.8500001430511475
+      },
+      "position": [
+        -57.5999755859375,
+        -16.0,
+        -346.3999328613281
+      ],
+      "yawDegrees": -79.00004577636719
+    },
+    {
+      "id": 224,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_224",
+        "modelPath": "assets/models/kitchen/Plate_Stack.gltf",
+        "heightOffsetWorld": 2.2200000286102295
+      },
+      "position": [
+        -57.79997253417969,
+        -16.0,
+        -348.87982177734375
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 225,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_225",
+        "modelPath": "assets/models/kitchen/Gastronorm_Pan.gltf",
+        "heightOffsetWorld": 0.9299999475479126
+      },
+      "position": [
+        -59.59998321533203,
+        -16.0,
+        -350.79986572265625
+      ],
+      "yawDegrees": -43.00000762939453
+    },
+    {
+      "id": 226,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_226",
+        "modelPath": "assets/models/kitchen/Plate_Stack.gltf",
+        "heightOffsetWorld": 0.9100001454353333
+      },
+      "position": [
+        -130.08001708984375,
+        -16.0,
+        -304.2803955078125
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 227,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_227",
+        "modelPath": "assets/models/kitchen/Prep_Table_2000.gltf",
+        "collision": true
+      },
+      "position": [
+        -107.4000015258789,
+        -16.0,
+        -340.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 228,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_228",
+        "modelPath": "assets/models/kitchen/Utility_Trolley.gltf",
+        "collision": true
+      },
+      "position": [
+        -62.0,
+        -16.0,
+        -360.0
+      ],
+      "yawDegrees": -69.99999237060547
+    },
+    {
+      "id": 229,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_229",
+        "modelPath": "assets/models/kitchen/Stockpot_Large.gltf",
+        "heightOffsetWorld": 0.9200000762939453
+      },
+      "position": [
+        -103.80001068115234,
+        -16.0,
+        -340.79998779296875
+      ],
+      "yawDegrees": -24.999998092651367
+    },
+    {
+      "id": 231,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_231",
+        "modelPath": "assets/models/kitchen/Stockpot_Small.gltf",
+        "heightOffsetWorld": 0.23999999463558197
+      },
+      "position": [
+        -111.60005187988281,
+        -16.0,
+        -339.20001220703125
+      ],
+      "yawDegrees": 53.000022888183594
+    },
+    {
+      "id": 232,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_232",
+        "modelPath": "assets/models/kitchen/Refrigerator_DoubleDoor.gltf",
+        "collision": true
+      },
+      "position": [
+        -74.39997100830078,
+        -16.0,
+        -364.55999755859375
+      ],
+      "yawDegrees": -4.26886799687054e-06
+    },
+    {
+      "id": 233,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_233",
+        "modelPath": "assets/models/kitchen/Soap_Dispenser.gltf",
+        "heightOffsetWorld": 1.3799998760223389
+      },
+      "position": [
+        -56.319969177246094,
+        -16.0,
+        -347.67974853515625
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 234,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_234",
+        "modelPath": "assets/models/kitchen/Utility_Bin.gltf",
+        "collision": true
+      },
+      "position": [
+        -59.0,
+        -16.0,
+        -328.8000183105469
+      ],
+      "yawDegrees": -104.99998474121094
+    },
+    {
+      "id": 235,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_235",
+        "modelPath": "assets/models/kitchen/Tray_Rack_12.gltf",
+        "collision": true
+      },
+      "position": [
+        -60.0,
+        -16.0,
+        -306.0
+      ],
+      "yawDegrees": 10.0
+    },
+    {
+      "id": 236,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_236",
+        "modelPath": "assets/models/kitchen/Plate_Stack.gltf",
+        "heightOffsetWorld": 0.440000057220459
+      },
+      "position": [
+        -60.400001525878906,
+        -16.0,
+        -306.84014892578125
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 237,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_237",
+        "modelPath": "assets/models/kitchen/Utility_Trolley.gltf",
+        "collision": true
+      },
+      "position": [
+        -131.19998168945313,
+        -16.0,
+        -316.0
+      ],
+      "yawDegrees": 94.99998474121094
+    },
+    {
+      "id": 238,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_238",
+        "modelPath": "assets/models/kitchen/Utility_Bin.gltf",
+        "collision": true
+      },
+      "position": [
+        -89.00001525878906,
+        -16.0,
+        -301.0
+      ],
+      "yawDegrees": -109.9999771118164
+    },
+    {
+      "id": 239,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_239",
+        "modelPath": "assets/models/kitchen/Prep_Table_2000.gltf",
+        "collision": true
+      },
+      "position": [
+        -107.20004272460938,
+        -16.0,
+        -320.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 240,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_240",
+        "modelPath": "assets/models/kitchen/Gastronorm_Pan.gltf",
+        "heightOffsetWorld": 0.9300001263618469
+      },
+      "position": [
+        -103.0,
+        -16.0,
+        -320.0
+      ],
+      "yawDegrees": 62.00002670288086
+    },
+    {
+      "id": 241,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_241",
+        "modelPath": "assets/models/kitchen/Fluorescent_Fixture.gltf",
+        "heightOffsetWorld": 3.319999933242798,
+        "castsShadow": false
+      },
+      "position": [
+        -96.0,
+        -16.0,
+        -332.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 242,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_242",
+        "modelPath": "assets/models/kitchen/Fluorescent_Fixture.gltf",
+        "heightOffsetWorld": 3.319999933242798,
+        "castsShadow": false
+      },
+      "position": [
+        -96.0,
+        -16.0,
+        -348.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 243,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_243",
+        "modelPath": "assets/models/kitchen/Fluorescent_Fixture.gltf",
+        "heightOffsetWorld": 3.319999933242798,
+        "castsShadow": false
+      },
+      "position": [
+        -96.0,
+        -16.0,
+        -316.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 244,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_244",
+        "modelPath": "assets/models/kitchen/Fluorescent_Fixture.gltf",
+        "heightOffsetWorld": 3.319999933242798,
+        "castsShadow": false
+      },
+      "position": [
+        -76.0,
+        -16.0,
+        -344.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 246,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_246",
+        "modelPath": "assets/models/kitchen/Fluorescent_Fixture.gltf",
+        "heightOffsetWorld": 3.319999933242798,
+        "castsShadow": false
+      },
+      "position": [
+        -76.0,
+        -16.0,
+        -320.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 247,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_247",
+        "modelPath": "assets/models/kitchen/Fluorescent_Fixture.gltf",
+        "heightOffsetWorld": 3.319999933242798,
+        "castsShadow": false
+      },
+      "position": [
+        -116.0,
+        -16.0,
+        -344.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 248,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_248",
+        "modelPath": "assets/models/kitchen/Fluorescent_Fixture.gltf",
+        "heightOffsetWorld": 3.319999933242798,
+        "castsShadow": false
+      },
+      "position": [
+        -116.0,
+        -16.0,
+        -320.0
+      ],
+      "yawDegrees": 90.0
     }
   ],
   "staticLights": [
@@ -7495,6 +8060,30 @@
       },
       "startFeather": 4.0,
       "castsShadow": false
+    },
+    {
+      "id": 26,
+      "position": [
+        -96.0,
+        0.0,
+        -332.0
+      ],
+      "target": [
+        -96.0,
+        16.0,
+        -332.0
+      ],
+      "width": 32.0,
+      "height": 42.0,
+      "range": 42.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "startFeather": 4.0
     }
   ],
   "dynamicPointLights": [
@@ -8466,25 +9055,28 @@
       "id": 1,
       "position": [
         -96.0,
-        14.0,
-        -336.0
+        10.25,
+        -332.0
       ],
       "target": [
         -96.0,
         -8.0,
-        -336.0
+        -332.0
       ],
-      "width": 8.0,
-      "height": 2.0,
-      "range": 84.0,
-      "intensity": 4.0,
+      "width": 32.0,
+      "height": 32.0,
+      "range": 64.0,
+      "intensity": 2.0,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 250,
+        "b": 241,
         "a": 255
       },
-      "instanceId": "light_rect_1"
+      "instanceId": "light_rect_1",
+      "castsShadow": true,
+      "shadowStrength": 0.8500000238418579,
+      "shadowSoftness": 2.0
     }
   ],
   "lightmapSettings": {
@@ -8494,7 +9086,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -8595,7 +9188,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "7270ca6676fffd5e",
+    "sourceHash": "b7b72fb03d3f80ad",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -8603,19 +9196,19 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.2421875,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 839
+      "sampleCount": 12582912,
+      "rgbChannelsAboveOne": 1379
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "7270ca6676fffd5e",
+      "sourceHash": "b7b72fb03d3f80ad",
       "count": 3955,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -8628,24 +9221,36 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23730,
-        "rgbChannelsAboveOne": 33
+        "rgbChannelsAboveOne": 32
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "7270ca6676fffd5e",
-      "modelCount": 54,
-      "objectCount": 161,
+      "sourceHash": "b7b72fb03d3f80ad",
+      "modelCount": 74,
+      "objectCount": 198,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/hub/hub.lightmap.2.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1
@@ -10509,12 +11114,12 @@
       },
       {
         "id": 386,
-        "x": -1920,
+        "x": -1904,
         "y": -4768
       },
       {
         "id": 387,
-        "x": -1920,
+        "x": -1904,
         "y": -4736
       },
       {
@@ -28773,6 +29378,47 @@
         }
       },
       {
+        "lineId": 631,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
         "lineId": 632,
         "side": "back",
         "wall": {
@@ -28852,11 +29498,53 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "worn_white_wall"
         }
       },
       {
         "lineId": 634,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 635,
         "side": "front",
         "wall": {
           "uv": {
@@ -29001,7 +29689,7 @@
             ],
             "offset": [
               0.019999999552965164,
-              0.5450000166893005
+              0.05000000074505806
             ]
           },
           "materialId": "white_wall_tiles"
@@ -29087,7 +29775,8 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "worn_white_wall"
         },
         "upper": {
           "uv": {
@@ -29099,7 +29788,8 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "worn_white_wall"
         }
       },
       {
@@ -36386,10 +37076,10 @@
       {
         "id": 95,
         "name": "Sector 95",
-        "x": -1905,
+        "x": -1889,
         "y": -4754,
-        "floorZ": -9.0,
-        "ceilingZ": 2.0,
+        "floorZ": -8.0,
+        "ceilingZ": 0.75,
         "floorUv": {
           "scale": [
             1.0,
@@ -36416,7 +37106,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.05000000074505806,
+        "ambientIntensity": 0.5,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -36462,7 +37152,7 @@
         "x": -1457,
         "y": -5314,
         "floorZ": -16.0,
-        "ceilingZ": 16.0,
+        "ceilingZ": 11.75,
         "floorUv": {
           "scale": [
             1.0,
@@ -36489,7 +37179,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.05000000074505806,
+        "ambientIntensity": 0.15000000596046448,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -36904,13 +37594,30 @@
         "yWorld": 0.0,
         "influenceOffsetWorld": [
           0.0,
-          0.0,
+          -0.265625,
           -0.125
         ],
         "halfExtentsWorld": [
           5.0,
-          2.0,
+          1.734375,
           4.375
+        ],
+        "resolution": 256
+      },
+      {
+        "id": 16,
+        "x": -1728,
+        "z": -4752,
+        "yWorld": -0.453125,
+        "influenceOffsetWorld": [
+          0.0625,
+          0.0,
+          -0.25
+        ],
+        "halfExtentsWorld": [
+          1.4375,
+          0.546875,
+          0.125
         ]
       }
     ],
