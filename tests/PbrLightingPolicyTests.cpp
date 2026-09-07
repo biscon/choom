@@ -306,6 +306,41 @@ void TestEnvironmentEligibility()
 
 std::string ReadSource(const char* path);
 
+void TestReflectionBindingsInitializeAfterSuccessfulLoad()
+{
+    // GLSL validation cannot detect a C++ initialization call accidentally
+    // placed in the shader failure branch. Guard both affected load paths.
+    const auto initializesOnSuccess = [](const std::string& source,
+            const char* loadFunction, const char* failureCondition) {
+        const auto loadStart = source.find(loadFunction);
+        const auto failureStart = source.find(failureCondition, loadStart);
+        const auto failureBody = source.find('{', failureStart);
+        if (loadStart == std::string::npos || failureStart == std::string::npos
+                || failureBody == std::string::npos) return false;
+        // Count nested braces, including Shader{} and {} initializers.
+        std::size_t failureEnd = failureBody + 1;
+        int depth = 1;
+        while (failureEnd < source.size() && depth != 0) {
+            if (source[failureEnd] == '{') ++depth;
+            else if (source[failureEnd] == '}') --depth;
+            ++failureEnd;
+        }
+        const auto reflectionInit = source.find(
+                "LoadSectorReflectionShaderLocations(", loadStart);
+        const auto attributeInit = source.find(
+                ".locs[SHADER_LOC_VERTEX_POSITION]", failureEnd);
+        return depth == 0 && reflectionInit != std::string::npos
+                && attributeInit != std::string::npos
+                && reflectionInit >= failureEnd && reflectionInit < attributeInit;
+    };
+    Check(initializesOnSuccess(ReadSource(PBR_SHADER_SOURCE_PATH),
+                  "bool SectorStaticModelRenderer::Load()", "if (shader.id == 0)"),
+          "model reflection bindings initialize after the shader failure branch");
+    Check(initializesOnSuccess(ReadSource(DOOR_SHADER_SOURCE_PATH),
+                  "bool SectorDoorRenderer::LoadOpaqueResources()", "if (opaqueShader.id == 0)"),
+          "door reflection bindings initialize after the shader failure branch");
+}
+
 void TestRemovedShaderPathsStayRemoved()
 {
     const std::string source = test::ReadShaderPrograms({game::GameShader::StaticModel});
@@ -1345,6 +1380,7 @@ int main()
     TestViewmodelIsolationAndFiniteHandling();
     TestMaterialTextureSemantics();
     TestEnvironmentEligibility();
+    TestReflectionBindingsInitializeAfterSuccessfulLoad();
     TestRemovedShaderPathsStayRemoved();
     TestSectorRuntimeNormalMappingPolicy();
     TestBakedHdrConsumersStayUnclamped();

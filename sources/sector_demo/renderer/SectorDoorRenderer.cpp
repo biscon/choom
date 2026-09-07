@@ -134,12 +134,12 @@ bool SectorDoorRenderer::LoadOpaqueResources()
 {
     opaqueShader = LoadGameShader(GameShader::DoorOpaque);
     if (opaqueShader.id == 0) {
-        opaqueShader = Shader{};    opaqueShaderLocations.reflections=LoadSectorReflectionShaderLocations(opaqueShader);
-
+        opaqueShader = Shader{};
         ResetOpaqueShaderLocations();
         opaqueShaderLoaded = false;
         return false;
     }
+    opaqueShaderLocations.reflections = LoadSectorReflectionShaderLocations(opaqueShader);
 
     opaqueShader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(opaqueShader, "vertexPosition");
     opaqueShader.locs[SHADER_LOC_VERTEX_NORMAL] = GetShaderLocationAttrib(opaqueShader, "vertexNormal");

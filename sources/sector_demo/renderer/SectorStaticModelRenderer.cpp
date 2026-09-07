@@ -345,11 +345,11 @@ bool SectorStaticModelRenderer::Load()
 {
     shader = LoadGameShader(GameShader::StaticModel);
     if (shader.id == 0) {
-        shader = {};    reflectionLocations=LoadSectorReflectionShaderLocations(shader);
-
+        shader = {};
         shaderLoaded = false;
         return false;
     }
+    reflectionLocations = LoadSectorReflectionShaderLocations(shader);
 
     shader.locs[SHADER_LOC_VERTEX_POSITION] =
             GetShaderLocationAttrib(shader, "vertexPosition");
