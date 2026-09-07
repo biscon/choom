@@ -1,5 +1,6 @@
 #pragma once
 #include "sector_demo/renderer/SectorReflectionSampling.h"
+#include "sector_demo/renderer/SectorWorldDiagnostics.h"
 
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -22,6 +23,7 @@ class World;
 namespace game {
 
 struct SectorWindowDrawContext {
+    SectorWorldProfiler* profiler = nullptr;
     engine::AssetManager* assets = nullptr;
     engine::World* world = nullptr;
     Camera3D camera = {};
@@ -43,59 +45,61 @@ public:
     void Shutdown();
     void Reserve(std::size_t capacity);
     void Draw(const SectorWindowDrawContext& context);
-    bool HasVisibleWindows(
-            engine::World& world,
-            const RuntimePortalVisibilityResult* visibility) const;
+    bool PrepareVisibleWindows(engine::World& world, const Camera3D& camera,
+            float aspect, const RuntimePortalVisibilityResult* visibility, bool enabled = true);
 
     bool IsLoaded() const { return materialLoaded && meshLoaded; }
     std::size_t ConsideredCount() const { return consideredCount; }
     std::size_t DrawnCount() const { return drawnCount; }
 
 private:
-    SectorReflectionShaderLocations reflectionLocations;
     struct DrawItem {
         engine::Entity entity = engine::NullEntity();
         int placedObjectId = 0;
         float distanceSquared = 0.0f;
     };
 
-    Shader shader = {};
-    Material material = {};
-    Mesh cube = {};
-    bool materialLoaded = false;
-    bool meshLoaded = false;
+    struct ShaderResources {
+        SectorReflectionShaderLocations reflectionLocations;
+        Shader shader = {};
+        Material material = {};
+        SectorFogShaderLocations fogLocations;
+        int cameraPositionLoc = -1;
+        int tintLoc = -1;
+        int opacityLoc = -1;
+        int roughnessLoc = -1;
+        int surfaceHazeLoc = -1;
+        int imperfectionStrengthLoc = -1;
+        int dimensionsLoc = -1;
+        int patternSeedLoc = -1;
+        int iorLoc = -1;
+        int thicknessLoc = -1;
+        int directionalLightEnabledLoc = -1;
+        int directionalLightDirectionLoc = -1;
+        int directionalLightColorLoc = -1;
+        int directionalLightIntensityLoc = -1;
+        int advancedTransmissionLoc = -1;
+        int flatGlassPassLoc = -1;
+        int sceneColorLoc = -1;
+        int sceneDepthLoc = -1;
+        int viewportSizeLoc = -1;
+        int viewMatrixLoc = -1;
+        int projectionMatrixLoc = -1;
+        int hasEnvironmentLoc = -1;
+        int environmentBoxProjectionLoc = -1;
+        int environmentCapturePositionLoc = -1;
+        int environmentInfluenceCenterLoc = -1;
+        int environmentHalfExtentsLoc = -1;
+        int environmentYawLoc = -1;
+        int environmentMaxLodLoc = -1;
+        int environmentIntensityLoc = -1;
+        int environmentSpecularScaleLoc = -1;
+    };
+    ShaderResources active;
+    std::array<ShaderResources, 3> variants;
+    Mesh cube{};
+    bool materialLoaded = false, meshLoaded = false, capacityWarned = false;
     std::vector<DrawItem> drawItems;
-    SectorFogShaderLocations fogLocations;
-    int cameraPositionLoc = -1;
-    int tintLoc = -1;
-    int opacityLoc = -1;
-    int roughnessLoc = -1;
-    int surfaceHazeLoc = -1;
-    int imperfectionStrengthLoc = -1;
-    int dimensionsLoc = -1;
-    int patternSeedLoc = -1;
-    int iorLoc = -1;
-    int thicknessLoc = -1;
-    int directionalLightEnabledLoc = -1;
-    int directionalLightDirectionLoc = -1;
-    int directionalLightColorLoc = -1;
-    int directionalLightIntensityLoc = -1;
-    int advancedTransmissionLoc = -1;
-    int flatGlassPassLoc = -1;
-    int sceneColorLoc = -1;
-    int sceneDepthLoc = -1;
-    int viewportSizeLoc = -1;
-    int viewMatrixLoc = -1;
-    int projectionMatrixLoc = -1;
-    int hasEnvironmentLoc = -1;
-    int environmentBoxProjectionLoc = -1;
-    int environmentCapturePositionLoc = -1;
-    int environmentInfluenceCenterLoc = -1;
-    int environmentHalfExtentsLoc = -1;
-    int environmentYawLoc = -1;
-    int environmentMaxLodLoc = -1;
-    int environmentIntensityLoc = -1;
-    int environmentSpecularScaleLoc = -1;
     std::size_t consideredCount = 0;
     std::size_t drawnCount = 0;
     std::size_t localEnvironmentCount = 0;

@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorReflectionProbePolicy.h"
+#include "sector_demo/renderer/SectorOpaqueDrawPolicy.h"
 #include <raymath.h>
 #include <utility>
 #include <algorithm>
@@ -110,39 +111,8 @@ SectorPreviewDynamicPointLightUniform NormalizeSectorReflectionLight(
 bool SectorReflectionBoundsInView(const Camera3D& camera, float aspect, float nearPlane,
         float farPlane, BoundingBox bounds)
 {
-    const auto finite = [](Vector3 v) {
-        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-    };
-    if (!finite(bounds.min) || !finite(bounds.max)
-            || bounds.min.x > bounds.max.x || bounds.min.y > bounds.max.y
-            || bounds.min.z > bounds.max.z || !finite(camera.position)
-            || !finite(camera.target) || !finite(camera.up)
-            || !std::isfinite(aspect) || aspect <= 0 || !std::isfinite(camera.fovy)
-            || camera.fovy <= 0 || camera.fovy >= 180) return true;
-    Vector3 forward = Vector3Subtract(camera.target, camera.position);
-    if (Vector3LengthSqr(forward) < 0.000001f) return true;
-    forward = Vector3Normalize(forward);
-    Vector3 right = Vector3CrossProduct(forward, camera.up);
-    if (Vector3LengthSqr(right) < 0.000001f) return true;
-    right = Vector3Normalize(right);
-    const Vector3 up = Vector3CrossProduct(right, forward);
-    const float vertical = std::tan(camera.fovy * DEG2RAD * 0.5f);
-    const float horizontal = vertical * aspect;
-    const Vector3 center = Vector3Scale(Vector3Add(bounds.min, bounds.max), 0.5f);
-    const Vector3 half = Vector3Scale(Vector3Subtract(bounds.max, bounds.min), 0.5f);
-    const Vector3 relative = Vector3Subtract(center, camera.position);
-    const auto outside = [&](Vector3 normal, float offset) {
-        const float radius = std::fabs(normal.x) * half.x
-                + std::fabs(normal.y) * half.y + std::fabs(normal.z) * half.z;
-        return Vector3DotProduct(normal, relative) + radius < offset - 0.0001f;
-    };
-    return !outside(forward, nearPlane) && !outside(Vector3Negate(forward), -farPlane)
-            && !outside(Vector3Add(Vector3Scale(forward, horizontal), right), 0)
-            && !outside(Vector3Subtract(Vector3Scale(forward, horizontal), right), 0)
-            && !outside(Vector3Add(Vector3Scale(forward, vertical), up), 0)
-            && !outside(Vector3Subtract(Vector3Scale(forward, vertical), up), 0);
+    return SectorBoundsInView(camera, aspect, nearPlane, farPlane, bounds);
 }
-
 void PublishSectorReflectionProbe(SectorPbrEnvironment::LocalProbe &probe, double seconds,
                                   std::uint64_t capturedRevision)
 {

@@ -1333,6 +1333,7 @@ bool SectorMeshRenderer::RefreshSurfaceGeometryInternal(
     }
     UnloadSectorMeshes(meshes);
     meshes = std::move(candidateMeshes);
+    visibleSectorDraws.reserve(meshes.sectorDrawRecords.size());
     generatedGeometry = std::move(candidateGeometry);
     sectorCount = map.sectors.size();
     if (refreshVisibilityData) {
@@ -1570,6 +1571,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
 
     std::string meshError;
     meshes = BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr, &meshError);
+    visibleSectorDraws.reserve(meshes.sectorDrawRecords.size());
     if (meshes.sectorDrawRecords.empty()) {
         Shutdown(assets);
         error = meshError.empty()
@@ -1656,6 +1658,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
 
+    worldProfiler.Initialize(8 + runtimeObjectCapacity * 2);
     if (!windowRenderer.Initialize(runtimeObjectCapacity)) {
         Shutdown(assets);
         error = "Preview failed: could not load window transparency shader";
@@ -1790,6 +1793,8 @@ void SectorMeshRenderer::Shutdown(engine::AssetManager& assets)
 
 void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
 {
+    worldProfiler.Shutdown();
+    worldDiagnosticsEnabled = false;
     runtimeReflections.Shutdown();
     reflectionPreparationStepPending = false;
     reflectionCaptureAssets = nullptr;
@@ -1973,6 +1978,30 @@ void SectorMeshRenderer::DrawScene(
     const float runtimeSeconds = capture ? capture->seconds : this->runtimeSeconds;
     const bool dynamicLightingEnabled = capture ? true : this->dynamicLightingEnabled;
     const bool shadowMapsEnabled = capture ? true : this->shadowMapsEnabled;
+    if (!capture) worldProfiler.BeginFrame(worldDiagnosticsEnabled);
+    visibleSectorDraws.clear();
+    if (!capture) worldProfiler.diagnostics.sectorTrianglesCulled = 0;
+    const float viewAspect = capture ? 1.0f : static_cast<float>(rlGetFramebufferWidth())
+            / std::max(1, rlGetFramebufferHeight());
+    for (std::size_t index = 0; index < meshes.sectorDrawRecords.size(); ++index) {
+        const auto& batch = meshes.sectorDrawRecords[index];
+        if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)
+                || (batch.hasBounds && !SectorBoundsInView(camera, viewAspect,
+                        rlGetCullDistanceNear(), rlGetCullDistanceFar(), batch.bounds))) {
+            if (capture) ++capture->batchesCulled;
+            else worldProfiler.diagnostics.sectorTrianglesCulled += batch.triangleCount;
+            continue;
+        }
+        AppendSectorOpaqueDraw(visibleSectorDraws, {engine::NullEntity(), batch.sectorId,
+                index, MatrixIdentity(), batch.bounds, SectorNearestViewDepth(camera, batch.bounds)},
+                sectorDrawCapacityWarned);
+    }
+    std::sort(visibleSectorDraws.begin(), visibleSectorDraws.end(), SectorOpaqueDrawLess);
+    if (runtimeObjectWorld) {
+        const auto& objectVisibility = capture ? capture->connectedVisibility : visibilityResult;
+        staticModelRenderer.PrepareVisibleDraws(assets, *runtimeObjectWorld, camera, viewAspect, objectVisibility);
+        doorRenderer.PrepareVisibleDraws(assets, *runtimeObjectWorld, camera, viewAspect, objectVisibility);
+    }
     SectorPbrContributionSettings pbrContributionSettings = this->pbrContributionSettings;
     if (capture) {
         pbrContributionSettings.worldEnvironmentSpecularScale=0;
@@ -1986,6 +2015,7 @@ void SectorMeshRenderer::DrawScene(
     BeginMode3D(camera);
     skyRenderer.Draw(assets, camera);
     if (!capture && depthPrepassEnabled && depthPrepassMaterialLoaded) {
+        worldProfiler.Begin(SectorWorldStage::Depth);
         rlDrawRenderBatchActive();
         rlColorMask(false, false, false, false);
         rlEnableDepthTest();
@@ -1993,7 +2023,10 @@ void SectorMeshRenderer::DrawScene(
         DrawDepthPrepass(assets, runtimeObjectWorld);
         rlDrawRenderBatchActive();
         rlColorMask(true, true, true, true);
+        worldProfiler.End();
     }
+
+    if (!capture) worldProfiler.Begin(SectorWorldStage::Sectors);
 
     SectorTopologyFogSettings materialFogSettings = fogSettings;
     if (NormalizeSectorTopologyFogSettings(fogSettings).mode
@@ -2079,16 +2112,8 @@ void SectorMeshRenderer::DrawScene(
             loadedDefaultMaterialTexture != nullptr
             ? *loadedDefaultMaterialTexture
             : defaultMaterialTexture;
-    for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
-        if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
-            if (capture) ++capture->batchesCulled;
-            continue;
-        }
-        if (capture && batch.hasBounds && !SectorReflectionBoundsInView(camera, 1.0f,
-                rlGetCullDistanceNear(), rlGetCullDistanceFar(), batch.bounds)) {
-            ++capture->batchesCulled;
-            continue;
-        }
+    for (const auto& item : visibleSectorDraws) {
+        const SectorMeshBatch& batch = meshes.sectorDrawRecords[item.index];
         if (capture) ++capture->batchesDrawn;
 
         if (batch.sectorId != uploadedLightSectorId) {
@@ -2316,6 +2341,17 @@ void SectorMeshRenderer::DrawScene(
         }
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
+    if (!capture) {
+        worldProfiler.End();
+        auto& stats = worldProfiler.diagnostics;
+        stats.sectorMeshes = visibleSectorDraws.size();
+        stats.sectorCulled = meshes.sectorDrawRecords.size() - visibleSectorDraws.size();
+        stats.sectorTriangles = 0;
+        for (const auto& item : visibleSectorDraws) stats.sectorTriangles += meshes.sectorDrawRecords[item.index].triangleCount;
+        stats.objects = stats.objectsCulled = stats.modelMeshes = stats.modelTriangles = 0;
+        stats.modelMeshesCulled = stats.modelTrianglesCulled = 0;
+        worldProfiler.Begin(SectorWorldStage::ModelsDoors);
+    }
     if (runtimeObjectWorld != nullptr) {
         const SectorPbrEnvironmentSelection objectEnvironmentSelection =
                 SelectSectorPbrEnvironment(
@@ -2410,6 +2446,18 @@ void SectorMeshRenderer::DrawScene(
                     billboardLightContext,
                     fogContext,
                     renderDebugText);
+        }
+    }
+    if (!capture) {
+        worldProfiler.End();
+        if (runtimeObjectWorld) {
+            auto& stats = worldProfiler.diagnostics;
+            stats.objects = staticModelRenderer.VisibleOpaqueObjects() + doorRenderer.VisibleOpaqueObjects();
+            stats.objectsCulled = staticModelRenderer.CulledOpaqueObjects() + doorRenderer.CulledOpaqueObjects();
+            stats.modelMeshes = staticModelRenderer.SubmittedMeshes() + doorRenderer.VisibleOpaqueObjects();
+            stats.modelTriangles = staticModelRenderer.SubmittedTriangles() + doorRenderer.SubmittedTriangles();
+            stats.modelMeshesCulled = staticModelRenderer.CulledMeshes() + doorRenderer.CulledOpaqueObjects();
+            stats.modelTrianglesCulled = staticModelRenderer.CulledTriangles() + doorRenderer.CulledTriangles();
         }
     }
     EndMode3D();
@@ -2507,58 +2555,15 @@ void SectorMeshRenderer::DrawDepthPrepass(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)
 {
-    for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
-        if (batch.alphaTest
-                || !ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
-            continue;
-        }
-        DrawMesh(batch.mesh, depthPrepassMaterial, MatrixIdentity());
+    RestoreSectorMaterialCulling();
+    for (const auto& item : visibleSectorDraws) {
+        const auto& batch = meshes.sectorDrawRecords[item.index];
+        if (!batch.alphaTest) DrawMesh(batch.mesh, depthPrepassMaterial, MatrixIdentity());
     }
-    if (runtimeObjectWorld == nullptr) return;
-
-    SectorDynamicSpotLightShadowRenderContext context;
-    context.assets = &assets;
-    context.sectorDrawRecords = &meshes.sectorDrawRecords;
-    doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
-    staticModelRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
-
-    if (context.doorShadowCasters != nullptr && context.doorMeshResolver != nullptr) {
-        for (const SectorDoorShadowCaster& caster : *context.doorShadowCasters) {
-            float width = 0.0f;
-            float height = 0.0f;
-            const Mesh* mesh = context.doorMeshResolver(
-                    context.doorMeshResolverUserData, caster, width, height);
-            if (mesh == nullptr || mesh->vertexCount <= 0) continue;
-            DrawMesh(*mesh, depthPrepassMaterial,
-                    BuildSectorDoorShadowCasterModelMatrix(caster, width, height));
-        }
-    }
-    if (context.doorModelShadowCasters != nullptr) {
-        for (const SectorDoorModelShadowCaster& caster : *context.doorModelShadowCasters) {
-            const engine::ModelAsset* asset = assets.GetModelAsset(caster.model);
-            if (asset == nullptr) continue;
-            const Matrix transform = MatrixMultiply(asset->model.transform, caster.transform);
-            for (int i = 0; i < asset->model.meshCount; ++i) {
-                if (asset->model.meshes[i].vertexCount > 0) {
-                    DrawMesh(asset->model.meshes[i], depthPrepassMaterial, transform);
-                }
-            }
-        }
-    }
-    if (context.staticModelShadowCasters != nullptr) {
-        rlDisableBackfaceCulling();
-        for (const SectorStaticModelShadowCaster& caster : *context.staticModelShadowCasters) {
-            const engine::ModelAsset* asset = assets.GetModelAsset(caster.model);
-            if (asset == nullptr) continue;
-            const Matrix transform = MatrixMultiply(asset->model.transform, caster.transform);
-            for (int i = 0; i < asset->model.meshCount; ++i) {
-                if (asset->model.meshes[i].vertexCount > 0) {
-                    DrawMesh(asset->model.meshes[i], depthPrepassMaterial, transform);
-                }
-            }
-        }
-        rlEnableBackfaceCulling();
-    }
+    if (!runtimeObjectWorld) return;
+    doorRenderer.DrawPreparedDepth(depthPrepassMaterial);
+    staticModelRenderer.DrawPreparedDepth(assets, *runtimeObjectWorld,
+            depthPrepassMaterial, lightmapTextures);
 }
 
 SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLightContext() const
@@ -2967,9 +2972,15 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
     // though these two effects are composited before transparent windows.
     BeginAtmosphereGpuFrame(collectGpuDiagnostics);
     atmosphereGpuFramePrepared = true;
+    // Collection is enabled for the next scene pass; diagnostics become available
+    // after the initial warm-up frame, including command-line frame tracing.
+    worldDiagnosticsEnabled = collectGpuDiagnostics;
 
     const bool visibleWindows = runtimeObjectWorld != nullptr
-            && windowRenderer.HasVisibleWindows(*runtimeObjectWorld, &visibilityResult);
+            && windowRenderer.PrepareVisibleWindows(*runtimeObjectWorld, camera,
+                    static_cast<float>(sceneTarget.native.texture.width)
+                            / std::max(1, sceneTarget.native.texture.height),
+                    &visibilityResult, glassEnabled);
     const bool visibleLiquids = liquidRenderer.HasVisibleLiquids(
             &visibilityResult, camera.position);
     const SectorTopologyMap* map = doorLighting.mapForFallback;
@@ -3003,6 +3014,7 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
                     == engine::RenderTargetDepthKind::SampleableTexture
             && EnsureHdrSceneColorView(sceneTarget);
     if (canRenderPreGlassEffects) {
+        worldProfiler.Begin(SectorWorldStage::PreGlass);
         SectorTopologyFogSettings effectFogSettings = fogSettings;
         if (NormalizeSectorTopologyFogSettings(fogSettings).mode
                 == SectorTopologyFogMode::Distance) {
@@ -3025,9 +3037,14 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
                 lightingVisibility, meshes.sectorReceiverBounds);
         EndAtmosphereGpuPass(4);
         preGlassLightEffectsRendered = true;
+        worldProfiler.End();
     }
 
     if (!visibleWindows && !visibleLiquids) {
+        worldProfiler.diagnostics.panes = 0;
+        worldProfiler.diagnostics.panesCulled = windowRenderer.ConsideredCount();
+        worldProfiler.FinishFrame();
+        atmosphereDiagnostics.world = worldProfiler.diagnostics;
         renderDebugText += " | transparents: idle";
         return causticsApplied || preGlassShaftApplied || preGlassHaloApplied;
     }
@@ -3098,6 +3115,7 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
         BeginTextureMode(sceneTarget.native);
         BeginMode3D(camera);
         SectorWindowDrawContext windowContext;
+        windowContext.profiler = &worldProfiler;
         windowContext.assets = &assets;
         windowContext.world = runtimeObjectWorld;
         windowContext.camera = camera;
@@ -3113,6 +3131,10 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
         EndMode3D();
         EndTextureMode();
     }
+    worldProfiler.diagnostics.panes = visibleWindows ? windowRenderer.DrawnCount() : 0;
+    worldProfiler.diagnostics.panesCulled = windowRenderer.ConsideredCount() - worldProfiler.diagnostics.panes;
+    worldProfiler.FinishFrame();
+    atmosphereDiagnostics.world = worldProfiler.diagnostics;
     return true;
 }
 

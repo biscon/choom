@@ -1120,6 +1120,9 @@ bool SectorStaticModelRenderer::Load()
 
 void SectorStaticModelRenderer::Shutdown()
 {
+    staticDraws.clear();
+    modelDoorDraws.clear();
+    drawingModelDoor = false;
     ClearCachedModels();
     shadowCasterCollection = {};
     lightmapData = {};
@@ -1402,9 +1405,149 @@ void SectorStaticModelRenderer::FinalizeResources(
 
 void SectorStaticModelRenderer::ReserveShadowCasterCapacity(size_t capacity)
 {
+    staticDraws.reserve(capacity);
+    modelDoorDraws.reserve(capacity);
+    drawCapacityWarned = false;
     ReserveSectorStaticModelShadowCasters(
             shadowCasterCollection,
             capacity);
+}
+
+void SectorStaticModelRenderer::PrepareVisibleDraws(engine::AssetManager &assets,
+                                                    engine::World &world, const Camera3D &camera,
+                                                    float aspect,
+                                                    const RuntimePortalVisibilityResult &visibility)
+{
+    staticDraws.clear();
+    modelDoorDraws.clear();
+    culledOpaqueObjects = submittedMeshes = submittedTriangles = 0;
+    culledMeshes = culledTriangles = 0;
+    const auto countCulled = [&](const engine::ModelAsset *asset) {
+        if (!asset)
+            return;
+        culledMeshes += asset->model.meshCount;
+        for (int i = 0; i < asset->model.meshCount; ++i)
+            culledTriangles += asset->model.meshes[i].triangleCount;
+    };
+    world.ForEach<SectorObjectTransform, SectorObject, SectorStaticModel>(
+        [&](engine::Entity entity, SectorObjectTransform &transform, SectorObject &object,
+            SectorStaticModel &prop) {
+            const auto *asset = assets.GetModelAsset(prop.model);
+            if (!asset) {
+                ++culledOpaqueObjects;
+                return;
+            }
+            const Matrix authored = BuildSectorStaticModelAuthoredTransform(
+                transform.position, transform.rotationXRadians, transform.yawRadians,
+                transform.rotationZRadians, prop.scale);
+            // ModelAsset bounds already include model.transform.
+            const BoundingBox bounds =
+                asset->hasLocalBounds ? TransformSectorDoorModelBounds(asset->localBounds, authored)
+                                      : BoundingBox{transform.position, transform.position};
+            if (!SectorOpaqueModelVisible(object.visible, object.currentSectorId, visibility,
+                                          camera, aspect, rlGetCullDistanceNear(),
+                                          rlGetCullDistanceFar(), bounds, asset->hasLocalBounds)) {
+                ++culledOpaqueObjects;
+                countCulled(asset);
+                return;
+            }
+            AppendSectorOpaqueDraw(staticDraws,
+                                   {entity, prop.placedObjectId, 0,
+                                    MatrixMultiply(asset->model.transform, authored), bounds,
+                                    SectorNearestViewDepth(camera, bounds)},
+                                   drawCapacityWarned);
+        });
+    world.ForEach<SectorObject, SectorObjectLighting, SectorDoor, SectorDoorResolvedAnchor,
+                  SectorDoorRender, SectorDoorModelRender>(
+        [&](engine::Entity entity, SectorObject &object, SectorObjectLighting &, SectorDoor &door,
+            SectorDoorResolvedAnchor &anchor, SectorDoorRender &render,
+            SectorDoorModelRender &model) {
+            if (!model.modelVisualRequested || !object.visible || !door.enabled || !render.visible)
+                return;
+            const bool inView = SectorBoundsInView(camera, aspect, rlGetCullDistanceNear(),
+                                                   rlGetCullDistanceFar(), model.receiverBounds);
+            if (!inView || !ShouldDrawSectorDoorForVisibility(anchor, visibility, inView)) {
+                ++culledOpaqueObjects;
+                countCulled(assets.GetModelAsset(model.leafModel));
+                countCulled(assets.GetModelAsset(model.frameModel));
+                return;
+            }
+            const auto policy = ResolveSectorDoorModelDrawPolicy(
+                model, assets.GetModelAsset(model.leafModel) != nullptr,
+                assets.GetModelAsset(model.frameModel) != nullptr);
+            if (!policy.drawLeaf && !policy.drawFrame)
+                return;
+            AppendSectorOpaqueDraw(modelDoorDraws,
+                                   {entity, door.placedObjectId, 0, MatrixIdentity(),
+                                    model.receiverBounds,
+                                    SectorNearestViewDepth(camera, model.receiverBounds)},
+                                   drawCapacityWarned);
+        });
+    std::sort(staticDraws.begin(), staticDraws.end(), SectorOpaqueDrawLess);
+    std::sort(modelDoorDraws.begin(), modelDoorDraws.end(), SectorOpaqueDrawLess);
+}
+
+void SectorStaticModelRenderer::DrawPreparedDepth(
+    engine::AssetManager &assets, engine::World &world, Material depthMaterial,
+    const std::vector<engine::TextureHandle> &lightmapTextures)
+{
+    if (!shaderLoaded)
+        return;
+    const auto drawModel = [&](const engine::ModelAsset &asset, engine::ModelHandle handle,
+                               Matrix transform, const SectorStaticModelLightmapObject *object) {
+        const Model &model = asset.model;
+        const CachedModel *cached = object ? FindCachedModel(handle, object->modelIndex) : nullptr;
+        for (int i = 0; i < model.meshCount; ++i) {
+            if (!model.meshMaterial)
+                continue;
+            const int materialIndex = model.meshMaterial[i];
+            if (materialIndex < 0 || materialIndex >= model.materialCount ||
+                !model.materials[materialIndex].maps ||
+                materialIndex >= static_cast<int>(asset.materials.size()))
+                continue;
+            const auto &material = asset.materials[materialIndex];
+            if (!SectorMaterialDepthEligible(material))
+                continue;
+            const Mesh *mesh = &model.meshes[i];
+            if (cached && object && cached->meshes.size() == static_cast<size_t>(model.meshCount) &&
+                object->meshPlacements.size() == static_cast<size_t>(model.meshCount)) {
+                const int atlas = object->meshPlacements[i].atlasIndex;
+                const Texture2D *lightmap =
+                    atlas >= 0 && atlas < static_cast<int>(lightmapTextures.size())
+                        ? assets.GetTexture(lightmapTextures[atlas])
+                        : nullptr;
+                if (lightmap && lightmap->id)
+                    mesh = &cached->meshes[i];
+            }
+            ApplySectorMaterialCulling(material, transform);
+            DrawMesh(*mesh, depthMaterial, transform);
+        }
+    };
+    for (const auto &item : staticDraws) {
+        if (!world.IsAlive(item.entity) || !world.Has<SectorStaticModel>(item.entity))
+            continue;
+        const auto &prop = world.Get<SectorStaticModel>(item.entity);
+        const auto *asset = assets.GetModelAsset(prop.model);
+        if (asset)
+            drawModel(*asset, prop.model, item.transform,
+                      FindLightmapObject(lightmapData, prop.placedObjectId));
+    }
+    for (const auto &item : modelDoorDraws) {
+        if (!world.IsAlive(item.entity) || !world.Has<SectorDoorModelRender>(item.entity))
+            continue;
+        const auto &door = world.Get<SectorDoorModelRender>(item.entity);
+        const auto *leaf = assets.GetModelAsset(door.leafModel);
+        const auto *frame = assets.GetModelAsset(door.frameModel);
+        const auto policy =
+            ResolveSectorDoorModelDrawPolicy(door, leaf != nullptr, frame != nullptr);
+        if (policy.drawLeaf)
+            drawModel(*leaf, door.leafModel, MatrixMultiply(leaf->model.transform, door.leafMatrix),
+                      nullptr);
+        if (policy.drawFrame)
+            drawModel(*frame, door.frameModel,
+                      MatrixMultiply(frame->model.transform, door.frameMatrix), nullptr);
+    }
+    RestoreSectorMaterialCulling();
 }
 
 void SectorStaticModelRenderer::PrepareShadowRenderContext(
@@ -1616,7 +1759,16 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
                                 static_cast<size_t>(meshIndex)],
                         modelTransform)
                 : modelTransform;
+        if (drawingModelDoor) ApplySectorMaterialCulling(
+                materialIndex < static_cast<int>(modelAsset.materials.size())
+                        ? modelAsset.materials[materialIndex] : engine::ModelMaterialAsset{}, meshTransform);
         DrawMesh(model.meshes[meshIndex], material, meshTransform);
+        if (drawingModelDoor) {
+            RestoreSectorMaterialCulling();
+            rlDisableBackfaceCulling();
+            ++submittedMeshes;
+            submittedTriangles += model.meshes[meshIndex].triangleCount;
+        }
         drewMesh = true;
     }
     return drewMesh;
@@ -1827,10 +1979,7 @@ void SectorStaticModelRenderer::Draw(
     // it explicitly below, so clear it before entering that pass.
     UploadInteractionHighlightStrength(0.0f);
 
-    runtimeObjectWorld.ForEach<
-            SectorObjectTransform,
-            SectorObject,
-            SectorStaticModel>(
+    const auto drawStatic =
             [this,
              &assets,
              &dynamicLightContext,
@@ -1885,7 +2034,7 @@ void SectorStaticModelRenderer::Draw(
                         transform.rotationZRadians, staticModel.scale);
                 const Matrix modelTransform = MatrixMultiply(model->transform, authoredTransform);
                 if (this->captureCulling && !AcceptSectorReflectionObject(this->captureCulling,
-                        TransformSectorDoorModelBounds(modelAsset->localBounds, modelTransform),
+                        TransformSectorDoorModelBounds(modelAsset->localBounds, authoredTransform),
                         modelAsset->hasLocalBounds)) return;
 
                 const int useSkinning = 0;
@@ -2095,7 +2244,14 @@ void SectorStaticModelRenderer::Draw(
                     const Mesh& mesh = hasRemappedMesh
                             ? cached->meshes[static_cast<size_t>(meshIndex)]
                             : model->meshes[meshIndex];
+                    ApplySectorMaterialCulling(
+                            materialIndex < static_cast<int>(modelAsset->materials.size())
+                                    ? modelAsset->materials[materialIndex] : engine::ModelMaterialAsset{}, modelTransform);
                     DrawMesh(mesh, material, modelTransform);
+                    RestoreSectorMaterialCulling();
+                    rlDisableBackfaceCulling();
+                    ++submittedMeshes;
+                    submittedTriangles += mesh.triangleCount;
                     drewMesh = true;
                 }
                 if (drewMesh) {
@@ -2103,7 +2259,13 @@ void SectorStaticModelRenderer::Draw(
                 } else {
                     ++skipped;
                 }
-            });
+            };
+    for (const auto& item : staticDraws) {
+        if (!runtimeObjectWorld.IsAlive(item.entity)) continue;
+        drawStatic(item.entity, runtimeObjectWorld.Get<SectorObjectTransform>(item.entity),
+                runtimeObjectWorld.Get<SectorObject>(item.entity),
+                runtimeObjectWorld.Get<SectorStaticModel>(item.entity));
+    }
 
     runtimeObjectWorld.ForEach<
             SectorObjectTransform,
@@ -2215,13 +2377,7 @@ void SectorStaticModelRenderer::Draw(
                 else ++skipped;
             });
 
-    runtimeObjectWorld.ForEach<
-            SectorObject,
-            SectorObjectLighting,
-            SectorDoor,
-            SectorDoorResolvedAnchor,
-            SectorDoorRender,
-            SectorDoorModelRender>(
+    const auto drawModelDoor =
             [this,
              &assets,
              &dynamicLightContext,
@@ -2250,23 +2406,7 @@ void SectorStaticModelRenderer::Draw(
                     return;
                 }
                 ++considered;
-                const bool boundsVisibleInCamera = !staticCaptureOnly
-                        && !ProjectSectorAtmosphereBoundsToScissor(
-                                    camera,
-                                    viewAspect,
-                                    viewNearPlane,
-                                    modelRender.receiverBounds.min,
-                                    modelRender.receiverBounds.max,
-                                    viewWidth,
-                                    viewHeight)
-                                    .Empty();
-                if (!ShouldDrawSectorDoorForVisibility(
-                            anchor,
-                            visibility,
-                            boundsVisibleInCamera)) {
-                    ++portalCulled;
-                    return;
-                }
+                // Visibility and camera bounds were resolved once for both depth and color.
                 if (!object.visible || !door.enabled || !render.visible) {
                     ++skipped;
                     return;
@@ -2332,7 +2472,18 @@ void SectorStaticModelRenderer::Draw(
                 }
                 if (drewDoorMesh) ++drawn;
                 else ++skipped;
-            });
+            };
+    drawingModelDoor = true;
+    for (const auto& item : modelDoorDraws) {
+        if (!runtimeObjectWorld.IsAlive(item.entity)) continue;
+        drawModelDoor(item.entity, runtimeObjectWorld.Get<SectorObject>(item.entity),
+                runtimeObjectWorld.Get<SectorObjectLighting>(item.entity),
+                runtimeObjectWorld.Get<SectorDoor>(item.entity),
+                runtimeObjectWorld.Get<SectorDoorResolvedAnchor>(item.entity),
+                runtimeObjectWorld.Get<SectorDoorRender>(item.entity),
+                runtimeObjectWorld.Get<SectorDoorModelRender>(item.entity));
+    }
+    drawingModelDoor = false;
 
     rlActiveTextureSlot(0);
     rlSetTexture(0);

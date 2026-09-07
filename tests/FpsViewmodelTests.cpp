@@ -1412,7 +1412,7 @@ void SettingsResolutionAndPersistence()
     assert(Near(
             loaded.graphics.dynamicLightFadeInSeconds,
             game::DefaultFpsDynamicLightFadeInSeconds));
-    assert(!loaded.graphics.depthPrepass);
+    assert(loaded.graphics.depthPrepass);
     assert(!loaded.graphics.showFpsCounter);
     assert(loaded.toneMapping.toneMapper
             == engine::ToneMappingOperator::KhronosPbrNeutral);

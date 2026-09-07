@@ -16,7 +16,7 @@
     "maxDynamicLights": 32,
     "maxShadowLightUpdatesPerFrame": 2,
     "dynamicLightFadeInSeconds": 0.25,
-    "depthPrepass": false,
+    "depthPrepass": true,
     "showFpsCounter": true,
     "performanceOverlay": false,
     "vsync": true,

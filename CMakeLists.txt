@@ -204,6 +204,12 @@ target_link_libraries(${PROJECT_NAME} PRIVATE xatlas)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(opaque_draw_policy_tests tests/OpaqueDrawPolicyTests.cpp)
+    target_include_directories(opaque_draw_policy_tests PRIVATE sources)
+    target_link_libraries(opaque_draw_policy_tests PRIVATE raylib)
+    target_compile_definitions(opaque_draw_policy_tests PRIVATE
+            GLASS_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorWindowRenderer.cpp")
+    add_test(NAME opaque_draw_policy COMMAND opaque_draw_policy_tests)
     add_executable(script_system_tests
             tests/ScriptSystemTests.cpp
             sources/engine/scripting/ScriptConsole.cpp

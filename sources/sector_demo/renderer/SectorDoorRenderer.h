@@ -173,6 +173,13 @@ public:
     bool LoadOpaqueResources();
     void ShutdownOpaqueResources();
     void Draw(const SectorDoorDrawContext& context);
+    void PrepareVisibleDraws(engine::AssetManager& assets, engine::World& world,
+            const Camera3D& camera, float aspect, const RuntimePortalVisibilityResult& visibility);
+    void DrawPreparedDepth(Material depthMaterial);
+    std::size_t VisibleOpaqueObjects() const { return visibleDraws.size(); }
+    std::size_t CulledOpaqueObjects() const { return culledOpaqueObjects; }
+    std::size_t SubmittedTriangles() const;
+    std::size_t CulledTriangles() const { return culledTriangles; }
     void PrepareShadowRenderContext(
             SectorDynamicSpotLightShadowRenderContext& context,
             engine::World* runtimeObjectWorld);
@@ -191,6 +198,10 @@ public:
     const SectorDoorRenderStats& RenderStats() const { return renderStats; }
 
 private:
+    std::vector<SectorOpaqueDrawItem> visibleDraws;
+    bool drawCapacityWarned = false;
+    std::size_t culledOpaqueObjects = 0;
+    std::size_t culledTriangles = 0;
     void ResetOpaqueShaderLocations();
     void PrepareRuntimeDoorMeshes(
             engine::AssetManager& assets,

@@ -1,6 +1,7 @@
 #include "engine/assets/ModelAssets.h"
 
 #include <external/cgltf.h>
+#include "engine/assets/ModelMaterialMetadata.h"
 #include <external/glad.h>
 #include <rlgl.h>
 #include <raymath.h>
@@ -621,6 +622,10 @@ ParsedModelMaterials ParseModelMaterials(
         return parsed;
     }
 
+    // raylib material zero is the glTF default material.
+    for (ModelMaterialAsset& material : parsed.materials) {
+        ReadGltfRasterMetadata(material, nullptr);
+    }
     const std::filesystem::path modelPath(path);
     const size_t count = std::min(
             static_cast<size_t>(data->materials_count),
@@ -628,6 +633,7 @@ ParsedModelMaterials ParseModelMaterials(
     for (size_t i = 0; i < count; ++i) {
         const cgltf_material& source = data->materials[i];
         ModelMaterialAsset& material = parsed.materials[i + 1];
+        ReadGltfRasterMetadata(material, &source);
         auto& textureSources = parsed.textureSources[i + 1];
         material.pbrMetallicRoughness = source.has_pbr_metallic_roughness;
         if (material.pbrMetallicRoughness) {

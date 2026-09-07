@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorReflectionSampling.h"
+#include "sector_demo/renderer/SectorShaderSource.h"
 #include "engine/assets/AssetManager.h"
 #include <rlgl.h>
 #include <external/glad.h>
@@ -78,11 +79,7 @@ vec3 SampleSectorEnvironment(vec3 position, vec3 direction, float roughness) {
 
 std::string AddSectorReflectionShaderSource(const char *source)
 {
-    std::string result(source);
-    const auto version = result.find("#version");
-    const auto line = result.find('\n', version);
-    result.insert(line + 1, ReflectionSource);
-    return result;
+    return InsertSectorShaderPreamble(source, ReflectionSource);
 }
 
 SectorReflectionShaderLocations LoadSectorReflectionShaderLocations(Shader shader)

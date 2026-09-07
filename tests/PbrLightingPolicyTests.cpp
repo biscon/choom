@@ -399,7 +399,7 @@ void TestRemovedShaderPathsStayRemoved()
             "UploadInteractionHighlightStrength(0.0f);",
             itemPass);
     const std::size_t staticPropPass = source.find(
-            "SectorStaticModel>(",
+            "const auto drawStatic =",
             itemPass);
     Check(itemPass != std::string::npos
                     && itemHighlightReset != std::string::npos
@@ -974,9 +974,9 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&glassShader.find("environmentBoxProjection")!=std::string::npos
                     &&glassShader.find("SelectSectorPbrEnvironmentBlend")
                             !=std::string::npos
-                    &&glassShader.find("shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneColorLoc")
+                    &&glassShader.find("active.shader.locs[SHADER_LOC_MAP_DIFFUSE] = active.sceneColorLoc")
                             !=std::string::npos
-                    &&glassShader.find("shader.locs[SHADER_LOC_MAP_SPECULAR] = sceneDepthLoc")
+                    &&glassShader.find("active.shader.locs[SHADER_LOC_MAP_SPECULAR] = active.sceneDepthLoc")
                             !=std::string::npos
                     &&glassShader.find("gl_FragCoord.z > opaqueDepth")
                             !=std::string::npos

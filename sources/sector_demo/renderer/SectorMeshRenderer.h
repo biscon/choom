@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/renderer/SectorWorldDiagnostics.h"
 #include "sector_demo/renderer/SectorRuntimeReflectionProbes.h"
 #include "sector_demo/renderer/SectorReflectionSampling.h"
 
@@ -52,6 +53,7 @@ struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
 
 struct SectorAtmosphereDiagnostics {
+    SectorWorldDiagnostics world;
     double causticsGpuMilliseconds = 0.0;
     double distanceFogGpuMilliseconds = 0.0;
     double analyticFogGpuMilliseconds = 0.0;
@@ -221,6 +223,8 @@ public:
     const std::string& RenderDebugText() const { return renderDebugText; }
     bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
     bool DepthPrepassEnabled() const { return depthPrepassEnabled; }
+    bool GlassEnabled() const { return glassEnabled; }
+    void SetGlassEnabled(bool enabled) { glassEnabled = enabled; }
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
     void SetGraphicsQuality(
@@ -228,7 +232,7 @@ public:
             int shadowMapResolution = DynamicSpotLightShadowMapResolution,
             int maxDynamicLights = static_cast<int>(MaxDynamicLights),
             int maxShadowLightUpdatesPerFrame = 2,
-            bool depthPrepass = false,
+            bool depthPrepass = true,
             float dynamicLightFadeInSeconds = DynamicLightDefaultFadeInSeconds)
     {
         shadowMapsEnabled = shadowsEnabled;
@@ -352,6 +356,8 @@ private:
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawDepthPrepass(engine::AssetManager& assets, engine::World* runtimeObjectWorld);
+    std::vector<SectorOpaqueDrawItem> visibleSectorDraws;
+    bool sectorDrawCapacityWarned = false;
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,
@@ -446,7 +452,7 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int shadowAtlasTilesPerRowLoc = -1;
-    bool depthPrepassEnabled = false;
+    bool depthPrepassEnabled = true;
     bool liquidRefractionFallbackLogged = false;
     bool atmosphereGpuFramePrepared = false;
     bool preGlassLightEffectsRendered = false;
@@ -491,6 +497,9 @@ private:
     int hdrSceneScratchFailedWidth = 0;
     int hdrSceneScratchFailedHeight = 0;
     SectorAtmosphereDiagnostics atmosphereDiagnostics;
+    SectorWorldProfiler worldProfiler;
+    bool worldDiagnosticsEnabled = false;
+    bool glassEnabled = true;
     std::array<unsigned int,
             AtmosphereGpuPassCount * AtmosphereGpuQueryLatency * 2>
             atmosphereGpuQueries{};

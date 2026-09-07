@@ -795,6 +795,12 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 }
                 break;
             case PreviewDebugOverlayTab::Render:
+                addKeyValue("glass", preview.GlassEnabled() ? "on (debug toggle below)" : "off (debug only)");
+                for (std::size_t i = 0; i < SectorWorldStageCount; ++i) {
+                    const auto& timing = preview.AtmosphereDiagnostics().world;
+                    addKeyValue(SectorWorldStageNames[i], TextFormat("CPU %.2f | GPU %.2f ms (delayed)",
+                            timing.cpuMs[i], timing.gpuMs[i]));
+                }
                 addKeyValue("sectors", TextFormat("%zu", preview.SectorCount()));
                 addKeyValue("batches", TextFormat("%zu", preview.BatchCount()));
                 addKeyValue("triangles", TextFormat("%d", preview.TriangleCount()));
@@ -1724,6 +1730,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         contentH += rowH + 6.0f;
     }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Render) {
+        contentH += rowH + 6.0f;
+    }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
         contentH += (rowH + 6.0f) * 4.0f;
     }
@@ -2099,6 +2108,20 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
         y += rowH + gap;
     }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Render) {
+        bool glass = preview.GlassEnabled();
+        const Rectangle rect{panel.x + padding, y, 280.0f, rowH};
+        if (mouseInteractive) {
+            engine::Checkbox(ui, smallConfig, input, assets, "preview_render_glass", rect,
+                    smallFont, "Render glass (debug only)", glass);
+            preview.SetGlassEnabled(glass);
+        } else {
+            engine::Text(smallConfig, assets, rect, smallFont,
+                    glass ? "Render glass: on" : "Render glass: off", engine::UITextJustify::Left);
+        }
+        y += rowH + 6.0f;
+    }
+
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
         SectorPbrContributionSettings settings = preview.PbrContributionSettings();
         const char* modeOptions[] = {

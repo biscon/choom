@@ -61,6 +61,7 @@ inline float SectorEditorPreviewOverlayExpandedHeight(PreviewDebugOverlayTab act
 {
     if (activeTab == PreviewDebugOverlayTab::Pbr) return 610.0f;
     if (activeTab == PreviewDebugOverlayTab::Navigation) return 760.0f;
+    if (activeTab == PreviewDebugOverlayTab::Render) return 560.0f;
     return 390.0f;
 }
 

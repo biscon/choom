@@ -616,6 +616,8 @@ void AppendDoorRenderDebugText(std::string& renderDebugText, const std::string& 
 
 void SectorDoorRenderer::ReserveRuntimeDoorCapacity(size_t capacity)
 {
+    visibleDraws.reserve(capacity);
+    drawCapacityWarned = false;
     doorMeshCache.reserve(capacity);
     runtimeDoorShadowCasters.clear();
     runtimeDoorShadowCasters.reserve(capacity);
@@ -832,6 +834,77 @@ void SectorDoorRenderer::PrepareRuntimeDoorMeshes(
     }
 }
 
+void SectorDoorRenderer::PrepareVisibleDraws(engine::AssetManager &assets, engine::World &world,
+                                             const Camera3D &camera, float aspect,
+                                             const RuntimePortalVisibilityResult &visibility)
+{
+    PrepareRuntimeDoorMeshes(assets, world);
+    visibleDraws.clear();
+    culledOpaqueObjects = 0;
+    culledTriangles = 0;
+    world.ForEach<SectorObjectTransform, SectorObject, SectorDoor, SectorDoorResolvedAnchor,
+                  SectorDoorRender>(
+        [&](engine::Entity entity, SectorObjectTransform &transform, SectorObject &object,
+            SectorDoor &door, SectorDoorResolvedAnchor &anchor, SectorDoorRender &render) {
+            if (!object.visible || !door.enabled || !render.visible || render.width <= 0 ||
+                render.height <= 0 || render.thickness <= 0)
+                return;
+            if (world.Has<SectorDoorModelRender>(entity)) {
+                const auto &model = world.Get<SectorDoorModelRender>(entity);
+                if (!ResolveSectorDoorModelDrawPolicy(
+                         model, assets.GetModelAsset(model.leafModel) != nullptr,
+                         assets.GetModelAsset(model.frameModel) != nullptr)
+                         .drawProcedural)
+                    return;
+            }
+            const auto *mesh = FindDoorMesh(door.placedObjectId);
+            if (!mesh || mesh->mesh.vertexCount <= 0)
+                return;
+            SectorReceiverBounds receiver{object.currentSectorId, transform.position,
+                                          transform.position};
+            BuildSectorDoorReceiverBounds(transform, object, door, anchor, render,
+                                          object.currentSectorId, receiver);
+            const BoundingBox bounds{receiver.min, receiver.max};
+            const bool inView = SectorBoundsInView(camera, aspect, rlGetCullDistanceNear(),
+                                                   rlGetCullDistanceFar(), bounds);
+            if (!inView || !ShouldDrawSectorDoorForVisibility(anchor, visibility, inView)) {
+                ++culledOpaqueObjects;
+                culledTriangles += mesh->mesh.triangleCount;
+                return;
+            }
+            AppendSectorOpaqueDraw(visibleDraws,
+                                   {entity, door.placedObjectId, 0,
+                                    BuildSectorDoorSlabModelMatrix(transform, anchor, render),
+                                    bounds, SectorNearestViewDepth(camera, bounds)},
+                                   drawCapacityWarned);
+        });
+    std::sort(visibleDraws.begin(), visibleDraws.end(), SectorOpaqueDrawLess);
+}
+
+void SectorDoorRenderer::DrawPreparedDepth(Material depthMaterial)
+{
+    if (!IsOpaqueReady())
+        return;
+    rlDisableBackfaceCulling(); // Procedural slabs keep their existing two-sided policy.
+    for (const auto &item : visibleDraws) {
+        const auto *entry = FindDoorMesh(item.id);
+        if (entry)
+            DrawMesh(entry->mesh, depthMaterial, item.transform);
+    }
+    rlEnableBackfaceCulling();
+}
+
+std::size_t SectorDoorRenderer::SubmittedTriangles() const
+{
+    std::size_t count = 0;
+    for (const auto &item : visibleDraws) {
+        const auto *entry = FindDoorMesh(item.id);
+        if (entry)
+            count += entry->mesh.triangleCount;
+    }
+    return count;
+}
+
 void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
 {
     if (!IsOpaqueReady()) {
@@ -849,7 +922,6 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
     Material& doorOpaqueMaterial = OpaqueMaterial();
     const Texture2D& doorOpaqueDefaultMaterialTexture = OpaqueDefaultMaterialTexture();
     const SectorDoorOpaqueShaderLocations& doorOpaqueLocations = OpaqueShaderLocations();
-    PrepareRuntimeDoorMeshes(*context.assets, *context.runtimeObjectWorld);
 
     size_t consideredCount = 0;
     size_t drawnCount = 0;
@@ -1005,12 +1077,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
             &useObjectAmbientCube,
             SHADER_UNIFORM_INT);
 
-    context.runtimeObjectWorld->ForEach<
-            SectorObjectTransform,
-            SectorObject,
-            SectorDoor,
-            SectorDoorResolvedAnchor,
-            SectorDoorRender>(
+    const auto drawDoor =
             [this,
              &context,
              &consideredCount,
@@ -1225,7 +1292,14 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                         doorOpaqueMaterial,
                         doorModel);
                 ++drawnCount;
-            });
+            };
+    for (const auto& item : visibleDraws) {
+        if (!context.runtimeObjectWorld->IsAlive(item.entity)) continue;
+        auto& world = *context.runtimeObjectWorld;
+        drawDoor(item.entity, world.Get<SectorObjectTransform>(item.entity),
+                world.Get<SectorObject>(item.entity), world.Get<SectorDoor>(item.entity),
+                world.Get<SectorDoorResolvedAnchor>(item.entity), world.Get<SectorDoorRender>(item.entity));
+    }
 
     doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = doorOpaqueDefaultMaterialTexture;
     doorOpaqueMaterial.maps[MATERIAL_MAP_NORMAL].texture = Texture2D{};

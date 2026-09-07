@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Offline GLSL validation of runtime reflection consumers and capture/filter shaders.
 
-Requires glslangValidator; does not open a window or create a graphics context.
+Requires glslangValidator and a C++17 compiler; no window or graphics context.
 """
 import pathlib
+import os
 import re
+import shlex
 import subprocess
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RENDERER = ROOT / "sources/sector_demo/renderer"
@@ -38,7 +41,15 @@ def sources(path, macros):
     return result
 
 
-def main():
+def validate(assembler):
+    def insert_preamble(source, preamble):
+        # Execute the same C++ insertion helper used by the runtime. Do not
+        # reproduce its newline/version handling in Python.
+        payload = preamble.encode() + source.encode()
+        return subprocess.run([str(assembler)],
+                              input=str(len(preamble.encode())).encode() + b'\n' + payload,
+                              capture_output=True, check=True).stdout.decode()
+
     macros = {}
     for path in RENDERER.glob('*.h'):
         text = path.read_text()
@@ -60,11 +71,47 @@ def main():
         for name, stage in zip(names, ('vert', 'frag')):
             source = shaders[name]
             if stage == 'frag' and name != 'FilterFs':
-                offset = source.index('\n', source.index('#version')) + 1
-                source = source[:offset] + shared + source[offset:]
+                source = insert_preamble(source, shared)
             print(f'Checking {filename}: {name}', flush=True)
             subprocess.run(['glslangValidator', '--stdin', '-S', stage],
-                           input=source, text=True, check=True)
+                           input=(insert_preamble(source, '#define WINDOW_FLAT_PASS 0\n')
+                                  if name == 'WindowFs' else source), text=True, check=True)
+            if name == 'WindowFs':
+                for variant in (1, 2):
+                    specialized = insert_preamble(source, f'#define WINDOW_FLAT_PASS {variant}\n')
+                    print(f'Checking flat glass variant {variant}', flush=True)
+                    subprocess.run(['glslangValidator', '--stdin', '-S', stage],
+                                   input=specialized, text=True, check=True)
+                    preprocessed = subprocess.run(
+                        ['glslangValidator', '--stdin', '-S', stage, '-E'],
+                        input=specialized, text=True, capture_output=True, check=True).stdout
+                    assert 'discard' not in preprocessed, 'Flat glass must permit early depth rejection'
+                    assert 'SampleTransmission(' not in preprocessed.replace(' ', ''), 'Flat glass must not sample scene refraction'
+
+
+def main():
+    # A tiny, graphics-free executable lets validation consume runtime-assembled
+    # shader source, including leading whitespace in the actual C++ literals.
+    driver = r'''
+#include "sector_demo/renderer/SectorShaderSource.h"
+#include <iostream>
+#include <iterator>
+int main() {
+    std::size_t size = 0;
+    std::cin >> size;
+    std::cin.get();
+    std::string preamble(size, '\0');
+    std::cin.read(preamble.data(), size);
+    std::string source((std::istreambuf_iterator<char>(std::cin)), {});
+    std::cout << game::InsertSectorShaderPreamble(source, preamble);
+}
+'''
+    with tempfile.TemporaryDirectory(prefix='sector-shader-check-') as directory:
+        assembler = pathlib.Path(directory) / 'assemble'
+        subprocess.run(shlex.split(os.environ.get('CXX', 'c++')) +
+                       ['-std=c++17', '-x', 'c++', '-', '-I', str(ROOT / 'sources'),
+                        '-o', str(assembler)], input=driver, text=True, check=True)
+        validate(assembler)
 
 
 if __name__ == '__main__':

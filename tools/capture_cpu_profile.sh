@@ -8,6 +8,7 @@ profile_dir="$repo_root/profiles"
 timestamp="$(date +%Y%m%d-%H%M%S)"
 profile_path="$profile_dir/cpu-$timestamp.perf.data"
 frame_trace_path="$profile_dir/cpu-$timestamp.frames.log"
+trace_threshold_ms="${ENGINE_FRAME_TRACE_THRESHOLD_MS:-0.01}"
 
 if ! command -v perf >/dev/null 2>&1; then
     echo "error: perf is not installed" >&2
@@ -40,7 +41,7 @@ perf record \
     --mmap-pages 128 \
     --compression-level=1 \
     -- "$engine_binary" \
-    --trace-frame-dips-ms=12 \
+    --trace-frame-dips-ms="$trace_threshold_ms" \
     --frame-trace-output="$frame_trace_path"
 status=$?
 
@@ -53,7 +54,7 @@ fi
 if [[ -s "$frame_trace_path" ]]; then
     echo "Frame-dip trace saved: $frame_trace_path"
 else
-    echo "No frames exceeded the 12 ms trace threshold."
+    echo "No frames exceeded the $trace_threshold_ms ms trace threshold."
 fi
 
 exit "$status"
