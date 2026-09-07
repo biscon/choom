@@ -1,8 +1,10 @@
 #pragma once
+#include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -43,6 +45,9 @@ struct SectorDoorRenderStats {
 struct SectorDoorResolvedMaterial {
     const Texture2D* albedo = nullptr;
     const Texture2D* normal = nullptr;
+    const Texture2D* properties = nullptr;
+    SectorMaterialPropertyMapKind propertyMapKind =
+            SectorMaterialPropertyMapKind::None;
     float normalStrength = 1.0f;
     float metallicFactor = 0.0f;
     float roughnessFactor = 0.8f;
@@ -67,6 +72,8 @@ struct SectorDoorDynamicLightContext {
 };
 
 struct SectorDoorDrawContext {
+    SectorReflectionCaptureCulling* captureCulling = nullptr;
+    const SectorPbrEnvironment* reflectionEnvironment = nullptr;
     engine::AssetManager* assets = nullptr;
     engine::World* runtimeObjectWorld = nullptr;
     SectorRuntimeDoorLightingContext lighting;
@@ -91,8 +98,11 @@ struct SectorDoorDrawContext {
 };
 
 struct SectorDoorOpaqueShaderLocations {
+    SectorReflectionShaderLocations reflections;
     int texture = -1;
     int normalTexture = -1;
+    int materialPropertiesTexture = -1;
+    int materialPropertiesKind = -1;
     int hasNormalMap = -1;
     int normalStrength = -1;
     int metallicFactor = -1;
@@ -163,6 +173,13 @@ public:
     bool LoadOpaqueResources();
     void ShutdownOpaqueResources();
     void Draw(const SectorDoorDrawContext& context);
+    void PrepareVisibleDraws(engine::AssetManager& assets, engine::World& world,
+            const Camera3D& camera, float aspect, const RuntimePortalVisibilityResult& visibility);
+    void DrawPreparedDepth(Material depthMaterial);
+    std::size_t VisibleOpaqueObjects() const { return visibleDraws.size(); }
+    std::size_t CulledOpaqueObjects() const { return culledOpaqueObjects; }
+    std::size_t SubmittedTriangles() const;
+    std::size_t CulledTriangles() const { return culledTriangles; }
     void PrepareShadowRenderContext(
             SectorDynamicSpotLightShadowRenderContext& context,
             engine::World* runtimeObjectWorld);
@@ -181,6 +198,10 @@ public:
     const SectorDoorRenderStats& RenderStats() const { return renderStats; }
 
 private:
+    std::vector<SectorOpaqueDrawItem> visibleDraws;
+    bool drawCapacityWarned = false;
+    std::size_t culledOpaqueObjects = 0;
+    std::size_t culledTriangles = 0;
     void ResetOpaqueShaderLocations();
     void PrepareRuntimeDoorMeshes(
             engine::AssetManager& assets,

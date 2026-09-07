@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <limits>
 #include <vector>
 
 namespace engine {
@@ -204,6 +205,22 @@ public:
             const SectorPreviewDynamicPointLightSource* light);
     void SetReservedRuntimeLight(
             const SectorPreviewDynamicPointLightSource* light);
+    const SectorPreviewDynamicPointLightSource* ReservedRuntimeLight() const
+    { return reservedRuntimeLightActive ? &reservedRuntimeLight : nullptr; }
+    // Capture instances own independent selection/shadow caches.
+    void SetCaptureSources(const std::vector<SectorPreviewDynamicPointLightSource>& value)
+    { captureSelection = true; sources = value; ReserveSelectionBuffers(); }
+    void ReserveCaptureCapacity(std::size_t lights, std::size_t sectors) {
+        sources.reserve(lights); selectionSources.reserve(lights);
+        candidates.reserve(lights); lightingVisibility.visibleSectorIds.reserve(sectors);
+        lightingVisibility.status.reserve(128); ReserveSelectionBuffers();
+    }
+    void SetShadowFaceBudget(std::size_t count) { maxShadowFacesPerFrame = count; }
+    bool HasPendingShadowFaces() const {
+        for (const auto& tile : shadowAtlasTileStates)
+            if (tile.assigned && (!tile.valid || tile.dirty)) return true;
+        return false;
+    }
     const SectorPreviewDynamicPointLightSource* RuntimePointLight() const
     {
         return runtimePointLightActive ? &runtimePointLight : nullptr;
@@ -262,6 +279,7 @@ public:
     void RenderShadowMaps(const SectorDynamicSpotLightShadowRenderContext& context);
 
 private:
+    std::size_t maxShadowFacesPerFrame = std::numeric_limits<std::size_t>::max();
     struct ShadowAtlasTileState {
         SectorPreviewDynamicSpotLightShadowMatrix matrix{};
         bool assigned = false;
@@ -312,6 +330,7 @@ private:
     SectorDynamicLightSelectionStats selectionStats;
     std::vector<SectorReceiverBounds> receiverBounds;
     std::vector<SectorDynamicLightSectorContext> sectorLightContexts;
+    bool captureSelection = false;
     std::vector<SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> shadowMatrices;
     std::array<ShadowAtlasTileState, MaxDynamicSpotLightShadowCasters>

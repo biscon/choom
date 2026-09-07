@@ -70,8 +70,8 @@ struct SectorEditorPreviewOverlayResult {
     bool openWeaponEditor = false;
     bool markTopologyDocumentEdited = false;
     bool requestNavigationRebuild = false;
-    bool requestBakeSelectedReflectionProbe = false;
-    bool requestBakeAllReflectionProbes = false;
+    bool requestRefreshReflections = false;
+    bool requestPauseReflections = false;
     bool requestApplyAdjustment = false;
     bool requestCancelAdjustment = false;
     const char* topologyDocumentEditStatus = nullptr;

@@ -1153,6 +1153,10 @@ void SectorSceneRuntime::RenderScene(
         bool useBakedAmbientOcclusion,
         SectorUseHighlight useHighlight)
 {
+    if (runtimeObjects.doorSpatialStateChanged) renderer.RefreshRuntimeReflections(false);
+    renderer.UpdateRuntimeReflections(context.assets, &context.world,
+            SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes,
+                    &map, runtimeObjects.staticLightingRevision});
     renderer.DrawScene(
             context.assets,
             useBakedAmbientOcclusion,
@@ -1169,6 +1173,15 @@ void SectorSceneRuntime::RenderScene(
             renderer.RenderCamera(),
             renderer.VisibilityResult());
     EndMode3D();
+}
+
+bool SectorSceneRuntime::PrepareInitialReflections(engine::EngineContext& context,
+        const SectorTopologyMap& map)
+{
+    renderer.UpdateRuntimeReflections(context.assets, &context.world,
+            SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes,
+                    &map, runtimeObjects.staticLightingRevision}, true);
+    return renderer.InitialReflectionsReady();
 }
 
 void SectorSceneRuntime::ApplyWorldAtmosphere(

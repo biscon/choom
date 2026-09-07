@@ -465,7 +465,6 @@ struct SectorTopologyMap {
     std::vector<SectorCompiledReflectionProbe> compiledReflectionProbes;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
-    SectorBakedReflectionProbeMetadata bakedReflectionProbes;
 };
 
 // Transient lookup data. Index vectors intentionally retain duplicate IDs so

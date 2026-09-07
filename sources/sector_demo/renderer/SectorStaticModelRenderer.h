@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "engine/assets/AssetHandles.h"
 #include "engine/assets/ModelAssets.h"
@@ -10,6 +11,7 @@
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
 #include "sector_demo/SectorStaticModelShadow.h"
+#include "sector_demo/renderer/SectorOpaqueDrawPolicy.h"
 
 #include <raylib.h>
 
@@ -30,6 +32,7 @@ struct ModelAsset;
 namespace game {
 
 struct RuntimePortalVisibilityResult;
+struct SectorReflectionCaptureCulling;
 
 constexpr size_t SectorStaticModelMaterialMapCount = 12;
 constexpr int SectorStaticModelLightmapMaterialMap =
@@ -79,6 +82,7 @@ struct SectorPbrContributionSettings {
     SectorPbrDiagnosticMode diagnosticMode = SectorPbrDiagnosticMode::Full;
     float worldIndirectDiffuseScale = 1.0f;
     float worldEnvironmentSpecularScale = 1.0f;
+    bool reflectionCapture = false;
 };
 
 inline SectorPbrContributionSettings NormalizeSectorPbrContributionSettings(
@@ -221,6 +225,9 @@ struct SectorPbrDrawDiagnostics {
     SectorPbrDrawState state;
     engine::ModelMaterialAsset material;
     SectorStaticSpecularLightContext staticSpecularLights;
+    std::array<int,2> reflectionProbeIds{{-1,-1}};
+    float reflectionSecondWeight = 0;
+    Vector2 reflectionTransition{1,1};
 };
 
 inline void ConfigureSectorStaticModelAuxiliaryMaterialMaps(
@@ -288,6 +295,16 @@ public:
             engine::AssetManager& assets,
             engine::World& runtimeObjectWorld);
     void ReserveShadowCasterCapacity(size_t capacity);
+    void PrepareVisibleDraws(engine::AssetManager& assets, engine::World& world,
+            const Camera3D& camera, float aspect, const RuntimePortalVisibilityResult& visibility);
+    void DrawPreparedDepth(engine::AssetManager& assets, engine::World& world,
+            Material depthMaterial, const std::vector<engine::TextureHandle>& lightmapTextures);
+    std::size_t VisibleOpaqueObjects() const { return staticDraws.size() + modelDoorDraws.size(); }
+    std::size_t CulledOpaqueObjects() const { return culledOpaqueObjects; }
+    std::size_t SubmittedMeshes() const { return submittedMeshes; }
+    std::size_t SubmittedTriangles() const { return submittedTriangles; }
+    std::size_t CulledMeshes() const { return culledMeshes; }
+    std::size_t CulledTriangles() const { return culledTriangles; }
     void PrepareShadowRenderContext(
             SectorDynamicSpotLightShadowRenderContext& context,
             engine::World* runtimeObjectWorld);
@@ -308,9 +325,11 @@ public:
             bool useBakedAmbientOcclusion,
             std::string& renderDebugText,
             bool staticCaptureOnly = false,
-            SectorUseHighlight useHighlight = {});
+            SectorUseHighlight useHighlight = {},
+            SectorReflectionCaptureCulling* captureCulling = nullptr);
 
     void DrawViewmodel(
+            engine::AssetManager& assets,
             const engine::ModelAsset& asset,
             engine::AnimatedModelInstance& instance,
             const Camera3D& camera,
@@ -341,6 +360,12 @@ public:
     void SetEnvironmentProjection(SectorPbrEnvironmentSelection selection)
     {
         environmentSelection = selection;
+        environmentBlend = {};
+        environmentBlend.first = selection;
+    }
+    void SetReflectionEnvironment(const SectorPbrEnvironment* environment) { reflectionEnvironment = environment; }
+    void SetEnvironmentBlend(SectorPbrEnvironmentBlend blend, Vector3 position) {
+        environmentBlend=blend;environmentSelection=blend.first;reflectionReceiverPosition=position;
     }
     const SectorPbrDrawDiagnostics& WorldPbrDiagnostics() const
     {
@@ -352,6 +377,19 @@ public:
     }
 
 private:
+    std::vector<SectorOpaqueDrawItem> staticDraws;
+    std::vector<SectorOpaqueDrawItem> modelDoorDraws;
+    bool drawCapacityWarned = false;
+    std::size_t culledOpaqueObjects = 0, submittedMeshes = 0, submittedTriangles = 0;
+    std::size_t culledMeshes = 0, culledTriangles = 0;
+    bool drawingModelDoor = false;
+    const SectorPbrEnvironment* reflectionEnvironment = nullptr;
+    SectorReflectionCaptureCulling* captureCulling = nullptr;
+    engine::AssetManager* drawAssets = nullptr;
+    SectorPbrEnvironmentBlend environmentBlend;
+    SectorReflectionShaderLocations reflectionLocations;
+    void PrepareReceiverEnvironment(Vector3 position, int sector, const SectorReceiverBounds* bounds = nullptr);
+    Vector3 reflectionReceiverPosition{};
     Shader shader = {};
     struct CachedModel {
         engine::ModelHandle handle = engine::NullModelHandle();

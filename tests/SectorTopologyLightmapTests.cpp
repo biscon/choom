@@ -1608,11 +1608,11 @@ void TestSourceHashChanges()
                     Vector3{1.0f, 1.0f, 1.0f},
                     Vector3{2.0f, 2.0f, 2.0f},
                     0.0f, 0, 1.0f, 128});
-    reflectionProbeMap.bakedReflectionProbes = {
-            "assets/levels/test/test.reflection-probes.bin", 1, 1,
-            "rgba16f-cubemap-mips"};
     Check(game::ComputeSectorLightmapSourceHash(reflectionProbeMap) == hash,
-          "lightmap source hash excludes reflection probe authoring and artifacts");
+          "lightmap source hash excludes runtime reflection probe authoring");
+    reflectionProbeMap.compiledReflectionProbes[0].blendDistanceWorld = 1.5f;
+    Check(game::ComputeSectorLightmapSourceHash(reflectionProbeMap) == hash,
+          "runtime reflection blending does not invalidate static lightmaps");
 
     game::SectorTopologyMap navigationOnlyMap = base;
     navigationOnlyMap.previewSettings.stepHeight += 0.15f;
@@ -2891,6 +2891,11 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
           "normal-map convention preserves dotted stems and directories");
     Check(game::SectorMaterialNormalMapPath("stone") == "stone_normal",
           "normal-map convention supports extensionless texture paths");
+    Check(game::SectorMaterialOrmMapPath("assets/images/stone.png")
+                  == "assets/images/stone_orm.png"
+                  && game::SectorMaterialRoughnessMapPath("/tmp/stone.wall.png")
+                          == "/tmp/stone.wall_roughness.png",
+          "material property-map conventions insert suffixes before extensions");
     Check(game::IsSectorMaterialNormalMapPath("assets/images/stone_normal.png")
                   && game::IsSectorMaterialNormalMapPath("stone.wall_normal.PNG")
                   && game::IsSectorMaterialNormalMapPath("stone_normal_512.png")
@@ -2898,6 +2903,13 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
                   && !game::IsSectorMaterialNormalMapPath("assets/images/abnormal_stone.png")
                   && !game::IsSectorMaterialNormalMapPath("assets/images/stone.png"),
           "normal-map convention identifies the automatic filename marker");
+    Check(game::IsSectorMaterialOrmMapPath("stone_ORM.PNG")
+                  && game::IsSectorMaterialRoughnessMapPath("stone_roughness_512.png")
+                  && game::IsSectorMaterialCompanionMapPath("stone_normal.png")
+                  && game::IsSectorMaterialCompanionMapPath("stone_orm.png")
+                  && game::IsSectorMaterialCompanionMapPath("stone_roughness.png")
+                  && !game::IsSectorMaterialCompanionMapPath("stone.png"),
+          "material companion-map markers are recognized case-insensitively");
 
     const std::filesystem::path floorBasePath = root / "floor.png";
     const std::filesystem::path floorNormalPath = root / "floor_normal.png";
@@ -2964,6 +2976,16 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
     std::filesystem::remove(hashNormalPath);
     Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
           "removing a companion normal map restores the missing-map source hash");
+
+    const std::filesystem::path hashOrmPath = root / "hash_surface_orm.png";
+    const std::filesystem::path hashRoughnessPath =
+            root / "hash_surface_roughness.png";
+    WriteSolidRgbTexture(hashRoughnessPath, Color{80, 80, 80, 255});
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "standalone roughness maps do not change the lightmap source hash");
+    WriteSolidRgbTexture(hashOrmPath, Color{255, 128, 0, 255});
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "ORM maps do not change the lightmap source hash");
 
     const std::filesystem::path unusedBasePath = root / "unused.png";
     const std::filesystem::path unusedNormalPath = root / "unused_normal.png";
@@ -5201,62 +5223,6 @@ void TestHdrArtifactAndBakeColorContract()
     std::filesystem::remove_all(sandbox);
 }
 
-void TestReflectionProbePrefilterAndArtifactRoundTrip()
-{
-    constexpr int Resolution = 64;
-    std::vector<Vector4> capture(static_cast<std::size_t>(Resolution)
-            * Resolution * 6u);
-    for (std::size_t i = 0; i < capture.size(); ++i) {
-        const float face = static_cast<float>(i / (Resolution * Resolution));
-        capture[i] = Vector4{1.0f + face, 0.25f, 0.5f, 1.0f};
-    }
-    game::SectorBakedReflectionProbeRecord record;
-    std::string error;
-    Check(game::BuildSectorReflectionProbeRecord(
-                  7, Resolution, "probe-hash", capture, record, error),
-          "reflection probe capture builds a GGX-prefiltered mip chain");
-    Check(record.mipCount == game::SectorReflectionProbeMipCount(Resolution)
-                  && record.rgba16.size()
-                          == game::SectorReflectionProbeHalfCount(
-                                  Resolution, record.mipCount),
-          "reflection probe prefilter has the expected complete mip payload");
-
-    game::SectorTopologyMap hashMap = MakeSquare();
-    game::SectorCompiledReflectionProbe probe{
-            7, 10, true, Vector3{1.0f, 1.0f, 1.0f},
-            Vector3{1.0f, 1.0f, 1.0f}, Vector3{2.0f, 2.0f, 2.0f},
-            0.0f, 0, 1.0f, Resolution};
-    const std::string firstHash = game::ComputeSectorReflectionProbeSourceHash(
-            hashMap, probe);
-    probe.intensity = 2.0f;
-    Check(game::ComputeSectorReflectionProbeSourceHash(hashMap, probe) != firstHash,
-          "reflection probe source hash includes probe settings");
-    probe.intensity = 1.0f;
-    hashMap.resolvedMaterialsById.begin()->second.roughnessFactor = 0.25f;
-    Check(game::ComputeSectorReflectionProbeSourceHash(hashMap, probe) != firstHash,
-          "reflection probe source hash includes captured PBR material inputs");
-
-    const std::filesystem::path sandbox =
-            std::filesystem::temp_directory_path()
-            / "sector_reflection_probe_round_trip";
-    std::filesystem::remove_all(sandbox);
-    std::filesystem::create_directories(sandbox);
-    const std::filesystem::path path = sandbox / "test.reflection-probes.bin";
-    game::SectorBakedReflectionProbeArtifact artifact;
-    artifact.version = game::SectorReflectionProbeBakeVersion;
-    artifact.probes.push_back(record);
-    Check(game::WriteSectorReflectionProbeArtifact(path, artifact, error),
-          "reflection probe artifact writes atomically");
-    game::SectorBakedReflectionProbeArtifact loaded;
-    Check(game::ReadSectorReflectionProbeArtifact(path, loaded, error)
-                  && loaded.probes.size() == 1
-                  && loaded.probes[0].probeId == 7
-                  && loaded.probes[0].sourceHash == "probe-hash"
-                  && loaded.probes[0].rgba16 == record.rgba16,
-          "reflection probe artifact round-trips without changing HDR half data");
-    std::filesystem::remove_all(sandbox);
-}
-
 } // namespace
 
 int main()
@@ -5322,7 +5288,6 @@ int main()
     TestStaticModelFingerprintRefreshAndHashInputs();
     TestStaticModelReceivesAndCastsBakedLighting();
     TestHdrArtifactAndBakeColorContract();
-    TestReflectionProbePrefilterAndArtifactRoundTrip();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d sector topology lightmap test(s) failed\n", failures);

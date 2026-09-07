@@ -81,7 +81,12 @@ enum ModelLoadFlags : uint32_t {
     ModelLoad_Animations = 1 << 0
 };
 
+enum class ModelMaterialSidedness { Unknown, SingleSided, DoubleSided };
+enum class ModelMaterialAlphaMode { Unknown, Opaque, Mask, Blend };
+
 struct ModelMaterialAsset {
+    ModelMaterialSidedness sidedness = ModelMaterialSidedness::Unknown;
+    ModelMaterialAlphaMode alphaMode = ModelMaterialAlphaMode::Unknown;
     // raylib's glTF textures bypass TextureAssets. Base-color and emissive
     // textures contain scene-sRGB bytes and are explicitly decoded by the
     // active model shader. Normal, metallic/roughness, and occlusion channels

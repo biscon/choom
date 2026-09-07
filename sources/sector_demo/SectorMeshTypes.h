@@ -24,6 +24,8 @@ struct SectorMeshBatch {
     Mesh mesh = {};
     int vertexCount = 0;
     int triangleCount = 0;
+    BoundingBox bounds{};
+    bool hasBounds = false;
 };
 
 struct SectorReceiverBounds {

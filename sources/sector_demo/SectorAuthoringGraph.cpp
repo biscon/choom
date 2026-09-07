@@ -1413,11 +1413,6 @@ void CopyFaceDefaultsToTopologySector(
 {
     sector.id = topologySectorId;
     sector.name = "Sector " + std::to_string(face.id);
-    sector.floorMaterialId = "floor";
-    sector.ceilingMaterialId = "ceiling";
-    sector.defaultWall.materialId = "wall";
-    sector.defaultLower.materialId = "wall";
-    sector.defaultUpper.materialId = "wall";
 }
 
 int AllocateDerivedSectorId(
@@ -1886,7 +1881,8 @@ void CompileAuthoringReflectionProbes(
                 probe.yawDegrees * DEG2RAD,
                 probe.priority,
                 probe.intensity,
-                probe.resolution});
+                probe.resolution,
+                probe.blendDistanceWorld});
     }
 }
 
@@ -2193,6 +2189,8 @@ SectorAuthoringReflectionProbe NormalizeSectorAuthoringReflectionProbe(
         probe.resolution = defaults.resolution;
     }
     probe.priority = std::clamp(probe.priority, -1000, 1000);
+    probe.blendDistanceWorld = std::isfinite(probe.blendDistanceWorld)
+            ? std::clamp(probe.blendDistanceWorld, 0.0f, 16.0f) : 0.5f;
     return probe;
 }
 
@@ -3525,6 +3523,7 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
         probe.priority = compiled.priority;
         probe.intensity = compiled.intensity;
         probe.resolution = compiled.resolution;
+        probe.blendDistanceWorld = compiled.blendDistanceWorld;
         graph.reflectionProbes.push_back(probe);
     }
 

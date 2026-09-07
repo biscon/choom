@@ -200,7 +200,11 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
             font,
             targetIsMiddle
                     ? TextFormat("Middle texture %s", currentTexture.empty() ? "<none>" : currentTexture.c_str())
-                    : TextFormat("%s texture %s", TopologyMaterialLayerName(layer), currentTexture.empty() ? "<none>" : currentTexture.c_str()),
+                    : TextFormat("%s texture %s", TopologyMaterialLayerName(layer),
+                            currentTexture.empty()
+                                    ? (layer == TopologyMaterialLayer::Base
+                                            ? "Default" : "<none>")
+                                    : currentTexture.c_str()),
             engine::UITextJustify::Left,
             missingTexture ? config.invalidColor : config.mutedTextColor
     );
@@ -274,6 +278,21 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
         OpenPreviewSurfaceTexturePicker(context, target, layer);
     }
     actionX += smallActionW + gap;
+
+    if (!targetIsMiddle && layer == TopologyMaterialLayer::Base) {
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_3d_default_material",
+                    Rectangle{actionX, actionTop, smallActionW, actionH},
+                    font,
+                    "Default")) {
+            materialEditing.UseDefaultSurfaceMaterial(target, &assets);
+        }
+        actionX += smallActionW + gap;
+    }
 
     if (portalLineDefId != -1) {
         bool blocksPlayer = portalBlocksPlayer;

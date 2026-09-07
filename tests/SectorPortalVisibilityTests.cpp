@@ -205,10 +205,10 @@ SectorTopologyMap MakeTurnFromMiddle()
             {4, 4, 1, 4, -1},
             {5, 2, 5, 5, -1},
             {6, 5, 6, 6, -1},
-            {7, 6, 3, 7, -1},
+            {7, 6, 3, 7, 20},
             {8, 6, 7, 8, -1},
             {9, 7, 8, 9, -1},
-            {10, 8, 3, 10, 20}};
+            {10, 8, 3, 10, -1}};
     AddSide(map, 1, 1, SectorTopologySideKind::Front, 10);
     AddSide(map, 2, 2, SectorTopologySideKind::Front, 10);
     AddSide(map, 3, 3, SectorTopologySideKind::Front, 10);
@@ -220,7 +220,8 @@ SectorTopologyMap MakeTurnFromMiddle()
     AddSide(map, 9, 9, SectorTopologySideKind::Front, 30);
     AddSide(map, 10, 10, SectorTopologySideKind::Front, 30);
     AddSide(map, 12, 2, SectorTopologySideKind::Back, 20);
-    AddSide(map, 20, 10, SectorTopologySideKind::Back, 20);
+    // The shared boundary is the top of 20 / bottom of 30, not 30's west wall.
+    AddSide(map, 20, 7, SectorTopologySideKind::Back, 30);
     map.sectors.push_back(Sector(10));
     map.sectors.push_back(Sector(20));
     map.sectors.push_back(Sector(30));
@@ -983,6 +984,220 @@ void TestViewCycleTerminates()
           "view cycle visible sectors are deterministic");
 }
 
+void AddTestPortal(game::RuntimeSectorVisibilityGraph& graph, int from, int to,
+                   Vector2 a, Vector2 b)
+{
+    for (int id : {from, to}) {
+        if (!game::FindRuntimeSectorVisibilityNode(graph, id))
+            graph.sectors.push_back({id, {}});
+    }
+    const int index = static_cast<int>(graph.portals.size());
+    graph.portals.push_back({index + 1, index + 1, from, to, a, b, 0, 3, true});
+    for (auto& node : graph.sectors) {
+        if (node.sectorId == from) node.outgoingPortalEdgeIndices.push_back(index);
+    }
+}
+
+void AddTestAngularPortal(game::RuntimeSectorVisibilityGraph& graph, int from, int to,
+                          float distance, float minDegrees, float maxDegrees)
+{
+    AddTestPortal(graph, from, to,
+                  {distance, distance * std::tan(Degrees(minDegrees))},
+                  {distance, distance * std::tan(Degrees(maxDegrees))});
+}
+
+void TestViewWindowsNeverEscapeParent()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    AddTestAngularPortal(graph, 10, 20, 10, -0.05f, 0.05f);
+    AddTestAngularPortal(graph, 20, 30, 20, 6.95f, 7.05f);
+    const auto result = game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+            graph, {0, 0}, {1, 0}, Degrees(20), {10});
+    Check(Contains(result.visibleSectorIds, 20), "first narrow doorway is visible");
+    Check(!Contains(result.visibleSectorIds, 30),
+          "a near-miss cannot move the child window outside its parent doorway");
+}
+
+void TestViewManySeparateWindowsPreserveGaps()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    for (int i = -4; i <= 4; ++i)
+        AddTestAngularPortal(graph, 10, 20, 10, i * 18.0f - 0.05f, i * 18.0f + 0.05f);
+    AddTestAngularPortal(graph, 20, 30, 20, 8.95f, 9.05f);
+    AddTestAngularPortal(graph, 20, 31, 20, 17.98f, 18.02f);
+    AddTestAngularPortal(graph, 20, 32, 20, -18.02f, -17.98f);
+    const auto result = game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+            graph, {0, 0}, {1, 0}, Degrees(170), {10});
+    Check(!Contains(result.visibleSectorIds, 30),
+          "nine separate openings must not fill the wall gaps between them");
+    Check(Contains(result.visibleSectorIds, 31) && Contains(result.visibleSectorIds, 32),
+          "separate valid portal paths are both retained");
+    Check(result.status == "visibility traversal complete",
+          "separate openings do not trigger coalescing or connected fallback");
+}
+
+void TestViewAngleSeamRetainsBothWindows()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    AddTestPortal(graph, 10, 20, {-10, -2}, {-10, 2});
+    AddTestPortal(graph, 20, 30, {-20, -2}, {-20, -1});
+    AddTestPortal(graph, 20, 40, {-20, 1}, {-20, 2});
+    const auto result = game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+            graph, {0, 0}, {1, 0}, Degrees(360), {10});
+    Check(Contains(result.visibleSectorIds, 30) && Contains(result.visibleSectorIds, 40),
+          "a portal crossing the +/-pi seam retains both child windows");
+}
+
+SectorTopologyMap MakeOccludedRoom(bool hole)
+{
+    SectorTopologyMap map;
+    map.sectors = {Sector(10), Sector(20)};
+    // A U-shaped room, or a rectangular room with a solid central pillar.
+    const std::vector<std::pair<SectorCoord, SectorCoord>> outline = hole
+            ? std::vector<std::pair<SectorCoord, SectorCoord>>{
+                    {0, 0}, {1024, 0}, {1024, 384}, {1024, 640}, {1024, 1024}, {0, 1024}}
+            : std::vector<std::pair<SectorCoord, SectorCoord>>{
+                    {0, 0}, {768, 0}, {768, 512}, {768, 768}, {512, 768},
+                    {512, 256}, {256, 256}, {256, 768}, {0, 768}};
+    AddSectorLoop(map, 10, outline);
+    // Both outlines have their exit portal on linedef 3, oriented upward.
+    const int a = static_cast<int>(map.vertices.size()) + 1;
+    map.vertices.push_back({a, outline[2].first + 256, outline[2].second});
+    map.vertices.push_back({a + 1, outline[3].first + 256, outline[3].second});
+    for (const auto endpoints : {std::pair<int, int>{3, a}, {a, a + 1}, {a + 1, 4}}) {
+        const int lineId = game::AllocateSectorTopologyLineDefId(map);
+        const int sideId = game::AllocateSectorTopologySideDefId(map);
+        map.lineDefs.push_back({lineId, endpoints.first, endpoints.second, sideId, -1});
+        AddSide(map, sideId, lineId, SectorTopologySideKind::Front, 20);
+    }
+    const int backSide = game::AllocateSectorTopologySideDefId(map);
+    map.lineDefs[2].backSideDefId = backSide;
+    AddSide(map, backSide, 3, SectorTopologySideKind::Back, 20);
+    if (hole) AddSectorLoop(map, 10, {{384, 256}, {384, 768}, {640, 768}, {640, 256}});
+    return map;
+}
+
+void TestViewSolidWallsOccludeConcaveRoomAndHole()
+{
+    for (bool hole : {false, true}) {
+        const auto map = MakeOccludedRoom(hole);
+        Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(map)),
+              "occlusion fixtures use valid generated topology, including the pillar hole");
+        game::SectorCollisionWorld lookup;
+        std::string error;
+        Check(lookup.BuildFromTopology(map, &error), "wall-occlusion fixture has valid sector loops");
+        game::RuntimeSectorVisibilityGraph graph;
+        Check(game::BuildRuntimeSectorVisibilityGraph(map, graph, &error),
+              "wall-occlusion graph builds from generated topology");
+        const auto* room = game::FindRuntimeSectorVisibilityNode(graph, 10);
+        Check(room && room->walls.size() >= 8, "solid boundaries are cached with visibility nodes");
+        const Vector2 hiddenEye{1, hole ? 4.0f : 5.0f};
+        auto result = game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                graph, hiddenEye, {1, 0}, Degrees(90), {10}, 10, 0, nullptr, 1.5f);
+        Check(result.visibleSectorIds == std::vector<int>{10},
+              "a solid bend or hole occludes the far portal inside the same sector");
+        Check(result.status == "visibility traversal complete", "wall clipping needs no fallback");
+        const Vector2 visibleEye{hole ? 7.0f : 5.0f, hiddenEye.y};
+        result = game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                graph, visibleEye, {1, 0}, Degrees(90), {10}, 10, 0, nullptr, 1.5f);
+        Check(Contains(result.visibleSectorIds, 20), "moving past the obstruction reveals the exit");
+        // The full connected set remains available for lighting, independent of camera occlusion.
+        Check(game::TraverseRuntimeSectorVisibility(graph, 10).visibleSectorIds.size() == 2,
+              "wall-aware culling does not alter portal connectivity");
+        if (hole) {
+            const Camera3D camera{{1, 1.5f, 4}, {2, 1.5f, 4}, {0, 1, 0}, 90, CAMERA_PERSPECTIVE};
+            const auto face = game::ComputeRuntimeSectorCaptureVisibility(
+                    graph, camera, game::TraverseRuntimeSectorVisibility(graph, 10));
+            Check(!Contains(face.visibleSectorIds, 20), "reflection faces use the same solid-wall occlusion");
+        }
+    }
+}
+
+void TestViewPartialWallOcclusionAndDepth()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    AddTestPortal(graph, 10, 20, {10, -4}, {10, 4});
+    AddTestPortal(graph, 20, 30, {20, -0.5f}, {20, 0.5f});
+    AddTestPortal(graph, 20, 40, {20, 6}, {20, 7});
+    AddTestPortal(graph, 20, 50, {20, -7}, {20, -6});
+    graph.sectors[0].walls.push_back({{5, -1}, {5, 1}, 0, 3});
+    game::RuntimePortalVisibilityScratch scratch;
+    game::ReserveRuntimePortalVisibilityScratch(graph, scratch);
+    const auto capacity = scratch.fragments.capacity();
+    const auto query = [&](float eyeY = 1.5f) {
+        return game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                graph, {0, 0}, {1, 0}, Degrees(90), {10}, 10, 0, nullptr, eyeY, &scratch);
+    };
+    auto result = query();
+    Check(Contains(result.visibleSectorIds, 20), "partially obscured portal remains visible");
+    Check(!Contains(result.visibleSectorIds, 30), "occluded middle of a portal cannot expose deeper sectors");
+    Check(Contains(result.visibleSectorIds, 40) && Contains(result.visibleSectorIds, 50),
+          "wall subtraction preserves both disjoint visible pieces of an opening");
+    Check(scratch.fragments.capacity() == capacity && scratch.nextFragments.capacity() == capacity,
+          "portal wall clipping reuses pre-reserved buffers");
+    std::swap(graph.sectors[0].walls[0].a, graph.sectors[0].walls[0].b);
+    Check(query().visibleSectorIds == result.visibleSectorIds,
+          "solid wall occlusion is independent of endpoint order");
+    graph.sectors[0].walls[0] = {{30, -10}, {30, 10}, 0, 3};
+    Check(Contains(query().visibleSectorIds, 30), "a wall behind the portal cannot occlude it");
+    graph.sectors[0].walls[0] = {{5, -10}, {5, 10}, 0, 1};
+    Check(Contains(query().visibleSectorIds, 30), "a low wall cannot hide the whole portal aperture");
+    graph.sectors[0].walls[0].top = 3;
+    Check(Contains(query(4).visibleSectorIds, 30), "an elevated camera is not falsely occluded");
+    Check(Contains(query(std::numeric_limits<float>::quiet_NaN()).visibleSectorIds, 30),
+          "unknown eye height conservatively skips solid-wall occlusion");
+    graph.sectors[0].walls[0] = {{0.01f, -10}, {0.01f, 10}, 0, 3};
+    Check(Contains(query().visibleSectorIds, 30), "near-camera wall ambiguity stays conservative");
+}
+
+void TestViewPortalFacingPreventsReverseTraversal()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    AddTestPortal(graph, 10, 20, {10, -1}, {10, 1});
+    AddTestPortal(graph, 20, 30, {5, 1}, {5, -1});
+    for (auto& edge : graph.portals) edge.hasFacing = true;
+    const auto result = game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+            graph, {0, 0}, {1, 0}, Degrees(90), {10});
+    Check(Contains(result.visibleSectorIds, 20) && !Contains(result.visibleSectorIds, 30),
+          "traversal cannot step backwards across an exit portal toward the camera");
+}
+
+void TestViewObliqueWallDepthClipping()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    AddTestPortal(graph, 10, 20, {10, -4}, {10, 4});
+    AddTestPortal(graph, 20, 30, {20, -4}, {20, -2});
+    AddTestPortal(graph, 20, 40, {20, 2}, {20, 4});
+    // The wall crosses the portal's depth plane. Its lower half is in front;
+    // its upper half is behind and must not hide the positive-angle opening.
+    graph.sectors[0].walls.push_back({{5, -2}, {15, 2}, 0, 3});
+    const auto result = game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+            graph, {0, 0}, {1, 0}, Degrees(90), {10}, 10, 0, nullptr, 1.5f);
+    Check(!Contains(result.visibleSectorIds, 30) && Contains(result.visibleSectorIds, 40),
+          "oblique wall clipping keeps depth order separately for each portal fragment");
+}
+
+void TestVisibilityWallsRespectSkyAndHeightStrips()
+{
+    auto map = MakeAdjacent();
+    map.sectors = {Sector(10, 0, 24), Sector(20, 4, 16)};
+    game::RuntimeSectorVisibilityGraph graph;
+    Check(game::BuildRuntimeSectorVisibilityGraph(map, graph), "height-strip wall graph builds");
+    const auto* room = game::FindRuntimeSectorVisibilityNode(graph, 10);
+    Check(room && room->walls.size() == 5, "lower and upper portal wall strips join three solid walls");
+    map.sectors[0].floorZ = 16;
+    map.sectors[0].ceilingZ = 24;
+    map.sectors[1].floorZ = 0;
+    map.sectors[1].ceilingZ = 8;
+    for (auto& sector : map.sectors) sector.ceilingSky = true;
+    Check(game::BuildRuntimeSectorVisibilityGraph(map, graph), "sky-sky wall graph builds");
+    room = game::FindRuntimeSectorVisibilityNode(graph, 10);
+    Check(room && room->walls.size() == 3,
+          "a sky-suppressed upper wall is not invented as an occluder for a closed height interval");
+    const auto* lower = game::FindRuntimeSectorVisibilityNode(graph, 20);
+    Check(lower && lower->walls.size() == 4, "sky-sky lower wall is still an occluder");
+}
+
 void TestViewTraversalCapFallsBackToConnectedComponent()
 {
     game::RuntimeSectorVisibilityGraph graph;
@@ -1607,8 +1822,53 @@ void TestMalformedReferencesFailCleanly()
 
 } // namespace
 
+void TestCaptureFaceVisibility()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeAdjacent(), graph, &error),
+          "capture fixture builds");
+    const auto connected = game::TraverseRuntimeSectorVisibility(graph, 10);
+    const auto xz = game::SectorCoordToWorldPosition2(32, 32);
+    Camera3D camera{{xz.x, 1, xz.y}, {xz.x + 1, 1, xz.y}, {0, 1, 0}, 90, CAMERA_PERSPECTIVE};
+    const auto toward = game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected);
+    Check(Contains(toward.visibleSectorIds, 20), "capture face toward portal includes neighbor");
+    camera.target.x = xz.x - 1;
+    const auto away = game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected);
+    Check(!Contains(away.visibleSectorIds, 20), "capture face away from portal excludes neighbor");
+    camera.target = {xz.x, 2, xz.y};
+    camera.up = {0, 0, -1};
+    Check(game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected).visibleSectorIds
+                  == connected.visibleSectorIds,
+          "upward capture conservatively retains component for 3D frustum culling");
+    camera.target.y = 0;
+    Check(game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected).visibleSectorIds
+                  == connected.visibleSectorIds,
+          "downward capture conservatively retains component for 3D frustum culling");
+    camera.target = {xz.x + 1, 1, xz.y};
+    camera.up = {0, 1, 0};
+    game::RuntimePortalDynamicBlocker blocker;
+    blocker.lineDefId = 2; blocker.fromSectorId = 10; blocker.toSectorId = 20;
+    blocker.blocksPortal = true;
+    const std::vector<game::RuntimePortalDynamicBlocker> blockers{blocker};
+    const auto closedConnected = game::TraverseRuntimeSectorVisibility(graph, 10, &blockers);
+    const auto closed = game::ComputeRuntimeSectorCaptureVisibility(graph, camera, closedConnected, &blockers);
+    Check(!Contains(closed.visibleSectorIds, 20), "closed door blocks capture traversal");
+    Check(Contains(closed.boundarySurfaceSectorIds, 20), "closed-door terminal boundary geometry is retained");
+    const auto limited = game::ComputeRuntimeSectorCaptureVisibility(graph, camera, connected, nullptr, 1);
+    Check(limited.visibleSectorIds == connected.visibleSectorIds && !limited.fallbackDrawAll,
+          "capture traversal cap falls back to component rather than dropping geometry");
+    auto invalidSeed = connected;
+    invalidSeed.startSectorId = 999;
+    invalidSeed.startSectorIds = {999};
+    Check(game::ComputeRuntimeSectorCaptureVisibility(graph, camera, invalidSeed).visibleSectorIds
+                  == connected.visibleSectorIds,
+          "invalid capture traversal uses conservative supplied component");
+}
+
 int main()
 {
+    TestCaptureFaceVisibility();
     TestOneSectorNoPortals();
     TestAdjacentCreatesDirectedEdges();
     TestOneSidedWallCreatesNoPortal();
@@ -1632,6 +1892,14 @@ int main()
     TestViewRecursivePortalClipping();
     TestViewRecursiveSliverRemainsVisible();
     TestViewCycleTerminates();
+    TestViewWindowsNeverEscapeParent();
+    TestViewManySeparateWindowsPreserveGaps();
+    TestViewAngleSeamRetainsBothWindows();
+    TestViewSolidWallsOccludeConcaveRoomAndHole();
+    TestViewPartialWallOcclusionAndDepth();
+    TestViewPortalFacingPreventsReverseTraversal();
+    TestViewObliqueWallDepthClipping();
+    TestVisibilityWallsRespectSkyAndHeightStrips();
     TestViewTraversalCapFallsBackToConnectedComponent();
     TestViewInvalidStartFallbackDrawsAll();
     TestViewClosedPortalDoesNotTraverse();

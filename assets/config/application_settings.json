@@ -10,13 +10,13 @@
     "landingNoiseRadiusWorld": 12.0
   },
   "graphics": {
-    "renderScale": 1.25,
+    "renderScale": 1.5,
     "fxaa": true,
     "shadowQuality": "high",
     "maxDynamicLights": 32,
     "maxShadowLightUpdatesPerFrame": 2,
     "dynamicLightFadeInSeconds": 0.25,
-    "depthPrepass": false,
+    "depthPrepass": true,
     "showFpsCounter": true,
     "performanceOverlay": false,
     "vsync": true,

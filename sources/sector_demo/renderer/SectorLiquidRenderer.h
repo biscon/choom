@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -23,7 +24,6 @@ struct SectorLiquidDrawContext {
     Camera3D camera = {};
     const RuntimePortalVisibilityResult* visibility = nullptr;
     const SectorPbrEnvironment* environment = nullptr;
-    bool localReflectionProbesCurrent = true;
     SectorPbrContributionSettings pbr;
     SectorTopologyDirectionalLightSettings directionalLight;
     SectorFogRenderContext fog;
@@ -54,11 +54,13 @@ public:
     std::size_t SurfaceCount() const { return surfaces.size(); }
 
 private:
+    SectorReflectionShaderLocations reflectionLocations;
     struct Surface {
         int sectorId = -1;
         Mesh mesh = {};
         SectorLiquidSettings settings;
         Vector3 center = {};
+        BoundingBox bounds{};
         float surfaceY = 0.0f;
     };
 

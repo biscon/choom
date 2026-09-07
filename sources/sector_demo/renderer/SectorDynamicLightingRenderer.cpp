@@ -627,6 +627,7 @@ void UploadSectorRendererDynamicShadowSlots(
 
 void SectorDynamicLightingRenderer::Reset()
 {
+    captureSelection = false;
     sources.clear();
     selectionSources.clear();
     runtimePointLight = {};
@@ -803,6 +804,12 @@ void SectorDynamicLightingRenderer::UpdateLightingReachability(
         const RuntimeSectorVisibilityGraph* visibilityGraph,
         const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers)
 {
+    if (captureSelection) {
+        // The capture caller already supplies an omnidirectional, portal-aware
+        // flood, independent of the player's view and its reachability cache.
+        lightingVisibility = visibility;
+        return;
+    }
     selectionStats.reachabilityCacheHit = false;
     selectionStats.cameraVisibilityFallback = visibility.fallbackDrawAll;
     selectionStats.dynamicPortalBlockerCount = dynamicPortalBlockers != nullptr
@@ -1158,8 +1165,8 @@ bool SectorDynamicLightingRenderer::EnsureShadowMapResources()
     if (shadowAtlas.id != 0 && shadowAtlas.depth.id != 0) {
         return true;
     }
-    const int requestedFaceResolution = shadowMapResolution <= 512
-            ? 512 : DynamicSpotLightShadowMapResolution;
+    const int requestedFaceResolution = shadowMapResolution <= 256 ? 256
+            : shadowMapResolution <= 512 ? 512 : DynamicSpotLightShadowMapResolution;
     const int requestedAtlasResolution = requestedFaceResolution
             * DynamicShadowAtlasTilesPerRow;
     int maximumTextureSize = 0;
@@ -1210,7 +1217,8 @@ bool SectorDynamicLightingRenderer::EnsureShadowMapResources()
 
 void SectorDynamicLightingRenderer::SetShadowMapResolution(int resolution)
 {
-    resolution = resolution <= 512 ? 512 : DynamicSpotLightShadowMapResolution;
+    resolution = resolution <= 256 ? 256
+            : resolution <= 512 ? 512 : DynamicSpotLightShadowMapResolution;
     if (shadowMapResolution == resolution) {
         return;
     }
@@ -1691,6 +1699,11 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 continue;
             }
         const int tilesPerRow = DynamicShadowAtlasTilesPerRow;
+        auto& renderedTile = shadowAtlasTileStates[static_cast<std::size_t>(matrix.shadowSlot)];
+        if (maxShadowFacesPerFrame != std::numeric_limits<std::size_t>::max()) {
+            if (renderedTile.valid && !renderedTile.dirty) continue;
+            if (shadowRenderStats.renderedTiles >= maxShadowFacesPerFrame) break;
+        }
         const int tileX = (matrix.shadowSlot % tilesPerRow)
                 * effectiveShadowMapResolution;
         const int tileY = (matrix.shadowSlot / tilesPerRow)
@@ -2015,8 +2028,12 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             rlEnableBackfaceCulling();
         }
         activeMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = activeDefaultTexture;
+        renderedTile.valid = lightCacheable;
+        renderedTile.dirty = !lightCacheable;
+        if (lightCacheable) renderedTile.dirtySerial = 0;
         }
         for (int offset = 0; offset < updateCaster.shadowSlotCount; ++offset) {
+            if (maxShadowFacesPerFrame != std::numeric_limits<std::size_t>::max()) break;
             const std::size_t slot = static_cast<std::size_t>(
                     updateCaster.shadowSlot + offset);
             if (slot >= shadowAtlasTileStates.size()) continue;

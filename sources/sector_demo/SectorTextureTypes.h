@@ -3,7 +3,9 @@
 #include "engine/assets/AssetHandles.h"
 #include "engine/assets/TextureLoadFlags.h"
 
+#include <cctype>
 #include <string>
+#include <string_view>
 
 namespace game {
 
@@ -12,6 +14,12 @@ enum class SectorMaterialFilter {
     Bilinear,
     Trilinear,
     Anisotropic8x
+};
+
+enum class SectorMaterialPropertyMapKind {
+    None = 0,
+    Roughness = 1,
+    Orm = 2
 };
 
 struct SectorMaterialDefinition {
@@ -31,27 +39,59 @@ struct SectorTextureBinding {
 engine::TextureLoadFlags SectorMaterialTextureLoadFlags(SectorMaterialFilter filter);
 const char* SectorMaterialFilterName(SectorMaterialFilter filter);
 std::string SectorMaterialNormalMapPath(const std::string& baseTexturePath);
-inline bool IsSectorMaterialNormalMapPath(const std::string& texturePath)
+std::string SectorMaterialOrmMapPath(const std::string& baseTexturePath);
+std::string SectorMaterialRoughnessMapPath(const std::string& baseTexturePath);
+
+inline bool HasSectorMaterialCompanionMarker(
+        const std::string& texturePath,
+        std::string_view marker)
 {
     const std::size_t separator = texturePath.find_last_of("/\\");
     const std::size_t fileNameBegin = separator == std::string::npos
             ? 0
             : separator + 1;
     const std::size_t extension = texturePath.find_last_of('.');
-    const std::size_t stemEnd = extension == std::string::npos || extension <= fileNameBegin
+    const std::size_t stemEnd = extension == std::string::npos
+                    || extension <= fileNameBegin
             ? texturePath.size()
             : extension;
-    constexpr const char* NormalMarker = "_normal";
-    constexpr std::size_t NormalMarkerLength = 7;
-    std::size_t marker = texturePath.find(NormalMarker, fileNameBegin);
-    while (marker != std::string::npos && marker + NormalMarkerLength <= stemEnd) {
-        const std::size_t markerEnd = marker + NormalMarkerLength;
-        if (markerEnd == stemEnd || texturePath[markerEnd] == '_') {
+    for (std::size_t position = fileNameBegin;
+            position + marker.size() <= stemEnd;
+            ++position) {
+        bool matches = true;
+        for (std::size_t i = 0; i < marker.size(); ++i) {
+            matches = matches
+                    && std::tolower(static_cast<unsigned char>(texturePath[position + i]))
+                            == std::tolower(static_cast<unsigned char>(marker[i]));
+        }
+        const std::size_t markerEnd = position + marker.size();
+        if (matches && (markerEnd == stemEnd || texturePath[markerEnd] == '_')) {
             return true;
         }
-        marker = texturePath.find(NormalMarker, markerEnd);
     }
     return false;
+}
+
+inline bool IsSectorMaterialNormalMapPath(const std::string& texturePath)
+{
+    return HasSectorMaterialCompanionMarker(texturePath, "_normal");
+}
+
+inline bool IsSectorMaterialOrmMapPath(const std::string& texturePath)
+{
+    return HasSectorMaterialCompanionMarker(texturePath, "_orm");
+}
+
+inline bool IsSectorMaterialRoughnessMapPath(const std::string& texturePath)
+{
+    return HasSectorMaterialCompanionMarker(texturePath, "_roughness");
+}
+
+inline bool IsSectorMaterialCompanionMapPath(const std::string& texturePath)
+{
+    return IsSectorMaterialNormalMapPath(texturePath)
+            || IsSectorMaterialOrmMapPath(texturePath)
+            || IsSectorMaterialRoughnessMapPath(texturePath);
 }
 
 } // namespace game

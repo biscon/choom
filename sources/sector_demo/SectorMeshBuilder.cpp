@@ -7,6 +7,7 @@
 #include "sector_demo/SectorPortalVisibility.h"
 
 #include <raylib.h>
+#include <raymath.h>
 
 #include <algorithm>
 #include <cmath>
@@ -371,6 +372,15 @@ SectorMeshBatch MakeUploadedBatch(const SectorMeshBatchData& builder, Mesh mesh)
     batch.mesh = mesh;
     batch.vertexCount = mesh.vertexCount;
     batch.triangleCount = mesh.triangleCount;
+    for (const auto& vertex : builder.vertices) {
+        if (!batch.hasBounds) {
+            batch.bounds = {vertex.position, vertex.position};
+            batch.hasBounds = true;
+        } else {
+            batch.bounds.min = Vector3Min(batch.bounds.min, vertex.position);
+            batch.bounds.max = Vector3Max(batch.bounds.max, vertex.position);
+        }
+    }
     return batch;
 }
 

@@ -248,6 +248,7 @@ private:
     bool paused = false;
     bool consoleInputCaptured = false;
     bool pendingLoadingSave = false;
+    bool loadStateInitialized = false;
     GameLevelLoadingState loading;
     FpsPlayerRuntime fpsPlayer;
     const FpsWeaponRegistry* weaponRegistry = nullptr;

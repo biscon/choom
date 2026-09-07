@@ -109,6 +109,7 @@ struct SectorAuthoringReflectionProbe {
     int priority = 0;
     float intensity = 1.0f;
     int resolution = 128;
+    float blendDistanceWorld = 0.5f;
 };
 
 struct SectorAuthoringLevelMarker {

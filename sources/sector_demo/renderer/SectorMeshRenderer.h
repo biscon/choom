@@ -1,4 +1,7 @@
 #pragma once
+#include "sector_demo/renderer/SectorWorldDiagnostics.h"
+#include "sector_demo/renderer/SectorRuntimeReflectionProbes.h"
+#include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorCollisionWorld.h"
@@ -26,6 +29,7 @@
 #include "sector_demo/renderer/SectorWindowRenderer.h"
 #include "sector_demo/renderer/SectorDuctCoverRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorViewPose.h"
 #include "sector_demo/SectorUseInteraction.h"
 
@@ -49,6 +53,7 @@ struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
 
 struct SectorAtmosphereDiagnostics {
+    SectorWorldDiagnostics world;
     double causticsGpuMilliseconds = 0.0;
     double distanceFogGpuMilliseconds = 0.0;
     double analyticFogGpuMilliseconds = 0.0;
@@ -117,15 +122,15 @@ public:
             SectorRuntimeDoorLightingContext doorLighting = {},
             const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{},
             bool staticCaptureOnly = false,
-            SectorUseHighlight useHighlight = {});
-    bool CaptureReflectionProbe(
-            engine::AssetManager& assets,
-            Vector3 capturePosition,
-            int resolution,
-            engine::World* runtimeObjectWorld,
-            SectorRuntimeDoorLightingContext doorLighting,
-            std::vector<Vector4>& outFacePixels,
-            std::string& error);
+            SectorUseHighlight useHighlight = {},
+            SectorReflectionCaptureDrawContext* capture = nullptr);
+    void UpdateRuntimeReflections(engine::AssetManager& assets, engine::World* world,
+            SectorRuntimeDoorLightingContext doorLighting, bool preparing = false);
+    bool InitialReflectionsReady() const { return runtimeReflections.InitialReady(pbrEnvironment); }
+    const SectorRuntimeReflectionStats& ReflectionStats() const { return runtimeReflections.Stats(); }
+    void RefreshRuntimeReflections(bool discontinuity = true) { runtimeReflections.Invalidate(pbrEnvironment, discontinuity); }
+    void ToggleRuntimeReflectionsPaused() { runtimeReflections.paused = !runtimeReflections.paused; }
+    bool RuntimeReflectionsPaused() const { return runtimeReflections.paused; }
     bool ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
@@ -218,6 +223,8 @@ public:
     const std::string& RenderDebugText() const { return renderDebugText; }
     bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
     bool DepthPrepassEnabled() const { return depthPrepassEnabled; }
+    bool GlassEnabled() const { return glassEnabled; }
+    void SetGlassEnabled(bool enabled) { glassEnabled = enabled; }
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
     void SetGraphicsQuality(
@@ -225,7 +232,7 @@ public:
             int shadowMapResolution = DynamicSpotLightShadowMapResolution,
             int maxDynamicLights = static_cast<int>(MaxDynamicLights),
             int maxShadowLightUpdatesPerFrame = 2,
-            bool depthPrepass = false,
+            bool depthPrepass = true,
             float dynamicLightFadeInSeconds = DynamicLightDefaultFadeInSeconds)
     {
         shadowMapsEnabled = shadowsEnabled;
@@ -343,9 +350,14 @@ private:
             const std::string& currentSourceHash);
     engine::TextureHandle TextureForId(const std::string& materialId) const;
     engine::TextureHandle NormalTextureForId(const std::string& materialId) const;
+    engine::TextureHandle PropertyTextureForId(const std::string& materialId) const;
+    SectorMaterialPropertyMapKind PropertyMapKindForId(
+            const std::string& materialId) const;
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawDepthPrepass(engine::AssetManager& assets, engine::World* runtimeObjectWorld);
+    std::vector<SectorOpaqueDrawItem> visibleSectorDraws;
+    bool sectorDrawCapacityWarned = false;
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,
@@ -358,6 +370,7 @@ private:
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
     RuntimeSectorVisibilityGraph visibilityGraph;
+    RuntimePortalVisibilityScratch visibilityScratch;
     RuntimePortalVisibilityResult visibilityResult;
     std::string portalVisibilityDebugText;
     std::string visibilityDebugText;
@@ -367,12 +380,16 @@ private:
     bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     std::unordered_map<std::string, engine::TextureHandle> normalTextureHandlesById;
+    std::unordered_map<std::string, engine::TextureHandle> propertyTextureHandlesById;
+    std::unordered_map<std::string, SectorMaterialPropertyMapKind> propertyMapKindsById;
     std::unordered_map<std::string, float> normalStrengthById;
     std::unordered_map<std::string, float> metallicFactorById;
     std::unordered_map<std::string, float> roughnessFactorById;
     std::vector<engine::TextureHandle> lightmapTextures;
     std::vector<engine::TextureHandle> directionalLightmapTextures;
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
+    engine::TextureHandle defaultMaterialTextureHandle =
+            engine::NullTextureHandle();
     engine::TextureHandle flashlightCookieTexture =
             engine::NullTextureHandle();
     Material material = {};
@@ -386,6 +403,7 @@ private:
     int hasDirectionalLightmapLoc = -1;
     int hasNormalMapLoc = -1;
     int normalStrengthLoc = -1;
+    int materialPropertiesKindLoc = -1;
     int metallicFactorLoc = -1;
     int roughnessFactorLoc = -1;
     int cameraPositionLoc = -1;
@@ -434,7 +452,7 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int shadowAtlasTilesPerRowLoc = -1;
-    bool depthPrepassEnabled = false;
+    bool depthPrepassEnabled = true;
     bool liquidRefractionFallbackLogged = false;
     bool atmosphereGpuFramePrepared = false;
     bool preGlassLightEffectsRendered = false;
@@ -450,13 +468,21 @@ private:
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
-    bool localReflectionProbesCurrent = true;
-    std::string localReflectionProbeSurfaceHash;
+    SectorRuntimeReflectionProbes runtimeReflections;
+    bool reflectionPreparationStepPending = false;
+    engine::AssetManager* reflectionCaptureAssets = nullptr;
+    SectorReflectionShaderLocations reflectionLocations;
+    friend class SectorRuntimeReflectionProbes;
+    void PrepareReflectionCapture(SectorReflectionCaptureDrawContext& draw,
+            const SectorCompiledReflectionProbe& probe, engine::World* world);
+    void PrepareReflectionShadows(SectorReflectionCaptureDrawContext& draw, engine::World* world);
+    void DrawReflectionFace(engine::AssetManager& assets, SectorReflectionCaptureDrawContext& draw,
+            const SectorCompiledReflectionProbe& probe, int face, engine::RenderTarget& target,
+            engine::World* world, SectorRuntimeDoorLightingContext lighting);
     bool staticObjectAdjustmentBakedDataActive = false;
     int staticObjectAdjustmentOriginalLightmapStatus = 0;
     bool staticObjectAdjustmentOriginalSurfaceLightmapCurrent = false;
     bool staticObjectAdjustmentOriginalObjectProbeCurrent = false;
-    bool staticObjectAdjustmentOriginalLocalReflectionProbesCurrent = true;
     SectorBloomRenderer bloomRenderer;
     engine::RenderTarget hdrSceneScratch;
     RenderTexture2D hdrSceneColorView = {};
@@ -471,6 +497,9 @@ private:
     int hdrSceneScratchFailedWidth = 0;
     int hdrSceneScratchFailedHeight = 0;
     SectorAtmosphereDiagnostics atmosphereDiagnostics;
+    SectorWorldProfiler worldProfiler;
+    bool worldDiagnosticsEnabled = false;
+    bool glassEnabled = true;
     std::array<unsigned int,
             AtmosphereGpuPassCount * AtmosphereGpuQueryLatency * 2>
             atmosphereGpuQueries{};

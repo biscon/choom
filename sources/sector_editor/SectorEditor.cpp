@@ -612,7 +612,6 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
     engine::Input& input = context.input;
     engine::AssetManager& assets = context.assets;
-    ProcessPendingReflectionProbeBake(context);
     if (state.footstepPicker.open) {
         BuildFootstepService().UpdatePreview();
     }
@@ -917,6 +916,15 @@ void SectorEditor::RenderUI(
     PollLightmapBakeResult(assets);
 
     engine::BeginUI(ui, input);
+    if (state.mode == SectorEditorMode::Preview3D && !sceneRuntime.Renderer().InitialReflectionsReady()) {
+        const auto& progress=sceneRuntime.Renderer().ReflectionStats();
+        engine::Text(ui,config,assets,Rectangle{32,80,700,40},font,
+                TextFormat("Preparing room reflections: %zu / %zu   |   Esc: cancel",progress.prepared,progress.required),
+                engine::UITextJustify::Left,config.textColor);
+        uiState.keyboardCaptured=true;
+        engine::EndUI(ui,config,input,assets);
+        return;
+    }
     const bool mainMenuVisible = state.mode != SectorEditorMode::Preview3D
             || !previewState.overlay.previewUiHidden;
     const SectorEditorConfigTarget configTarget =
@@ -2905,6 +2913,19 @@ void SectorEditor::UpdatePreviewAdjustmentInput(engine::Input& input)
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
 {
+    if (!sceneRuntime.Renderer().InitialReflectionsReady() && engineContext) {
+        for (auto& event:input.Events()) {
+            if (!event.handled && event.type==engine::InputEventType::KeyPressed && event.key.key==KEY_ESCAPE) {
+                engine::ConsumeEvent(event);LeavePreview3D();return;
+            }
+        }
+        sceneRuntime.UpdateLoadPreparation(*engineContext,TopologyMap());
+        if (sceneRuntime.AreLoadAssetScopesFinished(assets)
+                && sceneRuntime.RuntimeObjects().staticModelPendingCount==0) {
+            sceneRuntime.PrepareInitialReflections(*engineContext,TopologyMap());
+        }
+        return;
+    }
     UpdatePreviewAdjustmentInput(input);
     bool controlModeToggled = false;
     const bool gameplayWeaponInput = state.mode == SectorEditorMode::Preview3D
@@ -4708,14 +4729,6 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
             installPayload.bakeResult.staticModels;
     // Data files are installed and validated before this single metadata publish.
     TopologyMap().bakedLightmap = std::move(installedMetadata);
-    // Reflection captures contain the baked lighting and must be explicitly
-    // regenerated after any lightmap install.
-    TopologyMap().bakedReflectionProbes = {};
-    documentState.derivation.authoringDerivation.topology.bakedReflectionProbes = {};
-    if (documentState.derivation.lastValidAuthoringDerivedTopology.has_value()) {
-        documentState.derivation.lastValidAuthoringDerivedTopology
-                ->bakedReflectionProbes = {};
-    }
     Lifecycle().hasUnsavedChanges = true;
     Lifecycle().topologyDocumentDirty = true;
 
@@ -4743,145 +4756,6 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
                     "Baked %zu lightmap atlases in %.1fs",
                     atlasCount,
                     result.bakeResult.totalBakeSeconds);
-    return true;
-}
-
-void SectorEditor::ProcessPendingReflectionProbeBake(engine::EngineContext& context)
-{
-    if (!reflectionProbeBakePending) return;
-    const int selectedProbeId = reflectionProbeBakeSelectedId;
-    reflectionProbeBakePending = false;
-    reflectionProbeBakeSelectedId = -1;
-    BakeReflectionProbes(context, selectedProbeId);
-}
-
-bool SectorEditor::BakeReflectionProbes(
-        engine::EngineContext& context,
-        int selectedProbeId)
-{
-    if (state.mode != SectorEditorMode::Preview3D
-            || !sceneRuntime.Renderer().IsRendererReady()) {
-        statusText = "Enter 3D preview and use the Probes tab to bake reflection probes";
-        return false;
-    }
-    if (Lifecycle().currentLevelName.empty()) {
-        statusText = "Save the level before baking reflection probes";
-        return false;
-    }
-    if (GetSectorLightmapStatus(TopologyMap()) != SectorLightmapStatus::Valid) {
-        statusText = "Bake current static lightmaps before reflection probes";
-        return false;
-    }
-    LevelPaths paths;
-    std::string error;
-    if (!BuildLevelPaths(Lifecycle().currentLevelName, paths, error)
-            || !EnsureSaveLevelDirectory(paths, error)) {
-        statusText = "Reflection bake failed: " + error;
-        return false;
-    }
-
-    SectorBakedReflectionProbeArtifact artifact;
-    artifact.version = SectorReflectionProbeBakeVersion;
-    if (selectedProbeId > 0
-            && std::filesystem::exists(paths.reflectionProbeFilePath)) {
-        std::string ignored;
-        ReadSectorReflectionProbeArtifact(
-                paths.reflectionProbeFilePath, artifact, ignored);
-        artifact.version = SectorReflectionProbeBakeVersion;
-    }
-    if (selectedProbeId <= 0) artifact.probes.clear();
-
-    std::vector<const SectorCompiledReflectionProbe*> targets;
-    for (const SectorCompiledReflectionProbe& probe : TopologyMap().compiledReflectionProbes) {
-        if (!probe.enabled) continue;
-        if (selectedProbeId <= 0 || probe.sourceAuthoringProbeId == selectedProbeId) {
-            targets.push_back(&probe);
-        }
-    }
-    if (targets.empty()) {
-        statusText = selectedProbeId > 0
-                ? "Selected reflection probe is disabled or unresolved"
-                : "No enabled reflection probes to bake";
-        return false;
-    }
-
-    const SectorRuntimeDoorLightingContext doorLighting{
-            &sceneRuntime.RuntimeObjects().objectLightProbes,
-            &TopologyMap(),
-            sceneRuntime.RuntimeObjects().staticLightingRevision};
-    const auto started = std::chrono::steady_clock::now();
-    int bakedCount = 0;
-    for (const SectorCompiledReflectionProbe* probe : targets) {
-        statusText = TextFormat("Baking reflection probe %d...",
-                probe->sourceAuthoringProbeId);
-        std::vector<Vector4> capturedFaces;
-        if (!sceneRuntime.Renderer().CaptureReflectionProbe(
-                    context.assets,
-                    probe->capturePositionWorld,
-                    probe->resolution,
-                    &context.world,
-                    doorLighting,
-                    capturedFaces,
-                    error)) {
-            statusText = "Reflection bake failed: " + error;
-            return false;
-        }
-        SectorBakedReflectionProbeRecord record;
-        if (!BuildSectorReflectionProbeRecord(
-                    probe->sourceAuthoringProbeId,
-                    probe->resolution,
-                    ComputeSectorReflectionProbeSourceHash(TopologyMap(), *probe),
-                    capturedFaces,
-                    record,
-                    error)) {
-            statusText = "Reflection prefilter failed: " + error;
-            return false;
-        }
-        auto existing = std::find_if(artifact.probes.begin(), artifact.probes.end(),
-                [probe](const SectorBakedReflectionProbeRecord& value) {
-                    return value.probeId == probe->sourceAuthoringProbeId;
-                });
-        if (existing == artifact.probes.end()) artifact.probes.push_back(std::move(record));
-        else *existing = std::move(record);
-        ++bakedCount;
-    }
-    artifact.probes.erase(
-            std::remove_if(artifact.probes.begin(), artifact.probes.end(),
-                    [this](const SectorBakedReflectionProbeRecord& record) {
-                        return std::none_of(
-                                TopologyMap().compiledReflectionProbes.begin(),
-                                TopologyMap().compiledReflectionProbes.end(),
-                                [&record](const SectorCompiledReflectionProbe& probe) {
-                                    return probe.sourceAuthoringProbeId == record.probeId;
-                                });
-                    }),
-            artifact.probes.end());
-    std::sort(artifact.probes.begin(), artifact.probes.end(),
-            [](const auto& a, const auto& b) { return a.probeId < b.probeId; });
-    if (!WriteSectorReflectionProbeArtifact(
-                paths.reflectionProbeFilePath, artifact, error)) {
-        statusText = "Reflection bake failed: " + error;
-        return false;
-    }
-
-    const SectorBakedReflectionProbeMetadata metadata{
-            paths.reflectionProbeAssetPath,
-            SectorReflectionProbeBakeVersion,
-            static_cast<int>(artifact.probes.size()),
-            "rgba16f-cubemap-mips"};
-    TopologyMap().bakedReflectionProbes = metadata;
-    documentState.derivation.authoringDerivation.topology.bakedReflectionProbes = metadata;
-    if (documentState.derivation.lastValidAuthoringDerivedTopology.has_value()) {
-        documentState.derivation.lastValidAuthoringDerivedTopology
-                ->bakedReflectionProbes = metadata;
-    }
-    Lifecycle().hasUnsavedChanges = true;
-    Lifecycle().topologyDocumentDirty = true;
-    const float seconds = std::chrono::duration<float>(
-            std::chrono::steady_clock::now() - started).count();
-    statusText = TextFormat("Baked %d reflection probe%s in %.1fs",
-            bakedCount, bakedCount == 1 ? "" : "s", seconds);
-    RebuildPreviewMeshesPreservingView(context);
     return true;
 }
 
@@ -4970,6 +4844,7 @@ void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
 
 void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
 {
+    if (!sceneRuntime.Renderer().InitialReflectionsReady()) return;
     sceneRuntime.Renderer().SetPbrDiagnosticSelectedObjectId(
             selectionState.selectedRuntimeObjectId);
     sceneRuntime.RenderScene(
@@ -5041,6 +4916,10 @@ bool SectorEditor::CompositePreview3DViewmodel(
 
 void SectorEditor::RenderPreview3DOverlays()
 {
+    if (state.mode==SectorEditorMode::Preview3D && !sceneRuntime.Renderer().InitialReflectionsReady()) {
+        DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Color{18,22,28,255});
+        return;
+    }
     if (!previewState.overlay.previewUiHidden) {
         DrawPreviewSurfaceHighlights();
         DrawPreviewObjectAdjustmentGizmo();
@@ -5061,6 +4940,7 @@ void SectorEditor::RenderPreview3DHud(
         engine::FontHandle usePromptFont,
         Rectangle playableViewport) const
 {
+    if (!sceneRuntime.Renderer().InitialReflectionsReady()) return;
     if (state.mode == SectorEditorMode::Preview3D) {
         fpsPlayer.RenderHud(
                 playableViewport,
@@ -5374,18 +5254,8 @@ void SectorEditor::DrawPreviewOverlay(
                 ? "Navigation rebuild queued"
                 : "Navigation rebuild failed to initialize";
     }
-    if (result.requestBakeSelectedReflectionProbe) {
-        reflectionProbeBakeSelectedId =
-                selectionState.selectedAuthoring.kind
-                                == SectorAuthoringSelectionKind::ReflectionProbe
-                        ? selectionState.selectedAuthoring.reflectionProbeId
-                        : -1;
-        reflectionProbeBakePending = reflectionProbeBakeSelectedId > 0;
-    }
-    if (result.requestBakeAllReflectionProbes) {
-        reflectionProbeBakeSelectedId = -1;
-        reflectionProbeBakePending = true;
-    }
+    if (result.requestRefreshReflections) sceneRuntime.Renderer().RefreshRuntimeReflections();
+    if (result.requestPauseReflections) sceneRuntime.Renderer().ToggleRuntimeReflectionsPaused();
     if (result.requestApplyAdjustment) {
         ApplyPreviewAdjustment();
     }
@@ -7384,7 +7254,6 @@ void SectorEditor::DrawMaterialRegistryEditor(
     if (result == SectorEditorMaterialRegistryEditorResult::Saved) {
         SectorEditorTextureCatalogService catalog = MakeTextureCatalogService();
         catalog.RefreshTextureHandles(assets);
-        catalog.RefreshDefaultTextureIds();
         RefreshResolvedMaterials();
         state.lightmapSourceHashRevision = 0;
     }
@@ -7828,7 +7697,6 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     state.viewZoom = 48.0f;
     state.gridSize = SectorAuthoringEditorGridSizeDefault;
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
     BuildSoundService().RefreshCatalogHandles();
     ReloadSectorSwingDoorCatalog(sceneRuntime.RuntimeObjects());
@@ -7972,7 +7840,6 @@ bool SectorEditor::LoadLevel(
     surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     lightEditingState = LightEditingState{};
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
     BuildSoundService().RefreshCatalogHandles();
     sceneRuntime.RefreshMapRuntimeObjects(context, topologyMap);
@@ -8884,12 +8751,7 @@ SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
     return SectorEditorTextureCatalogService{
             SectorEditorTextureCatalogServiceContext{
                     materialRegistry,
-                    textureCatalogState,
-                    state.defaultFloorTextureId,
-                    state.defaultCeilingTextureId,
-                    state.defaultWallTextureId,
-                    state.defaultLowerWallTextureId,
-                    state.defaultUpperWallTextureId}};
+                    textureCatalogState}};
 }
 
 SectorEditorNpcEditorService SectorEditor::BuildNpcEditorService()

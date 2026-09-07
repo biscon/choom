@@ -99,11 +99,6 @@ struct SectorEditorState {
     PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
-    std::string defaultFloorTextureId;
-    std::string defaultCeilingTextureId;
-    std::string defaultWallTextureId;
-    std::string defaultLowerWallTextureId;
-    std::string defaultUpperWallTextureId;
 
     bool showGrid = true;
     bool showAxes = true;

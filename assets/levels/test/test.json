@@ -2,6 +2,37 @@
   "formatVersion": 4,
   "topology": "authoringGraph",
   "coordSubdivisions": 16,
+  "runtimeObjects": [
+    {
+      "id": 1,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_1",
+        "modelPath": "assets/models/kitchen/Convection_Oven_Stand.gltf"
+      },
+      "position": [
+        144.0,
+        0.0,
+        64.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 2,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_2",
+        "modelPath": "assets/models/kitchen/Fluorescent_Fixture.gltf",
+        "heightOffsetWorld": 3.0
+      },
+      "position": [
+        120.0,
+        0.0,
+        64.0
+      ],
+      "yawDegrees": 0.0
+    }
+  ],
   "staticLights": [
     {
       "id": 1,
@@ -43,6 +74,23 @@
       "castsShadow": true,
       "shadowStrength": 0.8999999761581421,
       "shadowSoftness": 4.0
+    },
+    {
+      "id": 2,
+      "instanceId": "light_point_2",
+      "position": [
+        137.0,
+        14.399999618530273,
+        78.0
+      ],
+      "radius": 64.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
     }
   ],
   "dynamicSpotLights": [
@@ -68,6 +116,28 @@
         "a": 255
       },
       "castsShadow": true
+    },
+    {
+      "id": 2,
+      "instanceId": "light_spot_2",
+      "position": [
+        159.66915893554688,
+        18.066946029663086,
+        74.58085632324219
+      ],
+      "target": [
+        134.80148315429688,
+        3.978421211242676,
+        58.83054733276367
+      ],
+      "range": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
     }
   ],
   "dynamicRectLights": [],
@@ -131,7 +201,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "9334d8a200490058",
+    "sourceHash": "7e8a15a75248b5b2",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -151,7 +221,7 @@
     "objectProbes": {
       "path": "assets/levels/test/test.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "9334d8a200490058",
+      "sourceHash": "7e8a15a75248b5b2",
       "count": 1308,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -164,14 +234,14 @@
           0.05000000074505806
         ],
         "rgbMax": [
-          2.1130449771881104,
-          2.022216320037842,
-          1.864700436592102
+          2.463045120239258,
+          2.3722164630889893,
+          2.21470046043396
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 7848,
-        "rgbChannelsAboveOne": 364
+        "rgbChannelsAboveOne": 778
       }
     }
   },
@@ -353,7 +423,6 @@
         "lineId": 8,
         "side": "front",
         "wall": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -366,7 +435,6 @@
           }
         },
         "lower": {
-          "materialId": "beige_wall_001",
           "uv": {
             "scale": [
               1.0,
@@ -376,10 +444,10 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "beige_wall_001"
         },
         "upper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -396,7 +464,6 @@
         "lineId": 19,
         "side": "front",
         "wall": {
-          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -406,10 +473,10 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "seamless_worn_concrete"
         },
         "lower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -422,7 +489,6 @@
           }
         },
         "upper": {
-          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -444,8 +510,6 @@
         "y": 1638,
         "floorZ": 0.0,
         "ceilingZ": 54.0,
-        "floorMaterialId": "large_industrial_tiles_512",
-        "ceilingMaterialId": "concrete_wall_009",
         "floorUv": {
           "scale": [
             1.0,
@@ -472,9 +536,8 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.05000000074505806,
+        "ambientIntensity": 0.4000000059604645,
         "defaultWall": {
-          "materialId": "dirty_gray_concrete_wall_512",
           "uv": {
             "scale": [
               1.0,
@@ -484,10 +547,10 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "dirty_gray_concrete_wall_512"
         },
         "defaultLower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -500,7 +563,6 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -511,7 +573,9 @@
               0.0
             ]
           }
-        }
+        },
+        "floorMaterialId": "large_industrial_tiles_512",
+        "ceilingMaterialId": "concrete_wall_009"
       },
       {
         "id": 2,
@@ -520,8 +584,6 @@
         "y": 1150,
         "floorZ": -50.0,
         "ceilingZ": 54.0,
-        "floorMaterialId": "floor",
-        "ceilingMaterialId": "ceiling",
         "floorUv": {
           "scale": [
             1.0,
@@ -550,7 +612,6 @@
         },
         "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -563,7 +624,6 @@
           }
         },
         "defaultLower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -576,7 +636,6 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -603,8 +662,6 @@
         "y": 1358,
         "floorZ": 20.0,
         "ceilingZ": 300.0,
-        "floorMaterialId": "seamless_worn_concrete",
-        "ceilingMaterialId": "seamless_worn_concrete",
         "floorUv": {
           "scale": [
             1.0,
@@ -633,7 +690,6 @@
         },
         "ambientIntensity": 0.30000001192092896,
         "defaultWall": {
-          "materialId": "brick_repair_512",
           "uv": {
             "scale": [
               1.0,
@@ -646,7 +702,6 @@
           }
         },
         "defaultLower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -659,7 +714,6 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -679,8 +733,6 @@
         "y": 1278,
         "floorZ": 20.0,
         "ceilingZ": 45.0,
-        "floorMaterialId": "seamless_worn_concrete",
-        "ceilingMaterialId": "seamless_worn_concrete",
         "floorUv": {
           "scale": [
             1.0,
@@ -709,7 +761,6 @@
         },
         "ambientIntensity": 1.0,
         "defaultWall": {
-          "materialId": "seamless_worn_concrete",
           "uv": {
             "scale": [
               1.0,
@@ -719,10 +770,10 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "seamless_worn_concrete"
         },
         "defaultLower": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -735,7 +786,6 @@
           }
         },
         "defaultUpper": {
-          "materialId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -746,7 +796,9 @@
               0.0
             ]
           }
-        }
+        },
+        "floorMaterialId": "seamless_worn_concrete",
+        "ceilingMaterialId": "seamless_worn_concrete"
       }
     ],
     "reflectionProbes": [
@@ -1010,9 +1062,6 @@
         "kind": "box",
         "x": 4544,
         "z": 960,
-        "material": {
-          "materialId": "wall"
-        },
         "box": {
           "width": 384,
           "depth": 384,

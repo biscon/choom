@@ -1,0 +1,142 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "extras": {
+        "asset_id": "Plate_Stack",
+        "units": "meters",
+        "front_axis": "-Y",
+        "pivot": "bottom-center; mounting assembly bottom for wall assets",
+        "texture_resolution": 1024,
+        "kit": "Cafeteria industrial kitchen / v1"
+      },
+      "mesh": 0,
+      "name": "Plate_Stack_Export"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Warm ceramic",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.6800000071525574,
+          0.6499999761581421,
+          0.5699999928474426,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.27000001072883606
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Plate_Stack_Mesh.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 1750,
+      "max": [
+        0.13699999451637268,
+        0.12000000476837158,
+        0.13699999451637268
+      ],
+      "min": [
+        -0.13699999451637268,
+        0,
+        -0.13699999451637268
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 1750,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 1750,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 1750,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 8064,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 21000,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 21000,
+      "byteOffset": 21000,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 14000,
+      "byteOffset": 42000,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 28000,
+      "byteOffset": 56000,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 16128,
+      "byteOffset": 84000,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 100128,
+      "uri": "Plate_Stack.bin"
+    }
+  ]
+}

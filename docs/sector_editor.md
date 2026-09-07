@@ -873,6 +873,9 @@ environment reflection probes, baked object-probe ambient, eligible static and
 dynamic specular lights, tint, and fog. Windows are omitted from reflection
 probe capture to avoid recursive glass capture.
 
+Reflection captures are scheduled at runtime; see [Runtime reflection probes](runtime_reflections.md)
+for update budgets, doorway blending, loading preparation and diagnostics.
+
 Solid windows contribute a thin analytic oriented-prism collider to player,
 item-drop, NPC locomotion/knockback, weapon-ray, and navigation queries. They do
 not become opaque perception, audio-propagation, or light-sampling blockers, and

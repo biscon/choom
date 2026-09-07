@@ -39,6 +39,7 @@ enum class RenderProfilePass : std::size_t {
     Bloom,
     Presentation,
     FinalComposite,
+    FrameControl,
     Count
 };
 
@@ -99,7 +100,7 @@ public:
     {
         const std::size_t index = static_cast<std::size_t>(pass);
         cpuStart[index] = GetTime();
-        if (active) {
+        if (active && pass != RenderProfilePass::FrameControl) {
             glBeginQuery(GL_TIME_ELAPSED, Query(index, slot));
             activePass = index;
         }
@@ -135,9 +136,9 @@ public:
     {
         static constexpr const char* Names[PassCount] = {
                 "shadows", "world", "atmosphere", "viewmodel", "bloom",
-                "presentation", "final"};
+                "presentation", "final", "swap/wait CPU"};
         DrawRectangle(8, topOffset + 42, 760,
-                104 + static_cast<int>(PassCount) * 20,
+                284 + static_cast<int>(PassCount) * 20,
                 Color{0, 0, 0, 190});
         DrawText(TextFormat("Render %.0f%%  FXAA %s  CPU / GPU ms",
                          renderScale * 100.0f, fxaa ? "on" : "off"),
@@ -179,6 +180,21 @@ public:
                          atmosphere.dustVisibleParticleCount,
                          atmosphere.underwaterVisibleParticleCount),
                 16, detailY + 40, 16, SKYBLUE);
+        for (std::size_t i = 0; i < game::SectorWorldStageCount; ++i) {
+            DrawText(TextFormat("  %-15s %5.2f / %5.2f (GPU delayed)",
+                    game::SectorWorldStageNames[i], atmosphere.world.cpuMs[i], atmosphere.world.gpuMs[i]),
+                    16, detailY + 60 + static_cast<int>(i) * 20, 16, SKYBLUE);
+        }
+        DrawText(TextFormat("draw/cull sectors %zu/%zu props %zu/%zu glass %zu/%zu",
+                atmosphere.world.sectorMeshes, atmosphere.world.sectorCulled,
+                atmosphere.world.objects, atmosphere.world.objectsCulled,
+                atmosphere.world.panes, atmosphere.world.panesCulled),
+                16, detailY + 180, 16, SKYBLUE);
+        DrawText(TextFormat("draw/cull model meshes %zu/%zu total tris %zu/%zu",
+                atmosphere.world.modelMeshes, atmosphere.world.modelMeshesCulled,
+                atmosphere.world.sectorTriangles + atmosphere.world.modelTriangles,
+                atmosphere.world.sectorTrianglesCulled + atmosphere.world.modelTrianglesCulled),
+                16, detailY + 200, 16, SKYBLUE);
     }
 
 private:
@@ -249,10 +265,11 @@ public:
                         outputPath);
             }
         }
+        if (ownsOutput) std::setvbuf(output, traceBuffer.data(), _IOFBF, traceBuffer.size());
         std::fprintf(
                 output,
-                "# frame trace v5; dips >= %.3f ms; timestamps use CLOCK_MONOTONIC\n"
-                "# mono_seconds total_ms pre_render_ms shadows_cpu_ms world_cpu_ms atmosphere_cpu_ms viewmodel_cpu_ms bloom_cpu_ms presentation_cpu_ms final_cpu_ms shadows_gpu_ms world_gpu_ms atmosphere_gpu_ms viewmodel_gpu_ms bloom_gpu_ms presentation_gpu_ms final_gpu_ms distance_fog_gpu_ms fog_gpu_ms shaft_gpu_ms haze_gpu_ms dust_gpu_ms fog_eligible fog_active fog_coverage shaft_eligible shaft_active shaft_coverage shaft_draws haze_eligible haze_active haze_coverage haze_draws dust_active dust_eligible dust_visible dynamic_lights\n",
+                "# frame trace v6; dips >= %.3f ms; timestamps use CLOCK_MONOTONIC; GPU samples delayed\n"
+                "# mono_seconds total_ms pre_render_ms shadows_cpu_ms world_cpu_ms atmosphere_cpu_ms viewmodel_cpu_ms bloom_cpu_ms presentation_cpu_ms final_cpu_ms shadows_gpu_ms world_gpu_ms atmosphere_gpu_ms viewmodel_gpu_ms bloom_gpu_ms presentation_gpu_ms final_gpu_ms caustics_gpu_ms distance_fog_gpu_ms fog_gpu_ms shaft_gpu_ms haze_gpu_ms dust_gpu_ms marine_gpu_ms fog_eligible fog_active fog_coverage shaft_eligible shaft_active shaft_coverage shaft_draws haze_eligible haze_active haze_coverage haze_draws dust_active dust_eligible dust_visible marine_visible dynamic_lights frame_control_cpu_ms depth_cpu_ms depth_gpu_ms sectors_cpu_ms sectors_gpu_ms models_doors_cpu_ms models_doors_gpu_ms pre_glass_cpu_ms pre_glass_gpu_ms glass_transmit_cpu_ms glass_transmit_gpu_ms glass_reflect_cpu_ms glass_reflect_gpu_ms sector_meshes sector_culled sector_triangles objects objects_culled model_meshes model_triangles panes panes_culled sector_triangles_culled model_meshes_culled model_triangles_culled\n",
                 thresholdMilliseconds);
         std::fflush(output);
     }
@@ -345,14 +362,28 @@ public:
                 atmosphere.dustVisibleParticleCount,
                 atmosphere.underwaterVisibleParticleCount,
                 atmosphere.dynamicLightCount);
+        std::fprintf(output, " %.3f", profiler.LastCpuMilliseconds(RenderProfilePass::FrameControl));
+        for (std::size_t i = 0; i < game::SectorWorldStageCount; ++i) {
+            std::fprintf(output, " %.3f %.3f", atmosphere.world.cpuMs[i], atmosphere.world.gpuMs[i]);
+        }
+        const auto& draw = atmosphere.world;
+        std::fprintf(output, " %zu %zu %zu %zu %zu %zu %zu %zu %zu", draw.sectorMeshes,
+                draw.sectorCulled, draw.sectorTriangles, draw.objects, draw.objectsCulled,
+                draw.modelMeshes, draw.modelTriangles, draw.panes, draw.panesCulled);
+        std::fprintf(output, " %zu %zu %zu", draw.sectorTrianglesCulled, draw.modelMeshesCulled, draw.modelTrianglesCulled);
         std::fputc('\n', output);
-        std::fflush(output);
+        if (++rowsSinceFlush >= 120) {
+            std::fflush(output);
+            rowsSinceFlush = 0;
+        }
     }
 
 private:
     std::FILE* output = nullptr;
     double thresholdMilliseconds = 0.0;
     bool ownsOutput = false;
+    std::array<char, 65536> traceBuffer{};
+    int rowsSinceFlush = 0;
 };
 
 #if defined(__APPLE__)
@@ -1167,8 +1198,11 @@ int main(int argc, char** argv)
                     WHITE);
             application.RenderLoadingOverlay(dst, screenW, screenH);
         }
-        EndDrawing();
+        rlDrawRenderBatchActive();
         performanceProfiler.End(RenderProfilePass::FinalComposite);
+        performanceProfiler.Begin(RenderProfilePass::FrameControl);
+        EndDrawing();
+        performanceProfiler.End(RenderProfilePass::FrameControl);
         frameDipTrace.Record(
                 frameStartSeconds,
                 preRenderEndSeconds,

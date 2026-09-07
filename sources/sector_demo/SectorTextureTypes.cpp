@@ -3,6 +3,25 @@
 #include <filesystem>
 
 namespace game {
+namespace {
+
+std::string SectorMaterialCompanionPath(
+        const std::string& baseTexturePath,
+        const char* suffix)
+{
+    if (baseTexturePath.empty()) return {};
+
+    const std::filesystem::path path(baseTexturePath);
+    const std::filesystem::path fileName = path.filename();
+    if (fileName.empty()) return {};
+
+    const std::string companionFileName = fileName.stem().string()
+            + suffix
+            + fileName.extension().string();
+    return (path.parent_path() / companionFileName).generic_string();
+}
+
+} // namespace
 
 engine::TextureLoadFlags SectorMaterialTextureLoadFlags(SectorMaterialFilter filter)
 {
@@ -36,20 +55,17 @@ const char* SectorMaterialFilterName(SectorMaterialFilter filter)
 
 std::string SectorMaterialNormalMapPath(const std::string& baseTexturePath)
 {
-    if (baseTexturePath.empty()) {
-        return {};
-    }
+    return SectorMaterialCompanionPath(baseTexturePath, "_normal");
+}
 
-    const std::filesystem::path path(baseTexturePath);
-    const std::filesystem::path fileName = path.filename();
-    if (fileName.empty()) {
-        return {};
-    }
+std::string SectorMaterialOrmMapPath(const std::string& baseTexturePath)
+{
+    return SectorMaterialCompanionPath(baseTexturePath, "_orm");
+}
 
-    const std::string normalFileName = fileName.stem().string()
-            + "_normal"
-            + fileName.extension().string();
-    return (path.parent_path() / normalFileName).generic_string();
+std::string SectorMaterialRoughnessMapPath(const std::string& baseTexturePath)
+{
+    return SectorMaterialCompanionPath(baseTexturePath, "_roughness");
 }
 
 } // namespace game

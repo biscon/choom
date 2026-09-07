@@ -8,8 +8,6 @@
 
 namespace game {
 
-constexpr int SectorReflectionProbeBakeVersion = 1;
-
 struct SectorCompiledReflectionProbe {
     int sourceAuthoringProbeId = -1;
     int topologySectorId = -1;
@@ -21,27 +19,7 @@ struct SectorCompiledReflectionProbe {
     int priority = 0;
     float intensity = 1.0f;
     int resolution = 128;
-};
-
-struct SectorBakedReflectionProbeMetadata {
-    std::string path;
-    int version = 0;
-    int count = 0;
-    std::string format;
-};
-
-struct SectorBakedReflectionProbeRecord {
-    int probeId = -1;
-    int resolution = 0;
-    int mipCount = 0;
-    std::string sourceHash;
-    // Face-major RGBA16F mip data: +X, -X, +Y, -Y, +Z, -Z for every mip.
-    std::vector<std::uint16_t> rgba16;
-};
-
-struct SectorBakedReflectionProbeArtifact {
-    int version = 0;
-    std::vector<SectorBakedReflectionProbeRecord> probes;
+    float blendDistanceWorld = 0.5f;
 };
 
 } // namespace game

@@ -727,6 +727,101 @@ bool SectorEditorMaterialEditingService::ClearMiddleTexture(
             });
 }
 
+bool SectorEditorMaterialEditingService::UseDefaultSurfaceMaterial(
+        TopologySurfaceEditTarget target,
+        engine::AssetManager* assets)
+{
+    if (target.kind == TopologySurfaceEditTargetKind::SideDefMiddle) {
+        return false;
+    }
+    return ApplyMaterialAction(
+            target,
+            assets,
+            TopologyMaterialLayer::Base,
+            [](SectorEditorAuthoringMaterialTarget& authoringTarget) {
+                SectorEditorMaterialActionResult result;
+                if (authoringTarget.materialId == nullptr
+                        || authoringTarget.materialId->empty()) {
+                    return result;
+                }
+                authoringTarget.materialId->clear();
+                result.changed = true;
+                result.status = "Using built-in default material.";
+                return result;
+            });
+}
+
+bool SectorEditorMaterialEditingService::UseDefaultAuthoringFaceMaterial(
+        int faceAnchorId,
+        TopologySectorTextureField field,
+        engine::AssetManager* assets)
+{
+    const bool changed = MutateSectorEditorAuthoringFaceAnchorById(
+            context_.lifecycle,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
+            context_.topologyMap,
+            context_.authoringGraph,
+            context_.derivation,
+            faceAnchorId,
+            "Using built-in default material",
+            [field](SectorAuthoringFaceAnchor& anchor) {
+                std::string* materialId = nullptr;
+                switch (field) {
+                    case TopologySectorTextureField::Floor:
+                        materialId = &anchor.floorMaterialId;
+                        break;
+                    case TopologySectorTextureField::Ceiling:
+                        materialId = &anchor.ceilingMaterialId;
+                        break;
+                    case TopologySectorTextureField::DefaultWall:
+                        materialId = &anchor.defaultWall.materialId;
+                        break;
+                    case TopologySectorTextureField::DefaultLower:
+                        materialId = &anchor.defaultLower.materialId;
+                        break;
+                    case TopologySectorTextureField::DefaultUpper:
+                        materialId = &anchor.defaultUpper.materialId;
+                        break;
+                }
+                if (materialId == nullptr || materialId->empty()) return false;
+                materialId->clear();
+                return true;
+            });
+    if (changed && assets != nullptr && context_.requestPreviewMaterialMeshRebuild) {
+        context_.requestPreviewMaterialMeshRebuild(assets);
+    }
+    return changed;
+}
+
+bool SectorEditorMaterialEditingService::UseDefaultAuthoringSideMaterial(
+        SectorAuthoringSideId sideId,
+        TopologyWallPart wallPart,
+        engine::AssetManager* assets)
+{
+    if (wallPart == TopologyWallPart::Middle) return false;
+    const bool changed = MutateSectorEditorAuthoringSideById(
+            context_.lifecycle,
+            context_.topologyRenderRevision,
+            context_.topologyRenderCache,
+            context_.topologyMap,
+            context_.authoringGraph,
+            context_.derivation,
+            sideId,
+            "Using built-in default material",
+            [wallPart](SectorAuthoringLineSide& side) {
+                std::string& materialId =
+                        AuthoringWallPartSettingsFor(side, wallPart).materialId;
+                if (materialId.empty()) return false;
+                materialId.clear();
+                return true;
+            });
+    if (changed && assets != nullptr && context_.requestPreviewMaterialMeshRebuild) {
+        context_.requestPreviewMaterialMeshRebuild(assets);
+    }
+    return changed;
+}
+
 bool SectorEditorMaterialEditingService::FitSelectedDecal(
         TopologySurfaceEditTarget target,
         engine::AssetManager* assets)
@@ -1060,6 +1155,28 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringStructuralPrimitiveUvValu
                         : component == 2 ? &uv.offset.x : &uv.offset.y;
                 if (*target == value) return false;
                 *target = value;
+                return true;
+            });
+}
+
+bool SectorEditorMaterialEditingService::UseDefaultAuthoringStructuralPrimitiveMaterial(
+        int primitiveId,
+        int surfaceGroup)
+{
+    if (surfaceGroup < -1
+            || surfaceGroup >= static_cast<int>(SectorStructuralSurfaceGroup::Count)) {
+        return false;
+    }
+    return MutateAuthoringStructuralPrimitive(
+            primitiveId,
+            "Using built-in default structure material",
+            [surfaceGroup](SectorAuthoringStructuralPrimitive& primitive) {
+                SectorStructuralMaterialSettings& settings = surfaceGroup < 0
+                        ? primitive.materials.defaultSurface
+                        : primitive.materials.overrides[
+                                static_cast<size_t>(surfaceGroup)].settings;
+                if (settings.materialId.empty()) return false;
+                settings.materialId.clear();
                 return true;
             });
 }

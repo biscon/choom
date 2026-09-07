@@ -155,7 +155,7 @@ bool UpdateStructureTool(SectorEditorToolContext& context)
                             placement.start,
                             placement.current,
                             placement.seedFloor,
-                            context.state.defaultWallTextureId,
+                            {},
                             &primitiveId)) {
                     context.currentTool = SectorEditorTool::Select;
                 }
@@ -199,7 +199,7 @@ bool HandleLadderMousePress(
     if (context.structuralPrimitiveEditing->CreateFromDrag(
                 SectorStructuralPrimitiveKind::Ladder,
                 point, point, floor,
-                context.state.defaultWallTextureId,
+                {},
                 &primitiveId)) {
         context.currentTool = SectorEditorTool::Select;
     }
@@ -259,7 +259,7 @@ void DrawStructureToolOverlay(SectorEditorToolContext& context)
     std::string error;
     const bool valid = context.structuralPrimitiveEditing->BuildPlacementValue(
             pending.kind, pending.start, pending.current, pending.seedFloor,
-            context.state.defaultWallTextureId, 1, preview, error);
+            {}, 1, preview, error);
     DrawFootprint(context, preview, valid ? YELLOW : RED);
     const int64_t dx = static_cast<int64_t>(pending.current.x) - pending.start.x;
     const int64_t dz = static_cast<int64_t>(pending.current.y) - pending.start.y;

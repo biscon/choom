@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorLiquidRenderer.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/render/ColorTransfer.h"
@@ -195,13 +196,8 @@ void main()
     float roughness = clamp(liquidParams0.y, 0.02, 1.0);
 
     vec3 reflection = mix(deepColor, shallowColor, 0.35);
-    if (hasEnvironment != 0) {
-        vec3 reflectedDirection = reflect(-viewDirection, normal);
-        reflection = textureLod(environmentTexture,
-                EnvironmentDirection(reflectedDirection),
-                roughness * environmentMaxLod).rgb
-                * environmentIntensity * environmentSpecularScale;
-    }
+    if (rpMode != 0) reflection = SampleSectorEnvironment(fragWorldPosition,
+            reflect(-viewDirection,normal),roughness)*environmentSpecularScale;
     reflection += DirectionalHighlight(normal, viewDirection, roughness);
 
     float opticalDepth = liquidParams0.x;
@@ -264,7 +260,9 @@ bool SectorLiquidRenderer::Initialize(std::size_t capacity)
 {
     Shutdown();
     Reserve(capacity);
-    shader = LoadShaderFromMemory(LiquidVs, LiquidFs);
+    const std::string reflectionSource=AddSectorReflectionShaderSource(LiquidFs);
+    shader = LoadShaderFromMemory(LiquidVs, reflectionSource.c_str());
+    reflectionLocations=LoadSectorReflectionShaderLocations(shader);
     if (shader.id == 0) return false;
     shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(shader, "vertexPosition");
     shader.locs[SHADER_LOC_VERTEX_NORMAL] = GetShaderLocationAttrib(shader, "vertexNormal");
@@ -358,6 +356,11 @@ bool SectorLiquidRenderer::Rebuild(
                         generated.vertices[i].position.x,
                         surfaceY,
                         generated.vertices[i].position.z};
+                if (i == 0) candidate.bounds = {position, position};
+                else {
+                    candidate.bounds.min = Vector3Min(candidate.bounds.min, position);
+                    candidate.bounds.max = Vector3Max(candidate.bounds.max, position);
+                }
                 candidate.mesh.vertices[i * 3 + 0] = position.x;
                 candidate.mesh.vertices[i * 3 + 1] = position.y;
                 candidate.mesh.vertices[i * 3 + 2] = position.z;
@@ -488,12 +491,13 @@ void SectorLiquidRenderer::Draw(const SectorLiquidDrawContext& context)
         if (liquidParams1Loc >= 0) SetShaderValue(shader, liquidParams1Loc, &params1, SHADER_UNIFORM_VEC4);
         if (flowParamsLoc >= 0) SetShaderValue(shader, flowParamsLoc, &flow, SHADER_UNIFORM_VEC2);
 
-        SectorPbrEnvironmentSelection selection;
-        if (context.environment != nullptr) {
-            selection = SelectSectorPbrEnvironment(*context.environment,
-                    surface.center, surface.sectorId,
-                    context.localReflectionProbesCurrent);
-        }
+        const auto reflectionBlend=context.environment
+                ? SelectSectorPbrEnvironmentBlend(*context.environment,surface.center,surface.sectorId,
+                        true, nullptr, SectorReflectionDemandForBounds(
+                                context.environment->demandCollector, surface.bounds))
+                : SectorPbrEnvironmentBlend{};
+        UploadSectorReflectionBlend(shader,reflectionLocations,reflectionBlend,*context.assets);
+        const auto& selection = reflectionBlend.first;
         const TextureCubemap* cubemap = context.assets->GetCubemap(selection.cubemap);
         const int hasEnvironment = cubemap != nullptr && cubemap->id != 0
                         && pbr.worldEnvironmentSpecularScale > 0.0f

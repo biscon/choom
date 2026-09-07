@@ -622,8 +622,6 @@ private:
     bool StartLightmapBake(SectorLightmapBakeQualityPreset qualityPreset);
     void PollLightmapBakeResult(engine::AssetManager& assets);
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
-    void ProcessPendingReflectionProbeBake(engine::EngineContext& context);
-    bool BakeReflectionProbes(engine::EngineContext& context, int selectedProbeId);
     SectorEditorState state;
     SectorEditorDocumentState documentState;
     SectorEditorPreviewState previewState;
@@ -669,8 +667,6 @@ private:
     std::optional<SectorEditorTriggerEditingService> triggerEditingService;
     std::optional<SectorEditorStructuralPrimitiveEditingService> structuralPrimitiveEditingService;
     SectorEditorLightmapBakeController lightmapBake;
-    bool reflectionProbeBakePending = false;
-    int reflectionProbeBakeSelectedId = -1;
     Rectangle canvasRect = {};
     std::string statusText;
     SectorSceneRuntime sceneRuntime;

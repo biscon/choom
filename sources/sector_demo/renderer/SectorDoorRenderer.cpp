@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorDoorRenderer.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
 
 #include "sector_demo/renderer/SectorDynamicShadowSampling.h"
 #include "sector_demo/renderer/SectorFlashlightProfileSampling.h"
@@ -61,8 +62,10 @@ in vec4 fragColor;
 
 uniform sampler2D texture0;
 uniform sampler2D normalTexture;
+uniform sampler2D materialPropertiesTexture;
 uniform int hasNormalMap;
 uniform float normalStrength;
+uniform int materialPropertiesKind;
 uniform float metallicFactor;
 uniform float roughnessFactor;
 uniform vec3 cameraPosition;
@@ -313,13 +316,25 @@ void main()
             geometricNormal, tangentNormalSample);
     vec3 viewDirection = SafeNormalize(
             cameraPosition - fragWorldPosition, geometricNormal);
+    float materialAo = 1.0;
     float metallic = clamp(metallicFactor, 0.0, 1.0);
     float roughness = clamp(roughnessFactor, 0.045, 1.0);
+    if (materialPropertiesKind == 1) {
+        roughness = clamp(
+                texture(materialPropertiesTexture, fragTexCoord).r,
+                0.045, 1.0);
+    } else if (materialPropertiesKind == 2) {
+        vec3 orm = texture(materialPropertiesTexture, fragTexCoord).rgb;
+        materialAo = clamp(orm.r, 0.0, 1.0);
+        roughness = clamp(orm.g, 0.045, 1.0);
+        metallic = clamp(orm.b, 0.0, 1.0);
+    }
     vec3 f0 = mix(vec3(0.04), surfaceRgb, metallic);
     vec3 indirectDiffuse = surfaceRgb
             * (1.0 - metallic)
             * staticProbeLighting
-            * indirectDiffuseScale;
+            * indirectDiffuseScale
+            * materialAo;
     vec3 dynamicDirectDiffuse = vec3(0.0);
     vec3 dynamicDirectSpecular = vec3(0.0);
     for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
@@ -467,44 +482,18 @@ void main()
         }
     }
 
-    vec3 environmentSpecular = vec3(0.0);
-    if (hasEnvironment != 0 && environmentSpecularScale > 0.0) {
-        vec3 reflected = reflect(-viewDirection, worldNormal);
-        if (environmentBoxProjection != 0) {
-            float c = cos(-environmentYaw);
-            float s = sin(-environmentYaw);
-            vec3 origin = fragWorldPosition - environmentInfluenceCenter;
-            vec3 localOrigin = vec3(origin.x*c-origin.z*s, origin.y, origin.x*s+origin.z*c);
-            vec3 localDirection = vec3(reflected.x*c-reflected.z*s, reflected.y, reflected.x*s+reflected.z*c);
-            vec3 safeDirection = mix(vec3(-1.0), vec3(1.0), step(vec3(0.0), localDirection))
-                    * max(abs(localDirection), vec3(0.00001));
-            vec3 exitPlane = mix(-environmentHalfExtents, environmentHalfExtents, step(vec3(0.0), localDirection));
-            vec3 exitDistance = (exitPlane-localOrigin)/safeDirection;
-            float distanceToBox = min(exitDistance.x, min(exitDistance.y, exitDistance.z));
-            vec3 localHit = localOrigin + localDirection * max(distanceToBox, 0.0);
-            vec3 captureOffset = environmentCapturePosition-environmentInfluenceCenter;
-            vec3 localCapture = vec3(captureOffset.x*c-captureOffset.z*s, captureOffset.y, captureOffset.x*s+captureOffset.z*c);
-            vec3 localLookup = localHit-localCapture;
-            c = cos(environmentYaw); s = sin(environmentYaw);
-            reflected = normalize(vec3(localLookup.x*c-localLookup.z*s, localLookup.y, localLookup.x*s+localLookup.z*c));
-        }
-        vec3 environment = textureLod(
-                environmentTexture, reflected, roughness * max(environmentMaxLod, 0.0)).rgb;
-        vec2 environmentBrdf = EnvironmentBrdfApprox(
-                roughness,
-                max(dot(worldNormal, viewDirection), 0.0));
-        environmentSpecular = environment
-                * (f0 * environmentBrdf.x + environmentBrdf.y)
-                * environmentExposure
-                * environmentSpecularScale;
-    }
+    vec3 environmentSpecular=SampleSectorEnvironment(fragWorldPosition,
+            reflect(-viewDirection,worldNormal),roughness);
+    vec2 brdf=EnvironmentBrdfApprox(roughness,max(dot(worldNormal,viewDirection),0.0));
+    environmentSpecular *= (f0*brdf.x+brdf.y)*environmentSpecularScale;
 
     vec3 outputRgb = indirectDiffuse
             + dynamicDirectDiffuse
             + dynamicDirectSpecular
             + staticDirectSpecular
             + environmentSpecular;
-    if (pbrDiagnosticMode == 1) outputRgb = surfaceRgb;
+    if (pbrDiagnosticMode == 11) outputRgb = indirectDiffuse + dynamicDirectDiffuse;
+    else if (pbrDiagnosticMode == 1) outputRgb = surfaceRgb;
     else if (pbrDiagnosticMode == 2) outputRgb = dynamicDirectDiffuse;
     else if (pbrDiagnosticMode == 3) {
         outputRgb = dynamicDirectSpecular + staticDirectSpecular;
@@ -512,7 +501,7 @@ void main()
     else if (pbrDiagnosticMode == 4) outputRgb = indirectDiffuse;
     else if (pbrDiagnosticMode == 5) outputRgb = environmentSpecular;
     else if (pbrDiagnosticMode == 6) outputRgb = vec3(0.0);
-    else if (pbrDiagnosticMode == 7) outputRgb = vec3(1.0);
+    else if (pbrDiagnosticMode == 7) outputRgb = vec3(materialAo);
     else if (pbrDiagnosticMode == 8) {
         outputRgb = vec3(metallic, roughness, 0.0);
     }
@@ -627,6 +616,8 @@ void AppendDoorRenderDebugText(std::string& renderDebugText, const std::string& 
 
 void SectorDoorRenderer::ReserveRuntimeDoorCapacity(size_t capacity)
 {
+    visibleDraws.reserve(capacity);
+    drawCapacityWarned = false;
     doorMeshCache.reserve(capacity);
     runtimeDoorShadowCasters.clear();
     runtimeDoorShadowCasters.reserve(capacity);
@@ -641,7 +632,9 @@ void SectorDoorRenderer::ResetOpaqueShaderLocations()
 
 bool SectorDoorRenderer::LoadOpaqueResources()
 {
-    opaqueShader = LoadShaderFromMemory(SectorDoorOpaqueVs, SectorDoorOpaqueFs);
+    const std::string reflectionSource=AddSectorReflectionShaderSource(SectorDoorOpaqueFs);
+    opaqueShader = LoadShaderFromMemory(SectorDoorOpaqueVs, reflectionSource.c_str());
+    opaqueShaderLocations.reflections=LoadSectorReflectionShaderLocations(opaqueShader);
     if (opaqueShader.id == 0) {
         opaqueShader = Shader{};
         ResetOpaqueShaderLocations();
@@ -658,12 +651,18 @@ bool SectorDoorRenderer::LoadOpaqueResources()
     opaqueShader.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(opaqueShader, "matNormal");
     opaqueShader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(opaqueShader, "texture0");
     opaqueShader.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(opaqueShader, "normalTexture");
+    opaqueShader.locs[SHADER_LOC_MAP_BRDF] =
+            GetShaderLocation(opaqueShader, "materialPropertiesTexture");
     opaqueShader.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(opaqueShader, "shadowMap0");
     opaqueShader.locs[SHADER_LOC_MAP_OCCLUSION] = GetShaderLocation(opaqueShader, "shadowMap1");
     opaqueShader.locs[SHADER_LOC_MAP_CUBEMAP] = GetShaderLocation(
             opaqueShader, "environmentTexture");
     opaqueShaderLocations.texture = opaqueShader.locs[SHADER_LOC_MAP_DIFFUSE];
     opaqueShaderLocations.normalTexture = opaqueShader.locs[SHADER_LOC_MAP_NORMAL];
+    opaqueShaderLocations.materialPropertiesTexture =
+            opaqueShader.locs[SHADER_LOC_MAP_BRDF];
+    opaqueShaderLocations.materialPropertiesKind = GetShaderLocation(
+            opaqueShader, "materialPropertiesKind");
     opaqueShaderLocations.hasNormalMap = GetShaderLocation(opaqueShader, "hasNormalMap");
     opaqueShaderLocations.normalStrength = GetShaderLocation(opaqueShader, "normalStrength");
     opaqueShaderLocations.metallicFactor = GetShaderLocation(opaqueShader, "metallicFactor");
@@ -737,6 +736,7 @@ void SectorDoorRenderer::ShutdownOpaqueResources()
         opaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
         opaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
         opaqueMaterial.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
+        opaqueMaterial.maps[MATERIAL_MAP_BRDF].texture = Texture2D{};
         UnloadMaterial(opaqueMaterial);
         opaqueMaterial = Material{};
         opaqueDefaultMaterialTexture = Texture2D{};
@@ -834,6 +834,77 @@ void SectorDoorRenderer::PrepareRuntimeDoorMeshes(
     }
 }
 
+void SectorDoorRenderer::PrepareVisibleDraws(engine::AssetManager &assets, engine::World &world,
+                                             const Camera3D &camera, float aspect,
+                                             const RuntimePortalVisibilityResult &visibility)
+{
+    PrepareRuntimeDoorMeshes(assets, world);
+    visibleDraws.clear();
+    culledOpaqueObjects = 0;
+    culledTriangles = 0;
+    world.ForEach<SectorObjectTransform, SectorObject, SectorDoor, SectorDoorResolvedAnchor,
+                  SectorDoorRender>(
+        [&](engine::Entity entity, SectorObjectTransform &transform, SectorObject &object,
+            SectorDoor &door, SectorDoorResolvedAnchor &anchor, SectorDoorRender &render) {
+            if (!object.visible || !door.enabled || !render.visible || render.width <= 0 ||
+                render.height <= 0 || render.thickness <= 0)
+                return;
+            if (world.Has<SectorDoorModelRender>(entity)) {
+                const auto &model = world.Get<SectorDoorModelRender>(entity);
+                if (!ResolveSectorDoorModelDrawPolicy(
+                         model, assets.GetModelAsset(model.leafModel) != nullptr,
+                         assets.GetModelAsset(model.frameModel) != nullptr)
+                         .drawProcedural)
+                    return;
+            }
+            const auto *mesh = FindDoorMesh(door.placedObjectId);
+            if (!mesh || mesh->mesh.vertexCount <= 0)
+                return;
+            SectorReceiverBounds receiver{object.currentSectorId, transform.position,
+                                          transform.position};
+            BuildSectorDoorReceiverBounds(transform, object, door, anchor, render,
+                                          object.currentSectorId, receiver);
+            const BoundingBox bounds{receiver.min, receiver.max};
+            const bool inView = SectorBoundsInView(camera, aspect, rlGetCullDistanceNear(),
+                                                   rlGetCullDistanceFar(), bounds);
+            if (!inView || !ShouldDrawSectorDoorForVisibility(anchor, visibility, inView)) {
+                ++culledOpaqueObjects;
+                culledTriangles += mesh->mesh.triangleCount;
+                return;
+            }
+            AppendSectorOpaqueDraw(visibleDraws,
+                                   {entity, door.placedObjectId, 0,
+                                    BuildSectorDoorSlabModelMatrix(transform, anchor, render),
+                                    bounds, SectorNearestViewDepth(camera, bounds)},
+                                   drawCapacityWarned);
+        });
+    std::sort(visibleDraws.begin(), visibleDraws.end(), SectorOpaqueDrawLess);
+}
+
+void SectorDoorRenderer::DrawPreparedDepth(Material depthMaterial)
+{
+    if (!IsOpaqueReady())
+        return;
+    rlDisableBackfaceCulling(); // Procedural slabs keep their existing two-sided policy.
+    for (const auto &item : visibleDraws) {
+        const auto *entry = FindDoorMesh(item.id);
+        if (entry)
+            DrawMesh(entry->mesh, depthMaterial, item.transform);
+    }
+    rlEnableBackfaceCulling();
+}
+
+std::size_t SectorDoorRenderer::SubmittedTriangles() const
+{
+    std::size_t count = 0;
+    for (const auto &item : visibleDraws) {
+        const auto *entry = FindDoorMesh(item.id);
+        if (entry)
+            count += entry->mesh.triangleCount;
+    }
+    return count;
+}
+
 void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
 {
     if (!IsOpaqueReady()) {
@@ -851,7 +922,6 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
     Material& doorOpaqueMaterial = OpaqueMaterial();
     const Texture2D& doorOpaqueDefaultMaterialTexture = OpaqueDefaultMaterialTexture();
     const SectorDoorOpaqueShaderLocations& doorOpaqueLocations = OpaqueShaderLocations();
-    PrepareRuntimeDoorMeshes(*context.assets, *context.runtimeObjectWorld);
 
     size_t consideredCount = 0;
     size_t drawnCount = 0;
@@ -994,7 +1064,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
     if (doorOpaqueLocations.environmentMaxLod >= 0) SetShaderValue(
             doorOpaqueMaterial.shader, doorOpaqueLocations.environmentMaxLod,
             &context.environmentMaxLod, SHADER_UNIFORM_FLOAT);
-    const int pbrDiagnosticMode = static_cast<int>(pbr.diagnosticMode);
+    const int pbrDiagnosticMode = pbr.reflectionCapture ? 11 : static_cast<int>(pbr.diagnosticMode);
     if (doorOpaqueLocations.pbrDiagnosticMode >= 0) SetShaderValue(
             doorOpaqueMaterial.shader,
             doorOpaqueLocations.pbrDiagnosticMode,
@@ -1007,12 +1077,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
             &useObjectAmbientCube,
             SHADER_UNIFORM_INT);
 
-    context.runtimeObjectWorld->ForEach<
-            SectorObjectTransform,
-            SectorObject,
-            SectorDoor,
-            SectorDoorResolvedAnchor,
-            SectorDoorRender>(
+    const auto drawDoor =
             [this,
              &context,
              &consideredCount,
@@ -1052,6 +1117,18 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                     return;
                 }
 
+                const int receiverSectorId = object.currentSectorId > 0
+                        ? object.currentSectorId
+                        : (anchor.frontSectorId > 0 ? anchor.frontSectorId : anchor.backSectorId);
+                SectorReceiverBounds receiverBounds{receiverSectorId, transform.position, transform.position};
+                BuildSectorDoorReceiverBounds(transform, object, door, anchor, render,
+                        receiverSectorId, receiverBounds);
+                const BoundingBox reflectionBounds{receiverBounds.min, receiverBounds.max};
+                if (!AcceptSectorReflectionObject(context.captureCulling, reflectionBounds)) {
+                    ++skippedCount;
+                    return;
+                }
+
                 SectorDoorResolvedMaterial resolvedMaterial;
                 if (!render.materialId.empty()
                         && context.materialResolver.resolve != nullptr) {
@@ -1072,6 +1149,8 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 }
                 const bool hasNormalMap = resolvedMaterial.normal != nullptr
                         && resolvedMaterial.normal->id != 0;
+                const bool hasPropertyMap = resolvedMaterial.properties != nullptr
+                        && resolvedMaterial.properties->id != 0;
                 resolvedMaterial.normalStrength = std::isfinite(
                             resolvedMaterial.normalStrength)
                         ? std::clamp(resolvedMaterial.normalStrength, 0.0f, 1.0f)
@@ -1153,6 +1232,14 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                         doorOpaqueLocations.normalStrength,
                         &resolvedMaterial.normalStrength,
                         SHADER_UNIFORM_FLOAT);
+                const int propertyMapKind = hasPropertyMap
+                        ? static_cast<int>(resolvedMaterial.propertyMapKind)
+                        : static_cast<int>(SectorMaterialPropertyMapKind::None);
+                if (doorOpaqueLocations.materialPropertiesKind >= 0) SetShaderValue(
+                        doorOpaqueMaterial.shader,
+                        doorOpaqueLocations.materialPropertiesKind,
+                        &propertyMapKind,
+                        SHADER_UNIFORM_INT);
                 if (doorOpaqueLocations.metallicFactor >= 0) SetShaderValue(
                         doorOpaqueMaterial.shader,
                         doorOpaqueLocations.metallicFactor,
@@ -1164,23 +1251,6 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                         &resolvedMaterial.roughnessFactor,
                         SHADER_UNIFORM_FLOAT);
 
-                const int receiverSectorId = object.currentSectorId > 0
-                        ? object.currentSectorId
-                        : (anchor.frontSectorId > 0
-                                ? anchor.frontSectorId
-                                : anchor.backSectorId);
-                SectorReceiverBounds receiverBounds{
-                        receiverSectorId,
-                        transform.position,
-                        transform.position};
-                BuildSectorDoorReceiverBounds(
-                        transform,
-                        object,
-                        door,
-                        anchor,
-                        render,
-                        receiverSectorId,
-                        receiverBounds);
                 const SectorStaticSpecularLightContext staticSpecularContext =
                         SelectSectorStaticSpecularLights(
                                 staticSpecularLights,
@@ -1207,19 +1277,36 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 doorOpaqueMaterial.maps[MATERIAL_MAP_NORMAL].texture = hasNormalMap
                         ? *resolvedMaterial.normal
                         : Texture2D{};
+                doorOpaqueMaterial.maps[MATERIAL_MAP_BRDF].texture = hasPropertyMap
+                        ? *resolvedMaterial.properties
+                        : Texture2D{};
                 doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+                const auto blend=context.reflectionEnvironment && !context.pbr.reflectionCapture
+                        ? SelectSectorPbrEnvironmentBlend(*context.reflectionEnvironment,transform.position,object.currentSectorId,
+                                true, nullptr, SectorReflectionDemandForBounds(
+                                        context.reflectionEnvironment->demandCollector, reflectionBounds))
+                        : SectorPbrEnvironmentBlend{};
+                UploadSectorReflectionBlend(doorOpaqueMaterial.shader,doorOpaqueLocations.reflections,blend,*context.assets);
                 DrawMesh(
                         cacheEntry->mesh,
                         doorOpaqueMaterial,
                         doorModel);
                 ++drawnCount;
-            });
+            };
+    for (const auto& item : visibleDraws) {
+        if (!context.runtimeObjectWorld->IsAlive(item.entity)) continue;
+        auto& world = *context.runtimeObjectWorld;
+        drawDoor(item.entity, world.Get<SectorObjectTransform>(item.entity),
+                world.Get<SectorObject>(item.entity), world.Get<SectorDoor>(item.entity),
+                world.Get<SectorDoorResolvedAnchor>(item.entity), world.Get<SectorDoorRender>(item.entity));
+    }
 
     doorOpaqueMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = doorOpaqueDefaultMaterialTexture;
     doorOpaqueMaterial.maps[MATERIAL_MAP_NORMAL].texture = Texture2D{};
     doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
     doorOpaqueMaterial.maps[MATERIAL_MAP_OCCLUSION].texture = Texture2D{};
     doorOpaqueMaterial.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
+    doorOpaqueMaterial.maps[MATERIAL_MAP_BRDF].texture = Texture2D{};
     rlActiveTextureSlot(0);
     rlSetTexture(0);
     rlEnableColorBlend();

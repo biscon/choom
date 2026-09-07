@@ -23,17 +23,42 @@ struct RuntimePortalEdge {
     float openBottom = 0.0f;
     float openTop = 0.0f;
     bool open = false;
+    // Built topology edges are oriented with the source sector on the left.
+    bool hasFacing = false;
+};
+
+struct RuntimeVisibilityWall {
+    Vector2 a{};
+    Vector2 b{};
+    float bottom = 0.0f;
+    float top = 0.0f;
 };
 
 struct RuntimeSectorNode {
     int sectorId = -1;
     std::vector<int> outgoingPortalEdgeIndices;
+    // Cached once with the graph; includes solid boundaries around holes/bends.
+    std::vector<RuntimeVisibilityWall> walls;
 };
 
 struct RuntimeSectorVisibilityGraph {
     std::vector<RuntimeSectorNode> sectors;
     std::vector<RuntimePortalEdge> portals;
 };
+
+struct RuntimePortalSegmentInterval {
+    float min = 0.0f;
+    float max = 1.0f;
+};
+
+// Reused by the renderer for main-view and sequential cubemap-face queries.
+struct RuntimePortalVisibilityScratch {
+    std::vector<RuntimePortalSegmentInterval> fragments;
+    std::vector<RuntimePortalSegmentInterval> nextFragments;
+};
+
+void ReserveRuntimePortalVisibilityScratch(
+        const RuntimeSectorVisibilityGraph& graph, RuntimePortalVisibilityScratch& scratch);
 
 struct RuntimePortalDynamicBlocker {
     int lineDefId = -1;
@@ -127,7 +152,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         float visibilitySeedRadiusWorld = 0.0f,
         float eyeYWorld = 0.0f,
         bool validateEyeY = false,
-        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr);
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr,
+        RuntimePortalVisibilityScratch* scratch = nullptr);
 
 RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         const RuntimeSectorVisibilityGraph& graph,
@@ -137,11 +163,22 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         const std::vector<int>& startSectorIds,
         int preferredStartSectorId = 0,
         size_t iterationCap = 0,
-        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr);
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr,
+        float eyeYWorld = 0.0f,
+        RuntimePortalVisibilityScratch* scratch = nullptr);
 
 bool IsRuntimePortalDynamicallyBlocked(
         const RuntimePortalEdge& edge,
         const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers);
+
+// Cubemap capture coarse visibility. Vertical faces retain connected membership;
+// all faces still require a 3D bounds/frustum test before draw submission.
+RuntimePortalVisibilityResult ComputeRuntimeSectorCaptureVisibility(
+        const RuntimeSectorVisibilityGraph& graph, const Camera3D& camera,
+        const RuntimePortalVisibilityResult& connected,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr,
+        size_t iterationCap = 0,
+        RuntimePortalVisibilityScratch* scratch = nullptr);
 
 float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld);
 

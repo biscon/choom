@@ -1,4 +1,6 @@
 #include "sector_demo/renderer/SectorWindowRenderer.h"
+#include "sector_demo/renderer/SectorReflectionProbePolicy.h"
+#include "sector_demo/renderer/SectorShaderSource.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/ecs/World.h"
@@ -60,8 +62,16 @@ uniform vec3 glassDimensions;
 uniform float glassPatternSeed;
 uniform float glassIor;
 uniform float glassThickness;
+#ifndef WINDOW_FLAT_PASS
+#define WINDOW_FLAT_PASS 0
+#endif
+#if WINDOW_FLAT_PASS == 0
 uniform int advancedTransmission;
 uniform int flatGlassPass;
+#else
+#define advancedTransmission 0
+#define flatGlassPass WINDOW_FLAT_PASS
+#endif
 uniform sampler2D sceneColor;
 uniform sampler2D sceneDepth;
 uniform vec2 viewportSize;
@@ -129,6 +139,34 @@ float GlassSurfacePattern(vec2 panePosition)
     return broad * 0.65 + fine * 0.35;
 }
 
+// Evaluate the finite-difference samples with shared hashes when they occupy
+// the same lattice cell. Crossing a cell boundary uses the original evaluation.
+float GlassNoiseFromCell(vec2 fraction, vec4 hashes)
+{
+    vec2 blend = fraction * fraction * (3.0 - 2.0 * fraction);
+    return mix(mix(hashes.x, hashes.y, blend.x), mix(hashes.z, hashes.w, blend.x), blend.y);
+}
+vec3 GlassNoiseSamples(vec2 center, vec2 offsetX, vec2 offsetY)
+{
+    vec2 cell = floor(center);
+    vec4 hashes = vec4(GlassHash(cell), GlassHash(cell + vec2(1, 0)),
+            GlassHash(cell + vec2(0, 1)), GlassHash(cell + vec2(1, 1)));
+    float x = all(equal(floor(offsetX), cell))
+            ? GlassNoiseFromCell(fract(offsetX), hashes) : GlassValueNoise(offsetX);
+    float y = all(equal(floor(offsetY), cell))
+            ? GlassNoiseFromCell(fract(offsetY), hashes) : GlassValueNoise(offsetY);
+    return vec3(GlassNoiseFromCell(fract(center), hashes), x, y);
+}
+vec3 GlassPatternSamples(vec2 position, float stepSize)
+{
+    vec2 seed = vec2(glassPatternSeed * 0.754877666, glassPatternSeed * 0.569840296);
+    vec2 x = position + vec2(stepSize, 0);
+    vec2 y = position + vec2(0, stepSize);
+    return GlassNoiseSamples(position * 0.65 + seed, x * 0.65 + seed, y * 0.65 + seed) * 0.65
+            + GlassNoiseSamples(position * 5.0 + seed * 1.731,
+                    x * 5.0 + seed * 1.731, y * 5.0 + seed * 1.731) * 0.35;
+}
+
 void GlassPaneCoordinates(out vec2 panePosition,
         out vec3 tangent, out vec3 bitangent)
 {
@@ -155,18 +193,20 @@ void GlassPaneCoordinates(out vec2 panePosition,
 void GlassSurfaceDetail(vec3 geometricNormal,
         out vec3 shadingNormal, out float hazeVariation)
 {
+    if (glassImperfectionStrength <= 0.0) {
+        shadingNormal = geometricNormal;
+        hazeVariation = 1.0;
+        return;
+    }
     vec2 panePosition;
     vec3 tangent;
     vec3 bitangent;
     GlassPaneCoordinates(panePosition, tangent, bitangent);
     float strength = clamp(glassImperfectionStrength, 0.0, 1.0);
     const float derivativeStep = 0.025;
-    float center = GlassSurfacePattern(panePosition);
-    vec2 gradient = vec2(
-            GlassSurfacePattern(panePosition + vec2(derivativeStep, 0.0))
-                    - center,
-            GlassSurfacePattern(panePosition + vec2(0.0, derivativeStep))
-                    - center) / derivativeStep;
+    vec3 samples = GlassPatternSamples(panePosition, derivativeStep);
+    float center = samples.x;
+    vec2 gradient = (samples.yz - vec2(center)) / derivativeStep;
     float gradientLength = length(gradient);
     if (gradientLength > 1.0) gradient /= gradientLength;
     // tan(4 degrees) bounds the maximum authored normal perturbation.
@@ -251,6 +291,7 @@ vec3 BoxProjectedEnvironmentDirection(vec3 direction)
             localLookup.y, localLookup.x*s+localLookup.z*c), direction);
 }
 
+#if WINDOW_FLAT_PASS == 0
 vec3 SampleTransmission(vec3 normal, vec3 viewDirection, float roughness,
         float ior, out float opticalPath)
 {
@@ -283,6 +324,7 @@ vec3 SampleTransmission(vec3 normal, vec3 viewDirection, float roughness,
     }
     return result * 0.2;
 }
+#endif
 
 vec3 DirectionalSpecular(vec3 normal, vec3 viewDirection, float roughness)
 {
@@ -327,11 +369,13 @@ void main()
 {
     vec3 normal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
     vec3 viewDirection = SafeNormalize(cameraPosition - fragWorldPosition, normal);
+#if WINDOW_FLAT_PASS == 0
     if (advancedTransmission != 0) {
         vec2 baseUv = gl_FragCoord.xy / max(viewportSize, vec2(1.0));
         float opaqueDepth = texture(sceneDepth, baseUv).r;
         if (gl_FragCoord.z > opaqueDepth + 0.00001) discard;
     }
+#endif
     float roughness = clamp(glassRoughness, 0.045, 1.0);
     float ior = clamp(glassIor, 1.0, 2.5);
     float ndotv = clamp(dot(normal, viewDirection), 0.0, 1.0);
@@ -360,17 +404,15 @@ void main()
             * (1.0 - fresnel) * hazeVariation, 0.20);
     vec3 haze = clamp(glassTint, 0.0, 1.0) * hazeWeight;
 
-    vec3 reflection = vec3(0.0);
-    if (hasEnvironment != 0) {
-        vec3 reflected = BoxProjectedEnvironmentDirection(
-                reflect(-viewDirection, shadingNormal));
-        reflection = textureLod(environmentTexture, reflected,
-                roughness * max(environmentMaxLod, 0.0)).rgb
-                * environmentIntensity * environmentSpecularScale;
+    vec3 reflection = vec3(0);
+    if (environmentSpecularScale > 0.0) {
+        reflection = SampleSectorEnvironment(fragWorldPosition,
+                reflect(-viewDirection,shadingNormal),roughness)*environmentSpecularScale;
     }
     vec3 direct = DirectionalSpecular(
             shadingNormal, viewDirection, roughness);
     vec3 rgb;
+#if WINDOW_FLAT_PASS == 0
     if (advancedTransmission != 0) {
         float opticalPath = 0.0;
         vec3 sceneTransmission = SampleTransmission(
@@ -386,7 +428,9 @@ void main()
         rgb = mix(rgb, fogColor, fogAmount);
         finalColor = vec4(clamp(rgb, vec3(0.0), vec3(65504.0)), 1.0);
         return;
-    } else {
+    } else
+#endif
+    {
         rgb = reflection * shadingFresnel
                 + direct + haze;
         float fogAmount = GlassFogAmount();
@@ -398,150 +442,80 @@ void main()
 }
 )glsl";
 
-bool WindowVisible(
-        const SectorWindow& window,
-        const RuntimePortalVisibilityResult* visibility)
-{
-    if (visibility == nullptr
-            || !visibility->validStartSector
-            || visibility->fallbackDrawAll) return true;
-    return ShouldDrawRuntimeSectorForVisibility(
-                    window.frontSectorId, *visibility)
-            || ShouldDrawRuntimeSectorForVisibility(
-                    window.backSectorId, *visibility);
-}
-
-SectorPbrEnvironmentSelection SelectWindowEnvironment(
-        const SectorPbrEnvironment& environment,
-        const SectorObjectTransform& transform,
-        const SectorObject& object,
-        const SectorWindow& window,
-        Vector3 cameraPosition,
-        bool includeLocalProbes)
-{
-    const Vector3 portalNormal{window.normal.x, 0.0f, window.normal.y};
-    const float cameraSide = Vector3DotProduct(
-            Vector3Subtract(cameraPosition, transform.position), portalNormal);
-    const float direction = cameraSide > 0.0f ? 1.0f : -1.0f;
-    const int viewerSectorId = cameraSide > 0.0f
-            ? window.backSectorId : window.frontSectorId;
-    const Vector3 receiver = Vector3Add(
-            transform.position, Vector3Scale(portalNormal, direction * 0.25f));
-    SectorPbrEnvironmentSelection selection = SelectSectorPbrEnvironment(
-            environment, receiver, viewerSectorId, includeLocalProbes);
-    if (selection.localProbe) return selection;
-    const SectorPbrEnvironmentSelection centerSelection =
-            SelectSectorPbrEnvironment(
-                    environment,
-                    transform.position,
-                    object.currentSectorId,
-                    includeLocalProbes);
-    if (centerSelection.localProbe) return centerSelection;
-
-    const SectorPbrEnvironment::LocalProbe* nearestSectorProbe = nullptr;
-    float nearestDistanceSquared = 0.0f;
-    if (includeLocalProbes) {
-        for (const SectorPbrEnvironment::LocalProbe& candidate
-                : environment.localProbes) {
-            const SectorCompiledReflectionProbe& probe = candidate.definition;
-            if (!probe.enabled || engine::IsNull(candidate.cubemap)
-                    || probe.topologySectorId != viewerSectorId) continue;
-            const float distanceSquared = Vector3DistanceSqr(
-                    receiver, probe.influenceCenterWorld);
-            if (nearestSectorProbe == nullptr
-                    || probe.priority > nearestSectorProbe->definition.priority
-                    || (probe.priority
-                                    == nearestSectorProbe->definition.priority
-                            && (distanceSquared < nearestDistanceSquared
-                                    || (distanceSquared == nearestDistanceSquared
-                                            && probe.sourceAuthoringProbeId
-                                                    < nearestSectorProbe->definition
-                                                            .sourceAuthoringProbeId)))) {
-                nearestSectorProbe = &candidate;
-                nearestDistanceSquared = distanceSquared;
-            }
-        }
-    }
-    if (nearestSectorProbe != nullptr) {
-        const SectorCompiledReflectionProbe& probe =
-                nearestSectorProbe->definition;
-        return SectorPbrEnvironmentSelection{
-                nearestSectorProbe->cubemap,
-                probe.capturePositionWorld,
-                probe.influenceCenterWorld,
-                probe.halfExtentsWorld,
-                probe.yawRadians,
-                probe.intensity,
-                static_cast<float>(std::max(0, nearestSectorProbe->mipCount - 1)),
-                true,
-                true};
-    }
-    return selection;
-}
-
 } // namespace
 
 bool SectorWindowRenderer::Initialize(std::size_t capacity)
 {
     Shutdown();
     Reserve(capacity);
-    shader = LoadShaderFromMemory(WindowVs, WindowFs);
-    if (shader.id == 0) return false;
-    shader.locs[SHADER_LOC_VERTEX_POSITION] =
-            GetShaderLocationAttrib(shader, "vertexPosition");
-    shader.locs[SHADER_LOC_VERTEX_NORMAL] =
-            GetShaderLocationAttrib(shader, "vertexNormal");
-    shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(shader, "mvp");
-    shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(shader, "matModel");
-    shader.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(shader, "matNormal");
-    shader.locs[SHADER_LOC_MAP_CUBEMAP] =
-            GetShaderLocation(shader, "environmentTexture");
-    cameraPositionLoc = GetShaderLocation(shader, "cameraPosition");
-    tintLoc = GetShaderLocation(shader, "glassTint");
-    opacityLoc = GetShaderLocation(shader, "glassOpacity");
-    roughnessLoc = GetShaderLocation(shader, "glassRoughness");
-    surfaceHazeLoc = GetShaderLocation(shader, "glassSurfaceHaze");
-    imperfectionStrengthLoc =
-            GetShaderLocation(shader, "glassImperfectionStrength");
-    dimensionsLoc = GetShaderLocation(shader, "glassDimensions");
-    patternSeedLoc = GetShaderLocation(shader, "glassPatternSeed");
-    iorLoc = GetShaderLocation(shader, "glassIor");
-    thicknessLoc = GetShaderLocation(shader, "glassThickness");
-    advancedTransmissionLoc = GetShaderLocation(shader, "advancedTransmission");
-    flatGlassPassLoc = GetShaderLocation(shader, "flatGlassPass");
-    sceneColorLoc = GetShaderLocation(shader, "sceneColor");
-    sceneDepthLoc = GetShaderLocation(shader, "sceneDepth");
-    shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneColorLoc;
-    shader.locs[SHADER_LOC_MAP_SPECULAR] = sceneDepthLoc;
-    viewportSizeLoc = GetShaderLocation(shader, "viewportSize");
-    viewMatrixLoc = GetShaderLocation(shader, "matView");
-    projectionMatrixLoc = GetShaderLocation(shader, "matProjection");
-    hasEnvironmentLoc = GetShaderLocation(shader, "hasEnvironment");
-    environmentBoxProjectionLoc =
-            GetShaderLocation(shader, "environmentBoxProjection");
-    environmentCapturePositionLoc =
-            GetShaderLocation(shader, "environmentCapturePosition");
-    environmentInfluenceCenterLoc =
-            GetShaderLocation(shader, "environmentInfluenceCenter");
-    environmentHalfExtentsLoc =
-            GetShaderLocation(shader, "environmentHalfExtents");
-    environmentYawLoc = GetShaderLocation(shader, "environmentYaw");
-    environmentMaxLodLoc = GetShaderLocation(shader, "environmentMaxLod");
-    environmentIntensityLoc = GetShaderLocation(shader, "environmentIntensity");
-    environmentSpecularScaleLoc =
-            GetShaderLocation(shader, "environmentSpecularScale");
-    directionalLightEnabledLoc =
-            GetShaderLocation(shader, "directionalLightEnabled");
-    directionalLightDirectionLoc =
-            GetShaderLocation(shader, "directionalLightDirection");
-    directionalLightColorLoc =
-            GetShaderLocation(shader, "directionalLightColor");
-    directionalLightIntensityLoc =
-            GetShaderLocation(shader, "directionalLightIntensity");
-    fogLocations = GetSectorFogShaderLocations(shader);
+    for (int variant = 0; variant < 3; ++variant) {
+        active = {};
+        const std::string reflectionSource = InsertSectorShaderPreamble(
+            AddSectorReflectionShaderSource(WindowFs),
+            "#define WINDOW_FLAT_PASS " + std::to_string(variant) + "\n");
+        active.shader = LoadShaderFromMemory(WindowVs, reflectionSource.c_str());
+        active.reflectionLocations = LoadSectorReflectionShaderLocations(active.shader);
+        if (active.shader.id == 0) {
+            Shutdown();
+            return false;
+        }
+        active.shader.locs[SHADER_LOC_VERTEX_POSITION] =
+            GetShaderLocationAttrib(active.shader, "vertexPosition");
+        active.shader.locs[SHADER_LOC_VERTEX_NORMAL] =
+            GetShaderLocationAttrib(active.shader, "vertexNormal");
+        active.shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(active.shader, "mvp");
+        active.shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(active.shader, "matModel");
+        active.shader.locs[SHADER_LOC_MATRIX_NORMAL] =
+            GetShaderLocation(active.shader, "matNormal");
+        active.shader.locs[SHADER_LOC_MAP_CUBEMAP] =
+            GetShaderLocation(active.shader, "environmentTexture");
+        active.cameraPositionLoc = GetShaderLocation(active.shader, "cameraPosition");
+        active.tintLoc = GetShaderLocation(active.shader, "glassTint");
+        active.opacityLoc = GetShaderLocation(active.shader, "glassOpacity");
+        active.roughnessLoc = GetShaderLocation(active.shader, "glassRoughness");
+        active.surfaceHazeLoc = GetShaderLocation(active.shader, "glassSurfaceHaze");
+        active.imperfectionStrengthLoc =
+            GetShaderLocation(active.shader, "glassImperfectionStrength");
+        active.dimensionsLoc = GetShaderLocation(active.shader, "glassDimensions");
+        active.patternSeedLoc = GetShaderLocation(active.shader, "glassPatternSeed");
+        active.iorLoc = GetShaderLocation(active.shader, "glassIor");
+        active.thicknessLoc = GetShaderLocation(active.shader, "glassThickness");
+        active.advancedTransmissionLoc = GetShaderLocation(active.shader, "advancedTransmission");
+        active.flatGlassPassLoc = GetShaderLocation(active.shader, "flatGlassPass");
+        active.sceneColorLoc = GetShaderLocation(active.shader, "sceneColor");
+        active.sceneDepthLoc = GetShaderLocation(active.shader, "sceneDepth");
+        active.shader.locs[SHADER_LOC_MAP_DIFFUSE] = active.sceneColorLoc;
+        active.shader.locs[SHADER_LOC_MAP_SPECULAR] = active.sceneDepthLoc;
+        active.viewportSizeLoc = GetShaderLocation(active.shader, "viewportSize");
+        active.viewMatrixLoc = GetShaderLocation(active.shader, "matView");
+        active.projectionMatrixLoc = GetShaderLocation(active.shader, "matProjection");
+        active.hasEnvironmentLoc = GetShaderLocation(active.shader, "hasEnvironment");
+        active.environmentBoxProjectionLoc =
+            GetShaderLocation(active.shader, "environmentBoxProjection");
+        active.environmentCapturePositionLoc =
+            GetShaderLocation(active.shader, "environmentCapturePosition");
+        active.environmentInfluenceCenterLoc =
+            GetShaderLocation(active.shader, "environmentInfluenceCenter");
+        active.environmentHalfExtentsLoc =
+            GetShaderLocation(active.shader, "environmentHalfExtents");
+        active.environmentYawLoc = GetShaderLocation(active.shader, "environmentYaw");
+        active.environmentMaxLodLoc = GetShaderLocation(active.shader, "environmentMaxLod");
+        active.environmentIntensityLoc = GetShaderLocation(active.shader, "environmentIntensity");
+        active.environmentSpecularScaleLoc =
+            GetShaderLocation(active.shader, "environmentSpecularScale");
+        active.directionalLightEnabledLoc =
+            GetShaderLocation(active.shader, "directionalLightEnabled");
+        active.directionalLightDirectionLoc =
+            GetShaderLocation(active.shader, "directionalLightDirection");
+        active.directionalLightColorLoc = GetShaderLocation(active.shader, "directionalLightColor");
+        active.directionalLightIntensityLoc =
+            GetShaderLocation(active.shader, "directionalLightIntensity");
+        active.fogLocations = GetSectorFogShaderLocations(active.shader);
 
-    material = LoadMaterialDefault();
-    material.shader = shader;
+        active.material = LoadMaterialDefault();
+        active.material.shader = active.shader;
+        variants[variant] = active;
+    }
     materialLoaded = true;
     cube = GenMeshCube(1.0f, 1.0f, 1.0f);
     meshLoaded = cube.vertexCount > 0;
@@ -551,17 +525,19 @@ bool SectorWindowRenderer::Initialize(std::size_t capacity)
 void SectorWindowRenderer::Shutdown()
 {
     drawItems.clear();
-    if (meshLoaded) UnloadMesh(cube);
+    if (meshLoaded)
+        UnloadMesh(cube);
     cube = {};
     meshLoaded = false;
-    if (materialLoaded) {
-        material.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
-        UnloadMaterial(material);
-    } else if (shader.id != 0) {
-        UnloadShader(shader);
+    for (auto &resources : variants) {
+        if (resources.material.maps) {
+            resources.material.maps[MATERIAL_MAP_CUBEMAP].texture = {};
+            UnloadMaterial(resources.material);
+        } else if (resources.shader.id)
+            UnloadShader(resources.shader);
+        resources = {};
     }
-    material = {};
-    shader = {};
+    active = {};
     materialLoaded = false;
     consideredCount = 0;
     drawnCount = 0;
@@ -575,252 +551,250 @@ void SectorWindowRenderer::Reserve(std::size_t capacity)
     drawItems.reserve(capacity);
 }
 
-bool SectorWindowRenderer::HasVisibleWindows(
-        engine::World& world,
-        const RuntimePortalVisibilityResult* visibility) const
+bool SectorWindowRenderer::PrepareVisibleWindows(engine::World &world, const Camera3D &camera,
+                                                 float aspect,
+                                                 const RuntimePortalVisibilityResult *visibility,
+                                                 bool enabled)
 {
-    bool found = false;
-    world.ForEach<SectorObject, SectorWindow>(
-            [&](engine::Entity, SectorObject& object, SectorWindow& window) {
-                if (object.visible && window.visible
-                        && WindowVisible(window, visibility)) found = true;
-            });
-    return found;
-}
-
-void SectorWindowRenderer::Draw(const SectorWindowDrawContext& context)
-{
-    consideredCount = 0;
-    drawnCount = 0;
-    localEnvironmentCount = 0;
-    globalEnvironmentCount = 0;
-    missingEnvironmentCount = 0;
+    consideredCount = drawnCount = 0;
     drawItems.clear();
-    if (!materialLoaded || !meshLoaded || shader.id == 0
-            || context.assets == nullptr || context.world == nullptr) return;
-
-    context.world->ForEach<SectorObjectTransform, SectorObject, SectorWindow>(
-            [&](engine::Entity entity,
-                    SectorObjectTransform& transform,
-                    SectorObject& object,
-                    SectorWindow& window) {
-                ++consideredCount;
-                if (!object.visible || !window.visible
-                        || !WindowVisible(window, context.visibility)) return;
-                const Vector3 delta = Vector3Subtract(
-                        transform.position, context.camera.position);
-                drawItems.push_back(DrawItem{
-                        entity, window.placedObjectId,
-                        Vector3LengthSqr(delta)});
-            });
-    std::sort(drawItems.begin(), drawItems.end(), [](const DrawItem& a,
-            const DrawItem& b) {
+    world.ForEach<SectorObjectTransform, SectorObject, SectorWindow>(
+        [&](engine::Entity entity, SectorObjectTransform &transform, SectorObject &object,
+            SectorWindow &window) {
+            ++consideredCount;
+            if (!enabled)
+                return;
+            const BoundingBox bounds =
+                TransformSectorDoorModelBounds({{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}},
+                                               BuildSectorWindowModelMatrix(transform, window));
+            if (!SectorPaneVisible(object.visible, window.visible, window.frontSectorId,
+                                   window.backSectorId, visibility, camera, aspect,
+                                   rlGetCullDistanceNear(), rlGetCullDistanceFar(), bounds))
+                return;
+            if (drawItems.size() == drawItems.capacity() && !capacityWarned) {
+                TraceLog(LOG_WARNING, "RENDER: window draw capacity exceeded; frame allocation");
+                capacityWarned = true;
+            }
+            drawItems.push_back({entity, window.placedObjectId,
+                                 Vector3DistanceSqr(transform.position, camera.position)});
+        });
+    std::sort(drawItems.begin(), drawItems.end(), [](const DrawItem &a, const DrawItem &b) {
         if (a.distanceSquared != b.distanceSquared) {
             return a.distanceSquared > b.distanceSquared;
         }
         return a.placedObjectId < b.placedObjectId;
     });
+    return !drawItems.empty();
+}
 
-    if (cameraPositionLoc >= 0) SetShaderValue(
-            shader, cameraPositionLoc, &context.camera.position,
-            SHADER_UNIFORM_VEC3);
-    const int advancedTransmission = context.advancedTransmission
-                    && context.sceneColor != nullptr
-                    && context.sceneDepth != nullptr
-            ? 1 : 0;
-    const Texture2D originalDiffuse =
-            material.maps[MATERIAL_MAP_DIFFUSE].texture;
-    const Texture2D originalSpecular =
-            material.maps[MATERIAL_MAP_SPECULAR].texture;
-    if (advancedTransmission != 0) {
-        material.maps[MATERIAL_MAP_DIFFUSE].texture = *context.sceneColor;
-        material.maps[MATERIAL_MAP_SPECULAR].texture = *context.sceneDepth;
-    }
-    if (advancedTransmissionLoc >= 0) SetShaderValue(
-            shader, advancedTransmissionLoc, &advancedTransmission,
-            SHADER_UNIFORM_INT);
-    if (viewportSizeLoc >= 0) SetShaderValue(
-            shader, viewportSizeLoc, &context.viewportSize,
-            SHADER_UNIFORM_VEC2);
-    const Matrix viewMatrix = GetCameraMatrix(context.camera);
-    const Matrix projectionMatrix = rlGetMatrixProjection();
-    if (viewMatrixLoc >= 0) SetShaderValueMatrix(
-            shader, viewMatrixLoc, viewMatrix);
-    if (projectionMatrixLoc >= 0) SetShaderValueMatrix(
-            shader, projectionMatrixLoc, projectionMatrix);
-    const SectorPbrContributionSettings pbr =
-            NormalizeSectorPbrContributionSettings(context.pbr);
-    if (environmentSpecularScaleLoc >= 0) SetShaderValue(
-            shader, environmentSpecularScaleLoc,
-            &pbr.worldEnvironmentSpecularScale, SHADER_UNIFORM_FLOAT);
-    const SectorTopologyDirectionalLightSettings directionalLight =
-            NormalizeSectorTopologyDirectionalLightSettings(
-                    context.directionalLight);
-    const int directionalLightEnabled = directionalLight.enabled ? 1 : 0;
-    const Vector3 directionalLightColor =
-            engine::SrgbColorBytesToLinearSceneRgb(directionalLight.color);
-    if (directionalLightEnabledLoc >= 0) SetShaderValue(
-            shader, directionalLightEnabledLoc, &directionalLightEnabled,
-            SHADER_UNIFORM_INT);
-    if (directionalLightDirectionLoc >= 0) SetShaderValue(
-            shader, directionalLightDirectionLoc,
-            &directionalLight.directionToLight, SHADER_UNIFORM_VEC3);
-    if (directionalLightColorLoc >= 0) SetShaderValue(
-            shader, directionalLightColorLoc, &directionalLightColor,
-            SHADER_UNIFORM_VEC3);
-    if (directionalLightIntensityLoc >= 0) SetShaderValue(
-            shader, directionalLightIntensityLoc, &directionalLight.intensity,
-            SHADER_UNIFORM_FLOAT);
-    UploadSectorFogShaderValues(shader, fogLocations, context.fog);
+void SectorWindowRenderer::Draw(const SectorWindowDrawContext &context)
+{
+    drawnCount = localEnvironmentCount = globalEnvironmentCount = missingEnvironmentCount = 0;
+    if (!materialLoaded || !meshLoaded || context.assets == nullptr || context.world == nullptr)
+        return;
 
+    const int advancedTransmission =
+        context.advancedTransmission && context.sceneColor && context.sceneDepth ? 1 : 0;
+    const auto pbr = NormalizeSectorPbrContributionSettings(context.pbr);
     rlDrawRenderBatchActive();
     rlEnableColorBlend();
     if (advancedTransmission != 0) {
         rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY);
     }
-    if (advancedTransmission != 0) rlDisableDepthTest();
-    else rlEnableDepthTest();
+    if (advancedTransmission != 0)
+        rlDisableDepthTest();
+    else
+        rlEnableDepthTest();
     rlDisableDepthMask();
     rlEnableBackfaceCulling();
 
-    for (const DrawItem& item : drawItems) {
-        if (!context.world->IsAlive(item.entity)
-                || !context.world->Has<SectorObjectTransform>(item.entity)
-                || !context.world->Has<SectorObject>(item.entity)
-                || !context.world->Has<SectorWindow>(item.entity)) continue;
-        const SectorObjectTransform& transform =
-                context.world->Get<SectorObjectTransform>(item.entity);
-        const SectorObject& object = context.world->Get<SectorObject>(item.entity);
-        const SectorWindow& window = context.world->Get<SectorWindow>(item.entity);
+    for (const DrawItem &item : drawItems) {
+        if (!context.world->IsAlive(item.entity) ||
+            !context.world->Has<SectorObjectTransform>(item.entity) ||
+            !context.world->Has<SectorObject>(item.entity) ||
+            !context.world->Has<SectorWindow>(item.entity))
+            continue;
+        const SectorObjectTransform &transform =
+            context.world->Get<SectorObjectTransform>(item.entity);
+        const SectorObject &object = context.world->Get<SectorObject>(item.entity);
+        const SectorWindow &window = context.world->Get<SectorWindow>(item.entity);
 
-        const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(window.tint);
-        if (tintLoc >= 0) SetShaderValue(
-                shader, tintLoc, &tint, SHADER_UNIFORM_VEC3);
-        if (opacityLoc >= 0) SetShaderValue(
-                shader, opacityLoc, &window.opacity, SHADER_UNIFORM_FLOAT);
-        if (roughnessLoc >= 0) SetShaderValue(
-                shader, roughnessLoc, &window.roughness, SHADER_UNIFORM_FLOAT);
-        if (surfaceHazeLoc >= 0) SetShaderValue(
-                shader, surfaceHazeLoc, &window.surfaceHaze,
-                SHADER_UNIFORM_FLOAT);
-        if (imperfectionStrengthLoc >= 0) SetShaderValue(
-                shader, imperfectionStrengthLoc,
-                &window.imperfectionStrength, SHADER_UNIFORM_FLOAT);
-        const Vector3 glassDimensions{
-                window.width, window.height, window.thickness};
-        if (dimensionsLoc >= 0) SetShaderValue(
-                shader, dimensionsLoc, &glassDimensions,
-                SHADER_UNIFORM_VEC3);
-        const float patternSeed = static_cast<float>(window.placedObjectId);
-        if (patternSeedLoc >= 0) SetShaderValue(
-                shader, patternSeedLoc, &patternSeed,
-                SHADER_UNIFORM_FLOAT);
-        if (iorLoc >= 0) SetShaderValue(
-                shader, iorLoc, &window.indexOfRefraction,
-                SHADER_UNIFORM_FLOAT);
-        if (thicknessLoc >= 0) SetShaderValue(
-                shader, thicknessLoc, &window.thickness,
-                SHADER_UNIFORM_FLOAT);
+        const int firstPass = advancedTransmission ? 0 : 1;
+        const int lastPass = advancedTransmission ? 0 : 2;
+        for (int pass = firstPass; pass <= lastPass; ++pass) {
+            active = variants[pass];
+            if (context.profiler)
+                context.profiler->Begin(pass == 1 ? SectorWorldStage::GlassTransmission
+                                                  : SectorWorldStage::GlassReflection);
+            if (active.cameraPositionLoc >= 0)
+                SetShaderValue(active.shader, active.cameraPositionLoc, &context.camera.position,
+                               SHADER_UNIFORM_VEC3);
+            const Texture2D originalDiffuse = active.material.maps[MATERIAL_MAP_DIFFUSE].texture;
+            const Texture2D originalSpecular = active.material.maps[MATERIAL_MAP_SPECULAR].texture;
+            if (advancedTransmission != 0) {
+                active.material.maps[MATERIAL_MAP_DIFFUSE].texture = *context.sceneColor;
+                active.material.maps[MATERIAL_MAP_SPECULAR].texture = *context.sceneDepth;
+            }
+            if (active.advancedTransmissionLoc >= 0)
+                SetShaderValue(active.shader, active.advancedTransmissionLoc, &advancedTransmission,
+                               SHADER_UNIFORM_INT);
+            if (active.viewportSizeLoc >= 0)
+                SetShaderValue(active.shader, active.viewportSizeLoc, &context.viewportSize,
+                               SHADER_UNIFORM_VEC2);
+            const Matrix viewMatrix = GetCameraMatrix(context.camera);
+            const Matrix projectionMatrix = rlGetMatrixProjection();
+            if (active.viewMatrixLoc >= 0)
+                SetShaderValueMatrix(active.shader, active.viewMatrixLoc, viewMatrix);
+            if (active.projectionMatrixLoc >= 0)
+                SetShaderValueMatrix(active.shader, active.projectionMatrixLoc, projectionMatrix);
+            if (active.environmentSpecularScaleLoc >= 0)
+                SetShaderValue(active.shader, active.environmentSpecularScaleLoc,
+                               &pbr.worldEnvironmentSpecularScale, SHADER_UNIFORM_FLOAT);
+            const SectorTopologyDirectionalLightSettings directionalLight =
+                NormalizeSectorTopologyDirectionalLightSettings(context.directionalLight);
+            const int directionalLightEnabled = directionalLight.enabled ? 1 : 0;
+            const Vector3 directionalLightColor =
+                engine::SrgbColorBytesToLinearSceneRgb(directionalLight.color);
+            if (active.directionalLightEnabledLoc >= 0)
+                SetShaderValue(active.shader, active.directionalLightEnabledLoc,
+                               &directionalLightEnabled, SHADER_UNIFORM_INT);
+            if (active.directionalLightDirectionLoc >= 0)
+                SetShaderValue(active.shader, active.directionalLightDirectionLoc,
+                               &directionalLight.directionToLight, SHADER_UNIFORM_VEC3);
+            if (active.directionalLightColorLoc >= 0)
+                SetShaderValue(active.shader, active.directionalLightColorLoc,
+                               &directionalLightColor, SHADER_UNIFORM_VEC3);
+            if (active.directionalLightIntensityLoc >= 0)
+                SetShaderValue(active.shader, active.directionalLightIntensityLoc,
+                               &directionalLight.intensity, SHADER_UNIFORM_FLOAT);
+            UploadSectorFogShaderValues(active.shader, active.fogLocations, context.fog);
 
-        SectorPbrEnvironmentSelection selection;
-        if (context.environment != nullptr) {
-            selection = SelectWindowEnvironment(
-                    *context.environment,
-                    transform,
-                    object,
-                    window,
-                    context.camera.position,
-                    context.localReflectionProbesCurrent);
-        }
-        const TextureCubemap* cubemap = context.assets->GetCubemap(
-                selection.cubemap);
-        const int hasEnvironment = cubemap != nullptr && cubemap->id != 0
-                        && pbr.worldEnvironmentSpecularScale > 0.0f
-                ? 1 : 0;
-        material.maps[MATERIAL_MAP_CUBEMAP].texture = hasEnvironment != 0
-                ? *cubemap : Texture2D{};
-        if (hasEnvironmentLoc >= 0) SetShaderValue(
-                shader, hasEnvironmentLoc, &hasEnvironment,
-                SHADER_UNIFORM_INT);
-        const int boxProjection = selection.boxProjection ? 1 : 0;
-        if (environmentBoxProjectionLoc >= 0) SetShaderValue(
-                shader, environmentBoxProjectionLoc, &boxProjection,
-                SHADER_UNIFORM_INT);
-        if (environmentCapturePositionLoc >= 0) SetShaderValue(
-                shader, environmentCapturePositionLoc,
-                &selection.capturePosition, SHADER_UNIFORM_VEC3);
-        if (environmentInfluenceCenterLoc >= 0) SetShaderValue(
-                shader, environmentInfluenceCenterLoc,
-                &selection.influenceCenter, SHADER_UNIFORM_VEC3);
-        if (environmentHalfExtentsLoc >= 0) SetShaderValue(
-                shader, environmentHalfExtentsLoc,
-                &selection.halfExtents, SHADER_UNIFORM_VEC3);
-        if (environmentYawLoc >= 0) SetShaderValue(
-                shader, environmentYawLoc, &selection.yawRadians,
-                SHADER_UNIFORM_FLOAT);
-        if (environmentMaxLodLoc >= 0) SetShaderValue(
-                shader, environmentMaxLodLoc, &selection.maxLod,
-                SHADER_UNIFORM_FLOAT);
-        const float environmentIntensity = selection.localProbe
-                ? selection.intensity : 0.15f;
-        if (environmentIntensityLoc >= 0) SetShaderValue(
-                shader, environmentIntensityLoc, &environmentIntensity,
-                SHADER_UNIFORM_FLOAT);
-        if (hasEnvironment == 0) ++missingEnvironmentCount;
-        else if (selection.localProbe) ++localEnvironmentCount;
-        else ++globalEnvironmentCount;
+            const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(window.tint);
+            if (active.tintLoc >= 0)
+                SetShaderValue(active.shader, active.tintLoc, &tint, SHADER_UNIFORM_VEC3);
+            if (active.opacityLoc >= 0)
+                SetShaderValue(active.shader, active.opacityLoc, &window.opacity,
+                               SHADER_UNIFORM_FLOAT);
+            if (active.roughnessLoc >= 0)
+                SetShaderValue(active.shader, active.roughnessLoc, &window.roughness,
+                               SHADER_UNIFORM_FLOAT);
+            if (active.surfaceHazeLoc >= 0)
+                SetShaderValue(active.shader, active.surfaceHazeLoc, &window.surfaceHaze,
+                               SHADER_UNIFORM_FLOAT);
+            if (active.imperfectionStrengthLoc >= 0)
+                SetShaderValue(active.shader, active.imperfectionStrengthLoc,
+                               &window.imperfectionStrength, SHADER_UNIFORM_FLOAT);
+            const Vector3 glassDimensions{window.width, window.height, window.thickness};
+            if (active.dimensionsLoc >= 0)
+                SetShaderValue(active.shader, active.dimensionsLoc, &glassDimensions,
+                               SHADER_UNIFORM_VEC3);
+            const float patternSeed = static_cast<float>(window.placedObjectId);
+            if (active.patternSeedLoc >= 0)
+                SetShaderValue(active.shader, active.patternSeedLoc, &patternSeed,
+                               SHADER_UNIFORM_FLOAT);
+            if (active.iorLoc >= 0)
+                SetShaderValue(active.shader, active.iorLoc, &window.indexOfRefraction,
+                               SHADER_UNIFORM_FLOAT);
+            if (active.thicknessLoc >= 0)
+                SetShaderValue(active.shader, active.thicknessLoc, &window.thickness,
+                               SHADER_UNIFORM_FLOAT);
 
-        const Matrix modelMatrix =
-                BuildSectorWindowModelMatrix(transform, window);
-        if (advancedTransmission != 0) {
-            const int inactiveFlatPass = 0;
-            if (flatGlassPassLoc >= 0) SetShaderValue(
-                    shader, flatGlassPassLoc, &inactiveFlatPass,
-                    SHADER_UNIFORM_INT);
-            DrawMesh(cube, material, modelMatrix);
-        } else {
-            const int transmissionPass = 1;
-            if (flatGlassPassLoc >= 0) SetShaderValue(
-                    shader, flatGlassPassLoc, &transmissionPass,
-                    SHADER_UNIFORM_INT);
-            rlSetBlendFactorsSeparate(
-                    RL_ZERO, RL_SRC_COLOR,
-                    RL_ZERO, RL_ONE,
-                    RL_FUNC_ADD, RL_FUNC_ADD);
-            rlSetBlendMode(BLEND_CUSTOM_SEPARATE);
-            DrawMesh(cube, material, modelMatrix);
+            if (pass != 1) {
+                SectorPbrEnvironmentBlend reflectionBlend;
+                if (context.environment) {
+                    const Vector3 portalNormal{window.normal.x, 0.0f, window.normal.y};
+                    const bool back = Vector3DotProduct(Vector3Subtract(context.camera.position,
+                                                                        transform.position),
+                                                        portalNormal) > 0;
+                    const Vector3 receiver = Vector3Add(
+                        transform.position, Vector3Scale(portalNormal, back ? 0.25f : -0.25f));
+                    const BoundingBox reflectionBounds = TransformSectorDoorModelBounds(
+                        {{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}},
+                        BuildSectorWindowModelMatrix(transform, window));
+                    reflectionBlend = SelectSectorPbrEnvironmentBlend(
+                        *context.environment, receiver,
+                        back ? window.backSectorId : window.frontSectorId, true, nullptr,
+                        SectorReflectionDemandForBounds(context.environment->demandCollector,
+                                                        reflectionBounds));
+                }
+                UploadSectorReflectionBlend(active.shader, active.reflectionLocations,
+                                            reflectionBlend, *context.assets);
+                const auto &selection = reflectionBlend.first;
+                const TextureCubemap *cubemap = context.assets->GetCubemap(selection.cubemap);
+                const int hasEnvironment = cubemap != nullptr && cubemap->id != 0 &&
+                                                   pbr.worldEnvironmentSpecularScale > 0.0f
+                                               ? 1
+                                               : 0;
+                active.material.maps[MATERIAL_MAP_CUBEMAP].texture =
+                    hasEnvironment != 0 ? *cubemap : Texture2D{};
+                if (active.hasEnvironmentLoc >= 0)
+                    SetShaderValue(active.shader, active.hasEnvironmentLoc, &hasEnvironment,
+                                   SHADER_UNIFORM_INT);
+                const int boxProjection = selection.boxProjection ? 1 : 0;
+                if (active.environmentBoxProjectionLoc >= 0)
+                    SetShaderValue(active.shader, active.environmentBoxProjectionLoc,
+                                   &boxProjection, SHADER_UNIFORM_INT);
+                if (active.environmentCapturePositionLoc >= 0)
+                    SetShaderValue(active.shader, active.environmentCapturePositionLoc,
+                                   &selection.capturePosition, SHADER_UNIFORM_VEC3);
+                if (active.environmentInfluenceCenterLoc >= 0)
+                    SetShaderValue(active.shader, active.environmentInfluenceCenterLoc,
+                                   &selection.influenceCenter, SHADER_UNIFORM_VEC3);
+                if (active.environmentHalfExtentsLoc >= 0)
+                    SetShaderValue(active.shader, active.environmentHalfExtentsLoc,
+                                   &selection.halfExtents, SHADER_UNIFORM_VEC3);
+                if (active.environmentYawLoc >= 0)
+                    SetShaderValue(active.shader, active.environmentYawLoc, &selection.yawRadians,
+                                   SHADER_UNIFORM_FLOAT);
+                if (active.environmentMaxLodLoc >= 0)
+                    SetShaderValue(active.shader, active.environmentMaxLodLoc, &selection.maxLod,
+                                   SHADER_UNIFORM_FLOAT);
+                const float environmentIntensity =
+                    selection.localProbe ? selection.intensity : 0.15f;
+                if (active.environmentIntensityLoc >= 0)
+                    SetShaderValue(active.shader, active.environmentIntensityLoc,
+                                   &environmentIntensity, SHADER_UNIFORM_FLOAT);
+                if (hasEnvironment == 0)
+                    ++missingEnvironmentCount;
+                else if (selection.localProbe)
+                    ++localEnvironmentCount;
+                else
+                    ++globalEnvironmentCount;
+            }
 
-            const int reflectionPass = 2;
-            if (flatGlassPassLoc >= 0) SetShaderValue(
-                    shader, flatGlassPassLoc, &reflectionPass,
-                    SHADER_UNIFORM_INT);
-            rlSetBlendFactorsSeparate(
-                    RL_ONE, RL_ONE,
-                    RL_ZERO, RL_ONE,
-                    RL_FUNC_ADD, RL_FUNC_ADD);
-            rlSetBlendMode(BLEND_CUSTOM_SEPARATE);
-            DrawMesh(cube, material, modelMatrix);
+            const Matrix modelMatrix = BuildSectorWindowModelMatrix(transform, window);
+            if (pass == 1) {
+                rlSetBlendFactorsSeparate(RL_ZERO, RL_SRC_COLOR, RL_ZERO, RL_ONE, RL_FUNC_ADD,
+                                          RL_FUNC_ADD);
+                rlSetBlendMode(BLEND_CUSTOM_SEPARATE);
+            } else if (pass == 2) {
+                rlSetBlendFactorsSeparate(RL_ONE, RL_ONE, RL_ZERO, RL_ONE, RL_FUNC_ADD,
+                                          RL_FUNC_ADD);
+                rlSetBlendMode(BLEND_CUSTOM_SEPARATE);
+            }
+            DrawMesh(cube, active.material, modelMatrix);
+            if (context.profiler)
+                context.profiler->End();
+            active.material.maps[MATERIAL_MAP_CUBEMAP].texture = {};
+            active.material.maps[MATERIAL_MAP_DIFFUSE].texture = originalDiffuse;
+            active.material.maps[MATERIAL_MAP_SPECULAR].texture = originalSpecular;
         }
         ++drawnCount;
     }
 
     rlDrawRenderBatchActive();
-    material.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
-    material.maps[MATERIAL_MAP_DIFFUSE].texture = originalDiffuse;
-    material.maps[MATERIAL_MAP_SPECULAR].texture = originalSpecular;
+    active.material.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
     rlSetBlendMode(BLEND_ALPHA);
     rlEnableDepthMask();
     rlEnableDepthTest();
     rlEnableBackfaceCulling();
     if (context.renderDebugText != nullptr) {
-        *context.renderDebugText += " | windows: "
-                + std::to_string(drawnCount) + " drawn / "
-                + std::to_string(consideredCount) + " considered; env local/global/none "
-                + std::to_string(localEnvironmentCount) + "/"
-                + std::to_string(globalEnvironmentCount) + "/"
-                + std::to_string(missingEnvironmentCount)
-                + (advancedTransmission != 0
-                        ? "; advanced" : "; flat two-pass");
+        *context.renderDebugText +=
+            " | windows: " + std::to_string(drawnCount) + " drawn / " +
+            std::to_string(consideredCount) + " considered; env local/global/none " +
+            std::to_string(localEnvironmentCount) + "/" + std::to_string(globalEnvironmentCount) +
+            "/" + std::to_string(missingEnvironmentCount) +
+            (advancedTransmission != 0 ? "; advanced" : "; flat two-pass");
     }
 }
 
