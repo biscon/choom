@@ -1,4 +1,5 @@
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/renderer/SectorShadowCasterBounds.h"
 #include "engine/systems/AnimatedModelRaycast.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "engine/audio/AudioSystem.h"
@@ -11557,6 +11558,8 @@ void TestSectorDoorModelShadowCasterMatrices()
             casters);
     Check(appended && casters.size() == 2,
           "ready leaf and frame append one model shadow caster each");
+    Check(!casters[0].isFrame && casters[1].isFrame,
+          "leaf and frame retain distinct shadow caster identities");
     Check(casters[0].model == model.leafModel
                   && NearTranslation(casters[0].transform, Vector3{1.0f, 2.0f, 3.0f})
                   && casters[1].model == model.frameModel
@@ -11572,8 +11575,69 @@ void TestSectorDoorModelShadowCasterMatrices()
             model,
             game::SectorDoorModelDrawPolicy{true, false, true},
             casters);
-    Check(casters.size() == 1 && casters[0].model == model.frameModel,
+    Check(casters.size() == 1 && casters[0].model == model.frameModel && casters[0].isFrame,
           "fallback slab state emits only independently drawable model frame casters");
+}
+
+void TestDoorShadowBoundsKeepLeafAndFrameSeparate()
+{
+    game::SectorObject object;
+    game::SectorDoor door{200, true};
+    game::SectorDoorRender render;
+    render.visible = true;
+    game::SectorDoorModelRender model;
+    // Identity must distinguish parts even when both use the same model asset.
+    model.leafModel = model.frameModel = engine::ModelHandle{3, 1};
+    model.leafMatrix = MatrixTranslate(1, 0, 0);
+    model.frameMatrix = MatrixIdentity();
+    std::vector<game::SectorDoorModelShadowCaster> capturedCasters;
+    game::AppendSectorDoorModelShadowCasters(engine::Entity{7, 1}, object, door,
+            render, model, {false, true, true}, capturedCasters);
+    const BoundingBox localBounds{{-0.5f, 0, -0.1f}, {0.5f, 2, 0.1f}};
+    const auto boundsRecords = [&](const auto& casters) {
+        std::vector<game::SectorShadowCasterBoundsRecord> records;
+        for (const auto& caster : casters) {
+            records.push_back({static_cast<uint64_t>(caster.placedObjectId),
+                    game::TransformSectorDoorModelBounds(localBounds, caster.transform),
+                    0, caster.isFrame ? 1u : 0u});
+        }
+        return records;
+    };
+    const auto capturedBounds = boundsRecords(capturedCasters);
+    auto liveCasters = capturedCasters;
+    liveCasters[0].transform = MatrixTranslate(3, 0, 0);
+    game::SectorDoorShadowCasterRevisionState sharedRevision;
+    std::vector<game::SectorDoorShadowCaster> procedural;
+    std::vector<BoundingBox> changed;
+    game::RefreshSectorDoorShadowCasterRevision(sharedRevision, procedural, capturedCasters);
+    for (int face = 0; face < 6; ++face) {
+        const auto lastRevision = sharedRevision.revision;
+        game::RefreshSectorDoorShadowCasterRevision(sharedRevision, procedural, liveCasters);
+        game::RefreshSectorDoorShadowCasterRevision(sharedRevision, procedural, capturedCasters);
+        Check(sharedRevision.revision > lastRevision,
+              "live and captured door poses force a shadow bounds recheck each frame");
+        changed.clear();
+        game::AppendChangedSectorShadowCasterBounds(capturedBounds, capturedBounds, changed);
+        Check(changed.empty(),
+              "unchanged capture leaf and frame do not re-dirty a six-face shadow during preparation");
+    }
+    const auto movedBounds = boundsRecords(liveCasters);
+    game::AppendChangedSectorShadowCasterBounds(movedBounds, capturedBounds, changed);
+    Check(changed.size() == 2
+                  && Near(changed[0].min, capturedBounds[0].bounds.min)
+                  && Near(changed[1].min, movedBounds[0].bounds.min),
+          "real leaf motion invalidates its old and new bounds without invalidating the frame");
+    auto frameOnly = capturedBounds;
+    frameOnly.erase(frameOnly.begin());
+    changed.clear();
+    game::AppendChangedSectorShadowCasterBounds(frameOnly, capturedBounds, changed);
+    Check(changed.size() == 1 && Near(changed[0].min, capturedBounds[0].bounds.min),
+          "leaf removal is detected even when its frame remains");
+    auto reordered = capturedBounds;
+    std::swap(reordered[0], reordered[1]);
+    changed.clear();
+    game::AppendChangedSectorShadowCasterBounds(reordered, capturedBounds, changed);
+    Check(changed.empty(), "caster ordering does not change leaf/frame identity");
 }
 
 void TestNpcWeaponDamageOcclusionAndCorpseFade()
@@ -12140,6 +12204,7 @@ int main()
     TestSectorDoorModelVisibilityUsesEitherAdjacentSector();
     TestSectorDoorModelBoundsAndLightingSectorHelpers();
     TestSectorDoorModelShadowCasterMatrices();
+    TestDoorShadowBoundsKeepLeafAndFrameSeparate();
     TestSectorDoorAutoOpenSetsTargetFromPlayerRange();
     TestSectorDoorAutoOpenIgnoresDisabledAndInvalidPlayerPosition();
     TestSectorDoorInteractTogglesNearestManualDoorInFront();

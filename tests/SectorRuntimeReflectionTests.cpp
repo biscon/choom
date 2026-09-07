@@ -144,6 +144,120 @@ void TestScheduling()
           "explicit refresh or light change permits retry");
 }
 
+void TestCaptureRetries()
+{
+    using namespace game;
+    SectorPbrEnvironment e;
+    e.localProbes = {Probe(12, 1, 0)};
+    auto& p = e.localProbes[0];
+    const auto published = p.cubemap, inactive = p.inactive;
+    p.required = true;
+    SectorReflectionDemand demand;
+    demand.requested = {1};
+    const auto select = [&](bool preparing = false, int active = -1, bool paused = false) {
+        return SelectSectorReflectionProbeUpdate(e, demand, preparing, {}, active, paused);
+    };
+    p.lastStarted = 10;
+    FailSectorReflectionProbeCapture(p, 10);
+    Check(!p.failed && p.captureFailures == 1 && p.retryAt == 10.25,
+          "first failure queues a retry after 250ms");
+    Check(p.ready && p.cubemap.index == published.index && p.inactive.index == inactive.index,
+          "failure preserves the published cube and does not swap partial output");
+    e.seconds = 10.249;
+    Check(select() == -1 && select(true) == -1, "both gameplay and loading respect retry delay");
+    e.seconds = 10.25;
+    Check(select() == 0, "demanded retry starts at its deadline");
+    Check(select(false, -1, true) == -1, "pause prevents starting an eligible retry");
+    Check(select(false, 0, true) == 0, "pause preserves a demanded in-flight job");
+    demand.requested[0] = 0;
+    Check(select(false, 0) == -1 && select(false, 0, true) == -1,
+          "lost demand cancels even a paused retry");
+    Check(p.captureFailures == 1 && p.retryAt == 10.25 && p.cubemap.index == published.index,
+          "demand cancellation preserves retry budget and published cube");
+    Check(select(true) == 0, "required loading probe retries without main-view demand");
+    demand.requested[0] = 1;
+    Check(select() == 0 && p.captureFailures == 1, "demand re-entry keeps the same retry budget");
+    p.lastStarted = e.seconds;
+    FailSectorReflectionProbeCapture(p, 11);
+    Check(!p.failed && p.captureFailures == 2 && p.retryAt == 12,
+          "second failure queues the final retry after one second");
+    MarkSectorReflectionProbeDirty(p, 11.1, false);
+    Check(p.captureFailures == 2 && p.retryAt == 12,
+          "continuous changes cannot erase backoff or replenish retries");
+    e.seconds = 11.999;
+    Check(select() == -1, "final retry cannot start early");
+    e.seconds = 12;
+    Check(select() == 0, "final retry becomes eligible after one second");
+    p.ready = false;
+    Check(!IsSectorReflectionProbePrepared(p), "preparation waits through recoverable failures");
+    FailSectorReflectionProbeCapture(p, 13);
+    e.seconds = 1000;
+    Check(p.failed && p.captureFailures == SectorReflectionMaxCaptureAttempts
+                  && select() == -1 && select(true) == -1,
+          "three failed attempts are terminal until explicit invalidation");
+    Check(IsSectorReflectionProbePrepared(p), "exhausted probe releases loading to fallback");
+    MarkSectorReflectionProbeDirty(p, 1000, false);
+    Check(p.failed && select() == -1, "continuous changes cannot revive an exhausted probe");
+    const auto discontinuity = p.discontinuity;
+    MarkSectorReflectionProbeDirty(p, 1000, true);
+    Check(!p.failed && p.captureFailures == 0 && p.retryAt == 0 && select() == 0
+                  && p.discontinuity == discontinuity + 1,
+          "refresh or discrete door/light change resets retries and invalidates the old snapshot");
+    FailSectorReflectionProbeCapture(p, 1001);
+    const auto revision = p.revision;
+    MarkSectorReflectionProbeDirty(p, 1001.1, false);
+    PublishSectorReflectionProbe(p, 1002, revision);
+    Check(p.ready && p.dirty && !p.failed && p.captureFailures == 0 && p.retryAt == 0
+                  && p.cubemap.index == inactive.index,
+          "successful retry resets budget and atomically publishes while preserving newer edits");
+    PublishSectorReflectionProbe(p, 1003, p.revision);
+    MarkSectorReflectionProbeDirty(p, 1003.01, true);
+    e.seconds = 1003.05;
+    Check(select() == -1, "retry reset still protects the previous cube during crossfade");
+    p.resourceFailed = p.failed = true;
+    MarkSectorReflectionProbeDirty(p, 1004, true);
+    e.seconds = 1005;
+    Check(p.failed && select() == -1 && IsSectorReflectionProbePrepared(p),
+          "refresh cannot repair failed GPU initialization or block preparation on it");
+}
+
+void TestCaptureErrorAttribution()
+{
+    using namespace game;
+    SectorReflectionCaptureFailure failure;
+    const unsigned int errors[] = {0x0500, 0x0502, 0};
+    std::size_t cursor = 0;
+    const auto readError = [&] {
+        Check(cursor < 3, "error drain must stop at GL_NO_ERROR");
+        return errors[cursor++];
+    };
+    DrainSectorReflectionGlErrors(failure, SectorReflectionFailureStage::BeforeCapture, readError);
+    Check(cursor == 3 && failure.inheritedGlError == 0x0500 && failure.inheritedGlErrorCount == 2
+                  && failure.reason == SectorReflectionFailureReason::None && failure.glErrorCount == 0,
+          "all inherited GL errors are drained and counted without failing capture");
+    for (auto stage : {SectorReflectionFailureStage::Setup, SectorReflectionFailureStage::Shadows,
+            SectorReflectionFailureStage::Scene, SectorReflectionFailureStage::Copy,
+            SectorReflectionFailureStage::Filter, SectorReflectionFailureStage::Restore}) {
+        failure = {};
+        cursor = 0;
+        DrainSectorReflectionGlErrors(failure, stage, readError);
+        Check(cursor == 3 && failure.reason == SectorReflectionFailureReason::GlError
+                      && failure.stage == stage && failure.glError == 0x0500 && failure.glErrorCount == 2,
+              "capture-local GL errors are fully drained and attributed to the producing stage");
+        RecordSectorReflectionGlError(failure, SectorReflectionFailureStage::Restore, 0x0505);
+        Check(failure.stage == stage && failure.glError == 0x0500 && failure.glErrorCount == 3,
+              "cleanup errors are counted without overwriting the original failure");
+    }
+    failure = {};
+    failure.reason = SectorReflectionFailureReason::IncompleteFramebuffer;
+    failure.stage = SectorReflectionFailureStage::Copy;
+    failure.framebufferStatus = 0x8cd6;
+    RecordSectorReflectionGlError(failure, SectorReflectionFailureStage::Copy, 0x0506);
+    Check(failure.reason == SectorReflectionFailureReason::IncompleteFramebuffer
+                  && failure.framebufferStatus == 0x8cd6 && failure.glError == 0x0506,
+          "framebuffer failure keeps its status alongside GL diagnostics");
+}
+
 void TestLightChanges()
 {
     game::SectorPreviewDynamicPointLightUniform a;
@@ -330,6 +444,8 @@ int main()
 {
     TestReceiverSelection();
     TestScheduling();
+    TestCaptureRetries();
+    TestCaptureErrorAttribution();
     TestLightChanges();
     TestFaceOrientation();
     TestDemandScheduling();

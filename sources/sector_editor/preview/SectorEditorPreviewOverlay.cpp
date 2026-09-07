@@ -1104,6 +1104,15 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 const auto& reflectionStats=preview.ReflectionStats();
                 addKeyValue("reflection probes", TextFormat("placed %zu | ready %zu | queued %zu | failed %zu",
                         reflectionProbeCount,reflectionStats.ready,reflectionStats.queued,reflectionStats.failed));
+                addKeyValue("capture recovery", TextFormat("retrying %zu | inherited GL errors %zu",
+                        reflectionStats.retrying, reflectionStats.inheritedGlErrors));
+                const auto& failure = reflectionStats.lastFailure;
+                if (failure.reason != SectorReflectionFailureReason::None) {
+                    addKeyValueStyled("last capture failure", TextFormat("probe %d | %s | %s | attempt %d/%d",
+                            failure.probeId, SectorReflectionFailureStageName(failure.stage),
+                            SectorReflectionFailureReasonName(failure.reason), failure.attempt,
+                            SectorReflectionMaxCaptureAttempts), smallConfig.mutedTextColor, true);
+                }
                 const auto probeIds = [](const std::vector<int>& ids) {
                     std::string text;
                     for (int id : ids) {

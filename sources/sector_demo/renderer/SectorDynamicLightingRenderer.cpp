@@ -1372,44 +1372,12 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             || !dynamicShadowCasterBoundsInitialized;
     changedShadowCasterBounds.clear();
     bool preciseCasterChanges = true;
-    const auto appendChangedBounds = [this](
-            const std::vector<ShadowCasterBoundsRecord>& current,
-            const std::vector<ShadowCasterBoundsRecord>& previous) {
-        for (const ShadowCasterBoundsRecord& currentRecord : current) {
-            const auto previousIt = std::find_if(
-                    previous.begin(), previous.end(),
-                    [&currentRecord](const ShadowCasterBoundsRecord& candidate) {
-                        return candidate.key == currentRecord.key;
-                    });
-            if (previousIt == previous.end()) {
-                changedShadowCasterBounds.push_back(currentRecord.bounds);
-                continue;
-            }
-            if (std::memcmp(&previousIt->bounds,
-                        &currentRecord.bounds, sizeof(BoundingBox)) != 0
-                    || previousIt->contentFingerprint
-                            != currentRecord.contentFingerprint) {
-                changedShadowCasterBounds.push_back(previousIt->bounds);
-                changedShadowCasterBounds.push_back(currentRecord.bounds);
-            }
-        }
-        for (const ShadowCasterBoundsRecord& previousRecord : previous) {
-            const auto currentIt = std::find_if(
-                    current.begin(), current.end(),
-                    [&previousRecord](const ShadowCasterBoundsRecord& candidate) {
-                        return candidate.key == previousRecord.key;
-                    });
-            if (currentIt == current.end()) {
-                changedShadowCasterBounds.push_back(previousRecord.bounds);
-            }
-        }
-    };
     if (refreshDoorBounds) {
         currentDoorShadowCasterBounds.clear();
         if (context.doorShadowCasters != nullptr) {
             for (const SectorDoorShadowCaster& caster : *context.doorShadowCasters) {
                 const SectorAabb3 bounds = DoorCasterBounds(caster);
-                currentDoorShadowCasterBounds.push_back(ShadowCasterBoundsRecord{
+                currentDoorShadowCasterBounds.push_back(SectorShadowCasterBoundsRecord{
                         (uint64_t{1} << 32)
                                 | static_cast<uint32_t>(caster.placedObjectId),
                         BoundingBox{bounds.min, bounds.max}});
@@ -1426,16 +1394,17 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 }
                 const Matrix transform = MatrixMultiply(
                         asset->model.transform, caster.transform);
-                currentDoorShadowCasterBounds.push_back(ShadowCasterBoundsRecord{
+                currentDoorShadowCasterBounds.push_back(SectorShadowCasterBoundsRecord{
                         (uint64_t{2} << 32)
                                 | static_cast<uint32_t>(caster.placedObjectId),
                         TransformSectorDoorModelBounds(
-                                asset->localBounds, transform)});
+                                asset->localBounds, transform),
+                        0, caster.isFrame ? 1u : 0u});
             }
         }
-        appendChangedBounds(
+        AppendChangedSectorShadowCasterBounds(
                 currentDoorShadowCasterBounds,
-                previousDoorShadowCasterBounds);
+                previousDoorShadowCasterBounds, changedShadowCasterBounds);
         previousDoorShadowCasterBounds.swap(currentDoorShadowCasterBounds);
         doorShadowCasterBoundsInitialized = true;
     }
@@ -1452,16 +1421,16 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 }
                 const Matrix transform = MatrixMultiply(
                         asset->model.transform, caster.transform);
-                currentStaticShadowCasterBounds.push_back(ShadowCasterBoundsRecord{
+                currentStaticShadowCasterBounds.push_back(SectorShadowCasterBoundsRecord{
                         (uint64_t{3} << 32)
                                 | static_cast<uint32_t>(caster.placedObjectId),
                         TransformSectorDoorModelBounds(
                                 asset->localBounds, transform)});
             }
         }
-        appendChangedBounds(
+        AppendChangedSectorShadowCasterBounds(
                 currentStaticShadowCasterBounds,
-                previousStaticShadowCasterBounds);
+                previousStaticShadowCasterBounds, changedShadowCasterBounds);
         previousStaticShadowCasterBounds.swap(currentStaticShadowCasterBounds);
         staticShadowCasterBoundsInitialized = true;
     }
@@ -1484,7 +1453,7 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                         ? asset->animatedLocalBounds
                         : asset->localBounds;
                 currentDynamicShadowCasterBounds.push_back(
-                        ShadowCasterBoundsRecord{
+                        SectorShadowCasterBoundsRecord{
                                 (uint64_t{4} << 32)
                                         | static_cast<uint32_t>(
                                                 caster.placedObjectId),
@@ -1494,9 +1463,9 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                                 caster.contentFingerprint});
             }
         }
-        appendChangedBounds(
+        AppendChangedSectorShadowCasterBounds(
                 currentDynamicShadowCasterBounds,
-                previousDynamicShadowCasterBounds);
+                previousDynamicShadowCasterBounds, changedShadowCasterBounds);
         previousDynamicShadowCasterBounds.swap(
                 currentDynamicShadowCasterBounds);
         dynamicShadowCasterBoundsInitialized = true;

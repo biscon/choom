@@ -72,6 +72,7 @@ uint64_t FingerprintDoorShadowCasters(
         hash = HashDoorShadowBytes(
                 hash, &caster.model.generation, sizeof(caster.model.generation));
         hash = HashDoorShadowMatrix(hash, caster.transform);
+        hash = HashDoorShadowBytes(hash, &caster.isFrame, sizeof(caster.isFrame));
     }
     return hash;
 }
@@ -813,7 +814,7 @@ bool AppendSectorDoorModelShadowCasters(
     }
     if (policy.drawFrame) {
         outCasters.push_back(SectorDoorModelShadowCaster{
-                door.placedObjectId, entity, model.frameModel, model.frameMatrix});
+                door.placedObjectId, entity, model.frameModel, model.frameMatrix, true});
     }
     return outCasters.size() > beginIndex;
 }

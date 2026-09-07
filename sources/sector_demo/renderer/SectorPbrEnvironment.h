@@ -32,7 +32,10 @@ struct SectorPbrEnvironment {
         int mipCount = 1;
         engine::TextureHandle inactive = engine::NullTextureHandle();
         bool ready = false;
-        bool failed = false;
+        bool failed = false; // Terminal failure; recoverable captures stay queued.
+        bool resourceFailed = false;
+        int captureFailures = 0;
+        double retryAt = 0.0;
         bool required = false;
         bool dirty = true;
         bool hasPrevious = false;
