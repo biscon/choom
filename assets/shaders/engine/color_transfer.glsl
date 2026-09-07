@@ -1,11 +1,6 @@
-#pragma once
+#ifndef ENGINE_COLOR_TRANSFER_GLSL
+#define ENGINE_COLOR_TRANSFER_GLSL
 
-namespace engine {
-
-// Canonical GLSL 330 transfer-function snippet. It intentionally omits a
-// #version directive so future shaders can compose it after their own version
-// line without introducing a shader-preprocessor framework.
-inline constexpr const char* ColorTransferGlsl = R"glsl(
 float SrgbNormalizedChannelToLinear(float srgb)
 {
     srgb = clamp(srgb, 0.0, 1.0);
@@ -47,6 +42,5 @@ vec4 LinearSceneToDisplaySrgb(vec4 linearRgba)
 {
     return vec4(LinearSceneToDisplaySrgb(linearRgba.rgb), linearRgba.a);
 }
-)glsl";
 
-} // namespace engine
+#endif

@@ -1,3 +1,4 @@
+#include "game/LoadShader.h"
 #include "sector_demo/renderer/SectorBloomRenderer.h"
 
 #include <external/glad.h>
@@ -11,118 +12,6 @@ namespace {
 
 constexpr int BloomDownsample = 4;
 constexpr int BloomIterations = 3;
-
-const char* PrefilterFs = R"(
-#version 330
-in vec2 fragTexCoord;
-out vec4 finalColor;
-uniform sampler2D texture0;
-uniform vec2 sourceTexelSize;
-uniform float threshold;
-uniform float softKnee;
-const float kRgba16fMaximumFinite = 65504.0;
-float SanitizeLinearHdrChannelForRgba16f(float value) {
-    if (isnan(value)) return 0.0;
-    if (isinf(value)) return value > 0.0 ? kRgba16fMaximumFinite : 0.0;
-    return min(max(value, 0.0), kRgba16fMaximumFinite);
-}
-vec3 SanitizeLinearHdrForRgba16f(vec3 value) {
-    return vec3(SanitizeLinearHdrChannelForRgba16f(value.r),
-            SanitizeLinearHdrChannelForRgba16f(value.g),
-            SanitizeLinearHdrChannelForRgba16f(value.b));
-}
-vec3 Prefilter(vec3 inputColor) {
-    vec3 color = SanitizeLinearHdrForRgba16f(inputColor);
-    float brightness = max(max(color.r, color.g), color.b);
-    if (brightness <= 0.0) return vec3(0.0);
-    if (threshold <= 0.0) return color;
-    float excess = 0.0;
-    if (softKnee <= 0.0) {
-        excess = max(brightness - threshold, 0.0);
-    } else {
-        float knee = threshold * softKnee;
-        float q = clamp(brightness - threshold + knee, 0.0, 2.0 * knee);
-        float softExcess = q * q / (4.0 * knee);
-        excess = max(softExcess, max(brightness - threshold, 0.0));
-    }
-    return SanitizeLinearHdrForRgba16f(color * (excess / brightness));
-}
-void main() {
-    vec3 seed = vec3(0.0);
-    for (int y = 0; y < 4; ++y) {
-        for (int x = 0; x < 4; ++x) {
-            vec2 offset = (vec2(float(x), float(y)) - vec2(1.5)) * sourceTexelSize;
-            seed += Prefilter(texture(texture0, clamp(fragTexCoord + offset,
-                    vec2(0.0), vec2(1.0))).rgb);
-        }
-    }
-    finalColor = vec4(SanitizeLinearHdrForRgba16f(seed * (1.0 / 16.0)), 0.0);
-}
-)";
-
-const char* BlurFs = R"(
-#version 330
-in vec2 fragTexCoord;
-out vec4 finalColor;
-uniform sampler2D texture0;
-uniform vec2 texelSize;
-uniform vec2 direction;
-uniform float radius;
-const float kRgba16fMaximumFinite = 65504.0;
-float SanitizeLinearHdrChannelForRgba16f(float value) {
-    if (isnan(value)) return 0.0;
-    if (isinf(value)) return value > 0.0 ? kRgba16fMaximumFinite : 0.0;
-    return min(max(value, 0.0), kRgba16fMaximumFinite);
-}
-vec3 SanitizeLinearHdrForRgba16f(vec3 value) {
-    return vec3(SanitizeLinearHdrChannelForRgba16f(value.r),
-            SanitizeLinearHdrChannelForRgba16f(value.g),
-            SanitizeLinearHdrChannelForRgba16f(value.b));
-}
-void main() {
-    vec2 offset = direction * texelSize * radius;
-    vec3 color = texture(texture0, fragTexCoord).rgb * 0.227027;
-    color += texture(texture0, fragTexCoord + offset * 1.384615).rgb * 0.316216;
-    color += texture(texture0, fragTexCoord - offset * 1.384615).rgb * 0.316216;
-    color += texture(texture0, fragTexCoord + offset * 3.230769).rgb * 0.070270;
-    color += texture(texture0, fragTexCoord - offset * 3.230769).rgb * 0.070270;
-    finalColor = vec4(SanitizeLinearHdrForRgba16f(color), 0.0);
-}
-)";
-
-const char* CompositeFs = R"(
-#version 330
-in vec2 fragTexCoord;
-out vec4 finalColor;
-uniform sampler2D texture0;
-uniform sampler2D bloomTexture;
-uniform float intensity;
-uniform int bloomOnly;
-const float kRgba16fMaximumFinite = 65504.0;
-float SanitizeLinearHdrChannelForRgba16f(float value) {
-    if (isnan(value)) return 0.0;
-    if (isinf(value)) return value > 0.0 ? kRgba16fMaximumFinite : 0.0;
-    return min(max(value, 0.0), kRgba16fMaximumFinite);
-}
-vec3 SanitizeLinearHdrForRgba16f(vec3 value) {
-    return vec3(SanitizeLinearHdrChannelForRgba16f(value.r),
-            SanitizeLinearHdrChannelForRgba16f(value.g),
-            SanitizeLinearHdrChannelForRgba16f(value.b));
-}
-float SafeAlpha(float value) {
-    return (isnan(value) || isinf(value)) ? 1.0 : clamp(value, 0.0, 1.0);
-}
-void main() {
-    vec3 bloom = texture(bloomTexture, fragTexCoord).rgb;
-    if (bloomOnly != 0) {
-        finalColor = vec4(SanitizeLinearHdrForRgba16f(bloom * intensity), 0.0);
-        return;
-    }
-    vec4 scene = texture(texture0, fragTexCoord);
-    vec3 rgb = scene.rgb + bloom * intensity;
-    finalColor = vec4(SanitizeLinearHdrForRgba16f(rgb), SafeAlpha(scene.a));
-}
-)";
 
 Rectangle SourceRect(Texture2D texture)
 {
@@ -195,21 +84,17 @@ void SectorBloomRenderer::DisableForCurrentKey(
     TraceLog(LOG_WARNING, "HDR BLOOM: %s", reason.c_str());
 }
 
-bool SectorBloomRenderer::EnsureResources(int width, int height)
+bool SectorBloomRenderer::Initialize()
 {
-    if (width <= 0 || height <= 0) return false;
-    if (failedForCurrentKey && failedWidth == width && failedHeight == height) {
-        return false;
-    }
-    if (sceneWidth != width || sceneHeight != height) Shutdown();
-
     if (prefilterShader.id == 0) {
-        prefilterShader = LoadShaderFromMemory(nullptr, PrefilterFs);
-        blurShader = LoadShaderFromMemory(nullptr, BlurFs);
-        compositeShader = LoadShaderFromMemory(nullptr, CompositeFs);
+        prefilterShader = LoadGameShader(GameShader::BloomPrefilter);
+        blurShader = LoadGameShader(GameShader::BloomBlur);
+        compositeShader = LoadGameShader(GameShader::BloomComposite);
         if (prefilterShader.id == 0 || blurShader.id == 0
                 || compositeShader.id == 0) {
-            DisableForCurrentKey("required HDR bloom shader failed to compile", width, height);
+            Shutdown();
+            diagnostics.disabled = true;
+            diagnostics.status = "required HDR bloom shader failed to compile";
             return false;
         }
         prefilterSourceTexelSizeLoc = GetShaderLocation(prefilterShader, "sourceTexelSize");
@@ -222,6 +107,18 @@ bool SectorBloomRenderer::EnsureResources(int width, int height)
         compositeIntensityLoc = GetShaderLocation(compositeShader, "intensity");
         compositeBloomOnlyLoc = GetShaderLocation(compositeShader, "bloomOnly");
     }
+
+    return true;
+}
+
+bool SectorBloomRenderer::EnsureResources(int width, int height)
+{
+    if (width <= 0 || height <= 0 || prefilterShader.id == 0
+            || blurShader.id == 0 || compositeShader.id == 0) return false;
+    if (failedForCurrentKey && failedWidth == width && failedHeight == height) {
+        return false;
+    }
+    if (sceneWidth != width || sceneHeight != height) UnloadTargets();
 
     const int bloomWidth = std::max(1, (width + BloomDownsample - 1) / BloomDownsample);
     const int bloomHeight = std::max(1, (height + BloomDownsample - 1) / BloomDownsample);
@@ -396,14 +293,8 @@ bool SectorBloomRenderer::IsLoaded() const
             || engine::IsRenderTargetReady(blurB);
 }
 
-void SectorBloomRenderer::Shutdown()
+void SectorBloomRenderer::UnloadTargets()
 {
-    if (prefilterShader.id != 0) UnloadShader(prefilterShader);
-    if (blurShader.id != 0) UnloadShader(blurShader);
-    if (compositeShader.id != 0) UnloadShader(compositeShader);
-    prefilterShader = {};
-    blurShader = {};
-    compositeShader = {};
     engine::UnloadRenderTarget(prefilterTarget);
     engine::UnloadRenderTarget(blurA);
     engine::UnloadRenderTarget(blurB);
@@ -413,6 +304,17 @@ void SectorBloomRenderer::Shutdown()
     failedHeight = 0;
     failedForCurrentKey = false;
     debugSource = nullptr;
+}
+
+void SectorBloomRenderer::Shutdown()
+{
+    if (prefilterShader.id != 0) UnloadShader(prefilterShader);
+    if (blurShader.id != 0) UnloadShader(blurShader);
+    if (compositeShader.id != 0) UnloadShader(compositeShader);
+    prefilterShader = {};
+    blurShader = {};
+    compositeShader = {};
+    UnloadTargets();
     diagnostics = {};
 }
 

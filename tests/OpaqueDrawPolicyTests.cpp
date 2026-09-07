@@ -1,5 +1,5 @@
 #include "sector_demo/renderer/SectorOpaqueDrawPolicy.h"
-#include "sector_demo/renderer/SectorShaderSource.h"
+#include "ShaderTestSources.h"
 #include "engine/assets/ModelMaterialMetadata.h"
 #include <cassert>
 #include <cstring>
@@ -8,22 +8,6 @@
 
 namespace
 {
-void TestShaderPreamble()
-{
-    for (const std::string leading : {"", "\n", "\n\n", "\r\n"}) {
-        for (int variant = 0; variant < 3; ++variant) {
-            const std::string define = "#define WINDOW_FLAT_PASS " + std::to_string(variant) + "\n";
-            const std::string source = leading + "#version 330\nvoid main() {}\n";
-            const auto shared = game::InsertSectorShaderPreamble(source, "// reflection functions\n");
-            const auto result = game::InsertSectorShaderPreamble(shared, define);
-            assert(result == leading + "#version 330\n" + define +
-                "// reflection functions\nvoid main() {}\n");
-        }
-    }
-    assert(game::InsertSectorShaderPreamble("#version 330", "// test\n") ==
-        "#version 330\n// test\n");
-}
-
 void TestMaterialMetadata()
 {
     const char *json = R"({"asset":{"version":"2.0"},"materials":[{},
@@ -154,8 +138,7 @@ void TestGlassNoiseEquivalence()
                 assert(shared.x == Noise(p) && shared.y == Noise(x) && shared.z == Noise(y));
             }
         }
-    std::ifstream file(GLASS_SHADER_SOURCE_PATH);
-    const std::string shader((std::istreambuf_iterator<char>(file)), {});
+    const std::string shader = test::ReadShaderStage(game::GameShader::Window);
     assert(shader.find("vec3 samples = GlassPatternSamples(panePosition, derivativeStep)") !=
            std::string::npos);
     assert(shader.find("if (glassImperfectionStrength <= 0.0)") != std::string::npos);
@@ -166,7 +149,6 @@ void TestGlassNoiseEquivalence()
 } // namespace
 int main()
 {
-    TestShaderPreamble();
     TestMaterialMetadata();
     TestVisibilityAndOrdering();
     TestGlassNoiseEquivalence();

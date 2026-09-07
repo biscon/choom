@@ -1,8 +1,6 @@
-#pragma once
+#ifndef ENGINE_TONE_MAPPING_GLSL
+#define ENGINE_TONE_MAPPING_GLSL
 
-namespace engine {
-
-inline constexpr const char* ToneMappingGlsl = R"glsl(
 // Khronos PBR Neutral reference operator:
 // https://github.com/KhronosGroup/ToneMapping/tree/main/PBR_Neutral
 vec3 ToneMapKhronosPbrNeutral(vec3 linearRgb)
@@ -49,6 +47,5 @@ vec3 ApplyToneMapping(vec3 linearRgb, int toneMapper)
     }
     return ToneMapKhronosPbrNeutral(linearRgb);
 }
-)glsl";
 
-} // namespace engine
+#endif

@@ -1,3 +1,4 @@
+#include "game/LoadShader.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 
 #include "engine/assets/AssetManager.h"
@@ -268,60 +269,6 @@ bool DynamicLightIntersectsBounds(
             / std::max(std::cos(clampedHalfAngle), 0.017452f);
     return radialDistance <= coneRadius + sphereAllowance;
 }
-
-const char* SectorSpotLightShadowVs = R"(
-#version 330
-in vec3 vertexPosition;
-in vec2 vertexTexCoord;
-in vec4 vertexBoneIndices;
-in vec4 vertexBoneWeights;
-
-uniform mat4 lightViewProjection;
-uniform mat4 matModel;
-uniform int useSkinning;
-#define MAX_BONE_NUM 128
-uniform mat4 boneMatrices[MAX_BONE_NUM];
-
-out vec2 fragTexCoord;
-
-void main()
-{
-    vec4 localPosition = vec4(vertexPosition, 1.0);
-    if (useSkinning != 0) {
-        int bone0 = int(vertexBoneIndices.x);
-        int bone1 = int(vertexBoneIndices.y);
-        int bone2 = int(vertexBoneIndices.z);
-        int bone3 = int(vertexBoneIndices.w);
-        localPosition = vertexBoneWeights.x * (boneMatrices[bone0] * localPosition)
-                + vertexBoneWeights.y * (boneMatrices[bone1] * localPosition)
-                + vertexBoneWeights.z * (boneMatrices[bone2] * localPosition)
-                + vertexBoneWeights.w * (boneMatrices[bone3] * localPosition);
-    }
-    fragTexCoord = vertexTexCoord;
-    gl_Position = lightViewProjection * matModel * localPosition;
-}
-)";
-
-const char* SectorSpotLightShadowOpaqueFs = R"(
-#version 330
-void main() {}
-)";
-
-const char* SectorSpotLightShadowCutoutFs = R"(
-#version 330
-in vec2 fragTexCoord;
-
-uniform sampler2D texture0;
-uniform int alphaTest;
-uniform float alphaCutoff;
-
-void main()
-{
-    if (alphaTest != 0 && texture(texture0, fragTexCoord).a < alphaCutoff) {
-        discard;
-    }
-}
-)";
 
 RenderTexture2D LoadDepthOnlyRenderTexture(int width, int height)
 {
@@ -1243,16 +1190,14 @@ bool SectorDynamicLightingRenderer::HasShadowMapResources() const
 bool SectorDynamicLightingRenderer::LoadShadowMaterial()
 {
     shadowMaterial = LoadMaterialDefault();
-    Shader shader = LoadShaderFromMemory(
-            SectorSpotLightShadowVs, SectorSpotLightShadowOpaqueFs);
+    Shader shader = LoadGameShader(GameShader::SpotLightShadowOpaque);
     if (shader.id == 0) {
         UnloadMaterial(shadowMaterial);
         shadowMaterial = Material{};
         return false;
     }
     spotShadowCutoutMaterial = LoadMaterialDefault();
-    Shader spotCutoutShader = LoadShaderFromMemory(
-            SectorSpotLightShadowVs, SectorSpotLightShadowCutoutFs);
+    Shader spotCutoutShader = LoadGameShader(GameShader::SpotLightShadowCutout);
     if (spotCutoutShader.id == 0) {
         UnloadShader(shader);
         UnloadMaterial(shadowMaterial);

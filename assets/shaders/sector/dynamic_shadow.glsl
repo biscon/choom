@@ -1,9 +1,6 @@
-#pragma once
+#ifndef SECTOR_DYNAMIC_SHADOW_GLSL
+#define SECTOR_DYNAMIC_SHADOW_GLSL
 
-// Shared GLSL for opaque and alpha-tested surface receivers. Keeping the
-// six-face mapping here prevents sector, door, model, and billboard shadows
-// from disagreeing at cube-face boundaries.
-#define SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL R"glsl(
 float SampleSpotShadowMap(vec2 atlasTile, float atlasScale, vec2 uv)
 {
     return texture(shadowMap0,
@@ -247,4 +244,5 @@ float DynamicLightShadowVisibility(
     }
     return visible / 12.0;
 }
-)glsl"
+
+#endif

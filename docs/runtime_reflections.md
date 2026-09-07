@@ -132,7 +132,7 @@ Automated checks:
 
 - `cmake --build cmake-build-debug -j2`
 - `ctest --test-dir cmake-build-debug --output-on-failure`
-- `python3 tools/check_reflection_shaders.py` (requires `glslangValidator`)
+- `cmake --build cmake-build-debug --target check_shaders` (requires Python 3 and `glslangValidator`; see [shader sources](shaders.md))
 - `git diff --check`
 
 Manual verification remains with the user: inspect hub sector 96 under Full PBR

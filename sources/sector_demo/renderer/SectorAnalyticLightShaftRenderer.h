@@ -17,6 +17,8 @@ struct SectorReceiverBounds;
 
 class SectorAnalyticLightShaftRenderer {
 public:
+    // Explicit load phase only; Apply never creates shader resources.
+    bool Initialize();
     void Reserve(std::size_t sourceCount);
     bool Apply(
             RenderTexture2D& sceneTarget,
@@ -44,7 +46,6 @@ private:
         float distanceSquared = 0.0f;
     };
 
-    bool EnsureResources();
 
     Shader shader = {};
     Mesh screenTriangle = {};

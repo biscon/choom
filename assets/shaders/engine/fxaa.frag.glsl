@@ -1,8 +1,3 @@
-#pragma once
-
-namespace engine {
-
-inline constexpr const char* FxaaFragmentShader = R"(
 #version 330
 
 in vec2 fragTexCoord;
@@ -62,6 +57,3 @@ void main()
 
     finalColor = vec4(rgb, texture(texture0, fragTexCoord).a) * fragColor;
 }
-)";
-
-} // namespace engine

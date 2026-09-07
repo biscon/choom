@@ -1,8 +1,6 @@
-#pragma once
+#ifndef SECTOR_FLASHLIGHT_PROFILE_GLSL
+#define SECTOR_FLASHLIGHT_PROFILE_GLSL
 
-// Shared GLSL for the projected flashlight beam. The generic spotlight cone
-// only clips the profile; this function owns the single visible edge feather.
-#define SECTOR_FLASHLIGHT_PROFILE_GLSL R"glsl(
 float FlashlightProfileFactor(int lightIndex, vec3 directionFromLight)
 {
     vec3 spotDirection = SafeNormalize(
@@ -33,4 +31,5 @@ float FlashlightProfileFactor(int lightIndex, vec3 directionFromLight)
     float cookieVariation = mix(0.90, 1.08, cookie);
     return mix(parameters.y, 1.0, hotspot) * edge * cookieVariation;
 }
-)glsl"
+
+#endif
