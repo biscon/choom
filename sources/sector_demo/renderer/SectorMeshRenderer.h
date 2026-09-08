@@ -322,7 +322,7 @@ private:
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
     bool EnsureHdrSceneColorView(const engine::RenderTarget& sceneTarget);
     void UnloadHdrSceneColorView();
-    bool EnsureHdrCompositeShader();
+    bool InitializeHdrCompositeShader();
     bool CommitHdrScratch(engine::RenderTarget& sceneTarget);
     bool EnsureAtmosphereGpuQueries();
     void ShutdownAtmosphereGpuQueries();
@@ -419,6 +419,7 @@ private:
     int environmentMaxLodLoc = -1;
     int environmentIntensityLoc = -1;
     int pbrDiagnosticModeLoc = -1;
+    int specularAaEnabledLoc = -1;
     int useStaticSpecularLightingLoc = -1;
     int alphaTestLoc = -1;
     int alphaCutoffLoc = -1;

@@ -1,6 +1,7 @@
 #include "sector_editor/SectorEditorTextureModals.h"
 
 #include "engine/assets/TextureLoadFlags.h"
+#include "sector_editor/services/SectorEditorAssetPickerUi.h"
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
@@ -87,41 +88,19 @@ void DrawTexturePickerModal(
     const float leftX = modal.x + 22.0f;
     const float leftWidth = 555.0f;
     const Rectangle filterBounds{leftX, y, leftWidth, 42.0f};
-    const float filterLabelWidth = 82.0f;
-    engine::Text(
-            config,
-            assets,
-            Rectangle{filterBounds.x, filterBounds.y, filterLabelWidth, filterBounds.height},
-            smallFont,
-            "Filter",
-            engine::UITextJustify::Left,
-            config.mutedTextColor);
-    const engine::UITextInputResult filterResult = engine::TextInput(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_texture_picker_filter",
-            Rectangle{
-                    filterBounds.x + filterLabelWidth,
-                    filterBounds.y,
-                    filterBounds.width - filterLabelWidth,
-                    filterBounds.height},
-            smallFont,
-            picker.filterBuffer,
-            sizeof(picker.filterBuffer),
-            0,
-            sizeof(picker.filterBuffer) - 1);
-    if (filterResult.changed) {
+    if (DrawSectorEditorAssetPickerFilter(
+                ui, config, input, assets, smallFont,
+                "sector_editor_texture_picker_filter", filterBounds,
+                picker.browsing.filterBuffer, sizeof(picker.browsing.filterBuffer))) {
         ApplySectorEditorTexturePickerFilter(picker);
     }
     y += 54.0f;
 
-    const Rectangle listBounds{leftX, y, leftWidth, 476.0f};
+    const Rectangle listBounds{leftX, y, leftWidth, modal.y + modal.height - 22.0f - y};
     const float listContentW = ScrollAreaContentWidthForVerticalScrollbar(listBounds.width, config);
     const Vector2 contentSize{
             listContentW,
-            std::max(listBounds.height, config.listItemHeight * static_cast<float>(picker.optionLabels.size()))
+            config.listItemHeight * static_cast<float>(picker.optionLabels.size())
     };
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
@@ -130,7 +109,7 @@ void DrawTexturePickerModal(
             "sector_editor_texture_picker_scroll",
             listBounds,
             contentSize,
-            picker.scroll
+            picker.browsing.scroll
     );
     if (!picker.optionLabels.empty()) {
         engine::List(
@@ -146,7 +125,7 @@ void DrawTexturePickerModal(
                 picker.selectedTextureIndex
         );
     }
-    engine::EndScrollArea(ui, config, input, scroll, picker.scroll);
+    engine::EndScrollArea(ui, config, input, scroll, picker.browsing.scroll);
     if (picker.optionLabels.empty()) {
         engine::Text(
                 config,
@@ -169,17 +148,22 @@ void DrawTexturePickerModal(
 
     const float rightX = modal.x + 607.0f;
     const float rightWidth = 376.0f;
-    const Rectangle previewBounds{rightX, y, rightWidth, 300.0f};
+    const float buttonY = modal.y + modal.height - 64.0f;
+    const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
+    const float idHeight = WrappedTextHeightForLines(config, 2);
+    const float pathHeight = WrappedTextHeightForLines(smallConfig, 3);
+    const float previewHeight = std::max(0.0f,
+            buttonY - 12.0f - y - 16.0f - idHeight - 4.0f - pathHeight);
+    const Rectangle previewBounds{rightX, y, rightWidth, previewHeight};
     engine::Image(
             config,
             assets,
             previewBounds,
             textureCatalog.EnsureTextureHandleForId(previewTextureId, assets));
-    y += 316.0f;
+    y += previewHeight + 16.0f;
 
     const SectorMaterialDefinition* previewTexture = textureCatalog.FindTexture(previewTextureId);
     const std::string path = previewTexture == nullptr ? std::string{} : previewTexture->path;
-    const float idHeight = WrappedTextHeightForLines(config, 2);
     engine::Text(
             config,
             assets,
@@ -191,9 +175,6 @@ void DrawTexturePickerModal(
             true);
     y += idHeight + 4.0f;
 
-    const engine::UIConfig smallConfig =
-            SectorEditorSmallFontConfig(config, assets, smallFont);
-    const float pathHeight = WrappedTextHeightForLines(smallConfig, 2);
     engine::Text(
             smallConfig,
             assets,
@@ -204,7 +185,6 @@ void DrawTexturePickerModal(
             smallConfig.mutedTextColor,
             true);
 
-    const float buttonY = modal.y + modal.height - 64.0f;
     const float buttonW = 150.0f;
     if (engine::Button(ui, config, input, assets, "sector_editor_texture_picker_select", Rectangle{modal.x + modal.width - buttonW * 2.0f - 34.0f, buttonY, buttonW, 44.0f}, font, "Select")) {
         if (CurrentSectorEditorTexturePickerSelection(picker).valid) {

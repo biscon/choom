@@ -8,6 +8,8 @@ namespace game {
 
 class SectorDistanceFogRenderer {
 public:
+    // Explicit load phase only; Apply never creates shader resources.
+    bool Initialize();
     bool Apply(
             RenderTexture2D& sceneTarget,
             RenderTexture2D& sceneScratch,
@@ -16,7 +18,6 @@ public:
     void Shutdown();
 
 private:
-    bool EnsureShader();
 
     Shader shader = {};
     int sceneColorLoc = -1;

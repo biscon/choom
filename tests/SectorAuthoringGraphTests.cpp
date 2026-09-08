@@ -3119,6 +3119,47 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
           "inner synthesized anchor uses implicit built-in defaults");
 }
 
+void TestBaseboardAuthoringMutationAndSplit()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    auto& graph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, graph, MakeAdjacentTwoRoomGraph());
+    const auto revision = state.topologyRenderRevision;
+    Check(game::MutateSectorEditorAuthoringSideById(state,
+            game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+            documentState.map.topologyMap, graph,
+            game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            {10, game::SectorTopologySideKind::Front}, "Test baseboard",
+            [](game::SectorAuthoringLineSide& side) {
+                side.baseboard = {true, 1.2f, 0.16f, "trim"};
+                return true;
+            }), "baseboard edit refreshes authoring derivation");
+    Check(documentState.lifecycle.topologyDocumentDirty && state.topologyRenderRevision > revision
+            && !state.topologyRenderCache.valid, "baseboard edit dirties document and invalidates 2D cache");
+    bool projected = false;
+    for (const auto& side : documentState.map.topologyMap.sideDefs) {
+        if (side.baseboard.enabled) {
+            projected = true;
+            Check(side.baseboard.materialId == "trim" && Near(side.baseboard.thickness, 0.16f),
+                    "baseboard settings project into derived sidedef");
+        }
+    }
+    Check(projected, "derived topology contains enabled baseboard");
+    game::SectorAuthoringInsertVertexResult split;
+    Check(game::InsertSectorAuthoringVertexOnLine(graph, 10, {32, 0}, &split),
+            "baseboard authoring line splits");
+    int copies = 0;
+    for (const auto& side : graph.lineSides) {
+        if (side.baseboard.enabled) {
+            ++copies;
+            Check(side.baseboard.materialId == "trim" && Near(side.baseboard.height, 1.2f),
+                    "split copies configured baseboard settings");
+        }
+    }
+    Check(copies == 2, "both split authoring sides retain trim");
+}
+
 void TestEditorAuthoringGraphMutationMarksDirtyAndStale()
 {
     game::SectorEditorState state;
@@ -7296,8 +7337,8 @@ void TestEditorMaterialCatalogUsesGlobalRegistry()
             catalog.TextureIds(),
             "imported_wall");
     std::snprintf(
-            filteredPicker.filterBuffer,
-            sizeof(filteredPicker.filterBuffer),
+            filteredPicker.browsing.filterBuffer,
+            sizeof(filteredPicker.browsing.filterBuffer),
             "%s",
             "PoRtEd_W");
     game::ApplySectorEditorTexturePickerFilter(filteredPicker);
@@ -7310,8 +7351,8 @@ void TestEditorMaterialCatalogUsesGlobalRegistry()
           "material picker filters IDs case-insensitively while preserving selection");
 
     std::snprintf(
-            filteredPicker.filterBuffer,
-            sizeof(filteredPicker.filterBuffer),
+            filteredPicker.browsing.filterBuffer,
+            sizeof(filteredPicker.browsing.filterBuffer),
             "%s",
             "existing");
     game::ApplySectorEditorTexturePickerFilter(filteredPicker);
@@ -7321,8 +7362,8 @@ void TestEditorMaterialCatalogUsesGlobalRegistry()
           "material picker selects the first result when the previous selection is filtered out");
 
     std::snprintf(
-            filteredPicker.filterBuffer,
-            sizeof(filteredPicker.filterBuffer),
+            filteredPicker.browsing.filterBuffer,
+            sizeof(filteredPicker.browsing.filterBuffer),
             "%s",
             "missing material");
     game::ApplySectorEditorTexturePickerFilter(filteredPicker);
@@ -7332,7 +7373,7 @@ void TestEditorMaterialCatalogUsesGlobalRegistry()
                   && !filteredPicker.filterMessage.empty(),
           "material picker reports an empty filter result without a selectable material");
 
-    filteredPicker.filterBuffer[0] = '\0';
+    filteredPicker.browsing.filterBuffer[0] = '\0';
     game::ApplySectorEditorTexturePickerFilter(filteredPicker);
     Check(filteredPicker.materialIds == catalog.TextureIds()
                   && filteredPicker.selectedTextureIndex == 0
@@ -13871,8 +13912,8 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
           "opening an already-scanned picker invalidates its cached filesystem scan");
     Check(picker.RefreshFromRoot(root, "assets/models")
                   && state.scanned
-                  && state.selectedModelIndex == 0,
-          "the opening refresh preselects the supplied current model path");
+                  && state.selectedModelIndex == 2,
+          "the opening refresh keeps the remembered selection ahead of the supplied model");
     picker.Close();
     WriteTextFile(root / "nested" / "aardvark.glb", "");
     picker.Open(expected[1]);
@@ -13881,8 +13922,8 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
     Check(picker.RefreshFromRoot(root, "assets/models")
                   && state.modelPaths.size() == 5
                   && state.modelPaths[1] == "assets/models/nested/aardvark.glb"
-                  && picker.SelectedModelPath() == expected[1],
-          "model picker reopening discovers new models and restores the current selection");
+                  && picker.SelectedModelPath() == expected[2],
+          "model picker reopening discovers new models and restores the remembered asset by path");
     picker.Close();
     picker.Open(
             "assets/models/characters/nested/beta.GLB",
@@ -13909,6 +13950,116 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
     picker.Close();
     Check(!state.open, "static model picker closes on cancel");
 
+    std::filesystem::remove_all(root, error);
+}
+
+void TestPickerSessionBrowsingMemory()
+{
+    game::TexturePickerState material;
+    const std::vector<std::string> materials{"base_a", "base_b", "other"};
+    material.topologyTargetKind = game::TopologyTexturePickerTargetKind::MapSky;
+    game::OpenSectorEditorTexturePicker(material, materials, "base_b");
+    std::snprintf(material.browsing.filterBuffer, sizeof(material.browsing.filterBuffer), "%s", "BASE");
+    game::ApplySectorEditorTexturePickerFilter(material);
+    material.browsing.scroll.offset = Vector2{0.0f, 120.0f};
+    material.authoringLineId = 42;
+    material.rebuildPreviewOnApply = true;
+    game::CloseSectorEditorTexturePicker(material);
+    Check(!material.open && material.authoringLineId == -1
+                  && !material.rebuildPreviewOnApply
+                  && material.topologyTargetKind == game::TopologyTexturePickerTargetKind::None
+                  && !game::CurrentSectorEditorTexturePickerSelection(material).valid,
+          "closing a material picker clears assignment routing and makes its result unavailable");
+    material.topologyTargetKind = game::TopologyTexturePickerTargetKind::AuthoringFaceAnchor;
+    game::OpenSectorEditorTexturePicker(material, {"base_0", "base_a", "base_b", "other"}, "base_a");
+    Check(std::string(material.browsing.filterBuffer) == "BASE"
+                  && material.browsing.scroll.offset.y == 120.0f
+                  && material.selectedTextureIndex == 2
+                  && game::CurrentSectorEditorTexturePickerSelection(material).materialId == "base_b",
+          "material picker reopening across targets preserves filter, offset and selected asset identity");
+    game::CloseSectorEditorTexturePicker(material);
+    material.topologyTargetKind = game::TopologyTexturePickerTargetKind::MapSky;
+    game::OpenSectorEditorTexturePicker(material, {"base_0", "base_a", "other"}, "base_a");
+    Check(game::CurrentSectorEditorTexturePickerSelection(material).materialId == "base_a",
+          "missing remembered materials fall back to the current target when visible");
+    std::snprintf(material.browsing.filterBuffer, sizeof(material.browsing.filterBuffer), "%s", "unmatched");
+    game::ApplySectorEditorTexturePickerFilter(material);
+    game::CloseSectorEditorTexturePicker(material);
+    material.topologyTargetKind = game::TopologyTexturePickerTargetKind::MapSky;
+    game::OpenSectorEditorTexturePicker(material, materials, "other");
+    Check(material.materialIds.empty() && !game::CurrentSectorEditorTexturePickerSelection(material).valid
+                  && std::string(material.browsing.filterBuffer) == "unmatched",
+          "empty material filters survive reopening without exposing an unfiltered selection");
+
+    const auto root = TempDirectoryPath("sector_picker_session_memory");
+    RecreateTempDirectory(root / "characters");
+    WriteTextFile(root / "alpha.glb", "");
+    WriteTextFile(root / "beta.glb", "");
+    WriteTextFile(root / "characters" / "hero.glb", "");
+    WriteTextFile(root / "characters" / "villain.gltf", "");
+    game::StaticModelPickerState state;
+    std::string status;
+    game::SectorEditorStaticModelPickerService picker(state, status);
+    picker.Open("assets/models/beta.glb");
+    Check(picker.RefreshFromRoot(root, "assets/models"), "session model fixture scans");
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer), "%s", ".GLB");
+    picker.ApplyFilter();
+    state.browsing.scroll.offset.y = 160.0f;
+    picker.Close();
+    WriteTextFile(root / "aardvark.glb", "");
+    picker.Open("assets/models/alpha.glb", game::ModelPickerTarget::ItemDefinition);
+    picker.RefreshFromRoot(root, "assets/models");
+    Check(picker.SelectedModelPath() == "assets/models/beta.glb"
+                  && std::string(state.browsing.filterBuffer) == ".GLB"
+                  && state.browsing.scroll.offset.y == 160.0f,
+          "model cancellation and cross-target reopen preserve filter, offset and identity despite reordered results");
+    state.open = false; // Same successful-selection close used by model assignment callers.
+    picker.Open("assets/models/alpha.glb", game::ModelPickerTarget::WeaponAttachment);
+    picker.RefreshFromRoot(root, "assets/models");
+    Check(picker.SelectedModelPath() == "assets/models/beta.glb",
+          "successful model selection also preserves browsing memory");
+    picker.Close();
+    picker.Open("assets/models/characters/hero.glb", game::ModelPickerTarget::NpcDefinition);
+    picker.RefreshFromRoot(root / "characters", "assets/models/characters");
+    Check(picker.SelectedModelPath() == "assets/models/characters/hero.glb"
+                  && state.modelPaths.size() == 1
+                  && std::string(state.browsing.filterBuffer) == ".GLB",
+          "NPC catalog uses shared filter memory and falls back to its current valid model");
+    picker.Close();
+    picker.Open("assets/models/alpha.glb", game::ModelPickerTarget::DynamicModel);
+    picker.RefreshFromRoot(root, "assets/models");
+    Check(picker.SelectedModelPath() == "assets/models/characters/hero.glb",
+          "NPC selections are remembered by the broader model picker");
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer), "%s", "ChArAcTeRs/ViL");
+    picker.ApplyFilter();
+    Check(picker.SelectedModelPath() == "assets/models/characters/villain.gltf"
+                  && state.modelPaths.size() == 1 && state.browsing.scroll.offset.y == 0.0f,
+          "model filter matches relative directories case-insensitively and resets scrolling");
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer), "%s", "missing");
+    picker.ApplyFilter();
+    Check(!picker.HasSelection() && picker.SelectedModelPath().empty()
+                  && state.optionLabels.empty() && !state.filterMessage.empty(),
+          "unmatched model filters cannot return stale selections");
+    picker.Close();
+    picker.Open("assets/models/alpha.glb");
+    picker.RefreshFromRoot(root, "assets/models");
+    Check(!picker.HasSelection() && std::string(state.browsing.filterBuffer) == "missing",
+          "empty model filters survive reopening");
+    state.browsing.filterBuffer[0] = '\0';
+    picker.ApplyFilter();
+    Check(state.modelPaths.size() == 5 && state.filterMessage.empty(),
+          "clearing a model filter restores the complete scanned catalog");
+    const auto selected = std::find(state.modelPaths.begin(), state.modelPaths.end(), "assets/models/beta.glb");
+    picker.SelectIndex(static_cast<int>(selected - state.modelPaths.begin()));
+    std::error_code error;
+    std::filesystem::remove(root / "beta.glb", error);
+    picker.RefreshFromRoot(root, "assets/models");
+    Check(picker.SelectedModelPath() == "assets/models/alpha.glb",
+          "refresh after model deletion uses the current model fallback");
+    Check(!picker.RefreshFromRoot(root / "unavailable", "assets/models")
+                  && !picker.HasSelection() && state.optionLabels.empty()
+                  && state.scanMessage.find("unavailable") != std::string::npos,
+          "unavailable model roots clear stale results and report the scan failure");
     std::filesystem::remove_all(root, error);
 }
 
@@ -15519,6 +15670,7 @@ int main()
     TestFreshDerivedTopologyUsesDefaultMaterials();
     TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials();
     TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor();
+    TestBaseboardAuthoringMutationAndSplit();
     TestEditorAuthoringGraphMutationMarksDirtyAndStale();
     TestAuthoringOverlayRenderCacheIncludesLooseGraph();
     TestAuthoringDiagnosticRenderCacheDoesNotRequireDerivedTopology();
@@ -15688,6 +15840,7 @@ int main()
     TestEditorGraphNativeMapLevelDataRoundTrip();
     TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation();
     TestStaticModelPickerRecursionFilteringRefreshAndSelection();
+    TestPickerSessionBrowsingMemory();
     TestAddMapTextureScanFiltersAutomaticNormalMaps();
     TestMaterialAlbedoPickerFilteringSelectionAndCommit();
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();

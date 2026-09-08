@@ -138,7 +138,7 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
             && modelPicker.State().target == ModelPickerTarget::NpcDefinition) {
         const SectorEditorModelPickerModalResult result =
                 DrawSectorEditorModelPickerModal(
-                        ui, config, input, assets, font, modelPicker);
+                        ui, config, input, assets, font, smallFont, modelPicker);
         if (result == SectorEditorModelPickerModalResult::Selected) {
             editor.SetSelectedModelPath(modelPicker.SelectedModelPath(), assets);
             modelPicker.State().open = false;

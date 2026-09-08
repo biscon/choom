@@ -37,8 +37,5 @@ HdrPostProcessOverlayRoute ResolveHdrPostProcessOverlayRoute(
         bool presentingFromScratch,
         bool diagnosticPresentationOverride);
 
-// Canonical GLSL 330 storage policy for generated shaders and policy tests.
-// Embedded renderer shaders mirror this named contract at RGBA16F writes.
-extern const char* const Rgba16fStoragePolicyGlsl;
 
 } // namespace engine

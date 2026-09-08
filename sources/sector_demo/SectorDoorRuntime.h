@@ -57,6 +57,7 @@ struct SectorDoorModelShadowCaster {
     engine::Entity entity = engine::NullEntity();
     engine::ModelHandle model = engine::NullModelHandle();
     Matrix transform = {};
+    bool isFrame = false;
 };
 
 struct SectorDoorShadowCasterRevisionState {

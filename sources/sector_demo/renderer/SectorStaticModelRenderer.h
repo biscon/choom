@@ -82,6 +82,7 @@ struct SectorPbrContributionSettings {
     SectorPbrDiagnosticMode diagnosticMode = SectorPbrDiagnosticMode::Full;
     float worldIndirectDiffuseScale = 1.0f;
     float worldEnvironmentSpecularScale = 1.0f;
+    bool specularAaEnabled = true;
     bool reflectionCapture = false;
 };
 
@@ -116,6 +117,7 @@ struct SectorPbrDrawState {
     bool environmentActive = false;
     bool materialOverrideActive = false;
     bool staticSpecularEligible = false;
+    bool specularAaEnabled = true;
 };
 
 inline float SanitizeSectorPbrNonnegative(float value, float fallback = 0.0f)
@@ -191,6 +193,7 @@ inline SectorPbrDrawState BuildSectorPbrDrawState(
     SectorPbrDrawState state;
     state.path = path;
     state.diagnosticMode = settings.diagnosticMode;
+    state.specularAaEnabled = settings.specularAaEnabled && !settings.reflectionCapture;
     state.indirectDiffuseScale = worldPath
             ? settings.worldIndirectDiffuseScale
             : 1.0f;
@@ -462,6 +465,7 @@ private:
     int baseColorHardwareSrgbLoc = -1;
     int emissiveHardwareSrgbLoc = -1;
     int diagnosticModeLoc = -1;
+    int specularAaEnabledLoc = -1;
     int indirectDiffuseScaleLoc = -1;
     int environmentSpecularScaleLoc = -1;
     int environmentBoxProjectionLoc = -1;

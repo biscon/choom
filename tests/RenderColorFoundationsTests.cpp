@@ -1,3 +1,4 @@
+#include "ShaderTestSources.h"
 #include "engine/assets/SpriteAnimationAssets.h"
 #include "engine/assets/TextureAssets.h"
 #include "engine/assets/TextureColorUsage.h"
@@ -230,7 +231,7 @@ void TestToneMapping()
                   && Near(normalized.exposureCompensationEv, 0.0f),
           "invalid tone-mapping settings normalize to the neutral defaults");
 
-    const std::string shader = engine::BuildScenePresentationFragmentShader();
+    const std::string shader = test::ReadShaderStage(game::GameShader::ScenePresentation);
     Check(shader.find("ToneMapKhronosPbrNeutral") != std::string::npos
                   && shader.find("ToneMapAcesFilmicFitted") != std::string::npos
                   && shader.find("presentationToneMapper") != std::string::npos,

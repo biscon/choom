@@ -1,3 +1,4 @@
+#include "game/LoadShader.h"
 #include "sector_demo/renderer/SectorDynamicModelShadowRenderer.h"
 
 #include "engine/assets/AssetManager.h"
@@ -20,34 +21,6 @@ constexpr float ContactShadowOpacity = 0.20f;
 constexpr float ContactFullOpacityGap = 0.05f;
 constexpr float ContactFadeDistance = 1.0f;
 constexpr float MinimumContactHalfExtent = 0.12f;
-
-const char* ContactVs = R"(
-#version 330
-in vec3 vertexPosition;
-in vec2 vertexTexCoord;
-uniform mat4 mvp;
-out vec2 texCoord;
-void main()
-{
-    texCoord = vertexTexCoord;
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
-}
-)";
-
-const char* ContactFs = R"(
-#version 330
-in vec2 texCoord;
-uniform float opacity;
-out vec4 finalColor;
-void main()
-{
-    vec2 p = texCoord * 2.0 - 1.0;
-    float radius = dot(p, p);
-    float alpha = (1.0 - smoothstep(0.35, 1.0, radius)) * opacity;
-    if (alpha <= 0.002) discard;
-    finalColor = vec4(0.0, 0.0, 0.0, alpha);
-}
-)";
 
 Vector3 NormalizeOr(Vector3 value, Vector3 fallback)
 {
@@ -199,7 +172,7 @@ bool SectorDynamicModelShadowRenderer::Load()
 {
     Shutdown();
     contactMaterial = LoadMaterialDefault();
-    contactMaterial.shader = LoadShaderFromMemory(ContactVs, ContactFs);
+    contactMaterial.shader = LoadGameShader(GameShader::DynamicModelShadowContact);
     if (contactMaterial.shader.id == 0) {
         Shutdown();
         return false;

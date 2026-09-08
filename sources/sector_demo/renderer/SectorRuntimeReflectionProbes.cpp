@@ -1,3 +1,4 @@
+#include "game/LoadShader.h"
 #include "sector_demo/renderer/SectorRuntimeReflectionProbes.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 #include "sector_demo/renderer/SectorReflectionProbePolicy.h"
@@ -13,61 +14,6 @@
 
 namespace game
 {
-namespace
-{
-const char *FilterVs = R"(#version 330
-void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.0-1.0,0,1);}
-)";
-const char *FilterFs = R"(#version 330
-uniform samplerCube sourceCube;
-uniform sampler2D sourceFace;
-uniform int faceIndex;
-uniform int faceSize;
-uniform int copyFace;
-uniform float roughness;
-out vec4 finalColor;
-vec3 direction(vec2 uv) {
-    vec2 p=uv*2.0-1.0;
-    if(faceIndex==0)return normalize(vec3(1,-p.y,-p.x));
-    if(faceIndex==1)return normalize(vec3(-1,-p.y,p.x));
-    if(faceIndex==2)return normalize(vec3(p.x,1,p.y));
-    if(faceIndex==3)return normalize(vec3(p.x,-1,-p.y));
-    if(faceIndex==4)return normalize(vec3(p.x,-p.y,1));
-    return normalize(vec3(-p.x,-p.y,-1));
-}
-float radical(uint bits) {
-    bits=(bits<<16u)|(bits>>16u);
-    bits=((bits&0x55555555u)<<1u)|((bits&0xAAAAAAAAu)>>1u);
-    bits=((bits&0x33333333u)<<2u)|((bits&0xCCCCCCCCu)>>2u);
-    bits=((bits&0x0F0F0F0Fu)<<4u)|((bits&0xF0F0F0F0u)>>4u);
-    bits=((bits&0x00FF00FFu)<<8u)|((bits&0xFF00FF00u)>>8u);
-    return float(bits)*2.3283064365386963e-10;
-}
-void main() {
-    vec2 uv=gl_FragCoord.xy/float(faceSize);
-    // Match the existing engine camera basis to OpenGL cubemap coordinates.
-    if(copyFace!=0){finalColor=vec4(texture(sourceFace,vec2(1)-uv).rgb,1);return;}
-    vec3 n=direction(uv);
-    vec3 up=abs(n.z)<0.999?vec3(0,0,1):vec3(1,0,0);
-    vec3 tangent=normalize(cross(up,n)),bitangent=cross(n,tangent);
-    float a=roughness*roughness;
-    vec3 sum=vec3(0);float weight=0;
-    for(uint i=0u;i<64u;++i){
-        float phi=6.28318530718*float(i)/64.0;
-        float y=radical(i);
-        float c=sqrt((1.0-y)/(1.0+(a*a-1.0)*y));
-        float s=sqrt(max(0.0,1.0-c*c));
-        vec3 h=tangent*cos(phi)*s+bitangent*sin(phi)*s+n*c;
-        vec3 l=normalize(2.0*dot(n,h)*h-n);
-        float w=max(dot(n,l),0.0);
-        sum+=textureLod(sourceCube,l,0.0).rgb*w;weight+=w;
-    }
-    finalColor=vec4(sum/max(weight,0.00001),1);
-}
-)";
-
-} // namespace
-
 bool SectorRuntimeReflectionProbes::Initialize(
     engine::AssetManager &assets, engine::AssetScopeHandle scope, SectorPbrEnvironment &environment,
     std::size_t lightCapacity, std::size_t receiverCapacity, std::size_t objectCapacity)
@@ -100,7 +46,7 @@ bool SectorRuntimeReflectionProbes::Initialize(
     }
     for (int i = 0; i < 3; ++i)
         raw[i] = assets.CreateRenderCubemap(scope, "reflection-capture-scratch", 64 << i);
-    filterShader = LoadShaderFromMemory(FilterVs, FilterFs);
+    filterShader = LoadGameShader(GameShader::ReflectionFilter);
     bool ready = !engine::IsNull(raw[0]) && !engine::IsNull(raw[1]) && !engine::IsNull(raw[2]) &&
                  filterShader.id != 0 && filterShader.id != rlGetShaderIdDefault();
     for (int i = 0; i < 3 && ready; ++i)
@@ -116,10 +62,11 @@ bool SectorRuntimeReflectionProbes::Initialize(
     if (!ready)
     {
         for (auto &p : environment.localProbes)
-            p.failed = true;
+            p.resourceFailed = p.failed = true;
         TraceLog(LOG_WARNING,
                  "Runtime reflections unavailable: GPU resource initialization failed");
         Shutdown();
+        stats.failed = environment.localProbes.size();
         return false;
     }
     glGenFramebuffers(1, &framebuffer);
@@ -136,8 +83,10 @@ bool SectorRuntimeReflectionProbes::Initialize(
     unit = 1;
     SetShaderValue(filterShader, GetShaderLocation(filterShader, "sourceFace"), &unit,
                    SHADER_UNIFORM_INT);
-    for (const auto &p : environment.localProbes)
+    for (auto &p : environment.localProbes)
     {
+        p.resourceFailed = !assets.GetCubemap(p.cubemap) || !assets.GetCubemap(p.inactive);
+        MarkSectorReflectionProbeDirty(p, environment.seconds, true);
         for (int size = p.definition.resolution; size; size /= 2)
             stats.allocationBytes += static_cast<std::uint64_t>(size) * size * 6 * 8 * 2;
     }
@@ -330,29 +279,62 @@ bool SectorRuntimeReflectionProbes::InitialReady(const SectorPbrEnvironment &e) 
     if (!initialRequired)
         return false;
     for (const auto &p : e.localProbes)
-        if (p.required && !p.ready && !p.failed)
+        if (!IsSectorReflectionProbePrepared(p))
             return false;
     return true;
+}
+
+bool SectorRuntimeReflectionProbes::CheckGlErrors(SectorReflectionFailureStage stage)
+{
+    DrainSectorReflectionGlErrors(failure, stage, [] { return glGetError(); });
+    return failure.reason == SectorReflectionFailureReason::None;
+}
+
+bool SectorRuntimeReflectionProbes::FailCapture(SectorReflectionFailureStage stage,
+        SectorReflectionFailureReason reason, int outputFace, int outputMip, int x, int y)
+{
+    if (failure.reason == SectorReflectionFailureReason::None) {
+        failure.stage = stage;
+        failure.reason = reason;
+        failure.face = outputFace;
+        failure.mip = outputMip;
+        failure.tileX = x;
+        failure.tileY = y;
+    }
+    return false;
 }
 
 bool SectorRuntimeReflectionProbes::FilterTile(engine::AssetManager &assets, unsigned int output,
                                                int resolution, int outputFace, int outputMip, int x,
                                                int y, bool copy)
 {
+    const auto stage = copy ? SectorReflectionFailureStage::Copy : SectorReflectionFailureStage::Filter;
+    failure.face = outputFace;
+    failure.mip = outputMip;
+    failure.tileX = x;
+    failure.tileY = y;
+    const auto *cube = assets.GetCubemap(raw[resolution == 64 ? 0 : resolution == 128 ? 1 : 2]);
+    if (!output || (!copy && (!cube || !cube->id)))
+        return FailCapture(stage, SectorReflectionFailureReason::MissingCubemap,
+                           outputFace, outputMip, x, y);
     const int size = std::max(1, resolution >> outputMip);
     const float roughness = outputMip / std::log2(static_cast<float>(resolution));
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            GL_TEXTURE_CUBE_MAP_POSITIVE_X + outputFace, output, outputMip);
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        return false;
+    const unsigned int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        failure.framebufferStatus = status;
+        FailCapture(stage, SectorReflectionFailureReason::IncompleteFramebuffer,
+                    outputFace, outputMip, x, y);
+    }
+    if (!CheckGlErrors(stage)) return false;
     glViewport(0, 0, size, size);
     glEnable(GL_SCISSOR_TEST);
     glScissor(x, y, copy ? size : std::min(64, size - x), copy ? size : std::min(64, size - y));
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
-    const auto *cube = assets.GetCubemap(raw[resolution == 64 ? 0 : resolution == 128 ? 1 : 2]);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, !copy && cube ? cube->id : 0);
     glUseProgram(filterShader.id);
@@ -365,7 +347,7 @@ bool SectorRuntimeReflectionProbes::FilterTile(engine::AssetManager &assets, uns
     glBindVertexArray(0);
     glUseProgram(0);
     glDisable(GL_SCISSOR_TEST);
-    return glGetError() == GL_NO_ERROR;
+    return CheckGlErrors(stage);
 }
 
 void SectorRuntimeReflectionProbes::BeginMainViewFrame()
@@ -385,7 +367,7 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     if (!initialized || e.localProbes.empty())
         return;
     const auto cpuStart = std::chrono::steady_clock::now();
-    stats.ready = stats.failed = stats.queued = stats.required = stats.prepared = 0;
+    stats.ready = stats.failed = stats.queued = stats.required = stats.prepared = stats.retrying = 0;
     stats.demanded = stats.demandedDirty = stats.deferredDirty = 0;
     stats.demandedProbeIds.clear();
     stats.demandedDirtyProbeIds.clear();
@@ -398,9 +380,10 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
         const auto &p = e.localProbes[i];
         stats.ready += p.ready;
         stats.failed += p.failed;
+        stats.retrying += p.dirty && p.captureFailures > 0 && !p.failed;
         stats.queued += p.dirty && !p.failed;
         stats.required += p.required;
-        stats.prepared += p.required && (p.ready || p.failed);
+        stats.prepared += p.required && IsSectorReflectionProbePrepared(p);
         const int id = p.definition.sourceAuthoringProbeId;
         if (demanded(i)) {
             ++stats.demanded;
@@ -415,15 +398,38 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
         }
     }
     const int nextProbe = SelectSectorReflectionProbeUpdate(
-            e, demand, preparing, renderer.Position(), active);
+            e, demand, preparing, renderer.Position(), active, paused);
     if (active >= 0 && nextProbe != active) {
         // The published cube remains untouched; a future request snapshots anew.
         active = -1;
         stats.activeProbeId = -1;
         ++stats.cancelled;
     }
-    if (paused)
+    if (paused || nextProbe < 0)
         return;
+    if (active >= 0 && e.localProbes[active].discontinuity != capturedDiscontinuity)
+    {
+        ++stats.discarded;
+        active = -1;
+        stats.activeProbeId = -1;
+        return;
+    }
+    const bool starting = active < 0;
+    if (starting) inheritedErrorsReported = false;
+    failure = {};
+    failure.probeId = e.localProbes[nextProbe].definition.sourceAuthoringProbeId;
+    failure.attempt = e.localProbes[nextProbe].captureFailures + 1;
+    // Flush queued main-view draws before establishing capture's GL error boundary.
+    rlDrawRenderBatchActive();
+    CheckGlErrors(SectorReflectionFailureStage::BeforeCapture);
+    stats.inheritedGlErrors += failure.inheritedGlErrorCount;
+    if (failure.inheritedGlErrorCount && !inheritedErrorsReported) {
+        TraceLog(LOG_WARNING, "Reflection probe %d: pre-existing OpenGL error 0x%04x (%u errors); "
+                 "not attributed to capture (attempt %d, further inherited errors counted in stats)",
+                 failure.probeId, failure.inheritedGlError, failure.inheritedGlErrorCount,
+                 failure.attempt);
+        inheritedErrorsReported = true;
+    }
     if (queryPending[querySlot])
     {
         GLint available = 0;
@@ -445,11 +451,6 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     if (active < 0)
     {
         active = nextProbe;
-        if (active < 0)
-        {
-            stats.activeProbeId = -1;
-            return;
-        }
         auto &p = e.localProbes[active];
         p.lastStarted = e.seconds;
         capturedAt = e.seconds;
@@ -461,22 +462,15 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
         shadowsReady = false;
         shadowFrames = 0;
         snapshot = current;
+        if (p.captureFailures > 0)
+            captureLights.InvalidateShadowContents();
         captureLights.SetCaptureSources(snapshot);
         SnapshotDoors(world);
         draw.lighting = &captureLights;
         draw.seconds = 0;
-        renderer.PrepareReflectionCapture(draw, p.definition, world);
         stats.activeProbeId = p.definition.sourceAuthoringProbeId;
     }
     auto &p = e.localProbes[active];
-    if (p.discontinuity != capturedDiscontinuity)
-    {
-        ++stats.discarded;
-        active = -1;
-        stats.activeProbeId = -1;
-        return;
-    }
-    rlDrawRenderBatchActive();
     GLint savedFbo = 0, savedReadFbo = 0, savedViewport[4], savedScissor[4], savedProgram = 0,
           savedVao = 0, savedActive = 0;
     GLint savedDepthFunc = 0, savedCullFace = 0, savedBlend[6];
@@ -518,47 +512,66 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     const bool timing = queries[0] && !queryPending[querySlot];
     if (timing)
         glQueryCounter(queries[querySlot * 2], GL_TIMESTAMP);
-    bool success = true;
+    bool success = CheckGlErrors(SectorReflectionFailureStage::Setup);
     int tiles = 0;
     draw.batchesDrawn = draw.batchesCulled = 0;
     draw.culling.objectsDrawn = draw.culling.objectsCulled = 0;
     SwapDoorPoses(world);
-    if (!shadowsReady)
+    if (starting && success) {
+        renderer.PrepareReflectionCapture(draw, p.definition, world);
+        success = CheckGlErrors(SectorReflectionFailureStage::Setup);
+    }
+    if (success && !shadowsReady)
     {
         stats.stage = SectorReflectionCaptureStage::Shadows;
+        failure.previousPendingShadowFaces = captureLights.PendingShadowFaceCount();
         renderer.PrepareReflectionShadows(draw, world);
-        shadowsReady = !captureLights.HasPendingShadowFaces();
+        failure.pendingShadowFaces = captureLights.PendingShadowFaceCount();
+        failure.renderedShadowFaces = captureLights.ShadowRenderStats().renderedTiles;
+        failure.shadowFrames = shadowFrames + 1;
+        shadowsReady = failure.pendingShadowFaces == 0;
+        success = CheckGlErrors(SectorReflectionFailureStage::Shadows);
         // Missing/failed alpha assets must not keep a load gate alive forever.
         if (++shadowFrames > static_cast<int>(MaxDynamicSpotLightShadowCasters) * 3 &&
             !shadowsReady)
-            success = false;
+            success = FailCapture(SectorReflectionFailureStage::Shadows,
+                                  SectorReflectionFailureReason::ShadowTimeout);
     }
-    else if (face < 6)
+    else if (success && face < 6)
     {
         stats.stage = SectorReflectionCaptureStage::Scene;
         const int resolution = p.definition.resolution;
         auto &target = targets[resolution == 64 ? 0 : resolution == 128 ? 1 : 2];
+        failure.face = face;
+        failure.mip = 0;
         renderer.DrawReflectionFace(assets, draw, p.definition, face, target, world, doorLighting);
+        success = CheckGlErrors(SectorReflectionFailureStage::Scene);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, target.native.texture.id);
         const auto *rawTexture = assets.GetCubemap(raw[resolution == 64    ? 0
                                                        : resolution == 128 ? 1
                                                                            : 2]);
         const auto *output = assets.GetCubemap(p.inactive);
-        success = rawTexture && output &&
-                  FilterTile(assets, rawTexture->id, resolution, face, 0, 0, 0, true) &&
+        if (success && (!rawTexture || !output))
+            success = FailCapture(SectorReflectionFailureStage::Copy,
+                                  SectorReflectionFailureReason::MissingCubemap, face, 0);
+        success = CheckGlErrors(SectorReflectionFailureStage::Copy) && success;
+        success = success && FilterTile(assets, rawTexture->id, resolution, face, 0, 0, 0, true) &&
                   FilterTile(assets, output->id, resolution, face, 0, 0, 0, true);
         ++face;
     }
-    else
+    else if (success)
     {
         stats.stage = SectorReflectionCaptureStage::Filter;
         const auto *output = assets.GetCubemap(p.inactive);
+        if (!output)
+            success = FailCapture(SectorReflectionFailureStage::Filter,
+                    SectorReflectionFailureReason::MissingCubemap, filterFace, mip, tileX, tileY);
         const int count = std::clamp(static_cast<int>(0.5 / estimatedTileMs), 1, 6);
         for (int i = 0; i < count && mip < p.mipCount && success; ++i)
         {
             ++tiles;
-            success = output && FilterTile(assets, output->id, p.definition.resolution, filterFace,
+            success = FilterTile(assets, output->id, p.definition.resolution, filterFace,
                                            mip, tileX, tileY, false);
             const int size = std::max(1, p.definition.resolution >> mip);
             tileX += 64;
@@ -588,6 +601,7 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
         timedStages[querySlot] = stats.stage;
     }
     querySlot = (querySlot + 1) % queryPending.size();
+    success = CheckGlErrors(SectorReflectionFailureStage::Setup) && success;
     // Restore raylib's current-FBO dimensions as well as OpenGL: BeginMode3D
     // derives its aspect ratio from this state, not just the GL viewport.
     if (savedFbo)
@@ -644,14 +658,27 @@ void SectorRuntimeReflectionProbes::Step(engine::AssetManager &assets, SectorPbr
     else
         glDisable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
+    success = CheckGlErrors(SectorReflectionFailureStage::Restore) && success;
     stats.face = face;
     stats.mip = mip;
     if (!success)
     {
-        p.failed = true;
+        FailSectorReflectionProbeCapture(p, e.seconds);
+        // A failed draw can leave a shadow tile marked valid despite bad contents.
+        // Rebuild the capture atlas on the next job, without reallocating resources.
+        captureLights.InvalidateShadowContents();
+        stats.lastFailure = failure;
         active = -1;
-        TraceLog(LOG_WARNING, "Reflection probe %d capture failed",
-                 p.definition.sourceAuthoringProbeId);
+        TraceLog(LOG_WARNING, "Reflection probe %d capture failed: stage=%s reason=%s "
+                 "attempt=%d/%d face=%d mip=%d tile=%d,%d GL=0x%04x errors=%u FBO=0x%04x "
+                 "shadowFrames=%d pending=%zu previousPending=%zu rendered=%zu; %s (delay=%.2fs)",
+                 failure.probeId, SectorReflectionFailureStageName(failure.stage),
+                 SectorReflectionFailureReasonName(failure.reason), failure.attempt,
+                 SectorReflectionMaxCaptureAttempts, failure.face, failure.mip, failure.tileX,
+                 failure.tileY, failure.glError, failure.glErrorCount, failure.framebufferStatus,
+                 failure.shadowFrames, failure.pendingShadowFaces, failure.previousPendingShadowFaces,
+                 failure.renderedShadowFaces, p.failed ? "retries exhausted" : "retry queued",
+                 p.failed ? 0.0 : p.retryAt - e.seconds);
     }
     else if (mip >= p.mipCount)
     {

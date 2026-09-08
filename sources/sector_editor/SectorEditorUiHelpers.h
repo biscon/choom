@@ -8,6 +8,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <iterator>
 #include <string_view>
 
 namespace game {
@@ -39,6 +40,38 @@ inline SectorEditorWorkspaceLayout BuildSectorEditorWorkspaceLayout()
                             - PanelGap * 2.0f}};
 }
 
+// Drawing and scroll measurement share these lists so new tools extend the scroll range.
+inline constexpr SectorEditorTool SectorEditorGraphTools[] = {
+        SectorEditorTool::Select,
+        SectorEditorTool::AuthoringLine,
+        SectorEditorTool::AuthoringRectangle,
+        SectorEditorTool::AuthoringInsertVertex
+};
+
+inline constexpr SectorEditorTool SectorEditorMapTools[] = {
+        SectorEditorTool::Structure,
+        SectorEditorTool::Ladder,
+        SectorEditorTool::RuntimeObject,
+        SectorEditorTool::StaticModel,
+        SectorEditorTool::DynamicModel,
+        SectorEditorTool::Item,
+        SectorEditorTool::Npc,
+        SectorEditorTool::Door,
+        SectorEditorTool::Window,
+        SectorEditorTool::DuctAccess,
+        SectorEditorTool::Trigger,
+        SectorEditorTool::LevelMarker,
+        SectorEditorTool::SoundEmitter,
+        SectorEditorTool::AuthoringFogVolume,
+        SectorEditorTool::ReflectionProbe,
+        SectorEditorTool::StaticLight,
+        SectorEditorTool::StaticSpotLight,
+        SectorEditorTool::StaticRectLight,
+        SectorEditorTool::DynamicLight,
+        SectorEditorTool::DynamicSpotLight,
+        SectorEditorTool::DynamicRectLight
+};
+
 inline float MeasureSectorEditorToolsContentHeight(
         float rowHeight,
         float gap,
@@ -52,9 +85,10 @@ inline float MeasureSectorEditorToolsContentHeight(
     const auto rowsHeight = [rowHeight, gap](int count) {
         return static_cast<float>(count) * (rowHeight + gap);
     };
-    return sectionLabelHeight + rowsHeight(5)
+    return sectionLabelHeight + rowsHeight(static_cast<int>(std::size(SectorEditorGraphTools)) + 1)
             + separatorHeight + sectionLabelHeight
-            + rowsHeight(20 + (triggerModeRowVisible ? 1 : 0)
+            + rowsHeight(static_cast<int>(std::size(SectorEditorMapTools))
+                    + (triggerModeRowVisible ? 1 : 0)
                     + (itemDefinitionRowVisible ? 1 : 0))
             + separatorHeight + roomtoneFadeLabelHeight + gap + rowsHeight(2)
             + separatorHeight + rowsHeight(1)
@@ -476,5 +510,35 @@ float MeasureSectorEditorWrappedTextHeight(
         const char* text,
         float boundsWidth,
         int minimumLines = 1);
+
+struct SectorEditorBaseboardLayout {
+    Rectangle checkbox;
+    Rectangle labels[2];
+    Rectangle inputs[2];
+    float materialY = 0;
+    float height = 0;
+};
+
+inline SectorEditorBaseboardLayout BuildSectorEditorBaseboardLayout(
+        float y, float width, float rowHeight, float gap, bool enabled)
+{
+    SectorEditorBaseboardLayout result;
+    const float start = y;
+    result.checkbox = {0, y, width, 36};
+    y += 36 + gap;
+    if (enabled) {
+        for (int i = 0; i < 2; ++i) {
+            result.labels[i] = {0, y, width, 26};
+            y += 26;
+            result.inputs[i] = {0, y, width, rowHeight};
+            y += rowHeight + gap;
+        }
+        result.materialY = y;
+        // Matches the existing two-line material picker row.
+        y += SectorEditorInspectorTextureRowHeight() + gap;
+    }
+    result.height = y - start;
+    return result;
+}
 
 } // namespace game

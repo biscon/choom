@@ -269,6 +269,20 @@ struct SectorTopologyLineDef {
     SectorTopologyLineDefFlags flags;
 };
 
+// Dimensions use authored units (8 units per meter), independent of the vertex grid.
+struct SectorBaseboardSettings {
+    bool enabled = false;
+    float height = 1.5f;
+    float thickness = 0.14f;
+    std::string materialId;
+};
+
+inline bool IsValidSectorBaseboardSettings(const SectorBaseboardSettings& value)
+{
+    return std::isfinite(value.height) && value.height > 0.0f
+            && std::isfinite(value.thickness) && value.thickness > 0.0f;
+}
+
 struct SectorTopologySideDef {
     int id = -1;
     int lineDefId = -1;
@@ -279,6 +293,7 @@ struct SectorTopologySideDef {
     SectorTopologyWallPartSettings lower;
     SectorTopologyWallPartSettings upper;
     SectorTopologyWallPartSettings middle;
+    SectorBaseboardSettings baseboard;
 };
 
 struct SectorTopologySector {

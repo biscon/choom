@@ -46,6 +46,7 @@ enum class TopologyTexturePickerTargetKind {
     AuthoringFaceAnchor,
     AuthoringSide,
     AuthoringStructuralPrimitive,
+    AuthoringBaseboard,
     MapSky,
     RuntimeDoor,
     RuntimeDuctFrame,
@@ -57,6 +58,13 @@ enum class PreviewSettingsTab {
     Sky,
     Lighting,
     Fog
+};
+
+// Session-only browsing state, independent of the current assignment target.
+struct SectorEditorAssetPickerBrowsingState {
+    char filterBuffer[256] = {};
+    engine::UIScrollState scroll;
+    std::string selectedAssetId;
 };
 
 struct TexturePickerState {
@@ -76,11 +84,10 @@ struct TexturePickerState {
     SectorTopologySideKind authoringSide = SectorTopologySideKind::Front;
     int runtimeObjectId = -1;
     int selectedTextureIndex = -1;
-    engine::UIScrollState scroll;
+    SectorEditorAssetPickerBrowsingState browsing;
     std::vector<std::string> allMaterialIds;
     std::vector<std::string> materialIds;
     std::vector<const char*> optionLabels;
-    char filterBuffer[256] = {};
     std::string filterMessage;
 };
 

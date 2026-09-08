@@ -34,6 +34,7 @@ void VisitMapMaterials(
         VisitWallPart(side.lower, visitor);
         VisitWallPart(side.upper, visitor);
         VisitWallPart(side.middle, visitor);
+        visitor(side.baseboard.materialId);
     }
     for (SectorTopologySector& sector : map.sectors) {
         visitor(sector.floorMaterialId);
@@ -56,6 +57,7 @@ void VisitAuthoringMaterials(
         VisitWallPart(side.lower, visitor);
         VisitWallPart(side.upper, visitor);
         VisitWallPart(side.middle, visitor);
+        visitor(side.baseboard.materialId);
     }
     for (SectorAuthoringFaceAnchor& anchor : graph.faceAnchors) {
         visitor(anchor.floorMaterialId);

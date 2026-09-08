@@ -8,6 +8,62 @@
 namespace game
 {
 
+const char* SectorReflectionFailureStageName(SectorReflectionFailureStage stage)
+{
+    switch (stage) {
+    case SectorReflectionFailureStage::BeforeCapture: return "before capture";
+    case SectorReflectionFailureStage::Setup: return "setup";
+    case SectorReflectionFailureStage::Shadows: return "shadows";
+    case SectorReflectionFailureStage::Scene: return "scene";
+    case SectorReflectionFailureStage::Copy: return "copy";
+    case SectorReflectionFailureStage::Filter: return "filter";
+    case SectorReflectionFailureStage::Restore: return "restore";
+    }
+    return "unknown";
+}
+
+const char* SectorReflectionFailureReasonName(SectorReflectionFailureReason reason)
+{
+    switch (reason) {
+    case SectorReflectionFailureReason::None: return "none";
+    case SectorReflectionFailureReason::GlError: return "OpenGL error";
+    case SectorReflectionFailureReason::MissingCubemap: return "missing cubemap";
+    case SectorReflectionFailureReason::IncompleteFramebuffer: return "incomplete framebuffer";
+    case SectorReflectionFailureReason::ShadowTimeout: return "shadow preparation timeout";
+    }
+    return "unknown";
+}
+
+void RecordSectorReflectionGlError(SectorReflectionCaptureFailure& failure,
+        SectorReflectionFailureStage stage, unsigned int error)
+{
+    if (!error) return;
+    if (stage == SectorReflectionFailureStage::BeforeCapture) {
+        if (!failure.inheritedGlError) failure.inheritedGlError = error;
+        ++failure.inheritedGlErrorCount;
+        return;
+    }
+    if (failure.reason == SectorReflectionFailureReason::None) {
+        failure.reason = SectorReflectionFailureReason::GlError;
+        failure.stage = stage;
+    }
+    if (!failure.glError) failure.glError = error;
+    ++failure.glErrorCount;
+}
+
+void FailSectorReflectionProbeCapture(SectorPbrEnvironment::LocalProbe& probe, double seconds)
+{
+    probe.captureFailures = std::min(probe.captureFailures + 1, SectorReflectionMaxCaptureAttempts);
+    probe.failed = probe.resourceFailed || probe.captureFailures >= SectorReflectionMaxCaptureAttempts;
+    probe.retryAt = seconds + (probe.captureFailures == 1 ? 0.25 : 1.0);
+    probe.dirty = true;
+}
+
+bool IsSectorReflectionProbePrepared(const SectorPbrEnvironment::LocalProbe& probe)
+{
+    return !probe.required || probe.ready || probe.failed;
+}
+
 Camera3D SectorReflectionFaceCamera(Vector3 position, int face)
 {
     const Vector3 directions[] = {{1, 0, 0},  {-1, 0, 0}, {0, 1, 0},
@@ -24,16 +80,20 @@ void MarkSectorReflectionProbeDirty(SectorPbrEnvironment::LocalProbe &probe, dou
     if (!probe.dirty)
         probe.dirtySince = seconds;
     probe.dirty = true;
-    probe.failed = false;
     ++probe.revision;
-    if (discontinuity)
+    if (discontinuity) {
+        probe.failed = probe.resourceFailed;
+        probe.captureFailures = 0;
+        probe.retryAt = 0;
         ++probe.discontinuity;
+    }
 }
 
 bool CanStartSectorReflectionProbe(const SectorPbrEnvironment::LocalProbe &probe, double seconds,
                                    bool preparing, bool demanded)
 {
     return probe.definition.enabled && probe.dirty && !probe.failed
+           && !probe.resourceFailed && seconds >= probe.retryAt
            && (preparing ? probe.required : demanded) &&
            seconds - probe.lastStarted >= SectorReflectionUpdateInterval &&
            (!probe.hasPrevious || seconds - probe.publishedAt >= SectorReflectionTransitionSeconds);
@@ -56,11 +116,12 @@ bool IsSectorReflectionProbeDemanded(const SectorPbrEnvironment& environment,
 
 int SelectSectorReflectionProbeUpdate(const SectorPbrEnvironment& environment,
         const SectorReflectionDemand& demand, bool preparing, Vector3 viewerPosition,
-        int activeProbeIndex)
+        int activeProbeIndex, bool paused)
 {
     if (activeProbeIndex >= 0 && IsSectorReflectionProbeDemanded(
             environment, demand, static_cast<std::size_t>(activeProbeIndex), preparing))
         return activeProbeIndex;
+    if (paused) return -1;
     int best = -1;
     double bestScore = -1e30;
     for (std::size_t i = 0; i < environment.localProbes.size(); ++i) {
@@ -119,6 +180,8 @@ void PublishSectorReflectionProbe(SectorPbrEnvironment::LocalProbe &probe, doubl
     probe.hasPrevious = probe.ready;
     probe.ready = true;
     probe.failed = false;
+    probe.captureFailures = 0;
+    probe.retryAt = 0;
     probe.publishedAt = seconds;
     std::swap(probe.cubemap, probe.inactive);
     probe.dirty = probe.revision != capturedRevision;

@@ -1,6 +1,7 @@
 #include "sector_editor/services/static_model_picker/SectorEditorModelPickerModal.h"
 
 #include "engine/input/InputEvents.h"
+#include "sector_editor/services/SectorEditorAssetPickerUi.h"
 #include "sector_editor/SectorEditorHelpers.h"
 
 #include <algorithm>
@@ -36,6 +37,7 @@ SectorEditorModelPickerModalResult DrawSectorEditorModelPickerModal(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         SectorEditorStaticModelPickerService& picker)
 {
     StaticModelPickerState& state = picker.State();
@@ -78,11 +80,19 @@ SectorEditorModelPickerModalResult DrawSectorEditorModelPickerModal(
             font,
             PickerTitle(state.target));
 
+    const Rectangle filterBounds{modal.x + 22.0f, modal.y + 68.0f, modal.width - 44.0f, 42.0f};
+    if (DrawSectorEditorAssetPickerFilter(
+                ui, config, input, assets, smallFont,
+                "sector_editor_model_picker_filter", filterBounds,
+                state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer))) {
+        picker.ApplyFilter();
+    }
+
+    const float buttonY = modal.y + modal.height - 64.0f;
+    const float listY = filterBounds.y + filterBounds.height + 12.0f;
     const Rectangle listBounds{
-            modal.x + 22.0f,
-            modal.y + 68.0f,
-            modal.width - 44.0f,
-            450.0f};
+            modal.x + 22.0f, listY, modal.width - 44.0f,
+            buttonY - 68.0f - listY};
     const float clientWidth = std::max(
             0.0f,
             listBounds.width - config.borderThickness * 2.0f);
@@ -92,10 +102,7 @@ SectorEditorModelPickerModalResult DrawSectorEditorModelPickerModal(
                     - engine::DefaultScrollAreaPaddingPx * 2.0f);
     const Vector2 contentSize{
             listContentW,
-            std::max(
-                    listBounds.height,
-                    config.listItemHeight
-                            * static_cast<float>(state.optionLabels.size()))};
+            config.listItemHeight * static_cast<float>(state.optionLabels.size())};
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
             ui,
             config,
@@ -103,7 +110,7 @@ SectorEditorModelPickerModalResult DrawSectorEditorModelPickerModal(
             "sector_editor_model_picker_scroll",
             listBounds,
             contentSize,
-            state.scroll);
+            state.browsing.scroll);
     if (!state.optionLabels.empty()) {
         const int previous = state.selectedModelIndex;
         engine::List(
@@ -121,7 +128,11 @@ SectorEditorModelPickerModalResult DrawSectorEditorModelPickerModal(
             picker.SelectIndex(state.selectedModelIndex);
         }
     }
-    engine::EndScrollArea(ui, config, input, scroll, state.scroll);
+    engine::EndScrollArea(ui, config, input, scroll, state.browsing.scroll);
+    if (!state.filterMessage.empty()) {
+        engine::Text(config, assets, listBounds, smallFont, state.filterMessage.c_str(),
+                engine::UITextJustify::Center, config.mutedTextColor, true);
+    }
 
     engine::Text(
             config,
@@ -132,13 +143,12 @@ SectorEditorModelPickerModalResult DrawSectorEditorModelPickerModal(
                     listBounds.width,
                     32.0f},
             font,
-            state.scanMessage.c_str(),
+            state.filterMessage.empty() ? state.scanMessage.c_str() : state.filterMessage.c_str(),
             engine::UITextJustify::Left,
             state.modelPaths.empty()
                     ? config.invalidColor
                     : config.mutedTextColor);
 
-    const float buttonY = modal.y + modal.height - 64.0f;
     if (engine::Button(
                 ui, config, input, assets,
                 "sector_editor_model_picker_refresh",

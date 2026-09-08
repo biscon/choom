@@ -18,6 +18,8 @@ namespace game {
 
 class SectorLightDustRenderer {
 public:
+    // Explicit load phase only; Apply never creates shader resources.
+    bool Initialize();
     static constexpr int MaxEmitters = 16;
     static constexpr int MaxParticles = 512;
     static constexpr int MaxParticlesPerEmitter = 128;
@@ -81,7 +83,6 @@ private:
         int shadowMap1 = -1;
     };
 
-    bool EnsureResources();
     bool EnsureShader();
     bool EnsureMesh();
     void ClearBorrowedMaterialTextures();

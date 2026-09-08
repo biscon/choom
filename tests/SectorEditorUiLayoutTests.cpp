@@ -520,7 +520,7 @@ void TestMainMenuWorkspaceAndToolsLayouts()
     Check(Near(itemExpanded - collapsed, rowH + gap),
           "tools content height includes the conditional Item definition row");
     Check(Near(collapsed, 26.0f + 5.0f * (rowH + gap)
-                  + 22.0f + 26.0f + 20.0f * (rowH + gap)
+                  + 22.0f + 26.0f + 21.0f * (rowH + gap)
                   + 22.0f + 26.0f + gap + 2.0f * (rowH + gap)
                   + 22.0f + (rowH + gap) + 12.0f),
           "tools content height reaches the final Grid control with padding");
@@ -967,8 +967,26 @@ void TestLightProxyPlacementMath()
 
 } // namespace
 
+void TestBaseboardLayout()
+{
+    for (float width : {180.0f, 240.0f, 320.0f}) {
+        const auto off = game::BuildSectorEditorBaseboardLayout(0, width, 36, 8, false);
+        const auto on = game::BuildSectorEditorBaseboardLayout(0, width, 36, 8, true);
+        Check(Near(off.height, 44), "disabled baseboard reserves only checkbox space");
+        for (int i = 0; i < 2; ++i) {
+            Check(!Overlaps(on.labels[i], on.inputs[i]), "baseboard labels never overlap dimension fields");
+            Check(on.inputs[i].x + on.inputs[i].width <= width, "baseboard field fits narrow pane");
+        }
+        const auto row = game::BuildSectorEditorInspectorTextureRowLayout(on.materialY, width, 8, 38, 72);
+        Check(row.pickerButtonRect.y + row.pickerButtonRect.height <= on.height,
+                "expanded baseboard scroll extent includes final picker button");
+        Check(on.materialY >= on.inputs[1].y + on.inputs[1].height, "material row follows dimensions");
+    }
+}
+
 int main()
 {
+    TestBaseboardLayout();
     TestMainMenuShortcutMatching();
     TestKeyboardPanModifierPolicy();
     TestLightmapBakeSetupModalStateLifecycle();

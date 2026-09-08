@@ -49,6 +49,8 @@ list(FILTER LUA55_SOURCES EXCLUDE REGEX "/luac\\.c$")
 add_library(lua55 STATIC ${LUA55_SOURCES})
 target_include_directories(lua55 PUBLIC sources/lua)
 
+# These reusable modules are also linked by graphics-free shader tools/tests.
+list(FILTER PROJECT_SOURCES EXCLUDE REGEX "/engine/render/Shader(Source|Program)\\.cpp$")
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE sources)
@@ -202,13 +204,59 @@ target_include_directories(xatlas PUBLIC
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE xatlas)
 
+add_library(shader_source STATIC sources/engine/render/ShaderSource.cpp)
+target_include_directories(shader_source PUBLIC sources)
+add_library(shader_runtime STATIC sources/engine/render/ShaderProgram.cpp)
+target_link_libraries(shader_runtime PUBLIC shader_source raylib)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(shader_runtime PRIVATE ASSETS_PATH="./assets/")
+else()
+    target_compile_definitions(shader_runtime PRIVATE
+            ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+endif()
+target_link_libraries(${PROJECT_NAME} PRIVATE shader_runtime)
+
+add_executable(shader_source_tool tools/shader_source_tool.cpp)
+target_link_libraries(shader_source_tool PRIVATE shader_source)
+find_package(Python3 COMPONENTS Interpreter QUIET)
+find_program(GLSLANG_VALIDATOR glslangValidator)
+if(NOT GLSLANG_VALIDATOR)
+    set(GLSLANG_VALIDATOR_COMMAND glslangValidator)
+else()
+    set(GLSLANG_VALIDATOR_COMMAND "${GLSLANG_VALIDATOR}")
+endif()
+if(Python3_Interpreter_FOUND)
+    add_custom_target(check_shaders
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_shaders.py"
+                    --tool $<TARGET_FILE:shader_source_tool>
+                    --root "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders"
+                    --validator "${GLSLANG_VALIDATOR_COMMAND}"
+            DEPENDS shader_source_tool
+            USES_TERMINAL VERBATIM)
+else()
+    add_custom_target(check_shaders
+            COMMAND ${CMAKE_COMMAND} -E echo "Python 3 and glslangValidator are required for shader validation"
+            COMMAND ${CMAKE_COMMAND} -E false)
+endif()
+
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(shader_source_tests tests/ShaderSourceTests.cpp)
+    target_link_libraries(shader_source_tests PRIVATE shader_source)
+    target_compile_definitions(shader_source_tests PRIVATE
+            SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders")
+    add_test(NAME shader_source COMMAND shader_source_tests)
+    if(Python3_Interpreter_FOUND AND GLSLANG_VALIDATOR)
+        add_test(NAME shader_validation
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_shaders.py"
+                        --tool $<TARGET_FILE:shader_source_tool>
+                        --root "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders"
+                        --validator "${GLSLANG_VALIDATOR}")
+    endif()
     add_executable(opaque_draw_policy_tests tests/OpaqueDrawPolicyTests.cpp)
     target_include_directories(opaque_draw_policy_tests PRIVATE sources)
-    target_link_libraries(opaque_draw_policy_tests PRIVATE raylib)
-    target_compile_definitions(opaque_draw_policy_tests PRIVATE
-            GLASS_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorWindowRenderer.cpp")
+    target_link_libraries(opaque_draw_policy_tests PRIVATE raylib shader_source)
+    target_compile_definitions(opaque_draw_policy_tests PRIVATE SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders")
     add_test(NAME opaque_draw_policy COMMAND opaque_draw_policy_tests)
     add_executable(script_system_tests
             tests/ScriptSystemTests.cpp
@@ -249,7 +297,8 @@ if(BUILD_TESTING)
             sources/engine/render/ToneMapping.cpp
     )
     target_include_directories(render_color_foundations_tests PRIVATE sources)
-    target_link_libraries(render_color_foundations_tests PRIVATE raylib)
+    target_link_libraries(render_color_foundations_tests PRIVATE raylib shader_source)
+    target_compile_definitions(render_color_foundations_tests PRIVATE SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders")
     add_test(NAME render_color_foundations COMMAND render_color_foundations_tests)
 
     add_executable(model_node_animation_tests
@@ -309,7 +358,7 @@ if(BUILD_TESTING)
             sources/engine/render/HdrEffectPolicy.cpp
     )
     target_include_directories(fps_viewmodel_tests PRIVATE sources)
-    target_link_libraries(fps_viewmodel_tests PRIVATE raylib)
+    target_link_libraries(fps_viewmodel_tests PRIVATE raylib shader_runtime)
     add_test(NAME fps_viewmodel COMMAND fps_viewmodel_tests)
 
     add_executable(player_health_visual_tests
@@ -333,8 +382,6 @@ if(BUILD_TESTING)
             LIQUID_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLiquidRenderer.cpp"
             UNDERWATER_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorUnderwaterRenderer.cpp"
             BILLBOARD_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBillboardRenderer.cpp"
-            FLASHLIGHT_PROFILE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorFlashlightProfileSampling.h"
-            DYNAMIC_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicShadowSampling.h"
             BLOOM_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBloomRenderer.cpp"
             DISTANCE_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDistanceFogRenderer.cpp"
             ANALYTIC_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorAnalyticFogRenderer.cpp"
@@ -344,9 +391,9 @@ if(BUILD_TESTING)
             MUZZLE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/game/FpsViewmodelEffectsRenderer.cpp"
             DYNAMIC_MODEL_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicModelShadowRenderer.cpp"
             DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicLightingRenderer.cpp"
-            DYNAMIC_SHADOW_SAMPLING_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicShadowSampling.h"
             MAIN_RENDER_GRAPH_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/Main.cpp")
-    target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib)
+    target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib shader_source)
+    target_compile_definitions(pbr_lighting_policy_tests PRIVATE SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders")
     add_test(NAME pbr_lighting_policy COMMAND pbr_lighting_policy_tests)
 
     add_executable(sector_runtime_reflection_tests
@@ -461,6 +508,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorMaterialRefactor.cpp
             sources/sector_demo/SectorMaterialRegistry.cpp
@@ -482,7 +530,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_authoring_graph_tests PRIVATE sources)
     target_compile_definitions(sector_authoring_graph_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_authoring_graph_tests PRIVATE raylib xatlas)
+    target_link_libraries(sector_authoring_graph_tests PRIVATE shader_runtime raylib xatlas)
     add_test(NAME sector_authoring_graph COMMAND sector_authoring_graph_tests)
 
     add_executable(sector_topology_serialization_tests
@@ -516,6 +564,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_generated_geometry_tests
             tests/SectorTopologyGeneratedGeometryTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -535,6 +584,7 @@ if(BUILD_TESTING)
             sources/sector_demo/renderer/SectorStaticSpecularLighting.cpp
             sources/engine/render/ColorTransfer.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorMeshBuilder.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -561,6 +611,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorDynamicPointLightSelection.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorLightmapReport.cpp
             sources/sector_demo/SectorReflectionProbes.cpp
@@ -591,6 +642,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -724,6 +776,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
@@ -747,7 +800,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_runtime_object_tests PRIVATE sources)
     target_compile_definitions(sector_runtime_object_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_runtime_object_tests PRIVATE raylib xatlas lua55 recastnavigation)
+    target_link_libraries(sector_runtime_object_tests PRIVATE shader_runtime raylib xatlas lua55 recastnavigation)
     add_test(NAME sector_runtime_object COMMAND sector_runtime_object_tests)
 
     add_executable(sector_sky_cylinder_tests
@@ -870,6 +923,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp

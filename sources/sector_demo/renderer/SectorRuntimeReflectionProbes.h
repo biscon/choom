@@ -30,6 +30,8 @@ struct SectorRuntimeReflectionStats
     int activeProbeId = -1;
     int face = 0, mip = 0;
     std::size_t queued = 0, ready = 0, failed = 0, required = 0, prepared = 0;
+    std::size_t retrying = 0, inheritedGlErrors = 0;
+    SectorReflectionCaptureFailure lastFailure;
     std::size_t completed = 0, discarded = 0, overruns = 0;
     std::size_t demanded = 0, demandedDirty = 0, deferredDirty = 0, cancelled = 0;
     std::size_t batchesDrawn = 0, batchesCulled = 0, objectsDrawn = 0, objectsCulled = 0;
@@ -70,6 +72,8 @@ class SectorRuntimeReflectionProbes
     int active = -1, face = 0, mip = 1, filterFace = 0, tileX = 0, tileY = 0;
     bool shadowsReady = false;
     int shadowFrames = 0;
+    bool inheritedErrorsReported = false;
+    SectorReflectionCaptureFailure failure;
     std::uint64_t capturedRevision = 0, capturedDiscontinuity = 0;
     double capturedAt = 0;
     std::array<engine::TextureHandle, 3> raw{};
@@ -100,6 +104,9 @@ class SectorRuntimeReflectionProbes
     SectorReflectionCaptureDrawContext draw;
     std::vector<SectorPreviewDynamicPointLightSource> observed, current, snapshot;
     SectorRuntimeReflectionStats stats;
+    bool CheckGlErrors(SectorReflectionFailureStage stage);
+    bool FailCapture(SectorReflectionFailureStage stage, SectorReflectionFailureReason reason,
+                     int outputFace = -1, int outputMip = -1, int x = -1, int y = -1);
     bool FilterTile(engine::AssetManager &assets, unsigned int output, int resolution,
                     int outputFace, int outputMip, int x, int y, bool copy);
 };

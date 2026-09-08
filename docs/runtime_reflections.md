@@ -110,10 +110,30 @@ initial reflection preparation. Simulation remains paused. Probes for initially
 visible sectors, the spawn sector and directly open adjacent sectors are
 prepared before the loading fade. Preview similarly waits for assets and nearby
 probes, displays progress, and permits Escape to cancel. Failed resources are
-terminal for preparation and fall back instead of hanging the load gate.
+terminal for preparation and fall back instead of hanging the load gate. Transient
+capture failures get two retries, after 0.25 seconds and 1 second (three failed
+attempts maximum). Initial preparation waits through those retries. Normal retries
+still require receiver demand, respect pause and the previous-cube crossfade, and
+start from fresh light/door snapshots and refreshed capture shadows. Partial cubes
+are never published; an existing complete reflection stays available.
+
+Success, Refresh, and discrete scene invalidation reset the retry budget.
+Continuous dirty updates and demand cancellation do not. After the third failure,
+the probe stays failed until Refresh or discrete invalidation. GPU resource
+initialization failures require resource reinitialization rather than retries.
+
+Capture warnings identify the probe, attempt, stage (setup/shadows/scene/copy/filter/
+restore), reason, zero-based face/mip/tile, GL error code/count and framebuffer
+status. Shadow timeouts also report elapsed shadow frames, pending faces before
+and after the last step, and faces rendered in that step. The existing shadow
+watchdog and per-frame work budgets remain in effect. Every capture stage drains
+all GL errors; errors already pending before capture are reported separately and
+do not fail the probe. Inherited errors are counted, with at most one warning per
+capture attempt. Capture failures emit one warning per failed attempt.
 
 The preview Probes tab exposes Refresh, Pause/Resume, queue/readiness/failure
-counts, demanded/demanded-dirty/deferred-dirty IDs, demand cancellations, active
+counts, retrying count, inherited GL error count, the last capture failure and its
+attempt (retained after recovery), demanded/demanded-dirty/deferred-dirty IDs, demand cancellations, active
 stage/face/mip, per-face submitted/culled geometry, GPU/CPU timings and memory.
 CPU stage timings describe the current frame and clear while idle or paused;
 asynchronous GPU timings are labeled as the last completed stage measurement.
@@ -132,7 +152,7 @@ Automated checks:
 
 - `cmake --build cmake-build-debug -j2`
 - `ctest --test-dir cmake-build-debug --output-on-failure`
-- `python3 tools/check_reflection_shaders.py` (requires `glslangValidator`)
+- `cmake --build cmake-build-debug --target check_shaders` (requires Python 3 and `glslangValidator`; see [shader sources](shaders.md))
 - `git diff --check`
 
 Manual verification remains with the user: inspect hub sector 96 under Full PBR
@@ -148,3 +168,20 @@ captures settle, flicker alone must cause no new captures. Probes 3/9 must remai
 deferred when no visible receiver uses them. Compare normal operation with
 paused reflections, then approach those probes and verify on-demand refresh,
 light switches, and doorway blending.
+
+For intermittent capture failures, reproduce opening `door_200` and watch probe 12
+(the reported probe may vary); compare closing/reopening the door and leaving/
+re-entering the affected sectors. Allow retries to finish without pressing Refresh.
+Check the last-failure stage/reason and console detail if a failure persists, then
+verify that Refresh permits a fresh set of attempts.
+
+Door leaves and frames have separate shadow-caster identities, even if they share
+an object ID or model asset. Main-view rendering and a reflection snapshot can
+alternate between different door poses and increment the shared caster revision
+every frame. Rechecking the capture's unchanged bounds must not compare the frame
+against the leaf and repeatedly dirty completed shadow faces. That identity
+collision could stall a six-face point shadow with five faces still pending until
+the capture timed out; a fresh retry after door movement stopped could succeed.
+The CPU regression covers repeated snapshot rechecks, real leaf movement, removal,
+and caster reordering. Repeating the door scenario on the target GPU remains a
+manual check.

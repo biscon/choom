@@ -216,6 +216,24 @@ task-scoping rules in the later sections.
   specifically being fixed.
 - Missing, failed, or pending textures must not crash preview rendering.
 
+## Editor UI layout rules
+
+- Whenever adding, removing, or resizing controls in a scroll pane, update its
+  content extent in the same change, including conditional rows, labels,
+  separators, spacing, and bottom padding. At maximum scroll, the final control
+  must be fully visible and clickable; do not wait for the user to request it.
+- Derive scroll content size from the same control lists/layout measurements used
+  for drawing wherever practical. Avoid separately hardcoded row counts that can
+  drift when controls are added.
+- Budget horizontal space for labels, inputs, buttons, gaps, panel padding, and
+  scrollbars together. Use actual font metrics or existing layout helpers;
+  labels must not overlap fields or adjacent controls. Stack labels above inputs
+  when the available width cannot fit both comfortably.
+- Check changed layouts at the narrowest supported pane size and UI scale, with
+  long labels/values and expanded conditional sections. Use code/layout checks
+  where available; leave interactive GUI testing to the user as required below,
+  and state what still needs manual verification.
+
 ## Sky and outdoor-sector rules
 
 - `SectorTopologySector::ceilingSky` marks a sector ceiling as open sky.

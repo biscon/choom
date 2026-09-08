@@ -1,4 +1,5 @@
 #include "sector_editor/SectorEditor.h"
+#include "sector_editor/services/static_model_picker/SectorEditorModelPickerModal.h"
 
 #include "engine/input/InputEvents.h"
 #include "engine/render/ColorTransfer.h"
@@ -1099,7 +1100,7 @@ void SectorEditor::RenderUI(
         DrawSoundPickerModal(ui, config, input, font);
         DrawFootstepPickerModal(ui, config, input, assets, font);
         DrawSpritePickerModal(ui, config, input, assets, font);
-        DrawStaticModelPickerModal(ui, config, input, assets, font);
+        DrawStaticModelPickerModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = ui.focusedId != 0
                 || uiState.mainMenu.openRootIndex >= 0;
         if (state.texturePicker.open
@@ -1253,7 +1254,7 @@ void SectorEditor::RenderUI(
         return;
     }
     if (runtimeObjectEditingState.staticModelPicker.open) {
-        DrawStaticModelPickerModal(ui, config, input, assets, font);
+        DrawStaticModelPickerModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -1268,7 +1269,7 @@ void SectorEditor::RenderUI(
     DrawSoundPickerModal(ui, config, input, font);
     DrawFootstepPickerModal(ui, config, input, assets, font);
     DrawSpritePickerModal(ui, config, input, assets, font);
-    DrawStaticModelPickerModal(ui, config, input, assets, font);
+    DrawStaticModelPickerModal(ui, config, input, assets, font, smallFont);
     uiState.keyboardCaptured = ui.focusedId != 0
             || uiState.mainMenu.openRootIndex >= 0;
     if (state.texturePicker.open
@@ -4982,7 +4983,7 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
         return best;
     }
     if (hit.ref.sourceKind
-            == SectorGeneratedSurfaceSourceKind::StructuralPrimitive) {
+            != SectorGeneratedSurfaceSourceKind::Topology) {
         // Slice 2 keeps the authored primitive as the editable identity. Generated
         // faces are not topology floor/wall targets in the 3D material picker.
         return best;
@@ -6390,13 +6391,7 @@ void SectorEditor::DrawToolsPanel(
     };
 
     sectionLabel("Graph authoring");
-    const SectorEditorTool graphTools[] = {
-            SectorEditorTool::Select,
-            SectorEditorTool::AuthoringLine,
-            SectorEditorTool::AuthoringRectangle,
-            SectorEditorTool::AuthoringInsertVertex
-    };
-    for (SectorEditorTool tool : graphTools) {
+    for (SectorEditorTool tool : SectorEditorGraphTools) {
         if (drawToolButton(tool)) {
             selectTool(tool);
         }
@@ -6419,30 +6414,7 @@ void SectorEditor::DrawToolsPanel(
 
     separator();
     sectionLabel("Map objects");
-    const SectorEditorTool mapTools[] = {
-            SectorEditorTool::Structure,
-            SectorEditorTool::Ladder,
-            SectorEditorTool::RuntimeObject,
-            SectorEditorTool::StaticModel,
-            SectorEditorTool::DynamicModel,
-            SectorEditorTool::Item,
-            SectorEditorTool::Npc,
-            SectorEditorTool::Door,
-            SectorEditorTool::Window,
-            SectorEditorTool::DuctAccess,
-            SectorEditorTool::Trigger,
-            SectorEditorTool::LevelMarker,
-            SectorEditorTool::SoundEmitter,
-            SectorEditorTool::AuthoringFogVolume,
-            SectorEditorTool::ReflectionProbe,
-            SectorEditorTool::StaticLight,
-            SectorEditorTool::StaticSpotLight,
-            SectorEditorTool::StaticRectLight,
-            SectorEditorTool::DynamicLight,
-            SectorEditorTool::DynamicSpotLight,
-            SectorEditorTool::DynamicRectLight
-    };
-    for (SectorEditorTool tool : mapTools) {
+    for (SectorEditorTool tool : SectorEditorMapTools) {
         if (drawToolButton(tool)) {
             selectTool(tool);
         }
@@ -6907,173 +6879,23 @@ void SectorEditor::DrawStaticModelPickerModal(
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
     SectorEditorStaticModelPickerService picker(
-            runtimeObjectEditingState.staticModelPicker,
-            statusText);
-    StaticModelPickerState& pickerState = picker.State();
-    if (!pickerState.open) {
-        return;
+            runtimeObjectEditingState.staticModelPicker, statusText);
+    const SectorEditorModelPickerModalResult result = DrawSectorEditorModelPickerModal(
+            ui, config, input, assets, font, smallFont, picker);
+    if (result != SectorEditorModelPickerModalResult::Selected) return;
+
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing = BuildRuntimeObjectEditingService(&selection);
+    if (picker.State().target == ModelPickerTarget::DynamicModel) {
+        editing.AssignSelectedDynamicModel(picker.SelectedModelPath());
+    } else if (picker.State().target == ModelPickerTarget::StaticModel) {
+        editing.AssignSelectedStaticModel(picker.SelectedModelPath());
     }
-    if (!pickerState.scanned) {
-        picker.Refresh();
-    }
-
-    bool cancelRequested = false;
-    bool selectRequested = false;
-    input.ForEachEvent(
-            engine::InputEventType::KeyPressed,
-            true,
-            [&cancelRequested, &selectRequested](engine::InputEvent& event) {
-                if (event.key.key == KEY_ESCAPE) {
-                    cancelRequested = true;
-                    engine::ConsumeEvent(event);
-                } else if (event.key.key == KEY_ENTER
-                        || event.key.key == KEY_KP_ENTER) {
-                    selectRequested = true;
-                    engine::ConsumeEvent(event);
-                }
-            });
-
-    DrawRectangle(
-            0,
-            0,
-            static_cast<int>(EditorWidth),
-            static_cast<int>(EditorHeight),
-            Color{0, 0, 0, 135});
-    const Rectangle modal{
-            (EditorWidth - 820.0f) * 0.5f,
-            (EditorHeight - 650.0f) * 0.5f,
-            820.0f,
-            650.0f};
-    DrawRectangleRec(modal, Color{20, 24, 32, 245});
-    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
-    engine::Text(
-            config,
-            assets,
-            Rectangle{modal.x + 22.0f, modal.y + 18.0f, modal.width - 44.0f, 36.0f},
-            font,
-            pickerState.target == ModelPickerTarget::DynamicModel
-                    ? "Choose Dynamic Prop Model"
-                    : "Choose 3D Prop Model");
-
-    const Rectangle listBounds{
-            modal.x + 22.0f,
-            modal.y + 68.0f,
-            modal.width - 44.0f,
-            450.0f};
-    const float listContentW =
-            ScrollAreaContentWidthForVerticalScrollbar(
-                    listBounds.width,
-                    config,
-                    0.0f,
-                    true);
-    const Vector2 contentSize{
-            listContentW,
-            std::max(
-                    listBounds.height,
-                    config.listItemHeight
-                            * static_cast<float>(pickerState.optionLabels.size()))};
-    engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
-            ui,
-            config,
-            input,
-            "sector_editor_static_model_picker_scroll",
-            listBounds,
-            contentSize,
-            pickerState.scroll);
-    if (!pickerState.optionLabels.empty()) {
-        const int previous = pickerState.selectedModelIndex;
-        engine::List(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_static_model_picker_list",
-                Rectangle{0.0f, 0.0f, scroll.viewport.width, contentSize.y},
-                font,
-                pickerState.optionLabels.data(),
-                pickerState.optionLabels.size(),
-                pickerState.selectedModelIndex);
-        if (pickerState.selectedModelIndex != previous) {
-            picker.SelectIndex(pickerState.selectedModelIndex);
-        }
-    }
-    engine::EndScrollArea(ui, config, input, scroll, pickerState.scroll);
-
-    engine::Text(
-            config,
-            assets,
-            Rectangle{
-                    listBounds.x,
-                    listBounds.y + listBounds.height + 8.0f,
-                    listBounds.width,
-                    32.0f},
-            font,
-            pickerState.scanMessage.c_str(),
-            engine::UITextJustify::Left,
-            pickerState.modelPaths.empty()
-                    ? config.invalidColor
-                    : config.mutedTextColor);
-
-    const float buttonY = modal.y + modal.height - 64.0f;
-    if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_static_model_picker_refresh",
-                Rectangle{modal.x + 22.0f, buttonY, 130.0f, 44.0f},
-                font,
-                "Refresh")) {
-        picker.Refresh();
-    }
-    selectRequested = selectRequested || engine::Button(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_static_model_picker_select",
-            Rectangle{modal.x + modal.width - 322.0f, buttonY, 140.0f, 44.0f},
-            font,
-            "Select");
-    cancelRequested = cancelRequested || engine::Button(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_static_model_picker_cancel",
-            Rectangle{modal.x + modal.width - 162.0f, buttonY, 140.0f, 44.0f},
-            font,
-            "Cancel");
-
-    input.ForEachEvent(
-            engine::InputEventType::Any,
-            true,
-            [](engine::InputEvent& event) {
-                engine::ConsumeEvent(event);
-            });
-    if (cancelRequested) {
-        picker.Close();
-    } else if (selectRequested) {
-        if (!picker.HasSelection()) {
-            statusText = "Select a model first";
-        } else {
-            SectorEditorSelectionServiceContext selection =
-                    BuildSelectionServiceContext();
-            SectorEditorRuntimeObjectEditingService editing =
-                    BuildRuntimeObjectEditingService(&selection);
-            if (pickerState.target == ModelPickerTarget::DynamicModel) {
-                editing.AssignSelectedDynamicModel(picker.SelectedModelPath());
-            } else if (pickerState.target == ModelPickerTarget::StaticModel) {
-                editing.AssignSelectedStaticModel(picker.SelectedModelPath());
-            } else {
-                statusText = "NPC model selection is only available in the NPC Editor";
-            }
-            pickerState.open = false;
-        }
-    }
+    picker.State().open = false;
 }
 
 void SectorEditor::DrawNpcEditorModal(
@@ -7669,10 +7491,15 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
         assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
     }
 
+    CloseSectorEditorTexturePicker(state.texturePicker);
+    auto materialBrowsing = std::move(state.texturePicker.browsing);
+    auto modelBrowsing = std::move(runtimeObjectEditingState.staticModelPicker.browsing);
     state = SectorEditorState{};
+    state.texturePicker.browsing = std::move(materialBrowsing);
     manipulationState = ManipulationState{};
     uiState = SectorEditorUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
+    runtimeObjectEditingState.staticModelPicker.browsing = std::move(modelBrowsing);
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     textureCatalogState = TextureCatalogState{};
@@ -7807,7 +7634,7 @@ bool SectorEditor::LoadLevel(
     uiState.gridSizeInput = engine::UIIntInputState{};
     previewState.controller.hasPreviewPose = false;
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
-    state.texturePicker = TexturePickerState{};
+    CloseSectorEditorTexturePicker(state.texturePicker);
     state.soundPicker = SoundPickerState{};
     soundEditorState = SectorEditorSoundEditorState{};
     state.loadLevelModal = LoadLevelModalState{};
@@ -7835,7 +7662,9 @@ bool SectorEditor::LoadLevel(
     soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
+    auto modelBrowsing = std::move(runtimeObjectEditingState.staticModelPicker.browsing);
     runtimeObjectEditingState = RuntimeObjectEditingState{};
+    runtimeObjectEditingState.staticModelPicker.browsing = std::move(modelBrowsing);
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     lightEditingState = LightEditingState{};

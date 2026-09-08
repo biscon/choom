@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstddef>
 #include <string_view>
+#include <utility>
 
 namespace game {
 
@@ -23,12 +24,13 @@ bool ContainsCaseInsensitive(std::string_view text, std::string_view filter)
 
 void RebuildSectorEditorTexturePickerOptions(
         TexturePickerState& picker,
-        const std::string& preferredMaterialId)
+        const std::string& preferredMaterialId,
+        const std::string& fallbackMaterialId = {})
 {
     picker.materialIds.clear();
     picker.optionLabels.clear();
 
-    const std::string_view filter = picker.filterBuffer;
+    const std::string_view filter = picker.browsing.filterBuffer;
     picker.materialIds.reserve(picker.allMaterialIds.size());
     for (const std::string& materialId : picker.allMaterialIds) {
         if (ContainsCaseInsensitive(materialId, filter)) {
@@ -44,6 +46,16 @@ void RebuildSectorEditorTexturePickerOptions(
             picker.selectedTextureIndex = static_cast<int>(i);
         }
     }
+    const auto preferred = std::find(picker.materialIds.begin(), picker.materialIds.end(), preferredMaterialId);
+    if (preferred == picker.materialIds.end()) {
+        const auto fallback = std::find(picker.materialIds.begin(), picker.materialIds.end(), fallbackMaterialId);
+        if (fallback != picker.materialIds.end()) {
+            picker.selectedTextureIndex = static_cast<int>(fallback - picker.materialIds.begin());
+        }
+    }
+    if (picker.selectedTextureIndex >= 0) {
+        picker.browsing.selectedAssetId = picker.materialIds[static_cast<size_t>(picker.selectedTextureIndex)];
+    }
     picker.filterMessage = picker.materialIds.empty()
             ? "No materials match the filter"
             : std::string{};
@@ -53,7 +65,13 @@ void RebuildSectorEditorTexturePickerOptions(
 
 void CloseSectorEditorTexturePicker(TexturePickerState& picker)
 {
+    if (picker.selectedTextureIndex >= 0
+            && picker.selectedTextureIndex < static_cast<int>(picker.materialIds.size())) {
+        picker.browsing.selectedAssetId = picker.materialIds[static_cast<size_t>(picker.selectedTextureIndex)];
+    }
+    auto browsing = std::move(picker.browsing);
     picker = TexturePickerState{};
+    picker.browsing = std::move(browsing);
 }
 
 void PopulateSectorEditorTexturePickerOptions(
@@ -61,10 +79,13 @@ void PopulateSectorEditorTexturePickerOptions(
         const std::vector<std::string>& materialIds,
         const std::string& currentTexture)
 {
-    picker.scroll = engine::UIScrollState{};
+    if (picker.selectedTextureIndex >= 0
+            && picker.selectedTextureIndex < static_cast<int>(picker.materialIds.size())) {
+        picker.browsing.selectedAssetId = picker.materialIds[static_cast<size_t>(picker.selectedTextureIndex)];
+    }
     picker.allMaterialIds = materialIds;
-    picker.filterBuffer[0] = '\0';
-    RebuildSectorEditorTexturePickerOptions(picker, currentTexture);
+    const std::string remembered = picker.browsing.selectedAssetId;
+    RebuildSectorEditorTexturePickerOptions(picker, remembered, currentTexture);
 }
 
 void ApplySectorEditorTexturePickerFilter(TexturePickerState& picker)
@@ -74,7 +95,7 @@ void ApplySectorEditorTexturePickerFilter(TexturePickerState& picker)
             && picker.selectedTextureIndex < static_cast<int>(picker.materialIds.size())) {
         selectedMaterialId = picker.materialIds[static_cast<size_t>(picker.selectedTextureIndex)];
     }
-    picker.scroll = engine::UIScrollState{};
+    picker.browsing.scroll = engine::UIScrollState{};
     RebuildSectorEditorTexturePickerOptions(picker, selectedMaterialId);
 }
 

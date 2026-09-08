@@ -1,6 +1,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 
 #include "sector_demo/SectorColor.h"
+#include "sector_demo/SectorBaseboardGeometry.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorUnits.h"
@@ -520,6 +521,11 @@ std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& r
               << " index=" << ref.structuralFace.roleIndex;
         return label.str();
     }
+    if (ref.sourceKind == SectorGeneratedSurfaceSourceKind::Baseboard) {
+        label << "Baseboard sidedef=" << ref.topologySideDefId
+              << " face=" << ref.baseboardFaceIndex;
+        return label.str();
+    }
     label << SectorGeneratedSurfaceKindName(ref.kind);
     if (ref.topologySectorId >= 0) {
         label << " sector=" << ref.topologySectorId;
@@ -577,6 +583,11 @@ bool BuildSectorGeneratedGeometry(
                     outError,
                     "Failed to extract loops for topology sector "
                             + std::to_string(sector.id) + ": " + detail);
+        }
+
+        std::string baseboardError;
+        if (!AppendSectorBaseboardGeometry(map, sector, loops, generated, &baseboardError)) {
+            return SetTopologyError(outGeometry, outError, baseboardError);
         }
 
         SectorGeneratedSurface floor;

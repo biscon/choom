@@ -575,6 +575,7 @@ void CopyAuthoringSidePropertiesToTopologySideDef(
     sideDef.lower = authoringSide.lower;
     sideDef.upper = authoringSide.upper;
     sideDef.middle = authoringSide.middle;
+    sideDef.baseboard = authoringSide.baseboard;
 }
 
 void SetFaceAnchorAveragePosition(
@@ -2625,6 +2626,10 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
 
     std::set<std::pair<int, SectorTopologySideKind>> sideIds;
     for (const SectorAuthoringLineSide& side : graph.lineSides) {
+        if (!IsValidSectorBaseboardSettings(side.baseboard)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Side, side.id.lineId,
+                    "Baseboard height and thickness must be finite and positive");
+        }
         const std::pair<int, SectorTopologySideKind> sideId{side.id.lineId, side.id.side};
         if (IsValidSectorAuthoringId(side.id.lineId) && !sideIds.insert(sideId).second) {
             AddIssue(issues, SectorAuthoringObjectKind::Side, side.id.lineId, "Duplicate authoring side identity");
@@ -3488,6 +3493,7 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
         side.lower = sideDef.lower;
         side.upper = sideDef.upper;
         side.middle = sideDef.middle;
+        side.baseboard = sideDef.baseboard;
         graph.lineSides.push_back(side);
     }
 

@@ -17,7 +17,6 @@ struct SectorReflectionShaderLocations
     int aperture = -1, heights = -1;
 };
 
-std::string AddSectorReflectionShaderSource(const char *source);
 SectorReflectionShaderLocations LoadSectorReflectionShaderLocations(Shader shader);
 void UploadSectorReflectionBlend(Shader shader, const SectorReflectionShaderLocations &locations,
                                  const SectorPbrEnvironmentBlend &blend,

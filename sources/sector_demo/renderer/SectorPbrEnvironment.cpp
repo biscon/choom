@@ -180,6 +180,7 @@ bool BuildSectorPbrEnvironment(
         probe.cubemap = assets.CreateRenderCubemap(scope, (key + "-a").c_str(), definition.resolution);
         probe.inactive = assets.CreateRenderCubemap(scope, (key + "-b").c_str(), definition.resolution);
         probe.failed = engine::IsNull(probe.cubemap) || engine::IsNull(probe.inactive);
+        probe.resourceFailed = probe.failed;
         outEnvironment.localProbes.push_back(probe);
     }
     RuntimeSectorVisibilityGraph graph;

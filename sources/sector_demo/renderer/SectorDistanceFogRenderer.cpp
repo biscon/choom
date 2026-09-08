@@ -1,3 +1,4 @@
+#include "game/LoadShader.h"
 #include "sector_demo/renderer/SectorDistanceFogRenderer.h"
 
 #include "engine/render/ColorTransfer.h"
@@ -9,44 +10,6 @@
 
 namespace game {
 namespace {
-
-const char* FullscreenVs = R"(
-#version 330
-in vec3 vertexPosition;
-in vec2 vertexTexCoord;
-out vec2 fragUv;
-uniform mat4 mvp;
-void main() { fragUv = vertexTexCoord; gl_Position = mvp * vec4(vertexPosition, 1.0); }
-)";
-
-const char* DistanceFogFs = R"(
-#version 330
-in vec2 fragUv;
-out vec4 finalColor;
-uniform sampler2D sceneColor;
-uniform sampler2D sceneDepth;
-uniform float nearPlane;
-uniform float farPlane;
-uniform float startDistance;
-uniform float endDistance;
-uniform float falloffExponent;
-uniform float maxOpacity;
-uniform vec3 fogColor;
-void main() {
-    vec4 scene = texture(sceneColor, fragUv);
-    float depth = texture(sceneDepth, fragUv).r;
-    if (depth >= 0.999999) { finalColor = scene; return; }
-    float zNdc = depth * 2.0 - 1.0;
-    float distance = (2.0 * nearPlane * farPlane)
-            / max(farPlane + nearPlane - zNdc * (farPlane - nearPlane), 0.00001);
-    float fogRange = max(endDistance - startDistance, 0.0001);
-    float factor = pow(clamp((distance - startDistance) / fogRange, 0.0, 1.0),
-            max(falloffExponent, 0.0001)) * clamp(maxOpacity, 0.0, 1.0);
-    vec3 result = max(scene.rgb, vec3(0.0)) * (1.0 - factor)
-            + max(fogColor, vec3(0.0)) * factor;
-    finalColor = vec4(min(result, vec3(65504.0)), scene.a);
-}
-)";
 
 Rectangle Source(Texture2D texture)
 {
@@ -62,11 +25,11 @@ Rectangle Destination(Texture2D texture)
 
 } // namespace
 
-bool SectorDistanceFogRenderer::EnsureShader()
+bool SectorDistanceFogRenderer::Initialize()
 {
     if (shader.id != 0) return true;
     if (shaderFailed) return false;
-    shader = LoadShaderFromMemory(FullscreenVs, DistanceFogFs);
+    shader = LoadGameShader(GameShader::DistanceFog);
     if (shader.id == 0) {
         shaderFailed = true;
         return false;
@@ -92,7 +55,7 @@ bool SectorDistanceFogRenderer::Apply(
     const SectorTopologyFogSettings settings = NormalizeSectorTopologyFogSettings(sourceSettings);
     if (!settings.enabled || settings.mode != SectorTopologyFogMode::Distance
             || settings.maxOpacity <= 0.0f || sceneTarget.texture.id == 0
-            || sceneTarget.depth.id == 0 || !EnsureShader()) {
+            || sceneTarget.depth.id == 0 || !(shader.id != 0)) {
         return false;
     }
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());

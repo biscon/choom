@@ -880,6 +880,35 @@ float ReadOptionalPositiveFloat(
     return value;
 }
 
+SectorBaseboardSettings ReadBaseboard(const Json& object, const std::string& context)
+{
+    SectorBaseboardSettings result;
+    const auto it = object.find("baseboard");
+    if (it == object.end()) return result;
+    const std::string field = context + ".baseboard";
+    if (!it->is_object()) Fail(field + " must be an object");
+    result.enabled = ReadOptionalBool(*it, "enabled", field, result.enabled);
+    result.height = ReadOptionalPositiveFloat(*it, "height", field, result.height);
+    result.thickness = ReadOptionalPositiveFloat(*it, "thickness", field, result.thickness);
+    result.materialId = ReadOptionalString(*it, "materialId", field, "");
+    return result;
+}
+
+void WriteBaseboard(Json& object, const SectorBaseboardSettings& value,
+        const std::string& context)
+{
+    if (!IsValidSectorBaseboardSettings(value)) {
+        Fail(context + ".baseboard dimensions must be finite and positive");
+    }
+    const SectorBaseboardSettings defaults;
+    Json fields = Json::object();
+    if (value.enabled) fields["enabled"] = true;
+    if (value.height != defaults.height) fields["height"] = value.height;
+    if (value.thickness != defaults.thickness) fields["thickness"] = value.thickness;
+    if (!value.materialId.empty()) fields["materialId"] = value.materialId;
+    if (!fields.empty()) object["baseboard"] = std::move(fields);
+}
+
 SectorDoorMotionType ReadSectorDoorMotionType(const Json& object, const char* field, const std::string& context)
 {
     const std::string value = ReadOptionalString(object, field, context, "slide_vertical");
@@ -4562,6 +4591,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         side.lower = ReadWallPart(RequireField(lineSides[i], "lower", context), context + ".lower");
         side.upper = ReadWallPart(RequireField(lineSides[i], "upper", context), context + ".upper");
         ReadOptionalWallPart(lineSides[i], "middle", context, side.middle);
+        side.baseboard = ReadBaseboard(lineSides[i], context);
         graph.lineSides.push_back(std::move(side));
     }
 
@@ -5209,6 +5239,7 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         if (HasNonDefaultWallPart(side->middle)) {
             sideJson["middle"] = WriteWallPart(side->middle, context + ".middle");
         }
+        WriteBaseboard(sideJson, side->baseboard, context);
         graphJson["lineSides"].push_back(std::move(sideJson));
     }
 

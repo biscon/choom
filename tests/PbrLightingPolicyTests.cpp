@@ -1,3 +1,4 @@
+#include "ShaderTestSources.h"
 #include "engine/assets/ModelAssets.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -31,6 +32,8 @@ void TestDiagnosticModesAndScales()
     game::SectorPbrContributionSettings settings;
     Check(settings.diagnosticMode == game::SectorPbrDiagnosticMode::Full,
           "PBR diagnostics default to the full renderer");
+    Check(settings.specularAaEnabled,
+          "fresh and reset PBR settings enable specular AA");
     Check(Near(settings.worldIndirectDiffuseScale, 1.0f),
           "world indirect diffuse defaults to one");
     Check(Near(settings.worldEnvironmentSpecularScale, 1.0f),
@@ -59,6 +62,30 @@ void TestDiagnosticModesAndScales()
     Check(Near(settings.worldIndirectDiffuseScale, 1.0f)
                     && Near(settings.worldEnvironmentSpecularScale, 1.0f),
           "non-finite contribution scales restore safe defaults");
+}
+
+void TestSpecularAaRouting()
+{
+    for (const auto path : {game::SectorPbrLightingPath::WorldStatic,
+                           game::SectorPbrLightingPath::WorldDynamic,
+                           game::SectorPbrLightingPath::Viewmodel,
+                           game::SectorPbrLightingPath::ViewmodelAttachment}) {
+        for (const bool enabled : {false, true}) {
+            for (const bool capture : {false, true}) {
+                game::SectorPbrContributionSettings settings;
+                settings.specularAaEnabled = enabled;
+                settings.reflectionCapture = capture;
+                const auto state = game::BuildSectorPbrDrawState(
+                        path, false, false, false, false,
+                        0.0f, 1.0f, false, settings);
+                Check(state.specularAaEnabled == (enabled && !capture),
+                      "all model paths honor specular AA toggles and bypass it in captures");
+                Check(Near(state.indirectDiffuseScale, 1.0f)
+                                && Near(state.environmentSpecularScale, 1.0f),
+                      "specular AA toggling does not change PBR contribution scales");
+            }
+        }
+    }
 }
 
 void TestIndirectAndEnvironmentRouting()
@@ -305,12 +332,45 @@ void TestEnvironmentEligibility()
 
 std::string ReadSource(const char* path);
 
+void TestReflectionBindingsInitializeAfterSuccessfulLoad()
+{
+    // GLSL validation cannot detect a C++ initialization call accidentally
+    // placed in the shader failure branch. Guard both affected load paths.
+    const auto initializesOnSuccess = [](const std::string& source,
+            const char* loadFunction, const char* failureCondition) {
+        const auto loadStart = source.find(loadFunction);
+        const auto failureStart = source.find(failureCondition, loadStart);
+        const auto failureBody = source.find('{', failureStart);
+        if (loadStart == std::string::npos || failureStart == std::string::npos
+                || failureBody == std::string::npos) return false;
+        // Count nested braces, including Shader{} and {} initializers.
+        std::size_t failureEnd = failureBody + 1;
+        int depth = 1;
+        while (failureEnd < source.size() && depth != 0) {
+            if (source[failureEnd] == '{') ++depth;
+            else if (source[failureEnd] == '}') --depth;
+            ++failureEnd;
+        }
+        const auto reflectionInit = source.find(
+                "LoadSectorReflectionShaderLocations(", loadStart);
+        const auto attributeInit = source.find(
+                ".locs[SHADER_LOC_VERTEX_POSITION]", failureEnd);
+        return depth == 0 && reflectionInit != std::string::npos
+                && attributeInit != std::string::npos
+                && reflectionInit >= failureEnd && reflectionInit < attributeInit;
+    };
+    Check(initializesOnSuccess(ReadSource(PBR_SHADER_SOURCE_PATH),
+                  "bool SectorStaticModelRenderer::Load()", "if (shader.id == 0)"),
+          "model reflection bindings initialize after the shader failure branch");
+    Check(initializesOnSuccess(ReadSource(DOOR_SHADER_SOURCE_PATH),
+                  "bool SectorDoorRenderer::LoadOpaqueResources()", "if (opaqueShader.id == 0)"),
+          "door reflection bindings initialize after the shader failure branch");
+}
+
 void TestRemovedShaderPathsStayRemoved()
 {
-    std::ifstream input(PBR_SHADER_SOURCE_PATH);
-    const std::string source(
-            (std::istreambuf_iterator<char>(input)),
-            std::istreambuf_iterator<char>());
+    const std::string source = test::ReadShaderPrograms({game::GameShader::StaticModel});
+    const std::string sourceCpp = ReadSource(PBR_SHADER_SOURCE_PATH);
     Check(!source.empty(), "PBR shader source guard can read active renderer");
     Check(source.find("roughSpecularFloor") == std::string::npos,
           "synthetic rough specular floor stays removed");
@@ -319,11 +379,11 @@ void TestRemovedShaderPathsStayRemoved()
     Check(source.find("Aces") == std::string::npos
                     && source.find("LinearToSrgb") == std::string::npos,
           "PBR shader does not reintroduce local tone mapping or output transfer");
-    Check(source.find(
+    Check(sourceCpp.find(
                       "environmentTextureLocation,\n"
                       "            SectorStaticModelEnvironmentMaterialMap")
                             != std::string::npos
-                    && source.find(
+                    && sourceCpp.find(
                                "InitializeSectorPbrSamplerUnits(\n"
                                "            shader,")
                             != std::string::npos,
@@ -340,8 +400,8 @@ void TestRemovedShaderPathsStayRemoved()
     Check(source.find("directDiffuse += staticDirectSpecular")
                     == std::string::npos,
           "static authored lights do not duplicate baked diffuse lighting");
-    const std::string sectorSource = ReadSource(SECTOR_SHADER_SOURCE_PATH);
-    const std::string doorSource = ReadSource(DOOR_SHADER_SOURCE_PATH);
+    const std::string sectorSource = test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite});
+    const std::string doorSource = test::ReadShaderPrograms({game::GameShader::DoorOpaque});
     const auto hasStaticRectFeather = [](const std::string& shaderSource) {
         return shaderSource.find("staticSpecularLightStartFeathers") != std::string::npos
                 && shaderSource.find("staticSpecularLightTypes[i] == 2") != std::string::npos
@@ -355,7 +415,7 @@ void TestRemovedShaderPathsStayRemoved()
     const std::size_t emissionShapeStart = source.find(
             "vec3 ShapeModelEmissive(");
     const std::size_t emissionShapeEnd = source.find(
-            ")\"\nSECTOR_DYNAMIC_SURFACE_SHADOW_GLSL",
+            "float SampleSpotShadowMap(",
             emissionShapeStart);
     const std::string emissionShape = emissionShapeStart != std::string::npos
                     && emissionShapeEnd != std::string::npos
@@ -378,27 +438,27 @@ void TestRemovedShaderPathsStayRemoved()
     Check(source.find(
                       "float visibility = DynamicLightShadowVisibility(")
                             != std::string::npos
-                    && source.find(
+                    && sourceCpp.find(
                                "dynamicLightContext.shadowMaps.shadowMap0")
                             != std::string::npos
-                    && source.find(
+                    && sourceCpp.find(
                                "dynamicLightContext.shadowMaps.shadowMap1")
                             != std::string::npos,
           "static and dynamic world-model PBR draws receive dynamic spotlight shadow maps");
-    Check(source.find("DrawWorldDynamicModel(") != std::string::npos
-                    && source.find("SectorDoorModelRender& modelRender")
+    Check(sourceCpp.find("DrawWorldDynamicModel(") != std::string::npos
+                    && sourceCpp.find("SectorDoorModelRender& modelRender")
                             != std::string::npos
-                    && source.find(
+                    && sourceCpp.find(
                                "SectorPbrLightingPath::WorldDynamic,\n"
                                "                validProbe,\n"
                                "                false,")
                             != std::string::npos,
           "dynamic props and model doors share the non-lightmapped world PBR draw helper");
-    const std::size_t itemPass = source.find("SectorItem>(");
-    const std::size_t itemHighlightReset = source.find(
+    const std::size_t itemPass = sourceCpp.find("SectorItem>(");
+    const std::size_t itemHighlightReset = sourceCpp.find(
             "UploadInteractionHighlightStrength(0.0f);",
             itemPass);
-    const std::size_t staticPropPass = source.find(
+    const std::size_t staticPropPass = sourceCpp.find(
             "const auto drawStatic =",
             itemPass);
     Check(itemPass != std::string::npos
@@ -407,10 +467,10 @@ void TestRemovedShaderPathsStayRemoved()
                     && itemPass < itemHighlightReset
                     && itemHighlightReset < staticPropPass,
           "item selection highlight is cleared before the static-prop draw pass");
-    const std::size_t staticHighlight = source.find(
+    const std::size_t staticHighlight = sourceCpp.find(
             "!staticCaptureOnly && entity == useHighlight.entity",
             staticPropPass);
-    const std::size_t dynamicPropPass = source.find(
+    const std::size_t dynamicPropPass = sourceCpp.find(
             "SectorDynamicModel,",
             staticPropPass);
     Check(staticHighlight != std::string::npos
@@ -429,17 +489,18 @@ std::string ReadSource(const char* path)
 
 void TestSectorRuntimeNormalMappingPolicy()
 {
-    const std::string source = ReadSource(SECTOR_SHADER_SOURCE_PATH);
-    const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
-    const std::string window = ReadSource(WINDOW_SHADER_SOURCE_PATH);
+    const std::string source = test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite});
+    const std::string sourceCpp = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const std::string door = test::ReadShaderPrograms({game::GameShader::DoorOpaque});
+    const std::string window = test::ReadShaderPrograms({game::GameShader::Window});
     Check(!source.empty(),
           "sector runtime normal-mapping policy can read the active renderer");
-    Check(source.find("engine::TextureColorUsage::LinearData")
+    Check(sourceCpp.find("engine::TextureColorUsage::LinearData")
                     != std::string::npos
-                    && source.find("normalTextureHandlesById.insert_or_assign(")
+                    && sourceCpp.find("normalTextureHandlesById.insert_or_assign(")
                             != std::string::npos,
           "automatic sector normal maps load as linear texture data");
-    Check(source.find("engine::TextureColorUsage::SceneSrgb")
+    Check(sourceCpp.find("engine::TextureColorUsage::SceneSrgb")
                     != std::string::npos
                     && source.find(
                                "vec3 mappedNormal = tangentNormalSample * 2.0 - 1.0")
@@ -447,13 +508,13 @@ void TestSectorRuntimeNormalMappingPolicy()
                     && source.find("mappedNormal.y = -mappedNormal.y")
                             == std::string::npos,
           "sector albedo uses sRGB while OpenGL Y+ normals decode without green inversion");
-    Check(source.find("SectorMaterialOrmMapPath(texture.path)")
+    Check(sourceCpp.find("SectorMaterialOrmMapPath(texture.path)")
                     != std::string::npos
-                    && source.find("SectorMaterialRoughnessMapPath(texture.path)")
+                    && sourceCpp.find("SectorMaterialRoughnessMapPath(texture.path)")
                             != std::string::npos
-                    && source.find("SectorMaterialPropertyMapKind::Orm")
-                            < source.find("SectorMaterialPropertyMapKind::Roughness")
-                    && source.find("propertyTextureHandlesById.insert_or_assign(")
+                    && sourceCpp.find("SectorMaterialPropertyMapKind::Orm")
+                            < sourceCpp.find("SectorMaterialPropertyMapKind::Roughness")
+                    && sourceCpp.find("propertyTextureHandlesById.insert_or_assign(")
                             != std::string::npos,
           "sector property maps load as linear data with ORM precedence");
     Check(source.find(
@@ -507,8 +568,8 @@ void TestSectorRuntimeNormalMappingPolicy()
                     && source.find("staticSpecularLightCount")
                             != std::string::npos,
           "sector dynamic and bounded authored-static lights use GGX specular");
-    Check(source.find("metallicFactorById.insert_or_assign") != std::string::npos
-                    && source.find("roughnessFactorById.insert_or_assign")
+    Check(sourceCpp.find("metallicFactorById.insert_or_assign") != std::string::npos
+                    && sourceCpp.find("roughnessFactorById.insert_or_assign")
                             != std::string::npos
                     && source.find("mix(vec3(0.04), surfaceRgb, metallic)")
                             != std::string::npos
@@ -526,16 +587,16 @@ void TestSectorRuntimeNormalMappingPolicy()
                     && source.find("fragColor.rgb * aoFactor * materialAo + correctedBakedLighting")
                             != std::string::npos,
           "sector ORM channels override material scalars and AO affects ambient only");
-    Check(source.find("InitializeSectorSurfaceSamplerUnits(material.shader)")
+    Check(sourceCpp.find("InitializeSectorSurfaceSamplerUnits(material.shader)")
                     != std::string::npos
-                    && source.find(
+                    && sourceCpp.find(
                                "for (int textureUnit = MATERIAL_MAP_ALBEDO;")
                             != std::string::npos,
           "sector material samplers receive deterministic fixed texture units");
-    Check(source.find(
+    Check(sourceCpp.find(
                       "surfaceLightmapBakeCurrent && !staticCaptureOnly)")
                             != std::string::npos
-                    && source.find(
+                    && sourceCpp.find(
                                "doorDrawContext.staticSpecularEligible = !staticCaptureOnly")
                             != std::string::npos
                     && source.find(
@@ -543,7 +604,7 @@ void TestSectorRuntimeNormalMappingPolicy()
                             != std::string::npos,
           "reflection probe captures exclude view-dependent direct specular from sectors and objects");
 
-    const std::string model = ReadSource(PBR_SHADER_SOURCE_PATH);
+    const std::string model = test::ReadShaderPrograms({game::GameShader::StaticModel});
     Check(source.find("pbrDiagnosticMode == 10") != std::string::npos
                     && model.find("pbrDiagnosticMode == 10")
                             != std::string::npos
@@ -604,19 +665,19 @@ void TestSectorRuntimeNormalMappingPolicy()
                     && window.find("mix(256.0, 4.0, roughness)")
                             == std::string::npos,
           "procedural windows use normalized GGX direct specular instead of a constant-peak exponent lobe");
-    Check(source.find("NormalMappedRendererMaterialIds(map, geometry)")
+    Check(sourceCpp.find("NormalMappedRendererMaterialIds(map, geometry)")
                             != std::string::npos
-                    && source.find("ResolveDoorMaterial(") != std::string::npos
-                    && source.find("normalTextureHandlesById.find(materialId)")
+                    && sourceCpp.find("ResolveDoorMaterial(") != std::string::npos
+                    && sourceCpp.find("normalTextureHandlesById.find(materialId)")
                             != std::string::npos,
           "procedural door materials resolve their global normal and scalar metadata");
 }
 
 void TestBakedHdrConsumersStayUnclamped()
 {
-    const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
-    const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
-    const std::string billboard = ReadSource(BILLBOARD_SHADER_SOURCE_PATH);
+    const std::string sector = test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite});
+    const std::string door = test::ReadShaderPrograms({game::GameShader::DoorOpaque});
+    const std::string billboard = test::ReadShaderPrograms({game::GameShader::BillboardCutout});
     Check(!sector.empty() && !door.empty() && !billboard.empty(),
           "baked HDR shader policy can read every active consumer");
     Check(sector.find("clamp(ambient + bakedDirect, 0.0, 1.0)")
@@ -642,10 +703,10 @@ void TestBakedHdrConsumersStayUnclamped()
 
 void TestDistanceFogUsesDarknessGatedScattering()
 {
-    const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
-    const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
-    const std::string billboard = ReadSource(BILLBOARD_SHADER_SOURCE_PATH);
-    const std::string model = ReadSource(PBR_SHADER_SOURCE_PATH);
+    const std::string sector = test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite});
+    const std::string door = test::ReadShaderPrograms({game::GameShader::DoorOpaque});
+    const std::string billboard = test::ReadShaderPrograms({game::GameShader::BillboardCutout});
+    const std::string model = test::ReadShaderPrograms({game::GameShader::StaticModel});
     const std::string lightPeak =
             "float fogLightPeak = max(max(fogLighting.r, fogLighting.g), fogLighting.b)";
     const std::string visibility =
@@ -735,42 +796,48 @@ void TestDistanceFogUsesDarknessGatedScattering()
 
 void TestHdrEffectShaderAndPassPolicies()
 {
-    const std::string bloom=ReadSource(BLOOM_SHADER_SOURCE_PATH);
-    const std::string distanceFog=ReadSource(DISTANCE_FOG_SHADER_SOURCE_PATH);
-    const std::string analyticFog=ReadSource(ANALYTIC_FOG_SHADER_SOURCE_PATH);
-    const std::string analyticShaft=ReadSource(ANALYTIC_SHAFT_SHADER_SOURCE_PATH);
-    const std::string lightProxy=ReadSource(LIGHT_PROXY_SHADER_SOURCE_PATH);
-    const std::string dust=ReadSource(DUST_SHADER_SOURCE_PATH);
-    const std::string muzzle=ReadSource(MUZZLE_SHADER_SOURCE_PATH);
+    const std::string bloom = test::ReadShaderPrograms({game::GameShader::BloomPrefilter, game::GameShader::BloomBlur, game::GameShader::BloomComposite});
+    const std::string bloomCpp = ReadSource(BLOOM_SHADER_SOURCE_PATH);
+    const std::string distanceFog = test::ReadShaderPrograms({game::GameShader::DistanceFog});
+    const std::string analyticFog = test::ReadShaderPrograms({game::GameShader::AnalyticFog});
+    const std::string analyticFogCpp = ReadSource(ANALYTIC_FOG_SHADER_SOURCE_PATH);
+    const std::string analyticShaft = test::ReadShaderPrograms({game::GameShader::AnalyticShaft});
+    const std::string analyticShaftCpp = ReadSource(ANALYTIC_SHAFT_SHADER_SOURCE_PATH);
+    const std::string lightProxy = test::ReadShaderPrograms({game::GameShader::AnalyticHalo});
+    const std::string lightProxyCpp = ReadSource(LIGHT_PROXY_SHADER_SOURCE_PATH);
+    const std::string dust = test::ReadShaderPrograms({game::GameShader::LightDust});
+    const std::string dustCpp = ReadSource(DUST_SHADER_SOURCE_PATH);
+    const std::string muzzle = test::ReadShaderPrograms({game::GameShader::MuzzleFlash});
+    const std::string muzzleCpp = ReadSource(MUZZLE_SHADER_SOURCE_PATH);
     const std::string mainGraph=ReadSource(MAIN_RENDER_GRAPH_SOURCE_PATH);
     const std::string modelAssets=ReadSource(MODEL_ASSET_SOURCE_PATH);
-    const std::string dynamicModelShadows=ReadSource(DYNAMIC_MODEL_SHADOW_SOURCE_PATH);
-    const std::string dynamicLightingShadows=ReadSource(
-            DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH);
-    const std::string dynamicShadowSampling=ReadSource(
-            DYNAMIC_SHADOW_SAMPLING_SOURCE_PATH);
-    const auto usesImmediateAtmospherePass = [](const std::string& source) {
+    const std::string dynamicModelShadows = test::ReadShaderPrograms({game::GameShader::DynamicModelShadowContact});
+    const std::string dynamicModelShadowsCpp = ReadSource(DYNAMIC_MODEL_SHADOW_SOURCE_PATH);
+    const std::string dynamicLightingShadows = test::ReadShaderPrograms({game::GameShader::SpotLightShadowOpaque, game::GameShader::SpotLightShadowCutout});
+    const std::string dynamicLightingShadowsCpp = ReadSource(DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH);
+    const std::string dynamicShadowSampling=test::ReadShaderStage(game::GameShader::Lightmap);
+    const auto usesImmediateAtmospherePass = [](const std::string& source, const std::string& cpp) {
         return source.find(
                            "gl_Position = vec4(vertexPosition.xy, 0.0, 1.0);")
                             != std::string::npos
-                && source.find(
+                && cpp.find(
                            "shader.locs[SHADER_LOC_MAP_DIFFUSE] = sceneDepthLoc;")
                             != std::string::npos
-                && source.find(
+                && cpp.find(
                            "material.maps[MATERIAL_MAP_DIFFUSE].texture = sceneTarget.depth;")
                             != std::string::npos
-                && source.find(
+                && cpp.find(
                            "DrawMesh(screenTriangle, material, MatrixIdentity());")
                             != std::string::npos
-                && source.find(
+                && cpp.find(
                            "material.maps[MATERIAL_MAP_DIFFUSE].texture = {};")
                             != std::string::npos
                 && source.find("any(isnan(") != std::string::npos
                 && source.find("any(isinf(") != std::string::npos
-                && source.find("SceneDepthTextureSlot") == std::string::npos
-                && source.find("SetShaderValueTexture(shader, sceneDepthLoc")
+                && cpp.find("SceneDepthTextureSlot") == std::string::npos
+                && cpp.find("SetShaderValueTexture(shader, sceneDepthLoc")
                             == std::string::npos
-                && source.find("DrawRectangle(0, 0, width, height, WHITE)")
+                && cpp.find("DrawRectangle(0, 0, width, height, WHITE)")
                             == std::string::npos;
     };
     Check(!bloom.empty()&&!distanceFog.empty()&&!analyticFog.empty()
@@ -786,15 +853,15 @@ void TestHdrEffectShaderAndPassPolicies()
                     && distanceFog.find("uniform sampler2D sceneDepth") != std::string::npos
                     && analyticFog.find("intersectEllipsoid") != std::string::npos
                     && lightProxy.find("intersectSphere") != std::string::npos
-                    && lightProxy.find("rlEnableScissorTest") != std::string::npos
+                    && lightProxyCpp.find("rlEnableScissorTest") != std::string::npos
                     && analyticShaft.find("intersectFiniteCone") != std::string::npos
-                    && analyticShaft.find("rlEnableScissorTest") != std::string::npos
-                    && analyticShaft.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos
-                    && lightProxy.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos,
+                    && analyticShaftCpp.find("rlEnableScissorTest") != std::string::npos
+                    && analyticShaftCpp.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos
+                    && lightProxyCpp.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos,
           "atmosphere paths use scissored closed-form work and premultiplied compositing");
-    Check(analyticFog.find("ShouldDrawRuntimeSectorForVisibility(")
+    Check(analyticFogCpp.find("ShouldDrawRuntimeSectorForVisibility(")
                             != std::string::npos
-                    && analyticFog.find("volume.topologySectorId, visibility")
+                    && analyticFogCpp.find("volume.topologySectorId, visibility")
                             != std::string::npos,
           "local fog candidates are culled by their runtime-visible owner sector");
     Check(lightProxy.find("float visibleChord = max(exitT - enterT, 0.0);")
@@ -804,10 +871,10 @@ void TestHdrEffectShaderAndPassPolicies()
                     && lightProxy.find("0.35 * broad + 0.65 * core") != std::string::npos
                     && lightProxy.find("haloRadiance * scatterWeight") != std::string::npos
                     && lightProxy.find("float extinction = clamp(haloParams.y") != std::string::npos
-                    && lightProxy.find("proxy.halo.maxExtinction <= 0.0f") == std::string::npos
+                    && lightProxyCpp.find("proxy.halo.maxExtinction <= 0.0f") == std::string::npos
                     && lightProxy.find("mappedSoftness = clamp(haloParams.x * 2.0")
                             != std::string::npos
-                    && lightProxy.find("proxy.shaft") == std::string::npos
+                    && lightProxyCpp.find("proxy.shaft") == std::string::npos
                     && analyticShaft.find("float shaftOpticalProfileAt(")
                             != std::string::npos
                     && analyticShaft.find("bool intersectRectFrustum(")
@@ -835,9 +902,9 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find(
                             "0.8646647168 * pathCoverage * integratedDensity")
                             != std::string::npos
-                    && analyticShaft.find("Vector2 RectShaftFarHalfSize(")
+                    && analyticShaftCpp.find("Vector2 RectShaftFarHalfSize(")
                             != std::string::npos
-                    && analyticShaft.find("SpreadDegreesAtScaleOne = 15.0f")
+                    && analyticShaftCpp.find("SpreadDegreesAtScaleOne = 15.0f")
                             != std::string::npos
                     && analyticShaft.find("float coverage = smoothstep(0.0, 1.0, rawCoverage);")
                             != std::string::npos
@@ -852,10 +919,10 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find("+ 2.0 * extraSoftness") != std::string::npos
                     && analyticShaft.find("shaftRadiance * scatterWeight") != std::string::npos
                     && analyticShaft.find("float extinction = clamp(shaftParams.y") != std::string::npos
-                    && analyticShaft.find("settings.maxExtinction <= 0.0f") == std::string::npos
-                    && usesImmediateAtmospherePass(analyticShaft)
-                    && usesImmediateAtmospherePass(analyticFog)
-                    && usesImmediateAtmospherePass(lightProxy),
+                    && analyticShaftCpp.find("settings.maxExtinction <= 0.0f") == std::string::npos
+                    && usesImmediateAtmospherePass(analyticShaft, analyticShaftCpp)
+                    && usesImmediateAtmospherePass(analyticFog, analyticFogCpp)
+                    && usesImmediateAtmospherePass(lightProxy, lightProxyCpp),
           "fog, haze, and shaft effects use immediate depth-backed triangles with finite output guards");
     Check(analyticFog.find("bool intersectBox(") != std::string::npos
                     && analyticFog.find("uniform int fogShape") != std::string::npos
@@ -897,23 +964,23 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticFog.find("float smallVolumeVisibility")
                             != std::string::npos
                     && analyticFog.find("authoredExponent * 0.55") == std::string::npos
-                    && analyticFog.find("ComputeSectorAnalyticFogCloudyEdgeExpansion(")
+                    && analyticFogCpp.find("ComputeSectorAnalyticFogCloudyEdgeExpansion(")
                             != std::string::npos
                     && analyticFog.find("fogColor * staticLighting") != std::string::npos
-                    && analyticFog.find("SampleSectorLocalFogStaticLighting(")
+                    && analyticFogCpp.find("SampleSectorLocalFogStaticLighting(")
                             != std::string::npos
-                    && analyticFog.find("BeginBlendMode(BLEND_ALPHA);")
+                    && analyticFogCpp.find("BeginBlendMode(BLEND_ALPHA);")
                             != std::string::npos
-                    && analyticFog.find("BeginBlendMode(BLEND_ADDITIVE);")
+                    && analyticFogCpp.find("BeginBlendMode(BLEND_ADDITIVE);")
                             == std::string::npos
                     && analyticFog.find("dynamicLightCount") == std::string::npos
                     && analyticFog.find("for (int stepIndex") == std::string::npos,
           "fog separates shape from style with feathered noisy silhouettes, filtered fixed interior taps, conservative bounds, alpha blending, and cached baked lighting without marching or dynamic-light loops");
-    Check(bloom.find("Rgba8Unorm")==std::string::npos
-                    && analyticFog.find("Rgba8Unorm")==std::string::npos
-                    && analyticShaft.find("Rgba8Unorm")==std::string::npos
-                    && lightProxy.find("Rgba8Unorm")==std::string::npos
-                    && dust.find("Rgba8Unorm")==std::string::npos,
+    Check(bloomCpp.find("Rgba8Unorm")==std::string::npos
+                    && analyticFogCpp.find("Rgba8Unorm")==std::string::npos
+                    && analyticShaftCpp.find("Rgba8Unorm")==std::string::npos
+                    && lightProxyCpp.find("Rgba8Unorm")==std::string::npos
+                    && dustCpp.find("Rgba8Unorm")==std::string::npos,
           "radiance-bearing atmosphere and bloom targets never select RGBA8");
     Check(analyticFog.find("dynamicLightingClamp")==std::string::npos
                     && analyticShaft.find("dynamicLightingClamp")==std::string::npos
@@ -932,16 +999,16 @@ void TestHdrEffectShaderAndPassPolicies()
                     && bloom.find("SafeAlpha(scene.a)")!=std::string::npos,
           "bloom buffers ignore alpha energy and composition preserves scene alpha");
     Check(muzzle.find("srgbToLinear")!=std::string::npos
-                    && muzzle.find("radianceStrength")!=std::string::npos
-                    && muzzle.find("BeginBlendMode(BLEND_ADD_COLORS)")!=std::string::npos
-                    && muzzle.find("rlDrawRenderBatchActive")!=std::string::npos,
+                    && muzzleCpp.find("radianceStrength")!=std::string::npos
+                    && muzzleCpp.find("BeginBlendMode(BLEND_ADD_COLORS)")!=std::string::npos
+                    && muzzleCpp.find("rlDrawRenderBatchActive")!=std::string::npos,
           "muzzle swatches decode once and add data-driven HDR radiance with synchronized state");
     Check(modelAssets.find("has_emissive_strength")!=std::string::npos
-                    && ReadSource(PBR_SHADER_SOURCE_PATH).find(
+                    && test::ReadShaderPrograms({game::GameShader::StaticModel}).find(
                                "emissive *= max(emissiveStrength, 0.0)")
                             !=std::string::npos,
           "core glTF emissive strength reaches per-fragment HDR emission");
-    Check(ReadSource(PBR_SHADER_SOURCE_PATH).find("wholeModelBloom")
+    Check(test::ReadShaderPrograms({game::GameShader::StaticModel}).find("wholeModelBloom")
                     ==std::string::npos,
           "models are not tagged as whole-object bloom sources");
     Check(bloom.find("LinearToSrgb")==std::string::npos
@@ -952,10 +1019,10 @@ void TestHdrEffectShaderAndPassPolicies()
                     && muzzle.find("LinearToSrgb")==std::string::npos
                     && bloom.find("ToneMap")==std::string::npos,
           "effect shaders do not tone map or output-encode radiance locally");
-    Check(bloom.find("ApplyEmissiveDecalBloom")==std::string::npos
-                    && ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
+    Check(bloomCpp.find("ApplyEmissiveDecalBloom")==std::string::npos
+                    && test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite}).find(
                                "emissiveRadiance * emissiveDecalAlpha")!=std::string::npos
-                    && ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
+                    && test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite}).find(
                                "surfaceRgb = mix(baseColor.rgb, decalRgb, decalAlpha)")
                             !=std::string::npos,
           "decal-only bloom redraw is retired in favor of visible emissive radiance");
@@ -966,25 +1033,27 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::size_t overlays=mainGraph.find("Render3DOverlays");
     Check(glass<atmosphere&&atmosphere<viewmodel&&viewmodel<sceneBloom&&sceneBloom<overlays,
           "pass graph orders glass, atmosphere, viewmodel, bloom, then excluded editor overlays");
-    const std::string glassShader=ReadSource(WINDOW_SHADER_SOURCE_PATH);
+    const std::string glassShader = test::ReadShaderPrograms({game::GameShader::Window});
+    const std::string glassShaderCpp = ReadSource(WINDOW_SHADER_SOURCE_PATH);
     Check(glassShader.find("uniform sampler2D sceneColor")!=std::string::npos
                     &&glassShader.find("uniform sampler2D sceneDepth")!=std::string::npos
                     &&glassShader.find("refract(incident, facingNormal, 1.0 / ior)")
                             !=std::string::npos
-                    &&glassShader.find("environmentBoxProjection")!=std::string::npos
-                    &&glassShader.find("SelectSectorPbrEnvironmentBlend")
+                    &&glassShaderCpp.find("environmentBoxProjection")!=std::string::npos
+                    &&glassShaderCpp.find("SelectSectorPbrEnvironmentBlend")
                             !=std::string::npos
-                    &&glassShader.find("active.shader.locs[SHADER_LOC_MAP_DIFFUSE] = active.sceneColorLoc")
+                    &&glassShaderCpp.find("active.shader.locs[SHADER_LOC_MAP_DIFFUSE] = active.sceneColorLoc")
                             !=std::string::npos
-                    &&glassShader.find("active.shader.locs[SHADER_LOC_MAP_SPECULAR] = active.sceneDepthLoc")
+                    &&glassShaderCpp.find("active.shader.locs[SHADER_LOC_MAP_SPECULAR] = active.sceneDepthLoc")
                             !=std::string::npos
                     &&glassShader.find("gl_FragCoord.z > opaqueDepth")
                             !=std::string::npos
-                    &&glassShader.find("SetShaderValueTexture")
+                    &&glassShaderCpp.find("SetShaderValueTexture")
                             ==std::string::npos
-                    &&glassShader.find("advancedTransmission")!=std::string::npos,
+                    &&glassShaderCpp.find("advancedTransmission")!=std::string::npos,
           "the retained refraction backend uses depth-aware scene transmission and box-projected probes");
-    const std::string liquidShader=ReadSource(LIQUID_SHADER_SOURCE_PATH);
+    const std::string liquidShader = test::ReadShaderPrograms({game::GameShader::Liquid});
+    const std::string liquidShaderCpp = ReadSource(LIQUID_SHADER_SOURCE_PATH);
     Check(liquidShader.find("#version 330")!=std::string::npos
                     &&liquidShader.find("uniform sampler2D sceneColor")!=std::string::npos
                     &&liquidShader.find("uniform sampler2D sceneDepth")!=std::string::npos
@@ -992,18 +1061,17 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&liquidShader.find("ReconstructWorldPosition")!=std::string::npos
                     &&liquidShader.find("OpaqueDepthEpsilon = 0.000001")!=std::string::npos
                     &&liquidShader.find("0.0005")==std::string::npos
-                    &&liquidShader.find("environmentBoxProjection")!=std::string::npos
+                    &&liquidShaderCpp.find("environmentBoxProjection")!=std::string::npos
                     &&liquidShader.find("SampleSectorEnvironment(")!=std::string::npos
                     &&liquidShader.find("ToneMap")==std::string::npos
                     &&liquidShader.find("LinearToSrgb")==std::string::npos,
           "liquid shader is procedural, depth-aware, probe-reflective, and linear HDR");
     Check(liquidShader.find("if (dot(normal, viewDirection) < 0.0) normal = -normal")
                             !=std::string::npos
-                    &&liquidShader.find("rlDisableBackfaceCulling()")
+                    &&liquidShaderCpp.find("rlDisableBackfaceCulling()")
                             !=std::string::npos,
           "liquid surfaces render from below with view-facing procedural normals");
-    const std::string underwaterShader = ReadSource(
-            UNDERWATER_SHADER_SOURCE_PATH);
+    const std::string underwaterShader = test::ReadShaderPrograms({game::GameShader::Caustics, game::GameShader::UnderwaterParticle});
     Check(underwaterShader.find("gl_FragCoord.xy / max(viewportSize")
                             != std::string::npos
                     && underwaterShader.find("sceneDistance = forwardDistance")
@@ -1040,7 +1108,7 @@ void TestHdrEffectShaderAndPassPolicies()
                     && underwaterShader.find("scene.rgb) * (1.0 + contribution)")
                             == std::string::npos,
           "underwater caustics are energy-centered, dark-surface visible, bounded, and bloom-safe");
-    Check(glassShader.find("rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY)")
+    Check(glassShaderCpp.find("rlSetBlendMode(BLEND_ALPHA_PREMULTIPLY)")
                             !=std::string::npos
                     &&glassShader.find("float fresnel = clamp(0.04 + 0.96")
                             !=std::string::npos
@@ -1053,9 +1121,9 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&glassShader.find("reflection * shadingFresnel")!=std::string::npos
                     &&glassShader.find("glassTint * opacity")
                             ==std::string::npos
-                    &&glassShader.find("RL_ZERO, RL_SRC_COLOR")
+                    &&glassShaderCpp.find("RL_ZERO, RL_SRC_COLOR")
                             !=std::string::npos
-                    &&glassShader.find("RL_ONE, RL_ONE")
+                    &&glassShaderCpp.find("RL_ONE, RL_ONE")
                             !=std::string::npos,
           "flat glass multiplicatively filters transmission before adding clamped-Fresnel reflection");
     const std::size_t flatTransmissionReturn = glassShader.find(
@@ -1063,8 +1131,8 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::size_t surfaceDetailEvaluation = glassShader.find(
             "GlassSurfaceDetail(normal, shadingNormal, hazeVariation)");
     Check(glassShader.find("fragLocalPosition")!=std::string::npos
-                    &&glassShader.find("glassDimensions")!=std::string::npos
-                    &&glassShader.find("glassPatternSeed")!=std::string::npos
+                    &&glassShaderCpp.find("glassDimensions")!=std::string::npos
+                    &&glassShaderCpp.find("glassPatternSeed")!=std::string::npos
                     &&glassShader.find("GlassSurfacePattern")!=std::string::npos
                     &&glassShader.find("0.069926812 * strength")
                             !=std::string::npos
@@ -1092,34 +1160,35 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&mainGraph.find("application.Composite3DViewmodel")
                             ==std::string::npos,
           "viewmodel keeps private depth while drawing directly into shared HDR color");
-    const std::string sectorRenderer=ReadSource(SECTOR_SHADER_SOURCE_PATH);
-    Check(sectorRenderer.find("glBlitFramebuffer")!=std::string::npos
-                    &&sectorRenderer.find("EnsureHdrSceneColorView(sceneTarget)")
+    const std::string sectorRenderer = test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite});
+    const std::string sectorRendererCpp = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    Check(sectorRendererCpp.find("glBlitFramebuffer")!=std::string::npos
+                    &&sectorRendererCpp.find("EnsureHdrSceneColorView(sceneTarget)")
                             !=std::string::npos
-                    &&sectorRenderer.find("? hdrSceneColorView : sceneTarget.native")
+                    &&sectorRendererCpp.find("? hdrSceneColorView : sceneTarget.native")
                             !=std::string::npos,
           "refractive liquids snapshot color without flipping and render through the depth-detached scene color view");
-    Check(sectorRenderer.find("bool refractionReady = visibleLiquids")!=std::string::npos
-                    &&sectorRenderer.find("liquidRenderer.Draw(liquidContext)")
+    Check(sectorRendererCpp.find("bool refractionReady = visibleLiquids")!=std::string::npos
+                    &&sectorRendererCpp.find("liquidRenderer.Draw(liquidContext)")
                             !=std::string::npos
-                    &&sectorRenderer.find("underwaterRenderer.ApplyCaustics")
+                    &&sectorRendererCpp.find("underwaterRenderer.ApplyCaustics")
                             !=std::string::npos
-                    &&sectorRenderer.find("underwaterRenderer.DrawParticles")
+                    &&sectorRendererCpp.find("underwaterRenderer.DrawParticles")
                             !=std::string::npos
-                    &&sectorRenderer.find("windowContext.advancedTransmission = false")
+                    &&sectorRendererCpp.find("windowContext.advancedTransmission = false")
                             !=std::string::npos
-                    &&sectorRenderer.find("preGlassLightEffectsRendered = true")
+                    &&sectorRendererCpp.find("preGlassLightEffectsRendered = true")
                             !=std::string::npos
-                    &&sectorRenderer.find("dynamicLightState.LightingVisibility()")
+                    &&sectorRendererCpp.find("dynamicLightState.LightingVisibility()")
                             !=std::string::npos,
           "liquids own the refraction snapshot while flat windows and blocker-aware pre-transparent effects keep their established paths");
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos
-                    &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
+                    &&test::ReadShaderPrograms({game::GameShader::StaticModel}).find(
                                "uniform float modelOpacity")
                             !=std::string::npos
-                    &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
+                    &&test::ReadShaderPrograms({game::GameShader::StaticModel}).find(
                                "clamp(modelOpacity, 0.0, 1.0)")
                             !=std::string::npos
                     &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
@@ -1128,81 +1197,87 @@ void TestHdrEffectShaderAndPassPolicies()
           "PBR model opacity supports corpse fading while viewmodels explicitly remain opaque");
     Check(muzzle.find("finalColor=vec4(storeFiniteHalfRadiance(radiance),0.0)")
                             !=std::string::npos
-                    &&muzzle.find("BeginBlendMode(BLEND_ADD_COLORS)")
+                    &&muzzleCpp.find("BeginBlendMode(BLEND_ADD_COLORS)")
                             !=std::string::npos,
           "muzzle keeps alpha-zero additive HDR semantics under direct viewmodel rendering");
-    const std::size_t rgbOnlyShadowMask=dynamicModelShadows.find(
+    const std::size_t rgbOnlyShadowMask=dynamicModelShadowsCpp.find(
             "rlColorMask(true, true, true, false)");
-    const std::size_t contactShadowDraw=dynamicModelShadows.find(
+    const std::size_t contactShadowDraw=dynamicModelShadowsCpp.find(
             "DrawContactShadows(context)",rgbOnlyShadowMask);
-    const std::size_t restoredShadowMask=dynamicModelShadows.find(
+    const std::size_t restoredShadowMask=dynamicModelShadowsCpp.find(
             "rlColorMask(true, true, true, true)",contactShadowDraw);
-    Check(dynamicModelShadows.find("rlDrawRenderBatchActive")!=std::string::npos
-                    &&dynamicModelShadows.find("rlActiveTextureSlot(0)")
+    Check(dynamicModelShadowsCpp.find("rlDrawRenderBatchActive")!=std::string::npos
+                    &&dynamicModelShadowsCpp.find("rlActiveTextureSlot(0)")
                             !=std::string::npos
-                    &&dynamicModelShadows.find("rlEnableColorBlend")
+                    &&dynamicModelShadowsCpp.find("rlEnableColorBlend")
                             !=std::string::npos
-                    &&dynamicModelShadows.find("rlSetBlendMode(BLEND_ALPHA)")
+                    &&dynamicModelShadowsCpp.find("rlSetBlendMode(BLEND_ALPHA)")
                             !=std::string::npos
-                    &&dynamicModelShadows.find("rlEnableDepthMask")
+                    &&dynamicModelShadowsCpp.find("rlEnableDepthMask")
                             !=std::string::npos
-                    &&dynamicModelShadows.find("rlDisableShader")
+                    &&dynamicModelShadowsCpp.find("rlDisableShader")
                             !=std::string::npos
                     &&rgbOnlyShadowMask!=std::string::npos
                     &&contactShadowDraw!=std::string::npos
                     &&restoredShadowMask!=std::string::npos,
           "dynamic contact shadows blend RGB without corrupting scene alpha and restore draw state");
-    Check(dynamicModelShadows.find("DrawProjectedShadows")==std::string::npos
-                    &&dynamicModelShadows.find("ProjectedSilhouette")
+    Check(dynamicModelShadowsCpp.find("DrawProjectedShadows")==std::string::npos
+                    &&dynamicModelShadowsCpp.find("ProjectedSilhouette")
                             ==std::string::npos
-                    &&dynamicModelShadows.find(
+                    &&dynamicModelShadowsCpp.find(
                                "!= SectorDynamicModelShadowMode::Contact")
                             !=std::string::npos,
           "contact shadows are mode-exclusive and the projected silhouette pass is removed");
+    const auto& opaqueShadow = game::GameShaderPrograms[static_cast<std::size_t>(
+            game::GameShader::SpotLightShadowOpaque)];
+    const auto& cutoutShadow = game::GameShaderPrograms[static_cast<std::size_t>(
+            game::GameShader::SpotLightShadowCutout)];
+    Check(std::string(opaqueShadow.vertexPath) == cutoutShadow.vertexPath,
+          "opaque and cutout shadows share the posed vertex stage");
     const std::size_t firstSkinnedShadowVertex=dynamicLightingShadows.find(
             "in vec4 vertexBoneIndices;");
     Check(firstSkinnedShadowVertex!=std::string::npos
-                    &&dynamicLightingShadows.find(
-                               "SectorSpotLightShadowVs, SectorSpotLightShadowOpaqueFs")
+                    &&dynamicLightingShadowsCpp.find(
+                               "LoadGameShader(GameShader::SpotLightShadowOpaque)")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find(
-                               "SectorSpotLightShadowVs, SectorSpotLightShadowCutoutFs")
+                    &&dynamicLightingShadowsCpp.find(
+                               "LoadGameShader(GameShader::SpotLightShadowCutout)")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find("BuildAnimatedModelPoseView")
+                    &&dynamicLightingShadowsCpp.find("BuildAnimatedModelPoseView")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find(
+                    &&dynamicLightingShadowsCpp.find(
                                "AnimatedModelMeshBoneMatrices")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find("dynamicModelShadowCasters")
+                    &&dynamicLightingShadowsCpp.find("dynamicModelShadowCasters")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find("contentFingerprint")
+                    &&dynamicLightingShadowsCpp.find("contentFingerprint")
                             !=std::string::npos,
           "shared spotlight and point-light atlas passes render and invalidate posed dynamic-model casters");
-    Check(dynamicLightingShadows.find("LoadGeometryShader")
+    Check(dynamicLightingShadowsCpp.find("LoadGeometryShader")
                             ==std::string::npos
-                    &&dynamicLightingShadows.find("GL_GEOMETRY_SHADER")
+                    &&dynamicLightingShadowsCpp.find("GL_GEOMETRY_SHADER")
                             ==std::string::npos
-                    &&dynamicLightingShadows.find(
+                    &&dynamicLightingShadowsCpp.find(
                                "DynamicPointLightShadowFaceCount")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find(
+                    &&dynamicLightingShadowsCpp.find(
                                "effectiveShadowMapResolution")
                             !=std::string::npos,
           "point-light shadows use six ordinary planar atlas passes without a geometry shader");
-    Check(dynamicLightingShadows.find("DynamicRectLightShadowFaceCount")
+    Check(dynamicLightingShadowsCpp.find("DynamicRectLightShadowFaceCount")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find(
+                    &&dynamicLightingShadowsCpp.find(
                                "SectorPreviewDynamicLightKind::Rect")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find("rectFaceDirections")
+                    &&dynamicLightingShadowsCpp.find("rectFaceDirections")
                             !=std::string::npos,
           "rect-light shadows use five oriented planar atlas faces");
-    Check(dynamicLightingShadows.find("GL_MAX_TEXTURE_SIZE")
+    Check(dynamicLightingShadowsCpp.find("GL_MAX_TEXTURE_SIZE")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find(
+                    &&dynamicLightingShadowsCpp.find(
                                "DynamicShadowAtlasLowResolution")
                             !=std::string::npos
-                    &&dynamicLightingShadows.find("falling back to")
+                    &&dynamicLightingShadowsCpp.find("falling back to")
                             !=std::string::npos,
           "high-quality dynamic shadow allocation checks GPU limits and exposes the 4K fallback");
     Check(dynamicShadowSampling.find("int PointShadowFace(vec3 ray)")
@@ -1231,30 +1306,30 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&dust.find("frontHemisphereOnly&&face==5")
                             !=std::string::npos,
           "surface and dust rect shadows sample a rect-local cube and reject the omitted back face");
-    Check(ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
-                          "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
+    Check(test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite}).find(
+                          "int PointShadowFace(vec3 ray)")
                             !=std::string::npos
-                    &&ReadSource(DOOR_SHADER_SOURCE_PATH).find(
-                               "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
+                    &&test::ReadShaderPrograms({game::GameShader::DoorOpaque}).find(
+                               "int PointShadowFace(vec3 ray)")
                             !=std::string::npos
-                    &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
-                               "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
+                    &&test::ReadShaderPrograms({game::GameShader::StaticModel}).find(
+                               "int PointShadowFace(vec3 ray)")
                             !=std::string::npos
-                    &&ReadSource(BILLBOARD_SHADER_SOURCE_PATH).find(
-                               "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
+                    &&test::ReadShaderPrograms({game::GameShader::BillboardCutout}).find(
+                               "int PointShadowFace(vec3 ray)")
                             !=std::string::npos
                     &&dust.find("pointShadowFace")!=std::string::npos,
           "all surface and volumetric receivers share cube-face shadow projection helpers");
-    const std::size_t atlasReset=dynamicLightingShadows.find(
+    const std::size_t atlasReset=dynamicLightingShadowsCpp.find(
             "if (shadowAtlasNeedsFullClear) {");
-    const std::size_t invalidateCachedTile=dynamicLightingShadows.find(
+    const std::size_t invalidateCachedTile=dynamicLightingShadowsCpp.find(
             "state.valid = false;",atlasReset);
-    const std::size_t assignedTileFilter=dynamicLightingShadows.find(
+    const std::size_t assignedTileFilter=dynamicLightingShadowsCpp.find(
             "if (!state.assigned) continue;",invalidateCachedTile);
-    const std::size_t lifecycleFullClear=dynamicLightingShadows.find(
+    const std::size_t lifecycleFullClear=dynamicLightingShadowsCpp.find(
             "const bool fullClear = shadowAtlasNeedsFullClear;",
             assignedTileFilter);
-    const std::size_t incrementalTileClear=dynamicLightingShadows.find(
+    const std::size_t incrementalTileClear=dynamicLightingShadowsCpp.find(
             "if (!fullClear) glClear(GL_DEPTH_BUFFER_BIT);",
             lifecycleFullClear);
     Check(atlasReset!=std::string::npos
@@ -1266,31 +1341,31 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&invalidateCachedTile<assignedTileFilter
                     &&assignedTileFilter<lifecycleFullClear
                     &&lifecycleFullClear<incrementalTileClear
-                    &&dynamicLightingShadows.find(
+                    &&dynamicLightingShadowsCpp.find(
                                "pendingShadowLightUpdates.size() == shadowCasters.size()")
                             ==std::string::npos,
           "full shadow-atlas clears invalidate every cached tile while routine updates clear only their scissored tiles");
-    const std::string pbrModels=ReadSource(PBR_SHADER_SOURCE_PATH);
-    Check(pbrModels.find("dynamicLightContext.shadowMaps.shadowMap0")
+    const std::string pbrModelsCpp = ReadSource(PBR_SHADER_SOURCE_PATH);
+    Check(pbrModelsCpp.find("dynamicLightContext.shadowMaps.shadowMap0")
                             !=std::string::npos
-                    &&pbrModels.find("dynamicModel.shadowMode")
+                    &&pbrModelsCpp.find("dynamicModel.shadowMode")
                             ==std::string::npos,
           "dynamic models receive shared atlas shadows independently of their caster mode");
-    Check(bloom.find("failedForCurrentKey")!=std::string::npos
-                    && bloom.find("rlDrawRenderBatchActive")!=std::string::npos
-                    && bloom.find("rlDisableColorBlend")!=std::string::npos
-                    && bloom.find("rlEnableColorBlend")!=std::string::npos,
+    Check(bloomCpp.find("failedForCurrentKey")!=std::string::npos
+                    && bloomCpp.find("rlDrawRenderBatchActive")!=std::string::npos
+                    && bloomCpp.find("rlDisableColorBlend")!=std::string::npos
+                    && bloomCpp.find("rlEnableColorBlend")!=std::string::npos,
           "optional bloom failure is latched and rlgl blend transitions are synchronized/restored");
 }
 
 void TestFlashlightProfileCoverage()
 {
-    const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
-    const std::string models = ReadSource(PBR_SHADER_SOURCE_PATH);
-    const std::string doors = ReadSource(DOOR_SHADER_SOURCE_PATH);
-    const std::string billboards = ReadSource(BILLBOARD_SHADER_SOURCE_PATH);
-    const std::string profile = ReadSource(FLASHLIGHT_PROFILE_SOURCE_PATH);
-    const std::string shadows = ReadSource(DYNAMIC_SHADOW_SOURCE_PATH);
+    const std::string sector = test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite});
+    const std::string models = test::ReadShaderPrograms({game::GameShader::StaticModel});
+    const std::string doors = test::ReadShaderPrograms({game::GameShader::DoorOpaque});
+    const std::string billboards = test::ReadShaderPrograms({game::GameShader::BillboardCutout});
+    const std::string profile = test::ReadShaderStage(game::GameShader::Lightmap);
+    const std::string shadows = test::ReadShaderStage(game::GameShader::Lightmap);
     const auto supportsFlashlight = [](const std::string& source) {
         return source.find("uniform sampler2D flashlightCookie")
                             != std::string::npos
@@ -1327,10 +1402,12 @@ void TestFlashlightProfileCoverage()
 int main()
 {
     TestDiagnosticModesAndScales();
+    TestSpecularAaRouting();
     TestIndirectAndEnvironmentRouting();
     TestViewmodelIsolationAndFiniteHandling();
     TestMaterialTextureSemantics();
     TestEnvironmentEligibility();
+    TestReflectionBindingsInitializeAfterSuccessfulLoad();
     TestRemovedShaderPathsStayRemoved();
     TestSectorRuntimeNormalMappingPolicy();
     TestBakedHdrConsumersStayUnclamped();

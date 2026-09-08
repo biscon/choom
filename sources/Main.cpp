@@ -6,7 +6,7 @@
 #include "engine/assets/FontLoadFlags.h"
 #include "engine/debug/DebugConsoleLogBridge.h"
 #include "engine/render/ColorTransfer.h"
-#include "engine/render/FxaaShader.h"
+#include "game/LoadShader.h"
 #include "engine/render/RenderColorDiagnostics.h"
 #include "engine/render/RenderTarget.h"
 #include "engine/render/ScenePresentationShader.h"
@@ -616,13 +616,22 @@ int main(int argc, char** argv)
 
     Shader fxaaShader{};
     int fxaaTexelSizeLoc = -1;
-    fxaaShader = LoadShaderFromMemory(nullptr, engine::FxaaFragmentShader);
-    fxaaTexelSizeLoc = GetShaderLocation(fxaaShader, "texelSize");
-    const std::string scenePresentationFragmentShader =
-            engine::BuildScenePresentationFragmentShader();
-    Shader scenePresentationShader = LoadShaderFromMemory(
-            nullptr,
-            scenePresentationFragmentShader.c_str());
+    fxaaShader = game::LoadGameShader(game::GameShader::Fxaa);
+    if (fxaaShader.id != 0) fxaaTexelSizeLoc = GetShaderLocation(fxaaShader, "texelSize");
+    Shader scenePresentationShader = game::LoadGameShader(game::GameShader::ScenePresentation);
+    if (!IsShaderValid(scenePresentationShader)) {
+        TraceLog(LOG_ERROR, "RENDER: required tone-map/sRGB presentation shader unavailable");
+        if (IsShaderValid(fxaaShader)) UnloadShader(fxaaShader);
+        unloadViewmodelTarget(viewmodelTarget);
+        engine::UnloadRenderTarget(worldTargetResource);
+        engine::UnloadRenderTarget(scenePresentationTargetResource);
+        engine::UnloadRenderTarget(editorTargetResource);
+        engine::UnloadRenderTarget(uiTargetResource);
+        engine::UnloadRenderTarget(menuTargetResource);
+        engine::UnloadRenderTarget(consoleTargetResource);
+        CloseWindow();
+        return 1;
+    }
     const int presentationToneMapperLoc = GetShaderLocation(
             scenePresentationShader, "presentationToneMapper");
     const int presentationExposureLoc = GetShaderLocation(
@@ -651,19 +660,6 @@ int main(int argc, char** argv)
             scenePresentationShader, "presentationUnderwaterFlow");
     const int presentationRuntimeSecondsLoc = GetShaderLocation(
             scenePresentationShader, "presentationRuntimeSeconds");
-    if (!IsShaderValid(scenePresentationShader)) {
-        TraceLog(LOG_ERROR, "RENDER: required tone-map/sRGB presentation shader unavailable");
-        if (IsShaderValid(fxaaShader)) UnloadShader(fxaaShader);
-        unloadViewmodelTarget(viewmodelTarget);
-        engine::UnloadRenderTarget(worldTargetResource);
-        engine::UnloadRenderTarget(scenePresentationTargetResource);
-        engine::UnloadRenderTarget(editorTargetResource);
-        engine::UnloadRenderTarget(uiTargetResource);
-        engine::UnloadRenderTarget(menuTargetResource);
-        engine::UnloadRenderTarget(consoleTargetResource);
-        CloseWindow();
-        return 1;
-    }
     const auto unloadRenderResources = [&]() {
         if (IsShaderValid(fxaaShader)) {
             UnloadShader(fxaaShader);

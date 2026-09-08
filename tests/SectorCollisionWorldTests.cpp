@@ -137,6 +137,24 @@ const game::SectorCollisionEdge* FindEdge(
     return nullptr;
 }
 
+void TestBaseboardsDoNotChangeCollision()
+{
+    auto map = MakeSquare();
+    game::SectorCollisionWorld before, after;
+    std::string error;
+    Check(before.BuildFromTopology(map, &error), "collision fixture builds without trim");
+    for (auto& side : map.sideDefs) side.baseboard = {true, 8.0f, 2.0f, "trim"};
+    Check(after.BuildFromTopology(map, &error), "collision fixture builds with thick trim");
+    const auto* a = before.GetSectorEdges(10);
+    const auto* b = after.GetSectorEdges(10);
+    Check(a && b && a->size() == b->size(), "baseboards do not add collision edges");
+    if (!a || !b || a->size() != b->size()) return;
+    for (size_t i = 0; i < a->size(); ++i) {
+        Check(Near((*a)[i].a, (*b)[i].a) && Near((*a)[i].b, (*b)[i].b)
+                && (*a)[i].kind == (*b)[i].kind, "baseboard thickness leaves collision unchanged");
+    }
+}
+
 void TestBuildBasics()
 {
     const SectorTopologyMap map = MakeSquare();
@@ -433,6 +451,7 @@ void TestRobustness()
 
 int main()
 {
+    TestBaseboardsDoNotChangeCollision();
     TestBuildBasics();
     TestHeightsUseRenderedWorldUnits();
     TestPortalExtraction();

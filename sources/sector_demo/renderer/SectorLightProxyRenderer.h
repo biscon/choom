@@ -17,6 +17,8 @@ struct SectorReceiverBounds;
 
 class SectorLightProxyRenderer {
 public:
+    // Explicit load phase only; Apply never creates shader resources.
+    bool Initialize();
     void Reserve(std::size_t sourceCount);
     bool Apply(
             RenderTexture2D& sceneTarget,
@@ -35,7 +37,6 @@ public:
     int DrawCallCount() const { return drawCallCount; }
 
 private:
-    bool EnsureResources();
 
     struct VisibleHalo {
         const SectorLightAtmosphereSource* source = nullptr;

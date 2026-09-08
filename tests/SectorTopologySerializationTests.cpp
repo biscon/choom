@@ -5573,6 +5573,39 @@ void TestFootstepSetRoundTripAndDefaults()
           "authoring face footstep override derives into runtime topology");
 }
 
+void TestBaseboardSerialization()
+{
+    auto document = MakeAuthoringDocumentFromMap(MakeSquare());
+    const Json original = Json::parse(SaveAuthoringText(document));
+    Check(!original["authoringGraph"]["lineSides"][0].contains("baseboard"),
+            "default baseboard is omitted from saved documents");
+    auto& board = document.graph.lineSides[0].baseboard;
+    board.enabled = true;
+    board.height = 1.2f;
+    board.thickness = 0.16f;
+    board.materialId = "test_trim";
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(SaveAuthoringText(document), loaded, error), "baseboard document round trips");
+    const auto& restored = loaded.graph.lineSides[0].baseboard;
+    Check(restored.enabled && restored.height == board.height && restored.thickness == board.thickness
+            && restored.materialId == board.materialId, "all baseboard settings round trip");
+    board.enabled = false;
+    Check(LoadAuthoringText(SaveAuthoringText(document), loaded, error)
+            && !loaded.graph.lineSides[0].baseboard.enabled
+            && loaded.graph.lineSides[0].baseboard.materialId == "test_trim",
+            "disabling a board retains its configured material and dimensions");
+    Json invalid = original;
+    invalid["authoringGraph"]["lineSides"][0]["baseboard"] = {{"height", 0}};
+    Check(!LoadAuthoringText(invalid.dump(), loaded, error), "zero baseboard height is rejected");
+    invalid["authoringGraph"]["lineSides"][0]["baseboard"] = {{"thickness", -1}};
+    Check(!LoadAuthoringText(invalid.dump(), loaded, error), "negative baseboard thickness is rejected");
+    Check(LoadAuthoringText(original.dump(), loaded, error) && !loaded.graph.lineSides[0].baseboard.enabled
+            && loaded.graph.lineSides[0].baseboard.height == 1.5f
+            && loaded.graph.lineSides[0].baseboard.thickness == 0.14f,
+            "missing baseboard fields load disabled with the current dimension defaults");
+}
+
 void TestAuthoringEditorSettingsRoundTripAndValidation()
 {
     game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(MakeSquare());
@@ -5852,6 +5885,7 @@ int main()
     TestPatrolRoundTripDefaultsAndValidation();
     TestTriggerRoundTripAndValidation();
     TestFootstepSetRoundTripAndDefaults();
+    TestBaseboardSerialization();
     TestAuthoringEditorSettingsRoundTripAndValidation();
     TestStructuralPrimitiveOrientationRoundTrip();
     TestProceduralLadderRoundTrip();

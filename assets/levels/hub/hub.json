@@ -358,8 +358,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 605,
-          "backSideDefId": 606,
+          "frontSideDefId": 617,
+          "backSideDefId": 618,
           "endpointA": [
             -704,
             1296
@@ -398,8 +398,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 553,
-          "backSideDefId": 581,
+          "frontSideDefId": 565,
+          "backSideDefId": 593,
           "endpointA": [
             -992,
             1456
@@ -469,8 +469,8 @@
           "lineDefId": 127,
           "frontSectorId": 33,
           "backSectorId": 26,
-          "frontSideDefId": 241,
-          "backSideDefId": 268,
+          "frontSideDefId": 251,
+          "backSideDefId": 278,
           "endpointA": [
             -2560,
             1376
@@ -1499,8 +1499,8 @@
           "lineDefId": 234,
           "frontSectorId": 50,
           "backSectorId": 43,
-          "frontSideDefId": 209,
-          "backSideDefId": 222,
+          "frontSideDefId": 219,
+          "backSideDefId": 232,
           "endpointA": [
             -2944,
             592
@@ -2181,8 +2181,8 @@
           "lineDefId": 269,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 398,
-          "backSideDefId": 377,
+          "frontSideDefId": 410,
+          "backSideDefId": 389,
           "endpointA": [
             -2048,
             -720
@@ -2421,8 +2421,8 @@
           "lineDefId": 255,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 392,
-          "backSideDefId": 338,
+          "frontSideDefId": 404,
+          "backSideDefId": 350,
           "endpointA": [
             -2432,
             -560
@@ -2825,8 +2825,8 @@
           "lineDefId": 324,
           "frontSectorId": 63,
           "backSectorId": 66,
-          "frontSideDefId": 418,
-          "backSideDefId": 354,
+          "frontSideDefId": 430,
+          "backSideDefId": 366,
           "endpointA": [
             -2432,
             -2688
@@ -3090,198 +3090,6 @@
       "yawDegrees": 0.0
     },
     {
-      "id": 188,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_188",
-        "modelPath": "assets/models/furniture/wooden_bench_low-poly.glb",
-        "scale": 0.5,
-        "collision": true
-      },
-      "position": [
-        -200.0,
-        -13.5,
-        -249.60003662109375
-      ],
-      "yawDegrees": 1.5
-    },
-    {
-      "id": 189,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_189",
-        "modelPath": "assets/models/furniture/wooden_long-table.glb",
-        "scale": 0.949999988079071,
-        "collision": true
-      },
-      "position": [
-        -200.6400146484375,
-        -13.5,
-        -257.5199890136719
-      ],
-      "yawDegrees": -1.0
-    },
-    {
-      "id": 190,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_190",
-        "modelPath": "assets/models/furniture/wooden_bench_low-poly.glb",
-        "scale": 0.5,
-        "collision": true
-      },
-      "position": [
-        -200.0,
-        -13.5,
-        -266.0
-      ],
-      "yawDegrees": -1.5
-    },
-    {
-      "id": 191,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_191",
-        "modelPath": "assets/models/furniture/wooden_long-table.glb",
-        "scale": 0.949999988079071,
-        "collision": true
-      },
-      "position": [
-        -200.0,
-        -13.5,
-        -232.79998779296875
-      ],
-      "yawDegrees": -1.0
-    },
-    {
-      "id": 192,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_192",
-        "modelPath": "assets/models/furniture/wooden_bench_low-poly.glb",
-        "scale": 0.5,
-        "collision": true
-      },
-      "position": [
-        -200.0,
-        -13.5,
-        -239.0
-      ],
-      "yawDegrees": -1.0
-    },
-    {
-      "id": 193,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_193",
-        "modelPath": "assets/models/furniture/wooden_bench_low-poly.glb",
-        "scale": 0.5,
-        "collision": true
-      },
-      "position": [
-        -200.0,
-        -13.5,
-        -225.0
-      ],
-      "yawDegrees": 1.5
-    },
-    {
-      "id": 194,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_194",
-        "modelPath": "assets/models/furniture/wooden_long-table.glb",
-        "scale": 0.949999988079071,
-        "collision": true
-      },
-      "position": [
-        -164.0,
-        -13.5,
-        -256.0
-      ],
-      "yawDegrees": 0.0
-    },
-    {
-      "id": 195,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_195",
-        "modelPath": "assets/models/furniture/wooden_long-table.glb",
-        "scale": 0.949999988079071,
-        "collision": true
-      },
-      "position": [
-        -164.0,
-        -13.5,
-        -232.0
-      ],
-      "yawDegrees": 0.5
-    },
-    {
-      "id": 196,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_196",
-        "modelPath": "assets/models/furniture/wooden_bench_low-poly.glb",
-        "scale": 0.5,
-        "collision": true
-      },
-      "position": [
-        -163.0,
-        -13.5,
-        -266.0
-      ],
-      "yawDegrees": 0.5
-    },
-    {
-      "id": 197,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_197",
-        "modelPath": "assets/models/furniture/wooden_bench_low-poly.glb",
-        "scale": 0.5,
-        "collision": true
-      },
-      "position": [
-        -164.0,
-        -13.5,
-        -247.0
-      ],
-      "yawDegrees": -0.5
-    },
-    {
-      "id": 198,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_198",
-        "modelPath": "assets/models/furniture/wooden_bench_low-poly.glb",
-        "scale": 0.5,
-        "collision": true
-      },
-      "position": [
-        -163.0,
-        -13.5,
-        -240.0
-      ],
-      "yawDegrees": 1.0
-    },
-    {
-      "id": 199,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_199",
-        "modelPath": "assets/models/furniture/wooden_bench_low-poly.glb",
-        "scale": 0.5,
-        "collision": true
-      },
-      "position": [
-        -164.0,
-        -13.5,
-        -225.0
-      ],
-      "yawDegrees": -1.0
-    },
-    {
       "id": 200,
       "kind": "door",
       "door": {
@@ -3290,8 +3098,8 @@
           "lineDefId": 296,
           "frontSectorId": 52,
           "backSectorId": 61,
-          "frontSideDefId": 395,
-          "backSideDefId": 357,
+          "frontSideDefId": 407,
+          "backSideDefId": 369,
           "endpointA": [
             -2320,
             -1920
@@ -3379,11 +3187,11 @@
       "kind": "window",
       "window": {
         "anchor": {
-          "lineDefId": 436,
+          "lineDefId": 435,
           "frontSectorId": 85,
           "backSectorId": 92,
-          "frontSideDefId": 471,
-          "backSideDefId": 615,
+          "frontSideDefId": 483,
+          "backSideDefId": 627,
           "endpointA": [
             -768,
             -2688
@@ -3398,11 +3206,13 @@
         "horizontalOffsetWorld": 0.25,
         "normalOffset": 0.125,
         "tint": {
-          "r": 100,
+          "r": 255,
           "g": 150,
-          "b": 255,
+          "b": 100,
           "a": 255
-        }
+        },
+        "surfaceHaze": 0.11999999731779099,
+        "imperfectionStrength": 0.25
       },
       "position": [
         -36.0,
@@ -3417,11 +3227,11 @@
       "door": {
         "instanceId": "door_205",
         "anchor": {
-          "lineDefId": 408,
+          "lineDefId": 407,
           "frontSectorId": 63,
           "backSectorId": 83,
-          "frontSideDefId": 423,
-          "backSideDefId": 463,
+          "frontSideDefId": 435,
+          "backSideDefId": 475,
           "endpointA": [
             -1664,
             -2640
@@ -3459,11 +3269,11 @@
       "door": {
         "instanceId": "door_206",
         "anchor": {
-          "lineDefId": 398,
+          "lineDefId": 397,
           "frontSectorId": 70,
           "backSectorId": 81,
-          "frontSideDefId": 517,
-          "backSideDefId": 589,
+          "frontSideDefId": 529,
+          "backSideDefId": 601,
           "endpointA": [
             -896,
             -4240
@@ -3504,7 +3314,7 @@
           "frontSectorId": 60,
           "backSectorId": 55,
           "frontSideDefId": 110,
-          "backSideDefId": 256,
+          "backSideDefId": 266,
           "endpointA": [
             -4992,
             -704
@@ -3534,7 +3344,7 @@
       "kind": "duct_access",
       "ductAccess": {
         "anchor": {
-          "lineDefId": 441,
+          "lineDefId": 440,
           "frontSectorId": 93,
           "backSectorId": 60,
           "frontSideDefId": 112,
@@ -4142,6 +3952,2479 @@
         -320.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 249,
+      "kind": "door",
+      "door": {
+        "instanceId": "door_249",
+        "anchor": {
+          "lineDefId": 447,
+          "frontSectorId": 94,
+          "backSectorId": 96,
+          "frontSideDefId": 524,
+          "backSideDefId": 578,
+          "endpointA": [
+            -1296,
+            -4768
+          ],
+          "endpointB": [
+            -1136,
+            -4768
+          ]
+        },
+        "width": 1.2549999952316284,
+        "height": 2.643749952316284,
+        "normalOffset": -0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_003",
+        "modelFit": "fit_width",
+        "motion": "swing",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "openDistance": 2.643749952316284,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_01"
+      },
+      "position": [
+        -76.0,
+        -15.75,
+        -298.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 250,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_250",
+        "modelPath": "assets/models/bathroom/Wall_Basin_Plumbed.gltf",
+        "heightOffsetWorld": 0.5,
+        "collision": true
+      },
+      "position": [
+        -240.0,
+        -16.0,
+        -162.3599853515625
+      ],
+      "yawDegrees": 179.99998474121094
+    },
+    {
+      "id": 251,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_251",
+        "modelPath": "assets/models/bathroom/Wall_Basin_Plumbed.gltf",
+        "heightOffsetWorld": 0.5,
+        "collision": true
+      },
+      "position": [
+        -250.39996337890625,
+        -16.0,
+        -162.3599853515625
+      ],
+      "yawDegrees": 179.99998474121094
+    },
+    {
+      "id": 252,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_252",
+        "modelPath": "assets/models/bathroom/Waste_Bin_Pedal.gltf",
+        "collision": true
+      },
+      "position": [
+        -232.7999267578125,
+        -16.0,
+        -162.20001220703125
+      ],
+      "yawDegrees": -157.99998474121094
+    },
+    {
+      "id": 253,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_253",
+        "modelPath": "assets/models/bathroom/Mirror_Dulled_460x800.gltf",
+        "heightOffsetWorld": 1.25
+      },
+      "position": [
+        -240.0,
+        -16.0,
+        -160.12001037597656
+      ],
+      "yawDegrees": -179.99998474121094
+    },
+    {
+      "id": 254,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_254",
+        "modelPath": "assets/models/bathroom/Mirror_Dulled_460x800.gltf",
+        "heightOffsetWorld": 1.25
+      },
+      "position": [
+        -250.39999389648438,
+        -16.0,
+        -160.0
+      ],
+      "yawDegrees": -179.99998474121094
+    },
+    {
+      "id": 255,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_255",
+        "modelPath": "assets/models/bathroom/Soap_Dispenser_Wall.gltf",
+        "heightOffsetWorld": 1.2499998807907104
+      },
+      "position": [
+        -245.0,
+        -16.0,
+        -160.75999450683594
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 256,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_256",
+        "modelPath": "assets/models/bathroom/Cubicle_Pilaster_150.gltf",
+        "collision": true
+      },
+      "position": [
+        -274.9999084472656,
+        -16.0,
+        -160.80010986328125
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 257,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_257",
+        "modelPath": "assets/models/bathroom/Cubicle_Divider_1640.gltf",
+        "collision": true
+      },
+      "position": [
+        -281.5199279785156,
+        -16.0,
+        -174.80014038085938
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 258,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_258",
+        "modelPath": "assets/models/bathroom/Cubicle_Infill_355.gltf",
+        "heightOffsetWorld": 0.20000001788139343,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -162.83999633789063
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 259,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_259",
+        "modelPath": "assets/models/bathroom/Cubicle_Door_890.gltf",
+        "heightOffsetWorld": 0.029999999329447746,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -164.24009704589844
+      ],
+      "yawDegrees": -5.000096321105957
+    },
+    {
+      "id": 260,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_260",
+        "modelPath": "assets/models/bathroom/Cubicle_Infill_355.gltf",
+        "heightOffsetWorld": 0.20000001788139343,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -172.80010986328125
+      ],
+      "yawDegrees": -90.00003814697266
+    },
+    {
+      "id": 261,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_261",
+        "modelPath": "assets/models/bathroom/Cubicle_Pilaster_150.gltf",
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -174.83999633789063
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 262,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_262",
+        "modelPath": "assets/models/bathroom/Cubicle_Infill_355.gltf",
+        "heightOffsetWorld": 0.20000001788139343,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -176.83999633789063
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 263,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_263",
+        "modelPath": "assets/models/bathroom/Cubicle_Door_890.gltf",
+        "heightOffsetWorld": 0.029999999329447746,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -178.28001403808594
+      ],
+      "yawDegrees": 45.999935150146484
+    },
+    {
+      "id": 264,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_264",
+        "modelPath": "assets/models/bathroom/Cubicle_Infill_355.gltf",
+        "heightOffsetWorld": 0.20000001788139343,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -186.7999725341797
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 265,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_265",
+        "modelPath": "assets/models/bathroom/Cubicle_Pilaster_150.gltf",
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -188.76004028320313
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 266,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_266",
+        "modelPath": "assets/models/bathroom/Cubicle_Divider_1640.gltf",
+        "collision": true
+      },
+      "position": [
+        -281.3999328613281,
+        -16.0,
+        -189.4399871826172
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 267,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_267",
+        "modelPath": "assets/models/bathroom/Toilet_Floor.gltf",
+        "collision": true
+      },
+      "position": [
+        -284.9599609375,
+        -16.0,
+        -167.88002014160156
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 268,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_268",
+        "modelPath": "assets/models/bathroom/Toilet_Floor.gltf",
+        "collision": true
+      },
+      "position": [
+        -285.0,
+        -16.0,
+        -182.40000915527344
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 269,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_269",
+        "modelPath": "assets/models/bathroom/Toilet_Paper_Holder.gltf",
+        "heightOffsetWorld": 0.5599997639656067
+      },
+      "position": [
+        -282.5997314453125,
+        -16.0,
+        -174.35995483398438
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 270,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_270",
+        "modelPath": "assets/models/bathroom/Toilet_Paper_Holder.gltf",
+        "heightOffsetWorld": 0.5599997639656067
+      },
+      "position": [
+        -283.0,
+        -16.0,
+        -189.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 271,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_271",
+        "modelPath": "assets/models/bathroom/Toilet_Brush_Holder.gltf"
+      },
+      "position": [
+        -286.0,
+        -16.0,
+        -163.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 272,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_272",
+        "modelPath": "assets/models/bathroom/Toilet_Brush_Holder.gltf"
+      },
+      "position": [
+        -286.0,
+        -16.0,
+        -178.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 273,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_273",
+        "modelPath": "assets/models/bathroom/Paper_Towel_Dispenser.gltf",
+        "heightOffsetWorld": 1.1999999284744263
+      },
+      "position": [
+        -256.4000244140625,
+        -16.0,
+        -160.9600067138672
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 274,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_274",
+        "modelPath": "assets/models/bathroom/Waste_Bin_Pedal.gltf",
+        "collision": true
+      },
+      "position": [
+        -263.0,
+        -16.0,
+        -162.0
+      ],
+      "yawDegrees": 122.00003814697266
+    },
+    {
+      "id": 275,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_275",
+        "modelPath": "assets/models/bathroom/Urinal_Privacy_Divider.gltf",
+        "heightOffsetWorld": 0.3500000238418579,
+        "collision": true
+      },
+      "position": [
+        -248.0,
+        -16.0,
+        -207.91993713378906
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 276,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_276",
+        "modelPath": "assets/models/bathroom/Urinal_Plumbed.gltf",
+        "heightOffsetWorld": 0.40000003576278687,
+        "collision": true
+      },
+      "position": [
+        -241.99996948242188,
+        -16.0,
+        -207.5199737548828
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 277,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_277",
+        "modelPath": "assets/models/bathroom/Urinal_Plumbed.gltf",
+        "heightOffsetWorld": 0.40000003576278687,
+        "collision": true
+      },
+      "position": [
+        -254.0,
+        -16.0,
+        -207.48001098632813
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 278,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_278",
+        "modelPath": "assets/models/bathroom/Fluorescent_Fixture_1240.gltf",
+        "heightOffsetWorld": 3.3399999141693115,
+        "castsShadow": false
+      },
+      "position": [
+        -240.0,
+        -16.0,
+        -184.0
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 279,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_279",
+        "modelPath": "assets/models/bathroom/Fluorescent_Fixture_1240.gltf",
+        "heightOffsetWorld": 3.3399999141693115,
+        "castsShadow": false
+      },
+      "position": [
+        -264.0,
+        -16.0,
+        -184.0
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 280,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_280",
+        "modelPath": "assets/models/cafeteria/Wall_Clock_360.gltf",
+        "heightOffsetWorld": 2.3099989891052246,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -107.4400863647461,
+        -16.0,
+        -295.8798522949219
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 281,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_281",
+        "modelPath": "assets/models/cafeteria/Noticeboard_Wall.gltf",
+        "heightOffsetWorld": 1.25,
+        "castsShadow": false
+      },
+      "position": [
+        -135.88002014160156,
+        -16.0,
+        -281.2000427246094
+      ],
+      "yawDegrees": 89.99996185302734
+    },
+    {
+      "id": 282,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_282",
+        "modelPath": "assets/models/cafeteria/Lectern_Wood.gltf",
+        "collision": true
+      },
+      "position": [
+        -88.00003051757813,
+        -9.75,
+        -232.79998779296875
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 283,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_283",
+        "modelPath": "assets/models/cafeteria/Upright_Piano.gltf",
+        "scale": 1.149999976158142,
+        "collision": true
+      },
+      "position": [
+        -59.44000244140625,
+        -9.75,
+        -222.59982299804688
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 284,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_284",
+        "modelPath": "assets/models/cafeteria/Piano_Bench.gltf",
+        "collision": true
+      },
+      "position": [
+        -66.40000915527344,
+        -9.75,
+        -222.60000610351563
+      ],
+      "yawDegrees": 87.0
+    },
+    {
+      "id": 285,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_285",
+        "modelPath": "assets/models/cafeteria/Gooseneck_Microphone.gltf",
+        "heightOffsetWorld": 1.149999976158142
+      },
+      "position": [
+        -89.00000762939453,
+        -9.75,
+        -234.19998168945313
+      ],
+      "yawDegrees": 59.99999237060547
+    },
+    {
+      "id": 286,
+      "kind": "door",
+      "door": {
+        "instanceId": "door_286",
+        "anchor": {
+          "lineDefId": 467,
+          "frontSectorId": 67,
+          "backSectorId": 98,
+          "frontSideDefId": 288,
+          "backSideDefId": 159,
+          "endpointA": [
+            -3520,
+            -2928
+          ],
+          "endpointB": [
+            -3520,
+            -3088
+          ]
+        },
+        "width": 1.2549999952316284,
+        "height": 2.643749952316284,
+        "normalOffset": 0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_009",
+        "modelFit": "fit_width",
+        "motion": "swing",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "openDistance": 2.643749952316284,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_01"
+      },
+      "position": [
+        -220.0,
+        -15.75,
+        -188.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 287,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_287",
+        "modelPath": "assets/models/cafeteria/Wall_Clock_360.gltf",
+        "heightOffsetWorld": 2.9099984169006348,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -140.0,
+        -16.0,
+        -170.20001220703125
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 288,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_288",
+        "modelPath": "assets/models/cafeteria/Painting_Autumn_River.gltf",
+        "heightOffsetWorld": 1.2899997234344482,
+        "scale": 2.0,
+        "castsShadow": false
+      },
+      "position": [
+        -192.0,
+        -16.0,
+        -170.1599578857422
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 289,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_289",
+        "modelPath": "assets/models/cafeteria/Drinking_Fountain.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -92.00009155273438,
+        -16.0,
+        -294.1199951171875
+      ],
+      "yawDegrees": 89.9999771118164
+    },
+    {
+      "id": 290,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_290",
+        "modelPath": "assets/models/cafeteria/Painting_Mountain_Lake.gltf",
+        "heightOffsetWorld": 1.2899999618530273,
+        "scale": 2.0,
+        "castsShadow": false
+      },
+      "position": [
+        -84.20000457763672,
+        -16.0,
+        -170.1200408935547
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 291,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_291",
+        "modelPath": "assets/models/cafeteria/Fire_Extinguisher_Wall.gltf",
+        "heightOffsetWorld": 0.9500000476837158,
+        "scale": 1.25
+      },
+      "position": [
+        -56.959983825683594,
+        -16.0,
+        -284.79998779296875
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 292,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_292",
+        "modelPath": "assets/models/cafeteria/Fire_Extinguisher_Sign.gltf",
+        "heightOffsetWorld": 1.1999999284744263,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -56.079986572265625,
+        -16.0,
+        -281.60003662109375
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 293,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_293",
+        "modelPath": "assets/models/cafeteria/Waste_Bin_Swing.gltf",
+        "collision": true
+      },
+      "position": [
+        -120.0,
+        -16.0,
+        -294.0
+      ],
+      "yawDegrees": 1.25
+    },
+    {
+      "id": 294,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_294",
+        "modelPath": "assets/models/kitchen/Tray_Rack_12.gltf",
+        "collision": true
+      },
+      "position": [
+        -129.99996948242188,
+        -16.0,
+        -292.0000305175781
+      ],
+      "yawDegrees": 4.0
+    },
+    {
+      "id": 295,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_295",
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 4.255001544952393,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -76.0,
+        -16.0,
+        -284.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 296,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_296",
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 4.255001544952393,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -76.0,
+        -16.0,
+        -180.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 297,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_297",
+        "modelPath": "assets/models/cafeteria/Fire_Extinguisher_Wall.gltf",
+        "heightOffsetWorld": 0.9500000476837158,
+        "scale": 1.25
+      },
+      "position": [
+        -57.0,
+        -16.0,
+        -183.0
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 298,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_298",
+        "modelPath": "assets/models/cafeteria/Fire_Extinguisher_Sign.gltf",
+        "heightOffsetWorld": 1.1999999284744263,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -56.11997985839844,
+        -16.0,
+        -180.0
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 299,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_299",
+        "modelPath": "assets/models/kitchen/Plate_Stack.gltf",
+        "heightOffsetWorld": 0.4300000071525574
+      },
+      "position": [
+        -129.60000610351563,
+        -16.0,
+        -291.3198547363281
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 300,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_300",
+        "modelPath": "assets/models/cafeteria/Cafeteria_Tray.gltf",
+        "heightOffsetWorld": 0.9000002145767212
+      },
+      "position": [
+        -130.0,
+        -16.0,
+        -292.3999328613281
+      ],
+      "yawDegrees": -8.0
+    },
+    {
+      "id": 301,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_301",
+        "modelPath": "assets/models/cafeteria/Cafeteria_Tray.gltf",
+        "heightOffsetWorld": 1.040000081062317
+      },
+      "position": [
+        -109.99998474121094,
+        -16.0,
+        -295.99993896484375
+      ],
+      "yawDegrees": 12.000000953674316
+    },
+    {
+      "id": 302,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_302",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.41999995708465576
+      },
+      "position": [
+        -131.19998168945313,
+        -16.0,
+        -290.3999328613281
+      ],
+      "yawDegrees": -14.00000286102295
+    },
+    {
+      "id": 303,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_303",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 1.3799997568130493
+      },
+      "position": [
+        -131.36000061035156,
+        -16.0,
+        -292.4794006347656
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 304,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_304",
+        "modelPath": "assets/models/kitchen/Plate_Stack.gltf",
+        "heightOffsetWorld": 1.3699997663497925
+      },
+      "position": [
+        -129.239990234375,
+        -16.0,
+        -291.99993896484375
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 305,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_305",
+        "modelPath": "assets/models/cafeteria/Painting_Rocky_Coast.gltf",
+        "heightOffsetWorld": 1.2100000381469727,
+        "scale": 2.25,
+        "castsShadow": false
+      },
+      "position": [
+        -215.7599639892578,
+        -13.5,
+        -228.0
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 306,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_306",
+        "modelPath": "assets/models/cafeteria/Painting_Quiet_Farmland.gltf",
+        "heightOffsetWorld": 1.209999918937683,
+        "scale": 2.25,
+        "castsShadow": false
+      },
+      "position": [
+        -215.7599639892578,
+        -13.5,
+        -252.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 307,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_307",
+        "modelPath": "assets/models/furniture/horse_painting.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 1.859999418258667,
+        "scale": 3.0,
+        "castsShadow": false
+      },
+      "position": [
+        -192.0,
+        -13.5,
+        -271.8399963378906
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 308,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_308",
+        "modelPath": "assets/models/furniture/painting_lowpoly.glb",
+        "heightOffsetWorld": 1.759999394416809,
+        "scale": 0.800000011920929,
+        "castsShadow": false
+      },
+      "position": [
+        -160.0,
+        -13.5,
+        -271.5599060058594
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 309,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_309",
+        "modelPath": "assets/models/cafeteria/Dining_Table_1600.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -202.39996337890625,
+        -13.5,
+        -257.20001220703125
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 310,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_310",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -205.79995727539063,
+        -13.5,
+        -263.7998046875
+      ],
+      "yawDegrees": 2.0
+    },
+    {
+      "id": 311,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_311",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -200.19992065429688,
+        -13.5,
+        -262.8000183105469
+      ],
+      "yawDegrees": -3.9999992847442627
+    },
+    {
+      "id": 312,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_312",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -205.20001220703125,
+        -13.5,
+        -250.99996948242188
+      ],
+      "yawDegrees": 179.5
+    },
+    {
+      "id": 313,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_313",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -199.60000610351563,
+        -13.5,
+        -251.39999389648438
+      ],
+      "yawDegrees": -178.00003051757813
+    },
+    {
+      "id": 314,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_314",
+        "modelPath": "assets/models/cafeteria/Dining_Table_1600.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -176.00003051757813,
+        -13.5,
+        -257.0
+      ],
+      "yawDegrees": 0.5
+    },
+    {
+      "id": 315,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_315",
+        "modelPath": "assets/models/cafeteria/Dining_Table_800.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -152.20004272460938,
+        -13.5,
+        -257.0
+      ],
+      "yawDegrees": -0.25
+    },
+    {
+      "id": 316,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_316",
+        "modelPath": "assets/models/cafeteria/Dining_Table_1600.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -203.0,
+        -13.5,
+        -233.16000366210938
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 317,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_317",
+        "modelPath": "assets/models/cafeteria/Dining_Table_1600.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -176.0,
+        -13.5,
+        -233.00003051757813
+      ],
+      "yawDegrees": -0.25
+    },
+    {
+      "id": 318,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_318",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -179.20004272460938,
+        -13.5,
+        -262.4000244140625
+      ],
+      "yawDegrees": -1.9999996423721313
+    },
+    {
+      "id": 319,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_319",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -172.800048828125,
+        -13.5,
+        -263.0799865722656
+      ],
+      "yawDegrees": 2.0
+    },
+    {
+      "id": 320,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_320",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -178.60000610351563,
+        -13.5,
+        -251.79998779296875
+      ],
+      "yawDegrees": 178.5
+    },
+    {
+      "id": 321,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_321",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -172.79998779296875,
+        -13.5,
+        -252.99996948242188
+      ],
+      "yawDegrees": 179.5
+    },
+    {
+      "id": 322,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_322",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -206.0,
+        -13.5,
+        -238.4000244140625
+      ],
+      "yawDegrees": -1.9999996423721313
+    },
+    {
+      "id": 323,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_323",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -200.39999389648438,
+        -13.5,
+        -239.0
+      ],
+      "yawDegrees": 2.13443399843527e-07
+    },
+    {
+      "id": 324,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_324",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -200.39999389648438,
+        -13.5,
+        -228.19998168945313
+      ],
+      "yawDegrees": 176.50001525878906
+    },
+    {
+      "id": 325,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_325",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -206.0,
+        -13.5,
+        -228.19998168945313
+      ],
+      "yawDegrees": 179.5
+    },
+    {
+      "id": 326,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_326",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -178.60000610351563,
+        -13.5,
+        -228.79998779296875
+      ],
+      "yawDegrees": -178.50001525878906
+    },
+    {
+      "id": 327,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_327",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -173.0,
+        -13.5,
+        -227.60000610351563
+      ],
+      "yawDegrees": 172.50003051757813
+    },
+    {
+      "id": 328,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_328",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -179.0,
+        -13.5,
+        -237.20001220703125
+      ],
+      "yawDegrees": -1.9999996423721313
+    },
+    {
+      "id": 329,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_329",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -172.79998779296875,
+        -13.5,
+        -237.60000610351563
+      ],
+      "yawDegrees": 1.0000001192092896
+    },
+    {
+      "id": 330,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_330",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -152.39999389648438,
+        -13.5,
+        -250.80001831054688
+      ],
+      "yawDegrees": 109.5003433227539
+    },
+    {
+      "id": 331,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_331",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -152.39999389648438,
+        -13.5,
+        -263.3999938964844
+      ],
+      "yawDegrees": 51.000022888183594
+    },
+    {
+      "id": 332,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_332",
+        "modelPath": "assets/models/cafeteria/Waste_Bin_Swing.gltf",
+        "collision": true
+      },
+      "position": [
+        -176.07994079589844,
+        -16.0,
+        -171.6399688720703
+      ],
+      "yawDegrees": -179.9999542236328
+    },
+    {
+      "id": 333,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_333",
+        "modelPath": "assets/models/cafeteria/Waste_Bin_Swing.gltf",
+        "collision": true
+      },
+      "position": [
+        -102.19998168945313,
+        -16.0,
+        -171.80001831054688
+      ],
+      "yawDegrees": -179.9999542236328
+    },
+    {
+      "id": 334,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_334",
+        "modelPath": "assets/models/furniture/coat_hanger.glb",
+        "collision": true
+      },
+      "position": [
+        -172.20001220703125,
+        -16.0,
+        -164.20001220703125
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 335,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_335",
+        "modelPath": "assets/models/furniture/coat_hanger.glb",
+        "collision": true
+      },
+      "position": [
+        -215.199951171875,
+        -16.0,
+        -175.79995727539063
+      ],
+      "yawDegrees": -13.000000953674316
+    },
+    {
+      "id": 336,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_336",
+        "modelPath": "assets/models/furniture/coat_hanger.glb",
+        "collision": true
+      },
+      "position": [
+        -60.20000457763672,
+        -16.0,
+        -173.79998779296875
+      ],
+      "yawDegrees": 13.000000953674316
+    },
+    {
+      "id": 337,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_337",
+        "modelPath": "assets/models/bathroom/Coat_Hook.gltf",
+        "heightOffsetWorld": 1.7999993562698364,
+        "scale": 1.25,
+        "castsShadow": false
+      },
+      "position": [
+        -65.87997436523438,
+        -16.0,
+        -295.8399353027344
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 338,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_338",
+        "modelPath": "assets/models/bathroom/Coat_Hook.gltf",
+        "heightOffsetWorld": 1.7999993562698364,
+        "scale": 1.25,
+        "castsShadow": false
+      },
+      "position": [
+        -60.480010986328125,
+        -16.0,
+        -295.84002685546875
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 339,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_339",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.8400001525878906
+      },
+      "position": [
+        -206.39999389648438,
+        -13.5,
+        -255.60000610351563
+      ],
+      "yawDegrees": -45.0000114440918
+    },
+    {
+      "id": 340,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_340",
+        "modelPath": "assets/models/cafeteria/Napkin_Holder.gltf",
+        "heightOffsetWorld": 0.8300001621246338
+      },
+      "position": [
+        -202.60000610351563,
+        -13.5,
+        -257.1999816894531
+      ],
+      "yawDegrees": 15.000001907348633
+    },
+    {
+      "id": 341,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_341",
+        "modelPath": "assets/models/cafeteria/Napkin_Holder.gltf",
+        "heightOffsetWorld": 0.8300001621246338
+      },
+      "position": [
+        -170.60009765625,
+        -13.5,
+        -257.0
+      ],
+      "yawDegrees": 96.00006866455078
+    },
+    {
+      "id": 342,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_342",
+        "modelPath": "assets/models/cafeteria/Napkin_Holder.gltf",
+        "heightOffsetWorld": 0.8300001621246338
+      },
+      "position": [
+        -207.99993896484375,
+        -13.5,
+        -233.0
+      ],
+      "yawDegrees": -18.999998092651367
+    },
+    {
+      "id": 343,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_343",
+        "modelPath": "assets/models/cafeteria/Napkin_Holder.gltf",
+        "heightOffsetWorld": 0.8300001621246338
+      },
+      "position": [
+        -175.4000244140625,
+        -13.5,
+        -233.0
+      ],
+      "yawDegrees": -94.00006866455078
+    },
+    {
+      "id": 344,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_344",
+        "modelPath": "assets/models/cafeteria/Napkin_Holder.gltf",
+        "heightOffsetWorld": 0.8300001621246338
+      },
+      "position": [
+        -152.20001220703125,
+        -13.5,
+        -256.6000061035156
+      ],
+      "yawDegrees": -8.999998092651367
+    },
+    {
+      "id": 345,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_345",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.8400001525878906
+      },
+      "position": [
+        -202.0,
+        -13.5,
+        -235.0
+      ],
+      "yawDegrees": -5.0
+    },
+    {
+      "id": 346,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_346",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.8400001525878906
+      },
+      "position": [
+        -204.0,
+        -13.5,
+        -231.0
+      ],
+      "yawDegrees": -84.99999237060547
+    },
+    {
+      "id": 347,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_347",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.8400001525878906
+      },
+      "position": [
+        -177.0,
+        -13.5,
+        -235.0
+      ],
+      "yawDegrees": 24.0
+    },
+    {
+      "id": 348,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_348",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.8400001525878906
+      },
+      "position": [
+        -154.0,
+        -13.5,
+        -257.0
+      ],
+      "yawDegrees": 35.0
+    },
+    {
+      "id": 349,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_349",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.8400001525878906
+      },
+      "position": [
+        -173.0,
+        -13.5,
+        -259.0
+      ],
+      "yawDegrees": -26.999998092651367
+    },
+    {
+      "id": 350,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_350",
+        "modelPath": "assets/models/cafeteria/Pepper_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906,
+        "castsShadow": false
+      },
+      "position": [
+        -201.5199432373047,
+        -13.5,
+        -257.52008056640625
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 351,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_351",
+        "modelPath": "assets/models/cafeteria/Salt_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906,
+        "castsShadow": false
+      },
+      "position": [
+        -201.6400146484375,
+        -13.5,
+        -256.79986572265625
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 352,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_352",
+        "modelPath": "assets/models/cafeteria/Salt_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906,
+        "castsShadow": false
+      },
+      "position": [
+        -170.68003845214844,
+        -13.5,
+        -258.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 353,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_353",
+        "modelPath": "assets/models/cafeteria/Pepper_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906,
+        "castsShadow": false
+      },
+      "position": [
+        -170.52003479003906,
+        -13.5,
+        -255.9601593017578
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 354,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_354",
+        "modelPath": "assets/models/cafeteria/Salt_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906,
+        "castsShadow": false
+      },
+      "position": [
+        -207.0,
+        -13.5,
+        -234.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 355,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_355",
+        "modelPath": "assets/models/cafeteria/Pepper_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906,
+        "castsShadow": false
+      },
+      "position": [
+        -207.7200164794922,
+        -13.5,
+        -233.80001831054688
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 356,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_356",
+        "modelPath": "assets/models/cafeteria/Salt_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906,
+        "castsShadow": false
+      },
+      "position": [
+        -177.51998901367188,
+        -13.5,
+        -233.32000732421875
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 357,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_357",
+        "modelPath": "assets/models/cafeteria/Pepper_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906,
+        "castsShadow": false
+      },
+      "position": [
+        -176.39996337890625,
+        -13.5,
+        -232.48001098632813
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 358,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_358",
+        "modelPath": "assets/models/cafeteria/Ashtray_Metal.gltf",
+        "heightOffsetWorld": 0.8399994969367981,
+        "castsShadow": false
+      },
+      "position": [
+        -150.3599853515625,
+        -13.5,
+        -258.1603088378906
+      ],
+      "yawDegrees": 23.250017166137695
+    },
+    {
+      "id": 359,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_359",
+        "modelPath": "assets/models/cafeteria/Cigarette_Butt.gltf",
+        "heightOffsetWorld": 0.8500002026557922,
+        "castsShadow": false
+      },
+      "position": [
+        -150.16001892089844,
+        -13.5,
+        -258.24005126953125
+      ],
+      "yawDegrees": 33.99999237060547
+    },
+    {
+      "id": 360,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_360",
+        "modelPath": "assets/models/cafeteria/Cigarette_Butt.gltf",
+        "heightOffsetWorld": 0.8500002026557922,
+        "castsShadow": false
+      },
+      "position": [
+        -150.51998901367188,
+        -13.5,
+        -258.2801208496094
+      ],
+      "yawDegrees": 117.00007629394531
+    },
+    {
+      "id": 361,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_361",
+        "modelPath": "assets/models/cafeteria/Newspaper_Folded.gltf",
+        "heightOffsetWorld": 0.8400002717971802,
+        "castsShadow": false
+      },
+      "position": [
+        -178.91986083984375,
+        -13.5,
+        -258.64007568359375
+      ],
+      "yawDegrees": 169.99996948242188
+    },
+    {
+      "id": 362,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_362",
+        "modelPath": "assets/models/low_poly_sofa.glb",
+        "heightOffsetWorld": 0.25,
+        "scale": 1.5,
+        "collision": true
+      },
+      "position": [
+        -34.39994812011719,
+        -9.75,
+        -170.00027465820313
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 363,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_363",
+        "modelPath": "assets/models/low_poly_sofa.glb",
+        "heightOffsetWorld": 0.25,
+        "scale": 1.5,
+        "collision": true
+      },
+      "position": [
+        -54.000022888183594,
+        -9.75,
+        -190.19998168945313
+      ],
+      "yawDegrees": 1.792924558685627e-05
+    },
+    {
+      "id": 364,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_364",
+        "modelPath": "assets/models/furniture/carpet_carpet.glb",
+        "heightOffsetWorld": 0.0010000000474974513,
+        "scale": 0.6000000238418579,
+        "castsShadow": false
+      },
+      "position": [
+        -36.0,
+        -9.75,
+        -190.199951171875
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 365,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_365",
+        "modelPath": "assets/models/furniture/free_wooden_round_dining_table_3d_model.glb",
+        "heightOffsetWorld": -0.15000000596046448,
+        "scale": 0.6000000238418579,
+        "collision": true
+      },
+      "position": [
+        -36.399993896484375,
+        -9.75,
+        -187.79995727539063
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 366,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_366",
+        "modelPath": "assets/models/furniture/the_matrix_chair.glb",
+        "heightOffsetWorld": 0.7200000882148743,
+        "scale": 1.4500000476837158,
+        "collision": true
+      },
+      "position": [
+        -40.79997253417969,
+        -9.75,
+        -206.79989624023438
+      ],
+      "yawDegrees": 34.0000114440918
+    },
+    {
+      "id": 367,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_367",
+        "modelPath": "assets/models/lighting/antique_lamp.glb",
+        "scale": 1.149999976158142,
+        "collision": true,
+        "castsShadow": false
+      },
+      "position": [
+        -50.0,
+        -9.75,
+        -174.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 368,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_368",
+        "modelPath": "assets/models/furniture/coat_hanger.glb",
+        "collision": true
+      },
+      "position": [
+        -16.440000534057617,
+        -9.75,
+        -173.7200164794922
+      ],
+      "yawDegrees": 13.000000953674316
+    },
+    {
+      "id": 369,
+      "kind": "door",
+      "door": {
+        "instanceId": "door_369",
+        "anchor": {
+          "lineDefId": 413,
+          "frontSectorId": 84,
+          "backSectorId": 82,
+          "frontSideDefId": 672,
+          "backSideDefId": 607,
+          "endpointA": [
+            -208,
+            -2720
+          ],
+          "endpointB": [
+            -48,
+            -2720
+          ]
+        },
+        "width": 1.2549999952316284,
+        "height": 2.643749952316284,
+        "normalOffset": -0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_009",
+        "modelFit": "fit_width",
+        "motion": "swing",
+        "hinge": "end",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "openDistance": 2.643749952316284,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_01"
+      },
+      "position": [
+        -8.0,
+        -9.5,
+        -170.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 370,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_370",
+        "modelPath": "assets/models/furniture/antique_wooden_wardrobe.glb",
+        "heightOffsetWorld": 1.100000023841858,
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -50.24000549316406,
+        -9.75,
+        -231.9998779296875
+      ],
+      "yawDegrees": 90.0000228881836
+    },
+    {
+      "id": 371,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_371",
+        "modelPath": "assets/models/cafeteria/Dining_Table_1600.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -13.599998474121094,
+        -9.75,
+        -254.40008544921875
+      ],
+      "yawDegrees": 90.49998474121094
+    },
+    {
+      "id": 372,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_372",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -14.0,
+        -9.75,
+        -264.20001220703125
+      ],
+      "yawDegrees": -3.9999704360961914
+    },
+    {
+      "id": 373,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_373",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -6.000000476837158,
+        -9.75,
+        -258.3999938964844
+      ],
+      "yawDegrees": -82.50001525878906
+    },
+    {
+      "id": 374,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_374",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -7.0,
+        -9.75,
+        -251.60000610351563
+      ],
+      "yawDegrees": -90.49995422363281
+    },
+    {
+      "id": 375,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_375",
+        "modelPath": "assets/models/cafeteria/Dining_Chair_Vinyl.gltf",
+        "scale": 1.100000023841858,
+        "collision": true
+      },
+      "position": [
+        -20.200000762939453,
+        -9.75,
+        -255.199951171875
+      ],
+      "yawDegrees": 80.50000762939453
+    },
+    {
+      "id": 376,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_376",
+        "modelPath": "assets/models/lighting/lamp_02_lowpoly.glb",
+        "heightOffsetWorld": 0.7550002336502075,
+        "scale": 0.800000011920929,
+        "castsShadow": false
+      },
+      "position": [
+        -13.679996490478516,
+        -9.75,
+        -253.16043090820313
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 377,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_377",
+        "modelPath": "assets/models/cafeteria/Painting_Rocky_Coast.gltf",
+        "heightOffsetWorld": 1.0800000429153442,
+        "scale": 1.75
+      },
+      "position": [
+        -53.84001922607422,
+        -9.75,
+        -190.08004760742188
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 378,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_378",
+        "modelPath": "assets/models/furniture/coat_hanger.glb",
+        "collision": true
+      },
+      "position": [
+        -50.199981689453125,
+        -9.75,
+        -243.19989013671875
+      ],
+      "yawDegrees": -34.49999237060547
+    },
+    {
+      "id": 379,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_379",
+        "modelPath": "assets/models/furniture/vintage_wooden_drawer_01_4k.glb",
+        "scale": 1.25,
+        "collision": true
+      },
+      "position": [
+        -34.719879150390625,
+        -9.75,
+        -269.47991943359375
+      ],
+      "yawDegrees": 1.792924558685627e-05
+    },
+    {
+      "id": 380,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_380",
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.099999189376831,
+        "scale": 0.25,
+        "castsShadow": false
+      },
+      "position": [
+        -46.00000762939453,
+        -9.75,
+        -272.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 381,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_381",
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.099999189376831,
+        "scale": 0.25,
+        "castsShadow": false
+      },
+      "position": [
+        -23.999998092651367,
+        -9.75,
+        -272.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 382,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_382",
+        "modelPath": "assets/models/cafeteria/Noticeboard_Wall.gltf",
+        "heightOffsetWorld": 1.25,
+        "castsShadow": false
+      },
+      "position": [
+        -34.75999450683594,
+        -9.75,
+        -271.8799743652344
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 383,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_383",
+        "modelPath": "assets/models/storage_shelves.glb",
+        "collision": true
+      },
+      "position": [
+        4.799999713897705,
+        -9.75,
+        -207.35980224609375
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 384,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_384",
+        "modelPath": "assets/models/cafeteria/Painting_Quiet_Farmland.gltf",
+        "heightOffsetWorld": 1.2000000476837158,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        7.800000190734863,
+        -9.75,
+        -257.9996643066406
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 385,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_385",
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 3.225001335144043,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -8.0,
+        -9.75,
+        -228.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 386,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_386",
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 3.225001335144043,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -8.0,
+        -9.75,
+        -204.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 387,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_387",
+        "modelPath": "assets/models/furniture/side_table_dresser.glb",
+        "scale": 1.2999999523162842,
+        "collision": true
+      },
+      "position": [
+        5.319999694824219,
+        -9.75,
+        -258.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 388,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_388",
+        "modelPath": "assets/models/bathroom/Waste_Bin_Pedal.gltf",
+        "collision": true
+      },
+      "position": [
+        4.799999713897705,
+        -9.75,
+        -268.6000061035156
+      ],
+      "yawDegrees": -48.00001525878906
+    },
+    {
+      "id": 389,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_389",
+        "modelPath": "assets/models/cafeteria/Newspaper_Folded.gltf",
+        "heightOffsetWorld": 0.5400000810623169
+      },
+      "position": [
+        -36.399993896484375,
+        -9.75,
+        -185.19998168945313
+      ],
+      "yawDegrees": -33.0
+    },
+    {
+      "id": 390,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_390",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.5400000810623169
+      },
+      "position": [
+        -38.80000305175781,
+        -9.75,
+        -185.80001831054688
+      ],
+      "yawDegrees": -142.9999237060547
+    },
+    {
+      "id": 391,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_391",
+        "modelPath": "assets/models/cafeteria/Ashtray_Metal.gltf",
+        "heightOffsetWorld": 0.5400000810623169,
+        "scale": 1.25
+      },
+      "position": [
+        -33.999908447265625,
+        -9.75,
+        -187.6399688720703
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 392,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_392",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.8400000929832458
+      },
+      "position": [
+        -15.439998626708984,
+        -9.75,
+        -255.9604949951172
+      ],
+      "yawDegrees": -142.9999237060547
+    },
+    {
+      "id": 393,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_393",
+        "modelPath": "assets/models/cafeteria/Coffee_Mug.gltf",
+        "heightOffsetWorld": 0.839999794960022
+      },
+      "position": [
+        -12.119998931884766,
+        -9.75,
+        -252.80010986328125
+      ],
+      "yawDegrees": 32.000038146972656
+    },
+    {
+      "id": 394,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_394",
+        "modelPath": "assets/models/cafeteria/Salt_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906
+      },
+      "position": [
+        -13.639999389648438,
+        -9.75,
+        -254.16062927246094
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 395,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_395",
+        "modelPath": "assets/models/cafeteria/Pepper_Shaker.gltf",
+        "heightOffsetWorld": 0.8400001525878906
+      },
+      "position": [
+        -13.759998321533203,
+        -9.75,
+        -254.84046936035156
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 396,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_396",
+        "modelPath": "assets/models/cafeteria/Ashtray_Metal.gltf",
+        "heightOffsetWorld": 0.8399994969367981
+      },
+      "position": [
+        -13.960000991821289,
+        -9.75,
+        -249.2799835205078
+      ],
+      "yawDegrees": 23.250017166137695
+    },
+    {
+      "id": 397,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_397",
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.099999189376831,
+        "scale": 0.25,
+        "castsShadow": false
+      },
+      "position": [
+        0.0,
+        -9.75,
+        -272.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 398,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_398",
+        "modelPath": "assets/models/lighting/light_fixture_ceiling_recessed.glb",
+        "heightOffsetWorld": 3.839998245239258,
+        "scale": 2.0,
+        "castsShadow": false
+      },
+      "position": [
+        -88.0,
+        -16.0,
+        -160.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 399,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_399",
+        "modelPath": "assets/models/lighting/light_fixture_ceiling_recessed.glb",
+        "heightOffsetWorld": 3.839998245239258,
+        "scale": 2.0,
+        "castsShadow": false
+      },
+      "position": [
+        -64.0,
+        -16.0,
+        -160.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -6068,6 +8351,138 @@
           }
         }
       }
+    },
+    {
+      "id": 63,
+      "position": [
+        -13.683892250061035,
+        7.850207328796387,
+        -254.8560028076172
+      ],
+      "radius": 5.0,
+      "sourceRadius": 0.5,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 64,
+      "position": [
+        -45.86697769165039,
+        7.016912937164307,
+        -269.4015197753906
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 229,
+        "g": 190,
+        "b": 136,
+        "a": 255
+      },
+      "castsShadow": false,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.0064258575439453125,
+              0.05116017162799835,
+              -0.014508247375488281
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 65,
+      "position": [
+        -24.041223526000977,
+        6.716689109802246,
+        -269.2346496582031
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 229,
+        "g": 190,
+        "b": 136,
+        "a": 255
+      },
+      "castsShadow": false,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.0064258575439453125,
+              0.05116017162799835,
+              -0.014508247375488281
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 66,
+      "position": [
+        0.031164519488811493,
+        7.016575336456299,
+        -269.3719482421875
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 229,
+        "g": 190,
+        "b": 136,
+        "a": 255
+      },
+      "castsShadow": false,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.0064258575439453125,
+              0.05116017162799835,
+              -0.014508247375488281
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
     }
   ],
   "staticSpotLights": [
@@ -6463,52 +8878,6 @@
       "castsShadow": false
     },
     {
-      "id": 15,
-      "position": [
-        -95.46705627441406,
-        22.047962188720703,
-        -231.98924255371094
-      ],
-      "target": [
-        -68.24192810058594,
-        4.054832458496094,
-        -231.98924255371094
-      ],
-      "range": 64.0,
-      "sourceRadius": 1.0,
-      "intensity": 3.0,
-      "color": {
-        "r": 255,
-        "g": 250,
-        "b": 240,
-        "a": 255
-      },
-      "innerConeDegrees": 15.0,
-      "atmosphere": {
-        "proxy": {
-          "halo": {
-            "enabled": true,
-            "brightness": 0.009999999776482582,
-            "maxExtinction": 0.0,
-            "edgeSoftness": 1.0
-          },
-          "shaft": {
-            "enabled": true,
-            "widthScale": 0.949999988079071,
-            "brightness": 0.014999999664723873,
-            "maxExtinction": 0.0,
-            "edgeSoftness": 0.75,
-            "scatteringTint": {
-              "r": 255,
-              "g": 250,
-              "b": 240,
-              "a": 255
-            }
-          }
-        }
-      }
-    },
-    {
       "id": 16,
       "position": [
         -60.27256774902344,
@@ -6531,6 +8900,7 @@
       },
       "innerConeDegrees": 15.0,
       "outerConeDegrees": 25.0,
+      "castsShadow": false,
       "atmosphere": {
         "proxy": {
           "halo": {
@@ -6578,6 +8948,7 @@
       },
       "innerConeDegrees": 15.0,
       "outerConeDegrees": 25.0,
+      "castsShadow": false,
       "atmosphere": {
         "proxy": {
           "halo": {
@@ -7177,6 +9548,202 @@
               "b": 241,
               "a": 255
             }
+          }
+        }
+      }
+    },
+    {
+      "id": 26,
+      "position": [
+        -46.17787170410156,
+        6.174620151519775,
+        -180.51829528808594
+      ],
+      "target": [
+        -59.54880142211914,
+        -13.898111343383789,
+        -158.5350341796875
+      ],
+      "range": 16.0,
+      "sourceRadius": 0.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 190,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 27,
+      "position": [
+        -47.08980941772461,
+        4.649999618530273,
+        -170.4817352294922
+      ],
+      "target": [
+        -63.46175003051758,
+        -14.54307746887207,
+        -191.18307495117188
+      ],
+      "range": 10.0,
+      "sourceRadius": 0.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 190,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 29,
+      "position": [
+        -88.0,
+        14.513472557067871,
+        -160.0
+      ],
+      "target": [
+        -88.0,
+        -49.424442291259766,
+        -160.0
+      ],
+      "range": 48.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 225,
+        "a": 255
+      },
+      "outerConeDegrees": 40.0,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "radiusWorld": 0.3499999940395355,
+            "centerOffsetWorld": [
+              0.000339508056640625,
+              0.07547223567962646,
+              0.008516311645507813
+            ],
+            "brightness": 0.07999999821186066,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.800000011920929,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 210,
+              "a": 255
+            }
+          },
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.0032167434692382813,
+              0.22337496280670166,
+              0.0023517608642578125
+            ],
+            "lengthScale": 0.3499999940395355,
+            "widthScale": 0.949999988079071,
+            "brightness": 0.02500000037252903,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.006000000052154064,
+          "maximumSizeWorld": 0.012000000104308128,
+          "scatteringTint": {
+            "r": 255,
+            "g": 250,
+            "b": 241,
+            "a": 255
+          }
+        }
+      }
+    },
+    {
+      "id": 30,
+      "position": [
+        -64.0,
+        14.510000228881836,
+        -160.0
+      ],
+      "target": [
+        -64.0,
+        -49.42791748046875,
+        -160.0
+      ],
+      "range": 48.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 225,
+        "a": 255
+      },
+      "outerConeDegrees": 40.0,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "radiusWorld": 0.3499999940395355,
+            "centerOffsetWorld": [
+              0.000339508056640625,
+              0.07547223567962646,
+              0.008516311645507813
+            ],
+            "brightness": 0.07999999821186066,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.800000011920929,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 210,
+              "a": 255
+            }
+          },
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.0032167434692382813,
+              0.22337496280670166,
+              0.0023517608642578125
+            ],
+            "lengthScale": 0.3499999940395355,
+            "widthScale": 0.949999988079071,
+            "brightness": 0.02500000037252903,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.006000000052154064,
+          "maximumSizeWorld": 0.012000000104308128,
+          "scatteringTint": {
+            "r": 255,
+            "g": 250,
+            "b": 241,
+            "a": 255
           }
         }
       }
@@ -8084,6 +10651,271 @@
         "a": 255
       },
       "startFeather": 4.0
+    },
+    {
+      "id": 27,
+      "position": [
+        -251.0,
+        1.0,
+        -184.0
+      ],
+      "target": [
+        -251.0,
+        16.0,
+        -184.0
+      ],
+      "width": 32.0,
+      "height": 32.0,
+      "range": 24.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "startFeather": 1.0,
+      "castsShadow": false
+    },
+    {
+      "id": 28,
+      "position": [
+        -76.0,
+        17.0,
+        -284.0
+      ],
+      "target": [
+        -76.0,
+        -61.29999542236328,
+        -284.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 45.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "startFeather": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.010056495666503906,
+              0.12452530860900879,
+              -0.011722564697265625
+            ],
+            "lengthScale": 0.22499999403953552,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.8999999761581421
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.013000000268220901,
+          "opacity": 0.15000000596046448
+        }
+      }
+    },
+    {
+      "id": 29,
+      "position": [
+        -76.0,
+        0.0,
+        -284.0
+      ],
+      "target": [
+        -76.0,
+        12.799999237060547,
+        -284.0
+      ],
+      "width": 20.0,
+      "height": 20.0,
+      "range": 32.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 30,
+      "position": [
+        -76.0,
+        17.0,
+        -180.0
+      ],
+      "target": [
+        -76.0,
+        -79.89999389648438,
+        -180.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 45.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "startFeather": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.010056495666503906,
+              0.12452530860900879,
+              -0.011722564697265625
+            ],
+            "lengthScale": 0.22499999403953552,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.8999999761581421
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.013000000268220901,
+          "opacity": 0.15000000596046448
+        }
+      }
+    },
+    {
+      "id": 31,
+      "position": [
+        -76.0,
+        0.0,
+        -180.0
+      ],
+      "target": [
+        -76.0,
+        11.19999885559082,
+        -180.0
+      ],
+      "width": 20.0,
+      "height": 20.0,
+      "range": 32.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 32,
+      "position": [
+        -8.0,
+        14.5,
+        -228.0
+      ],
+      "target": [
+        -8.0,
+        -55.04999542236328,
+        -228.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 45.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "startFeather": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.010056495666503906,
+              0.12452530860900879,
+              -0.011722564697265625
+            ],
+            "lengthScale": 0.22499999403953552,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.8999999761581421
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.013000000268220901,
+          "opacity": 0.15000000596046448
+        }
+      }
+    },
+    {
+      "id": 33,
+      "position": [
+        -8.0,
+        14.5,
+        -204.0
+      ],
+      "target": [
+        -8.0,
+        -55.04999542236328,
+        -204.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 45.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "startFeather": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.010056495666503906,
+              0.12452530860900879,
+              -0.011722564697265625
+            ],
+            "lengthScale": 0.22499999403953552,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.8999999761581421
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.013000000268220901,
+          "opacity": 0.15000000596046448
+        }
+      }
     }
   ],
   "dynamicPointLights": [
@@ -8371,17 +11203,42 @@
       "id": 13,
       "instanceId": "light_point_13",
       "position": [
-        -16.0,
-        4.649999618530273,
-        -240.0
+        -50.15134811401367,
+        2.2818398475646973,
+        -173.96934509277344
       ],
       "radius": 64.0,
       "intensity": 1.0,
       "color": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
+        "r": 235,
+        "g": 200,
+        "b": 130,
         "a": 255
+      },
+      "castsShadow": true,
+      "shadowStrength": 0.949999988079071,
+      "shadowSoftness": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.6000000238418579,
+            "centerOffsetWorld": [
+              -0.05384540557861328,
+              -0.20523855090141296,
+              0.04161834716796875
+            ],
+            "brightness": 0.25,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 245,
+              "b": 190,
+              "a": 255
+            }
+          }
+        }
       }
     },
     {
@@ -8418,6 +11275,24 @@
         "a": 255
       },
       "castsShadow": true
+    },
+    {
+      "id": 64,
+      "instanceId": "light_point_64",
+      "position": [
+        -114.0,
+        6.0,
+        -202.0
+      ],
+      "radius": 100.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "enabled": false
     }
   ],
   "dynamicSpotLights": [
@@ -9048,6 +11923,133 @@
           }
         }
       }
+    },
+    {
+      "id": 15,
+      "instanceId": "light_spot_15",
+      "position": [
+        -95.46705627441406,
+        22.047962188720703,
+        -231.98924255371094
+      ],
+      "target": [
+        -72.87194061279297,
+        -1.4980850219726563,
+        -232.05702209472656
+      ],
+      "range": 64.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 240,
+        "a": 255
+      },
+      "innerConeDegrees": 15.0,
+      "castsShadow": true,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "brightness": 0.009999999776482582,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 1.0
+          },
+          "shaft": {
+            "enabled": true,
+            "widthScale": 0.949999988079071,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 240,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 28,
+      "instanceId": "light_spot_28",
+      "position": [
+        -13.797003746032715,
+        8.516946792602539,
+        -254.70046997070313
+      ],
+      "target": [
+        -13.797003746032715,
+        -24.11678123474121,
+        -254.70046997070313
+      ],
+      "range": 48.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0,
+      "castsShadow": true,
+      "shadowStrength": 0.949999988079071,
+      "shadowSoftness": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.3499999940395355,
+            "centerOffsetWorld": [
+              0.009017348289489746,
+              0.0003426074981689453,
+              -0.0079345703125
+            ],
+            "brightness": 0.02500000037252903,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 240,
+              "b": 190,
+              "a": 255
+            }
+          },
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.00039184093475341797,
+              0.3176778554916382,
+              -0.016180038452148438
+            ],
+            "lengthScale": 0.3499999940395355,
+            "widthScale": 0.949999988079071,
+            "brightness": 0.009999999776482582,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 240,
+              "b": 190,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.012000000104308128,
+          "opacity": 0.15000000596046448,
+          "scatteringTint": {
+            "r": 255,
+            "g": 250,
+            "b": 240,
+            "a": 255
+          }
+        }
+      }
     }
   ],
   "dynamicRectLights": [
@@ -9077,6 +12079,120 @@
       "castsShadow": true,
       "shadowStrength": 0.8500000238418579,
       "shadowSoftness": 2.0
+    },
+    {
+      "id": 2,
+      "position": [
+        -264.0,
+        10.25,
+        -184.0
+      ],
+      "target": [
+        -264.0,
+        -19.600000381469727,
+        -184.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 54.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "instanceId": "light_rect_2",
+      "castsShadow": true,
+      "shadowStrength": 0.8500000238418579,
+      "shadowSoftness": 3.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.011760711669921875,
+              0.24263346195220947,
+              0.00191497802734375
+            ],
+            "lengthScale": 0.25,
+            "widthScale": 1.0,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.014000000432133675,
+          "opacity": 0.11999999731779099
+        }
+      }
+    },
+    {
+      "id": 3,
+      "position": [
+        -240.0,
+        10.0,
+        -184.0
+      ],
+      "target": [
+        -240.0,
+        -19.850000381469727,
+        -184.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 54.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "instanceId": "light_rect_3",
+      "castsShadow": true,
+      "shadowStrength": 0.8500000238418579,
+      "shadowSoftness": 3.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.011760711669921875,
+              0.24263346195220947,
+              0.00191497802734375
+            ],
+            "lengthScale": 0.25,
+            "widthScale": 1.0,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.014000000432133675,
+          "opacity": 0.11999999731779099
+        }
+      }
     }
   ],
   "lightmapSettings": {
@@ -9188,7 +12304,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "b7b72fb03d3f80ad",
+    "sourceHash": "4634bdd8d0cef8b4",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -9203,13 +12319,13 @@
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 12582912,
-      "rgbChannelsAboveOne": 1379
+      "rgbChannelsAboveOne": 1445
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "b7b72fb03d3f80ad",
-      "count": 3955,
+      "sourceHash": "4634bdd8d0cef8b4",
+      "count": 3973,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -9227,16 +12343,16 @@
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 23730,
+        "sampleCount": 23838,
         "rgbChannelsAboveOne": 32
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "b7b72fb03d3f80ad",
-      "modelCount": 74,
-      "objectCount": 198,
+      "sourceHash": "4634bdd8d0cef8b4",
+      "modelCount": 114,
+      "objectCount": 334,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
@@ -10929,18 +14045,18 @@
       },
       {
         "id": 349,
-        "x": 256,
+        "x": 128,
         "y": -2720
       },
       {
         "id": 350,
-        "x": 256,
-        "y": -4736
+        "x": 128,
+        "y": -4352
       },
       {
         "id": 351,
         "x": -864,
-        "y": -4736
+        "y": -4352
       },
       {
         "id": 352,
@@ -11141,6 +14257,46 @@
         "id": 391,
         "x": -896,
         "y": -4768
+      },
+      {
+        "id": 392,
+        "x": -3520,
+        "y": -3088
+      },
+      {
+        "id": 393,
+        "x": -3552,
+        "y": -3088
+      },
+      {
+        "id": 394,
+        "x": -3552,
+        "y": -2928
+      },
+      {
+        "id": 395,
+        "x": -3520,
+        "y": -2928
+      },
+      {
+        "id": 396,
+        "x": -3552,
+        "y": -3328
+      },
+      {
+        "id": 397,
+        "x": -4608,
+        "y": -3328
+      },
+      {
+        "id": 398,
+        "x": -4608,
+        "y": -2560
+      },
+      {
+        "id": 399,
+        "x": -3552,
+        "y": -2560
       }
     ],
     "lines": [
@@ -12856,11 +16012,6 @@
         "endVertexId": 299
       },
       {
-        "id": 500,
-        "startVertexId": 306,
-        "endVertexId": 309
-      },
-      {
         "id": 501,
         "startVertexId": 309,
         "endVertexId": 308
@@ -13464,6 +16615,61 @@
         "id": 648,
         "startVertexId": 381,
         "endVertexId": 385
+      },
+      {
+        "id": 650,
+        "startVertexId": 392,
+        "endVertexId": 309
+      },
+      {
+        "id": 651,
+        "startVertexId": 392,
+        "endVertexId": 393
+      },
+      {
+        "id": 652,
+        "startVertexId": 393,
+        "endVertexId": 394
+      },
+      {
+        "id": 653,
+        "startVertexId": 306,
+        "endVertexId": 395
+      },
+      {
+        "id": 654,
+        "startVertexId": 395,
+        "endVertexId": 392
+      },
+      {
+        "id": 655,
+        "startVertexId": 394,
+        "endVertexId": 395
+      },
+      {
+        "id": 656,
+        "startVertexId": 393,
+        "endVertexId": 396
+      },
+      {
+        "id": 657,
+        "startVertexId": 396,
+        "endVertexId": 397
+      },
+      {
+        "id": 658,
+        "startVertexId": 397,
+        "endVertexId": 398
+      },
+      {
+        "id": 659,
+        "startVertexId": 398,
+        "endVertexId": 399
+      },
+      {
+        "id": 660,
+        "startVertexId": 399,
+        "endVertexId": 394
       }
     ],
     "lineSides": [
@@ -22993,6 +26199,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23034,6 +26244,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23075,6 +26289,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23116,6 +26334,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23157,6 +26379,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23198,6 +26424,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23239,6 +26469,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23280,6 +26514,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23527,6 +26765,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23774,6 +27016,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23855,6 +27101,9 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23897,6 +27146,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23939,6 +27192,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23980,6 +27237,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24062,6 +27323,53 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 468,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24103,6 +27411,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24144,6 +27456,53 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 474,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24185,6 +27544,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24226,6 +27589,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24267,6 +27634,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24349,6 +27720,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24390,6 +27765,9 @@
             ]
           },
           "materialId": "beige_wall_001"
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24431,6 +27809,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24472,6 +27854,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24556,6 +27942,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24597,6 +27987,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24638,6 +28032,53 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 494,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24679,6 +28120,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24720,47 +28165,10 @@
               0.0
             ]
           }
-        }
-      },
-      {
-        "lineId": 500,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -1.125
-            ]
-          },
-          "materialId": "worn_white_wall"
         },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24802,6 +28210,53 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 501,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24844,6 +28299,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24886,6 +28345,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24928,6 +28391,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24970,6 +28437,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25011,6 +28482,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25052,6 +28527,9 @@
             ]
           },
           "materialId": "beige_wall_001"
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25134,6 +28612,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25216,6 +28698,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25380,6 +28866,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25790,6 +29280,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -26036,6 +29530,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -26529,6 +30027,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -26653,6 +30155,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -26778,6 +30284,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -26902,6 +30412,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -27149,6 +30663,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -27231,6 +30749,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -27313,6 +30835,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -27395,6 +30921,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -27436,6 +30966,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -27603,6 +31137,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -27685,6 +31223,12 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 6.599999904632568,
+          "thickness": 0.25,
+          "materialId": "wooden_panels"
         }
       },
       {
@@ -27726,6 +31270,12 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 6.599999904632568,
+          "thickness": 0.25,
+          "materialId": "wooden_panels"
         }
       },
       {
@@ -27767,6 +31317,12 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 6.599999904632568,
+          "thickness": 0.25,
+          "materialId": "wooden_panels"
         }
       },
       {
@@ -27808,6 +31364,12 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 6.599999904632568,
+          "thickness": 0.25,
+          "materialId": "wooden_panels"
         }
       },
       {
@@ -27849,6 +31411,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -28015,6 +31581,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -28097,6 +31667,12 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 6.599999904632568,
+          "thickness": 0.25,
+          "materialId": "wooden_panels"
         }
       },
       {
@@ -28304,6 +31880,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -28427,6 +32007,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -28797,6 +32381,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -28920,6 +32508,12 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 6.599999904632568,
+          "thickness": 0.25,
+          "materialId": "wooden_panels"
         }
       },
       {
@@ -29002,6 +32596,12 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 6.599999904632568,
+          "thickness": 0.25,
+          "materialId": "wooden_panels"
         }
       },
       {
@@ -29044,6 +32644,12 @@
             ]
           },
           "materialId": "plastered_wall_02"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 6.599999904632568,
+          "thickness": 0.25,
+          "materialId": "wooden_panels"
         }
       },
       {
@@ -29085,6 +32691,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -29127,6 +32737,10 @@
             ]
           },
           "materialId": "painted_plaster_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -29444,7 +33058,8 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "worn_gray_metal_step_512"
         },
         "upper": {
           "uv": {
@@ -29486,7 +33101,8 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "worn_gray_metal_step_512"
         },
         "upper": {
           "uv": {
@@ -29541,6 +33157,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -29623,6 +33243,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -29706,6 +33330,10 @@
             ]
           },
           "materialId": "white_wall_tiles"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -29747,6 +33375,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -29790,6 +33422,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -29872,6 +33508,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -29913,6 +33553,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -29954,6 +33598,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -29995,6 +33643,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -30036,6 +33688,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -30077,6 +33733,578 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 650,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 650,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 651,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 652,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        }
+      },
+      {
+        "lineId": 653,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 653,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 654,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_white_wall"
+        }
+      },
+      {
+        "lineId": 655,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 656,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 657,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 658,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 659,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 660,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       }
     ],
@@ -35354,7 +39582,7 @@
           "b": 241,
           "a": 255
         },
-        "ambientIntensity": 0.10000000149011612,
+        "ambientIntensity": 0.15000000596046448,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -36129,7 +40357,7 @@
         "x": -433,
         "y": -4297,
         "floorZ": -9.75,
-        "ceilingZ": 20.0,
+        "ceilingZ": 16.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -36193,7 +40421,7 @@
             ]
           }
         },
-        "floorMaterialId": "worn_office_oak_floor_512",
+        "floorMaterialId": "old_wooden_floor_03",
         "ceilingMaterialId": "white_stucco"
       },
       {
@@ -36275,7 +40503,7 @@
         "x": -189,
         "y": -2706,
         "floorZ": -9.5,
-        "ceilingZ": 14.0,
+        "ceilingZ": 11.5,
         "floorUv": {
           "scale": [
             1.0,
@@ -36375,7 +40603,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.02500000037252903,
+        "ambientIntensity": 0.03500000014901161,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -36592,7 +40820,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.02500000037252903,
+        "ambientIntensity": 0.03500000014901161,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -36665,7 +40893,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.02500000037252903,
+        "ambientIntensity": 0.03500000014901161,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -36738,7 +40966,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.02500000037252903,
+        "ambientIntensity": 0.03500000014901161,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -37005,8 +41233,8 @@
         "name": "Sector 94",
         "x": -1277,
         "y": -4754,
-        "floorZ": -16.0,
-        "ceilingZ": 6.0,
+        "floorZ": -15.75,
+        "ceilingZ": 5.25,
         "floorUv": {
           "scale": [
             1.0,
@@ -37070,7 +41298,7 @@
             ]
           }
         },
-        "floorMaterialId": "interior_tiles",
+        "floorMaterialId": "worn_gray_metal_step_512",
         "ceilingMaterialId": "white_stucco"
       },
       {
@@ -37179,7 +41407,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.15000000596046448,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -37291,6 +41519,152 @@
           }
         },
         "isVoid": true
+      },
+      {
+        "id": 98,
+        "name": "Sector 98",
+        "x": -3537,
+        "y": -3070,
+        "floorZ": -15.75,
+        "ceilingZ": 5.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_wall"
+      },
+      {
+        "id": 99,
+        "name": "Sector 99",
+        "x": -4028,
+        "y": -3010,
+        "floorZ": -16.0,
+        "ceilingZ": 12.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 250,
+          "b": 241,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "floor_tiles",
+        "ceilingMaterialId": "worn_white_ceiling_512"
       }
     ],
     "fogVolumes": [
@@ -37618,6 +41992,45 @@
           1.4375,
           0.546875,
           0.125
+        ]
+      },
+      {
+        "id": 17,
+        "x": -4080,
+        "z": -2944,
+        "yWorld": -0.25,
+        "halfExtentsWorld": [
+          4.125,
+          1.75,
+          3.0
+        ],
+        "resolution": 256
+      },
+      {
+        "id": 18,
+        "x": -448,
+        "z": -3520,
+        "yWorld": 0.390625,
+        "influenceOffsetWorld": [
+          0.125,
+          0.0,
+          -0.125
+        ],
+        "halfExtentsWorld": [
+          3.375,
+          1.609375,
+          6.375
+        ]
+      },
+      {
+        "id": 19,
+        "x": -832,
+        "z": -2560,
+        "yWorld": -0.0625,
+        "halfExtentsWorld": [
+          6.5,
+          1.9375,
+          1.0
         ]
       }
     ],

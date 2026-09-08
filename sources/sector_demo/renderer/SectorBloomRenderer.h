@@ -40,6 +40,7 @@ struct SectorBloomDiagnostics {
 
 class SectorBloomRenderer {
 public:
+    bool Initialize();
     void Shutdown();
     bool Apply(
             engine::RenderTarget& sceneTarget,
@@ -53,6 +54,7 @@ public:
     bool IsLoaded() const;
 
 private:
+    void UnloadTargets();
     bool EnsureResources(int sceneWidth, int sceneHeight);
     void DisableForCurrentKey(const std::string& reason, int width, int height);
 

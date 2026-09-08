@@ -15,6 +15,8 @@ namespace game {
 
 class SectorAnalyticFogRenderer {
 public:
+    // Explicit load phase only; Apply never creates shader resources.
+    bool Initialize();
     void Reserve(std::size_t volumeCount);
     bool Apply(
             RenderTexture2D& sceneTarget,
@@ -49,7 +51,6 @@ private:
         SectorLocalFogStaticLightingSamples samples;
     };
 
-    bool EnsureResources();
     const SectorLocalFogStaticLightingSamples& StaticLightingForVolume(
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,

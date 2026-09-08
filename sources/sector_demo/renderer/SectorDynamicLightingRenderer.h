@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/renderer/SectorShadowCasterBounds.h"
 
 #include <raylib.h>
 
@@ -216,11 +217,14 @@ public:
         lightingVisibility.status.reserve(128); ReserveSelectionBuffers();
     }
     void SetShadowFaceBudget(std::size_t count) { maxShadowFacesPerFrame = count; }
-    bool HasPendingShadowFaces() const {
+    std::size_t PendingShadowFaceCount() const {
+        std::size_t count = 0;
         for (const auto& tile : shadowAtlasTileStates)
-            if (tile.assigned && (!tile.valid || tile.dirty)) return true;
-        return false;
+            if (tile.assigned && (!tile.valid || tile.dirty)) ++count;
+        return count;
     }
+    bool HasPendingShadowFaces() const { return PendingShadowFaceCount() != 0; }
+    void InvalidateShadowContents() { shadowAtlasNeedsFullClear = true; }
     const SectorPreviewDynamicPointLightSource* RuntimePointLight() const
     {
         return runtimePointLightActive ? &runtimePointLight : nullptr;
@@ -288,12 +292,6 @@ private:
         uint64_t dirtySerial = 0;
     };
 
-    struct ShadowCasterBoundsRecord {
-        uint64_t key = 0;
-        BoundingBox bounds{};
-        uint64_t contentFingerprint = 0;
-    };
-
     void ReserveSelectionBuffers();
     void UpdateLightingReachability(
             const RuntimePortalVisibilityResult& visibility,
@@ -338,12 +336,12 @@ private:
     std::array<SectorDynamicShadowSlotOwner, MaxDynamicSpotLightShadowCasters>
             shadowAtlasSlotOwners{};
     std::vector<SectorDynamicShadowUpdateRequest> pendingShadowLightUpdates;
-    std::vector<ShadowCasterBoundsRecord> previousDoorShadowCasterBounds;
-    std::vector<ShadowCasterBoundsRecord> currentDoorShadowCasterBounds;
-    std::vector<ShadowCasterBoundsRecord> previousStaticShadowCasterBounds;
-    std::vector<ShadowCasterBoundsRecord> currentStaticShadowCasterBounds;
-    std::vector<ShadowCasterBoundsRecord> previousDynamicShadowCasterBounds;
-    std::vector<ShadowCasterBoundsRecord> currentDynamicShadowCasterBounds;
+    std::vector<SectorShadowCasterBoundsRecord> previousDoorShadowCasterBounds;
+    std::vector<SectorShadowCasterBoundsRecord> currentDoorShadowCasterBounds;
+    std::vector<SectorShadowCasterBoundsRecord> previousStaticShadowCasterBounds;
+    std::vector<SectorShadowCasterBoundsRecord> currentStaticShadowCasterBounds;
+    std::vector<SectorShadowCasterBoundsRecord> previousDynamicShadowCasterBounds;
+    std::vector<SectorShadowCasterBoundsRecord> currentDynamicShadowCasterBounds;
     std::vector<BoundingBox> changedShadowCasterBounds;
     uint64_t nextShadowDirtySerial = 1;
     bool shadowAtlasNeedsFullClear = true;

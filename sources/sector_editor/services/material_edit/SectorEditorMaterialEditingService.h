@@ -144,6 +144,9 @@ public:
             SectorAuthoringSideId sideId,
             TopologyWallPart wallPart,
             TopologyMaterialLayer layer);
+    bool OpenMaterialPickerForAuthoringBaseboard(SectorAuthoringSideId sideId);
+    bool SetAuthoringBaseboardMaterial(SectorAuthoringSideId sideId,
+            const std::string& materialId, engine::AssetManager* assets);
     bool OpenMaterialPickerForAuthoringStructuralPrimitive(
             int primitiveId,
             int surfaceGroup = -1);

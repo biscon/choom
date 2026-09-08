@@ -5225,8 +5225,35 @@ void TestHdrArtifactAndBakeColorContract()
 
 } // namespace
 
+void TestBaseboardLighting()
+{
+    auto map = MakeSquare();
+    const auto oldHash = game::ComputeSectorLightmapSourceHash(map);
+    map.sideDefs[0].baseboard.height = 1.2f;
+    Check(game::ComputeSectorLightmapSourceHash(map) == oldHash, "disabled baseboard settings do not stale lightmaps");
+    map.sideDefs[0].baseboard.enabled = true;
+    const auto enabledHash = game::ComputeSectorLightmapSourceHash(map);
+    Check(enabledHash != oldHash, "enabling baseboard stales lightmaps");
+    map.sideDefs[0].baseboard.thickness *= 2;
+    Check(game::ComputeSectorLightmapSourceHash(map) != enabledHash, "baseboard thickness affects lightmap hash");
+    const auto geometryHash = game::ComputeSectorLightmapSourceHash(map);
+    map.sideDefs[0].baseboard.materialId = "trim_material";
+    Check(game::ComputeSectorLightmapSourceHash(map) != geometryHash, "baseboard material affects lightmap hash");
+    game::SectorGeneratedGeometry geometry;
+    game::SectorLightmapLayout layout;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error)
+            && game::BuildSectorLightmapLayout(map, layout, error), "baseboard lightmap layout builds");
+    int boardCharts = 0;
+    for (const auto& chart : layout.charts) {
+        if (geometry.surfaces[chart.surfaceIndex].ref.sourceKind == game::SectorGeneratedSurfaceSourceKind::Baseboard) ++boardCharts;
+    }
+    Check(boardCharts > 0, "baseboards receive dedicated lightmap charts");
+}
+
 int main()
 {
+    TestBaseboardLighting();
     TestLightmapBakeReportFormatting();
     TestSectorAssetPathHelpers();
     TestLightmapBakeInstallBoundaryRejectsStaleAndCleansTemps();

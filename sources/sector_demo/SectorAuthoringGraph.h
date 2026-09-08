@@ -39,6 +39,7 @@ struct SectorAuthoringLineSide {
     SectorTopologyWallPartSettings lower;
     SectorTopologyWallPartSettings upper;
     SectorTopologyWallPartSettings middle;
+    SectorBaseboardSettings baseboard;
 };
 
 struct SectorAuthoringFaceAnchor {
