@@ -19,6 +19,7 @@ SectorEditorModelPickerModalResult DrawSectorEditorModelPickerModal(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         SectorEditorStaticModelPickerService& picker);
 
 } // namespace game

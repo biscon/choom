@@ -9728,8 +9728,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -9830,7 +9829,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "8a90f61c58ef466e",
+    "sourceHash": "b1868ced5c50083a",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -9838,19 +9837,19 @@
         0.0
       ],
       "rgbMax": [
-        2.203125,
-        1.564453125,
-        1.564453125
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 195
+      "rgbChannelsAboveOne": 839
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "8a90f61c58ef466e",
+      "sourceHash": "b1868ced5c50083a",
       "count": 4053,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -9863,20 +9862,20 @@
           0.0
         ],
         "rgbMax": [
-          2.204270601272583,
-          1.935850739479065,
-          1.8489267826080322
+          2.192941665649414,
+          1.9389466047286987,
+          1.8518656492233276
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 24318,
-        "rgbChannelsAboveOne": 35
+        "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "8a90f61c58ef466e",
+      "sourceHash": "b1868ced5c50083a",
       "modelCount": 89,
       "objectCount": 228,
       "format": "staticModelUvRemapF32LE"
@@ -24782,6 +24781,54 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 468,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25192,6 +25239,11 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25317,6 +25369,11 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25358,6 +25415,54 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 494,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25399,6 +25504,11 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25440,6 +25550,11 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25481,6 +25596,54 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 501,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -27581,6 +27744,10 @@
             ]
           },
           "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "height": 1.5,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -30428,6 +30595,11 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -30799,6 +30971,54 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 650,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -30923,6 +31143,54 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.5,
+          "materialId": "baseboard_wood"
+        }
+      },
+      {
+        "lineId": 653,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -31050,7 +31318,7 @@
         },
         "baseboard": {
           "enabled": true,
-          "materialId": "baseboard_painted_white"
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -31095,7 +31363,7 @@
         },
         "baseboard": {
           "enabled": true,
-          "materialId": "baseboard_painted_white"
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -31140,7 +31408,7 @@
         },
         "baseboard": {
           "enabled": true,
-          "materialId": "baseboard_painted_white"
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -31185,7 +31453,7 @@
         },
         "baseboard": {
           "enabled": true,
-          "materialId": "baseboard_painted_white"
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -31230,7 +31498,7 @@
         },
         "baseboard": {
           "enabled": true,
-          "materialId": "baseboard_painted_white"
+          "materialId": "baseboard_metal"
         }
       }
     ],

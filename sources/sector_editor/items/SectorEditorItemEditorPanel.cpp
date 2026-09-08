@@ -40,7 +40,7 @@ SectorEditorItemEditorPanelResult DrawSectorEditorItemEditorPanel(
             && modelPicker.State().target == ModelPickerTarget::ItemDefinition) {
         const SectorEditorModelPickerModalResult pickerResult =
                 DrawSectorEditorModelPickerModal(
-                        ui, config, input, assets, font, modelPicker);
+                        ui, config, input, assets, font, smallFont, modelPicker);
         if (pickerResult == SectorEditorModelPickerModalResult::Selected) {
             editor.SetModelPath(modelPicker.SelectedModelPath());
             modelPicker.State().open = false;

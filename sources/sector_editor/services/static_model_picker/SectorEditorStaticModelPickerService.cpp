@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <system_error>
+#include <string_view>
 
 namespace game {
 namespace {
@@ -57,7 +58,6 @@ void SectorEditorStaticModelPickerService::Open(
     state_.target = target;
     state_.open = true;
     state_.requestedModelPath = currentModelPath;
-    state_.scroll = engine::UIScrollState{};
     state_.selectedModelIndex = -1;
     state_.scanned = false;
     statusText_ = target == ModelPickerTarget::DynamicModel
@@ -106,9 +106,12 @@ bool SectorEditorStaticModelPickerService::RefreshFromRoot(
         const std::string& assetRelativeRoot)
 {
     if (HasSelection()) {
-        state_.requestedModelPath = SelectedModelPath();
+        state_.browsing.selectedAssetId = SelectedModelPath();
     }
+    state_.allModelPaths.clear();
     state_.modelPaths.clear();
+    state_.optionLabelStorage.clear();
+    state_.filterMessage.clear();
     state_.optionLabels.clear();
     state_.selectedModelIndex = -1;
     state_.scanned = true;
@@ -144,24 +147,23 @@ bool SectorEditorStaticModelPickerService::RefreshFromRoot(
             const std::filesystem::path relative =
                     std::filesystem::relative(entry.path(), modelsRoot, entryError);
             if (!entryError && !relative.empty()) {
-                state_.modelPaths.push_back(
+                state_.allModelPaths.push_back(
                         NormalizeAssetPath(assetRelativeRoot, relative));
             }
         }
         it.increment(error);
     }
 
-    std::sort(state_.modelPaths.begin(), state_.modelPaths.end());
-    state_.modelPaths.erase(
-            std::unique(state_.modelPaths.begin(), state_.modelPaths.end()),
-            state_.modelPaths.end());
-    RebuildOptionLabels();
-    RestoreRequestedSelection();
+    std::sort(state_.allModelPaths.begin(), state_.allModelPaths.end());
+    state_.allModelPaths.erase(
+            std::unique(state_.allModelPaths.begin(), state_.allModelPaths.end()),
+            state_.allModelPaths.end());
+    RebuildFilteredOptions();
     state_.scanMessage = error
             ? "Model scan completed with filesystem errors"
-            : (state_.modelPaths.empty()
+            : (state_.allModelPaths.empty()
                     ? "No .gltf or .glb models found"
-                    : "Found " + std::to_string(state_.modelPaths.size()) + " models");
+                    : "Found " + std::to_string(state_.allModelPaths.size()) + " models");
     statusText_ = state_.scanMessage;
     return !error;
 }
@@ -173,6 +175,7 @@ bool SectorEditorStaticModelPickerService::SelectIndex(int index)
         return false;
     }
     state_.selectedModelIndex = index;
+    state_.browsing.selectedAssetId = SelectedModelPath();
     return true;
 }
 
@@ -207,17 +210,45 @@ void SectorEditorStaticModelPickerService::RebuildOptionLabels()
     }
 }
 
-void SectorEditorStaticModelPickerService::RestoreRequestedSelection()
+void SectorEditorStaticModelPickerService::ApplyFilter()
 {
-    state_.selectedModelIndex = -1;
-    const auto found = std::lower_bound(
-            state_.modelPaths.begin(),
-            state_.modelPaths.end(),
-            state_.requestedModelPath);
-    if (found != state_.modelPaths.end() && *found == state_.requestedModelPath) {
-        state_.selectedModelIndex = static_cast<int>(
-                std::distance(state_.modelPaths.begin(), found));
+    if (HasSelection()) {
+        state_.browsing.selectedAssetId = SelectedModelPath();
     }
+    state_.browsing.scroll = engine::UIScrollState{};
+    RebuildFilteredOptions(false);
+}
+
+void SectorEditorStaticModelPickerService::RebuildFilteredOptions(bool useCurrentModelFallback)
+{
+    const std::string remembered = state_.browsing.selectedAssetId;
+    const std::string_view filter = state_.browsing.filterBuffer;
+    const char* prefix = state_.target == ModelPickerTarget::NpcDefinition
+            ? "assets/models/characters/"
+            : "assets/models/";
+    state_.modelPaths.clear();
+    state_.modelPaths.reserve(state_.allModelPaths.size());
+    for (const std::string& path : state_.allModelPaths) {
+        const std::string label = EditorAssetPathDisplayLabel(path, prefix);
+        if (filter.empty() || std::search(
+                    label.begin(), label.end(), filter.begin(), filter.end(),
+                    [](char lhs, char rhs) {
+                        return std::tolower(static_cast<unsigned char>(lhs))
+                                == std::tolower(static_cast<unsigned char>(rhs));
+                    }) != label.end()) {
+            state_.modelPaths.push_back(path);
+        }
+    }
+    RebuildOptionLabels();
+    auto found = std::find(state_.modelPaths.begin(), state_.modelPaths.end(), remembered);
+    if (found == state_.modelPaths.end() && useCurrentModelFallback) {
+        found = std::find(state_.modelPaths.begin(), state_.modelPaths.end(), state_.requestedModelPath);
+    }
+    SelectIndex(found != state_.modelPaths.end()
+            ? static_cast<int>(found - state_.modelPaths.begin())
+            : (state_.modelPaths.empty() ? -1 : 0));
+    state_.filterMessage = !state_.allModelPaths.empty() && state_.modelPaths.empty()
+            ? "No models match the filter" : std::string{};
 }
 
 } // namespace game

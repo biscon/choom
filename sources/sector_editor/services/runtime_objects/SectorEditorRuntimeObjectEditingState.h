@@ -42,7 +42,9 @@ struct StaticModelPickerState {
     bool open = false;
     bool scanned = false;
     std::string scanMessage;
-    engine::UIScrollState scroll;
+    SectorEditorAssetPickerBrowsingState browsing;
+    std::vector<std::string> allModelPaths;
+    std::string filterMessage;
     std::vector<std::string> modelPaths;
     std::vector<std::string> optionLabelStorage;
     std::vector<const char*> optionLabels;

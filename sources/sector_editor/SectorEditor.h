@@ -332,7 +332,8 @@ private:
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawNpcEditorModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,

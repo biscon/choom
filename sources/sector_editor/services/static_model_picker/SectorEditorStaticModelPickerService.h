@@ -22,6 +22,7 @@ public:
             const std::filesystem::path& modelsRoot,
             const std::string& assetRelativeRoot);
     bool SelectIndex(int index);
+    void ApplyFilter();
 
     bool HasSelection() const;
     std::string SelectedModelPath() const;
@@ -30,7 +31,7 @@ public:
 
 private:
     void RebuildOptionLabels();
-    void RestoreRequestedSelection();
+    void RebuildFilteredOptions(bool useCurrentModelFallback = true);
 
     StaticModelPickerState& state_;
     std::string& statusText_;
