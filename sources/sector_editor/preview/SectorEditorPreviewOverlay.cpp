@@ -920,7 +920,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 const SectorPbrContributionSettings settings =
                         preview.PbrContributionSettings();
                 addKeyValue("mode", SectorPbrDiagnosticModeName(
-                        settings.diagnosticMode));
+                            settings.diagnosticMode));
+                addKeyValue("specular AA", settings.specularAaEnabled ? "on" : "off");
                 addKeyValue("world scales", TextFormat(
                         "indirect %.2f | environment specular %.2f",
                         settings.worldIndirectDiffuseScale,
@@ -1743,7 +1744,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         contentH += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
-        contentH += (rowH + 6.0f) * 4.0f;
+        // Output, specular AA, bloom view/status, atmosphere status, two scales, reset.
+        contentH += (rowH + 6.0f) * 8.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
         contentH += rowH + 6.0f;
@@ -2168,6 +2170,19 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             engine::Text(smallConfig, assets, modeRect, smallFont,
                     SectorPbrDiagnosticModeName(settings.diagnosticMode),
                     engine::UITextJustify::Center, smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const Rectangle specularAaRect{panel.x + padding, y, 280.0f, rowH};
+        if (mouseInteractive) {
+            engine::Checkbox(ui, smallConfig, input, assets,
+                    "sector_editor_preview_specular_aa", specularAaRect,
+                    smallFont, "Specular AA", settings.specularAaEnabled);
+            preview.SetPbrContributionSettings(settings);
+        } else {
+            engine::Text(smallConfig, assets, specularAaRect, smallFont,
+                    settings.specularAaEnabled ? "Specular AA: on" : "Specular AA: off",
+                    engine::UITextJustify::Left, smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;
 

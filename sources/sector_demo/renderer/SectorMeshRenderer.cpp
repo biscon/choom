@@ -328,6 +328,7 @@ bool LoadPreviewMaterial(
         int& environmentMaxLodLoc,
         int& environmentIntensityLoc,
         int& pbrDiagnosticModeLoc,
+        int& specularAaEnabledLoc,
         int& useStaticSpecularLightingLoc,
         SectorStaticSpecularShaderLocations& staticSpecularLocations,
         int& alphaTestLoc,
@@ -412,6 +413,7 @@ bool LoadPreviewMaterial(
     environmentIntensityLoc = GetShaderLocation(material.shader, "environmentIntensity");
     pbrDiagnosticModeLoc = GetShaderLocation(
             material.shader, "pbrDiagnosticMode");
+    specularAaEnabledLoc = GetShaderLocation(material.shader, "specularAaEnabled");
     useStaticSpecularLightingLoc = GetShaderLocation(
             material.shader, "useStaticSpecularLighting");
     staticSpecularLocations = GetSectorStaticSpecularShaderLocations(
@@ -1082,6 +1084,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 environmentMaxLodLoc,
                 environmentIntensityLoc,
                 pbrDiagnosticModeLoc,
+                specularAaEnabledLoc,
                 useStaticSpecularLightingLoc,
                 staticSpecularLocations,
                 alphaTestLoc,
@@ -1433,6 +1436,11 @@ void SectorMeshRenderer::DrawScene(
     constexpr float SectorSurfaceEnvironmentExposure = 0.15f;
     const int pbrDiagnosticMode = capture ? 11 : static_cast<int>(
             pbrContributionSettings.diagnosticMode);
+    const int specularAaEnabled = pbrContributionSettings.specularAaEnabled
+            && !pbrContributionSettings.reflectionCapture ? 1 : 0;
+    if (specularAaEnabledLoc >= 0) SetShaderValue(
+            material.shader, specularAaEnabledLoc,
+            &specularAaEnabled, SHADER_UNIFORM_INT);
     if (cameraPositionLoc >= 0) SetShaderValue(
             material.shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
     if (indirectDiffuseScaleLoc >= 0) SetShaderValue(

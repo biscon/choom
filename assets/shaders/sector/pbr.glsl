@@ -1,6 +1,24 @@
 #ifndef SECTOR_PBR_GLSL
 #define SECTOR_PBR_GLSL
 
+// Bounded normal-variance filtering (Tokuyoshi/Kaplanyan; also used by Filament).
+// Evaluate once per fragment, before discard or divergent lighting branches.
+// enabled must be uniform across the draw. Roughness here is perceptual: GGX
+// uses alpha = roughness^2, so the filter adds variance to roughness^4.
+float FilterSpecularRoughness(float roughness, vec3 worldNormal, bool enabled)
+{
+    if (!enabled) return roughness;
+    vec3 normalDx = dFdx(worldNormal);
+    vec3 normalDy = dFdy(worldNormal);
+    const float VarianceScale = 0.15;
+    const float MaxKernelContribution = 0.2;
+    float variance = VarianceScale
+            * (dot(normalDx, normalDx) + dot(normalDy, normalDy));
+    float alpha = roughness * roughness;
+    float kernel = min(2.0 * variance, MaxKernelContribution);
+    return sqrt(sqrt(clamp(alpha * alpha + kernel, 0.0, 1.0)));
+}
+
 float DistributionGgx(vec3 normal, vec3 halfway, float roughness)
 {
     float a = roughness * roughness;

@@ -400,6 +400,7 @@ bool SectorStaticModelRenderer::Load()
     emissiveHardwareSrgbLoc = GetShaderLocation(
             shader, "emissiveTextureHardwareSrgb");
     diagnosticModeLoc = GetShaderLocation(shader, "pbrDiagnosticMode");
+    specularAaEnabledLoc = GetShaderLocation(shader, "specularAaEnabled");
     indirectDiffuseScaleLoc = GetShaderLocation(
             shader, "indirectDiffuseScale");
     environmentSpecularScaleLoc = GetShaderLocation(
@@ -532,6 +533,7 @@ void SectorStaticModelRenderer::Shutdown()
     baseColorHardwareSrgbLoc = -1;
     emissiveHardwareSrgbLoc = -1;
     diagnosticModeLoc = -1;
+    specularAaEnabledLoc = -1;
     indirectDiffuseScaleLoc = -1;
     environmentSpecularScaleLoc = -1;
     environmentBoxProjectionLoc = -1;
@@ -616,6 +618,8 @@ void SectorStaticModelRenderer::UploadPbrDrawState(
     const int useVerticalProbe = state.useVerticalObjectProbe ? 1 : 0;
     const int hasEnvironment = state.environmentActive ? 1 : 0;
     const int useStaticSpecular = state.staticSpecularEligible ? 1 : 0;
+    const int specularAaEnabled = state.specularAaEnabled ? 1 : 0;
+    if (specularAaEnabledLoc >= 0) SetShaderValue(shader, specularAaEnabledLoc, &specularAaEnabled, SHADER_UNIFORM_INT);
     if (diagnosticModeLoc >= 0) SetShaderValue(shader, diagnosticModeLoc, &diagnosticMode, SHADER_UNIFORM_INT);
     if (indirectDiffuseScaleLoc >= 0) SetShaderValue(shader, indirectDiffuseScaleLoc, &state.indirectDiffuseScale, SHADER_UNIFORM_FLOAT);
     if (environmentSpecularScaleLoc >= 0) SetShaderValue(shader, environmentSpecularScaleLoc, &state.environmentSpecularScale, SHADER_UNIFORM_FLOAT);

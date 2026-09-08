@@ -32,6 +32,8 @@ void TestDiagnosticModesAndScales()
     game::SectorPbrContributionSettings settings;
     Check(settings.diagnosticMode == game::SectorPbrDiagnosticMode::Full,
           "PBR diagnostics default to the full renderer");
+    Check(settings.specularAaEnabled,
+          "fresh and reset PBR settings enable specular AA");
     Check(Near(settings.worldIndirectDiffuseScale, 1.0f),
           "world indirect diffuse defaults to one");
     Check(Near(settings.worldEnvironmentSpecularScale, 1.0f),
@@ -60,6 +62,30 @@ void TestDiagnosticModesAndScales()
     Check(Near(settings.worldIndirectDiffuseScale, 1.0f)
                     && Near(settings.worldEnvironmentSpecularScale, 1.0f),
           "non-finite contribution scales restore safe defaults");
+}
+
+void TestSpecularAaRouting()
+{
+    for (const auto path : {game::SectorPbrLightingPath::WorldStatic,
+                           game::SectorPbrLightingPath::WorldDynamic,
+                           game::SectorPbrLightingPath::Viewmodel,
+                           game::SectorPbrLightingPath::ViewmodelAttachment}) {
+        for (const bool enabled : {false, true}) {
+            for (const bool capture : {false, true}) {
+                game::SectorPbrContributionSettings settings;
+                settings.specularAaEnabled = enabled;
+                settings.reflectionCapture = capture;
+                const auto state = game::BuildSectorPbrDrawState(
+                        path, false, false, false, false,
+                        0.0f, 1.0f, false, settings);
+                Check(state.specularAaEnabled == (enabled && !capture),
+                      "all model paths honor specular AA toggles and bypass it in captures");
+                Check(Near(state.indirectDiffuseScale, 1.0f)
+                                && Near(state.environmentSpecularScale, 1.0f),
+                      "specular AA toggling does not change PBR contribution scales");
+            }
+        }
+    }
 }
 
 void TestIndirectAndEnvironmentRouting()
@@ -1376,6 +1402,7 @@ void TestFlashlightProfileCoverage()
 int main()
 {
     TestDiagnosticModesAndScales();
+    TestSpecularAaRouting();
     TestIndirectAndEnvironmentRouting();
     TestViewmodelIsolationAndFiniteHandling();
     TestMaterialTextureSemantics();

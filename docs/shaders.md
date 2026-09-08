@@ -56,6 +56,35 @@ explicit renderer reinitialization; required scene presentation fails startup.
 Shader edits are read at the next explicit load. Restart the application to
 reliably refresh everything; no file watcher or reload command is provided.
 
+## Specular antialiasing
+
+Opaque PBR models (including dynamic objects and viewmodels), sector surfaces,
+and doors use `FilterSpecularRoughness` from `sector/pbr.glsl`. The filter estimates
+screen-space variance from the final normalized shading normal, then broadens
+the specular response with a bounded roughness adjustment. It runs once per
+fragment before discard and light loops, using the actual render-resolution
+pixel footprint. Direct GGX lighting and environment reflections use the same
+filtered roughness; the Metallic / Roughness diagnostic retains material
+roughness. The minimum material roughness remains `0.045`.
+
+Specular AA defaults on. The preview PBR panel's **Specular AA** checkbox offers
+a session-only comparison; **Reset PBR** enables it again. Disabling it bypasses
+the adjustment. Reflection captures bypass it as well, since their output
+excludes specular. Glass and liquids do not use this filter. No assets, baked
+lighting, lightmap source hashes, or saved settings are changed by the toggle.
+
+The variance scale (`0.15`) and kernel cap (`0.2`) are named constants in the
+helper. The approach follows the bounded normal filtering described by
+Tokuyoshi/Kaplanyan and used by
+[Filament](https://github.com/google/filament/blob/main/shaders/src/surface_shading_lit.fs).
+It cannot reconstruct missing silhouette coverage or normal variation already
+lost in texture mipmaps.
+
+For visual comparison, use 100% render scale and toggle AA in Direct Specular
+and Full PBR while moving and rotating past glossy edges. Compare distant
+sparkle, close-up appearance, and GPU time; also check doors, sector surfaces,
+and the viewmodel. This remains a manual check.
+
 ## Validation
 
 ```sh

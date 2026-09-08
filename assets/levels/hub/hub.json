@@ -358,8 +358,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 605,
-          "backSideDefId": 606,
+          "frontSideDefId": 617,
+          "backSideDefId": 618,
           "endpointA": [
             -704,
             1296
@@ -398,8 +398,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 553,
-          "backSideDefId": 581,
+          "frontSideDefId": 565,
+          "backSideDefId": 593,
           "endpointA": [
             -992,
             1456
@@ -469,8 +469,8 @@
           "lineDefId": 127,
           "frontSectorId": 33,
           "backSectorId": 26,
-          "frontSideDefId": 241,
-          "backSideDefId": 268,
+          "frontSideDefId": 251,
+          "backSideDefId": 278,
           "endpointA": [
             -2560,
             1376
@@ -1499,8 +1499,8 @@
           "lineDefId": 234,
           "frontSectorId": 50,
           "backSectorId": 43,
-          "frontSideDefId": 209,
-          "backSideDefId": 222,
+          "frontSideDefId": 219,
+          "backSideDefId": 232,
           "endpointA": [
             -2944,
             592
@@ -2181,8 +2181,8 @@
           "lineDefId": 269,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 398,
-          "backSideDefId": 377,
+          "frontSideDefId": 410,
+          "backSideDefId": 389,
           "endpointA": [
             -2048,
             -720
@@ -2421,8 +2421,8 @@
           "lineDefId": 255,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 392,
-          "backSideDefId": 338,
+          "frontSideDefId": 404,
+          "backSideDefId": 350,
           "endpointA": [
             -2432,
             -560
@@ -2825,8 +2825,8 @@
           "lineDefId": 324,
           "frontSectorId": 63,
           "backSectorId": 66,
-          "frontSideDefId": 418,
-          "backSideDefId": 354,
+          "frontSideDefId": 430,
+          "backSideDefId": 366,
           "endpointA": [
             -2432,
             -2688
@@ -3290,8 +3290,8 @@
           "lineDefId": 296,
           "frontSectorId": 52,
           "backSectorId": 61,
-          "frontSideDefId": 395,
-          "backSideDefId": 357,
+          "frontSideDefId": 407,
+          "backSideDefId": 369,
           "endpointA": [
             -2320,
             -1920
@@ -3379,11 +3379,11 @@
       "kind": "window",
       "window": {
         "anchor": {
-          "lineDefId": 436,
+          "lineDefId": 435,
           "frontSectorId": 85,
           "backSectorId": 92,
-          "frontSideDefId": 471,
-          "backSideDefId": 615,
+          "frontSideDefId": 483,
+          "backSideDefId": 627,
           "endpointA": [
             -768,
             -2688
@@ -3417,11 +3417,11 @@
       "door": {
         "instanceId": "door_205",
         "anchor": {
-          "lineDefId": 408,
+          "lineDefId": 407,
           "frontSectorId": 63,
           "backSectorId": 83,
-          "frontSideDefId": 423,
-          "backSideDefId": 463,
+          "frontSideDefId": 435,
+          "backSideDefId": 475,
           "endpointA": [
             -1664,
             -2640
@@ -3459,11 +3459,11 @@
       "door": {
         "instanceId": "door_206",
         "anchor": {
-          "lineDefId": 398,
+          "lineDefId": 397,
           "frontSectorId": 70,
           "backSectorId": 81,
-          "frontSideDefId": 517,
-          "backSideDefId": 589,
+          "frontSideDefId": 529,
+          "backSideDefId": 601,
           "endpointA": [
             -896,
             -4240
@@ -3504,7 +3504,7 @@
           "frontSectorId": 60,
           "backSectorId": 55,
           "frontSideDefId": 110,
-          "backSideDefId": 256,
+          "backSideDefId": 266,
           "endpointA": [
             -4992,
             -704
@@ -3534,7 +3534,7 @@
       "kind": "duct_access",
       "ductAccess": {
         "anchor": {
-          "lineDefId": 441,
+          "lineDefId": 440,
           "frontSectorId": 93,
           "backSectorId": 60,
           "frontSideDefId": 112,
@@ -4142,6 +4142,509 @@
         -320.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 249,
+      "kind": "door",
+      "door": {
+        "instanceId": "door_249",
+        "anchor": {
+          "lineDefId": 447,
+          "frontSectorId": 94,
+          "backSectorId": 96,
+          "frontSideDefId": 524,
+          "backSideDefId": 578,
+          "endpointA": [
+            -1296,
+            -4768
+          ],
+          "endpointB": [
+            -1136,
+            -4768
+          ]
+        },
+        "width": 1.2549999952316284,
+        "height": 2.643749952316284,
+        "normalOffset": -0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_003",
+        "modelFit": "fit_width",
+        "motion": "swing",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "openDistance": 2.643749952316284,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_01"
+      },
+      "position": [
+        -76.0,
+        -15.75,
+        -298.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 250,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_250",
+        "modelPath": "assets/models/bathroom/Wall_Basin_Plumbed.gltf",
+        "heightOffsetWorld": 0.5,
+        "collision": true
+      },
+      "position": [
+        -240.0,
+        -16.0,
+        -162.3599853515625
+      ],
+      "yawDegrees": 179.99998474121094
+    },
+    {
+      "id": 251,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_251",
+        "modelPath": "assets/models/bathroom/Wall_Basin_Plumbed.gltf",
+        "heightOffsetWorld": 0.5,
+        "collision": true
+      },
+      "position": [
+        -250.39996337890625,
+        -16.0,
+        -162.3599853515625
+      ],
+      "yawDegrees": 179.99998474121094
+    },
+    {
+      "id": 252,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_252",
+        "modelPath": "assets/models/bathroom/Waste_Bin_Pedal.gltf",
+        "collision": true
+      },
+      "position": [
+        -232.7999267578125,
+        -16.0,
+        -162.20001220703125
+      ],
+      "yawDegrees": -157.99998474121094
+    },
+    {
+      "id": 253,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_253",
+        "modelPath": "assets/models/bathroom/Mirror_Dulled_460x800.gltf",
+        "heightOffsetWorld": 1.25
+      },
+      "position": [
+        -240.0,
+        -16.0,
+        -160.12001037597656
+      ],
+      "yawDegrees": -179.99998474121094
+    },
+    {
+      "id": 254,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_254",
+        "modelPath": "assets/models/bathroom/Mirror_Dulled_460x800.gltf",
+        "heightOffsetWorld": 1.25
+      },
+      "position": [
+        -250.39999389648438,
+        -16.0,
+        -160.0
+      ],
+      "yawDegrees": -179.99998474121094
+    },
+    {
+      "id": 255,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_255",
+        "modelPath": "assets/models/bathroom/Soap_Dispenser_Wall.gltf",
+        "heightOffsetWorld": 1.2499998807907104
+      },
+      "position": [
+        -245.0,
+        -16.0,
+        -160.75999450683594
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 256,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_256",
+        "modelPath": "assets/models/bathroom/Cubicle_Pilaster_150.gltf",
+        "collision": true
+      },
+      "position": [
+        -274.9999084472656,
+        -16.0,
+        -160.80010986328125
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 257,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_257",
+        "modelPath": "assets/models/bathroom/Cubicle_Divider_1640.gltf",
+        "collision": true
+      },
+      "position": [
+        -281.5199279785156,
+        -16.0,
+        -174.80014038085938
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 258,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_258",
+        "modelPath": "assets/models/bathroom/Cubicle_Infill_355.gltf",
+        "heightOffsetWorld": 0.20000001788139343,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -162.83999633789063
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 259,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_259",
+        "modelPath": "assets/models/bathroom/Cubicle_Door_890.gltf",
+        "heightOffsetWorld": 0.029999999329447746,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -164.24009704589844
+      ],
+      "yawDegrees": -5.000096321105957
+    },
+    {
+      "id": 260,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_260",
+        "modelPath": "assets/models/bathroom/Cubicle_Infill_355.gltf",
+        "heightOffsetWorld": 0.20000001788139343,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -172.80010986328125
+      ],
+      "yawDegrees": -90.00003814697266
+    },
+    {
+      "id": 261,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_261",
+        "modelPath": "assets/models/bathroom/Cubicle_Pilaster_150.gltf",
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -174.83999633789063
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 262,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_262",
+        "modelPath": "assets/models/bathroom/Cubicle_Infill_355.gltf",
+        "heightOffsetWorld": 0.20000001788139343,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -176.83999633789063
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 263,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_263",
+        "modelPath": "assets/models/bathroom/Cubicle_Door_890.gltf",
+        "heightOffsetWorld": 0.029999999329447746,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -178.28001403808594
+      ],
+      "yawDegrees": 45.999935150146484
+    },
+    {
+      "id": 264,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_264",
+        "modelPath": "assets/models/bathroom/Cubicle_Infill_355.gltf",
+        "heightOffsetWorld": 0.20000001788139343,
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -186.7999725341797
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 265,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_265",
+        "modelPath": "assets/models/bathroom/Cubicle_Pilaster_150.gltf",
+        "collision": true
+      },
+      "position": [
+        -275.0,
+        -16.0,
+        -188.76004028320313
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 266,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_266",
+        "modelPath": "assets/models/bathroom/Cubicle_Divider_1640.gltf",
+        "collision": true
+      },
+      "position": [
+        -281.3999328613281,
+        -16.0,
+        -189.4399871826172
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 267,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_267",
+        "modelPath": "assets/models/bathroom/Toilet_Floor.gltf",
+        "collision": true
+      },
+      "position": [
+        -284.9599609375,
+        -16.0,
+        -167.88002014160156
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 268,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_268",
+        "modelPath": "assets/models/bathroom/Toilet_Floor.gltf",
+        "collision": true
+      },
+      "position": [
+        -285.0,
+        -16.0,
+        -182.40000915527344
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 269,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_269",
+        "modelPath": "assets/models/bathroom/Toilet_Paper_Holder.gltf",
+        "heightOffsetWorld": 0.5599997639656067
+      },
+      "position": [
+        -282.5997314453125,
+        -16.0,
+        -174.35995483398438
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 270,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_270",
+        "modelPath": "assets/models/bathroom/Toilet_Paper_Holder.gltf",
+        "heightOffsetWorld": 0.5599997639656067
+      },
+      "position": [
+        -283.0,
+        -16.0,
+        -189.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 271,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_271",
+        "modelPath": "assets/models/bathroom/Toilet_Brush_Holder.gltf"
+      },
+      "position": [
+        -286.0,
+        -16.0,
+        -163.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 272,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_272",
+        "modelPath": "assets/models/bathroom/Toilet_Brush_Holder.gltf"
+      },
+      "position": [
+        -286.0,
+        -16.0,
+        -178.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 273,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_273",
+        "modelPath": "assets/models/bathroom/Paper_Towel_Dispenser.gltf",
+        "heightOffsetWorld": 1.1999999284744263
+      },
+      "position": [
+        -256.4000244140625,
+        -16.0,
+        -160.9600067138672
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 274,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_274",
+        "modelPath": "assets/models/bathroom/Waste_Bin_Pedal.gltf",
+        "collision": true
+      },
+      "position": [
+        -263.0,
+        -16.0,
+        -162.0
+      ],
+      "yawDegrees": 122.00003814697266
+    },
+    {
+      "id": 275,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_275",
+        "modelPath": "assets/models/bathroom/Urinal_Privacy_Divider.gltf",
+        "heightOffsetWorld": 0.3500000238418579,
+        "collision": true
+      },
+      "position": [
+        -248.0,
+        -16.0,
+        -207.91993713378906
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 276,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_276",
+        "modelPath": "assets/models/bathroom/Urinal_Plumbed.gltf",
+        "heightOffsetWorld": 0.40000003576278687,
+        "collision": true
+      },
+      "position": [
+        -241.99996948242188,
+        -16.0,
+        -207.5199737548828
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 277,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_277",
+        "modelPath": "assets/models/bathroom/Urinal_Plumbed.gltf",
+        "heightOffsetWorld": 0.40000003576278687,
+        "collision": true
+      },
+      "position": [
+        -254.0,
+        -16.0,
+        -207.48001098632813
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 278,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_278",
+        "modelPath": "assets/models/bathroom/Fluorescent_Fixture_1240.gltf",
+        "heightOffsetWorld": 3.3399999141693115,
+        "castsShadow": false
+      },
+      "position": [
+        -240.0,
+        -16.0,
+        -184.0
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 279,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_279",
+        "modelPath": "assets/models/bathroom/Fluorescent_Fixture_1240.gltf",
+        "heightOffsetWorld": 3.3399999141693115,
+        "castsShadow": false
+      },
+      "position": [
+        -264.0,
+        -16.0,
+        -184.0
+      ],
+      "yawDegrees": 89.99999237060547
     }
   ],
   "staticLights": [
@@ -8084,6 +8587,31 @@
         "a": 255
       },
       "startFeather": 4.0
+    },
+    {
+      "id": 27,
+      "position": [
+        -251.0,
+        1.0,
+        -184.0
+      ],
+      "target": [
+        -251.0,
+        16.0,
+        -184.0
+      ],
+      "width": 32.0,
+      "height": 32.0,
+      "range": 24.0,
+      "intensity": 0.25,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "startFeather": 1.0,
+      "castsShadow": false
     }
   ],
   "dynamicPointLights": [
@@ -9077,6 +9605,120 @@
       "castsShadow": true,
       "shadowStrength": 0.8500000238418579,
       "shadowSoftness": 2.0
+    },
+    {
+      "id": 2,
+      "position": [
+        -264.0,
+        10.25,
+        -184.0
+      ],
+      "target": [
+        -264.0,
+        -19.600000381469727,
+        -184.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 54.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "instanceId": "light_rect_2",
+      "castsShadow": true,
+      "shadowStrength": 0.8500000238418579,
+      "shadowSoftness": 3.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.011760711669921875,
+              0.24263346195220947,
+              0.00191497802734375
+            ],
+            "lengthScale": 0.25,
+            "widthScale": 1.0,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.014000000432133675,
+          "opacity": 0.11999999731779099
+        }
+      }
+    },
+    {
+      "id": 3,
+      "position": [
+        -240.0,
+        10.0,
+        -184.0
+      ],
+      "target": [
+        -240.0,
+        -19.850000381469727,
+        -184.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 54.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "instanceId": "light_rect_3",
+      "castsShadow": true,
+      "shadowStrength": 0.8500000238418579,
+      "shadowSoftness": 3.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.011760711669921875,
+              0.24263346195220947,
+              0.00191497802734375
+            ],
+            "lengthScale": 0.25,
+            "widthScale": 1.0,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.014000000432133675,
+          "opacity": 0.11999999731779099
+        }
+      }
     }
   ],
   "lightmapSettings": {
@@ -9087,7 +9729,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -9188,7 +9830,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "b7b72fb03d3f80ad",
+    "sourceHash": "8a90f61c58ef466e",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -9196,20 +9838,20 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.666015625,
-        1.666015625
+        2.203125,
+        1.564453125,
+        1.564453125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 12582912,
-      "rgbChannelsAboveOne": 1379
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 195
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "b7b72fb03d3f80ad",
-      "count": 3955,
+      "sourceHash": "8a90f61c58ef466e",
+      "count": 4053,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -9221,36 +9863,24 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.204270601272583,
+          1.935850739479065,
+          1.8489267826080322
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 23730,
-        "rgbChannelsAboveOne": 32
+        "sampleCount": 24318,
+        "rgbChannelsAboveOne": 35
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "b7b72fb03d3f80ad",
-      "modelCount": 74,
-      "objectCount": 198,
+      "sourceHash": "8a90f61c58ef466e",
+      "modelCount": 89,
+      "objectCount": 228,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      },
-      {
-        "path": "assets/levels/hub/hub.lightmap.2.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "editorSettings": {
     "gridSize": 1
@@ -11141,6 +11771,46 @@
         "id": 391,
         "x": -896,
         "y": -4768
+      },
+      {
+        "id": 392,
+        "x": -3520,
+        "y": -3088
+      },
+      {
+        "id": 393,
+        "x": -3552,
+        "y": -3088
+      },
+      {
+        "id": 394,
+        "x": -3552,
+        "y": -2928
+      },
+      {
+        "id": 395,
+        "x": -3520,
+        "y": -2928
+      },
+      {
+        "id": 396,
+        "x": -3552,
+        "y": -3328
+      },
+      {
+        "id": 397,
+        "x": -4608,
+        "y": -3328
+      },
+      {
+        "id": 398,
+        "x": -4608,
+        "y": -2560
+      },
+      {
+        "id": 399,
+        "x": -3552,
+        "y": -2560
       }
     ],
     "lines": [
@@ -12856,11 +13526,6 @@
         "endVertexId": 299
       },
       {
-        "id": 500,
-        "startVertexId": 306,
-        "endVertexId": 309
-      },
-      {
         "id": 501,
         "startVertexId": 309,
         "endVertexId": 308
@@ -13464,6 +14129,61 @@
         "id": 648,
         "startVertexId": 381,
         "endVertexId": 385
+      },
+      {
+        "id": 650,
+        "startVertexId": 392,
+        "endVertexId": 309
+      },
+      {
+        "id": 651,
+        "startVertexId": 392,
+        "endVertexId": 393
+      },
+      {
+        "id": 652,
+        "startVertexId": 393,
+        "endVertexId": 394
+      },
+      {
+        "id": 653,
+        "startVertexId": 306,
+        "endVertexId": 395
+      },
+      {
+        "id": 654,
+        "startVertexId": 395,
+        "endVertexId": 392
+      },
+      {
+        "id": 655,
+        "startVertexId": 394,
+        "endVertexId": 395
+      },
+      {
+        "id": 656,
+        "startVertexId": 393,
+        "endVertexId": 396
+      },
+      {
+        "id": 657,
+        "startVertexId": 396,
+        "endVertexId": 397
+      },
+      {
+        "id": 658,
+        "startVertexId": 397,
+        "endVertexId": 398
+      },
+      {
+        "id": 659,
+        "startVertexId": 398,
+        "endVertexId": 399
+      },
+      {
+        "id": 660,
+        "startVertexId": 399,
+        "endVertexId": 394
       }
     ],
     "lineSides": [
@@ -24723,47 +25443,6 @@
         }
       },
       {
-        "lineId": 500,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -1.125
-            ]
-          },
-          "materialId": "worn_white_wall"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 501,
         "side": "front",
         "wall": {
@@ -29444,7 +30123,8 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "worn_gray_metal_step_512"
         },
         "upper": {
           "uv": {
@@ -29486,7 +30166,8 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "worn_gray_metal_step_512"
         },
         "upper": {
           "uv": {
@@ -30050,6 +30731,459 @@
             "offset": [
               0.0,
               -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 650,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 651,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 652,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        }
+      },
+      {
+        "lineId": 653,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 654,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 655,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 656,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 657,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 658,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 659,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 660,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
             ]
           },
           "materialId": "white_wall_tiles"
@@ -37005,8 +38139,8 @@
         "name": "Sector 94",
         "x": -1277,
         "y": -4754,
-        "floorZ": -16.0,
-        "ceilingZ": 6.0,
+        "floorZ": -15.75,
+        "ceilingZ": 5.25,
         "floorUv": {
           "scale": [
             1.0,
@@ -37070,7 +38204,7 @@
             ]
           }
         },
-        "floorMaterialId": "interior_tiles",
+        "floorMaterialId": "worn_gray_metal_step_512",
         "ceilingMaterialId": "white_stucco"
       },
       {
@@ -37179,7 +38313,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.15000000596046448,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -37291,6 +38425,152 @@
           }
         },
         "isVoid": true
+      },
+      {
+        "id": 98,
+        "name": "Sector 98",
+        "x": -3537,
+        "y": -3070,
+        "floorZ": -15.75,
+        "ceilingZ": 5.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.4000000059604645,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_white_wall"
+      },
+      {
+        "id": 99,
+        "name": "Sector 99",
+        "x": -4028,
+        "y": -3010,
+        "floorZ": -16.0,
+        "ceilingZ": 12.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 250,
+          "b": 241,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "floor_tiles",
+        "ceilingMaterialId": "worn_white_ceiling_512"
       }
     ],
     "fogVolumes": [
@@ -37619,6 +38899,18 @@
           0.546875,
           0.125
         ]
+      },
+      {
+        "id": 17,
+        "x": -4080,
+        "z": -2944,
+        "yWorld": -0.25,
+        "halfExtentsWorld": [
+          4.125,
+          1.75,
+          3.0
+        ],
+        "resolution": 256
       }
     ],
     "levelMarkers": [

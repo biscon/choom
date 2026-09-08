@@ -26,6 +26,7 @@ uniform vec3 environmentHalfExtents;
 uniform float environmentYaw;
 uniform float environmentMaxLod;
 uniform int pbrDiagnosticMode;
+uniform int specularAaEnabled;
 uniform int useObjectAmbientCube;
 uniform vec3 objectAmbientCube[6];
 
@@ -199,6 +200,8 @@ void main()
         roughness = clamp(orm.g, 0.045, 1.0);
         metallic = clamp(orm.b, 0.0, 1.0);
     }
+    float specularRoughness = FilterSpecularRoughness(
+            roughness, worldNormal, specularAaEnabled != 0);
     vec3 f0 = mix(vec3(0.04), surfaceRgb, metallic);
     vec3 indirectDiffuse = surfaceRgb
             * (1.0 - metallic)
@@ -259,9 +262,9 @@ void main()
             vec3 halfway = SafeNormalize(
                     viewDirection + lightDirection, worldNormal);
             float distribution = DistributionGgx(
-                    worldNormal, halfway, roughness);
+                    worldNormal, halfway, specularRoughness);
             float geometry = GeometrySmith(
-                    worldNormal, viewDirection, lightDirection, roughness);
+                    worldNormal, viewDirection, lightDirection, specularRoughness);
             vec3 fresnel = FresnelSchlick(
                     max(dot(halfway, viewDirection), 0.0), f0);
             vec3 specular = distribution * geometry * fresnel
@@ -334,9 +337,9 @@ void main()
             vec3 halfway = SafeNormalize(
                     viewDirection + lightDirection, worldNormal);
             float distribution = DistributionGgx(
-                    worldNormal, halfway, roughness);
+                    worldNormal, halfway, specularRoughness);
             float geometry = GeometrySmith(
-                    worldNormal, viewDirection, lightDirection, roughness);
+                    worldNormal, viewDirection, lightDirection, specularRoughness);
             vec3 fresnel = FresnelSchlick(
                     max(dot(halfway, viewDirection), 0.0), f0);
             vec3 specular = distribution * geometry * fresnel
@@ -353,8 +356,8 @@ void main()
     }
 
     vec3 environmentSpecular=SampleSectorEnvironment(fragWorldPosition,
-            reflect(-viewDirection,worldNormal),roughness);
-    vec2 brdf=EnvironmentBrdfApprox(roughness,max(dot(worldNormal,viewDirection),0.0));
+            reflect(-viewDirection,worldNormal),specularRoughness);
+    vec2 brdf=EnvironmentBrdfApprox(specularRoughness,max(dot(worldNormal,viewDirection),0.0));
     environmentSpecular *= (f0*brdf.x+brdf.y)*environmentSpecularScale;
 
     vec3 outputRgb = indirectDiffuse

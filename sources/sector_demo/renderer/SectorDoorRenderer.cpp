@@ -178,6 +178,7 @@ bool SectorDoorRenderer::LoadOpaqueResources()
     opaqueShaderLocations.environmentYaw = GetShaderLocation(opaqueShader, "environmentYaw");
     opaqueShaderLocations.environmentMaxLod = GetShaderLocation(opaqueShader, "environmentMaxLod");
     opaqueShaderLocations.pbrDiagnosticMode = GetShaderLocation(opaqueShader, "pbrDiagnosticMode");
+    opaqueShaderLocations.specularAaEnabled = GetShaderLocation(opaqueShader, "specularAaEnabled");
     opaqueShaderLocations.useObjectAmbientCube = GetShaderLocation(
             opaqueShader, "useObjectAmbientCube");
     opaqueShaderLocations.objectAmbientCube = GetShaderLocationArrayBase(
@@ -564,6 +565,12 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
             doorOpaqueMaterial.shader, doorOpaqueLocations.environmentMaxLod,
             &context.environmentMaxLod, SHADER_UNIFORM_FLOAT);
     const int pbrDiagnosticMode = pbr.reflectionCapture ? 11 : static_cast<int>(pbr.diagnosticMode);
+    const int specularAaEnabled = pbr.specularAaEnabled && !pbr.reflectionCapture ? 1 : 0;
+    if (doorOpaqueLocations.specularAaEnabled >= 0) SetShaderValue(
+            doorOpaqueMaterial.shader,
+            doorOpaqueLocations.specularAaEnabled,
+            &specularAaEnabled,
+            SHADER_UNIFORM_INT);
     if (doorOpaqueLocations.pbrDiagnosticMode >= 0) SetShaderValue(
             doorOpaqueMaterial.shader,
             doorOpaqueLocations.pbrDiagnosticMode,

@@ -47,6 +47,7 @@ uniform float objectAmbientCubeLowerHeight;
 uniform float objectAmbientCubeUpperHeight;
 uniform int useVerticalObjectProbeLighting;
 uniform int pbrDiagnosticMode;
+uniform int specularAaEnabled;
 uniform float indirectDiffuseScale;
 uniform float environmentSpecularScale;
 uniform int environmentBoxProjection;
@@ -249,6 +250,8 @@ void main()
             ? mix(1.0, texture(occlusionTexture, fragTexCoord).r, occlusionStrength)
             : 1.0;
     vec3 viewDirection = SafeNormalize(cameraPosition - fragWorldPosition, geometricNormal);
+    float specularRoughness = FilterSpecularRoughness(
+            roughness, worldNormal, specularAaEnabled != 0);
     vec3 f0 = mix(vec3(0.04), albedo, metallic);
     vec3 directDiffuse = vec3(0.0);
     vec3 dynamicDirectSpecular = vec3(0.0);
@@ -310,8 +313,8 @@ void main()
             }
             {
                 vec3 halfway = SafeNormalize(viewDirection + lightDirection, worldNormal);
-                float distribution = DistributionGgx(worldNormal, halfway, roughness);
-                float geometry = GeometrySmith(worldNormal, viewDirection, lightDirection, roughness);
+                float distribution = DistributionGgx(worldNormal, halfway, specularRoughness);
+                float geometry = GeometrySmith(worldNormal, viewDirection, lightDirection, specularRoughness);
                 vec3 fresnel = FresnelSchlick(max(dot(halfway, viewDirection), 0.0), f0);
                 vec3 specular = distribution * geometry * fresnel
                         / max(4.0 * max(dot(worldNormal, viewDirection), 0.0) * ndotl, 0.001);
@@ -381,12 +384,12 @@ void main()
                             viewDirection + lightDirection,
                             worldNormal);
                     float distribution = DistributionGgx(
-                            worldNormal, halfway, roughness);
+                            worldNormal, halfway, specularRoughness);
                     float geometry = GeometrySmith(
                             worldNormal,
                             viewDirection,
                             lightDirection,
-                            roughness);
+                            specularRoughness);
                     vec3 fresnel = FresnelSchlick(
                             max(dot(halfway, viewDirection), 0.0), f0);
                     vec3 specular = distribution * geometry * fresnel
@@ -426,8 +429,8 @@ void main()
             * materialAo
             * indirectDiffuseScale;
     vec3 environmentSpecular=SampleSectorEnvironment(fragWorldPosition,
-            reflect(-viewDirection,worldNormal),roughness);
-    vec2 brdf=EnvironmentBrdfApprox(roughness,max(dot(worldNormal,viewDirection),0.0));
+            reflect(-viewDirection,worldNormal),specularRoughness);
+    vec2 brdf=EnvironmentBrdfApprox(specularRoughness,max(dot(worldNormal,viewDirection),0.0));
     environmentSpecular *= (f0*brdf.x+brdf.y)*environmentSpecularScale*materialAo;
     vec3 emissive = emissiveFactor;
     if (hasEmissiveTexture != 0) {
