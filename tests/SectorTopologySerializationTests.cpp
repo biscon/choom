@@ -5601,7 +5601,7 @@ void TestBaseboardSerialization()
     invalid["authoringGraph"]["lineSides"][0]["baseboard"] = {{"thickness", -1}};
     Check(!LoadAuthoringText(invalid.dump(), loaded, error), "negative baseboard thickness is rejected");
     Check(LoadAuthoringText(original.dump(), loaded, error) && !loaded.graph.lineSides[0].baseboard.enabled
-            && loaded.graph.lineSides[0].baseboard.height == 1.0f
+            && loaded.graph.lineSides[0].baseboard.height == 1.5f
             && loaded.graph.lineSides[0].baseboard.thickness == 0.14f,
             "missing baseboard fields load disabled with the current dimension defaults");
 }

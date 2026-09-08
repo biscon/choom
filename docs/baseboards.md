@@ -5,7 +5,7 @@ has an independent **Baseboard** checkbox. Enable it to reveal Height, Thickness
 and Material. Default clears the material assignment and uses the engine default.
 
 Dimensions use existing authoring units: 8 units = 1 meter. Defaults are height
-1.0 (12.5 cm) and thickness 0.14 (1.75 cm). Disabling trim preserves its settings.
+1.5 (18.75 cm) and thickness 0.14 (1.75 cm). Disabling trim preserves its settings.
 Existing documents load with trim disabled. Saving adds only optional non-default
 `baseboard` fields to authoring line sides; no format migration is required.
 

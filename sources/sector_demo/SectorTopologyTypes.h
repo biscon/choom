@@ -272,7 +272,7 @@ struct SectorTopologyLineDef {
 // Dimensions use authored units (8 units per meter), independent of the vertex grid.
 struct SectorBaseboardSettings {
     bool enabled = false;
-    float height = 1.0f;
+    float height = 1.5f;
     float thickness = 0.14f;
     std::string materialId;
 };

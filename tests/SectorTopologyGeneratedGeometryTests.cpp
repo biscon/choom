@@ -938,8 +938,8 @@ void TestBaseboards()
             Check(v.position.x >= -0.00001f && v.position.x <= size + 0.00001f
                     && v.position.z >= -0.00001f && v.position.z <= size + 0.00001f,
                     "interior miter stays within supporting room");
-            Check(v.position.y >= 0 && v.position.y <= 0.12501f, "baseboard authored units convert to meters");
-            if (Near(v.position, Vector3{size - thickness, 0.125f, thickness})) ++sharedCornerCount;
+            Check(v.position.y >= 0 && v.position.y <= 0.18751f, "baseboard authored units convert to meters");
+            if (Near(v.position, Vector3{size - thickness, 0.1875f, thickness})) ++sharedCornerCount;
         }
         for (size_t i = 0; i < surface.vertices.size(); i += 3) {
             const auto a = surface.vertices[i].position, b = surface.vertices[i+1].position,
