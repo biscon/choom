@@ -6390,13 +6390,7 @@ void SectorEditor::DrawToolsPanel(
     };
 
     sectionLabel("Graph authoring");
-    const SectorEditorTool graphTools[] = {
-            SectorEditorTool::Select,
-            SectorEditorTool::AuthoringLine,
-            SectorEditorTool::AuthoringRectangle,
-            SectorEditorTool::AuthoringInsertVertex
-    };
-    for (SectorEditorTool tool : graphTools) {
+    for (SectorEditorTool tool : SectorEditorGraphTools) {
         if (drawToolButton(tool)) {
             selectTool(tool);
         }
@@ -6419,30 +6413,7 @@ void SectorEditor::DrawToolsPanel(
 
     separator();
     sectionLabel("Map objects");
-    const SectorEditorTool mapTools[] = {
-            SectorEditorTool::Structure,
-            SectorEditorTool::Ladder,
-            SectorEditorTool::RuntimeObject,
-            SectorEditorTool::StaticModel,
-            SectorEditorTool::DynamicModel,
-            SectorEditorTool::Item,
-            SectorEditorTool::Npc,
-            SectorEditorTool::Door,
-            SectorEditorTool::Window,
-            SectorEditorTool::DuctAccess,
-            SectorEditorTool::Trigger,
-            SectorEditorTool::LevelMarker,
-            SectorEditorTool::SoundEmitter,
-            SectorEditorTool::AuthoringFogVolume,
-            SectorEditorTool::ReflectionProbe,
-            SectorEditorTool::StaticLight,
-            SectorEditorTool::StaticSpotLight,
-            SectorEditorTool::StaticRectLight,
-            SectorEditorTool::DynamicLight,
-            SectorEditorTool::DynamicSpotLight,
-            SectorEditorTool::DynamicRectLight
-    };
-    for (SectorEditorTool tool : mapTools) {
+    for (SectorEditorTool tool : SectorEditorMapTools) {
         if (drawToolButton(tool)) {
             selectTool(tool);
         }

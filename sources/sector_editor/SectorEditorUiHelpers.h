@@ -8,6 +8,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <iterator>
 #include <string_view>
 
 namespace game {
@@ -39,6 +40,38 @@ inline SectorEditorWorkspaceLayout BuildSectorEditorWorkspaceLayout()
                             - PanelGap * 2.0f}};
 }
 
+// Drawing and scroll measurement share these lists so new tools extend the scroll range.
+inline constexpr SectorEditorTool SectorEditorGraphTools[] = {
+        SectorEditorTool::Select,
+        SectorEditorTool::AuthoringLine,
+        SectorEditorTool::AuthoringRectangle,
+        SectorEditorTool::AuthoringInsertVertex
+};
+
+inline constexpr SectorEditorTool SectorEditorMapTools[] = {
+        SectorEditorTool::Structure,
+        SectorEditorTool::Ladder,
+        SectorEditorTool::RuntimeObject,
+        SectorEditorTool::StaticModel,
+        SectorEditorTool::DynamicModel,
+        SectorEditorTool::Item,
+        SectorEditorTool::Npc,
+        SectorEditorTool::Door,
+        SectorEditorTool::Window,
+        SectorEditorTool::DuctAccess,
+        SectorEditorTool::Trigger,
+        SectorEditorTool::LevelMarker,
+        SectorEditorTool::SoundEmitter,
+        SectorEditorTool::AuthoringFogVolume,
+        SectorEditorTool::ReflectionProbe,
+        SectorEditorTool::StaticLight,
+        SectorEditorTool::StaticSpotLight,
+        SectorEditorTool::StaticRectLight,
+        SectorEditorTool::DynamicLight,
+        SectorEditorTool::DynamicSpotLight,
+        SectorEditorTool::DynamicRectLight
+};
+
 inline float MeasureSectorEditorToolsContentHeight(
         float rowHeight,
         float gap,
@@ -52,9 +85,10 @@ inline float MeasureSectorEditorToolsContentHeight(
     const auto rowsHeight = [rowHeight, gap](int count) {
         return static_cast<float>(count) * (rowHeight + gap);
     };
-    return sectionLabelHeight + rowsHeight(5)
+    return sectionLabelHeight + rowsHeight(static_cast<int>(std::size(SectorEditorGraphTools)) + 1)
             + separatorHeight + sectionLabelHeight
-            + rowsHeight(20 + (triggerModeRowVisible ? 1 : 0)
+            + rowsHeight(static_cast<int>(std::size(SectorEditorMapTools))
+                    + (triggerModeRowVisible ? 1 : 0)
                     + (itemDefinitionRowVisible ? 1 : 0))
             + separatorHeight + roomtoneFadeLabelHeight + gap + rowsHeight(2)
             + separatorHeight + rowsHeight(1)
