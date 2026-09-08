@@ -16,6 +16,8 @@ struct MaterialEditingUiState {
     engine::UIFloatInputState topologySectorDecalOpacityInputs[2];
     engine::UIFloatInputState topologySectorDecalEmissiveStrengthInputs[2];
     engine::UIFloatInputState topologySideDefUvInputs[4];
+    engine::UIFloatInputState baseboardInputs[2][2];
+    int baseboardInputLineId = -1;
     engine::UIFloatInputState topologySideDefDecalOpacityInput;
     engine::UIFloatInputState topologySideDefDecalEmissiveStrengthInput;
 };

@@ -3292,6 +3292,9 @@ std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopology
         AddReferencedLightmapTexture(referenced, sideDef.lower.materialId);
         AddReferencedLightmapTexture(referenced, sideDef.upper.materialId);
         AddReferencedLightmapTexture(referenced, sideDef.middle.materialId);
+        if (sideDef.baseboard.enabled) {
+            AddReferencedLightmapTexture(referenced, sideDef.baseboard.materialId);
+        }
     }
     for (const SectorTopologySector& sector : map.sectors) {
         AddReferencedLightmapTexture(referenced, sector.floorMaterialId);
@@ -4055,6 +4058,10 @@ bool IsSameLogicalSectorLightmapSurface(
         }
         return a.structuralFace.role != SectorStructuralFaceRole::CylinderSide
                 && a.structuralFace.role != SectorStructuralFaceRole::SphereSurface;
+    }
+    if (a.sourceKind == SectorGeneratedSurfaceSourceKind::Baseboard) {
+        return a.topologySideDefId == b.topologySideDefId
+                && a.baseboardFaceIndex == b.baseboardFaceIndex;
     }
     if (a.kind != b.kind) return false;
 
@@ -5745,6 +5752,13 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendTopologyWallPart(hash, sideDef->lower);
         FnvAppendTopologyWallPart(hash, sideDef->upper);
         FnvAppendTopologyWallPart(hash, sideDef->middle);
+        // No bytes for disabled boards: pre-feature maps retain their bake hash.
+        if (sideDef->baseboard.enabled) {
+            FnvAppendString(hash, "baseboard-geometry-v1");
+            FnvAppendFloat(hash, sideDef->baseboard.height);
+            FnvAppendFloat(hash, sideDef->baseboard.thickness);
+            FnvAppendString(hash, sideDef->baseboard.materialId);
+        }
     }
 
     const std::vector<const SectorTopologySector*> sectors = SortedLightmapHashRecords(map.sectors);

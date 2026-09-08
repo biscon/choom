@@ -291,6 +291,7 @@ std::vector<std::string> ResolveSectorMaterialsForMap(
         AddWallPartMaterialIds(referenced, side.lower);
         AddWallPartMaterialIds(referenced, side.upper);
         AddWallPartMaterialIds(referenced, side.middle);
+        if (side.baseboard.enabled) AddMaterialId(referenced, side.baseboard.materialId);
     }
     bool hasSky = false;
     for (const SectorTopologySector& sector : map.sectors) {

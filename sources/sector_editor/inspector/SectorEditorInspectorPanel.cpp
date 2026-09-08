@@ -209,6 +209,8 @@ float AuthoringLineInspectorContentHeight(
 
         const SectorAuthoringLineSide* side =
                 FindSectorAuthoringLineSide(graph, SectorAuthoringSideId{line.id, sideKind});
+        height += BuildSectorEditorBaseboardLayout(0, 1, rowH, gap,
+                side && side->baseboard.enabled).height;
         const SectorTopologyDecalLayer emptyDecal;
         const SectorTopologyDecalLayer& wallDecal =
                 side != nullptr ? side->wall.decal : emptyDecal;
@@ -1673,13 +1675,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     const SectorAuthoringSideId sideId{selectedAuthoringLine->id, sideKind};
                     const SectorAuthoringLineSide* authoringSide =
                             FindSectorAuthoringLineSide(authoringGraph, sideId);
-                    const auto textureForPart = [authoringSide](TopologyWallPart part) -> std::string {
+                    const auto textureForPart = [&authoringSide](TopologyWallPart part) -> std::string {
                         if (authoringSide == nullptr) {
                             return std::string{};
                         }
                         return TopologyWallPartSettingsFor(*authoringSide, part).materialId;
                     };
-                    const auto decalForPart = [authoringSide](TopologyWallPart part) -> SectorTopologyDecalLayer {
+                    const auto decalForPart = [&authoringSide](TopologyWallPart part) -> SectorTopologyDecalLayer {
                         if (authoringSide == nullptr) {
                             return SectorTopologyDecalLayer{};
                         }
@@ -1719,6 +1721,63 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 status,
                                 mutate);
                     };
+                    const SectorBaseboardSettings baseboard = authoringSide
+                            ? authoringSide->baseboard : SectorBaseboardSettings{};
+                    const auto boardLayout = BuildSectorEditorBaseboardLayout(
+                            y, contentW, rowH, gap, baseboard.enabled);
+                    bool boardEnabled = baseboard.enabled;
+                    if (engine::Checkbox(ui, config, input, assets,
+                                TextFormat("%s_baseboard", idPrefix), boardLayout.checkbox,
+                                font, "Baseboard", boardEnabled)) {
+                        mutateSide("Updated baseboard", [boardEnabled](SectorAuthoringLineSide& side) {
+                            side.baseboard.enabled = boardEnabled;
+                            return true;
+                        });
+                    }
+                    if (baseboard.enabled) {
+                        if (materialUiState.baseboardInputLineId != sideId.lineId) {
+                            for (auto& sideInputs : materialUiState.baseboardInputs) {
+                                for (auto& value : sideInputs) value = {};
+                            }
+                            materialUiState.baseboardInputLineId = sideId.lineId;
+                        }
+                        const int sideIndex = sideKind == SectorTopologySideKind::Front ? 0 : 1;
+                        const char* labels[] = {"Height:", "Thickness:"};
+                        const float values[] = {baseboard.height, baseboard.thickness};
+                        for (int i = 0; i < 2; ++i) {
+                            const auto value = DrawLabeledFloatInput(ui, config, input, assets, font,
+                                    TextFormat("%s_baseboard_dimension_%d", idPrefix, i), labels[i],
+                                    boardLayout.labels[i], boardLayout.inputs[i], engine::UITextJustify::Left,
+                                    values[i], materialUiState.baseboardInputs[sideIndex][i],
+                                    0.001f, 100000.0f, 3);
+                            if (value.changed && value.finite && value.value > 0 && value.value != values[i]) {
+                                mutateSide("Updated baseboard dimensions", [i, value](SectorAuthoringLineSide& side) {
+                                    (i == 0 ? side.baseboard.height : side.baseboard.thickness) = value.value;
+                                    return true;
+                                });
+                            }
+                        }
+                        const auto row = BuildSectorEditorInspectorTextureRowLayout(
+                                boardLayout.materialY, contentW, gap, 38, 72);
+                        engine::Text(ui, config, assets, row.labelRect, font, "Material:",
+                                engine::UITextJustify::Left, config.mutedTextColor);
+                        engine::Text(ui, smallConfig, assets, row.valueRect, smallFont,
+                                baseboard.materialId.empty() ? "Default" : baseboard.materialId.c_str(),
+                                engine::UITextJustify::Left,
+                                !baseboard.materialId.empty() && !textureCatalog.HasTexture(baseboard.materialId)
+                                        ? config.invalidColor : config.mutedTextColor);
+                        if (engine::Button(ui, config, input, assets, TextFormat("%s_baseboard_default", idPrefix),
+                                    row.clearButtonRect, font, "Default")) {
+                            materialEditing.SetAuthoringBaseboardMaterial(sideId, {}, &assets);
+                        }
+                        if (engine::Button(ui, config, input, assets, TextFormat("%s_baseboard_material", idPrefix),
+                                    row.pickerButtonRect, font, ">")) {
+                            materialEditing.OpenMaterialPickerForAuthoringBaseboard(sideId);
+                        }
+                    }
+                    y += boardLayout.height;
+                    // An initial side edit can grow the authoring side vector.
+                    authoringSide = FindSectorAuthoringLineSide(authoringGraph, sideId);
                     const auto drawTextureRow =
                             [&](const char* suffix, const char* label, TopologyWallPart part) {
                                 const float buttonW = 38.0f;

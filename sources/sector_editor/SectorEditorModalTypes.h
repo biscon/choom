@@ -46,6 +46,7 @@ enum class TopologyTexturePickerTargetKind {
     AuthoringFaceAnchor,
     AuthoringSide,
     AuthoringStructuralPrimitive,
+    AuthoringBaseboard,
     MapSky,
     RuntimeDoor,
     RuntimeDuctFrame,

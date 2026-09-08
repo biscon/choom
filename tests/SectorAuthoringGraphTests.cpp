@@ -3119,6 +3119,47 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
           "inner synthesized anchor uses implicit built-in defaults");
 }
 
+void TestBaseboardAuthoringMutationAndSplit()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    auto& graph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, graph, MakeAdjacentTwoRoomGraph());
+    const auto revision = state.topologyRenderRevision;
+    Check(game::MutateSectorEditorAuthoringSideById(state,
+            game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+            documentState.map.topologyMap, graph,
+            game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            {10, game::SectorTopologySideKind::Front}, "Test baseboard",
+            [](game::SectorAuthoringLineSide& side) {
+                side.baseboard = {true, 1.2f, 0.16f, "trim"};
+                return true;
+            }), "baseboard edit refreshes authoring derivation");
+    Check(documentState.lifecycle.topologyDocumentDirty && state.topologyRenderRevision > revision
+            && !state.topologyRenderCache.valid, "baseboard edit dirties document and invalidates 2D cache");
+    bool projected = false;
+    for (const auto& side : documentState.map.topologyMap.sideDefs) {
+        if (side.baseboard.enabled) {
+            projected = true;
+            Check(side.baseboard.materialId == "trim" && Near(side.baseboard.thickness, 0.16f),
+                    "baseboard settings project into derived sidedef");
+        }
+    }
+    Check(projected, "derived topology contains enabled baseboard");
+    game::SectorAuthoringInsertVertexResult split;
+    Check(game::InsertSectorAuthoringVertexOnLine(graph, 10, {32, 0}, &split),
+            "baseboard authoring line splits");
+    int copies = 0;
+    for (const auto& side : graph.lineSides) {
+        if (side.baseboard.enabled) {
+            ++copies;
+            Check(side.baseboard.materialId == "trim" && Near(side.baseboard.height, 1.2f),
+                    "split copies configured baseboard settings");
+        }
+    }
+    Check(copies == 2, "both split authoring sides retain trim");
+}
+
 void TestEditorAuthoringGraphMutationMarksDirtyAndStale()
 {
     game::SectorEditorState state;
@@ -15519,6 +15560,7 @@ int main()
     TestFreshDerivedTopologyUsesDefaultMaterials();
     TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials();
     TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor();
+    TestBaseboardAuthoringMutationAndSplit();
     TestEditorAuthoringGraphMutationMarksDirtyAndStale();
     TestAuthoringOverlayRenderCacheIncludesLooseGraph();
     TestAuthoringDiagnosticRenderCacheDoesNotRequireDerivedTopology();

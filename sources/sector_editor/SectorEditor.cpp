@@ -4982,7 +4982,7 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
         return best;
     }
     if (hit.ref.sourceKind
-            == SectorGeneratedSurfaceSourceKind::StructuralPrimitive) {
+            != SectorGeneratedSurfaceSourceKind::Topology) {
         // Slice 2 keeps the authored primitive as the editable identity. Generated
         // faces are not topology floor/wall targets in the 3D material picker.
         return best;

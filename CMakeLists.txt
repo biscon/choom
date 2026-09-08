@@ -508,6 +508,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorMaterialRefactor.cpp
             sources/sector_demo/SectorMaterialRegistry.cpp
@@ -563,6 +564,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_generated_geometry_tests
             tests/SectorTopologyGeneratedGeometryTests.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -582,6 +584,7 @@ if(BUILD_TESTING)
             sources/sector_demo/renderer/SectorStaticSpecularLighting.cpp
             sources/engine/render/ColorTransfer.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorMeshBuilder.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -608,6 +611,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorDynamicPointLightSelection.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorLightmapReport.cpp
             sources/sector_demo/SectorReflectionProbes.cpp
@@ -638,6 +642,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -771,6 +776,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
@@ -917,6 +923,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorStructuralPrimitives.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
+            sources/sector_demo/SectorBaseboardGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp

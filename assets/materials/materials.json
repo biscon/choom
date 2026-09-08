@@ -1,6 +1,27 @@
 {
   "formatVersion": 1,
   "materials": {
+    "baseboard_wood": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_wood.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.35
+    },
+    "baseboard_metal": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_metal.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 1.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.15
+    },
+    "baseboard_painted_white": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_painted_white.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.2
+    },
     "asphalt_06": {
       "albedoTexturePath": "assets/images/hires/asphalt_06.png",
       "filter": "anisotropic8x",

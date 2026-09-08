@@ -312,6 +312,22 @@ void TestHole()
     const double expectedArea = outerWorldSide * outerWorldSide - holeWorldSide * holeWorldSide;
     Check(floor != nullptr && std::fabs(TriangleAreaXZ(*floor) - expectedArea) < 0.000001,
           "floor triangulation excludes hole area");
+    for (auto& side : map.sideDefs) side.baseboard.enabled = true;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "baseboards around a sector hole build");
+    double trimArea = 0;
+    int tops = 0;
+    for (const auto& surface : geometry.surfaces) {
+        if (surface.ref.sourceKind != game::SectorGeneratedSurfaceSourceKind::Baseboard
+                || surface.ref.baseboardFaceIndex != 0) continue;
+        ++tops;
+        trimArea += TriangleAreaXZ(surface);
+    }
+    const double t = game::SectorAuthoringToWorldDistance(0.14f);
+    const double expectedTrimArea = outerWorldSide * outerWorldSide
+            - (outerWorldSide-2*t)*(outerWorldSide-2*t)
+            + (holeWorldSide+2*t)*(holeWorldSide+2*t)-holeWorldSide*holeWorldSide;
+    Check(tops == 8 && std::fabs(trimArea-expectedTrimArea) < 0.000001,
+            "outer and hole loops offset to the owning side with exact miter area");
 }
 
 void TestEqualHeightPortal()
@@ -816,6 +832,163 @@ void TestStructuralPrimitiveUsesOwningSectorAmbient()
           "every structural primitive kind inherits its primary owning sector ambient");
 }
 
+double BoardTopOverlap(const game::SectorGeneratedSurface& a, const game::SectorGeneratedSurface& b)
+{
+    double overlap = 0;
+    const auto cross = [](Vector2 a, Vector2 b, Vector2 p) {
+        return (b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);
+    };
+    for (size_t i = 0; i < a.vertices.size(); i += 3) {
+        for (size_t j = 0; j < b.vertices.size(); j += 3) {
+            std::vector<Vector2> polygon;
+            Vector2 clip[3];
+            for (int k = 0; k < 3; ++k) {
+                const auto p = a.vertices[i+k].position, q = b.vertices[j+k].position;
+                polygon.push_back({p.x,p.z}); clip[k] = {q.x,q.z};
+            }
+            const float sign = cross(clip[0],clip[1],clip[2]) > 0 ? 1 : -1;
+            for (int k = 0; k < 3 && !polygon.empty(); ++k) {
+                std::vector<Vector2> next;
+                const auto ca = clip[k], cb = clip[(k+1)%3];
+                for (size_t l = 0; l < polygon.size(); ++l) {
+                    const auto p = polygon[l], q = polygon[(l+1)%polygon.size()];
+                    const float dp = sign*cross(ca,cb,p), dq = sign*cross(ca,cb,q);
+                    if (dp >= 0) next.push_back(p);
+                    if ((dp > 0 && dq < 0) || (dp < 0 && dq > 0)) {
+                        const float t = dp/(dp-dq);
+                        next.push_back({p.x+t*(q.x-p.x),p.y+t*(q.y-p.y)});
+                    }
+                }
+                polygon = std::move(next);
+            }
+            double area = 0;
+            for (size_t k = 0; k < polygon.size(); ++k) {
+                const auto p = polygon[k], q = polygon[(k+1)%polygon.size()];
+                area += p.x*q.y-p.y*q.x;
+            }
+            overlap += std::fabs(area)*0.5;
+        }
+    }
+    return overlap;
+}
+
+void TestBaseboardCornerVariants()
+{
+    const std::vector<std::vector<game::SectorTopologyVertex>> fixtures = {
+        {{1,0,0},{2,256,0},{3,256,128},{4,128,128},{5,128,256},{6,0,256}},
+        {{1,0,0},{2,256,0},{3,320,128},{4,64,256}},
+        {{1,0,0},{2,128,0},{3,256,0},{4,256,256},{5,0,256}},
+        {{1,0,0},{2,256,0},{3,128,16}},
+        {{1,0,0},{2,512,0},{3,512,512},{4,256,512},{5,128,256},{6,240,512},{7,0,512}}
+    };
+    for (const auto& vertices : fixtures) {
+        game::SectorTopologyMap map;
+        map.vertices = vertices;
+        map.sectors.push_back(Sector(10));
+        for (size_t i = 0; i < vertices.size(); ++i) {
+            const int id = static_cast<int>(i+1);
+            map.lineDefs.push_back({id,id,static_cast<int>((i+1)%vertices.size()+1),id,-1});
+            AddSide(map,id,id,game::SectorTopologySideKind::Front,10,"corner");
+            map.sideDefs.back().baseboard = {true,0.8f,i%2 == 0 ? 0.12f : 0.2f,"trim"};
+        }
+        game::SectorGeneratedGeometry geometry;
+        std::string error;
+        Check(game::BuildSectorGeneratedGeometry(map,geometry,&error), "angle/collinear/short-span trim fixture builds");
+        std::vector<const game::SectorGeneratedSurface*> tops;
+        for (const auto& surface : geometry.surfaces) {
+            if (surface.ref.sourceKind == game::SectorGeneratedSurfaceSourceKind::Baseboard
+                    && surface.ref.baseboardFaceIndex == 0) tops.push_back(&surface);
+        }
+        for (size_t i = 0; i < tops.size(); ++i) {
+            for (size_t j = i+1; j < tops.size(); ++j) {
+                Check(BoardTopOverlap(*tops[i],*tops[j]) < 0.000001,
+                        "adjacent baseboard top faces have no coplanar overlap");
+            }
+        }
+    }
+}
+
+void TestBaseboards()
+{
+    auto map = MakeSquare();
+    game::SectorGeneratedGeometry geometry;
+    std::string error;
+    const auto isBoard = [](const auto& surface) {
+        return surface.ref.sourceKind == game::SectorGeneratedSurfaceSourceKind::Baseboard;
+    };
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "default baseboard fixture builds");
+    Check(std::none_of(geometry.surfaces.begin(), geometry.surfaces.end(), isBoard), "baseboards default off");
+    for (auto& side : map.sideDefs) side.baseboard.enabled = true;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "mitered baseboards build");
+    Check(std::count_if(geometry.surfaces.begin(), geometry.surfaces.end(), isBoard) == 8,
+            "closed rectangular trim has only four tops and four fronts, no internal caps");
+    const float size = game::SectorCoordToWorldDistance(64);
+    const float thickness = game::SectorAuthoringToWorldDistance(0.14f);
+    double topArea = 0;
+    int sharedCornerCount = 0;
+    for (const auto& surface : geometry.surfaces) {
+        if (!isBoard(surface)) continue;
+        Check(surface.materialId.empty(), "unassigned baseboard uses built-in default");
+        Check(surface.receivesLightmap && surface.castsLightmapOcclusion && surface.castsDynamicShadow,
+                "baseboard participates in lighting and shadow passes");
+        Check(surface.owningSectorIds == std::vector<int>{10}, "baseboard retains sector ownership");
+        Check(surface.chartWidth > 0 && surface.chartHeight > 0, "baseboard lightmap chart has area");
+        for (const auto& v : surface.vertices) {
+            Check(std::isfinite(v.uv.x) && std::isfinite(v.uv.y), "baseboard UVs are finite");
+            Check(v.position.x >= -0.00001f && v.position.x <= size + 0.00001f
+                    && v.position.z >= -0.00001f && v.position.z <= size + 0.00001f,
+                    "interior miter stays within supporting room");
+            Check(v.position.y >= 0 && v.position.y <= 0.12501f, "baseboard authored units convert to meters");
+            if (Near(v.position, Vector3{size - thickness, 0.125f, thickness})) ++sharedCornerCount;
+        }
+        for (size_t i = 0; i < surface.vertices.size(); i += 3) {
+            const auto a = surface.vertices[i].position, b = surface.vertices[i+1].position,
+                    c = surface.vertices[i+2].position;
+            const Vector3 ab{b.x-a.x,b.y-a.y,b.z-a.z}, ac{c.x-a.x,c.y-a.y,c.z-a.z};
+            const Vector3 cross{ab.y*ac.z-ab.z*ac.y, ab.z*ac.x-ab.x*ac.z, ab.x*ac.y-ab.y*ac.x};
+            Check(cross.x*surface.normal.x+cross.y*surface.normal.y+cross.z*surface.normal.z > 0,
+                    "baseboard triangles have nondegenerate outward winding");
+            if (surface.ref.baseboardFaceIndex == 0) topArea += cross.y * 0.5;
+        }
+    }
+    Check(sharedCornerCount >= 4, "adjacent boards use the same miter corner");
+    Check(std::fabs(topArea - (size*size - (size-2*thickness)*(size-2*thickness))) < 0.00001,
+            "miter tops cover the perimeter exactly once without overlapping area");
+
+    map.sideDefs[0].baseboard.height *= 2;
+    map.sideDefs[0].baseboard.materialId = "test_trim";
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "unequal-height miter builds");
+    int exposedSteps = 0;
+    for (const auto& surface : geometry.surfaces) {
+        if (isBoard(surface) && surface.ref.topologySideDefId == 1
+                && (surface.ref.baseboardFaceIndex == 1 || surface.ref.baseboardFaceIndex == 5)) {
+            ++exposedSteps;
+            for (const auto& v : surface.vertices) Check(v.position.y >= 0.12499f, "step cap exposes only the uncovered height");
+        }
+    }
+    Check(exposedSteps == 2, "taller board has two exposed stepped caps");
+
+    auto portal = MakeAdjacent(0, 24, 0, 24);
+    for (auto& side : portal.sideDefs) side.baseboard.enabled = true;
+    Check(game::BuildSectorGeneratedGeometry(portal, geometry, &error), "portal trim builds");
+    for (const auto& s : geometry.surfaces) {
+        Check(!isBoard(s) || s.ref.topologyLineDefId != 2, "trim never crosses a floor-level portal");
+    }
+    portal.sectors[1].floorZ = 0.4f;
+    Check(game::BuildSectorGeneratedGeometry(portal, geometry, &error), "low step trim builds");
+    int stepBoards = 0;
+    for (const auto& s : geometry.surfaces) {
+        if (isBoard(s) && s.ref.topologyLineDefId == 2) {
+            ++stepBoards;
+            Check(s.ref.topologySideDefId == 2, "step trim appears only on lower sector side");
+            for (const auto& v : s.vertices) Check(v.position.y <= 0.05001f, "trim clips to solid lower-wall height");
+        }
+    }
+    Check(stepBoards > 0, "lower wall receives baseboard");
+    map.sideDefs[0].baseboard.thickness = -1;
+    Check(!game::BuildSectorGeneratedGeometry(map, geometry, &error), "invalid baseboard dimensions are rejected");
+}
+
 void TestInvalidAndEmptyMaps()
 {
     game::SectorTopologyMap invalid = MakeSquare();
@@ -839,6 +1012,8 @@ void TestInvalidAndEmptyMaps()
 
 int main()
 {
+    TestBaseboardCornerVariants();
+    TestBaseboards();
     TestSquare();
     TestHole();
     TestEqualHeightPortal();

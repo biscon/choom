@@ -959,6 +959,11 @@ std::string SectorEditorMaterialEditingService::CurrentTextureForSurface(
 
 std::string SectorEditorMaterialEditingService::CurrentTextureForPickerTarget() const
 {
+    if (context_.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringBaseboard) {
+        const auto* side = FindSectorAuthoringLineSide(context_.authoringGraph,
+                {context_.texturePicker.authoringLineId, context_.texturePicker.authoringSide});
+        return side ? side->baseboard.materialId : std::string{};
+    }
     if (context_.texturePicker.topologyTargetKind
             == TopologyTexturePickerTargetKind::AuthoringStructuralPrimitive) {
         const SectorAuthoringStructuralPrimitive* primitive =
@@ -1057,6 +1062,17 @@ SectorEditorTexturePickerApplyResult SectorEditorMaterialEditingService::ApplyTe
         return SectorEditorTexturePickerApplyResult{};
     }
 
+    if (context_.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringBaseboard) {
+        SectorEditorTexturePickerApplyResult result;
+        result.changed = SetAuthoringBaseboardMaterial(
+                {context_.texturePicker.authoringLineId, context_.texturePicker.authoringSide},
+                selected.materialId, assets);
+        result.status = result.changed ? "Updated baseboard material" : "Baseboard material unchanged";
+        context_.statusText = result.status;
+        CloseSectorEditorTexturePicker(context_.texturePicker);
+        return result;
+    }
+
     if (context_.texturePicker.topologyTargetKind
             == TopologyTexturePickerTargetKind::AuthoringStructuralPrimitive) {
         SectorEditorTexturePickerApplyResult result;
@@ -1103,6 +1119,39 @@ SectorEditorTexturePickerApplyResult SectorEditorMaterialEditingService::ApplyTe
                         : false;
             }};
     return ApplySectorEditorMaterialTexturePickerSelection(routingContext, assets);
+}
+
+bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringBaseboard(SectorAuthoringSideId sideId)
+{
+    if (!FindSectorAuthoringLine(context_.authoringGraph, sideId.lineId)) return false;
+    const auto* side = FindSectorAuthoringLineSide(context_.authoringGraph, sideId);
+    context_.texturePicker.rebuildPreviewOnApply = false;
+    context_.texturePicker.authoringSurface3DFlatTarget = false;
+    context_.texturePicker.topologyTargetKind = TopologyTexturePickerTargetKind::AuthoringBaseboard;
+    context_.texturePicker.authoringLineId = sideId.lineId;
+    context_.texturePicker.authoringSide = sideId.side;
+    OpenSectorEditorTexturePicker(context_.texturePicker,
+            SortedSectorMaterialIds(context_.materialRegistry),
+            side ? side->baseboard.materialId : std::string{});
+    return true;
+}
+
+bool SectorEditorMaterialEditingService::SetAuthoringBaseboardMaterial(
+        SectorAuthoringSideId sideId, const std::string& materialId, engine::AssetManager* assets)
+{
+    const bool changed = MutateSectorEditorAuthoringSideById(
+            context_.lifecycle, context_.topologyRenderRevision, context_.topologyRenderCache,
+            context_.topologyMap, context_.authoringGraph, context_.derivation,
+            sideId, "Updated baseboard material",
+            [&materialId](SectorAuthoringLineSide& side) {
+                if (side.baseboard.materialId == materialId) return false;
+                side.baseboard.materialId = materialId;
+                return true;
+            });
+    if (changed && assets && context_.requestPreviewMaterialMeshRebuild) {
+        context_.requestPreviewMaterialMeshRebuild(assets);
+    }
+    return changed;
 }
 
 bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringStructuralPrimitive(

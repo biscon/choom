@@ -24,7 +24,8 @@ enum class SectorGeneratedSurfaceKind {
 
 enum class SectorGeneratedSurfaceSourceKind {
     Topology,
-    StructuralPrimitive
+    StructuralPrimitive,
+    Baseboard
 };
 
 struct SectorGeneratedSurfaceRef {
@@ -35,6 +36,7 @@ struct SectorGeneratedSurfaceRef {
     SectorTopologySideKind topologySide = SectorTopologySideKind::Front;
     SectorGeneratedSurfaceSourceKind sourceKind = SectorGeneratedSurfaceSourceKind::Topology;
     SectorStructuralFaceId structuralFace;
+    int baseboardFaceIndex = 0;
 };
 
 struct SectorGeneratedVertex {

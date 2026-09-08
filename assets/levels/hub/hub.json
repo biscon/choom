@@ -31047,6 +31047,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -31088,6 +31092,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -31129,6 +31137,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -31170,6 +31182,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -31211,6 +31227,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       }
     ],
