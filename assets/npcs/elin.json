@@ -5,7 +5,7 @@
   "modelPath": "assets/models/characters/Elin.glb",
   "headLook": {
     "enabled": true,
-    "boneName": "mixamorig:Head"
+    "boneName": "mixamorig:Neck"
   },
   "actions": {
     "idle": {

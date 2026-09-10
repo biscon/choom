@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "voice_identity_id": "male",
+  "moods": {
+    "neutral": [
+      "neutral/male_neutral_01.wav",
+      "neutral/male_neutral_02.wav",
+      "neutral/male_neutral_03.wav",
+      "neutral/male_neutral_04.wav",
+      "neutral/male_neutral_05.wav",
+      "neutral/male_neutral_06.wav",
+      "neutral/male_neutral_07.wav",
+      "neutral/male_neutral_08.wav"
+    ],
+    "happy": [
+      "happy/male_happy_01.wav",
+      "happy/male_happy_02.wav",
+      "happy/male_happy_03.wav",
+      "happy/male_happy_04.wav",
+      "happy/male_happy_05.wav",
+      "happy/male_happy_06.wav",
+      "happy/male_happy_07.wav",
+      "happy/male_happy_08.wav"
+    ],
+    "angry": [
+      "angry/male_angry_01.wav",
+      "angry/male_angry_02.wav",
+      "angry/male_angry_03.wav",
+      "angry/male_angry_04.wav",
+      "angry/male_angry_05.wav",
+      "angry/male_angry_06.wav",
+      "angry/male_angry_07.wav",
+      "angry/male_angry_08.wav"
+    ],
+    "afraid": [
+      "afraid/male_afraid_01.wav",
+      "afraid/male_afraid_02.wav",
+      "afraid/male_afraid_03.wav",
+      "afraid/male_afraid_04.wav",
+      "afraid/male_afraid_05.wav",
+      "afraid/male_afraid_06.wav",
+      "afraid/male_afraid_07.wav",
+      "afraid/male_afraid_08.wav"
+    ],
+    "panicked": [
+      "panicked/male_panicked_01.wav",
+      "panicked/male_panicked_02.wav",
+      "panicked/male_panicked_03.wav",
+      "panicked/male_panicked_04.wav",
+      "panicked/male_panicked_05.wav",
+      "panicked/male_panicked_06.wav",
+      "panicked/male_panicked_07.wav",
+      "panicked/male_panicked_08.wav"
+    ],
+    "pained": [
+      "pained/male_pained_01.wav",
+      "pained/male_pained_02.wav",
+      "pained/male_pained_03.wav",
+      "pained/male_pained_04.wav",
+      "pained/male_pained_05.wav",
+      "pained/male_pained_06.wav",
+      "pained/male_pained_07.wav",
+      "pained/male_pained_08.wav"
+    ],
+    "relieved": [
+      "relieved/male_relieved_01.wav",
+      "relieved/male_relieved_02.wav",
+      "relieved/male_relieved_03.wav",
+      "relieved/male_relieved_04.wav",
+      "relieved/male_relieved_05.wav",
+      "relieved/male_relieved_06.wav",
+      "relieved/male_relieved_07.wav",
+      "relieved/male_relieved_08.wav"
+    ]
+  },
+  "pitch_range": [
+    0.96,
+    1.04
+  ],
+  "volume_range": [
+    0.92,
+    1.08
+  ],
+  "minimum_interval_ms": 85,
+  "characters_per_sound_range": [
+    3,
+    5
+  ],
+  "max_active_clips_per_speaker": 1
+}

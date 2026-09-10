@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "model": "gpt-4o-mini-tts",
+  "common_instructions": "Speak only the single supplied invented fragment, once. No introduction, explanation, translation, or added words. Treat it as a brief natural conversational utterance in an unintelligible pseudo-language, not as letters to spell. One to three syllables, compact and fluid. Do not turn it into an English word or phrase. Sound like an ordinary modern adult in a grounded, serious survival-horror story. Use subtle human intonation and a consistent natural voice. Avoid exaggerated accents, theatrical acting, announcer delivery, fantasy characters, comedy, monsters, robots, singing, laughter, and screams. A close, dry recording with no music, ambience, echo, or reverb. Convey emotion through the fragment's delivery, not extra vocalizations.",
+  "profiles": {
+    "male": {
+      "voice": "onyx",
+      "instructions": "An ordinary adult masculine voice, natural mid-to-low conversational register. Understated and believable; no exaggerated bass, growling, gravelly character affect, or heroic performance."
+    },
+    "female": {
+      "voice": "nova",
+      "instructions": "An ordinary adult feminine voice, natural middle conversational register. Understated and believable; no exaggerated high pitch, girlishness, breathy glamour, or character affect."
+    }
+  },
+  "moods": {
+    "neutral": {
+      "instructions": "Restrained ordinary conversation, calm and matter-of-fact, with a small natural intonation contour.",
+      "fragments": ["nehvuh", "tehrem", "vohnel", "shevuh", "rehvek", "nuhrel", "fehnum", "mehvo"]
+    },
+    "happy": {
+      "instructions": "Warm and mildly pleased. A slight smile in the voice, still quiet and grounded. No cartoon cheerfulness, laughter, or celebration.",
+      "fragments": ["vehnuh", "rehnem", "tohvek", "nehvom", "fehrel", "shehno", "mehvun", "dehvo"]
+    },
+    "angry": {
+      "instructions": "Tense and forceful, irritated but controlled. Firm articulation and contained pressure. Do not shout every utterance, growl, or become theatrical.",
+      "fragments": ["kehnum", "tehrov", "vehket", "nohrem", "dehvek", "rehkut", "fehnok", "sehvem"]
+    },
+    "afraid": {
+      "instructions": "Uneasy, cautious, and softly breathy, as if trying to speak despite fear. Preserve clear human articulation and a little uncertainty. No gasps or added words.",
+      "fragments": ["hehven", "nuhvem", "sehnel", "fehvuh", "mehrel", "vohrem", "rehnum", "tehnel"]
+    },
+    "panicked": {
+      "instructions": "Urgent and emotionally unstable, with a quick uneven contour and slight trembling. Keep the fragment short, intelligibly articulated as invented speech, and usable beneath readable dialogue text. No screaming or frantic extra sounds.",
+      "fragments": ["kehvuh", "tehnem", "vehrok", "nehkut", "dehnum", "fohvet", "rehnel", "sehkov"]
+    },
+    "pained": {
+      "instructions": "Strained, tired, or mildly injured, with effort behind the speech and restrained breath. Still speak the fragment naturally. No extreme screams, groans replacing speech, or dramatic death performance.",
+      "fragments": ["mehnum", "hehrel", "nuhvek", "vohnem", "fehrov", "dehnel", "rehvuh", "tehvum"]
+    },
+    "relieved": {
+      "instructions": "Exhausted relief after danger, gently releasing tension while still weary. A soft settling contour. Not joyful celebration, laughter, or a separate sigh.",
+      "fragments": ["hehnem", "vehrel", "nohvek", "fehnuh", "mehnel", "rohvem", "sehnum", "dehvuh"]
+    }
+  },
+  "processing": {
+    "silence_db": -60,
+    "silence_min_ms": 10,
+    "padding_ms": 15,
+    "fade_ms": 3,
+    "peak_db": -3,
+    "duration_min_ms": 80,
+    "duration_max_ms": 1200,
+    "audible_peak_min_db": -75,
+    "gain_warning_db": 20
+  },
+  "runtime_defaults": {
+    "pitch_range": [0.96, 1.04],
+    "volume_range": [0.92, 1.08],
+    "minimum_interval_ms": 85,
+    "characters_per_sound_range": [3, 5],
+    "max_active_clips_per_speaker": 1
+  }
+}

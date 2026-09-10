@@ -14,3 +14,9 @@ CMakeSettings.json
 *.object_probes.bin*
 *.reflection-probes.bin*
 .venv/
+# Offline dialogue voice generation intermediates (final audio remains tracked).
+/audio_generation/raw/
+/audio_generation/previews/
+/audio_generation/reports/
+/tools/dialogue_voice_generator/__pycache__/
+/tools/dialogue_voice_generator/tests/__pycache__/

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "voice_identity_id": "female",
+  "moods": {
+    "neutral": [
+      "neutral/female_neutral_01.wav",
+      "neutral/female_neutral_02.wav",
+      "neutral/female_neutral_03.wav",
+      "neutral/female_neutral_04.wav",
+      "neutral/female_neutral_05.wav",
+      "neutral/female_neutral_06.wav",
+      "neutral/female_neutral_07.wav",
+      "neutral/female_neutral_08.wav"
+    ],
+    "happy": [
+      "happy/female_happy_01.wav",
+      "happy/female_happy_02.wav",
+      "happy/female_happy_03.wav",
+      "happy/female_happy_04.wav",
+      "happy/female_happy_05.wav",
+      "happy/female_happy_06.wav",
+      "happy/female_happy_07.wav",
+      "happy/female_happy_08.wav"
+    ],
+    "angry": [
+      "angry/female_angry_01.wav",
+      "angry/female_angry_02.wav",
+      "angry/female_angry_03.wav",
+      "angry/female_angry_04.wav",
+      "angry/female_angry_05.wav",
+      "angry/female_angry_06.wav",
+      "angry/female_angry_07.wav",
+      "angry/female_angry_08.wav"
+    ],
+    "afraid": [
+      "afraid/female_afraid_01.wav",
+      "afraid/female_afraid_02.wav",
+      "afraid/female_afraid_03.wav",
+      "afraid/female_afraid_04.wav",
+      "afraid/female_afraid_05.wav",
+      "afraid/female_afraid_06.wav",
+      "afraid/female_afraid_07.wav",
+      "afraid/female_afraid_08.wav"
+    ],
+    "panicked": [
+      "panicked/female_panicked_01.wav",
+      "panicked/female_panicked_02.wav",
+      "panicked/female_panicked_03.wav",
+      "panicked/female_panicked_04.wav",
+      "panicked/female_panicked_05.wav",
+      "panicked/female_panicked_06.wav",
+      "panicked/female_panicked_07.wav",
+      "panicked/female_panicked_08.wav"
+    ],
+    "pained": [
+      "pained/female_pained_01.wav",
+      "pained/female_pained_02.wav",
+      "pained/female_pained_03.wav",
+      "pained/female_pained_04.wav",
+      "pained/female_pained_05.wav",
+      "pained/female_pained_06.wav",
+      "pained/female_pained_07.wav",
+      "pained/female_pained_08.wav"
+    ],
+    "relieved": [
+      "relieved/female_relieved_01.wav",
+      "relieved/female_relieved_02.wav",
+      "relieved/female_relieved_03.wav",
+      "relieved/female_relieved_04.wav",
+      "relieved/female_relieved_05.wav",
+      "relieved/female_relieved_06.wav",
+      "relieved/female_relieved_07.wav",
+      "relieved/female_relieved_08.wav"
+    ]
+  },
+  "pitch_range": [
+    0.96,
+    1.04
+  ],
+  "volume_range": [
+    0.92,
+    1.08
+  ],
+  "minimum_interval_ms": 85,
+  "characters_per_sound_range": [
+    3,
+    5
+  ],
+  "max_active_clips_per_speaker": 1
+}
