@@ -358,8 +358,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 617,
-          "backSideDefId": 618,
+          "frontSideDefId": 629,
+          "backSideDefId": 630,
           "endpointA": [
             -704,
             1296
@@ -398,8 +398,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 565,
-          "backSideDefId": 593,
+          "frontSideDefId": 575,
+          "backSideDefId": 605,
           "endpointA": [
             -992,
             1456
@@ -469,8 +469,8 @@
           "lineDefId": 127,
           "frontSectorId": 33,
           "backSectorId": 26,
-          "frontSideDefId": 251,
-          "backSideDefId": 278,
+          "frontSideDefId": 261,
+          "backSideDefId": 288,
           "endpointA": [
             -2560,
             1376
@@ -1499,8 +1499,8 @@
           "lineDefId": 234,
           "frontSectorId": 50,
           "backSectorId": 43,
-          "frontSideDefId": 219,
-          "backSideDefId": 232,
+          "frontSideDefId": 229,
+          "backSideDefId": 242,
           "endpointA": [
             -2944,
             592
@@ -2181,8 +2181,8 @@
           "lineDefId": 269,
           "frontSectorId": 52,
           "backSectorId": 56,
-          "frontSideDefId": 410,
-          "backSideDefId": 389,
+          "frontSideDefId": 420,
+          "backSideDefId": 399,
           "endpointA": [
             -2048,
             -720
@@ -2421,8 +2421,8 @@
           "lineDefId": 255,
           "frontSectorId": 52,
           "backSectorId": 53,
-          "frontSideDefId": 404,
-          "backSideDefId": 350,
+          "frontSideDefId": 414,
+          "backSideDefId": 360,
           "endpointA": [
             -2432,
             -560
@@ -2825,8 +2825,8 @@
           "lineDefId": 324,
           "frontSectorId": 63,
           "backSectorId": 66,
-          "frontSideDefId": 430,
-          "backSideDefId": 366,
+          "frontSideDefId": 440,
+          "backSideDefId": 376,
           "endpointA": [
             -2432,
             -2688
@@ -3098,8 +3098,8 @@
           "lineDefId": 296,
           "frontSectorId": 52,
           "backSectorId": 61,
-          "frontSideDefId": 407,
-          "backSideDefId": 369,
+          "frontSideDefId": 417,
+          "backSideDefId": 379,
           "endpointA": [
             -2320,
             -1920
@@ -3190,8 +3190,8 @@
           "lineDefId": 435,
           "frontSectorId": 85,
           "backSectorId": 92,
-          "frontSideDefId": 483,
-          "backSideDefId": 627,
+          "frontSideDefId": 493,
+          "backSideDefId": 639,
           "endpointA": [
             -768,
             -2688
@@ -3230,8 +3230,8 @@
           "lineDefId": 407,
           "frontSectorId": 63,
           "backSectorId": 83,
-          "frontSideDefId": 435,
-          "backSideDefId": 475,
+          "frontSideDefId": 445,
+          "backSideDefId": 485,
           "endpointA": [
             -1664,
             -2640
@@ -3272,8 +3272,8 @@
           "lineDefId": 397,
           "frontSectorId": 70,
           "backSectorId": 81,
-          "frontSideDefId": 529,
-          "backSideDefId": 601,
+          "frontSideDefId": 539,
+          "backSideDefId": 613,
           "endpointA": [
             -896,
             -4240
@@ -3313,8 +3313,8 @@
           "lineDefId": 291,
           "frontSectorId": 60,
           "backSectorId": 55,
-          "frontSideDefId": 110,
-          "backSideDefId": 266,
+          "frontSideDefId": 116,
+          "backSideDefId": 276,
           "endpointA": [
             -4992,
             -704
@@ -3336,40 +3336,6 @@
         -312.0,
         3.9000000953674316,
         -40.0
-      ],
-      "yawDegrees": 0.0
-    },
-    {
-      "id": 208,
-      "kind": "duct_access",
-      "ductAccess": {
-        "anchor": {
-          "lineDefId": 440,
-          "frontSectorId": 93,
-          "backSectorId": 60,
-          "frontSideDefId": 112,
-          "backSideDefId": 107,
-          "endpointA": [
-            -5376,
-            -1280
-          ],
-          "endpointB": [
-            -5504,
-            -1280
-          ]
-        },
-        "width": 1.0,
-        "height": 0.9750000238418579,
-        "cover": {
-          "enabled": true,
-          "frameMaterialId": "worn_steel_512",
-          "louverMaterialId": "worn_steel_512"
-        }
-      },
-      "position": [
-        -340.0,
-        3.9000000953674316,
-        -80.0
       ],
       "yawDegrees": 0.0
     },
@@ -3959,11 +3925,11 @@
       "door": {
         "instanceId": "door_249",
         "anchor": {
-          "lineDefId": 447,
+          "lineDefId": 445,
           "frontSectorId": 94,
           "backSectorId": 96,
-          "frontSideDefId": 524,
-          "backSideDefId": 578,
+          "frontSideDefId": 534,
+          "backSideDefId": 588,
           "endpointA": [
             -1296,
             -4768
@@ -4556,11 +4522,11 @@
       "door": {
         "instanceId": "door_286",
         "anchor": {
-          "lineDefId": 467,
+          "lineDefId": 464,
           "frontSectorId": 67,
           "backSectorId": 98,
-          "frontSideDefId": 288,
-          "backSideDefId": 159,
+          "frontSideDefId": 298,
+          "backSideDefId": 165,
           "endpointA": [
             -3520,
             -2928
@@ -5910,8 +5876,8 @@
           "lineDefId": 413,
           "frontSectorId": 84,
           "backSectorId": 82,
-          "frontSideDefId": 672,
-          "backSideDefId": 607,
+          "frontSideDefId": 684,
+          "backSideDefId": 619,
           "endpointA": [
             -208,
             -2720
@@ -6487,21 +6453,6 @@
       "yawDegrees": -89.99999237060547
     },
     {
-      "id": 404,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_404",
-        "modelPath": "assets/models/bathroom/Ventilation_Grille_410.gltf",
-        "heightOffsetWorld": 2.5799994468688965
-      },
-      "position": [
-        -135.9199981689453,
-        -16.0,
-        -318.3199462890625
-      ],
-      "yawDegrees": 90.0
-    },
-    {
       "id": 405,
       "kind": "static_model",
       "staticModel": {
@@ -6515,21 +6466,6 @@
         -160.0800018310547
       ],
       "yawDegrees": 180.0
-    },
-    {
-      "id": 406,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_406",
-        "modelPath": "assets/models/bathroom/Ventilation_Grille_410.gltf",
-        "heightOffsetWorld": 2.59999942779541
-      },
-      "position": [
-        -232.52012634277344,
-        -16.0,
-        -207.9199981689453
-      ],
-      "yawDegrees": -4.26886799687054e-06
     },
     {
       "id": 407,
@@ -6559,6 +6495,210 @@
         -172.35989379882813
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 409,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_409",
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25,
+        "castsShadow": false
+      },
+      "position": [
+        -152.0,
+        -15.0,
+        -88.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 410,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_410",
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25,
+        "castsShadow": false
+      },
+      "position": [
+        -128.0,
+        -15.0,
+        -88.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 411,
+      "kind": "duct_access",
+      "ductAccess": {
+        "anchor": {
+          "lineDefId": 471,
+          "frontSectorId": 60,
+          "backSectorId": 99,
+          "frontSideDefId": 110,
+          "backSideDefId": 172,
+          "endpointA": [
+            -4608,
+            -3264
+          ],
+          "endpointB": [
+            -4608,
+            -3136
+          ]
+        },
+        "width": 1.0,
+        "height": 0.9750000238418579,
+        "cover": {
+          "enabled": true,
+          "frameMaterialId": "baseboard_metal",
+          "louverMaterialId": "baseboard_metal"
+        }
+      },
+      "position": [
+        -288.0,
+        3.9000000953674316,
+        -200.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 412,
+      "kind": "duct_access",
+      "ductAccess": {
+        "anchor": {
+          "lineDefId": 478,
+          "frontSectorId": 96,
+          "backSectorId": 102,
+          "frontSideDefId": 593,
+          "backSideDefId": 158,
+          "endpointA": [
+            -2176,
+            -5248
+          ],
+          "endpointB": [
+            -2176,
+            -5376
+          ]
+        },
+        "width": 1.0,
+        "height": 0.9750000238418579,
+        "cover": {
+          "enabled": true,
+          "frameMaterialId": "worn_steel_512",
+          "louverMaterialId": "worn_steel_512"
+        }
+      },
+      "position": [
+        -136.0,
+        3.9000000953674316,
+        -332.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 413,
+      "kind": "duct_access",
+      "ductAccess": {
+        "anchor": {
+          "lineDefId": 481,
+          "frontSectorId": 102,
+          "backSectorId": 99,
+          "frontSideDefId": 155,
+          "backSideDefId": 175,
+          "endpointA": [
+            -3648,
+            -3328
+          ],
+          "endpointB": [
+            -3776,
+            -3328
+          ]
+        },
+        "width": 1.0,
+        "height": 0.9750000238418579,
+        "cover": {
+          "enabled": true,
+          "frameMaterialId": "worn_steel_512",
+          "louverMaterialId": "baseboard_metal"
+        }
+      },
+      "position": [
+        -232.0,
+        3.9000000953674316,
+        -208.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 414,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_414",
+        "modelPath": "assets/models/cafeteria/Painting_Autumn_River.gltf",
+        "heightOffsetWorld": 1.3499997854232788,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -151.83999633789063,
+        -15.0,
+        -8.0
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 415,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_415",
+        "modelPath": "assets/models/cafeteria/Painting_Mountain_Lake.gltf",
+        "heightOffsetWorld": 1.3499997854232788,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -128.0800018310547,
+        -15.0,
+        -8.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 416,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_416",
+        "modelPath": "assets/models/cafeteria/Painting_Quiet_Farmland.gltf",
+        "heightOffsetWorld": 1.3499997854232788,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -151.9199981689453,
+        -15.0,
+        -72.0
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 417,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_417",
+        "modelPath": "assets/models/cafeteria/Painting_Rocky_Coast.gltf",
+        "heightOffsetWorld": 1.3499997854232788,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -128.0800018310547,
+        -15.0,
+        -72.0
+      ],
+      "yawDegrees": -90.0
     }
   ],
   "staticLights": [
@@ -8610,6 +8750,97 @@
             "edgeSoftness": 0.75,
             "scatteringTint": {
               "r": 255,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 67,
+      "position": [
+        -292.0,
+        4.0,
+        -200.0
+      ],
+      "radius": 8.0,
+      "sourceRadius": 0.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      }
+    },
+    {
+      "id": 68,
+      "position": [
+        -149.23983764648438,
+        1.039301872253418,
+        -88.00033569335938
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 229,
+        "g": 181,
+        "b": 126,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.02288055419921875,
+              0.052538394927978516,
+              0.0053827762603759766
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 229,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 69,
+      "position": [
+        -130.5951385498047,
+        1.1331576108932495,
+        -87.91751861572266
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 229,
+        "g": 181,
+        "b": 126,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.02288055419921875,
+              0.052538394927978516,
+              0.0053827762603759766
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 229,
               "g": 181,
               "b": 126,
               "a": 255
@@ -11376,41 +11607,6 @@
       }
     },
     {
-      "id": 14,
-      "instanceId": "light_point_14",
-      "position": [
-        -340.0,
-        12.0,
-        -90.0
-      ],
-      "radius": 64.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      }
-    },
-    {
-      "id": 63,
-      "instanceId": "light_point_63",
-      "position": [
-        -340.0,
-        5.0,
-        -40.0
-      ],
-      "radius": 24.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 250,
-        "b": 241,
-        "a": 255
-      },
-      "castsShadow": true
-    },
-    {
       "id": 64,
       "instanceId": "light_point_64",
       "position": [
@@ -12336,8 +12532,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -12437,7 +12632,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "84480e4ba14a4987",
+    "sourceHash": "7cb16b16a494bd20",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -12445,20 +12640,20 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.666015625,
-        1.666015625
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 12582912,
-      "rgbChannelsAboveOne": 1445
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 874
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "84480e4ba14a4987",
-      "count": 3973,
+      "sourceHash": "7cb16b16a494bd20",
+      "count": 3917,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -12470,32 +12665,27 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.192941665649414,
+          1.9389466047286987,
+          1.8518656492233276
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 23838,
-        "rgbChannelsAboveOne": 34
+        "sampleCount": 23502,
+        "rgbChannelsAboveOne": 37
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "84480e4ba14a4987",
+      "sourceHash": "7cb16b16a494bd20",
       "modelCount": 117,
-      "objectCount": 343,
+      "objectCount": 347,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
       {
         "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      },
-      {
-        "path": "assets/levels/hub/hub.lightmap.2.bin",
         "width": 2048,
         "height": 2048
       }
@@ -14313,23 +14503,23 @@
       },
       {
         "id": 376,
-        "x": -6016,
-        "y": -1280
+        "x": -5504,
+        "y": -3264
       },
       {
         "id": 377,
-        "x": -6016,
-        "y": -2048
+        "x": -4864,
+        "y": -3264
       },
       {
         "id": 378,
         "x": -4864,
-        "y": -2048
+        "y": -3136
       },
       {
         "id": 379,
-        "x": -4864,
-        "y": -1280
+        "x": -5376,
+        "y": -3136
       },
       {
         "id": 380,
@@ -14430,6 +14620,46 @@
         "id": 399,
         "x": -3552,
         "y": -2560
+      },
+      {
+        "id": 400,
+        "x": -4608,
+        "y": -3264
+      },
+      {
+        "id": 401,
+        "x": -4608,
+        "y": -3136
+      },
+      {
+        "id": 402,
+        "x": -3648,
+        "y": -3328
+      },
+      {
+        "id": 403,
+        "x": -3648,
+        "y": -5248
+      },
+      {
+        "id": 404,
+        "x": -2176,
+        "y": -5248
+      },
+      {
+        "id": 405,
+        "x": -2176,
+        "y": -5376
+      },
+      {
+        "id": 406,
+        "x": -3776,
+        "y": -5376
+      },
+      {
+        "id": 407,
+        "x": -3776,
+        "y": -3328
       }
     ],
     "lines": [
@@ -16635,11 +16865,6 @@
         "endVertexId": 375
       },
       {
-        "id": 623,
-        "startVertexId": 375,
-        "endVertexId": 373
-      },
-      {
         "id": 624,
         "startVertexId": 373,
         "endVertexId": 376
@@ -16648,11 +16873,6 @@
         "id": 625,
         "startVertexId": 376,
         "endVertexId": 377
-      },
-      {
-        "id": 626,
-        "startVertexId": 377,
-        "endVertexId": 378
       },
       {
         "id": 627,
@@ -16725,11 +16945,6 @@
         "endVertexId": 388
       },
       {
-        "id": 644,
-        "startVertexId": 388,
-        "endVertexId": 389
-      },
-      {
         "id": 645,
         "startVertexId": 389,
         "endVertexId": 390
@@ -16785,16 +17000,6 @@
         "endVertexId": 396
       },
       {
-        "id": 657,
-        "startVertexId": 396,
-        "endVertexId": 397
-      },
-      {
-        "id": 658,
-        "startVertexId": 397,
-        "endVertexId": 398
-      },
-      {
         "id": 659,
         "startVertexId": 398,
         "endVertexId": 399
@@ -16803,6 +17008,81 @@
         "id": 660,
         "startVertexId": 399,
         "endVertexId": 394
+      },
+      {
+        "id": 661,
+        "startVertexId": 397,
+        "endVertexId": 400
+      },
+      {
+        "id": 663,
+        "startVertexId": 400,
+        "endVertexId": 377
+      },
+      {
+        "id": 664,
+        "startVertexId": 400,
+        "endVertexId": 401
+      },
+      {
+        "id": 665,
+        "startVertexId": 401,
+        "endVertexId": 398
+      },
+      {
+        "id": 666,
+        "startVertexId": 378,
+        "endVertexId": 401
+      },
+      {
+        "id": 667,
+        "startVertexId": 396,
+        "endVertexId": 402
+      },
+      {
+        "id": 669,
+        "startVertexId": 402,
+        "endVertexId": 403
+      },
+      {
+        "id": 670,
+        "startVertexId": 388,
+        "endVertexId": 404
+      },
+      {
+        "id": 672,
+        "startVertexId": 403,
+        "endVertexId": 404
+      },
+      {
+        "id": 673,
+        "startVertexId": 404,
+        "endVertexId": 405
+      },
+      {
+        "id": 674,
+        "startVertexId": 405,
+        "endVertexId": 389
+      },
+      {
+        "id": 675,
+        "startVertexId": 405,
+        "endVertexId": 406
+      },
+      {
+        "id": 676,
+        "startVertexId": 402,
+        "endVertexId": 407
+      },
+      {
+        "id": 677,
+        "startVertexId": 407,
+        "endVertexId": 397
+      },
+      {
+        "id": 678,
+        "startVertexId": 406,
+        "endVertexId": 407
       }
     ],
     "lineSides": [
@@ -23458,10 +23738,10 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         }
       },
       {
@@ -23605,7 +23885,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -23632,6 +23912,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23648,7 +23932,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -23675,6 +23959,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23691,7 +23979,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -23718,6 +24006,11 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.2999999523162842,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23734,7 +24027,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -23761,6 +24054,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23818,7 +24115,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -23845,6 +24142,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -23861,7 +24162,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -23888,6 +24189,11 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 1.2999999523162842,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24232,7 +24538,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -24259,6 +24565,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24359,7 +24669,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -24386,6 +24696,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -24424,11 +24738,11 @@
               1.0
             ],
             "offset": [
-              0.0,
-              0.0
+              -0.625,
+              -0.9375
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         }
       },
       {
@@ -24873,7 +25187,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -24900,6 +25214,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25021,11 +25339,11 @@
               1.0
             ],
             "offset": [
-              0.0,
-              0.0
+              -0.625,
+              -0.9375
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         }
       },
       {
@@ -25042,7 +25360,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -25069,6 +25387,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25711,7 +26033,7 @@
               0.0
             ]
           },
-          "materialId": "worn_gray_metal_step_512"
+          "materialId": "worn_steel_512"
         },
         "lower": {
           "uv": {
@@ -25838,7 +26160,7 @@
               0.0
             ]
           },
-          "materialId": "worn_gray_metal_step_512"
+          "materialId": "worn_steel_512"
         },
         "lower": {
           "uv": {
@@ -25879,7 +26201,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -25906,6 +26228,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -25978,7 +26304,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_gray_metal_step_512"
         },
         "upper": {
           "uv": {
@@ -25987,11 +26313,11 @@
               1.0
             ],
             "offset": [
-              0.0,
-              0.0
+              -0.625,
+              -0.9375
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         }
       },
       {
@@ -26008,7 +26334,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "plastered_wall_02"
         },
         "lower": {
           "uv": {
@@ -26035,6 +26361,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -31659,7 +31989,8 @@
               0.0,
               0.0
             ]
-          }
+          },
+          "materialId": "worn_gray_metal_step_512"
         },
         "upper": {
           "uv": {
@@ -32931,7 +33262,7 @@
               0.0
             ]
           },
-          "materialId": "worn_gray_metal_step_512"
+          "materialId": "worn_steel_512"
         },
         "lower": {
           "uv": {
@@ -32972,7 +33303,7 @@
               0.0
             ]
           },
-          "materialId": "worn_gray_metal_step_512"
+          "materialId": "worn_steel_512"
         },
         "lower": {
           "uv": {
@@ -33013,48 +33344,7 @@
               0.0
             ]
           },
-          "materialId": "worn_gray_metal_step_512"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
-        "lineId": 623,
-        "side": "back",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "worn_gray_metal_step_512"
+          "materialId": "worn_steel_512"
         },
         "lower": {
           "uv": {
@@ -33604,51 +33894,6 @@
       },
       {
         "lineId": 643,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.5,
-              1.5
-            ],
-            "offset": [
-              0.0,
-              -1.0
-            ]
-          },
-          "materialId": "white_wall_tiles"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "baseboard": {
-          "enabled": true,
-          "materialId": "baseboard_metal"
-        }
-      },
-      {
-        "lineId": 644,
         "side": "front",
         "wall": {
           "uv": {
@@ -34261,96 +34506,6 @@
         }
       },
       {
-        "lineId": 657,
-        "side": "back",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.5,
-              1.5
-            ],
-            "offset": [
-              0.0,
-              -1.125
-            ]
-          },
-          "materialId": "white_wall_tiles"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "baseboard": {
-          "enabled": true,
-          "materialId": "baseboard_metal"
-        }
-      },
-      {
-        "lineId": 658,
-        "side": "back",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.5,
-              1.5
-            ],
-            "offset": [
-              0.0,
-              -1.125
-            ]
-          },
-          "materialId": "white_wall_tiles"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "baseboard": {
-          "enabled": true,
-          "materialId": "baseboard_metal"
-        }
-      },
-      {
         "lineId": 659,
         "side": "back",
         "wall": {
@@ -34397,6 +34552,417 @@
       },
       {
         "lineId": 660,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 661,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 664,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 665,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 667,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 670,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 673,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              -0.75,
+              -0.10000000149011612
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              -1.6875,
+              0.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 674,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 676,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              0.0,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              -0.75,
+              0.0
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.5,
+              1.5
+            ],
+            "offset": [
+              -0.75,
+              -1.125
+            ]
+          },
+          "materialId": "white_wall_tiles"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 677,
         "side": "back",
         "wall": {
           "uv": {
@@ -38271,7 +38837,7 @@
           "materialId": "dirty_office_wall_baseboard_512"
         },
         "floorMaterialId": "worn_dark_red_carpet_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "roomtone": {
           "mode": "play",
           "soundId": "roomtone_02",
@@ -38349,7 +38915,7 @@
           }
         },
         "floorMaterialId": "old_wooden_floor_03",
-        "ceilingMaterialId": "worn_white_ceiling_512",
+        "ceilingMaterialId": "white_stucco",
         "footstepSet": "Parquet_Floor_Mono"
       },
       {
@@ -38906,7 +39472,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.05000000074505806,
+        "ambientIntensity": 0.07500000298023224,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -38947,7 +39513,7 @@
           "materialId": "worn_steel_512"
         },
         "floorMaterialId": "worn_gray_metal_step_512",
-        "ceilingMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_steel_512",
         "crawlspace": true
       },
       {
@@ -41285,83 +41851,6 @@
         "ceilingMaterialId": "painted_plaster_wall"
       },
       {
-        "id": 93,
-        "name": "Sector 93",
-        "x": -5621,
-        "y": -1666,
-        "floorZ": -17.0,
-        "ceilingZ": 15.0,
-        "floorUv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        },
-        "ceilingUv": {
-          "scale": [
-            1.0,
-            1.0
-          ],
-          "offset": [
-            0.0,
-            0.0
-          ]
-        },
-        "ambientColor": {
-          "r": 255,
-          "g": 255,
-          "b": 255,
-          "a": 255
-        },
-        "ambientIntensity": 0.05000000074505806,
-        "defaultWall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "beige_wall_001"
-        },
-        "defaultLower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "beige_wall_001"
-        },
-        "defaultUpper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "beige_wall_001"
-        },
-        "floorMaterialId": "worn_office_oak_floor_512",
-        "ceilingMaterialId": "worn_white_ceiling_512",
-        "footstepSet": "Parquet_Floor_Mono"
-      },
-      {
         "id": 94,
         "name": "Sector 94",
         "x": -1277,
@@ -41798,6 +42287,227 @@
         },
         "floorMaterialId": "floor_tiles",
         "ceilingMaterialId": "worn_white_ceiling_512"
+      },
+      {
+        "id": 100,
+        "name": "Sector 93",
+        "x": -3276,
+        "y": -1906,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "isVoid": true
+      },
+      {
+        "id": 101,
+        "name": "Sector 100",
+        "x": -3368,
+        "y": -4741,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "isVoid": true
+      },
+      {
+        "id": 102,
+        "name": "Sector 101",
+        "x": -3713,
+        "y": -5099,
+        "floorZ": 0.0,
+        "ceilingZ": 7.800000190734863,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.07500000298023224,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_steel_512"
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_steel_512"
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_steel_512"
+        },
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_steel_512",
+        "crawlspace": true
       }
     ],
     "fogVolumes": [
@@ -42068,17 +42778,6 @@
         ]
       },
       {
-        "id": 13,
-        "x": -5440,
-        "z": -1664,
-        "yWorld": -0.125,
-        "halfExtentsWorld": [
-          4.5,
-          2.0,
-          3.0
-        ]
-      },
-      {
         "id": 14,
         "x": -5440,
         "z": -640,
@@ -42164,6 +42863,38 @@
           6.5,
           1.9375,
           1.0
+        ]
+      },
+      {
+        "id": 20,
+        "x": -5440,
+        "z": -3200,
+        "yWorld": 0.48750001192092896,
+        "influenceOffsetWorld": [
+          3.0,
+          0.0,
+          10.0
+        ],
+        "halfExtentsWorld": [
+          3.5,
+          0.48750001192092896,
+          10.5
+        ]
+      },
+      {
+        "id": 21,
+        "x": -3712,
+        "z": -5312,
+        "yWorld": 0.48750001192092896,
+        "influenceOffsetWorld": [
+          5.75,
+          0.0,
+          7.5
+        ],
+        "halfExtentsWorld": [
+          6.25,
+          0.48750001192092896,
+          8.0
         ]
       }
     ],
