@@ -353,7 +353,7 @@
       "id": 29,
       "kind": "door",
       "door": {
-        "instanceId": "door_29",
+        "instanceId": "office_door",
         "anchor": {
           "lineDefId": 96,
           "frontSectorId": 24,
@@ -42969,38 +42969,6 @@
         "orientationDegrees": 0.0
       },
       {
-        "editorId": 16,
-        "id": "wp1",
-        "x": -656,
-        "y": 0.0,
-        "z": 1072,
-        "orientationDegrees": 90.0
-      },
-      {
-        "editorId": 17,
-        "id": "wp2",
-        "x": -1024,
-        "y": 0.0,
-        "z": 576,
-        "orientationDegrees": 180.0
-      },
-      {
-        "editorId": 18,
-        "id": "wp3",
-        "x": -1616,
-        "y": 0.0,
-        "z": 832,
-        "orientationDegrees": -90.0
-      },
-      {
-        "editorId": 19,
-        "id": "wp4",
-        "x": -1152,
-        "y": 0.0,
-        "z": 1008,
-        "orientationDegrees": 180.0
-      },
-      {
         "editorId": 20,
         "id": "intro_marker_1",
         "x": -176,
@@ -43015,6 +42983,14 @@
         "y": 0.0,
         "z": 1536,
         "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 22,
+        "id": "intro_marker_3",
+        "x": -1152,
+        "y": 0.0,
+        "z": 976,
+        "orientationDegrees": 180.0
       }
     ],
     "patrols": [
@@ -43060,32 +43036,6 @@
         ],
         "shuffleWaypoints": true,
         "faceWaypointOrientation": false
-      },
-      {
-        "editorId": 2,
-        "id": "test_npc_patrol",
-        "waypoints": [
-          {
-            "levelMarkerEditorId": 16,
-            "delayMilliseconds": 3000,
-            "lookAround": true,
-            "lookArcDegrees": 75.0
-          },
-          {
-            "levelMarkerEditorId": 17,
-            "delayMilliseconds": 4000
-          },
-          {
-            "levelMarkerEditorId": 18,
-            "delayMilliseconds": 5000,
-            "lookAround": true
-          },
-          {
-            "levelMarkerEditorId": 19,
-            "delayMilliseconds": 3500
-          }
-        ],
-        "shuffleWaypoints": true
       }
     ],
     "soundEmitters": [

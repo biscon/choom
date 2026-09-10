@@ -1080,8 +1080,9 @@ void DrawSectorCutsceneLetterbox(
     const SectorCutscenePresentationLayout layout = BuildSectorCutscenePresentationLayout(
             runtime.presentation, viewport, SectorCutsceneTextPosition::Bottom, 0.0f);
     if (layout.topBar.height <= 0.0f) return;
-    DrawRectangleRec(layout.topBar, BLACK);
-    DrawRectangleRec(layout.bottomBar, BLACK);
+    const Color barColor = Fade(BLACK, 0.75f);
+    DrawRectangleRec(layout.topBar, barColor);
+    DrawRectangleRec(layout.bottomBar, barColor);
 }
 
 void DrawSectorCutsceneCaption(

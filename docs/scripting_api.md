@@ -686,7 +686,8 @@ end
 
 `startCutscene()` disables controls exactly like `enableControls(false)` and
 immediately hides gameplay HUD: health, stamina, oxygen, ammo, crosshair, and
-interaction prompts/messages. Equal black bars slide in from the top and bottom
+interaction prompts/messages. Equal black bars at 75% opacity (25% transparent)
+slide in from the top and bottom
 over 350 ms with smooth easing, each covering 15% of the playable viewport.
 Captions, menus, debug overlays, and the existing weapon viewmodel remain available.
 The bars are overlays and do not change the camera projection or physics.

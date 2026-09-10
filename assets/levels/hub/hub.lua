@@ -15,6 +15,7 @@ end
 function intro_trigger_1()
     log("trigger_1")
     assert(startCutscene())
+    openDoor("office_door")
     say("Who is there?!!...")
     assert(startPlayNpcAnimation("elin", "Waving"))
     movePlayer("intro_marker_1", "walk", 2.0, {
@@ -33,7 +34,7 @@ function intro_trigger_1()
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
     say("I've been walking these dark tunnels forever. You're are the first person I met so far.")
-
+    startMoveNpc("elin", "intro_marker_3", "walk")
     assert(endCutscene())
 end
 
