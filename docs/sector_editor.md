@@ -248,9 +248,12 @@ depth offset, thickness, frame width, louver count and angle, separate frame and
 louver materials, slide side, and removal speed. The generated frame and louvers
 fit the portal opening, keep world-scaled UVs, and use the normal opaque PBR path
 for material maps, baked probes, dynamic lights, reflections, and fog. E removes
-an attached cover with eased outward/sideways motion, after which it falls to
-the floor on the side from which it was removed. Covers can therefore be removed
-from either outside or inside. Weapons holster for the entire duct traversal and
+an attached cover with eased outward motion into the outside room, after which
+it falls upright to that room's floor. **Portal Start** and **Portal End** also
+slide the cover sideways toward the selected portal endpoint. **Middle** pushes
+it outward, then drops it straight down beneath its mounted position without
+sideways travel. Covers can be removed from either outside or inside, and always
+fall into the outside room. Weapons holster for the entire duct traversal and
 remain holstered after exiting until the player explicitly selects a weapon.
 
 `Settings -> Player -> Ducts` controls the global interaction distance, entry

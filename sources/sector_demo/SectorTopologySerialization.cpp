@@ -1236,8 +1236,10 @@ SectorPlacedDuctAccess ReadPlacedDuctAccess(
             access.cover.slideSide = SectorDuctCoverSlideSide::PortalStart;
         } else if (slideSide == "portal_end") {
             access.cover.slideSide = SectorDuctCoverSlideSide::PortalEnd;
+        } else if (slideSide == "middle") {
+            access.cover.slideSide = SectorDuctCoverSlideSide::Middle;
         } else {
-            Fail(coverContext + ".slideSide must be 'portal_start' or 'portal_end'");
+            Fail(coverContext + ".slideSide must be 'portal_start', 'portal_end', or 'middle'");
         }
         access.cover.removalSpeedWorld = ReadOptionalFloat(
                 *coverIt, "removalSpeedWorld", coverContext,
@@ -2516,6 +2518,8 @@ Json WritePlacedDuctAccess(
         if (!cover.louverMaterialId.empty()) coverJson["louverMaterialId"] = cover.louverMaterialId;
         if (cover.slideSide == SectorDuctCoverSlideSide::PortalStart) {
             coverJson["slideSide"] = "portal_start";
+        } else if (cover.slideSide == SectorDuctCoverSlideSide::Middle) {
+            coverJson["slideSide"] = "middle";
         }
         if (cover.removalSpeedWorld != coverDefaults.removalSpeedWorld) {
             coverJson["removalSpeedWorld"] = cover.removalSpeedWorld;

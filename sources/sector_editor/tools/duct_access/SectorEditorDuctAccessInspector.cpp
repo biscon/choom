@@ -255,18 +255,29 @@ void DrawSectorEditorDuctAccessInspector(
                 access.cover.removalSpeedWorld = value; return true;
             });
     selected = refresh(); if (!selected) return;
-    const bool starts = selected->ductAccess.cover.slideSide
-            == SectorDuctCoverSlideSide::PortalStart;
+    const SectorDuctCoverSlideSide slideSide = selected->ductAccess.cover.slideSide;
+    const char* slideLabel = "Slide: Portal End";
+    SectorDuctCoverSlideSide nextSlideSide = SectorDuctCoverSlideSide::Middle;
+    switch (slideSide) {
+        case SectorDuctCoverSlideSide::PortalStart:
+            slideLabel = "Slide: Portal Start";
+            nextSlideSide = SectorDuctCoverSlideSide::PortalEnd;
+            break;
+        case SectorDuctCoverSlideSide::PortalEnd:
+            break;
+        case SectorDuctCoverSlideSide::Middle:
+            slideLabel = "Slide: Middle";
+            nextSlideSide = SectorDuctCoverSlideSide::PortalStart;
+            break;
+    }
     if (engine::Button(context.ui, context.config, context.input,
                 context.assets, "duct_cover_slide_side",
                 Rectangle{0.0f, y, contentW, rowH}, context.font,
-                starts ? "Slide: Portal Start" : "Slide: Portal End")) {
+                slideLabel)) {
         context.editing.MutateSelected("Updated Vent Cover slide side",
-                [starts](SectorPlacedRuntimeObject& object) {
+                [nextSlideSide](SectorPlacedRuntimeObject& object) {
                     if (object.kind != "duct_access") return false;
-                    object.ductAccess.cover.slideSide = starts
-                            ? SectorDuctCoverSlideSide::PortalEnd
-                            : SectorDuctCoverSlideSide::PortalStart;
+                    object.ductAccess.cover.slideSide = nextSlideSide;
                     return true;
                 });
     }

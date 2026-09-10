@@ -359,7 +359,8 @@ using SectorDuctAccessAnchor = SectorDoorAnchor;
 
 enum class SectorDuctCoverSlideSide {
     PortalStart,
-    PortalEnd
+    PortalEnd,
+    Middle
 };
 
 struct SectorDuctCoverSettings {

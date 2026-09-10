@@ -3329,7 +3329,8 @@
         "cover": {
           "enabled": true,
           "frameMaterialId": "worn_steel_512",
-          "louverMaterialId": "worn_steel_512"
+          "louverMaterialId": "worn_steel_512",
+          "slideSide": "middle"
         }
       },
       "position": [
@@ -6554,7 +6555,8 @@
         "cover": {
           "enabled": true,
           "frameMaterialId": "baseboard_metal",
-          "louverMaterialId": "baseboard_metal"
+          "louverMaterialId": "baseboard_metal",
+          "slideSide": "middle"
         }
       },
       "position": [
@@ -6588,7 +6590,8 @@
         "cover": {
           "enabled": true,
           "frameMaterialId": "worn_steel_512",
-          "louverMaterialId": "worn_steel_512"
+          "louverMaterialId": "worn_steel_512",
+          "slideSide": "middle"
         }
       },
       "position": [
@@ -6622,7 +6625,8 @@
         "cover": {
           "enabled": true,
           "frameMaterialId": "worn_steel_512",
-          "louverMaterialId": "baseboard_metal"
+          "louverMaterialId": "baseboard_metal",
+          "slideSide": "middle"
         }
       },
       "position": [

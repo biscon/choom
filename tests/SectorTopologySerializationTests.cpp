@@ -2338,10 +2338,46 @@ void TestDuctAccessRoundTripAndLightmapExclusion()
                   && object->kind == "duct_access"
                   && object->ductAccess.cover.enabled
                   && object->ductAccess.cover.louverCount == 9
+                  && object->ductAccess.cover.slideSide
+                             == game::SectorDuctCoverSlideSide::PortalStart
                   && Near(object->ductAccess.cover.removalSpeedWorld, 1.75f)
                   && game::ResolveSectorDuctAccessAnchor(
                              loaded, object->ductAccess).valid,
             "Duct Access and crawlspace state round-trip with a valid portal anchor");
+
+    for (const auto slideSide : {game::SectorDuctCoverSlideSide::PortalStart,
+                 game::SectorDuctCoverSlideSide::PortalEnd,
+                 game::SectorDuctCoverSlideSide::Middle}) {
+        map.runtimeObjects.front().ductAccess.cover.slideSide = slideSide;
+        const Json sideSaved = Json::parse(SaveText(map));
+        const Json& cover = sideSaved["runtimeObjects"][0]["ductAccess"]["cover"];
+        if (slideSide == game::SectorDuctCoverSlideSide::PortalEnd) {
+            Check(!cover.contains("slideSide"),
+                    "default Portal End slide side is omitted from saved covers");
+        } else {
+            Check(cover["slideSide"]
+                            == (slideSide == game::SectorDuctCoverSlideSide::Middle
+                                            ? "middle" : "portal_start"),
+                    "non-default cover slide sides serialize by name");
+        }
+        SectorTopologyMap sideLoaded;
+        Check(LoadText(sideSaved.dump(), sideLoaded, error)
+                      && sideLoaded.runtimeObjects.size() == 1
+                      && sideLoaded.runtimeObjects.front().ductAccess.cover.slideSide
+                                 == slideSide,
+                "all cover slide sides round-trip, including the omitted default");
+    }
+    Json explicitDefault = saved;
+    explicitDefault["runtimeObjects"][0]["ductAccess"]["cover"]["slideSide"] = "portal_end";
+    SectorTopologyMap defaultLoaded;
+    Check(LoadText(explicitDefault.dump(), defaultLoaded, error)
+                  && defaultLoaded.runtimeObjects.size() == 1
+                  && defaultLoaded.runtimeObjects.front().ductAccess.cover.slideSide
+                             == game::SectorDuctCoverSlideSide::PortalEnd,
+            "explicit Portal End remains supported");
+    Json invalidSide = saved;
+    invalidSide["runtimeObjects"][0]["ductAccess"]["cover"]["slideSide"] = "invalid";
+    ExpectRejected(invalidSide, "unknown vent cover slide side is rejected");
 
     game::SectorAuthoringDocument authoring =
             MakeAuthoringDocumentFromMap(map);
@@ -2368,6 +2404,8 @@ void TestDuctAccessRoundTripAndLightmapExclusion()
                     loadedAuthoring.mapData, 51);
     Check(authoringAccess != nullptr
                   && loadedAuthoring.derivation.success
+                  && authoringAccess->ductAccess.cover.slideSide
+                             == game::SectorDuctCoverSlideSide::Middle
                   && game::ResolveSectorDuctAccessAnchor(
                              loadedAuthoring.derivation.topology,
                              authoringAccess->ductAccess).valid,

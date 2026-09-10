@@ -1886,7 +1886,7 @@ void TestSpawnPlacedWindowBuildsGlassAndPhysicalCollider()
           "weapon raycasts identify physical glass before geometry behind it");
 }
 
-void TestSpawnedDuctAccessCoverRemovesAndFalls()
+void CheckSpawnedDuctAccessCoverRemovesAndFalls(game::SectorDuctCoverSlideSide slideSide)
 {
     for (const bool crawlspaceOnFront : {false, true}) {
         for (const bool removeFromInside : {false, true}) {
@@ -1899,8 +1899,11 @@ void TestSpawnedDuctAccessCoverRemovesAndFalls()
             object.id = 39;
             object.kind = "duct_access";
             object.ductAccess.anchor = MakeDoorOnPortal().anchor;
+            object.ductAccess.horizontalOffsetWorld = 0.2f;
+            object.ductAccess.verticalOffsetWorld = 1.0f;
             object.ductAccess.cover.enabled = true;
-            object.ductAccess.cover.removalSpeedWorld = 100.0f;
+            object.ductAccess.cover.slideSide = slideSide;
+            object.ductAccess.cover.removalSpeedWorld = 1.0f;
             map.runtimeObjects.push_back(object);
 
             game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -1928,17 +1931,43 @@ void TestSpawnedDuctAccessCoverRemovesAndFalls()
                                                      ? game::SectorDuctCoverRemovalSide::Crawlspace
                                                      : game::SectorDuctCoverRemovalSide::Outside),
                     "attached vent cover records which side initiated removal");
+            const float pop = access.cover.thickness + 0.05f;
+            const float expectedSlide = slideSide == game::SectorDuctCoverSlideSide::Middle
+                    ? 0.0f : (access.width + 0.05f)
+                            * (slideSide == game::SectorDuctCoverSlideSide::PortalStart
+                                            ? -1.0f : 1.0f);
+            const float removalDuration = std::max(pop, std::fabs(expectedSlide))
+                    / access.cover.removalSpeedWorld;
             game::UpdateSectorRuntimeObjects(
-                    world, assets, state, map, 1.0f);
+                    world, assets, state, map, removalDuration * 0.5f);
+            const Vector2 halfwayOffset{access.coverOffset.x, access.coverOffset.z};
+            Check(access.coverPhase == game::SectorDuctCoverPhase::Removing
+                          && Near(access.coverOffset.y, 0.0f)
+                          && Near(Vector2DotProduct(halfwayOffset, access.tangent),
+                                  expectedSlide * 0.5f)
+                          && Near(Vector2DotProduct(halfwayOffset,
+                                          access.outsideToCrawlspaceNormal), -pop * 0.5f),
+                    "cover eases halfway outward with only the selected sideways travel");
+            game::UpdateSectorRuntimeObjects(
+                    world, assets, state, map, removalDuration * 0.5f + 0.001f);
             const Vector2 removalOffset{
                     access.coverOffset.x, access.coverOffset.z};
             Check(access.coverPhase == game::SectorDuctCoverPhase::Falling
                           && Vector2DotProduct(
                                      removalOffset,
                                      access.outsideToCrawlspaceNormal) < 0.0f
+                          && Near(Vector2DotProduct(removalOffset, access.tangent), expectedSlide)
+                          && Near(Vector2DotProduct(removalOffset,
+                                          access.outsideToCrawlspaceNormal), -pop)
                           && world.Get<game::SectorObject>(entity).currentSectorId
                                      == access.outsideSectorId,
                     "vent cover always pops outside for either portal orientation and interaction side");
+            game::UpdateSectorRuntimeObjects(
+                    world, assets, state, map, 0.05f);
+            Check(access.coverPhase == game::SectorDuctCoverPhase::Falling
+                          && Near(Vector2{access.coverOffset.x, access.coverOffset.z}, removalOffset)
+                          && Near(access.coverOffset.y, -0.5f * 25.0f * 0.05f * 0.05f),
+                    "cover falls vertically under existing gravity after the outward push");
             game::UpdateSectorRuntimeObjects(
                     world, assets, state, map, 1.0f);
             const game::SectorTopologySector* outside =
@@ -1957,6 +1986,15 @@ void TestSpawnedDuctAccessCoverRemovesAndFalls()
                           && Near(access.coverOffset, restoredOffset),
                     "removed and restored vent covers share the outside-room resting position");
         }
+    }
+}
+
+void TestSpawnedDuctAccessCoverRemovesAndFalls()
+{
+    for (const auto slideSide : {game::SectorDuctCoverSlideSide::PortalStart,
+                 game::SectorDuctCoverSlideSide::PortalEnd,
+                 game::SectorDuctCoverSlideSide::Middle}) {
+        CheckSpawnedDuctAccessCoverRemovesAndFalls(slideSide);
     }
 }
 
