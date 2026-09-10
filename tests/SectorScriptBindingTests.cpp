@@ -9,6 +9,8 @@
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcCombatSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcHeadLookSystem.h"
+#include "game/npc/NpcPatrolSystem.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorStaticModelCollision.h"
@@ -258,7 +260,7 @@ struct NpcScriptFixture {
                 objects.staticModelColliders,
                 objects.objectLightProbes,
                 map,
-                dt);
+                dt, nullptr, false, &playerState.feetPosition);
         game::UpdateSectorScriptOperations(context, host);
         game::UpdateSectorCutsceneTimelines(cutscene, runtime, dt);
         const Vector2 previous{playerState.feetPosition.x, playerState.feetPosition.z};
@@ -2067,10 +2069,280 @@ void CinematicTransitionsAndCaptionLayout()
     assert(cutscene.controlsEnabled);
 }
 
+void NpcMarkerArrivalOrientationTurnsAfterStopping()
+{
+    for (float distance : {0.0f, 0.3f, 12.0f}) {
+        for (bool async : {false, true}) {
+            NpcScriptFixture fixture;
+            NpcScriptFixture baseline;
+            fixture.map.levelMarkers[0].position = {(2.0f + distance) * 8.0f, 0.0f, 64.0f};
+            fixture.map.levelMarkers[0].yawRadians = -0.8f;
+            baseline.map.levelMarkers[0] = fixture.map.levelMarkers[0];
+            const std::string call = "moveNpc(\"script_guard\", \"run_target\", nil, nil, true)";
+            fixture.files.Write("function init() assert(" + (async
+                    ? std::string("await(startMoveNpc(\"script_guard\", \"run_target\", nil, nil, true))")
+                    : call) + ") end");
+            baseline.files.Write("function init() assert(moveNpc(\"script_guard\", \"run_target\")) end");
+            assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+            assert(Create(baseline.context, baseline.runtime, baseline.persistent, baseline.host, baseline.files));
+            int stationaryTurnFrames = 0;
+            bool waitedAfterArrival = false;
+            for (int frame = 0; frame < 600 && !fixture.runtime.initFinished; ++frame) {
+                auto& record = fixture.npcNavigation.records.front();
+                const float previousX = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc).position.x;
+                fixture.Update(0.025f);
+                baseline.Update(0.025f);
+                const auto& transform = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc);
+                const auto& plain = baseline.context.world.Get<game::SectorObjectTransform>(baseline.npc);
+                assert(std::fabs(transform.position.x - plain.position.x) < 0.001f);
+                assert(std::fabs(transform.position.z - plain.position.z) < 0.001f);
+                if (transform.position.x > previousX) assert(!record.arrivalTurn.started);
+                if (!record.arrivalTurn.started) assert(std::fabs(transform.yawRadians - plain.yawRadians) < 0.001f);
+                else ++stationaryTurnFrames;
+                if (record.arrivalReached) {
+                    waitedAfterArrival = true;
+                    assert(game::IsNull(record.pathHandle));
+                    assert(!record.holdsDoor && !fixture.runtime.initFinished);
+                }
+            }
+            assert(fixture.runtime.initFinished);
+            assert(std::fabs(fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc).yawRadians + 0.8f) < 0.001f);
+            assert(waitedAfterArrival && stationaryTurnFrames >= 30);
+        }
+    }
+}
+
+void NpcTurnTimingRespectsDoorsReplansAndAngleWrap()
+{
+    game::NpcNavigationRecord record;
+    record.matchArrivalOrientation = true;
+    record.cornerCount = 2;
+    record.corners[0] = {10, 0, 0};
+    record.corners[1] = {0.2f, 0, 0};
+    record.arrivalTurn.targetYaw = -3.0f;
+    float yaw = 3.0f;
+    game::UpdateNpcArrivalTurn(record, yaw, 0.1f);
+    assert(!record.arrivalTurn.started); // Remaining route, not straight-line distance.
+    record.cornerCount = 1;
+    record.corners[0] = {0.2f, 0, 0};
+    record.cornerDoorIds[0] = 42;
+    game::UpdateNpcArrivalTurn(record, yaw, 0.1f);
+    assert(!record.arrivalTurn.started);
+    record.cornerDoorIds[0] = 0;
+    record.doorPhase = game::NpcDoorTraversalPhase::Crossing;
+    game::UpdateNpcArrivalTurn(record, yaw, 0.1f);
+    assert(!record.arrivalTurn.started);
+    record.doorPhase = game::NpcDoorTraversalPhase::None;
+    record.tileReplanPending = true;
+    game::UpdateNpcArrivalTurn(record, yaw, 0.1f);
+    assert(!record.arrivalTurn.started);
+    record.tileReplanPending = false;
+    game::UpdateNpcArrivalTurn(record, yaw, 0.1f);
+    assert(!record.arrivalTurn.started && yaw == 3.0f);
+    record.arrivalReached = true;
+    game::UpdateNpcArrivalTurn(record, yaw, 0.1f);
+    assert(record.arrivalTurn.started && yaw > 3.0f);
+    const double elapsed = record.arrivalTurn.elapsedSeconds;
+    record.doorPhase = game::NpcDoorTraversalPhase::WaitingForClearance;
+    game::UpdateNpcArrivalTurn(record, yaw, 0.1f);
+    assert(record.arrivalTurn.elapsedSeconds > elapsed); // Once started, delays do not restart it.
+    const float held = yaw;
+    game::UpdateNpcArrivalTurn(record, yaw, NAN);
+    game::UpdateNpcArrivalTurn(record, yaw, -1.0f);
+    assert(yaw == held);
+    game::UpdateNpcArrivalTurn(record, yaw, 1.0f);
+    assert(std::fabs(yaw - (2.0f * PI - 3.0f)) < 0.001f);
+}
+
+void NpcLookTargetsCompleteAndPreserveHeadAnimation()
+{
+    for (const std::string& target : {"Player", "Npc", "Prop", "Marker"}) {
+        for (bool async : {false, true}) {
+            NpcScriptFixture fixture;
+            auto& world = fixture.context.world;
+            const auto other = SpawnScriptNpc(world);
+            world.Get<game::NpcRuntimeInstance>(other).instanceId = "target";
+            world.Get<game::SectorObjectTransform>(other).position = {8, 0, 8};
+            const auto prop = world.CreateEntity();
+            game::SectorStaticModel model;
+            model.instanceId = "target";
+            world.Add(prop, model);
+            game::SectorObjectTransform propTransform;
+            propTransform.position = {8, 0, 8};
+            world.Add(prop, propTransform);
+            fixture.playerState.feetPosition = {8, 0, 8};
+            fixture.map.levelMarkers[0].position = {64, 0, 64};
+            game::NpcHeadLookState head;
+            head.currentYawRadians = 0.2f;
+            head.boneName = "Head";
+            world.Add(fixture.npc, head);
+            auto& animation = world.Get<game::NpcAnimationState>(fixture.npc);
+            animation.scriptRequestId = 77;
+            animation.scriptStatus = game::NpcScriptAnimationStatus::Playing;
+            const std::string args = target == "Player" ? "\"script_guard\", 200"
+                    : "\"script_guard\", \"" + (target == "Marker" ? std::string("run_target") : std::string("target")) + "\", 200";
+            const std::string call = (async ? "startNpcLookAt" : "npcLookAt") + target + "(" + args + ")";
+            fixture.files.Write("function init() assert(" + (async ? "await(" + call + ")" : call) + ") end");
+            assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+            assert(!fixture.runtime.initFinished);
+            fixture.Update(0.1f);
+            assert(!fixture.runtime.initFinished);
+            float yaw = world.Get<game::SectorObjectTransform>(fixture.npc).yawRadians;
+            assert(yaw > 0.0f && yaw < PI / 2.0f);
+            fixture.Update(0.11f);
+            assert(fixture.runtime.initFinished);
+            yaw = world.Get<game::SectorObjectTransform>(fixture.npc).yawRadians;
+            assert(std::fabs(yaw - PI / 2.0f) < 0.001f);
+            assert(animation.scriptRequestId == 77 && animation.scriptStatus == game::NpcScriptAnimationStatus::Playing);
+            assert(world.Get<game::NpcHeadLookState>(fixture.npc).currentYawRadians == 0.2f);
+            game::NpcHeadLookDefinition definition;
+            definition.enabled = true;
+            definition.rangeWorld = 20.0f;
+            const auto angles = game::EvaluateNpcHeadLookTargetAngles({2, 0, 8}, yaw,
+                    {2, 1.6f, 8}, {8, 1.6f, 9}, definition, true);
+            assert(angles.active && angles.yawRadians < 0.0f);
+            world.Get<game::SectorObjectTransform>(other).position.z = 14;
+            world.Get<game::SectorObjectTransform>(prop).position.z = 14;
+            fixture.playerState.feetPosition.z = 14;
+            fixture.Update(0.1f);
+            assert(world.Get<game::SectorObjectTransform>(fixture.npc).yawRadians == yaw);
+        }
+    }
+}
+
+void NpcLookValidationReplacementMovementAndLifecycle()
+{
+    NpcScriptFixture fixture;
+    fixture.playerState.feetPosition = {8, 0, 8};
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto console = [&](const char* source) {
+        assert(engine::ScriptSystemExecuteConsole(fixture.runtime, source).success);
+    };
+    console(R"(
+assert(npcLookAtPlayer("script_guard", 100) == false)
+assert(startNpcLookAtNpc("script_guard", "script_guard", 100) == nil)
+assert(startNpcLookAtNpc("script_guard", "missing", 100) == nil)
+assert(startNpcLookAtPlayer("missing", 100) == nil)
+assert(startNpcLookAtPlayer("script_guard", 0) == nil)
+assert(startNpcLookAtPlayer("script_guard", 0/0) == nil)
+assert(startNpcLookAtPlayer("script_guard", math.huge) == nil)
+assert(startNpcLookAtPlayer("script_guard", "100") == nil)
+assert(startMoveNpc("script_guard", "run_target", nil, nil, "yes") == nil)
+turn = assert(startNpcLookAtPlayer("script_guard", 1000))
+assert(startNpcLookAtMarker("script_guard", "missing", 100) == nil)
+)");
+    auto* turn = game::FindNpcBodyTurn(fixture.npcNavigation, fixture.npc);
+    const uint64_t first = turn->requestId;
+    fixture.Update(0.1f);
+    fixture.playerState.feetPosition = {2, 0, 14};
+    fixture.Update(0.1f);
+    assert(std::fabs(fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc).yawRadians) < 0.001f);
+    console("nextTurn = assert(startNpcLookAtMarker('script_guard', 'run_target', 1000)); assert(operationStatus(turn) == 'cancelled')");
+    assert(turn->requestId != first);
+    console("assert(startMoveNpc('script_guard', 'outside_target') == nil)");
+    assert(turn->status == game::NpcBodyTurnStatus::Playing);
+    console("movement = assert(startMoveNpc('script_guard', 'run_target')); assert(startNpcLookAtPlayer('script_guard', 100) == nil)");
+    fixture.Update(0.025f);
+    assert(turn->status == game::NpcBodyTurnStatus::Cancelled);
+    console("assert(operationStatus(nextTurn) == 'cancelled'); assert(cancelOperation(movement)); turn = assert(startNpcLookAtPlayer('script_guard', 1000)); assert(cancelOperation(turn))");
+    assert(!game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
+    console("turn = assert(startNpcLookAtPlayer('script_guard', 1000))");
+    game::InterruptSectorScriptNpcMoveForAi(fixture.context, fixture.host, "script_guard");
+    console("assert(operationStatus(turn) == 'cancelled')");
+    console("turn = assert(startNpcLookAtPlayer('script_guard', 1000))");
+    engine::ScriptSystemShutdownForMap(fixture.context, fixture.runtime);
+    assert(!game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
+}
+
+void NpcLookPatrolPauseAndTargetRemoval()
+{
+    NpcScriptFixture fixture;
+    game::SectorCompiledPatrol patrol;
+    patrol.sourceAuthoringPatrolId = 9;
+    patrol.id = "patrol";
+    patrol.waypoints.push_back({1, 5000, game::SectorPatrolGait::Walk, true, 90.0f});
+    fixture.map.patrols.push_back(patrol);
+    game::NpcPatrolState state;
+    state.patrolEditorId = 9;
+    state.phase = game::NpcPatrolPhase::Waiting;
+    state.waitRemainingSeconds = 5.0f;
+    state.scriptMoveStopsPatrol = true;
+    fixture.context.world.Add(fixture.npc, state);
+    game::NpcPatrolRuntime patrolRuntime;
+    game::InitializeNpcPatrolRuntime(patrolRuntime, 4);
+    const auto target = SpawnScriptNpc(fixture.context.world);
+    fixture.context.world.Get<game::NpcRuntimeInstance>(target).instanceId = "target";
+    fixture.context.world.Get<game::SectorObjectTransform>(target).position = {8, 0, 8};
+    fixture.files.Write("function init() turn = assert(startNpcLookAtNpc('script_guard', 'target', 1000)) end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    game::UpdateNpcPatrolSystem(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, patrolRuntime, fixture.map, 0.2f, false);
+    auto& current = fixture.context.world.Get<game::NpcPatrolState>(fixture.npc);
+    assert(current.waitRemainingSeconds == 5.0f && !current.stoppedByScript);
+    fixture.context.world.DestroyLater(target);
+    fixture.context.world.FlushDestroyedEntities();
+    fixture.Update(0.1f);
+    assert(engine::ScriptSystemExecuteConsole(fixture.runtime, "assert(operationStatus(turn) == 'failed')").success);
+    game::UpdateNpcPatrolSystem(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, patrolRuntime, fixture.map, 0.2f, false);
+    assert(current.waitRemainingSeconds < 5.0f && !current.stoppedByScript);
+}
+
+void NpcFacingCancellationDeathAndRemovalReleaseOwnership()
+{
+    for (int mode = 0; mode < 4; ++mode) {
+        NpcScriptFixture fixture;
+        fixture.playerState.feetPosition = {8, 0, 8};
+        fixture.files.Write("function init() turn = assert(startNpcLookAtPlayer('script_guard', 1000)) end");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        if (mode == 0) {
+            fixture.context.world.Get<game::NpcCombatState>(fixture.npc).dead = true;
+        } else if (mode == 1) {
+            game::NpcAiState ai;
+            ai.awareness = game::NpcAwarenessState::InvestigatingTravel;
+            fixture.context.world.Add(fixture.npc, ai);
+        } else if (mode == 2) {
+            fixture.context.world.DestroyLater(fixture.npc);
+            fixture.context.world.FlushDestroyedEntities();
+        } else {
+            fixture.playerState.feetPosition = {2, 0, 8};
+        }
+        fixture.Update(0.1f);
+        assert(!game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
+        assert(engine::ScriptSystemExecuteConsole(fixture.runtime,
+                "assert(operationStatus(turn) ~= 'running'); assert(startNpcLookAtPlayer('script_guard', 100) == nil)").success);
+    }
+    for (bool takeover : {false, true}) {
+        NpcScriptFixture fixture;
+        fixture.map.levelMarkers[0].position = {16, 0, 64};
+        fixture.files.Write("function init() movement = assert(startMoveNpc('script_guard', 'run_target', nil, nil, true)) end");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        fixture.Update(0.1f);
+        auto& record = fixture.npcNavigation.records.front();
+        assert(record.arrivalReached && game::IsNull(record.pathHandle));
+        if (takeover) {
+            game::InterruptSectorScriptNpcMoveForAi(fixture.context, fixture.host, "script_guard");
+        } else {
+            assert(engine::ScriptSystemExecuteConsole(fixture.runtime, "assert(cancelOperation(movement))").success);
+        }
+        assert(record.phase == game::NpcMovePhase::Cancelled && !record.matchArrivalOrientation);
+        const float yaw = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc).yawRadians;
+        fixture.Update(0.2f);
+        assert(fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc).yawRadians == yaw);
+    }
+}
+
 } // namespace
 
 void RunSectorScriptBindingTests()
 {
+    NpcMarkerArrivalOrientationTurnsAfterStopping();
+    NpcTurnTimingRespectsDoorsReplansAndAngleWrap();
+    NpcLookTargetsCompleteAndPreserveHeadAnimation();
+    NpcLookValidationReplacementMovementAndLifecycle();
+    NpcLookPatrolPauseAndTargetRemoval();
+    NpcFacingCancellationDeathAndRemovalReleaseOwnership();
     DoorCompletionAndCancellationShareTheBackend();
     StableDoorAndDynamicLightBindingsMutateRuntimeTargets();
     DoorPermissionCallbacksCanYieldAndMustReturnTrue();

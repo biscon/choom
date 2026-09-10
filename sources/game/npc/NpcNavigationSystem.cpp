@@ -115,6 +115,35 @@ const NpcNavigationRecord* FindRecord(
     return found == runtime.records.end() ? nullptr : &*found;
 }
 
+float ShortestAngleDelta(float from, float to);
+
+bool ResolveNpcBodyTurnTarget(engine::World& world, const NpcBodyTurnState& turn,
+        const Vector3* playerPosition, Vector3& point)
+{
+    if (turn.targetKind == NpcBodyTurnTarget::Player) {
+        if (playerPosition == nullptr) return false;
+        point = *playerPosition;
+    } else if (turn.targetKind == NpcBodyTurnTarget::Entity) {
+        if (!world.IsAlive(turn.targetEntity)
+                || !world.Has<SectorObjectTransform>(turn.targetEntity)) return false;
+        point = world.Get<SectorObjectTransform>(turn.targetEntity).position;
+    } else {
+        point = turn.targetPoint;
+    }
+    return std::isfinite(point.x) && std::isfinite(point.z);
+}
+
+bool SetNpcBodyTurnTargetYaw(NpcBodyTurnState& turn, Vector3 position, Vector3 target)
+{
+    const float dx = target.x - position.x;
+    const float dz = target.z - position.z;
+    if (!std::isfinite(dx) || !std::isfinite(dz) || dx * dx + dz * dz < 0.00000001f) return false;
+    const float yaw = std::atan2(dx, dz);
+    turn.targetYaw = turn.started
+            ? turn.targetYaw + ShortestAngleDelta(turn.targetYaw, yaw) : yaw;
+    return true;
+}
+
 bool IsActive(NpcMovePhase phase)
 {
     return phase == NpcMovePhase::FollowingPath;
@@ -169,6 +198,8 @@ void SetTerminal(
 {
     ReleasePath(navigation, record, &world);
     record.phase = phase;
+    record.matchArrivalOrientation = false;
+    record.arrivalReached = false;
     record.lastQueryStatus = status;
     record.preferredVelocity = {};
     record.desiredVelocity = {};
@@ -1013,6 +1044,100 @@ bool DeactivateNpcNavigation(
     return false;
 }
 
+NpcBodyTurnState* FindNpcBodyTurn(NpcNavigationRuntime& runtime, engine::Entity entity)
+{
+    NpcNavigationRecord* record = FindRecord(runtime, entity);
+    return record != nullptr ? &record->bodyTurn : nullptr;
+}
+
+bool HasNpcBodyTurn(const NpcNavigationRuntime& runtime, engine::Entity entity)
+{
+    const NpcNavigationRecord* record = FindRecord(runtime, entity);
+    return record != nullptr && record->bodyTurn.status == NpcBodyTurnStatus::Playing;
+}
+
+void CancelNpcBodyTurn(NpcNavigationRuntime& runtime, engine::Entity entity,
+        uint64_t requestId, const char* reason)
+{
+    NpcBodyTurnState* turn = FindNpcBodyTurn(runtime, entity);
+    if (turn != nullptr && turn->status == NpcBodyTurnStatus::Playing
+            && (requestId == 0 || requestId == turn->requestId)) {
+        turn->status = NpcBodyTurnStatus::Cancelled;
+        turn->failureReason = reason;
+    }
+}
+
+bool BeginNpcBodyTurn(engine::World& world, NpcNavigationRuntime& runtime,
+        engine::Entity entity, NpcBodyTurnState turn,
+        const Vector3* playerPosition, std::string& error)
+{
+    NpcNavigationRecord* record = FindRecord(runtime, entity);
+    if (record == nullptr || !world.IsAlive(entity)
+            || !world.Has<NpcRuntimeInstance>(entity)
+            || !world.Has<SectorObjectTransform>(entity)) {
+        error = "NPC instance was not found";
+        return false;
+    }
+    if ((world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead)
+            || (world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))) {
+        error = "NPC is dead";
+        return false;
+    }
+    if ((world.Has<NpcAiState>(entity)
+                && world.Get<NpcAiState>(entity).awareness != NpcAwarenessState::Unaware)
+            || world.Get<NpcRuntimeInstance>(entity).actionLockedByAi) {
+        error = "player detected; AI took control";
+        return false;
+    }
+    if (IsActive(record->phase)) {
+        error = "NPC is moving; await its move before looking";
+        return false;
+    }
+    if (!std::isfinite(turn.durationSeconds) || turn.durationSeconds <= 0.0) {
+        error = "NPC look duration must be positive and finite";
+        return false;
+    }
+    Vector3 target{};
+    if ((turn.targetKind == NpcBodyTurnTarget::Entity && turn.targetEntity == entity)
+            || !ResolveNpcBodyTurnTarget(world, turn, playerPosition, target)
+            || !SetNpcBodyTurnTargetYaw(turn, world.Get<SectorObjectTransform>(entity).position, target)) {
+        error = "NPC look target is unavailable or has no horizontal direction";
+        return false;
+    }
+    turn.startYaw = world.Get<SectorObjectTransform>(entity).yawRadians;
+    turn.targetYaw = turn.startYaw + ShortestAngleDelta(turn.startYaw, turn.targetYaw);
+    turn.started = true;
+    turn.elapsedSeconds = 0.0;
+    turn.status = NpcBodyTurnStatus::Playing;
+    turn.requestId = AllocateRequestId(runtime);
+    record->bodyTurn = turn;
+    error.clear();
+    return true;
+}
+
+bool AdvanceNpcBodyTurn(NpcBodyTurnState& turn, float& yaw, float dt)
+{
+    if (turn.status == NpcBodyTurnStatus::Completed) return true;
+    if (!turn.started) {
+        turn.startYaw = yaw;
+        turn.targetYaw = yaw + ShortestAngleDelta(yaw, turn.targetYaw);
+        turn.started = true;
+        turn.status = NpcBodyTurnStatus::Playing;
+    }
+    if (std::isfinite(dt) && dt > 0.0f) turn.elapsedSeconds += dt;
+    const float t = static_cast<float>(std::clamp(turn.elapsedSeconds / turn.durationSeconds, 0.0, 1.0));
+    const float blend = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+    yaw = turn.startYaw + (turn.targetYaw - turn.startYaw) * blend;
+    if (t >= 1.0f) turn.status = NpcBodyTurnStatus::Completed;
+    return t >= 1.0f;
+}
+
+void UpdateNpcArrivalTurn(NpcNavigationRecord& record, float& yaw, float dt)
+{
+    if (!record.matchArrivalOrientation || !record.arrivalReached) return;
+    AdvanceNpcBodyTurn(record.arrivalTurn, yaw, dt);
+}
+
 static NpcMoveRequestResult RequestNpcMoveRecord(
         engine::World& world,
         SectorNavigationWorld& navigation,
@@ -1022,7 +1147,8 @@ static NpcMoveRequestResult RequestNpcMoveRecord(
         Vector2 destinationXZ,
         NpcMoveGait gait,
         NpcMoveAuthority authority,
-        float movementSpeedOverride)
+        float movementSpeedOverride,
+        const float* arrivalYaw)
 {
     if (record == nullptr || !world.IsAlive(record->entity)
             || !world.Has<SectorObjectTransform>(record->entity)
@@ -1102,6 +1228,11 @@ static NpcMoveRequestResult RequestNpcMoveRecord(
         ClearNpcScriptAnimation(world.Get<NpcAnimationState>(record->entity),
                 NpcScriptAnimationCancelReason::Movement);
     }
+    CancelNpcBodyTurn(runtime, record->entity, 0, "NPC look interrupted by movement");
+    record->arrivalReached = false;
+    record->arrivalTurn = {};
+    record->matchArrivalOrientation = arrivalYaw != nullptr;
+    if (arrivalYaw != nullptr) record->arrivalTurn.targetYaw = *arrivalYaw;
     record->phase = NpcMovePhase::FollowingPath;
     record->gait = gait;
     record->movementSpeedOverride = std::isfinite(movementSpeedOverride)
@@ -1135,7 +1266,8 @@ NpcMoveRequestResult RequestNpcMove(
         Vector2 destinationXZ,
         NpcMoveGait gait,
         NpcMoveAuthority authority,
-        float movementSpeedOverride)
+        float movementSpeedOverride,
+        const float* arrivalYaw)
 {
     if (!IsValidNpcInstanceId(instanceId)) {
         return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "invalid NPC instance ID");
@@ -1143,7 +1275,7 @@ NpcMoveRequestResult RequestNpcMove(
     return RequestNpcMoveRecord(
             world, navigation, collisionWorld, runtime,
             FindRecord(runtime, instanceId), destinationXZ, gait, authority,
-            movementSpeedOverride);
+            movementSpeedOverride, arrivalYaw);
 }
 
 NpcMoveRequestResult RequestNpcMoveForEntity(
@@ -1155,12 +1287,13 @@ NpcMoveRequestResult RequestNpcMoveForEntity(
         Vector2 destinationXZ,
         NpcMoveGait gait,
         NpcMoveAuthority authority,
-        float movementSpeedOverride)
+        float movementSpeedOverride,
+        const float* arrivalYaw)
 {
     return RequestNpcMoveRecord(
             world, navigation, collisionWorld, runtime,
             FindRecord(runtime, entity), destinationXZ, gait, authority,
-            movementSpeedOverride);
+            movementSpeedOverride, arrivalYaw);
 }
 
 NpcMoveRequestResult RetargetNpcAiMove(
@@ -1256,6 +1389,9 @@ NpcMoveRequestResult RetargetNpcAiMove(
         ClearNpcScriptAnimation(world.Get<NpcAnimationState>(record->entity),
                 NpcScriptAnimationCancelReason::Movement);
     }
+    CancelNpcBodyTurn(runtime, record->entity, 0, "NPC look interrupted by AI");
+    record->arrivalReached = false;
+    record->matchArrivalOrientation = false;
     record->phase = NpcMovePhase::FollowingPath;
     record->gait = gait;
     record->authority = NpcMoveAuthority::Ai;
@@ -1544,7 +1680,7 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
 
     const SectorNavigationSettings& settings = navigation.Settings();
     for (NpcNavigationRecord& record : runtime.records) {
-        if (!record.occupied || !IsActive(record.phase)
+        if (!record.occupied || record.arrivalReached || !IsActive(record.phase)
                 || !world.IsAlive(record.entity)
                 || !world.Has<NpcRuntimeInstance>(record.entity)
                 || !world.Has<SectorObjectTransform>(record.entity)) {
@@ -1738,7 +1874,7 @@ void CollectNpcDoorObstacles(
     if (playerObstacle != nullptr) outObstacles.push_back(*playerObstacle);
     const SectorDoorPlayerObstacle npcShape{{}, 0.25f, 1.6f};
     for (const NpcNavigationRecord& record : runtime.records) {
-        if (!record.occupied || !IsActive(record.phase)
+        if (!record.occupied || record.arrivalReached || !IsActive(record.phase)
                 || (record.doorPhase != NpcDoorTraversalPhase::WaitingForClearance
                     && record.doorPhase != NpcDoorTraversalPhase::Crossing)
                 || !world.IsAlive(record.entity)
@@ -1762,7 +1898,8 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const SectorTopologyMap& map,
         float rawDt,
         const SectorDoorPlayerObstacle* playerObstacle,
-        bool freezeAi)
+        bool freezeAi,
+        const Vector3* playerPosition)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     bool movedAnyNpc = false;
@@ -1819,7 +1956,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const bool frozenAi = freezeAi
                 && (record.authority == NpcMoveAuthority::Ai
                     || record.authority == NpcMoveAuthority::Patrol);
-        if (!staggered && !frozenAi && IsActive(record.phase)
+        if (!staggered && !frozenAi && !record.arrivalReached && IsActive(record.phase)
                 && navigation.IsPathRecordValid(record.pathHandle)
                 && !record.tileReplanPending
                 && record.nextCorner < record.cornerCount
@@ -1921,7 +2058,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                     "navigation became unavailable during movement");
         }
 
-        if (IsActive(record.phase)
+        if (IsActive(record.phase) && !record.arrivalReached
                 && !navigation.IsPathRecordValid(record.pathHandle)) {
             npc.action = NpcAction::Idle;
             SetTerminal(
@@ -1934,7 +2071,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                     "navigation was rebuilt during movement");
         }
 
-        if (IsActive(record.phase)
+        if (IsActive(record.phase) && !record.arrivalReached
                 && navigation.CorridorTouchesChangedTile(
                         record.corridorTiles.data(),
                         record.corridorTileCount,
@@ -1970,6 +2107,18 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const bool frozenAi = freezeAi
                 && (record.authority == NpcMoveAuthority::Ai
                     || record.authority == NpcMoveAuthority::Patrol);
+        if (dead && record.matchArrivalOrientation && IsActive(record.phase)) {
+            SetTerminal(world, navigation, runtime, record, NpcMovePhase::Failed,
+                    SectorNavigationQueryStatus::InvalidAgent, "NPC is dead");
+        }
+        if (record.arrivalReached && IsActive(record.phase)) {
+            UpdateNpcArrivalTurn(record, transform.yawRadians, dt);
+            if (record.arrivalTurn.status == NpcBodyTurnStatus::Completed) {
+                SetTerminal(world, navigation, runtime, record, NpcMovePhase::Arrived,
+                        SectorNavigationQueryStatus::Success, "arrived and facing marker");
+            }
+        }
+
         if (!staggered && !dead && !freezeAi && dt > 0.0f
                 && world.Has<NpcAiState>(record.entity)) {
             const NpcAiState& ai = world.Get<NpcAiState>(record.entity);
@@ -2019,7 +2168,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 }
             }
         }
-        if (!staggered && !frozenAi && IsActive(record.phase)
+        if (!staggered && !frozenAi && !record.arrivalReached && IsActive(record.phase)
                 && !record.tileReplanPending && dt > 0.0f) {
             const float authoredMovementSpeed = record.gait == NpcMoveGait::Run
                     ? npc.runSpeed : npc.walkSpeed;
@@ -2198,7 +2347,13 @@ void UpdateNpcNavigationAndLocomotionSystem(
                                  + destinationDz * destinationDz)
                             <= ArrivalTolerance) {
                 npc.action = NpcAction::Idle;
-                SetTerminal(
+                if (record.matchArrivalOrientation) {
+                    record.arrivalReached = true;
+                    ReleasePath(navigation, record, &world);
+                    record.preferredVelocity = {};
+                    record.desiredVelocity = {};
+                    record.actualVelocity = {};
+                } else SetTerminal(
                         world,
                         navigation,
                         runtime,
@@ -2224,7 +2379,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
             }
 
             record.driftCheckSeconds += dt;
-            if (IsActive(record.phase)
+            if (IsActive(record.phase) && !record.arrivalReached
                     && record.driftCheckSeconds >= DriftCheckIntervalSeconds) {
                 record.driftCheckSeconds = 0.0f;
                 const SectorNavigationNearestPointResult nearest =
@@ -2257,6 +2412,23 @@ void UpdateNpcNavigationAndLocomotionSystem(
             npc.action = NpcAction::Idle;
         } else if (!IsActive(record.phase) && !npc.actionLockedByAi) {
             npc.action = NpcAction::Idle;
+        }
+
+        if (record.bodyTurn.status == NpcBodyTurnStatus::Playing) {
+            const bool aware = world.Has<NpcAiState>(record.entity)
+                    && world.Get<NpcAiState>(record.entity).awareness != NpcAwarenessState::Unaware;
+            Vector3 target{};
+            if (dead || aware || npc.actionLockedByAi) {
+                CancelNpcBodyTurn(runtime, record.entity, 0, "NPC look interrupted by combat or AI");
+            } else if (!ResolveNpcBodyTurnTarget(world, record.bodyTurn, playerPosition, target)) {
+                record.bodyTurn.status = NpcBodyTurnStatus::Failed;
+                record.bodyTurn.failureReason = "NPC look target is unavailable";
+            } else if (!SetNpcBodyTurnTargetYaw(record.bodyTurn, transform.position, target)) {
+                record.bodyTurn.status = NpcBodyTurnStatus::Failed;
+                record.bodyTurn.failureReason = "NPC look target has no horizontal direction";
+            } else {
+                AdvanceNpcBodyTurn(record.bodyTurn, transform.yawRadians, dt);
+            }
         }
 
         if (visualOffset != nullptr && !capturedStepOffset

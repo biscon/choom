@@ -34,7 +34,13 @@ function intro_trigger_1()
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
     say("I've been walking these dark tunnels forever. You're are the first person I met so far.")
-    startMoveNpc("elin", "intro_marker_3", "walk")
+    startMoveNpc("elin", "intro_marker_3", "walk", 1.5, true)
+    delay(1500)
+    movePlayer("intro_marker_4", "walk", 1.25, {
+        lookAtNpc = "elin",
+        turnDurationMs = 750,
+        targetHeight = 0.7,
+    })
     assert(endCutscene())
 end
 

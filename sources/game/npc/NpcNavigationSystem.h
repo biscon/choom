@@ -117,6 +117,18 @@ bool DeactivateNpcNavigation(
         NpcNavigationRuntime& runtime,
         engine::Entity entity);
 
+NpcBodyTurnState* FindNpcBodyTurn(NpcNavigationRuntime& runtime, engine::Entity entity);
+bool HasNpcBodyTurn(const NpcNavigationRuntime& runtime, engine::Entity entity);
+bool BeginNpcBodyTurn(
+        engine::World& world, NpcNavigationRuntime& runtime, engine::Entity entity,
+        NpcBodyTurnState turn, const Vector3* playerPosition, std::string& error);
+// reason must have static lifetime; the runtime retains it until operation resolution.
+void CancelNpcBodyTurn(NpcNavigationRuntime& runtime, engine::Entity entity,
+        uint64_t requestId, const char* reason = "NPC look was cancelled");
+// Shared shortest-angle easing for arrival orientation and standalone looks.
+bool AdvanceNpcBodyTurn(NpcBodyTurnState& turn, float& yaw, float dt);
+void UpdateNpcArrivalTurn(NpcNavigationRecord& record, float& yaw, float dt);
+
 NpcMoveRequestResult RequestNpcMove(
         engine::World& world,
         SectorNavigationWorld& navigation,
@@ -126,7 +138,8 @@ NpcMoveRequestResult RequestNpcMove(
         Vector2 destinationXZ,
         NpcMoveGait gait = NpcMoveGait::Walk,
         NpcMoveAuthority authority = NpcMoveAuthority::Programmatic,
-        float movementSpeedOverride = 0.0f);
+        float movementSpeedOverride = 0.0f,
+        const float* arrivalYaw = nullptr);
 
 NpcMoveRequestResult RequestNpcMoveForEntity(
         engine::World& world,
@@ -137,7 +150,8 @@ NpcMoveRequestResult RequestNpcMoveForEntity(
         Vector2 destinationXZ,
         NpcMoveGait gait,
         NpcMoveAuthority authority,
-        float movementSpeedOverride = 0.0f);
+        float movementSpeedOverride = 0.0f,
+        const float* arrivalYaw = nullptr);
 
 // Replaces an AI-owned route only after its new path has been found. A failed
 // retarget leaves the previous route, door holds, and request ID intact.
@@ -221,6 +235,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const SectorTopologyMap& map,
         float dt,
         const SectorDoorPlayerObstacle* playerObstacle = nullptr,
-        bool freezeAi = false);
+        bool freezeAi = false,
+        const Vector3* playerPosition = nullptr);
 
 } // namespace game

@@ -72,6 +72,13 @@ struct SectorScriptNpcAnimation {
     bool active = false;
 };
 
+struct SectorScriptNpcLook {
+    uint64_t token = 0;
+    engine::Entity entity = engine::NullEntity();
+    engine::ScriptOperationHandle operation{};
+    bool active = false;
+};
+
 struct SectorScriptDoorPermission {
     engine::ScriptTaskHandle task{};
     engine::Entity entity = engine::NullEntity();
@@ -110,6 +117,7 @@ struct SectorScriptHost {
     std::vector<SectorScriptDoorMove> doorMoves;
     std::vector<SectorScriptNpcMove> npcMoves;
     std::vector<SectorScriptNpcAnimation> npcAnimations;
+    std::vector<SectorScriptNpcLook> npcLooks;
     std::vector<SectorScriptTriggerState> triggers;
     SectorScriptNpcMoveDiagnostics npcMoveDiagnostics;
     SectorScriptDoorPermission doorPermission;

@@ -243,6 +243,23 @@ enum class NpcDoorTraversalPhase : uint8_t {
     Crossing
 };
 
+enum class NpcBodyTurnStatus : uint8_t { None, Playing, Completed, Cancelled, Failed };
+enum class NpcBodyTurnTarget : uint8_t { Point, Entity, Player };
+
+struct NpcBodyTurnState {
+    uint64_t requestId = 0;
+    NpcBodyTurnStatus status = NpcBodyTurnStatus::None;
+    NpcBodyTurnTarget targetKind = NpcBodyTurnTarget::Point;
+    engine::Entity targetEntity = engine::NullEntity();
+    Vector3 targetPoint{};
+    double durationSeconds = 0.75;
+    double elapsedSeconds = 0.0;
+    float startYaw = 0.0f;
+    float targetYaw = 0.0f;
+    const char* failureReason = "";
+    bool started = false;
+};
+
 struct NpcNavigationRecord {
     std::string instanceId;
     int placedObjectId = 0;
@@ -253,6 +270,11 @@ struct NpcNavigationRecord {
     NpcMoveGait gait = NpcMoveGait::Walk;
     // Request-local override. Zero keeps the authored Walk/Run action speed.
     float movementSpeedOverride = 0.0f;
+    NpcBodyTurnState bodyTurn;
+    NpcBodyTurnState arrivalTurn;
+    bool matchArrivalOrientation = false;
+    // Movement retains script ownership until both travel and turning finish.
+    bool arrivalReached = false;
     NpcMoveAuthority authority = NpcMoveAuthority::None;
     uint64_t requestId = 0;
     SectorNavigationQueryStatus lastQueryStatus =

@@ -301,7 +301,8 @@ BeginNpcMoveResult BeginNpcMove(
         std::string instanceId,
         Vector2 destinationXZ,
         NpcMoveGait gait,
-        float movementSpeedOverride)
+        float movementSpeedOverride,
+        const float* arrivalYaw)
 {
     BeginNpcMoveResult result;
     ++host.npcMoveDiagnostics.requests;
@@ -322,7 +323,7 @@ BeginNpcMoveResult BeginNpcMove(
             destinationXZ,
             gait,
             NpcMoveAuthority::Script,
-            movementSpeedOverride);
+            movementSpeedOverride, arrivalYaw);
     if (!request.accepted) {
         result.error = request.message.empty()
                 ? SectorNavigationQueryStatusName(request.status)
@@ -369,6 +370,8 @@ bool ParseNpcMove(
         Vector2& destinationXZ,
         NpcMoveGait& gait,
         float& movementSpeedOverride,
+        bool& matchOrientation,
+        float& arrivalYaw,
         std::string& error)
 {
     size_t idLength = 0;
@@ -402,6 +405,20 @@ bool ParseNpcMove(
                 SectorAuthoringToWorldPosition(marker->position);
         destinationXZ = {worldPosition.x, worldPosition.z};
         gaitArgument = 3;
+        if (!lua_isnoneornil(state, 5)) {
+            if (lua_type(state, 5) != LUA_TBOOLEAN) {
+                error = "NPC matchOrientation must be a boolean";
+                return false;
+            }
+            matchOrientation = lua_toboolean(state, 5) != 0;
+            if (matchOrientation) {
+                arrivalYaw = marker->yawRadians;
+                if (!std::isfinite(arrivalYaw)) {
+                    error = "level marker orientation must be finite";
+                    return false;
+                }
+            }
+        }
     } else {
         const lua_Number rawX = luaL_checknumber(state, 2);
         const lua_Number rawZ = luaL_checknumber(state, 3);
@@ -465,10 +482,12 @@ int LuaMoveNpc(lua_State* state)
     Vector2 destinationXZ{};
     NpcMoveGait gait = NpcMoveGait::Walk;
     float movementSpeedOverride = 0.0f;
+    bool matchOrientation = false;
+    float arrivalYaw = 0.0f;
     std::string parseError;
     if (!ParseNpcMove(
             state, host, instanceId, destinationXZ, gait,
-            movementSpeedOverride, parseError)) {
+            movementSpeedOverride, matchOrientation, arrivalYaw, parseError)) {
         ++host.npcMoveDiagnostics.requests;
         ++host.npcMoveDiagnostics.failures;
         RecordNpcMoveOutcome(host, instanceId, parseError.c_str());
@@ -477,7 +496,7 @@ int LuaMoveNpc(lua_State* state)
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     const BeginNpcMoveResult begin = BeginNpcMove(
             context, host, instanceId, destinationXZ, gait,
-            movementSpeedOverride);
+            movementSpeedOverride, matchOrientation ? &arrivalYaw : nullptr);
     if (!begin.started) {
         return PushNpcMoveStartError(state, false, begin.error);
     }
@@ -512,10 +531,12 @@ int LuaStartMoveNpc(lua_State* state)
     Vector2 destinationXZ{};
     NpcMoveGait gait = NpcMoveGait::Walk;
     float movementSpeedOverride = 0.0f;
+    bool matchOrientation = false;
+    float arrivalYaw = 0.0f;
     std::string parseError;
     if (!ParseNpcMove(
             state, host, instanceId, destinationXZ, gait,
-            movementSpeedOverride, parseError)) {
+            movementSpeedOverride, matchOrientation, arrivalYaw, parseError)) {
         ++host.npcMoveDiagnostics.requests;
         ++host.npcMoveDiagnostics.failures;
         RecordNpcMoveOutcome(host, instanceId, parseError.c_str());
@@ -524,7 +545,7 @@ int LuaStartMoveNpc(lua_State* state)
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     const BeginNpcMoveResult begin = BeginNpcMove(
             context, host, instanceId, destinationXZ, gait,
-            movementSpeedOverride);
+            movementSpeedOverride, matchOrientation ? &arrivalYaw : nullptr);
     if (!begin.started) {
         return PushNpcMoveStartError(state, true, begin.error);
     }
@@ -823,6 +844,112 @@ int StartPlayerMove(lua_State* state, bool async)
 
 int LuaMovePlayer(lua_State* state) { return StartPlayerMove(state, false); }
 int LuaStartMovePlayer(lua_State* state) { return StartPlayerMove(state, true); }
+
+void CancelScriptNpcLook(engine::EngineContext&, void* hostContext, uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host == nullptr || host->npcNavigation == nullptr) return;
+    for (SectorScriptNpcLook& look : host->npcLooks) {
+        if (look.active && look.token == token) {
+            CancelNpcBodyTurn(*host->npcNavigation, look.entity, token);
+            look.active = false;
+            return;
+        }
+    }
+}
+
+enum class ScriptNpcLookTarget { Player, Npc, Prop, Marker };
+
+int StartNpcLook(lua_State* state, ScriptNpcLookTarget kind, bool async)
+{
+    const int originalTop = lua_gettop(state);
+    SectorScriptHost& host = HostFromLua(state);
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    const engine::ScriptTaskHandle task = engine::ScriptSystemTryCurrentTaskFromLua(state);
+    if (!async && !engine::IsValid(task)) {
+        return PushNpcMoveStartError(state, async, "blocking NPC looks require a managed Lua task");
+    }
+    if (host.npcNavigation == nullptr || (scripts.phase != engine::ScriptRuntimePhase::Loading
+            && scripts.phase != engine::ScriptRuntimePhase::Active)) {
+        return PushNpcMoveStartError(state, async, "NPC look runtime is unavailable");
+    }
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    if (lua_type(state, 1) != LUA_TSTRING) {
+        return PushNpcMoveStartError(state, async, "NPC instance ID must be a string");
+    }
+    size_t length = 0;
+    const char* id = lua_tolstring(state, 1, &length);
+    const engine::Entity actor = FindNpcEntity(context.world, std::string_view{id, length});
+    NpcBodyTurnState turn;
+    const int durationArgument = kind == ScriptNpcLookTarget::Player ? 2 : 3;
+    if (lua_type(state, durationArgument) != LUA_TNUMBER) {
+        return PushNpcMoveStartError(state, async, "NPC look duration must be positive and finite");
+    }
+    turn.durationSeconds = lua_tonumber(state, durationArgument) / 1000.0;
+    if (kind == ScriptNpcLookTarget::Player) {
+        turn.targetKind = NpcBodyTurnTarget::Player;
+    } else {
+        if (lua_type(state, 2) != LUA_TSTRING) {
+            return PushNpcMoveStartError(state, async, "NPC look target ID must be a string");
+        }
+        id = lua_tolstring(state, 2, &length);
+        const std::string targetId{id, length};
+        if (targetId.empty() || targetId.find('\0') != std::string::npos) {
+            return PushNpcMoveStartError(state, async, "invalid NPC look target ID");
+        }
+        if (kind == ScriptNpcLookTarget::Marker) {
+            const SectorCompiledLevelMarker* marker = host.map != nullptr
+                    ? FindSectorCompiledLevelMarker(*host.map, targetId) : nullptr;
+            if (marker == nullptr) return PushNpcMoveStartError(state, async, "level marker was not found");
+            turn.targetPoint = SectorAuthoringToWorldPosition(marker->position);
+        } else {
+            turn.targetKind = NpcBodyTurnTarget::Entity;
+            turn.targetEntity = kind == ScriptNpcLookTarget::Npc
+                    ? FindNpcEntity(context.world, targetId) : FindAnyPropEntity(context.world, targetId);
+        }
+    }
+    std::string error;
+    if (!BeginNpcBodyTurn(context.world, *host.npcNavigation, actor, turn,
+            host.playerState != nullptr ? &host.playerState->feetPosition : nullptr, error)) {
+        return PushNpcMoveStartError(state, async, error);
+    }
+    const uint64_t token = FindNpcBodyTurn(*host.npcNavigation, actor)->requestId;
+    for (SectorScriptNpcLook& previous : host.npcLooks) {
+        if (previous.active && previous.entity == actor) {
+            engine::ScriptSystemCancelOperation(context, scripts, previous.operation, "NPC look was replaced");
+            previous.active = false;
+        }
+    }
+    const engine::ScriptOperationHandle operation = engine::ScriptSystemCreateOperation(
+            scripts, async ? engine::ScriptOperationLaunchStyle::Async : engine::ScriptOperationLaunchStyle::Blocking,
+            task, "npcLook", token, CancelScriptNpcLook);
+    if (!engine::IsValid(operation)) {
+        CancelNpcBodyTurn(*host.npcNavigation, actor, token);
+        return PushNpcMoveStartError(state, async, "could not allocate NPC look operation");
+    }
+    const SectorScriptNpcLook look{token, actor, operation, true};
+    const auto slot = std::find_if(host.npcLooks.begin(), host.npcLooks.end(),
+            [](const SectorScriptNpcLook& item) { return !item.active; });
+    if (slot != host.npcLooks.end()) *slot = look;
+    else {
+        if (host.npcLooks.size() == host.npcLooks.capacity()) {
+            TraceLog(LOG_WARNING, "[Lua WARNING] NPC-look capacity exceeded; runtime allocation may occur");
+        }
+        host.npcLooks.push_back(look);
+    }
+    if (!async) return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+    engine::ScriptSystemPushOperationUserdata(state, operation);
+    return 1;
+}
+
+int LuaNpcLookAtPlayer(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Player, false); }
+int LuaStartNpcLookAtPlayer(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Player, true); }
+int LuaNpcLookAtNpc(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Npc, false); }
+int LuaStartNpcLookAtNpc(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Npc, true); }
+int LuaNpcLookAtProp(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Prop, false); }
+int LuaStartNpcLookAtProp(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Prop, true); }
+int LuaNpcLookAtMarker(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Marker, false); }
+int LuaStartNpcLookAtMarker(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Marker, true); }
 
 int StartLook(lua_State* state, SectorCutsceneLookTargetKind kind, bool async)
 {
@@ -2165,7 +2292,9 @@ void InitializeSectorScriptHost(
     host.npcMoves.reserve(navigation != nullptr
             ? navigation->Capacities().agentCapacity : 64);
     host.npcAnimations.clear();
+    host.npcLooks.clear();
     host.npcAnimations.reserve(host.npcMoves.capacity());
+    host.npcLooks.reserve(host.npcMoves.capacity());
     host.npcMoveDiagnostics = {};
     host.doorPermission = {};
     host.dynamicLightsDirty = false;
@@ -2197,6 +2326,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.doorMoves.clear();
     host.npcMoves.clear();
     host.npcAnimations.clear();
+    host.npcLooks.clear();
     host.triggers.clear();
     host.doorPermission = {};
     host.dynamicLightsDirty = false;
@@ -2223,6 +2353,14 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "setNpcAnimation", LuaSetNpcAnimation);
     Register(state, "playNpcAnimation", LuaPlayNpcAnimation);
     Register(state, "startPlayNpcAnimation", LuaStartPlayNpcAnimation);
+    Register(state, "npcLookAtPlayer", LuaNpcLookAtPlayer);
+    Register(state, "npcLookAtNpc", LuaNpcLookAtNpc);
+    Register(state, "npcLookAtProp", LuaNpcLookAtProp);
+    Register(state, "npcLookAtMarker", LuaNpcLookAtMarker);
+    Register(state, "startNpcLookAtPlayer", LuaStartNpcLookAtPlayer);
+    Register(state, "startNpcLookAtNpc", LuaStartNpcLookAtNpc);
+    Register(state, "startNpcLookAtProp", LuaStartNpcLookAtProp);
+    Register(state, "startNpcLookAtMarker", LuaStartNpcLookAtMarker);
     Register(state, "moveNpc", LuaMoveNpc);
     Register(state, "startMoveNpc", LuaStartMoveNpc);
     Register(state, "enableControls", LuaEnableControls);
@@ -2397,6 +2535,26 @@ void UpdateSectorScriptOperations(
                     }),
             host.doorMoves.end());
 
+    for (SectorScriptNpcLook& look : host.npcLooks) {
+        if (!look.active) continue;
+        NpcBodyTurnState* turn = host.npcNavigation != nullptr
+                ? FindNpcBodyTurn(*host.npcNavigation, look.entity) : nullptr;
+        if (!context.world.IsAlive(look.entity) || turn == nullptr) {
+            engine::ScriptSystemFailOperation(*host.scripts, look.operation, "NPC was removed or reset");
+        } else if (turn->requestId != look.token) {
+            engine::ScriptSystemCancelOperation(context, *host.scripts, look.operation, "NPC look was replaced");
+        } else if (turn->status == NpcBodyTurnStatus::Playing) {
+            continue;
+        } else if (turn->status == NpcBodyTurnStatus::Completed) {
+            engine::ScriptSystemCompleteOperation(*host.scripts, look.operation);
+        } else if (turn->status == NpcBodyTurnStatus::Failed) {
+            engine::ScriptSystemFailOperation(*host.scripts, look.operation, turn->failureReason);
+        } else {
+            engine::ScriptSystemCancelOperation(context, *host.scripts, look.operation, turn->failureReason);
+        }
+        look.active = false;
+    }
+
     // Animation operations remain usable even without a navigation world.
     for (SectorScriptNpcAnimation& playback : host.npcAnimations) {
         if (!playback.active) continue;
@@ -2528,6 +2686,14 @@ void InterruptSectorScriptNpcMoveForAi(
         const char* instanceId)
 {
     if (instanceId == nullptr || host.scripts == nullptr) return;
+    const engine::Entity actor = FindNpcEntity(context.world, instanceId);
+    for (SectorScriptNpcLook& look : host.npcLooks) {
+        if (look.active && look.entity == actor) {
+            engine::ScriptSystemCancelOperation(context, *host.scripts, look.operation,
+                    "player detected; AI took control");
+            look.active = false;
+        }
+    }
     for (SectorScriptNpcMove& move : host.npcMoves) {
         if (!move.active || move.instanceId != instanceId) continue;
         ++host.npcMoveDiagnostics.cancellations;

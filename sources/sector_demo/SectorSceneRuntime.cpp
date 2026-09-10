@@ -366,7 +366,8 @@ void SectorSceneRuntime::Update(
                 map,
                 dt,
                 playerObstacle,
-                npcGameplay != nullptr && npcGameplay->frozen);
+                npcGameplay != nullptr && npcGameplay->frozen,
+                npcGameplay != nullptr ? &npcGameplay->playerEyePosition : nullptr);
     }
     engine::AnimatedModelSystem(context.world, context.assets, dt);
     if (runtimeObjects.objectSectorLookupWorldValid) {

@@ -46,9 +46,16 @@ ranges, return values, behavior, and failure details.
   `startPlayNpcAnimation(instanceId, animationName [, durationMs])`.
 - **[NPC movement](#npc-movement):**
   `moveNpc(instanceId, x, z [, gait [, movementSpeed]])`,
-  `moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]])`,
+  `moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed [, matchOrientation]]])`,
   `startMoveNpc(instanceId, x, z [, gait [, movementSpeed]])`,
-  `startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]])`.
+  `startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed [, matchOrientation]]])`.
+- **[NPC body looks](#npc-body-looks):**
+  `npcLookAtPlayer(npcId, durationMs)`,
+  `npcLookAtNpc(npcId, targetNpcId, durationMs)`,
+  `npcLookAtProp(npcId, propId, durationMs)`,
+  `npcLookAtMarker(npcId, markerId, durationMs)`,
+  and their `startNpcLookAtPlayer`, `startNpcLookAtNpc`,
+  `startNpcLookAtProp`, `startNpcLookAtMarker` forms.
 - **[Player controls and movement](#cutscenes-and-player-camera):**
   `startCutscene()`, `endCutscene()`, `enableControls(enabled)`,
   `movePlayer(x, z [, gait [, movementSpeed [, options]]])`,
@@ -589,18 +596,36 @@ local movement = startMoveNpc("guard_1", 4.0, 8.0)
 
 A level-marker ID can replace X/Z. IDs are exact and case-sensitive. The
 marker is resolved once at request start; its authored position is converted
-to world X/Z. Marker height and yaw are ignored.
+to world X/Z. Marker height is ignored; yaw is used only when explicitly requested.
 
 ```lua
 moveNpc("guard_1", "patrol_end", "run")
 local movement = startMoveNpc("guard_1", "guard_post")
 ```
 
+The marker overloads accept a final `matchOrientation` boolean (default `false`).
+Use `nil` to keep default gait or speed:
+
+```lua
+startMoveNpc("elin", "intro_marker_3", "walk", nil, true)
+moveNpc("guard_1", "guard_post", nil, nil, true)
+```
+
+When enabled, the NPC first reaches the destination, then smoothly rotates its
+whole-body yaw to the marker's captured orientation over 750 ms. Walking speed,
+path, and movement-facing behavior remain unchanged throughout the approach.
+Zero-distance moves also perform the stationary turn. The movement operation
+completes only after both physical arrival and orientation alignment; script
+ownership continues through the turn while path and door resources are released
+on arrival.
+Only the marker overload supports this flag; coordinate moves retain their
+existing behavior. Invalid flags or marker orientation fail before movement changes.
+
 ### Blocking forms
 
 ```text
 moveNpc(instanceId, x, z [, gait [, movementSpeed]]) -> true | false, reason
-moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]]) -> true | false, reason
+moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed [, matchOrientation]]]) -> true | false, reason
 ```
 
 They resume only after collision-constrained locomotion physically arrives or
@@ -629,7 +654,7 @@ last-resort safeguard, each managed script start/resume has a budget of
 
 ```text
 startMoveNpc(instanceId, x, z [, gait [, movementSpeed]]) -> operation | nil, reason
-startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]]) -> operation | nil, reason
+startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed [, matchOrientation]]]) -> operation | nil, reason
 ```
 
 Only one script-owned move may control an NPC at a time. Use `await`,
@@ -652,6 +677,53 @@ Navigation must be ready when the request starts. Rebuilds, map unload, NPC
 deletion, unreachable destinations, capacity limits, and prolonged stalls end
 the operation with a reason. Cancelling an operation also releases any door
 hold owned by that move.
+
+## NPC body looks
+
+```text
+npcLookAtPlayer(npcId, durationMs) -> true | false, reason
+npcLookAtNpc(npcId, targetNpcId, durationMs) -> true | false, reason
+npcLookAtProp(npcId, propId, durationMs) -> true | false, reason
+npcLookAtMarker(npcId, markerId, durationMs) -> true | false, reason
+startNpcLookAtPlayer(npcId, durationMs) -> operation | nil, reason
+startNpcLookAtNpc(npcId, targetNpcId, durationMs) -> operation | nil, reason
+startNpcLookAtProp(npcId, propId, durationMs) -> operation | nil, reason
+startNpcLookAtMarker(npcId, markerId, durationMs) -> operation | nil, reason
+```
+
+These smoothly rotate the NPC's whole body around its vertical axis over a
+positive, finite duration in milliseconds. Blocking forms require a managed
+Lua task; async forms also work from the console and support `await`,
+`operationStatus`, and `cancelOperation`.
+
+Player/NPC/prop positions are tracked during the timed turn. Markers supply a
+fixed position captured at launch: looking at a marker faces its **position**,
+whereas moving with `matchOrientation = true` matches its **orientation**.
+Only horizontal direction matters, so no target-height argument is needed.
+When the turn finishes, its operation completes and the NPC retains the final
+facing until normal AI/patrol behavior or a later command changes it.
+
+```lua
+assert(moveNpc("elin", "intro_marker_3", "walk", nil, true))
+assert(npcLookAtPlayer("elin", 750))
+local turn = assert(startNpcLookAtProp("elin", "office_lamp_1", 1000))
+assert(await(turn))
+```
+
+Look requests are rejected while the actor is moving (including an unfinished
+arrival turn). A new accepted look replaces the previous look on that NPC.
+Accepted movement interrupts a standalone look; rejected requests preserve
+existing actions. Idle patrol turning/timers pause during a look and resume
+afterward; looking does not trigger the “script move stops patrol for session”
+setting. Combat/AI takeover cancels script facing and rejects new look requests
+while AI owns the actor. Death, removal, map reset, and cancellation release
+facing ownership. Missing targets, self-targets, and targets without a horizontal
+direction fail; a disappearing entity target also fails an active turn.
+
+These commands preserve animation playback and scripted animation overrides.
+The existing procedural head-look system continues blending on top of animation,
+relative to the updated body yaw. They do not retarget or disable head-look,
+and they do not add persistent body tracking after the timed turn.
 
 ## Cutscenes and player camera
 

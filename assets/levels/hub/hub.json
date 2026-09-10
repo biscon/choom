@@ -42987,10 +42987,18 @@
       {
         "editorId": 22,
         "id": "intro_marker_3",
-        "x": -1152,
+        "x": -1632,
         "y": 0.0,
-        "z": 976,
-        "orientationDegrees": 180.0
+        "z": 832,
+        "orientationDegrees": 90.0
+      },
+      {
+        "editorId": 23,
+        "id": "intro_marker_4",
+        "x": -1440,
+        "y": 0.0,
+        "z": 832,
+        "orientationDegrees": -90.0
       }
     ],
     "patrols": [
