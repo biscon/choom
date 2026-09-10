@@ -620,12 +620,81 @@ bool ParseGaitAndSpeed(
     return true;
 }
 
+bool ParsePlayerArrivalLook(
+        lua_State* state,
+        int argument,
+        const SectorScriptHost& host,
+        SectorCutsceneLookState& look,
+        std::string& error)
+{
+    if (lua_isnoneornil(state, argument)) return true;
+    if (!lua_istable(state, argument)) {
+        error = "player movement options must be a table";
+        return false;
+    }
+    lua_getfield(state, argument, "lookAtNpc");
+    lua_getfield(state, argument, "lookAtProp");
+    const bool npc = !lua_isnil(state, -2);
+    const bool prop = !lua_isnil(state, -1);
+    if (npc == prop || lua_type(state, npc ? -2 : -1) != LUA_TSTRING) {
+        lua_pop(state, 2);
+        error = "movement options require exactly one string lookAtNpc or lookAtProp";
+        return false;
+    }
+    size_t length = 0;
+    const char* rawId = lua_tolstring(state, npc ? -2 : -1, &length);
+    const std::string_view id{rawId, length};
+    if (id.empty() || id.find('\0') != std::string_view::npos) {
+        lua_pop(state, 2);
+        error = "arrival look target ID must not be empty or contain NUL";
+        return false;
+    }
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    look.entity = npc ? FindNpcEntity(context.world, id)
+            : FindAnyPropEntity(context.world, id);
+    look.targetKind = npc ? SectorCutsceneLookTargetKind::Npc
+            : SectorCutsceneLookTargetKind::Prop;
+    lua_pop(state, 2);
+    if (engine::IsNull(look.entity)) {
+        error = "arrival look target not found";
+        return false;
+    }
+    lua_getfield(state, argument, "turnDurationMs");
+    const bool defaultDuration = lua_isnil(state, -1);
+    const bool validDurationType = defaultDuration || lua_type(state, -1) == LUA_TNUMBER;
+    const double duration = defaultDuration ? 750.0 : lua_tonumber(state, -1);
+    lua_pop(state, 1);
+    lua_getfield(state, argument, "targetHeight");
+    const bool defaultHeight = lua_isnil(state, -1);
+    const bool validHeightType = defaultHeight || lua_type(state, -1) == LUA_TNUMBER;
+    const double height = defaultHeight ? 0.5 : lua_tonumber(state, -1);
+    lua_pop(state, 1);
+    if (!validDurationType || !std::isfinite(duration) || duration <= 0.0
+            || duration / 1000.0 <= 0.0) {
+        error = "turnDurationMs must be a finite positive number";
+        return false;
+    }
+    if (!validHeightType || !std::isfinite(height) || height < 0.0 || height > 1.0) {
+        error = "targetHeight must be between 0 and 1";
+        return false;
+    }
+    if (host.cutscene->look.active) {
+        error = "camera already has an active scripted look";
+        return false;
+    }
+    look.durationSeconds = duration / 1000.0;
+    look.targetHeight = static_cast<float>(height);
+    look.active = true;
+    return true;
+}
+
 bool ParsePlayerMove(
         lua_State* state,
         const SectorScriptHost& host,
         Vector2& destinationXZ,
         NpcMoveGait& gait,
         float& movementSpeed,
+        SectorCutsceneLookState& arrivalLook,
         std::string& error)
 {
     int gaitArgument = 3;
@@ -675,7 +744,7 @@ bool ParsePlayerMove(
             ? overrideSpeed
             : (gait == NpcMoveGait::Run
                     ? host.playerConfig->runSpeed : host.playerConfig->walkSpeed);
-    return true;
+    return ParsePlayerArrivalLook(state, gaitArgument + 2, host, arrivalLook, error);
 }
 
 int PushCutsceneStartError(lua_State* state, bool async, const std::string& error)
@@ -708,9 +777,10 @@ int StartPlayerMove(lua_State* state, bool async)
     Vector2 destination{};
     NpcMoveGait gait = NpcMoveGait::Walk;
     float movementSpeed = 0.0f;
+    SectorCutsceneLookState arrivalLook;
     std::string error;
     if (!ParsePlayerMove(
-            state, host, destination, gait, movementSpeed, error)) {
+            state, host, destination, gait, movementSpeed, arrivalLook, error)) {
         return PushCutsceneStartError(state, async, error);
     }
     uint64_t token = 0;
@@ -742,6 +812,7 @@ int StartPlayerMove(lua_State* state, bool async)
         return PushCutsceneStartError(
                 state, async, "could not allocate player move operation");
     }
+    host.cutscene->playerMove.arrivalLook = arrivalLook;
     BindSectorCutscenePlayerMoveOperation(*host.cutscene, token, operation);
     if (async) {
         engine::ScriptSystemPushOperationUserdata(state, operation);

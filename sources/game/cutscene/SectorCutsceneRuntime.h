@@ -48,6 +48,21 @@ enum class SectorCutsceneTextPosition : int {
     Bottom = 3
 };
 
+struct SectorCutsceneLookState {
+    uint64_t token = 0;
+    engine::ScriptOperationHandle operation{};
+    engine::Entity entity = engine::NullEntity();
+    SectorCutsceneLookTargetKind targetKind =
+            SectorCutsceneLookTargetKind::Npc;
+    float targetHeight = 0.5f;
+    float startYawRadians = 0.0f;
+    float startPitchRadians = 0.0f;
+    float targetYawRadians = 0.0f;
+    double elapsedSeconds = 0.0;
+    double durationSeconds = 0.0;
+    bool active = false;
+};
+
 struct SectorCutscenePlayerMoveState {
     uint64_t token = 0;
     engine::ScriptOperationHandle operation{};
@@ -69,6 +84,10 @@ struct SectorCutscenePlayerMoveState {
     NpcMoveGait gait = NpcMoveGait::Walk;
     float movementSpeed = 0.0f;
     float stallSeconds = 0.0f;
+    float facingVelocity = 0.0f;
+    SectorCutsceneLookState arrivalLook;
+    bool arrivalLookStarted = false;
+    bool arrived = false;
     uint32_t replanCount = 0;
     NpcDoorTraversalPhase doorPhase = NpcDoorTraversalPhase::None;
     int doorId = 0;
@@ -78,20 +97,6 @@ struct SectorCutscenePlayerMoveState {
     float doorWaitSeconds = 0.0f;
     bool holdsDoor = false;
     bool doorReplanRequested = false;
-    bool active = false;
-};
-
-struct SectorCutsceneLookState {
-    uint64_t token = 0;
-    engine::ScriptOperationHandle operation{};
-    engine::Entity entity = engine::NullEntity();
-    SectorCutsceneLookTargetKind targetKind =
-            SectorCutsceneLookTargetKind::Npc;
-    float targetHeight = 0.5f;
-    float startYawRadians = 0.0f;
-    float startPitchRadians = 0.0f;
-    double elapsedSeconds = 0.0;
-    double durationSeconds = 0.0;
     bool active = false;
 };
 
@@ -168,6 +173,23 @@ Vector2 BuildSectorCutscenePlayerMoveDelta(
         const SectorFpsControllerState& player,
         float dt,
         float* outFacingYawRadians);
+// Camera-only backend; arrivalTarget is a resolved world-space visual target.
+// Returns false if an active arrival look cannot aim at that point.
+bool AdvanceSectorCutscenePlayerCamera(
+        SectorCutsceneRuntime& runtime,
+        SectorFpsControllerState& player,
+        Vector3 eyePosition,
+        const Vector3* arrivalTarget,
+        float dt);
+void UpdateSectorCutscenePlayerCamera(
+        SectorCutsceneRuntime& runtime,
+        SectorNavigationWorld& navigation,
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorFpsControllerState& player,
+        const SectorFpsControllerConfig& playerConfig,
+        engine::ScriptRuntime& scripts,
+        float dt);
 void FinishSectorCutscenePlayerMoveFrame(
         SectorCutsceneRuntime& runtime,
         SectorNavigationWorld& navigation,

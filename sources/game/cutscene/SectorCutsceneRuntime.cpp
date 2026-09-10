@@ -56,6 +56,101 @@ float ShortestAngleDelta(float from, float to)
     return std::remainder(to - from, 2.0f * PI);
 }
 
+// Follow the route visually without altering the collision movement delta.
+Vector2 PlayerRouteLookAhead(
+        const SectorCutscenePlayerMoveState& move, Vector3 position)
+{
+    float remaining = std::clamp(move.movementSpeed * 0.35f, 0.25f, 1.0f);
+    Vector2 point{position.x, position.z};
+    for (size_t i = move.nextCorner; i < move.cornerCount; ++i) {
+        const Vector3 corner = i == move.nextCorner
+                && move.doorPhase == NpcDoorTraversalPhase::Crossing
+                ? move.doorLanding : move.corners[i];
+        const Vector2 end{corner.x, corner.z};
+        const float distance = Vector2Distance(point, end);
+        if (distance > remaining) {
+            return Vector2Lerp(point, end, remaining / distance);
+        }
+        point = end;
+        remaining -= distance;
+        if (move.cornerDoorIds[i] > 0) break;
+    }
+    return point;
+}
+
+float PlayerRouteRemainingDistance(
+        const SectorCutscenePlayerMoveState& move, Vector3 position)
+{
+    float remaining = 0.0f;
+    Vector2 point{position.x, position.z};
+    for (size_t i = move.nextCorner; i < move.cornerCount; ++i) {
+        const Vector3 corner = i == move.nextCorner
+                && move.doorPhase == NpcDoorTraversalPhase::Crossing
+                ? move.doorLanding : move.corners[i];
+        const Vector2 end{corner.x, corner.z};
+        remaining += Vector2Distance(point, end);
+        point = end;
+        // Off-mesh door links include the approach and the landing.
+        if (move.cornerDoorIds[i] > 0) {
+            const Vector2 landing{
+                    move.cornerDoorLandings[i].x, move.cornerDoorLandings[i].z};
+            remaining += Vector2Distance(point, landing);
+            point = landing;
+        }
+    }
+    return remaining;
+}
+
+float SmoothPlayerFacing(float yaw, float target, float& velocity, float dt)
+{
+    if (dt <= 0.0f) return yaw;
+    constexpr float omega = 2.0f / 0.2f;
+    constexpr float maximumSpeed = 2.0f * PI;
+    const float delta = ShortestAngleDelta(yaw, target);
+    // Limit the spring displacement, then integrate the critically damped
+    // spring analytically. This avoids Euler instability on long frames.
+    const float change = -std::clamp(delta, -maximumSpeed * 0.2f,
+            maximumSpeed * 0.2f);
+    const float decay = std::exp(-omega * dt);
+    const float nextVelocity = (velocity * (1.0f - omega * dt)
+            - omega * omega * change * dt) * decay;
+    const float step = -change + (change * (1.0f + omega * dt)
+            + velocity * dt) * decay;
+    velocity = std::clamp(nextVelocity, -maximumSpeed, maximumSpeed);
+    if (step * delta >= 0.0f && std::fabs(step) >= std::fabs(delta)) {
+        velocity = 0.0f;
+        return yaw + delta;
+    }
+    return yaw + std::clamp(step, -maximumSpeed * dt, maximumSpeed * dt);
+}
+
+bool ApplyLookPoint(
+        SectorCutsceneLookState& look,
+        SectorFpsControllerState& player,
+        Vector3 eye, Vector3 target, float dt)
+{
+    const Vector3 delta = Vector3Subtract(target, eye);
+    const float horizontal = std::sqrt(delta.x * delta.x + delta.z * delta.z);
+    if (!std::isfinite(horizontal) || !std::isfinite(delta.y)
+            || (horizontal <= MovementEpsilon
+                && std::fabs(delta.y) <= MovementEpsilon)) return false;
+    look.elapsedSeconds += SafeDelta(dt);
+    const float progress = look.durationSeconds <= 0.0 ? 1.0f
+            : static_cast<float>(look.elapsedSeconds / look.durationSeconds);
+    const float eased = Smootherstep(progress);
+    // Unwrap against the previous target so a moving target crossing +/-PI
+    // cannot flip the interpolation to the other side of the camera.
+    look.targetYawRadians += ShortestAngleDelta(
+            look.targetYawRadians, std::atan2(delta.z, delta.x));
+    const float targetPitch = ClampSectorFpsPitch(
+            std::atan2(delta.y, std::max(horizontal, MovementEpsilon)));
+    player.yawRadians = look.startYawRadians
+            + (look.targetYawRadians - look.startYawRadians) * eased;
+    player.pitchRadians = ClampSectorFpsPitch(look.startPitchRadians
+            + (targetPitch - look.startPitchRadians) * eased);
+    return true;
+}
+
 void ReleasePlayerPath(
         SectorCutscenePlayerMoveState& move,
         SectorNavigationWorld* navigation)
@@ -157,6 +252,7 @@ void FailPlayerMove(
     const engine::ScriptOperationHandle operation = move.operation;
     ReleasePlayerPath(move, &navigation);
     move.active = false;
+    move.arrivalLook.active = false;
     if (engine::IsValid(operation)) {
         engine::ScriptSystemFailOperation(
                 scripts, operation, reason != nullptr ? reason : "movement failed");
@@ -172,6 +268,7 @@ void CompletePlayerMove(
     const engine::ScriptOperationHandle operation = move.operation;
     ReleasePlayerPath(move, &navigation);
     move.active = false;
+    move.arrivalLook.active = false;
     if (engine::IsValid(operation)) {
         engine::ScriptSystemCompleteOperation(scripts, operation);
     }
@@ -405,6 +502,7 @@ void CancelSectorCutscenePlayerMove(
     if (!runtime.playerMove.active || runtime.playerMove.token != token) return;
     ReleasePlayerPath(runtime.playerMove, navigation);
     runtime.playerMove.active = false;
+    runtime.playerMove.arrivalLook.active = false;
 }
 
 void PrepareSectorCutscenePlayerDoorTraversal(
@@ -415,7 +513,7 @@ void PrepareSectorCutscenePlayerDoorTraversal(
         float rawDt)
 {
     SectorCutscenePlayerMoveState& move = runtime.playerMove;
-    if (!move.active || move.nextCorner >= move.cornerCount) return;
+    if (!move.active || move.arrived || move.nextCorner >= move.cornerCount) return;
     if (move.doorPhase == NpcDoorTraversalPhase::None
             && move.cornerDoorIds[move.nextCorner] > 0) {
         move.doorPhase = NpcDoorTraversalPhase::Approaching;
@@ -469,7 +567,7 @@ Vector2 BuildSectorCutscenePlayerMoveDelta(
     if (outFacingYawRadians != nullptr) *outFacingYawRadians = player.yawRadians;
     SectorCutscenePlayerMoveState& move = runtime.playerMove;
     const float dt = static_cast<float>(SafeDelta(rawDt));
-    if (!move.active || dt <= 0.0f || move.nextCorner >= move.cornerCount
+    if (!move.active || move.arrived || dt <= 0.0f || move.nextCorner >= move.cornerCount
             || move.doorPhase == NpcDoorTraversalPhase::WaitingForClearance) {
         return {};
     }
@@ -482,9 +580,80 @@ Vector2 BuildSectorCutscenePlayerMoveDelta(
     if (distance <= MovementEpsilon) return {};
     const Vector2 direction = Vector2Scale(delta, 1.0f / distance);
     if (outFacingYawRadians != nullptr) {
-        *outFacingYawRadians = std::atan2(direction.y, direction.x);
+        const Vector2 lookPoint = PlayerRouteLookAhead(move, player.feetPosition);
+        const Vector2 lookDelta = Vector2Subtract(lookPoint,
+                Vector2{player.feetPosition.x, player.feetPosition.z});
+        if (Vector2Length(lookDelta) > MovementEpsilon) {
+            *outFacingYawRadians = std::atan2(lookDelta.y, lookDelta.x);
+        }
     }
     return Vector2Scale(direction, std::min(distance, move.movementSpeed * dt));
+}
+
+bool AdvanceSectorCutscenePlayerCamera(
+        SectorCutsceneRuntime& runtime,
+        SectorFpsControllerState& player,
+        Vector3 eyePosition,
+        const Vector3* arrivalTarget,
+        float rawDt)
+{
+    SectorCutscenePlayerMoveState& move = runtime.playerMove;
+    if (!move.active) return true;
+    const float dt = static_cast<float>(SafeDelta(rawDt));
+    if (move.arrivalLook.active) {
+        if (arrivalTarget == nullptr) return false;
+        if (!move.arrivalLookStarted
+                && move.doorPhase != NpcDoorTraversalPhase::WaitingForClearance
+                && (move.arrived || PlayerRouteRemainingDistance(move,
+                        player.feetPosition) <= move.movementSpeed
+                                * move.arrivalLook.durationSeconds + ArrivalTolerance)) {
+            move.arrivalLookStarted = true;
+            move.arrivalLook.startYawRadians = player.yawRadians;
+            move.arrivalLook.targetYawRadians = player.yawRadians;
+            move.arrivalLook.startPitchRadians = player.pitchRadians;
+            move.facingVelocity = 0.0f;
+        }
+        if (move.arrivalLookStarted) {
+            return ApplyLookPoint(move.arrivalLook, player, eyePosition,
+                    *arrivalTarget, dt);
+        }
+    }
+    if (runtime.look.active || move.arrived) {
+        move.facingVelocity = 0.0f;
+        return true;
+    }
+    float targetYaw = player.yawRadians;
+    BuildSectorCutscenePlayerMoveDelta(runtime, player, dt, &targetYaw);
+    player.yawRadians = SmoothPlayerFacing(
+            player.yawRadians, targetYaw, move.facingVelocity, dt);
+    return true;
+}
+
+void UpdateSectorCutscenePlayerCamera(
+        SectorCutsceneRuntime& runtime,
+        SectorNavigationWorld& navigation,
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorFpsControllerState& player,
+        const SectorFpsControllerConfig& playerConfig,
+        engine::ScriptRuntime& scripts,
+        float dt)
+{
+    if (!runtime.playerMove.active) return;
+    Vector3 target{};
+    const bool hasTarget = runtime.playerMove.arrivalLook.active;
+    if (hasTarget && !ResolveLookTargetPoint(
+            world, assets, runtime.playerMove.arrivalLook, target)) {
+        FailPlayerMove(runtime, navigation, scripts,
+                "arrival look target was removed or is not ready");
+        return;
+    }
+    if (!AdvanceSectorCutscenePlayerCamera(runtime, player,
+            SectorFpsControllerEyePosition(player, playerConfig),
+            hasTarget ? &target : nullptr, dt)) {
+        FailPlayerMove(runtime, navigation, scripts,
+                "arrival look target coincides with the camera");
+    }
 }
 
 void FinishSectorCutscenePlayerMoveFrame(
@@ -498,6 +667,12 @@ void FinishSectorCutscenePlayerMoveFrame(
 {
     SectorCutscenePlayerMoveState& move = runtime.playerMove;
     if (!move.active) return;
+    if (move.arrived) {
+        if (move.arrivalLook.elapsedSeconds >= move.arrivalLook.durationSeconds) {
+            CompletePlayerMove(runtime, navigation, scripts);
+        }
+        return;
+    }
     if (navigation.State() != SectorNavigationState::Ready
             || !navigation.IsPathRecordValid(move.pathHandle)) {
         FailPlayerMove(runtime, navigation, scripts,
@@ -555,7 +730,12 @@ void FinishSectorCutscenePlayerMoveFrame(
     if (move.nextCorner >= move.cornerCount
             && std::sqrt(destinationDx * destinationDx
                     + destinationDz * destinationDz) <= ArrivalTolerance) {
-        CompletePlayerMove(runtime, navigation, scripts);
+        move.arrived = true;
+        ReleasePlayerPath(move, &navigation);
+        if (!move.arrivalLook.active || (move.arrivalLookStarted
+                && move.arrivalLook.elapsedSeconds >= move.arrivalLook.durationSeconds)) {
+            CompletePlayerMove(runtime, navigation, scripts);
+        }
         return;
     }
     const Vector2 current{player.feetPosition.x, player.feetPosition.z};
@@ -588,7 +768,8 @@ bool BeginSectorCutsceneLook(
         uint64_t& outToken,
         std::string& error)
 {
-    if (runtime.look.active) {
+    if (runtime.look.active || (runtime.playerMove.active
+            && runtime.playerMove.arrivalLook.active)) {
         error = "camera already has an active scripted look";
         return false;
     }

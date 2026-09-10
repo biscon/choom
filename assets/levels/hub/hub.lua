@@ -15,17 +15,24 @@ end
 function intro_trigger_1()
     log("trigger_1")
     assert(enableControls(false))
-    movePlayer("default", "walk")
-    startSay("Who is there?!!...")
+    say("Who is there?!!...")
     assert(startPlayNpcAnimation("elin", "Waving"))
-    --startLookAtNpc("elin", 2000, 0.7)
-    movePlayer("intro_marker_1", "walk", 2.0)
-    lookAtNpc("elin", 750, 0.7)
-    delay(1000)
-    say("Yes finally another person!!. I've been walking these tunnels for hours.")
-    movePlayer("intro_marker_2", "walk", 2.0)
-    lookAtNpc("elin", 1000, 0.45)
+    movePlayer("intro_marker_1", "walk", 2.0, {
+        lookAtNpc = "elin",
+        turnDurationMs = 750,
+        targetHeight = 0.7,
+    })
+    delay(2000)
+    startPlayNpcAnimation("elin", "Excited_2")
+    say("Yes finally another person!!. Come closer.")
+    movePlayer("intro_marker_2", "walk", 2.0, {
+        lookAtNpc = "elin",
+        turnDurationMs = 1000,
+        targetHeight = 0.45,
+    })
     lookAtNpc("elin", 1500, 0.7)
+    startPlayNpcAnimation("elin", "Talking_2")
+    say("I've been walking these dark tunnels forever. You're are the first person I met so far.")
 
     assert(enableControls(true))
 end

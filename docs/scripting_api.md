@@ -51,10 +51,10 @@ ranges, return values, behavior, and failure details.
   `startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]])`.
 - **[Player controls and movement](#cutscenes-and-player-camera):**
   `enableControls(enabled)`,
-  `movePlayer(x, z [, gait [, movementSpeed]])`,
-  `movePlayer(levelMarkerId [, gait [, movementSpeed]])`,
-  `startMovePlayer(x, z [, gait [, movementSpeed]])`,
-  `startMovePlayer(levelMarkerId [, gait [, movementSpeed]])`.
+  `movePlayer(x, z [, gait [, movementSpeed [, options]]])`,
+  `movePlayer(levelMarkerId [, gait [, movementSpeed [, options]]])`,
+  `startMovePlayer(x, z [, gait [, movementSpeed [, options]]])`,
+  `startMovePlayer(levelMarkerId [, gait [, movementSpeed [, options]]])`.
 - **[Camera looks](#animated-camera-looks):**
   `lookAtNpc(instanceId, durationMs [, targetHeight])`,
   `startLookAtNpc(instanceId, durationMs [, targetHeight])`,
@@ -698,16 +698,59 @@ player's configured walk/run speed is used. `movementSpeed`, when supplied,
 must be from `0.1` through `200` world units per second.
 
 ```text
-movePlayer(x, z [, gait [, movementSpeed]]) -> true | false, reason
-movePlayer(levelMarkerId [, gait [, movementSpeed]]) -> true | false, reason
-startMovePlayer(x, z [, gait [, movementSpeed]]) -> operation | nil, reason
-startMovePlayer(levelMarkerId [, gait [, movementSpeed]]) -> operation | nil, reason
+movePlayer(x, z [, gait [, movementSpeed [, options]]]) -> true | false, reason
+movePlayer(levelMarkerId [, gait [, movementSpeed [, options]]]) -> true | false, reason
+startMovePlayer(x, z [, gait [, movementSpeed [, options]]]) -> operation | nil, reason
+startMovePlayer(levelMarkerId [, gait [, movementSpeed [, options]]]) -> operation | nil, reason
 ```
 
-Blocking forms resume on physical arrival or failure. Async forms work with
-`await`, `operationStatus`, and `cancelOperation`. Only one scripted player
-move may be active. The camera turns toward the route while moving unless a
-scripted look is active.
+Without options, blocking forms resume on physical arrival or failure. Async
+forms work with `await`, `operationStatus`, and `cancelOperation`. Only one
+scripted player move may be active. The camera smoothly turns toward a point
+ahead on the route, anticipating corners unless a scripted look is active.
+This changes camera facing only; walking speed and collision movement are unchanged.
+
+The optional final `options` table attaches an arrival look to the movement:
+
+```lua
+assert(movePlayer("intro_marker_1", "walk", 2.0, {
+    lookAtNpc = "elin",
+    turnDurationMs = 750,
+    targetHeight = 0.7,
+}))
+
+-- Use nil placeholders to retain the default gait and speed.
+local movement = assert(startMovePlayer("hall_corner", nil, nil, {
+    lookAtProp = "wall_switch",
+}))
+assert(await(movement))
+```
+
+Options require exactly one `lookAtNpc` or `lookAtProp` instance ID.
+`turnDurationMs` defaults to `750` and must be finite and positive.
+`targetHeight` defaults to `0.5`, must be within `0..1`, and uses the same visual
+bounds as the standalone look commands.
+
+The turn starts when the remaining route distance corresponds to roughly
+`turnDurationMs` of walking. It eases yaw and pitch toward the live target,
+overlapping the end of the walk. A short or zero-distance walk starts turning
+immediately and retains the requested turn duration after physical arrival.
+The operation succeeds only after both arrival and the initial turn finish;
+there is no walking deceleration. An ordinary `movePlayer` followed by a
+blocking `lookAtNpc` still executes those two actions sequentially.
+
+Before the turn starts, timing follows the current route after replanning and
+does not trigger while waiting for door clearance. Once started, the turn
+continues through movement delays. If it finishes before the walk, the camera
+keeps following the target until arrival.
+
+An attached arrival look reserves camera-look ownership for the whole move.
+Starting a competing look, or attaching a look while another look is active,
+fails without replacing the existing operation. Moves without arrival options
+can still run alongside standalone look commands. Cancelling the movement,
+re-enabling controls, task cleanup, or level unload releases its attached look
+together with movement. A removed or unavailable target, or a target coinciding
+with the camera, fails the combined operation and stops its movement.
 
 ### Animated camera looks
 

@@ -241,7 +241,8 @@ struct NpcScriptFixture {
         navigation.Shutdown();
     }
 
-    void Update(float dt)
+    // Supply a generated visual target to test camera math without GPU assets.
+    void Update(float dt, const Vector3* arrivalTarget = nullptr)
     {
         navigation.UpdateDynamicObstacles(
                 objects.dynamicModelColliders,
@@ -265,6 +266,15 @@ struct NpcScriptFixture {
                 cutscene, playerState, dt, nullptr);
         playerState.feetPosition.x += delta.x;
         playerState.feetPosition.z += delta.y;
+        if (arrivalTarget != nullptr) {
+            assert(game::AdvanceSectorCutscenePlayerCamera(cutscene, playerState,
+                    game::SectorFpsControllerEyePosition(playerState, playerConfig),
+                    arrivalTarget, dt));
+        } else {
+            game::UpdateSectorCutscenePlayerCamera(cutscene, navigation,
+                    context.world, context.assets, playerState, playerConfig,
+                    runtime, dt);
+        }
         game::FinishSectorCutscenePlayerMoveFrame(
                 cutscene,
                 navigation,
@@ -625,6 +635,239 @@ end
     assert(fixture.persistent.strings.at("player_move_reason").empty());
     assert(std::fabs(fixture.playerState.feetPosition.x - 14.0f) < 0.11f);
     assert(std::fabs(fixture.playerState.feetPosition.z - 8.0f) < 0.11f);
+}
+
+void PlayerRouteCameraAnticipatesAndSmoothsWithoutChangingMovement()
+{
+    game::SectorCutsceneRuntime runtime;
+    auto& move = runtime.playerMove;
+    move.active = true;
+    move.movementSpeed = 2.0f;
+    move.cornerCount = 2;
+    move.corners[0] = {1.0f, 0.0f, 0.0f};
+    move.corners[1] = {1.0f, 0.0f, 5.0f};
+    game::SectorFpsControllerState player;
+    player.feetPosition = {0.8f, 0.0f, 0.0f};
+    player.yawRadians = 0.0f;
+    float facing = 0.0f;
+    const Vector2 movement = game::BuildSectorCutscenePlayerMoveDelta(
+            runtime, player, 0.025f, &facing);
+    assert(std::fabs(movement.x - 0.05f) < 0.0001f && movement.y == 0.0f);
+    assert(facing > 0.5f); // Camera anticipates the corner; feet still go straight.
+    assert(game::AdvanceSectorCutscenePlayerCamera(
+            runtime, player, {}, nullptr, 0.025f));
+    assert(player.yawRadians > 0.0f && player.yawRadians < facing);
+
+    move.cornerDoorIds[0] = 42;
+    game::BuildSectorCutscenePlayerMoveDelta(runtime, player, 0.025f, &facing);
+    assert(facing == 0.0f); // Do not anticipate beyond the pending door.
+    move.cornerDoorIds[0] = 0;
+    runtime.look.active = true;
+    const float beforeLook = player.yawRadians;
+    game::AdvanceSectorCutscenePlayerCamera(runtime, player, {}, nullptr, 0.1f);
+    assert(player.yawRadians == beforeLook && move.facingVelocity == 0.0f);
+    runtime.look.active = false;
+
+    auto turn = [](int frames, float dt, float start, Vector3 destination) {
+        game::SectorCutsceneRuntime test;
+        test.playerMove.active = true;
+        test.playerMove.movementSpeed = 2.0f;
+        test.playerMove.cornerCount = 1;
+        test.playerMove.corners[0] = destination;
+        game::SectorFpsControllerState camera;
+        camera.yawRadians = start;
+        const float target = start + std::remainder(
+                std::atan2(destination.z, destination.x) - start, 2.0f * PI);
+        for (int i = 0; i < frames; ++i) {
+            const float previous = camera.yawRadians;
+            game::AdvanceSectorCutscenePlayerCamera(test, camera, {}, nullptr, dt);
+            assert(std::isfinite(camera.yawRadians));
+            assert(std::fabs(camera.yawRadians - previous) <= 2.0f * PI * dt + 0.00001f);
+            assert(camera.yawRadians >= std::min(start, target) - 0.00001f);
+            assert(camera.yawRadians <= std::max(start, target) + 0.00001f);
+        }
+        return camera.yawRadians;
+    };
+    const Vector3 slightTurn{5.0f, 0.0f, 2.0f};
+    assert(std::fabs(turn(30, 1.0f / 30.0f, 0.0f, slightTurn)
+            - turn(144, 1.0f / 144.0f, 0.0f, slightTurn)) < 0.0001f);
+    const float wrapped = turn(60, 1.0f / 60.0f, PI - 0.1f, {-5.0f, 0.0f, -0.5f});
+    assert(wrapped > PI && wrapped < PI + 0.11f);
+    turn(1, 2.0f, 0.0f, {-5.0f, 0.0f, 0.1f}); // Long frame remains stable.
+    const float unchanged = player.yawRadians;
+    game::AdvanceSectorCutscenePlayerCamera(runtime, player, {}, nullptr, -1.0f);
+    game::AdvanceSectorCutscenePlayerCamera(runtime, player, {}, nullptr, NAN);
+    assert(player.yawRadians == unchanged);
+}
+
+void PlayerArrivalLookBindingsValidateAndReserveOwnership()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+function init()
+    local invalid = {
+        false, {}, {lookAtNpc="missing"}, {lookAtNpc=""},
+        {lookAtNpc="script_guard", lookAtProp="anything"},
+        {lookAtNpc="script_guard", turnDurationMs=0},
+        {lookAtNpc="script_guard", turnDurationMs=math.huge},
+        {lookAtNpc="script_guard", turnDurationMs="750"},
+        {lookAtNpc="script_guard", targetHeight=-1},
+        {lookAtNpc="script_guard", targetHeight=0/0},
+    }
+    for _, options in ipairs(invalid) do
+        local op, reason = startMovePlayer("run_target", nil, nil, options)
+        assert(op == nil and #reason > 0)
+    end
+    wave = assert(startMovePlayer("run_target", nil, nil, {lookAtNpc="script_guard"}))
+    local look, reason = startLookAtNpc("script_guard", 100)
+    assert(look == nil and #reason > 0)
+    assert(cancelOperation(wave))
+    look = assert(startLookAtNpc("script_guard", 100))
+    local move = startMovePlayer(4, 8, "walk", 2, {lookAtNpc="script_guard"})
+    assert(move == nil)
+    -- Ordinary movement can still coexist with a separate look.
+    move = assert(startMovePlayer(4, 8, "walk", 2))
+    assert(cancelOperation(move))
+    assert(cancelOperation(look))
+    wave = assert(startMovePlayer("run_target", "walk", 2, {lookAtNpc="script_guard"}))
+end
+)");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent,
+            fixture.host, fixture.files));
+    assert(fixture.cutscene.playerMove.active);
+    assert(fixture.cutscene.playerMove.arrivalLook.active);
+    assert(fixture.cutscene.playerMove.arrivalLook.durationSeconds == 0.75);
+    assert(fixture.cutscene.playerMove.arrivalLook.targetHeight == 0.5f);
+    // The production target resolver fails safely for an unavailable model.
+    fixture.Update(0.025f);
+    assert(!fixture.cutscene.playerMove.active);
+    assert(!fixture.cutscene.playerMove.arrivalLook.active);
+    assert(game::IsNull(fixture.cutscene.playerMove.pathHandle));
+}
+
+void PlayerArrivalLooksOverlapAndCompleteWithTheirMove()
+{
+    for (const bool shortWalk : {false, true}) {
+        NpcScriptFixture fixture;
+        fixture.files.Write(shortWalk ? R"(
+function init()
+    local ok, reason = movePlayer(2.3, 8, "walk", 2, {
+        lookAtNpc="script_guard", turnDurationMs=750, targetHeight=0.7})
+    assert(ok, reason)
+    setPersistentBool("done", true)
+end
+)" : R"(
+function init()
+    local op = assert(startMovePlayer("run_target", "walk", 2, {
+        lookAtNpc="script_guard", turnDurationMs=750, targetHeight=0.7}))
+    assert(await(op))
+    setPersistentBool("done", true)
+end
+)");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent,
+                fixture.host, fixture.files));
+        Vector3 target{14.0f, 2.0f, 12.0f};
+        bool turnedWhileWalking = false;
+        bool waitedAfterArrival = false;
+        float startedAt = 0.0f;
+        for (int frame = 0; frame < 400 && !fixture.runtime.initFinished; ++frame) {
+            const bool wasStarted = fixture.cutscene.playerMove.arrivalLookStarted;
+            fixture.Update(0.025f, &target);
+            const auto& move = fixture.cutscene.playerMove;
+            if (!wasStarted && move.arrivalLookStarted) startedAt = fixture.playerState.feetPosition.x;
+            turnedWhileWalking |= move.arrivalLookStarted && !move.arrived
+                    && fixture.playerState.yawRadians > 0.001f;
+            waitedAfterArrival |= move.arrived && move.active;
+        }
+        assert(fixture.runtime.initFinished && fixture.persistent.bools.at("done"));
+        assert(turnedWhileWalking);
+        if (shortWalk) assert(waitedAfterArrival && startedAt < 2.1f);
+        else assert(startedAt > 12.0f && startedAt < 13.0f);
+        const Vector3 eye = game::SectorFpsControllerEyePosition(
+                fixture.playerState, fixture.playerConfig);
+        const float expectedYaw = std::atan2(target.z - eye.z, target.x - eye.x);
+        assert(std::fabs(std::remainder(fixture.playerState.yawRadians - expectedYaw,
+                2.0f * PI)) < 0.0001f);
+        assert(!fixture.cutscene.playerMove.active);
+        assert(!fixture.cutscene.playerMove.arrivalLook.active);
+        assert(game::IsNull(fixture.cutscene.playerMove.pathHandle));
+    }
+}
+
+void PlayerArrivalLookHandlesDelaysMovingTargetsAndZeroDistance()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+function init()
+    local op = assert(startMovePlayer(2, 8, "walk", 2, {lookAtNpc="script_guard"}))
+    assert(await(op))
+    setPersistentBool("done", true)
+end
+)");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent,
+            fixture.host, fixture.files));
+    Vector3 target{2.0f, 2.0f, 12.0f};
+    fixture.Update(0.025f, &target);
+    assert(fixture.cutscene.playerMove.arrived && fixture.cutscene.playerMove.active);
+    for (int i = 0; i < 40 && !fixture.runtime.initFinished; ++i) fixture.Update(0.025f, &target);
+    assert(fixture.runtime.initFinished && fixture.persistent.bools.at("done"));
+
+    game::SectorCutsceneRuntime runtime;
+    auto& move = runtime.playerMove;
+    move.active = true;
+    move.movementSpeed = 2.0f;
+    move.cornerCount = 2;
+    move.corners[0] = {0.0f, 0.0f, 5.0f};
+    move.corners[1] = {0.5f, 0.0f, 0.0f};
+    move.arrivalLook.active = true;
+    move.arrivalLook.durationSeconds = 0.75;
+    game::SectorFpsControllerState player;
+    game::AdvanceSectorCutscenePlayerCamera(runtime, player, {}, &target, 0.025f);
+    assert(!move.arrivalLookStarted); // Nearby destination, long route.
+    move.cornerCount = 1; // Simulate replacement by a shorter replanned route.
+    move.corners[0] = {0.5f, 0.0f, 0.0f};
+    move.doorPhase = game::NpcDoorTraversalPhase::WaitingForClearance;
+    game::AdvanceSectorCutscenePlayerCamera(runtime, player, {}, &target, 0.25f);
+    assert(!move.arrivalLookStarted);
+    move.doorPhase = game::NpcDoorTraversalPhase::None;
+    game::AdvanceSectorCutscenePlayerCamera(runtime, player, {}, &target, 0.25f);
+    assert(move.arrivalLookStarted);
+    move.doorPhase = game::NpcDoorTraversalPhase::WaitingForClearance;
+    game::AdvanceSectorCutscenePlayerCamera(runtime, player, {}, &target, 0.5f);
+    assert(move.arrivalLook.elapsedSeconds == 0.75);
+    target = {-2.0f, 1.0f, 4.0f};
+    game::AdvanceSectorCutscenePlayerCamera(runtime, player, {}, &target, 0.025f);
+    assert(std::fabs(player.yawRadians - std::atan2(target.z, target.x)) < 0.0001f);
+    assert(!game::AdvanceSectorCutscenePlayerCamera(runtime, player, target, &target, 0.025f));
+}
+
+void PlayerArrivalLookCancellationAndRemovalReleaseBothActions()
+{
+    for (int mode = 0; mode < 3; ++mode) {
+        NpcScriptFixture fixture;
+        fixture.files.Write(R"(
+function init()
+    wave = assert(startMovePlayer("run_target", "walk", 2, {lookAtNpc="script_guard"}))
+end
+function stop()
+    assert(cancelOperation(wave))
+end
+)");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent,
+                fixture.host, fixture.files));
+        if (mode == 0) {
+            assert(engine::ScriptSystemExecuteConsole(fixture.runtime, "stop()").success);
+        } else if (mode == 1) {
+            fixture.context.world.DestroyLater(fixture.npc);
+            fixture.context.world.FlushDestroyedEntities();
+            fixture.Update(0.025f);
+        } else {
+            engine::ScriptSystemShutdownForMap(fixture.context, fixture.runtime);
+        }
+        assert(!fixture.cutscene.playerMove.active);
+        assert(!fixture.cutscene.playerMove.arrivalLook.active);
+        assert(game::IsNull(fixture.cutscene.playerMove.pathHandle));
+    }
 }
 
 void KillingMovingNpcStopsRunawayPatrolWithoutFreezing()
@@ -1737,6 +1980,11 @@ void RunSectorScriptBindingTests()
     BlockingNpcMoveCompletesAfterPhysicalArrival();
     BackgroundNpcPatrolYieldsWhenNavigationIsPrepared();
     AsyncPlayerMoveUsesNavigationMarkerAndSpeedOverride();
+    PlayerRouteCameraAnticipatesAndSmoothsWithoutChangingMovement();
+    PlayerArrivalLookBindingsValidateAndReserveOwnership();
+    PlayerArrivalLooksOverlapAndCompleteWithTheirMove();
+    PlayerArrivalLookHandlesDelaysMovingTargetsAndZeroDistance();
+    PlayerArrivalLookCancellationAndRemovalReleaseBothActions();
     KillingMovingNpcStopsRunawayPatrolWithoutFreezing();
     BlockingNpcMoveReplansAfterDynamicObstacleChange();
     NpcMoveLevelMarkerOverloadsResolvePositionOnly();

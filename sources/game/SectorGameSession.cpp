@@ -1702,7 +1702,8 @@ void SectorGameSession::Update(
                 SectorFpsInputUsesRunSpeed(input));
     }
 
-    if (cutscene.look.active) input.mouseLookEnabled = false;
+    if (cutscene.look.active || (cutscene.playerMove.active
+            && cutscene.playerMove.arrivalLook.active)) input.mouseLookEnabled = false;
 
     const float previousVisualEyeY = scene.Renderer().RendererPose().position.y;
     const Vector2 previousPositionXZ{
@@ -1710,7 +1711,6 @@ void SectorGameSession::Update(
             controller.fpsControllerState.feetPosition.z};
     input.externalHorizontalMovementDelta = Vector2Scale(
             playerKnockbackVelocity, std::max(0.0f, dt));
-    float scriptedFacingYaw = controller.fpsControllerState.yawRadians;
     if (cutscene.playerMove.active) {
         input.externalHorizontalMovementDelta = Vector2Add(
                 input.externalHorizontalMovementDelta,
@@ -1718,7 +1718,7 @@ void SectorGameSession::Update(
                         cutscene,
                         controller.fpsControllerState,
                         dt,
-                        &scriptedFacingYaw));
+                        nullptr));
     }
     UpdateSectorEditorGameplayPreview(
             context.world,
@@ -1767,6 +1767,15 @@ void SectorGameSession::Update(
                 controller.liquidMovement.exitingWater,
                 swimControlHeld);
     }
+    UpdateSectorCutscenePlayerCamera(
+            cutscene,
+            scene.Navigation(),
+            context.world,
+            context.assets,
+            controller.fpsControllerState,
+            controller.fpsControllerConfig,
+            scripts,
+            dt);
     FinishSectorCutscenePlayerMoveFrame(
             cutscene,
             scene.Navigation(),
@@ -1775,14 +1784,6 @@ void SectorGameSession::Update(
             previousPositionXZ,
             scripts,
             dt);
-    if (cutscene.playerMove.active && !cutscene.look.active) {
-        const float maximumTurn = 2.0f * PI * std::max(0.0f, dt);
-        const float deltaYaw = std::remainder(
-                scriptedFacingYaw - controller.fpsControllerState.yawRadians,
-                2.0f * PI);
-        controller.fpsControllerState.yawRadians += std::clamp(
-                deltaYaw, -maximumTurn, maximumTurn);
-    }
     UpdateSectorCutsceneLook(
             cutscene,
             context.world,
