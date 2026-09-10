@@ -26,6 +26,7 @@ struct SectorCutsceneRuntime;
 struct SectorFpsControllerConfig;
 struct SectorFpsControllerState;
 struct SectorTopologyMap;
+struct NpcScriptAnimationClip;
 
 struct SectorScriptDoorMove {
     uint64_t token = 0;
@@ -62,6 +63,13 @@ struct SectorScriptNpcMoveDiagnostics {
     uint64_t capacityWarnings = 0;
     std::array<char, 64> lastInstanceId{};
     std::array<char, 192> lastOutcome{};
+};
+
+struct SectorScriptNpcAnimation {
+    uint64_t token = 0;
+    engine::Entity entity = engine::NullEntity();
+    engine::ScriptOperationHandle operation{};
+    bool active = false;
 };
 
 struct SectorScriptDoorPermission {
@@ -101,13 +109,24 @@ struct SectorScriptHost {
     engine::ScriptRuntime* scripts = nullptr;
     std::vector<SectorScriptDoorMove> doorMoves;
     std::vector<SectorScriptNpcMove> npcMoves;
+    std::vector<SectorScriptNpcAnimation> npcAnimations;
     std::vector<SectorScriptTriggerState> triggers;
     SectorScriptNpcMoveDiagnostics npcMoveDiagnostics;
     SectorScriptDoorPermission doorPermission;
     uint64_t nextDoorMoveToken = 1;
     uint64_t nextNpcMoveToken = 1;
+    uint64_t nextNpcAnimationToken = 1;
     bool dynamicLightsDirty = false;
 };
+
+// Starts an already validated one-shot on a resolved NPC animation component.
+engine::ScriptOperationHandle BeginSectorScriptNpcAnimation(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        engine::Entity entity,
+        const NpcScriptAnimationClip& clip,
+        engine::ScriptOperationLaunchStyle launchStyle,
+        engine::ScriptTaskHandle task);
 
 void InitializeSectorScriptHost(
         SectorScriptHost& host,

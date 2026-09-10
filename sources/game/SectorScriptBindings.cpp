@@ -1299,6 +1299,160 @@ int PushBindingError(lua_State* state, const std::string& error)
     return 2;
 }
 
+const char* NpcAnimationControlError(
+        engine::World& world, SectorScriptHost& host, engine::Entity entity)
+{
+    const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(entity);
+    if (npc.actionLockedByAi
+            || (world.Has<NpcAiState>(entity)
+                    && world.Get<NpcAiState>(entity).awareness != NpcAwarenessState::Unaware)) {
+        return "player detected; AI took control";
+    }
+    if (world.Has<NpcCombatState>(entity)) {
+        const NpcCombatState& combat = world.Get<NpcCombatState>(entity);
+        if (combat.dead) return "NPC is dead";
+        if (combat.hurtAnimationRequested || combat.hurtAnimationPlaying
+                || combat.staggerRemainingSeconds > 0.0f) {
+            return "NPC animation is controlled by combat";
+        }
+    }
+    if (host.npcNavigation != nullptr
+            && GetNpcMoveStatus(*host.npcNavigation, npc.instanceId).phase
+                    == NpcMovePhase::FollowingPath) {
+        return "NPC animation is controlled by movement";
+    }
+    return nullptr;
+}
+
+void CancelScriptNpcAnimation(
+        engine::EngineContext& context, void* hostContext, uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host == nullptr) return;
+    for (SectorScriptNpcAnimation& playback : host->npcAnimations) {
+        if (!playback.active || playback.token != token) continue;
+        playback.active = false;
+        if (!context.world.IsAlive(playback.entity)
+                || !context.world.Has<NpcRuntimeInstance>(playback.entity)
+                || !context.world.Has<NpcAnimationState>(playback.entity)
+                || !context.world.Has<engine::AnimatedModelAnimator>(playback.entity)) return;
+        NpcAnimationState& animation = context.world.Get<NpcAnimationState>(playback.entity);
+        if (animation.scriptRequestId != token) return;
+        CancelNpcScriptAnimation(animation,
+                context.world.Get<engine::AnimatedModelAnimator>(playback.entity));
+        return;
+    }
+}
+
+void ReplaceScriptNpcAnimation(
+        engine::EngineContext& context, SectorScriptHost& host, engine::Entity entity)
+{
+    for (SectorScriptNpcAnimation& playback : host.npcAnimations) {
+        if (!playback.active || playback.entity != entity) continue;
+        const NpcAnimationState& animation = context.world.Get<NpcAnimationState>(entity);
+        // Completion wins if the old clip ended before this request was issued.
+        if (animation.scriptRequestId == playback.token
+                && animation.scriptStatus == NpcScriptAnimationStatus::Completed) {
+            engine::ScriptSystemCompleteOperation(*host.scripts, playback.operation);
+        } else {
+            // The new selection supplies the blend destination; avoid a transient
+            // return to idle in the cancellation callback.
+            playback.active = false;
+            engine::ScriptSystemCancelOperation(context, *host.scripts,
+                    playback.operation, "NPC animation was replaced");
+        }
+        playback.active = false;
+    }
+}
+
+int LuaNpcAnimation(lua_State* state, bool loop, bool async)
+{
+    const int originalTop = lua_gettop(state);
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    const engine::ScriptTaskHandle task = !loop && !async
+            ? engine::ScriptSystemCurrentTaskFromLua(state)
+            : engine::ScriptSystemTryCurrentTaskFromLua(state);
+    size_t idLength = 0;
+    size_t nameLength = 0;
+    const char* id = luaL_checklstring(state, 1, &idLength);
+    const char* name = luaL_checklstring(state, 2, &nameLength);
+    const bool explicitValue = !lua_isnoneornil(state, 3);
+    const double value = explicitValue ? luaL_checknumber(state, 3) : (loop ? 1.0 : 0.0);
+    if (!std::isfinite(value) || (explicitValue && value <= 0.0)) {
+        return PushNpcMoveStartError(state, async,
+                "animation speed/duration must be finite and positive");
+    }
+    if (idLength == 0 || nameLength == 0
+            || std::string_view{id, idLength}.find('\0') != std::string_view::npos
+            || std::string_view{name, nameLength}.find('\0') != std::string_view::npos) {
+        return PushNpcMoveStartError(state, async, "NPC ID and animation name must not be empty or contain NUL");
+    }
+    if (scripts.phase != engine::ScriptRuntimePhase::Loading
+            && scripts.phase != engine::ScriptRuntimePhase::Active) {
+        return PushNpcMoveStartError(state, async, "script runtime is shutting down");
+    }
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    SectorScriptHost& host = HostFromLua(state);
+    engine::World& world = context.world;
+    const engine::Entity entity = FindNpcEntity(world, std::string_view{id, idLength});
+    if (engine::IsNull(entity) || !world.Has<NpcAnimationState>(entity)
+            || !world.Has<engine::AnimatedModelInstance>(entity)
+            || !world.Has<engine::AnimatedModelAnimator>(entity)) {
+        return PushNpcMoveStartError(state, async, "animated NPC was not found");
+    }
+    if (const char* error = NpcAnimationControlError(world, host, entity)) {
+        return PushNpcMoveStartError(state, async, error);
+    }
+    const engine::AnimatedModelInstance& instance = world.Get<engine::AnimatedModelInstance>(entity);
+    const engine::ModelAsset* asset = context.assets.GetModelAsset(instance.model);
+    if (asset == nullptr || !instance.poseReady || instance.poseFailed) {
+        return PushNpcMoveStartError(state, async, "NPC model is not ready or failed");
+    }
+    NpcScriptAnimationClip clip;
+    std::string error;
+    if (!ResolveNpcScriptAnimationClip(*asset, name, loop, value, clip, error)) {
+        return PushNpcMoveStartError(state, async, error);
+    }
+    UpdateNpcAnimationState(world, context.assets,
+            host.runtimeObjects->npcDefinitionCatalog, entity);
+    NpcAnimationState& animation = world.Get<NpcAnimationState>(entity);
+    if (!animation.resolved) {
+        return PushNpcMoveStartError(state, async, "NPC animation definition is not ready");
+    }
+    if (!loop && animation.scriptLoopIndex == engine::InvalidModelAnimationIndex) {
+        const uint32_t idleIndex = animation.animationIndices[static_cast<size_t>(NpcAction::Idle)];
+        NpcScriptAnimationClip idle;
+        if (idleIndex >= static_cast<uint32_t>(asset->animationCount)
+                || !ResolveNpcScriptAnimationClip(*asset, asset->animations[idleIndex].name,
+                        true, animation.animationSpeeds[static_cast<size_t>(NpcAction::Idle)], idle, error)) {
+            return PushNpcMoveStartError(state, async, "NPC has no usable idle return animation");
+        }
+    }
+    if (loop) {
+        ReplaceScriptNpcAnimation(context, host, entity);
+        SetNpcScriptAnimation(animation, world.Get<engine::AnimatedModelAnimator>(entity),
+                clip.index, clip.speed, true, clip.durationSeconds, host.nextNpcAnimationToken++);
+        lua_pushboolean(state, 1);
+        return 1;
+    }
+    const engine::ScriptOperationHandle operation = BeginSectorScriptNpcAnimation(
+            context, host, entity, clip,
+            async ? engine::ScriptOperationLaunchStyle::Async
+                    : engine::ScriptOperationLaunchStyle::Blocking, task);
+    if (!engine::IsValid(operation)) {
+        return PushNpcMoveStartError(state, async, "could not allocate NPC animation operation");
+    }
+    if (async) {
+        engine::ScriptSystemPushOperationUserdata(state, operation);
+        return 1;
+    }
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
+int LuaSetNpcAnimation(lua_State* state) { return LuaNpcAnimation(state, true, false); }
+int LuaPlayNpcAnimation(lua_State* state) { return LuaNpcAnimation(state, false, false); }
+int LuaStartPlayNpcAnimation(lua_State* state) { return LuaNpcAnimation(state, false, true); }
+
 bool ResolvePropAnimation(
         lua_State* state,
         int nameArgument,
@@ -1857,6 +2011,42 @@ void Register(lua_State* state, const char* name, lua_CFunction function)
 
 } // namespace
 
+engine::ScriptOperationHandle BeginSectorScriptNpcAnimation(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        engine::Entity entity,
+        const NpcScriptAnimationClip& clip,
+        engine::ScriptOperationLaunchStyle launchStyle,
+        engine::ScriptTaskHandle task)
+{
+    if (host.scripts == nullptr || !context.world.IsAlive(entity)
+            || !context.world.Has<NpcRuntimeInstance>(entity)
+            || !context.world.Has<NpcAnimationState>(entity)
+            || !context.world.Has<engine::AnimatedModelAnimator>(entity)) return {};
+    const uint64_t token = host.nextNpcAnimationToken++;
+    const engine::ScriptOperationHandle operation = engine::ScriptSystemCreateOperation(
+            *host.scripts, launchStyle, task,
+            "playNpcAnimation:" + context.world.Get<NpcRuntimeInstance>(entity).instanceId,
+            token, CancelScriptNpcAnimation);
+    if (!engine::IsValid(operation)) return {};
+    ReplaceScriptNpcAnimation(context, host, entity);
+    SetNpcScriptAnimation(context.world.Get<NpcAnimationState>(entity),
+            context.world.Get<engine::AnimatedModelAnimator>(entity),
+            clip.index, clip.speed, false, clip.durationSeconds, token);
+    auto slot = std::find_if(host.npcAnimations.begin(), host.npcAnimations.end(),
+            [](const SectorScriptNpcAnimation& playback) { return !playback.active; });
+    const SectorScriptNpcAnimation playback{token, entity, operation, true};
+    if (slot != host.npcAnimations.end()) {
+        *slot = playback;
+    } else {
+        if (host.npcAnimations.size() == host.npcAnimations.capacity()) {
+            TraceLog(LOG_WARNING, "[Lua WARNING] NPC animation capacity exceeded; runtime allocation may occur");
+        }
+        host.npcAnimations.push_back(playback);
+    }
+    return operation;
+}
+
 void InitializeSectorScriptHost(
         SectorScriptHost& host,
         SectorRuntimeObjectState& runtimeObjects,
@@ -1887,6 +2077,8 @@ void InitializeSectorScriptHost(
     host.npcMoves.clear();
     host.npcMoves.reserve(navigation != nullptr
             ? navigation->Capacities().agentCapacity : 64);
+    host.npcAnimations.clear();
+    host.npcAnimations.reserve(host.npcMoves.capacity());
     host.npcMoveDiagnostics = {};
     host.doorPermission = {};
     host.dynamicLightsDirty = false;
@@ -1917,6 +2109,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.scripts = nullptr;
     host.doorMoves.clear();
     host.npcMoves.clear();
+    host.npcAnimations.clear();
     host.triggers.clear();
     host.doorPermission = {};
     host.dynamicLightsDirty = false;
@@ -1940,6 +2133,9 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
     Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);
+    Register(state, "setNpcAnimation", LuaSetNpcAnimation);
+    Register(state, "playNpcAnimation", LuaPlayNpcAnimation);
+    Register(state, "startPlayNpcAnimation", LuaStartPlayNpcAnimation);
     Register(state, "moveNpc", LuaMoveNpc);
     Register(state, "startMoveNpc", LuaStartMoveNpc);
     Register(state, "enableControls", LuaEnableControls);
@@ -2111,6 +2307,55 @@ void UpdateSectorScriptOperations(
                         return !move.active;
                     }),
             host.doorMoves.end());
+
+    // Animation operations remain usable even without a navigation world.
+    for (SectorScriptNpcAnimation& playback : host.npcAnimations) {
+        if (!playback.active) continue;
+        if (!context.world.IsAlive(playback.entity)
+                || !context.world.Has<NpcRuntimeInstance>(playback.entity)
+                || !context.world.Has<NpcAnimationState>(playback.entity)
+                || !context.world.Has<engine::AnimatedModelAnimator>(playback.entity)) {
+            engine::ScriptSystemFailOperation(*host.scripts, playback.operation, "NPC was removed");
+            playback.active = false;
+            continue;
+        }
+        NpcAnimationState& animation = context.world.Get<NpcAnimationState>(playback.entity);
+        if (animation.scriptRequestId == playback.token
+                && animation.scriptStatus == NpcScriptAnimationStatus::Playing) {
+            if (NpcAnimationControlError(context.world, host, playback.entity) != nullptr) {
+                const bool moving = host.npcNavigation != nullptr
+                        && GetNpcMoveStatus(*host.npcNavigation,
+                                context.world.Get<NpcRuntimeInstance>(playback.entity).instanceId).phase
+                                == NpcMovePhase::FollowingPath;
+                ClearNpcScriptAnimation(animation, moving
+                        ? NpcScriptAnimationCancelReason::Movement
+                        : NpcScriptAnimationCancelReason::Combat);
+            } else {
+                UpdateNpcScriptAnimation(animation,
+                        context.world.Get<engine::AnimatedModelAnimator>(playback.entity));
+            }
+        }
+        if (animation.scriptRequestId == playback.token
+                && animation.scriptStatus == NpcScriptAnimationStatus::Completed) {
+            engine::ScriptSystemCompleteOperation(*host.scripts, playback.operation);
+            playback.active = false;
+        } else if (animation.scriptRequestId != playback.token
+                || animation.scriptStatus != NpcScriptAnimationStatus::Playing) {
+            const char* reason = "NPC animation was replaced or reset";
+            if (animation.scriptRequestId == playback.token) {
+                switch (animation.scriptCancelReason) {
+                    case NpcScriptAnimationCancelReason::Movement:
+                        reason = "NPC animation interrupted by movement"; break;
+                    case NpcScriptAnimationCancelReason::Combat:
+                        reason = "NPC animation interrupted by combat or AI"; break;
+                    case NpcScriptAnimationCancelReason::Cancelled:
+                        reason = "NPC animation was cancelled"; break;
+                }
+            }
+            engine::ScriptSystemCancelOperation(context, *host.scripts, playback.operation, reason);
+            playback.active = false;
+        }
+    }
 
     if (host.navigation == nullptr || host.npcNavigation == nullptr) return;
     for (SectorScriptNpcMove& move : host.npcMoves) {

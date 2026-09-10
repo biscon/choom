@@ -133,6 +133,14 @@ struct NpcBoneImpactState {
     bool classificationWarningPrinted = false;
 };
 
+enum class NpcScriptAnimationStatus : uint8_t {
+    None, Playing, Completed, Cancelled
+};
+
+enum class NpcScriptAnimationCancelReason : uint8_t {
+    Cancelled, Movement, Combat
+};
+
 struct NpcAnimationState {
     std::array<uint32_t, kNpcActionCount> animationIndices{
             UINT32_MAX,
@@ -149,6 +157,15 @@ struct NpcAnimationState {
     uint8_t missingAnimationMask = 0;
     bool resolved = false;
     bool hasPendingAction = false;
+    uint32_t scriptLoopIndex = UINT32_MAX;
+    float scriptLoopSpeed = 1.0f;
+    uint32_t scriptAnimationIndex = UINT32_MAX;
+    uint64_t scriptRequestId = 0;
+    NpcScriptAnimationStatus scriptStatus = NpcScriptAnimationStatus::None;
+    NpcScriptAnimationCancelReason scriptCancelReason =
+            NpcScriptAnimationCancelReason::Cancelled;
+    bool forceSemanticAnimation = false;
+    bool scriptReturnPending = false;
 };
 
 struct NpcHeadLookState {

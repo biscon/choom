@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 
 namespace game {
 namespace {
@@ -300,6 +301,14 @@ void ResolveNpcAnimations(
     NpcCombatState* combat = world.Has<NpcCombatState>(entity)
             ? &world.Get<NpcCombatState>(entity)
             : nullptr;
+    const bool combatControlsAnimation = npc.actionLockedByAi
+            || (world.Has<NpcAiState>(entity)
+                    && world.Get<NpcAiState>(entity).awareness != NpcAwarenessState::Unaware)
+            || (combat != nullptr && (combat->dead || combat->hurtAnimationRequested
+                    || combat->hurtAnimationPlaying || combat->staggerRemainingSeconds > 0.0f));
+    if (combatControlsAnimation) {
+        ClearNpcScriptAnimation(state, NpcScriptAnimationCancelReason::Combat);
+    }
     if (combat != nullptr && combat->dead) {
         const size_t deathIndex = ActionIndex(NpcAction::Death);
         if (combat->deathAnimationRequested) {
@@ -367,6 +376,7 @@ void ResolveNpcAnimations(
                     animator, hurtIndex)) return;
         combat->hurtAnimationPlaying = false;
     }
+    if (UpdateNpcScriptAnimation(state, animator)) return;
     ApplyNpcSemanticAnimation(state, animator, npc.action);
 }
 
@@ -684,13 +694,176 @@ void UpdateNpcWaypointProgressTracking(
     }
 }
 
+bool ResolveNpcScriptAnimationClip(
+        const engine::ModelAsset& asset,
+        const char* name,
+        bool loop,
+        double playbackValue,
+        NpcScriptAnimationClip& clip,
+        std::string& error)
+{
+    clip = {};
+    if (!std::isfinite(playbackValue) || playbackValue < 0.0
+            || (loop && playbackValue == 0.0)) {
+        error = "animation speed/duration must be finite and positive";
+        return false;
+    }
+    clip.index = engine::FindModelAnimationIndex(asset, name);
+    if (clip.index == engine::InvalidModelAnimationIndex) {
+        error = "NPC animation was not found";
+        return false;
+    }
+    const ModelAnimation& animation = asset.animations[clip.index];
+    if (animation.keyframeCount <= 0 || animation.keyframePoses == nullptr
+            || animation.boneCount <= 0 || !IsModelAnimationValid(asset.model, animation)) {
+        error = "NPC animation has no usable skeletal keyframes";
+        return false;
+    }
+    if (!loop && animation.keyframeCount < 2) {
+        error = "one-shot NPC animation must have at least two keyframes";
+        return false;
+    }
+    const double nativeSeconds = static_cast<double>(animation.keyframeCount - 1)
+            / engine::GltfAnimationFramesPerSecond;
+    const double seconds = loop ? 0.0
+            : (playbackValue > 0.0 ? playbackValue / 1000.0 : nativeSeconds);
+    const double speed = loop ? playbackValue : nativeSeconds / seconds;
+    clip.speed = static_cast<float>(speed);
+    clip.durationSeconds = static_cast<float>(seconds);
+    if (!std::isfinite(clip.speed) || clip.speed <= 0.0f
+            || !std::isfinite(clip.durationSeconds)
+            || (!loop && clip.durationSeconds <= 0.0f)
+            || speed * engine::GltfAnimationFramesPerSecond
+                    > std::numeric_limits<float>::max()) {
+        error = "NPC animation speed/duration is outside the supported range";
+        return false;
+    }
+    return true;
+}
+
+void ClearNpcScriptAnimation(
+        NpcAnimationState& state,
+        NpcScriptAnimationCancelReason reason)
+{
+    if (state.scriptStatus != NpcScriptAnimationStatus::Playing
+            && state.scriptLoopIndex == engine::InvalidModelAnimationIndex) return;
+    if (state.scriptStatus == NpcScriptAnimationStatus::Playing) {
+        state.scriptStatus = NpcScriptAnimationStatus::Cancelled;
+        state.scriptCancelReason = reason;
+    }
+    state.scriptAnimationIndex = engine::InvalidModelAnimationIndex;
+    state.scriptLoopIndex = engine::InvalidModelAnimationIndex;
+    state.scriptLoopSpeed = 1.0f;
+    state.hasPendingAction = false;
+    state.forceSemanticAnimation = true;
+    state.scriptReturnPending = true;
+}
+
+static void RestoreNpcScriptLoop(
+        NpcAnimationState& state,
+        engine::AnimatedModelAnimator& animator)
+{
+    const bool customLoop = state.scriptLoopIndex != engine::InvalidModelAnimationIndex;
+    const uint32_t index = customLoop ? state.scriptLoopIndex
+            : state.animationIndices[ActionIndex(NpcAction::Idle)];
+    state.hasPendingAction = false;
+    state.forceSemanticAnimation = !customLoop;
+    state.scriptReturnPending = !customLoop;
+    if (customLoop) {
+        engine::SetAnimatedModelAnimation(animator, index, state.blendSeconds, true);
+        engine::SetAnimatedModelAnimationLoop(animator, index, true);
+        animator.speed = state.scriptLoopSpeed;
+    } else {
+        ApplyNpcSemanticAnimation(state, animator, NpcAction::Idle);
+    }
+}
+
+void SetNpcScriptAnimation(
+        NpcAnimationState& state,
+        engine::AnimatedModelAnimator& animator,
+        uint32_t animationIndex,
+        float speed,
+        bool loop,
+        float durationSeconds,
+        uint64_t requestId)
+{
+    const bool sameLoop = loop && state.scriptLoopIndex == animationIndex
+            && state.scriptStatus != NpcScriptAnimationStatus::Playing;
+    state.scriptRequestId = requestId;
+    state.scriptStatus = loop ? NpcScriptAnimationStatus::None
+            : NpcScriptAnimationStatus::Playing;
+    state.scriptAnimationIndex = loop ? engine::InvalidModelAnimationIndex : animationIndex;
+    state.hasPendingAction = false;
+    state.forceSemanticAnimation = false;
+    state.scriptReturnPending = false;
+    if (loop) {
+        state.scriptLoopIndex = animationIndex;
+        state.scriptLoopSpeed = speed;
+    }
+    if (!sameLoop) {
+        const float blend = !loop && durationSeconds > 0.0f
+                ? std::min(state.blendSeconds, durationSeconds) : state.blendSeconds;
+        engine::SetAnimatedModelAnimation(animator, animationIndex, blend, true);
+    }
+    engine::SetAnimatedModelAnimationLoop(animator, animationIndex, loop);
+    animator.speed = speed;
+    animator.paused = false;
+    animator.reverse = false;
+}
+
+void CancelNpcScriptAnimation(
+        NpcAnimationState& state,
+        engine::AnimatedModelAnimator& animator)
+{
+    if (state.scriptStatus != NpcScriptAnimationStatus::Playing) return;
+    state.scriptStatus = NpcScriptAnimationStatus::Cancelled;
+    state.scriptCancelReason = NpcScriptAnimationCancelReason::Cancelled;
+    state.scriptAnimationIndex = engine::InvalidModelAnimationIndex;
+    RestoreNpcScriptLoop(state, animator);
+}
+
+bool HasNpcScriptAnimationOverride(const NpcAnimationState& state)
+{
+    return state.scriptStatus == NpcScriptAnimationStatus::Playing
+            || state.scriptLoopIndex != engine::InvalidModelAnimationIndex
+            || state.scriptReturnPending;
+}
+
+bool UpdateNpcScriptAnimation(
+        NpcAnimationState& state,
+        engine::AnimatedModelAnimator& animator)
+{
+    if (state.scriptReturnPending && !state.forceSemanticAnimation
+            && !engine::IsAnimatedModelTransitioning(animator)) {
+        state.scriptReturnPending = false;
+    }
+    if (state.scriptStatus == NpcScriptAnimationStatus::Playing) {
+        if (!engine::IsAnimatedModelAnimationFinished(animator, state.scriptAnimationIndex)) {
+            return true;
+        }
+        state.scriptStatus = NpcScriptAnimationStatus::Completed;
+        state.scriptAnimationIndex = engine::InvalidModelAnimationIndex;
+        RestoreNpcScriptLoop(state, animator);
+    }
+    return state.scriptLoopIndex != engine::InvalidModelAnimationIndex;
+}
+
+void UpdateNpcAnimationState(
+        engine::World& world,
+        engine::AssetManager& assets,
+        const NpcDefinitionCatalog& definitions,
+        engine::Entity entity)
+{
+    ResolveNpcAnimations(world, assets, definitions, entity);
+}
+
 NpcAnimationApplyResult ApplyNpcSemanticAnimation(
         NpcAnimationState& state,
         engine::AnimatedModelAnimator& animator,
         NpcAction requested)
 {
     if (!state.resolved) return NpcAnimationApplyResult::Unchanged;
-    if (engine::IsAnimatedModelTransitioning(animator)) {
+    if (!state.forceSemanticAnimation && engine::IsAnimatedModelTransitioning(animator)) {
         if (requested != state.appliedAction) {
             state.pendingAction = requested;
             state.hasPendingAction = true;
@@ -703,7 +876,7 @@ NpcAnimationApplyResult ApplyNpcSemanticAnimation(
         requested = state.pendingAction;
         state.hasPendingAction = false;
     }
-    if (requested == state.appliedAction) {
+    if (!state.forceSemanticAnimation && requested == state.appliedAction) {
         return NpcAnimationApplyResult::Unchanged;
     }
     const size_t requestedIndex = ActionIndex(requested);
@@ -715,7 +888,8 @@ NpcAnimationApplyResult ApplyNpcSemanticAnimation(
             animator,
             animationIndex,
             state.blendSeconds,
-            false);
+            state.forceSemanticAnimation);
+    state.forceSemanticAnimation = false;
     animator.speed = state.animationSpeeds[requestedIndex];
     const bool loop = requested != NpcAction::Attack
             && requested != NpcAction::Hurt
@@ -924,6 +1098,10 @@ static NpcMoveRequestResult RequestNpcMoveRecord(
                 SectorNavigationQueryStatus::CapacityExceeded,
                 "navigation path record capacity was exceeded");
     }
+    if (world.Has<NpcAnimationState>(record->entity)) {
+        ClearNpcScriptAnimation(world.Get<NpcAnimationState>(record->entity),
+                NpcScriptAnimationCancelReason::Movement);
+    }
     record->phase = NpcMovePhase::FollowingPath;
     record->gait = gait;
     record->movementSpeedOverride = std::isfinite(movementSpeedOverride)
@@ -1073,6 +1251,10 @@ NpcMoveRequestResult RetargetNpcAiMove(
         return FailRequest(
                 SectorNavigationQueryStatus::CapacityExceeded,
                 "navigation path record capacity was exceeded");
+    }
+    if (world.Has<NpcAnimationState>(record->entity)) {
+        ClearNpcScriptAnimation(world.Get<NpcAnimationState>(record->entity),
+                NpcScriptAnimationCancelReason::Movement);
     }
     record->phase = NpcMovePhase::FollowingPath;
     record->gait = gait;

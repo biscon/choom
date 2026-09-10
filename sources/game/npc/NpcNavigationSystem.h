@@ -11,6 +11,7 @@ namespace engine {
 class AssetManager;
 class World;
 struct AnimatedModelAnimator;
+struct ModelAsset;
 }
 
 namespace game {
@@ -54,6 +55,46 @@ NpcAnimationApplyResult ApplyNpcSemanticAnimation(
         NpcAnimationState& state,
         engine::AnimatedModelAnimator& animator,
         NpcAction requested);
+
+// Script playback uses resolved skeletal clip indices, never per-frame names.
+struct NpcScriptAnimationClip {
+    uint32_t index = UINT32_MAX;
+    float speed = 1.0f;
+    float durationSeconds = 0.0f;
+};
+
+// playbackValue is loop speed, or one-shot milliseconds (zero means native).
+bool ResolveNpcScriptAnimationClip(
+        const engine::ModelAsset& asset,
+        const char* name,
+        bool loop,
+        double playbackValue,
+        NpcScriptAnimationClip& clip,
+        std::string& error);
+
+void SetNpcScriptAnimation(
+        NpcAnimationState& state,
+        engine::AnimatedModelAnimator& animator,
+        uint32_t animationIndex,
+        float speed,
+        bool loop,
+        float durationSeconds,
+        uint64_t requestId);
+void ClearNpcScriptAnimation(
+        NpcAnimationState& state,
+        NpcScriptAnimationCancelReason reason);
+void CancelNpcScriptAnimation(
+        NpcAnimationState& state,
+        engine::AnimatedModelAnimator& animator);
+bool HasNpcScriptAnimationOverride(const NpcAnimationState& state);
+bool UpdateNpcScriptAnimation(
+        NpcAnimationState& state,
+        engine::AnimatedModelAnimator& animator);
+void UpdateNpcAnimationState(
+        engine::World& world,
+        engine::AssetManager& assets,
+        const NpcDefinitionCatalog& definitions,
+        engine::Entity entity);
 
 void UpdateNpcAnimationStateSystem(
         engine::World& world,

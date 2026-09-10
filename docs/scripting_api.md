@@ -40,6 +40,10 @@ ranges, return values, behavior, and failure details.
   `setDynamicLightColor(lightId, red, green, blue)`.
 - **[Actor health](#actor-health):** `setPlayerHealth(health)`,
   `setNpcHealth(instanceId, health)`.
+- **[NPC animation](#npc-animation):**
+  `setNpcAnimation(instanceId, animationName [, speed])`,
+  `playNpcAnimation(instanceId, animationName [, durationMs])`,
+  `startPlayNpcAnimation(instanceId, animationName [, durationMs])`.
 - **[NPC movement](#npc-movement):**
   `moveNpc(instanceId, x, z [, gait [, movementSpeed]])`,
   `moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]])`,
@@ -502,6 +506,72 @@ Dead NPCs cannot be revived by setting a positive value.
 ```lua
 local ok, reason = setNpcHealth("guard_1", 25)
 ```
+
+## NPC animation
+
+NPC instance IDs and animation names are exact and case-sensitive. Use the model
+clip names displayed in the NPC editor's action animation selectors, such as
+`"Idle"` or `"Waving"`. A clip does not need to be assigned to a predefined action.
+These commands animate the skeleton only; they do not move the NPC.
+
+### `setNpcAnimation(instanceId, animationName [, speed]) -> true | false, reason`
+
+Selects a persistent looping animation and returns immediately. There is no
+`startSetNpcAnimation`. Optional `speed` is a positive, finite playback multiplier
+and defaults to `1.0`. Transitions use the NPC's authored animation blend time.
+Setting the already-active loop changes its speed without restarting it.
+
+```lua
+assert(setNpcAnimation("elin", "Talking", 0.8))
+```
+
+### `playNpcAnimation(instanceId, animationName [, durationMs]) -> true | false, reason`
+
+Plays the clip once from its beginning and waits for playback to finish. Then
+it blends back into the selected loop at that loop's speed. If no loop was set,
+it returns to the NPC's authored idle clip and authored idle speed.
+
+Omitting `durationMs` plays at native speed (`1.0`). A positive, finite duration
+scales playback so the first-to-last-frame span takes that many milliseconds.
+The incoming blend runs within this time and is capped at the clip's playback
+duration. Completion begins the return blend and releases the waiter; the return
+blend adds no waiting time. Completion is observed on a frame update.
+
+```lua
+assert(playNpcAnimation("elin", "Waving", 3000))
+-- Elin is now blending back into her selected loop or authored idle.
+```
+
+### `startPlayNpcAnimation(instanceId, animationName [, durationMs]) -> operation | nil, reason`
+
+Starts the same one-shot without waiting. Use `await`, `operationStatus`, or
+`cancelOperation` with its operation. Like other async operations, it can outlive
+the task that launched it. Blocking calls require a managed script task; the
+setter and async starter can also be used from the console.
+
+```lua
+local wave = assert(startPlayNpcAnimation("elin", "Waving"))
+assert(movePlayer("intro_marker_1", "walk", 2.0))
+assert(await(wave))
+```
+
+A new one-shot interrupts the previous one-shot and restarts from the beginning,
+while retaining the selected return loop. `setNpcAnimation` interrupts a one-shot
+and blends immediately into the new loop. Replaced operations become cancelled
+with a reason. Cancelling a one-shot explicitly returns to the selected loop or
+authored idle. Invalid requests leave the current playback unchanged.
+
+Animation requests fail while an NPC is moving or controlled by AI/combat.
+Every accepted NPC movement request clears the scripted loop and interrupts any
+one-shot, so the engine supplies locomotion and idle animations again. This
+applies to both coordinate and marker movement commands. Rejected movement
+requests leave scripted animation unchanged. AI takeover, hurt, and death also
+clear animation overrides and cancel pending one-shots.
+
+Missing NPCs, unavailable models, unknown clips, invalid speeds/durations, and
+unusable animation data return a failure and reason. One-shots require at least
+two skeletal keyframes and a usable return animation. Animation overrides are
+transient and are not saved; map unload cancels pending operations.
 
 ## NPC movement
 

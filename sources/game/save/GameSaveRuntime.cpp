@@ -276,7 +276,12 @@ GameSaveLevelState CaptureGameSaveLevelState(
             if (world.Has<SectorDynamicModel>(entity)) {
                 npc.opacity = world.Get<SectorDynamicModel>(entity).opacity;
             }
-            if (world.Has<engine::AnimatedModelAnimator>(entity)
+            // Script clips and their outgoing blends are transient cutscene
+            // state. Reload living NPCs with their normal engine animation.
+            const bool scriptAnimation = !combat.dead
+                    && world.Has<NpcAnimationState>(entity)
+                    && HasNpcScriptAnimationOverride(world.Get<NpcAnimationState>(entity));
+            if (!scriptAnimation && world.Has<engine::AnimatedModelAnimator>(entity)
                     && world.Has<engine::AnimatedModelInstance>(entity)) {
                 npc.hasAnimator = true;
                 npc.animator = CaptureAnimator(world, assets, entity);

@@ -1,6 +1,8 @@
 #include "engine/EngineContext.h"
 #include "engine/scripting/ScriptConsole.h"
 #include "engine/scripting/ScriptSystem.h"
+#include "engine/systems/AnimatedModelSystem.h"
+#include "lua.hpp"
 #include "game/Health.h"
 #include "game/SectorScriptBindings.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
@@ -275,6 +277,191 @@ struct NpcScriptFixture {
         game::UpdateSectorScriptCutsceneControlOwnership(context, host);
     }
 };
+
+void NpcAnimationBindingsRejectInvalidRequestsWithoutMutation()
+{
+    NpcScriptFixture fixture;
+    fixture.context.world.Add(fixture.npc, engine::AnimatedModelInstance{});
+    fixture.context.world.Add(fixture.npc, engine::AnimatedModelAnimator{});
+    auto& animation = fixture.context.world.Get<game::NpcAnimationState>(fixture.npc);
+    animation.resolved = true;
+    animation.scriptLoopIndex = 1;
+    animation.scriptLoopSpeed = 0.7f;
+    fixture.files.Write(R"(
+function init()
+    assert(type(setNpcAnimation) == "function")
+    assert(type(playNpcAnimation) == "function")
+    assert(type(startPlayNpcAnimation) == "function")
+    assert(startSetNpcAnimation == nil)
+    local ok, reason = setNpcAnimation("missing", "Waving")
+    assert(ok == false and reason:find("not found"))
+    ok, reason = playNpcAnimation("missing", "Waving")
+    assert(ok == false and reason:find("not found"))
+    local operation
+    operation, reason = startPlayNpcAnimation("missing", "Waving")
+    assert(operation == nil and reason:find("not found"))
+    ok, reason = setNpcAnimation("script_guard", "Waving")
+    assert(ok == false and reason:find("not ready"))
+    for _, value in ipairs({0, -1, math.huge, 0/0}) do
+        ok, reason = setNpcAnimation("script_guard", "Waving", value)
+        assert(ok == false and reason:find("positive"))
+        operation, reason = startPlayNpcAnimation("script_guard", "Waving", value)
+        assert(operation == nil and reason:find("positive"))
+    end
+    assert(not pcall(setNpcAnimation, {}, "Idle"))
+    assert(not pcall(startPlayNpcAnimation, "script_guard", {}))
+    setPersistentBool("animation_validation_passed", true)
+end
+)");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    assert(fixture.persistent.bools.at("animation_validation_passed"));
+    assert(animation.scriptLoopIndex == 1 && animation.scriptLoopSpeed == 0.7f);
+    assert(fixture.host.npcAnimations.empty());
+    const auto console = engine::ScriptSystemExecuteConsole(fixture.runtime,
+            "playNpcAnimation('script_guard', 'Waving')");
+    assert(!console.success);
+    assert(animation.scriptLoopIndex == 1);
+}
+
+void NpcAnimationOperationsCompleteReplaceCancelAndUnload()
+{
+    NpcScriptFixture fixture;
+    fixture.context.world.Add(fixture.npc, engine::AnimatedModelAnimator{});
+    auto& animation = fixture.context.world.Get<game::NpcAnimationState>(fixture.npc);
+    auto& animator = fixture.context.world.Get<engine::AnimatedModelAnimator>(fixture.npc);
+    animation.resolved = true;
+    animation.animationIndices[0] = 0;
+    animation.animationSpeeds[0] = 0.8f;
+    animator.animationIndex = 0;
+    fixture.files.Write(R"(
+function init() end
+function waitForWave()
+    local ok, reason = await(wave)
+    setPersistentBool("wave_done", true)
+    setPersistentBool("wave_ok", ok)
+    setPersistentString("wave_reason", reason or "")
+end
+function cancelWave()
+    assert(cancelOperation(wave))
+    local ok, reason = await(wave)
+    assert(not ok and reason ~= nil)
+end
+)");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto start = [&]() {
+        const auto operation = game::BeginSectorScriptNpcAnimation(fixture.context,
+                fixture.host, fixture.npc, {2, 1.0f, 1.0f},
+                engine::ScriptOperationLaunchStyle::Async, {});
+        assert(engine::IsValid(operation));
+        engine::ScriptSystemPushOperationUserdata(fixture.runtime.vm, operation);
+        lua_setglobal(fixture.runtime.vm, "wave");
+        return operation;
+    };
+    const auto status = [&](engine::ScriptOperationHandle operation) {
+        return fixture.runtime.operations[operation.index].state;
+    };
+    game::SetNpcScriptAnimation(animation, animator, 1, 0.6f, true, 0, 99);
+    auto operation = start();
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "waitForWave").result
+            == engine::ScriptCallResult::Started);
+    assert(!fixture.persistent.bools.count("wave_done"));
+    // Completion must not depend on navigation being installed in the script host.
+    fixture.host.navigation = nullptr;
+    fixture.host.npcNavigation = nullptr;
+    animator.animationIndex = 2;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    animator.finished = true;
+    animator.playing = false;
+    game::UpdateSectorScriptOperations(fixture.context, fixture.host);
+    assert(status(operation) == engine::ScriptOperationState::Succeeded);
+    assert(animator.targetAnimationIndex == 1 && animator.speed == 0.6f);
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.016f);
+    assert(fixture.persistent.bools.at("wave_done") && fixture.persistent.bools.at("wave_ok"));
+
+    operation = start();
+    const auto oldCancel = fixture.runtime.operations[operation.index].cancelBackend;
+    const uint64_t oldToken = fixture.runtime.operations[operation.index].backendToken;
+    auto replacement = start();
+    assert(status(operation) == engine::ScriptOperationState::Cancelled);
+    assert(status(replacement) == engine::ScriptOperationState::Pending);
+    const uint64_t newToken = animation.scriptRequestId;
+    oldCancel(fixture.context, &fixture.host, oldToken);
+    assert(animation.scriptRequestId == newToken
+            && animation.scriptStatus == game::NpcScriptAnimationStatus::Playing);
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "cancelWave").result
+            == engine::ScriptCallResult::Completed);
+    assert(animation.scriptLoopIndex == 1 && animator.speed == 0.6f);
+
+    operation = start();
+    fixture.context.world.Get<game::NpcCombatState>(fixture.npc).hurtAnimationRequested = true;
+    game::UpdateSectorScriptOperations(fixture.context, fixture.host);
+    assert(status(operation) == engine::ScriptOperationState::Cancelled);
+    assert(animation.scriptLoopIndex == engine::InvalidModelAnimationIndex);
+    fixture.context.world.Get<game::NpcCombatState>(fixture.npc).hurtAnimationRequested = false;
+
+    operation = start();
+    engine::ScriptSystemShutdownForMap(fixture.context, fixture.runtime);
+    assert(animation.scriptStatus == game::NpcScriptAnimationStatus::Cancelled);
+    assert(std::none_of(fixture.host.npcAnimations.begin(), fixture.host.npcAnimations.end(),
+            [](const game::SectorScriptNpcAnimation& playback) { return playback.active; }));
+}
+
+void NpcMovementClearsAnimationOverridesOnlyWhenAccepted()
+{
+    for (const std::string destination : {"12.0, 8.0", "\"run_target\""}) {
+        NpcScriptFixture fixture;
+        fixture.context.world.Add(fixture.npc, engine::AnimatedModelAnimator{});
+        fixture.context.world.Add(fixture.npc, engine::AnimatedModelInstance{});
+        auto& animation = fixture.context.world.Get<game::NpcAnimationState>(fixture.npc);
+        auto& animator = fixture.context.world.Get<engine::AnimatedModelAnimator>(fixture.npc);
+        animation.resolved = true;
+        animation.animationIndices = {0, 1, 1, 2, 2, 2};
+        animator.animationIndex = 0;
+        fixture.files.Write("function init() end\nfunction moveGuard()\n"
+                "  assert(startMoveNpc('script_guard', " + destination + "))\n"
+                "  local ok, reason = setNpcAnimation('script_guard', 'Waving')\n"
+                "  assert(not ok and reason:find('movement'))\nend\n");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        game::SetNpcScriptAnimation(animation, animator, 1, 0.7f, true, 0, 42);
+        const auto wave = game::BeginSectorScriptNpcAnimation(fixture.context, fixture.host,
+                fixture.npc, {2, 1.0f, 1.0f}, engine::ScriptOperationLaunchStyle::Async, {});
+        const auto rejected = game::RequestNpcMove(fixture.context.world, fixture.navigation,
+                fixture.objects.objectSectorLookupWorld, fixture.npcNavigation,
+                "script_guard", {-1000.0f, -1000.0f}, game::NpcMoveGait::Walk);
+        assert(!rejected.accepted && animation.scriptLoopIndex == 1
+                && animation.scriptStatus == game::NpcScriptAnimationStatus::Playing);
+        assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "moveGuard").result
+                == engine::ScriptCallResult::Completed);
+        assert(animation.scriptLoopIndex == engine::InvalidModelAnimationIndex
+                && animation.scriptStatus == game::NpcScriptAnimationStatus::Cancelled);
+        game::UpdateSectorScriptOperations(fixture.context, fixture.host);
+        assert(fixture.runtime.operations[wave.index].state == engine::ScriptOperationState::Cancelled);
+        for (int i = 0; i < 500 && game::GetNpcMoveStatus(fixture.npcNavigation,
+                "script_guard").phase == game::NpcMovePhase::FollowingPath; ++i) {
+            fixture.Update(0.05f);
+        }
+        assert(game::GetNpcMoveStatus(fixture.npcNavigation, "script_guard").phase
+                == game::NpcMovePhase::Arrived);
+        assert(animation.scriptLoopIndex == engine::InvalidModelAnimationIndex);
+        assert(fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc).action
+                == game::NpcAction::Idle);
+        assert(animator.loop || animator.targetLoop);
+    }
+}
+
+void NpcAnimationRemovalResolvesOperation()
+{
+    NpcScriptFixture fixture;
+    fixture.context.world.Add(fixture.npc, engine::AnimatedModelAnimator{});
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto operation = game::BeginSectorScriptNpcAnimation(fixture.context, fixture.host,
+            fixture.npc, {2, 1.0f, 1.0f}, engine::ScriptOperationLaunchStyle::Async, {});
+    fixture.context.world.DestroyLater(fixture.npc);
+    fixture.context.world.FlushDestroyedEntities();
+    game::UpdateSectorScriptOperations(fixture.context, fixture.host);
+    assert(fixture.runtime.operations[operation.index].state == engine::ScriptOperationState::Failed);
+}
 
 void HealthBindingsSetPlayerAndNpcCurrentHealth()
 {
@@ -1541,6 +1728,10 @@ void RunSectorScriptBindingTests()
     DoorCompletionAndCancellationShareTheBackend();
     StableDoorAndDynamicLightBindingsMutateRuntimeTargets();
     DoorPermissionCallbacksCanYieldAndMustReturnTrue();
+    NpcAnimationBindingsRejectInvalidRequestsWithoutMutation();
+    NpcAnimationOperationsCompleteReplaceCancelAndUnload();
+    NpcMovementClearsAnimationOverridesOnlyWhenAccepted();
+    NpcAnimationRemovalResolvesOperation();
     HealthBindingsSetPlayerAndNpcCurrentHealth();
     SettingNpcHealthToZeroUsesNpcDeathState();
     BlockingNpcMoveCompletesAfterPhysicalArrival();

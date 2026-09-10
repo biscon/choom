@@ -8863,6 +8863,161 @@ void TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions()
           "a blending Attack completes only when its target cursor finishes");
 }
 
+void TestNpcScriptAnimationTimingAndReturnLoop()
+{
+    ModelAnimation animations[3]{};
+    Transform pose{};
+    Transform* poseFrames[191];
+    std::fill(std::begin(poseFrames), std::end(poseFrames), &pose);
+    const char* names[] = {"Idle", "Talking", "Waving"};
+    for (size_t i = 0; i < 3; ++i) {
+        std::strcpy(animations[i].name, names[i]);
+        animations[i].keyframeCount = 191;
+        animations[i].boneCount = 1;
+        animations[i].keyframePoses = poseFrames;
+    }
+    engine::ModelAsset asset;
+    asset.model.skeleton.boneCount = 1;
+    asset.animations = animations;
+    asset.animationCount = 3;
+    game::NpcScriptAnimationClip clip;
+    std::string error;
+    Check(game::ResolveNpcScriptAnimationClip(asset, "Waving", false, 2000, clip, error)
+                  && clip.index == 2 && Near(clip.durationSeconds, 2.0f)
+                  && Near(clip.speed, 190.0f / 120.0f),
+          "timed one-shot uses the first-to-last frame span, excluding a loop wrap frame");
+    Check(game::ResolveNpcScriptAnimationClip(asset, "Waving", false, 0, clip, error)
+                  && Near(clip.speed, 1.0f) && Near(clip.durationSeconds, 190.0f / 60.0f),
+          "omitted duration preserves native playback speed");
+    Check(!game::ResolveNpcScriptAnimationClip(asset, "waving", false, 1000, clip, error)
+                  && !game::ResolveNpcScriptAnimationClip(asset, "missing", true, 1, clip, error),
+          "script clip names are exact and case-sensitive");
+    Check(!game::ResolveNpcScriptAnimationClip(asset, "Waving", true, 0, clip, error)
+                  && !game::ResolveNpcScriptAnimationClip(asset, "Waving", false, -1, clip, error)
+                  && !game::ResolveNpcScriptAnimationClip(asset, "Waving", true,
+                          std::numeric_limits<double>::infinity(), clip, error)
+                  && !game::ResolveNpcScriptAnimationClip(asset, "Waving", false,
+                          std::numeric_limits<double>::quiet_NaN(), clip, error)
+                  && !game::ResolveNpcScriptAnimationClip(asset, "Waving", false,
+                          std::numeric_limits<double>::min(), clip, error),
+          "invalid or unrepresentable timing and speed fail without playback");
+    animations[2].keyframeCount = 1;
+    Check(!game::ResolveNpcScriptAnimationClip(asset, "Waving", false, 1000, clip, error)
+                  && game::ResolveNpcScriptAnimationClip(asset, "Waving", true, 1, clip, error),
+          "single-frame poses can loop but cannot be timed as one-shots");
+    animations[2].keyframeCount = 0;
+    Check(!game::ResolveNpcScriptAnimationClip(asset, "Waving", true, 1, clip, error),
+          "empty animation clips fail safely");
+    animations[2].keyframeCount = 191;
+    animations[2].boneCount = 2;
+    Check(!game::ResolveNpcScriptAnimationClip(asset, "Waving", true, 1, clip, error),
+          "incompatible skeletons fail safely");
+    animations[2].boneCount = 1;
+
+    game::NpcAnimationState state;
+    state.resolved = true;
+    state.animationIndices = {0, 1, 1, 2, 2, 2};
+    state.animationSpeeds[0] = 0.8f;
+    engine::AnimatedModelAnimator animator;
+    animator.animationIndex = 0;
+    game::SetNpcScriptAnimation(state, animator, 1, 0.7f, true, 0, 1);
+    Check(game::UpdateNpcScriptAnimation(state, animator)
+                  && animator.targetAnimationIndex == 1 && animator.targetLoop
+                  && Near(animator.speed, 0.7f),
+          "script loop persists over normal idle selection and blends at its own speed");
+    animator.targetFrame = 12.0f;
+    game::SetNpcScriptAnimation(state, animator, 1, 1.2f, true, 0, 2);
+    Check(Near(animator.targetFrame, 12.0f) && Near(animator.speed, 1.2f),
+          "setting the same loop while blending preserves its cursor");
+    animator.animationIndex = 1;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    animator.frame = 30.0f;
+    game::SetNpcScriptAnimation(state, animator, 2, 2.0f, false, 0.1f, 3);
+    Check(animator.targetAnimationIndex == 2 && !animator.targetLoop
+                  && Near(animator.transitionDurationSeconds, 0.1f)
+                  && state.scriptLoopIndex == 1 && Near(state.scriptLoopSpeed, 1.2f),
+          "one-shot retains its return loop and caps incoming blend for short durations");
+    animator.finished = true;
+    Check(game::UpdateNpcScriptAnimation(state, animator)
+                  && state.scriptStatus == game::NpcScriptAnimationStatus::Playing,
+          "finished outgoing blend source does not finish a one-shot target");
+    animator.animationIndex = 2;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    animator.finished = true;
+    animator.playing = false;
+    Check(game::UpdateNpcScriptAnimation(state, animator)
+                  && state.scriptStatus == game::NpcScriptAnimationStatus::Completed
+                  && animator.targetAnimationIndex == 1 && animator.targetLoop
+                  && Near(animator.speed, 1.2f),
+          "completed one-shot blends back to the selected loop and restores loop speed");
+
+    game::SetNpcScriptAnimation(state, animator, 2, 1.0f, false, 1.0f, 4);
+    animator.frame = 40.0f;
+    game::SetNpcScriptAnimation(state, animator, 2, 1.0f, false, 1.0f, 5);
+    Check(Near(animator.frame, 0.0f) && !animator.finished && !animator.loop,
+          "repeated one-shot on the same clip restarts from the beginning");
+    game::CancelNpcScriptAnimation(state, animator);
+    Check(state.scriptStatus == game::NpcScriptAnimationStatus::Cancelled
+                  && state.scriptLoopIndex == 1 && Near(animator.speed, 1.2f),
+          "explicit cancellation restores selected loop");
+    game::ClearNpcScriptAnimation(state, game::NpcScriptAnimationCancelReason::Movement);
+    Check(state.scriptLoopIndex == engine::InvalidModelAnimationIndex
+                  && state.forceSemanticAnimation && !state.hasPendingAction,
+          "movement clears script loop and forces semantic animation handoff");
+    Check(game::ApplyNpcSemanticAnimation(state, animator, game::NpcAction::Idle)
+                  == game::NpcAnimationApplyResult::Applied
+                  && Near(animator.speed, 0.8f),
+          "engine idle is reapplied even when remembered semantic action was already Idle");
+    animator.animationIndex = 0;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    game::SetNpcScriptAnimation(state, animator, 0, 1.0f, false, 1.0f, 6);
+    animator.finished = true;
+    animator.playing = false;
+    Check(!game::UpdateNpcScriptAnimation(state, animator)
+                  && animator.animationIndex == 0 && animator.loop && animator.playing
+                  && !animator.finished && Near(animator.speed, 0.8f),
+          "one-shot using the idle clip itself restarts authored idle looping on completion");
+    game::UpdateNpcScriptAnimation(state, animator);
+    Check(!game::HasNpcScriptAnimationOverride(state),
+          "normal idle animation is saveable after a same-clip one-shot returns");
+    game::SetNpcScriptAnimation(state, animator, 2, 1.0f, false, 1.0f, 7);
+    Check(game::HasNpcScriptAnimationOverride(state),
+          "active one-shot playback is excluded from NPC saved animator state");
+    animator.animationIndex = 2;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    animator.finished = true;
+    game::UpdateNpcScriptAnimation(state, animator);
+    Check(game::HasNpcScriptAnimationOverride(state) && animator.targetAnimationIndex == 0,
+          "outgoing scripted pose stays transient throughout the return-to-idle blend");
+    animator.animationIndex = 0;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    game::UpdateNpcScriptAnimation(state, animator);
+    Check(!game::HasNpcScriptAnimationOverride(state),
+          "automatic animator capture resumes when the scripted return blend completes");
+    game::SetNpcScriptAnimation(state, animator, 2, 1.0f, false, 1.0f, 7);
+    game::ClearNpcScriptAnimation(state, game::NpcScriptAnimationCancelReason::Combat);
+    Check(state.scriptStatus == game::NpcScriptAnimationStatus::Cancelled
+                  && state.scriptCancelReason == game::NpcScriptAnimationCancelReason::Combat
+                  && state.scriptLoopIndex == engine::InvalidModelAnimationIndex,
+          "combat cancels scripted playback and clears all overrides");
+
+    // Exercise the real non-looping cursor at irregular frame sizes.
+    game::ResolveNpcScriptAnimationClip(asset, "Waving", false, 2000, clip, error);
+    animator = {};
+    animator.animationIndex = clip.index;
+    state = {};
+    state.resolved = true;
+    state.animationIndices[0] = 0;
+    game::SetNpcScriptAnimation(state, animator, clip.index, clip.speed, false,
+            clip.durationSeconds, 8);
+    engine::AdvanceAnimatedModelAnimator(animator, 191, 0.73f);
+    engine::AdvanceAnimatedModelAnimator(animator, 191, 1.26f);
+    Check(!animator.finished, "timed clip remains active just before its requested duration");
+    engine::AdvanceAnimatedModelAnimator(animator, 191, 0.02f);
+    Check(animator.finished && Near(animator.frame, 190.0f),
+          "timed clip clamps exactly to its final keyframe on the first update past duration");
+}
+
 void TestNpcNavigationSmoothsSectorGeometryStairsVisually()
 {
     const game::SectorTopologyMap map = MakeNavigationStairMap();
@@ -12300,6 +12455,7 @@ int main()
     TestCrowdHeadOnNpcAgentsAvoidEachOther();
     TestCrowdMovingNpcAvoidsStationaryNpc();
     TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
+    TestNpcScriptAnimationTimingAndReturnLoop();
     TestNpcWeaponDamageOcclusionAndCorpseFade();
     TestWeaponPelletVolleyDamageAndPretrace();
     TestNpcNavigationSmoothsSectorGeometryStairsVisually();
