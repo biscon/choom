@@ -29,6 +29,7 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         bool canPasteConfig,
         bool hasAdjustablePreviewSelection,
         bool previewAdjustmentActive,
+        bool dialogueVoicesEnabled,
         bool visible,
         bool enabled)
 {
@@ -92,12 +93,14 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Show ids", CommandId(SectorEditorMainMenuCommand::ToggleShowIds),
                     engine::UIMenuItemKind::Checkbox, true, editorState.showSectorIds}
     }};
-    const std::array<engine::UIMenuItem, 5> settingsItems{{
+    const std::array<engine::UIMenuItem, 6> settingsItems{{
             {"Level", CommandId(SectorEditorMainMenuCommand::OpenLevelSettings)},
             {"Color", CommandId(SectorEditorMainMenuCommand::OpenColorSettings)},
             {"Player", CommandId(SectorEditorMainMenuCommand::OpenPlayerSettings)},
             {"Sneaking", CommandId(SectorEditorMainMenuCommand::OpenSneakSettings)},
-            {"Liquids", CommandId(SectorEditorMainMenuCommand::OpenLiquidGameplaySettings)}
+            {"Liquids", CommandId(SectorEditorMainMenuCommand::OpenLiquidGameplaySettings)},
+            {"Dialogue voices", CommandId(SectorEditorMainMenuCommand::ToggleDialogueVoices),
+                    engine::UIMenuItemKind::Checkbox, true, dialogueVoicesEnabled}
     }};
     const std::array<engine::UIMenuRoot, 6> roots{{
             {"Level", levelItems.data(), levelItems.size()},

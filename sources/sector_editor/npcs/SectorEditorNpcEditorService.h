@@ -32,6 +32,7 @@ public:
 
     void ApplyIdBuffer();
     void ApplyNameBuffer();
+    void SetSelectedVoice(const std::string& voice);
     void SetSelectedHostile(bool hostile);
     void SetSelectedAiType(const std::string& aiType);
     void SetSelectedPerception(

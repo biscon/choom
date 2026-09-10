@@ -47,7 +47,8 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     OpenColorSettings,
     OpenPlayerSettings,
     OpenSneakSettings,
-    OpenLiquidGameplaySettings
+    OpenLiquidGameplaySettings,
+    ToggleDialogueVoices
 };
 
 SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
@@ -64,6 +65,7 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         bool canPasteConfig,
         bool hasAdjustablePreviewSelection,
         bool previewAdjustmentActive,
+        bool dialogueVoicesEnabled,
         bool visible,
         bool enabled);
 

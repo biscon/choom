@@ -14,6 +14,7 @@ struct lua_State;
 
 namespace engine {
 struct EngineContext;
+struct DialogueVoiceLibrary;
 }
 
 namespace game {
@@ -103,6 +104,7 @@ struct SectorScriptControlApi {
 };
 
 struct SectorScriptHost {
+    const engine::DialogueVoiceLibrary* dialogueVoices = nullptr;
     SectorRuntimeObjectState* runtimeObjects = nullptr;
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;

@@ -1664,6 +1664,7 @@ void CutsceneBindingsControlFadeAndCaptionTimelines(bool cinematic)
     };
 
     engine::EngineContext context;
+    SpawnScriptNpc(context.world);
     engine::ScriptRuntime runtime;
     engine::PersistentScriptStore persistent;
     game::SectorRuntimeObjectState objects;
@@ -1695,7 +1696,7 @@ function init()
     setPersistentBool("faded_out", true)
     text("A centered cutscene card", CENTER, 100)
     setPersistentBool("text_done", true)
-    say("Follow me this way.", 100)
+    say("script_guard", "Follow me this way.", nil, 100)
     setPersistentBool("say_done", true)
     fadeIn(100)
     assert(enableControls(true))
@@ -1749,9 +1750,136 @@ end
     game::ResetSectorCutsceneRuntime(cutscene);
 }
 
+void SpeechCompletionGatesCaptionHold()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime scripts;
+    game::SectorCutsceneRuntime cutscene;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    const auto speaker = SpawnScriptNpc(context.world);
+    engine::DialogueVoice voice;
+    voice.pitchRange = {1.0f, 1.0f};
+    voice.banks[0].push_back({engine::SoundHandle{7, 1}, 2.0f, 0});
+    game::SectorCutsceneSpeechOptions speech;
+    speech.speaker = speaker;
+    speech.voice = &voice;
+    const double hold = 0.5;
+    uint64_t token = 0;
+    std::string error;
+    assert(game::BeginSectorCutsceneCaption(cutscene, game::SectorCutsceneCaptionKind::Say,
+            game::SectorCutsceneTextPosition::Bottom, "Wait.", &hold, token, error, &speech));
+    const auto update = [&](float dt) {
+        game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, dt);
+        game::UpdateSectorCutsceneTimelines(cutscene, scripts, dt);
+    };
+    update(0); // start a full two-second recording, with no device -> estimated timing
+    assert(cutscene.caption.speechDriven && cutscene.caption.visibleByteCount == 0);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 100);
+    assert(cutscene.caption.active && cutscene.caption.elapsedSeconds == 0);
+    update(0.5f);
+    assert(cutscene.caption.visibleByteCount == 1 && !cutscene.caption.speechFinished);
+    update(10); // hitch consumes only this fragment, not punctuation or caption hold
+    assert(cutscene.caption.active && !cutscene.caption.speechFinished);
+    assert(cutscene.caption.elapsedSeconds == 2.0);
+    update(0.3f);
+    assert(cutscene.caption.speechFinished && cutscene.caption.opacity == 1);
+    assert(cutscene.caption.elapsedSeconds == cutscene.caption.revealSeconds);
+    update(0.49f);
+    assert(cutscene.caption.opacity == 1 && cutscene.caption.active);
+    update(0.1f);
+    assert(cutscene.caption.opacity < 1 && cutscene.caption.active);
+    update(0.4f);
+    assert(!cutscene.caption.active);
+    game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
+}
+
+void DisabledDialogueVoicesKeepTextAndCanBeReenabled()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime scripts;
+    game::SectorCutsceneRuntime cutscene;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    const auto speaker = SpawnScriptNpc(context.world);
+    auto& npc = context.world.Get<game::NpcRuntimeInstance>(speaker);
+    engine::DialogueVoice voice;
+    voice.pitchRange = {1.0f, 1.0f};
+    voice.banks[0].push_back({engine::SoundHandle{7, 1}, 2.0f, 0});
+    game::SectorCutsceneSpeechOptions speech;
+    speech.speaker = speaker;
+    speech.voice = &voice;
+    const double hold = 0.5;
+    uint64_t token = 0;
+    std::string error;
+    const auto begin = [&](std::string_view text) {
+        assert(game::BeginSectorCutsceneCaption(cutscene, game::SectorCutsceneCaptionKind::Say,
+                game::SectorCutsceneTextPosition::Bottom, text, &hold, token, error, &speech));
+    };
+    const auto update = [&](float dt, bool enabled) {
+        game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, dt, enabled);
+        game::UpdateSectorCutsceneTimelines(cutscene, scripts, dt);
+    };
+    // Every codepoint, including spaces and punctuation, takes exactly 25 ms.
+    // Neither multi-byte UTF-8 nor mood or two-second recordings alter the rate.
+    const size_t prefixes[] = {1, 3, 4, 5, 8, 9, 10, 11, 12};
+    for (size_t mood = 0; mood < engine::DialogueMoodCount; ++mood) {
+        speech.mood = static_cast<engine::DialogueMood>(mood);
+        begin(u8"Aé, 人! B?");
+        update(0, false);
+        assert(!npc.dialogueSpeaking && engine::IsNull(cutscene.speechPlayback.handle));
+        assert(!cutscene.caption.voiceTiming && !cutscene.caption.speechDriven);
+        assert(std::fabs(cutscene.caption.revealSeconds - 9.0/40.0) < 0.000001);
+        for (const size_t prefix : prefixes) {
+            update(0.025f, false);
+            assert(cutscene.caption.visibleByteCount == prefix);
+        }
+        assert(cutscene.caption.speechFinished && cutscene.caption.active);
+        assert(npc.dialogueHistory.banks[0].available == 0);
+        assert(cutscene.speechPlayback.sequence.nextCue == 0);
+        update(0.49f, false);
+        assert(cutscene.caption.opacity == 1.0f);
+        update(0.02f, false);
+        assert(cutscene.caption.opacity < 1.0f && cutscene.caption.active);
+        update(0.4f, false);
+        assert(!cutscene.caption.active);
+    }
+
+    speech.mood = engine::DialogueMood::Neutral;
+    begin("Wait. Another person!");
+    update(0, true);
+    update(0.5f, true);
+    assert(npc.dialogueSpeaking && cutscene.caption.visibleByteCount == 1);
+    cutscene.speechPlayback.sequence.usesDevice = true;
+    update(0, false);
+    assert(!npc.dialogueSpeaking && engine::IsNull(cutscene.speechSpeaker));
+    assert(cutscene.caption.visibleByteCount == 1);
+    assert(std::fabs(cutscene.caption.elapsedSeconds - 1.0/40.0) < 0.000001);
+    update(0.025f, false);
+    assert(cutscene.caption.visibleByteCount == 2);
+    update(0, true);
+    assert(npc.dialogueSpeaking && cutscene.caption.visibleByteCount == 2);
+    assert(cutscene.speechPlayback.sequence.nextCue == 1); // skip the partially revealed word
+    assert(!cutscene.speechPlayback.sequence.fragmentActive);
+
+    // Switching timing after revelation preserves elapsed hold/fade progress.
+    update(0, false);
+    update(0.6f, false);
+    assert(cutscene.caption.speechFinished && cutscene.caption.active);
+    const double elapsedHold = cutscene.caption.elapsedSeconds - cutscene.caption.revealSeconds;
+    update(0, true);
+    assert(std::fabs(cutscene.caption.elapsedSeconds - cutscene.caption.revealSeconds - elapsedHold) < 0.000001);
+    assert(cutscene.caption.speechFinished && cutscene.caption.visibleByteCount == cutscene.caption.text.size());
+    update(0, false);
+    assert(std::fabs(cutscene.caption.elapsedSeconds - cutscene.caption.revealSeconds - elapsedHold) < 0.000001);
+    update(0.8f, false);
+    assert(!cutscene.caption.active);
+    game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
+}
+
 void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
 {
     engine::EngineContext context;
+    const engine::Entity speaker = SpawnScriptNpc(context.world);
+    context.world.Get<game::NpcRuntimeInstance>(speaker).voice = "female";
     engine::ScriptRuntime runtime;
     engine::PersistentScriptStore persistent;
     game::SectorRuntimeObjectState objects;
@@ -1774,13 +1902,19 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
             &cutscene,
             &player,
             &config);
+    engine::DialogueVoiceLibrary voices;
+    engine::DialogueVoice female;
+    female.id = "female";
+    female.banks[0].push_back({engine::SoundHandle{123, 1}, 0.09f, 7});
+    voices.voices.push_back(std::move(female));
+    host.dialogueVoices = &voices;
     files.Write("function init() end\n");
     assert(Create(context, runtime, persistent, host, files));
     assert(runtime.initFinished);
 
     const engine::ScriptConsoleResult blocking =
             engine::ScriptSystemExecuteConsole(
-                    runtime, "say('must not start', 100)");
+                    runtime, "say('script_guard', 'must not start', nil, 100)");
     assert(!blocking.success);
     assert(!cutscene.caption.active);
     const engine::ScriptConsoleResult blockingFade =
@@ -1790,10 +1924,33 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
 
     const engine::ScriptConsoleResult say =
             engine::ScriptSystemExecuteConsole(
-                    runtime, "startSay('console bark', 100)");
+                    runtime, "startSay('script_guard', 'console bark', nil, 100)");
     assert(say.success);
     assert(cutscene.caption.active);
     assert(cutscene.caption.kind == game::SectorCutsceneCaptionKind::Say);
+    assert(cutscene.caption.speaker == speaker);
+    assert(cutscene.caption.mood == engine::DialogueMood::Neutral);
+    assert(std::fabs(cutscene.caption.holdSeconds - 0.1) < 0.0001);
+    assert(!cutscene.caption.speechTimeline.cues.empty());
+    assert(cutscene.caption.speechTimeline.cues.front().source == 7);
+    const uint64_t originalToken = cutscene.caption.token;
+    assert(engine::ScriptSystemExecuteConsole(runtime, R"(
+        local op, err = startSay('missing_npc', 'must not replace')
+        assert(op == nil and type(err) == 'string')
+        op, err = startSay('script_guard', 'must not replace', 'unknown')
+        assert(op == nil and type(err) == 'string')
+        op, err = startSay('script_guard', 'must not replace', 'happy', -1)
+        assert(op == nil and type(err) == 'string')
+        assert(not pcall(function() startSay('obsolete speakerless line') end))
+        assert(not pcall(function() startSay('script_guard', 'bad mood type', 25) end))
+    )").success);
+    assert(cutscene.caption.token == originalToken);
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.01f);
+    assert(context.world.Get<game::NpcRuntimeInstance>(speaker).dialogueSpeaking);
+    context.world.Get<game::NpcCombatState>(speaker).dead = true;
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.01f);
+    assert(!context.world.Get<game::NpcRuntimeInstance>(speaker).dialogueSpeaking);
+    context.world.Get<game::NpcCombatState>(speaker).dead = false;
     const std::vector<engine::ScriptOperationSnapshot> sayOperations =
             engine::ScriptSystemOperationSnapshot(runtime);
     const auto sayOperation = std::find_if(
@@ -1812,6 +1969,8 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
     assert(text.success);
     assert(cutscene.caption.active);
     assert(cutscene.caption.kind == game::SectorCutsceneCaptionKind::Text);
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.01f);
+    assert(!context.world.Get<game::NpcRuntimeInstance>(speaker).dialogueSpeaking);
     assert(cutscene.caption.position
             == game::SectorCutsceneTextPosition::Center);
     const std::vector<engine::ScriptOperationSnapshot> textOperations =
@@ -1839,6 +1998,29 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
             textOperation->handle,
             "caption console cancellation test"));
     assert(!cutscene.caption.active);
+
+    for (const char* mood : {"neutral", "happy", "angry", "afraid", "panicked", "pained", "relieved"}) {
+        const std::string command = std::string("startSay('script_guard', 'Another person?', '") + mood + "', 0)";
+        assert(engine::ScriptSystemExecuteConsole(runtime, command).success);
+        assert(std::string(engine::DialogueMoodName(cutscene.caption.mood)) == mood);
+        assert(!cutscene.caption.speechTimeline.cues.empty()); // missing moods fall back to neutral
+        assert(cutscene.caption.holdSeconds == 0);
+    }
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.01f);
+    assert(context.world.Get<game::NpcRuntimeInstance>(speaker).dialogueSpeaking);
+    game::CancelSectorCutsceneCaption(cutscene, cutscene.caption.token);
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.01f);
+    assert(!context.world.Get<game::NpcRuntimeInstance>(speaker).dialogueSpeaking);
+    game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
+    assert(engine::IsNull(cutscene.speechSpeaker));
+    assert(engine::ScriptSystemExecuteConsole(runtime,
+            "startSay('script_guard', 'Still speaking')").success);
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.01f);
+    context.world.DestroyLater(speaker);
+    context.world.FlushDestroyedEntities();
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.01f);
+    assert(cutscene.caption.active); // a stale generational speaker never dereferences or cancels the text
+    game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
 
     const engine::ScriptConsoleResult finalText =
             engine::ScriptSystemExecuteConsole(
@@ -2373,6 +2555,8 @@ void RunSectorScriptBindingTests()
     CutsceneBindingsControlFadeAndCaptionTimelines(false);
     CutsceneBindingsControlFadeAndCaptionTimelines(true);
     AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();
+    SpeechCompletionGatesCaptionHold();
+    DisabledDialogueVoicesKeepTextAndCanBeReenabled();
     CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(false);
     CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(true);
     CinematicTransitionsAndCaptionLayout();

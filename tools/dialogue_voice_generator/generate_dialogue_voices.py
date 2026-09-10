@@ -33,11 +33,15 @@ PROFILES = ("male", "female")
 VOICES = {"alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova",
           "sage", "shimmer", "verse", "marin", "cedar"}
 ENDPOINT = "https://api.openai.com/v1/audio/speech"
-PROCESS_VERSION = 1
+PROCESS_VERSION = 4
 INITIAL_LIMIT = 112
 
 
 class GenerationError(Exception):
+    pass
+
+
+class RejectedAudio(GenerationError):
     pass
 
 
@@ -111,6 +115,8 @@ def load_config(path):
         for mood in config["moods"].values():
             if not isinstance(mood["instructions"], str) or not mood["instructions"].strip():
                 raise ValueError()
+            if not numeric(mood.get("tempo", 1.0), 1.0, 3.0):
+                raise ValueError()
             fragments = mood["fragments"]
             if not isinstance(fragments, list) or len(fragments) != 8:
                 raise ValueError()
@@ -126,11 +132,16 @@ def load_config(path):
                 if len(" ".join((config["common_instructions"], profile["instructions"], mood["instructions"]))) > 4096:
                     raise ValueError()
         p = config["processing"]
-        bounds = {"silence_db": (-90, -45), "silence_min_ms": (1, 30),
+        bounds = {"analysis_window_ms": (5, 20), "sustained_ms": (20, 60),
+                  "core_relative_db": (-45, -20), "boundary_relative_db": (-65, -30),
+                  "boundary_extension_ms": (50, 300), "dc_rejection_gain_db": (20, 45),
+                  "dc_power_fraction_max": (0.4, 0.95),
                   "padding_ms": (10, 20), "fade_ms": (1, 5), "peak_db": (-6, -1),
                   "duration_min_ms": (40, 200), "duration_max_ms": (500, 2000),
                   "audible_peak_min_db": (-90, -50), "gain_warning_db": (6, 40)}
         if set(p) != set(bounds) or any(not numeric(p[k], *b) for k, b in bounds.items()):
+            raise ValueError()
+        if p["boundary_relative_db"] >= p["core_relative_db"]:
             raise ValueError()
         defaults = config["runtime_defaults"]
         for name, low, high in (("pitch_range", 0.5, 2), ("volume_range", 0, 2),
@@ -237,7 +248,62 @@ def validate_final(path, settings):
     return result
 
 
-def process_audio(raw, destination, settings):
+def content_bounds(samples, settings):
+    """Locate sustained AC energy; isolated tail noise must not extend a word."""
+    window = round(settings["analysis_window_ms"] * 48)
+    energy = []
+    total, squares = sum(samples), sum(x*x for x in samples)
+    dc_fraction = total*total / (len(samples)*squares) if squares else 1.0
+    peak = max(abs(x) for x in samples)
+    gain = settings["peak_db"] - 20*math.log10(max(1, peak)/32768)
+    if gain > settings["dc_rejection_gain_db"] and dc_fraction > settings["dc_power_fraction_max"]:
+        raise RejectedAudio("Low-level DC-dominated source; refusing excessive normalization.")
+    for start in range(0, len(samples), window):
+        chunk = samples[start:start+window]
+        mean = sum(chunk)/len(chunk)
+        energy.append(math.sqrt(sum((x-mean)**2 for x in chunk)/len(chunk)))
+    peak_rms = max(energy)
+    if peak_rms < 1:
+        raise RejectedAudio("No usable varying speech signal.")
+    core = peak_rms * 10**(settings["core_relative_db"]/20)
+    boundary = peak_rms * 10**(settings["boundary_relative_db"]/20)
+    required = math.ceil(settings["sustained_ms"]/settings["analysis_window_ms"])
+    anchors, run = [], 0
+    for i, value in enumerate(energy):
+        run = run+1 if value >= core else 0
+        if run >= required:
+            anchors.extend(range(i-required+1, i+1))
+    if not anchors:
+        raise RejectedAudio("No sustained speech region found.")
+    first, last = min(anchors), max(anchors)
+    extension = math.ceil(settings["boundary_extension_ms"]/settings["analysis_window_ms"])
+    limited = False
+    for direction in (-1, 1):
+        edge = first if direction < 0 else last
+        retained, quiet = edge, 0
+        for step in range(1, extension+1):
+            i = edge+step*direction
+            if not 0 <= i < len(energy): break
+            quiet = quiet+1 if energy[i] < boundary else 0
+            if energy[i] >= boundary: retained = i
+            if quiet >= 2: break
+            if step == extension: limited = True
+        if direction < 0: first = retained
+        else: last = retained
+    # Refine within the edge windows, leaving faded waveform boundaries followed
+    # by separate safety padding. Only outer silence is removed.
+    start, end = first*window, min(len(samples), (last+1)*window)
+    threshold = max(1.0, boundary)
+    while start < end and abs(samples[start]) < threshold: start += 1
+    while end > start and abs(samples[end-1]) < threshold: end -= 1
+    return start, end, {"dc_power_fraction": dc_fraction,
+                        "core_rms": core, "boundary_rms": boundary,
+                        "boundary_extension_limited": limited}
+
+
+def process_audio(raw, destination, settings, tempo=1.0):
+    if not numeric(tempo, 1.0, 3.0):
+        raise GenerationError("Tempo must be a finite number between 1.0 and 3.0.")
     probe(raw)
     commands = []
     with tempfile.TemporaryDirectory(prefix="dialogue-process-") as folder:
@@ -251,40 +317,30 @@ def process_audio(raw, destination, settings):
         source = measurements(decoded)
         if source["peak_dbfs"] < settings["audible_peak_min_db"]:
             raise GenerationError("Source is silent or below the audible-content threshold.")
-        detection = ffmpeg(["-i", str(decoded), "-af", f"silencedetect=n={settings['silence_db']}dB:d={settings['silence_min_ms']/1000}", "-f", "null", "-"])
-        log = detection.stderr.decode(errors="replace")
-        intervals = []
-        start = None
-        for match in re.finditer(r"silence_(start|end):\s*([0-9.eE+-]+)", log):
-            if match[1] == "start":
-                start = float(match[2])
-            elif start is not None:
-                intervals.append((start, float(match[2])))
-                start = None
-        duration = source["duration_ms"] / 1000
-        if start is not None:
-            intervals.append((start, duration))
-        first, last = 0.0, duration
-        for begin, end in intervals:
-            if begin <= 1 / 48000:
-                first = end
-            if end >= duration - 2 / 48000:
-                last = begin
-        if first >= last:
-            raise GenerationError("No audible region found at conservative silence threshold.")
-        pad = settings["padding_ms"] / 1000
-        trim_start = max(0, round((first - pad) * 48000))
-        trim_end = min(source["frames"], round((last + pad) * 48000))
-        # Supply missing safety padding when speech touches the raw file boundary.
-        leading_pad = max(0, round((pad - first) * 48000))
-        trailing_pad = max(0, round((pad - (duration - last)) * 48000))
-        frames = trim_end - trim_start + leading_pad + trailing_pad
-        fade = round(settings["fade_ms"] * 48)
-        filters = (f"atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=PTS-STARTPTS,"
-                   f"adelay={leading_pad}S:all=1,apad=pad_len={trailing_pad},"
-                   f"afade=t=in:ss=0:ns={fade},afade=t=out:ss={max(0, frames-fade)}:ns={fade}")
+        trim_start, trim_end, detection = content_bounds(pcm_samples(decoded), settings)
+        if trim_start >= trim_end:
+            raise RejectedAudio("No retained speech content.")
+        leading_pad = trailing_pad = round(settings["padding_ms"] * 48)
+        retained_frames = trim_end-trim_start
+        # Time-scale the complete retained utterance before computing fades.
+        # Always start from the raw take; reprocessing must not compound tempo.
+        retimed = work / "retimed.wav"
+        filters = f"atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=PTS-STARTPTS"
+        if tempo != 1.0:
+            # Above 2x a single atempo stage skips samples. Keep each stage
+            # within its overlap/blend range to preserve full articulation.
+            if tempo > 2.0:
+                stage = math.sqrt(tempo)
+                filters += f",atempo={stage:.9g},atempo={stage:.9g}"
+            else:
+                filters += f",atempo={tempo:.9g}"
+        ffmpeg(["-v", "error", "-i", str(decoded), "-af", filters, "-c:a", "pcm_s16le", str(retimed)])
+        frames = measurements(retimed)["frames"]
+        fade = min(round(settings["fade_ms"] * 48), frames//2)
+        filters = (f"afade=t=in:ss=0:ns={fade},afade=t=out:ss={max(0, frames-fade)}:ns={max(1, fade-1)},"
+                   f"adelay={leading_pad}S:all=1,apad=pad_len={trailing_pad}")
         trimmed = work / "trimmed.wav"
-        ffmpeg(["-v", "error", "-i", str(decoded), "-af", filters, "-c:a", "pcm_s16le", str(trimmed)])
+        ffmpeg(["-v", "error", "-i", str(retimed), "-af", filters, "-c:a", "pcm_s16le", str(trimmed)])
         gain = settings["peak_db"] - measurements(trimmed)["peak_dbfs"]
         final = work / "final.wav"
         ffmpeg(["-v", "error", "-i", str(trimmed), "-af", f"volume={gain:.9f}dB", "-ac", "1", "-ar", "48000", "-c:a", "pcm_s16le", "-map_metadata", "-1", str(final)])
@@ -293,7 +349,19 @@ def process_audio(raw, destination, settings):
             result["warnings"].append("large_normalization_gain")
         if source["clipped_samples"]:
             result["warnings"].append("source_clipping_suspected")
-        result.update({"gain_db": gain, "source_peak_dbfs": source["peak_dbfs"],
+        if detection["boundary_extension_limited"]:
+            result["warnings"].append("boundary_extension_limit_review")
+        if (source["frames"]-retained_frames)/48 > 500:
+            result["warnings"].append("large_outer_trim_review")
+        output = pcm_samples(final)
+        result.update({"source_duration_ms": source["duration_ms"],
+                       "removed_outer_ms": (source["frames"]-retained_frames)/48,
+                       "tempo": tempo, "retained_duration_ms": retained_frames/48,
+                       "retimed_duration_ms": frames/48,
+                       "boundary_detection": detection,
+                       "leading_boundary_jump": abs(output[leading_pad]-output[leading_pad-1]),
+                       "trailing_boundary_jump": abs(output[-trailing_pad-1]-output[-trailing_pad]),
+                       "gain_db": gain, "source_peak_dbfs": source["peak_dbfs"],
                        "trim_start_sample": trim_start, "trim_end_sample": trim_end,
                        "leading_padding_added_samples": leading_pad, "trailing_padding_added_samples": trailing_pad,
                        "processing_commands": commands, "processing_settings": settings,
@@ -354,8 +422,9 @@ def speech_request(payload, on_success, opener=None, sleep=time.sleep):
         sleep(delay)
 
 
-def processing_fingerprint(config):
-    return digest(canonical({"version": PROCESS_VERSION, "settings": config["processing"]}))
+def processing_fingerprint(config, mood):
+    return digest(canonical({"version": PROCESS_VERSION, "settings": config["processing"],
+                             "tempo": float(config["moods"][mood].get("tempo", 1.0))}))
 
 
 def matching_raw(root, spec, record):
@@ -368,7 +437,7 @@ def matching_raw(root, spec, record):
     return None
 
 
-def plan_assets(root, config, specs, records, regenerate=(), max_requests=112):
+def plan_assets(root, config, specs, records, regenerate=(), max_requests=112, reprocess=False):
     plan = []
     used = 0
     for spec in specs:
@@ -385,7 +454,7 @@ def plan_assets(root, config, specs, records, regenerate=(), max_requests=112):
         current = record.get("final", {})
         if valid:
             if (current.get("request_fingerprint") == spec["request_fingerprint"] and
-                    current.get("processing_fingerprint") == processing_fingerprint(config) and
+                    current.get("processing_fingerprint") == processing_fingerprint(config, spec["mood"]) and
                     current.get("sha256") == file_hash(final)):
                 action = "cached"
             else:
@@ -394,6 +463,10 @@ def plan_assets(root, config, specs, records, regenerate=(), max_requests=112):
             action = "process"
         elif any(t.get("request_fingerprint") == spec["request_fingerprint"] for t in record.get("takes", [])) or record.get("interrupted_success"):
             action = "blocked"  # Never silently spend again on a completed generation.
+        if current.get("status") == "rejected":
+            action = "blocked"
+        if reprocess:
+            action = "process" if matching_raw(root, spec, record) else "blocked"
         if spec["asset_id"] in regenerate:
             action = "request"
         if action == "request":
@@ -493,10 +566,13 @@ def parse_args(argv=None):
     parser.add_argument("--mood", choices=MOODS)
     parser.add_argument("--regenerate", action="append", default=[], metavar="ASSET-ID")
     parser.add_argument("--build-previews", action="store_true")
+    parser.add_argument("--reprocess", action="store_true", help="Rebuild selected finals from cached raw audio; never call the API")
     parser.add_argument("--max-requests", type=int, default=112)
     args = parser.parse_args(argv)
     if not 0 <= args.max_requests <= 112:
         parser.error("--max-requests must be between 0 and 112")
+    if args.reprocess and args.regenerate:
+        parser.error("--reprocess and --regenerate are mutually exclusive")
     return args
 
 
@@ -522,7 +598,7 @@ def execute(args, root=ROOT, config_path=TOOL / "voice_profiles.json"):
         if missing:
             raise GenerationError("Missing required audio tools: " + ", ".join(missing))
     allowance = args.max_requests if args.regenerate else min(args.max_requests, max(0, INITIAL_LIMIT-ledger["initial_successes"]))
-    plan = plan_assets(root, config, selected, state["assets"], args.regenerate, allowance)
+    plan = plan_assets(root, config, selected, state["assets"], args.regenerate, allowance, args.reprocess)
     counts = {action: sum(p["action"] == action for p in plan) for action in ("cached", "stale", "process", "request", "deferred", "blocked")}
     announce(f"Plan: {len(selected)} expected final files; {counts['cached']} valid cached finals; {counts['process']} reusable raw files; {counts['request']} new API requests; {counts['stale']} stale; {counts['deferred']} deferred; {counts['blocked']} blocked. Initial successes: {ledger['initial_successes']}/112.")
     if args.dry_run:
@@ -575,19 +651,24 @@ def execute(args, root=ROOT, config_path=TOOL / "voice_profiles.json"):
                     record["takes"].append(take)
                     record.pop("interrupted_success", None)
                     checkpoint()
-                result = process_audio(safe_relative(root, take["raw_path"]), final, config["processing"])
+                previous_duration = record.get("final", {}).get("duration_ms")
+                result = process_audio(safe_relative(root, take["raw_path"]), final, config["processing"],
+                                       config["moods"][spec["mood"]].get("tempo", 1.0))
                 take["status"] = "processed"
-                record["final"] = {**result, "status": "warned" if result["warnings"] else "accepted",
+                record["final"] = {**result, "previous_duration_ms": previous_duration, "status": "warned" if result["warnings"] else "accepted",
                                    "path": final.relative_to(root).as_posix(), "sha256": file_hash(final),
                                    "request_fingerprint": spec["request_fingerprint"], "raw_sha256": take["raw_sha256"],
-                                   "processing_fingerprint": processing_fingerprint(config), "ffmpeg_version": version,
+                                   "processing_fingerprint": processing_fingerprint(config, spec["mood"]), "ffmpeg_version": version,
                                    "listening_review": "pending"}
                 row.update({k: record["final"][k] for k in ("status", "duration_ms", "peak_dbfs", "warnings")})
                 announce(f"{asset_id}: {row['status']}, {row['duration_ms']:.0f} ms, {row['peak_dbfs']:.2f} dBFS; completed requests {run['completed_requests']}/{run['planned_requests']}.")
             except (GenerationError, OSError, wave.Error, EOFError, subprocess.TimeoutExpired) as error:
                 row.update({"status": "failed", "error": redacted(error)})
                 record["last_failure"] = {"at": utc_now(), "error": redacted(error)}
-                if take and take.get("status") == "downloaded":
+                if isinstance(error, RejectedAudio) and record.get("final"):
+                    record["final"]["status"] = "rejected"
+                    record["final"]["warnings"] = ["source_quality_rejected"]
+                if take and (take.get("status") == "downloaded" or isinstance(error, RejectedAudio)):
                     take["status"] = "rejected"
                 announce(f"{asset_id}: failed: {redacted(error)}")
                 if isinstance(error, FatalAPIError):
@@ -618,7 +699,14 @@ def execute(args, root=ROOT, config_path=TOOL / "voice_profiles.json"):
         entry = record.get("final", {})
         rows.append({"asset_id": spec["asset_id"], "profile": spec["profile"], "mood": spec["mood"],
                      "status": entry.get("status", "missing"), "duration_ms": entry.get("duration_ms", ""),
-                     "peak_dbfs": entry.get("peak_dbfs", ""), "warnings": ";".join(entry.get("warnings", [])),
+                     "peak_dbfs": entry.get("peak_dbfs", ""),
+                     "previous_duration_ms": entry.get("previous_duration_ms", ""),
+                     "tempo": entry.get("tempo", 1.0),
+                     "retained_duration_ms": entry.get("retained_duration_ms", ""),
+                     "retimed_duration_ms": entry.get("retimed_duration_ms", ""),
+                     "removed_outer_ms": entry.get("removed_outer_ms", ""),
+                     "leading_boundary_jump": entry.get("leading_boundary_jump", ""),
+                     "trailing_boundary_jump": entry.get("trailing_boundary_jump", ""), "warnings": ";".join(entry.get("warnings", [])),
                      "last_failure": record.get("last_failure", {}).get("error", ""), "listening_review": "pending"})
     atomic_bytes(report_dir / "validation.csv", csv_bytes(rows, list(rows[0])))
     announce(f"Completed API requests: {run['completed_requests']}/{run['planned_requests']}; results: {run['counts']}. Listening review pending.")

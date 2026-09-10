@@ -82,6 +82,26 @@ bool SoundAssets::IsReady(SoundHandle handle) const
     return IsValidNoLock(handle) && slots[handle.index].state == State::Ready;
 }
 
+SoundHandle SoundAssets::CreateSoundFromPcm(AssetScopeHandle scope,
+        const char* key, const int16_t* samples, size_t frameCount,
+        unsigned int sampleRate)
+{
+    if (key == nullptr || *key == '\0' || samples == nullptr || frameCount == 0
+            || frameCount > UINT32_MAX || sampleRate < 8000 || sampleRate > 192000) {
+        return NullSoundHandle();
+    }
+    const std::string identity = std::string(":generated-pcm:") + key;
+    const SoundHandle handle = RequestSound(scope, identity.c_str());
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (!IsValidNoLock(handle)) return NullSoundHandle();
+    Slot& slot = slots[handle.index];
+    if (slot.state == State::Queued && slot.generatedSampleRate == 0) {
+        slot.generatedPcm.assign(samples, samples + frameCount);
+        slot.generatedSampleRate = sampleRate;
+    }
+    return handle;
+}
+
 bool SoundAssets::IsFinished(SoundHandle handle) const
 {
     std::lock_guard<std::mutex> lock(stateMutex);
@@ -157,6 +177,8 @@ void SoundAssets::UpdateMainThread(float maxMilliseconds)
     while (true) {
         SoundHandle handle;
         std::string path;
+        std::vector<int16_t> pcm;
+        unsigned int sampleRate = 0;
         {
             std::lock_guard<std::mutex> lock(stateMutex);
             if (pendingLoads.empty()) break;
@@ -167,11 +189,19 @@ void SoundAssets::UpdateMainThread(float maxMilliseconds)
                 continue;
             }
             path = slots[handle.index].path;
+            pcm = std::move(slots[handle.index].generatedPcm);
+            sampleRate = slots[handle.index].generatedSampleRate;
         }
 
         SoundAsset loaded;
         loaded.path = path;
-        loaded.source = LoadSound(path.c_str());
+        if (sampleRate != 0) {
+            Wave wave{static_cast<unsigned int>(pcm.size()), sampleRate, 16, 1,
+                    pcm.data()};
+            loaded.source = LoadSoundFromWave(wave);
+        } else {
+            loaded.source = LoadSound(path.c_str());
+        }
         if (IsSoundValid(loaded.source)) {
             loaded.voiceCount = 1;
             for (size_t i = 0; i < loaded.aliases.size(); ++i) {
@@ -272,6 +302,7 @@ void SoundAssets::ReleaseNoLock(SoundHandle handle)
     if (slot.ownerCount != 0) return;
     soundByPath.erase(slot.path);
     if (slot.state == State::Ready) UnloadAsset(slot.asset);
+    std::vector<int16_t>{}.swap(slot.generatedPcm);
     slot.state = State::Unloaded;
     ++slot.generation;
 }

@@ -2,6 +2,7 @@
   "formatVersion": 1,
   "id": "elin",
   "name": "Elin",
+  "voice": "female",
   "modelPath": "assets/models/characters/Elin.glb",
   "headLook": {
     "enabled": true,

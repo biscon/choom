@@ -1067,9 +1067,40 @@ int StartCaption(
                 state, async, "cutscene caption runtime is unavailable");
     }
     size_t textLength = 0;
-    const char* rawText = luaL_checklstring(state, 1, &textLength);
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    const bool spoken = kind == SectorCutsceneCaptionKind::Say;
+    luaL_checktype(state, spoken ? 2 : 1, LUA_TSTRING);
+    const char* rawText = luaL_checklstring(state, spoken ? 2 : 1, &textLength);
+    SectorCutsceneSpeechOptions speech;
     SectorCutsceneTextPosition position = SectorCutsceneTextPosition::Bottom;
-    int holdArgument = 2;
+    int holdArgument = 4;
+    if (spoken) {
+        luaL_checktype(state, 1, LUA_TSTRING);
+        size_t idLength = 0;
+        const char* id = luaL_checklstring(state, 1, &idLength);
+        speech.speaker = FindNpcEntity(context.world, std::string_view{id, idLength});
+        if (!context.world.IsAlive(speech.speaker))
+            return PushCutsceneStartError(state, async, "say NPC instance was not found");
+        if (!lua_isnoneornil(state, 3)) {
+            luaL_checktype(state, 3, LUA_TSTRING);
+            size_t moodLength = 0;
+            const char* mood = luaL_checklstring(state, 3, &moodLength);
+            if (!engine::ParseDialogueMood(std::string_view{mood, moodLength}, speech.mood))
+                return PushCutsceneStartError(state, async, "unknown dialogue mood");
+        }
+        if (originalTop > 4)
+            return PushCutsceneStartError(state, async, "say expects npcId, message, optional mood and holdMs");
+        speech.history = &context.world.Get<NpcRuntimeInstance>(speech.speaker).dialogueHistory;
+        speech.seed = 2166136261u ^ static_cast<uint32_t>(host.cutscene->nextToken);
+        for (size_t i = 0; i < idLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(id[i])) * 16777619u;
+        for (size_t i = 0; i < textLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(rawText[i])) * 16777619u;
+        speech.seed ^= static_cast<uint32_t>(speech.mood) * 0x9e3779b9u;
+        if (host.dialogueVoices) {
+            speech.settings = &host.dialogueVoices->settings;
+            speech.voice = engine::FindDialogueVoice(*host.dialogueVoices,
+                    context.world.Get<NpcRuntimeInstance>(speech.speaker).voice);
+        }
+    }
     if (kind == SectorCutsceneCaptionKind::Text) {
         const lua_Integer rawPosition = luaL_checkinteger(state, 2);
         if (rawPosition < static_cast<int>(SectorCutsceneTextPosition::Top)
@@ -1091,7 +1122,6 @@ int StartCaption(
         holdSeconds = static_cast<double>(holdMs) / 1000.0;
         hold = &holdSeconds;
     }
-    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     const engine::ScriptOperationHandle replacedOperation =
             host.cutscene->caption.operation;
     std::string error;
@@ -1103,7 +1133,8 @@ int StartCaption(
             std::string_view{rawText, textLength},
             hold,
             token,
-            error)) {
+            error,
+            spoken ? &speech : nullptr)) {
         return PushCutsceneStartError(state, async, error);
     }
     if (engine::IsValid(replacedOperation)) {
@@ -2279,6 +2310,7 @@ void InitializeSectorScriptHost(
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
     host.cutscene = cutscene;
+    host.dialogueVoices = nullptr;
     host.playerState = playerState;
     host.playerConfig = playerConfig;
     host.playerHealth = playerHealth;
@@ -2316,6 +2348,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.navigation = nullptr;
     host.npcNavigation = nullptr;
     host.cutscene = nullptr;
+    host.dialogueVoices = nullptr;
     host.playerState = nullptr;
     host.playerConfig = nullptr;
     host.playerHealth = nullptr;

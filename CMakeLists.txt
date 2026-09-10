@@ -326,8 +326,26 @@ if(BUILD_TESTING)
     target_link_libraries(game_save_tests PRIVATE raylib)
     add_test(NAME game_save COMMAND game_save_tests)
 
+    add_executable(dialogue_speech_preview
+            tools/dialogue_voice_generator/preview_dialogue_speech.cpp
+            sources/engine/audio/DialogueTimeline.cpp
+            sources/engine/audio/DialogueSpeech.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+            sources/engine/audio/AudioSystem.cpp
+    )
+    target_include_directories(dialogue_speech_preview PRIVATE sources)
+    target_link_libraries(dialogue_speech_preview PRIVATE raylib)
+
     add_executable(audio_system_tests
             tests/AudioSystemTests.cpp
+            tests/DialogueSpeechTests.cpp
+            sources/engine/audio/DialogueTimeline.cpp
+            sources/engine/audio/DialogueSpeech.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
@@ -762,6 +780,9 @@ if(BUILD_TESTING)
             sources/engine/scripting/ScriptPersistence.cpp
             sources/game/SectorScriptBindings.cpp
             sources/game/cutscene/SectorCutsceneRuntime.cpp
+            sources/game/cutscene/SectorCutsceneSpeech.cpp
+            sources/engine/audio/DialogueTimeline.cpp
+            sources/engine/audio/DialogueSpeech.cpp
             sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
             sources/engine/systems/AnimatedModelRaycast.cpp

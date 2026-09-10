@@ -265,6 +265,7 @@ private:
     engine::ScriptRuntime scripts;
     SectorScriptHost scriptHost;
     SectorCutsceneRuntime cutscene;
+    engine::DialogueVoiceLibrary dialogueVoices;
     SectorGameNavigationDebugState navigationDebug;
     Health playerHealth = MakeHealth(100);
     Vector2 playerKnockbackVelocity{};

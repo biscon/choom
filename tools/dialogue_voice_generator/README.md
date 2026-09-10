@@ -43,8 +43,8 @@ languages; listening review is necessary to catch unwanted associations.
 # Plan one bank (8 clips).
 python3 tools/dialogue_voice_generator/generate_dialogue_voices.py --dry-run --profile female --mood afraid
 
-# Reprocess missing finals from raw cache and rebuild previews, without API calls.
-python3 tools/dialogue_voice_generator/generate_dialogue_voices.py --max-requests 0 --build-previews
+# Reprocess existing finals from cached raw takes using current processing settings.
+python3 tools/dialogue_voice_generator/generate_dialogue_voices.py --reprocess --max-requests 0 --build-previews
 
 # Replace exactly one reported clip; keep all previous raw takes.
 python3 tools/dialogue_voice_generator/generate_dialogue_voices.py --regenerate female_afraid_03 --max-requests 1 --build-previews
@@ -56,7 +56,8 @@ python3 tools/dialogue_voice_generator/generate_dialogue_voices.py --regenerate 
 `--profile` and `--mood` intersect. When `--regenerate` is present, only those IDs
 are selected; conflicting filters and unknown IDs fail before requests. A normal
 run skips valid existing finals. Configuration or hash mismatches on valid
-finals are reported as stale and require explicit regeneration. Missing/invalid
+finals are reported as stale. Use `--reprocess` for processing-only changes and
+`--regenerate` when a new API take is intended. Missing/invalid
 finals are rebuilt from matching raw takes. Successful raw responses that fail
 audio validation are retained and reported, not automatically regenerated.
 
@@ -87,24 +88,62 @@ manifests list only existing assets with verified stored hashes.
 
 ## Processing and validation
 
-FFmpeg converts sources to mono 48 kHz PCM. Boundary silence detection uses
-−60 dBFS and 10 ms minimum silence, preserving internal pauses. Trimming retains
-15 ms of safety around detected audio, adding missing padding if speech touches
-a file boundary. Three-millisecond edge fades prevent clicks. Measured linear
-gain targets −3 dBFS, followed by signed 16-bit PCM WAV encoding. There is no
-compression, denoising, reverb, distortion, time stretching, or pitch shifting.
+FFmpeg converts sources to mono 48 kHz PCM. The CPU boundary detector examines
+10 ms windows of AC energy (the window mean is removed for analysis only).
+Speech anchors must exceed peak-window RMS minus 34 dB for at least 30 ms;
+boundaries expand to peak-window RMS minus 46 dB, stopping after two quiet windows
+or 150 ms of extension. This preserves nearby breaths and consonants while
+ignoring isolated distant noise. It only trims outer material; internal pauses
+remain intact. Within the outer windows it refines the cut to the threshold.
 
-FFprobe and decoded sample inspection validate WAV structure, codec, channels,
-sample rate, sample format, complete nonzero content, peak normalization, and
-absence of clipped final samples. Source peaks below −75 dBFS are rejected.
-Durations outside 80–1200 ms are retained with warnings; gain above 20 dB and
-suspected source clipping also receive warnings. Thresholds are configurable.
+Each mood has an optional `tempo` multiplier in `voice_profiles.json`, defaulting
+to 1.0 and accepting finite numbers from 1.0 through 3.0. Current settings are
+neutral 2.0, happy 2.1, angry 2.2, afraid 1.75, panicked 2.5, pained 1.7, and
+relieved 1.9. FFmpeg's `atempo` filter accelerates the complete trimmed utterance
+without raising its pitch. Multipliers above 2.0 use two equal stages whose
+product is the requested tempo, keeping each stage below the sample-skipping
+range. A 2.0 multiplier makes speech approximately half as long;
+safety padding and engine punctuation pauses remain separate from that ratio.
+Tempo belongs to offline processing, so it does not change the API request or
+invalidate raw takes. Its effective value is included in each asset's processing
+fingerprint; changing one mood leaves other moods' cached finals valid.
+
+These settings put ordinary conversation at approximately the previous panicked
+pace. The engine config also uses neutral's former panicked pause rate (36),
+with the other mood rates increased proportionally. Actual line duration depends
+on the selected recordings, word grouping, and punctuation; a tempo multiplier
+alone cannot guarantee an identical words-per-minute rate across banks.
+
+After measuring the retimed waveform, FFmpeg applies 5 ms fades at its edges,
+then adds 15 ms of silent safety padding on each side. Fades smooth the transition into
+padding, including sources that start or stop at nonzero amplitude. Linear gain
+targets −3 dBFS. There is no dynamic-range compression, denoising, reverb, or
+pitch shifting in the final source assets.
+
+Low-level sources requiring more than 30 dB gain with more than 60% of their
+power in DC are rejected, preventing amplified offset/noise from becoming a
+runtime vocalization. Clean quiet content remains usable with a gain warning.
+Source peaks below −75 dBFS are rejected. FFprobe and sample inspection validate
+format, nonzero content, normalization and clipped samples. Durations outside
+80–1200 ms, gain above 20 dB, trimming over 500 ms, and reaching the boundary
+extension limit are flagged for review. These thresholds are configurable.
+
+`--reprocess` rebuilds selected assets from hash-verified raw caches, including
+valid existing finals, and never requests generation even if `--max-requests`
+is nonzero. Missing raw caches are reported as blocked. It cannot be combined
+with `--regenerate`. Successful writes are atomic; a rejected source keeps its
+old final bytes for diagnosis but is excluded from runtime manifests and previews.
+Unmodified raw takes and request accounting are retained. Authoring metadata and
+`validation.csv` include prior/new duration, tempo, retained duration before and
+after tempo adjustment, removed outer time, and sample jumps at the padding
+boundaries. Detection thresholds remain in the authoring manifest. Reprocessing
+always starts from raw audio, so tempo adjustments never compound.
 
 These checks establish technical properties only. They cannot establish that a
 clip sounds human, maintains identity, expresses its intended mood, contains no
 recognizable words, or lacks generated room sound. Every clip starts with
 `listening_review: "pending"`. No duration correction is applied merely to pass
-validation, and no extra generations are purchased to replace warnings.
+validation, and no extra generations are purchased automatically to replace warnings.
 
 ## Files and provenance
 
@@ -156,3 +195,37 @@ words or extra speech, tonal exaggeration, preserved consonants/breaths, room
 sound, and edge artifacts. Give special attention to duration/gain warnings and
 the afraid, panicked, and pained banks. Report undesirable asset IDs for selective
 regeneration; all source text and mood directions remain editable in JSON.
+
+## Engine speech previews
+
+The C++ preview utility uses the engine's current voice loader, complete-fragment
+selection, pitch/volume settings, word grouping, persistent per-identity/mood selection pools, and punctuation schedule. It
+needs no API key, network, audio device, window, or running game.
+
+```sh
+cmake --build cmake-build-debug --target dialogue_speech_preview -j2
+cmake-build-debug/dialogue_speech_preview
+```
+
+This target is available with `BUILD_TESTING=ON`. Run from the repository root,
+or pass `--assets-root /path/to/assets` and `--output-dir /path/to/previews`.
+Defaults write only to the ignored `audio_generation/previews/engine_speech/`:
+
+- `female_speech.wav` and `male_speech.wav`: all seven moods, in manifest mood
+  order, with a short line and a longer punctuated line in each bank.
+- `<identity>_<mood>_speech.wav`: the same individual mood sections.
+- `<identity>_speech_cues.csv`: exact timestamps in the combined identity WAV,
+  source asset IDs, pitch, volume, and the English group revealed by each clip.
+
+Start with `male_neutral_speech.wav` and `female_neutral_speech.wav`, then both
+panicked previews. The cue
+sheet identifies the source if a particular fragment sounds undesirable.
+Half-second gaps separate example lines; one-second gaps separate mood groups in
+combined WAVs. These review separators are additional to dialogue timing.
+
+Offline previews render ideal uninterrupted scheduling and use linear pitch
+resampling. Device resampling, frame-boundary delays, spatial propagation,
+interruptions, and pause/resume still need in-game listening. Successful rendering
+checks that samples do not clip; it does not establish that speech sounds natural.
+The original Python generation previews remain useful for reviewing individual
+source recordings with equal gaps.

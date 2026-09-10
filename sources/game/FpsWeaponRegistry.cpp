@@ -1388,6 +1388,13 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             }
             parsed.consoleEnabled = consoleEnabled->get<bool>();
         }
+        const auto dialogueVoicesEnabled = root.find("dialogueVoicesEnabled");
+        if (dialogueVoicesEnabled != root.end()) {
+            if (!dialogueVoicesEnabled->is_boolean()) {
+                Fail("application settings.dialogueVoicesEnabled must be a boolean");
+            }
+            parsed.dialogueVoicesEnabled = dialogueVoicesEnabled->get<bool>();
+        }
         const auto playerInventory = root.find("playerInventory");
         if (playerInventory != root.end()) {
             if (!playerInventory->is_object()) {
@@ -2584,6 +2591,7 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"version", 1},
             {"firstLevel", settings.firstLevel},
             {"consoleEnabled", settings.consoleEnabled},
+            {"dialogueVoicesEnabled", settings.dialogueVoicesEnabled},
             {"footsteps", {
                     {"defaultSet", settings.footsteps.defaultSet},
                     {"volume", settings.footsteps.volume},

@@ -67,8 +67,8 @@ ranges, return values, behavior, and failure details.
   `startLookAtNpc(instanceId, durationMs [, targetHeight])`,
   `lookAtProp(instanceId, durationMs [, targetHeight])`,
   `startLookAtProp(instanceId, durationMs [, targetHeight])`.
-- **[Captions](#captions):** `say(message [, holdMs])`,
-  `startSay(message [, holdMs])`,
+- **[Captions](#captions):** `say(npcId, message [, mood [, holdMs]])`,
+  `startSay(npcId, message [, mood [, holdMs]])`,
   `text(message, TOP|CENTER|BOTTOM [, holdMs])`,
   `startText(message, TOP|CENTER|BOTTOM [, holdMs])`.
 - **[World fades](#world-fades):** `fadeOut(durationMs)`,
@@ -735,7 +735,7 @@ then restores controls:
 ```lua
 function intro()
     assert(enableControls(false))
-    say("Follow me this way...")
+    say("elin", "Follow me this way...")
     movePlayer("hall_corner", "walk", 2.0)
     lookAtNpc("guide", 750, 0.7)
     assert(enableControls(true))
@@ -750,7 +750,7 @@ waiting for their animations. For example:
 ```lua
 function cinematicIntro()
     assert(startCutscene())
-    say("Follow me this way...")
+    say("elin", "Follow me this way...")
     movePlayer("hall_corner", "walk", 2.0)
     assert(endCutscene())
 end
@@ -881,8 +881,8 @@ instance-ID namespace. Only one scripted look may be active.
 ### Captions
 
 ```text
-say(message [, holdMs]) -> true | false, reason
-startSay(message [, holdMs]) -> operation | nil, reason
+say(npcId, message [, mood [, holdMs]]) -> true | false, reason
+startSay(npcId, message [, mood [, holdMs]]) -> operation | nil, reason
 text(message, TOP|CENTER|BOTTOM [, holdMs]) -> true | false, reason
 startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 ```
@@ -893,8 +893,82 @@ startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 directly in the non-yielding debug console to preview captions; direct console
 calls to the blocking forms are rejected before changing caption state.
 
-`say` is bottom-centered and reveals
-text at 40 Unicode codepoints per second. `text` displays the whole message
+`say` requires a placed NPC instance ID (the same IDs used by `moveNpc`). The
+NPC editor's Voice setting selects `male` or `female`; older definitions default
+to male. The optional mood is `neutral` (default), `happy`, `angry`, `afraid`,
+`panicked`, `pained`, or `relieved`. Pass `nil` for mood to specify only `holdMs`.
+Unknown NPC IDs or moods fail before replacing the current caption. The old
+speakerless `say(message)` form is no longer supported; use `text` for silent
+captions.
+
+```lua
+say("elin", "Yes finally another person!!. Come closer.", "relieved")
+say("elin", "Stay here.", nil, 2000)
+local operation = startSay("elin", "What was that?", "afraid")
+```
+
+`say` is bottom-centered. Text follows complete spoken fragments. Each English
+word gets a recording, except two adjacent words of at most three letters each
+may share one. Groups never cross punctuation. The processed WAV duration sets
+the reveal time; playback must finish before the next group advances.
+
+Each NPC keeps a separate selection pool for each mood. All usable clips are
+consumed once before refilling, and the last three are avoided where bank size
+permits. Selection persists across dialogue lines. Only clips that actually
+start consume the pool; planning or cancelling unplayed text does not. Missing
+mood audio shares the neutral pool. Small banks relax the oldest repeat
+restriction as necessary. This history is session-only and resets on level load.
+
+The editor's **Settings → Dialogue voices** checkbox enables or disables chatter
+globally. It defaults to enabled and is saved as `dialogueVoicesEnabled` in
+`assets/config/application_settings.json`; it is not exposed in player options.
+Disabling fades active chatter out and restores the original steady typewriter:
+40 Unicode codepoints per second, including spaces and punctuation, with no
+speech-driven pauses or dependence on clip lengths or mood. Hold and fade start
+after that text reveal completes. Switching during a line preserves the visible
+text and elapsed hold/fade progress. Re-enabling resumes speech timing at the
+visible position and plays subsequent complete words without replaying the
+partially revealed word. Silent text does not consume the voice selection pool.
+
+The configured character rates—neutral 36, happy 42, angry 45, afraid 30,
+panicked 54, pained 24, relieved 33—guide silent fallback timing and pause scaling.
+They do not stretch recordings or determine how many words a clip absorbs.
+Mood recordings retain their own delivery and intonation; their offline tempo
+settings are authored separately in the dialogue voice generator configuration.
+
+Punctuation adds mood-scaled pauses; repeated punctuation produces one bounded
+pause. Between fragments within a phrase, the configured 20–60 ms gaps are scaled
+by `24 / characters_per_second`, giving approximately 13–40 ms for neutral. Pitch stays
+constant within each fragment with up to ±2% variation between fragments,
+bounded by the voice manifest, and volume varies within the manifest's range.
+Sound originates near the NPC and follows existing distance/propagation effects.
+
+The session owns a dedicated dialogue asset scope. Each final WAV is decoded
+whole during level loading, preserving its prepared fades. `AssetManager` owns
+its sound and playback aliases. Source WAVs remain unchanged; no slicing or
+asset loading occurs during speech. Settings are in
+`assets/config/dialogue_speech.json`; restart the level after changing them,
+voice manifests, or an NPC's voice. The manifest's old characters-per-sound and
+minimum-trigger-interval recommendations do not drive this complete-fragment
+scheduler.
+
+Playback completion gates progression: late starts receive their full duration,
+and a frame stall cannot truncate a fragment or queue a burst of new sounds.
+The caption hold timer begins after the final fragment and punctuation pause.
+Replacement/cancellation uses a short release, and pause/resume follows the game.
+Speaker death/removal releases speech while the caption continues with estimated
+timing. Missing mood audio falls back to neutral; missing voices or unavailable
+audio use silent estimated timing. Dialogue suppresses ambient vocalizations
+without adding AI-hearing events or changing combat sounds.
+
+Headless speech previews and cue sheets can be rebuilt with
+`cmake-build-debug/dialogue_speech_preview`. See
+[the preview instructions](../tools/dialogue_voice_generator/README.md#engine-speech-previews).
+Tests cover planning, UTF-8, ownership, completion gating, and script lifecycle.
+Listening still needs to verify naturalness, interruptions, positional
+propagation, and pause/resume on the actual audio device.
+
+`text` displays the whole message
 and fades in over 250 ms at the selected vertical position. Both word-wrap
 within 80% of the viewport, use the game's 48-pixel bold font, and fade out
 over 350 ms. `holdMs` is the interval after reveal/fade-in and before fade-out.

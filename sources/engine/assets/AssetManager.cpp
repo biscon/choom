@@ -321,6 +321,17 @@ bool AssetManager::IsReady(SoundHandle handle) const
     return sounds.IsReady(handle);
 }
 
+SoundHandle AssetManager::CreateSoundFromPcm(AssetScopeHandle scope,
+        const char* key, const int16_t* samples, size_t frameCount,
+        unsigned int sampleRate)
+{
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!IsValidScopeNoLock(scope)) return NullSoundHandle();
+    }
+    return sounds.CreateSoundFromPcm(scope, key, samples, frameCount, sampleRate);
+}
+
 bool AssetManager::IsFinished(SoundHandle handle) const
 {
     return sounds.IsFinished(handle);

@@ -322,6 +322,29 @@ void TestRoundTripDefaultsAndSharedClips()
           "unassigned actions remain valid and default safely");
 }
 
+void TestDialogueVoiceDefinition()
+{
+    auto definition = MakeDefinition("voice_test");
+    std::string json, error;
+    game::NpcDefinition parsed;
+    Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                  && !Json::parse(json).contains("voice")
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.voice == "male",
+          "existing NPC definitions default to male without a schema migration");
+    definition.voice = "female";
+    Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                  && Json::parse(json)["voice"] == "female"
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.voice == "female", "female dialogue voice round-trips");
+    auto invalid = Json::parse(json);
+    for (const Json& value : {Json("unknown"), Json(""), Json(42), Json(nullptr)}) {
+        invalid["voice"] = value;
+        Check(!game::ParseNpcDefinitionJson(invalid.dump(), parsed, error),
+              "invalid dialogue voice values are rejected");
+    }
+}
+
 void TestHeadLookDefinitionRoundTripAndValidation()
 {
     game::NpcDefinition definition = MakeDefinition("friendly_look");
@@ -716,6 +739,10 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
     Check(service.Open() && state.drafts.size() == 2,
           "NPC editor service opens a valid catalog");
     Check(service.SelectIndex(1), "second NPC can be selected");
+    service.SetSelectedVoice("female");
+    service.SetSelectedVoice("invalid");
+    Check(service.SelectedDraft()->definition.voice == "female",
+          "voice dropdown edits the draft and rejects unknown identities");
     session.listScroll.offset.y = 42.0f;
     session.formScroll.offset.y = 84.0f;
     service.SelectedDraft()->definition.name = "Discarded";
@@ -726,10 +753,12 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                   && service.SelectedDraft() != nullptr
                   && service.SelectedDraft()->definition.id == "beta"
                   && service.SelectedDraft()->definition.name == "Test Character"
+                  && service.SelectedDraft()->definition.voice == "male"
                   && Near(session.listScroll.offset.y, 42.0f)
                   && Near(session.formScroll.offset.y, 84.0f),
           "reopen restores session selection and scrolls but discards draft edits");
 
+    service.SetSelectedVoice("female");
     service.SelectedDraft()->definition.id = "renamed_beta";
     session.selectedNpcId = "renamed_beta";
     Check(service.SaveAndClose(nullptr)
@@ -741,6 +770,8 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                   && service.SelectedDraft() != nullptr
                   && service.SelectedDraft()->definition.id == "renamed_beta",
           "saved rename updates the session selection");
+    Check(service.SelectedDraft()->definition.voice == "female",
+          "saved dialogue voice survives reopening the NPC editor");
     service.SetSelectedAnimationBlendSeconds(0.45f);
     Check(Near(service.SelectedDraft()->definition.animationBlendSeconds, 0.45f),
           "NPC editor service updates animation blending through its draft API");
@@ -943,6 +974,7 @@ void TestCatalogErrorsBlockEditorSave()
 int main()
 {
     TestRoundTripDefaultsAndSharedClips();
+    TestDialogueVoiceDefinition();
     TestHeadLookDefinitionRoundTripAndValidation();
     TestBodyPartDamageRoundTripAndValidation();
     TestBoneImpactRoundTripAndValidation();

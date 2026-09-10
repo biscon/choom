@@ -1,0 +1,22 @@
+{
+  "voices": {
+    "male": "audio/dialogue_voices/male/voice_manifest.json",
+    "female": "audio/dialogue_voices/female/voice_manifest.json"
+  },
+  "characters_per_second": {
+    "neutral": 36,
+    "happy": 42,
+    "angry": 45,
+    "afraid": 30,
+    "panicked": 54,
+    "pained": 24,
+    "relieved": 33
+  },
+  "volume": 0.65,
+  "comma_pause_ms": 120,
+  "clause_pause_ms": 180,
+  "sentence_pause_ms": 260,
+  "ellipsis_pause_ms": 450,
+  "minimum_gap_ms": 20,
+  "maximum_gap_ms": 60
+}

@@ -336,6 +336,12 @@ void UpdateNpcAudioSystem(
             }
             continue;
         }
+        if (world.Has<NpcRuntimeInstance>(record.entity)
+                && world.Get<NpcRuntimeInstance>(record.entity).dialogueSpeaking) {
+            if (record.playbackKind == NpcVocalPlaybackKind::Ambient)
+                StopVocalPlayback(assets, audio, record);
+            continue;
+        }
         if (!engine::IsNull(record.vocalPlayback)
                 || record.ambientDisabled
                 || record.ambientSounds.sounds.empty()) {

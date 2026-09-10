@@ -104,6 +104,11 @@ public:
     ModelHandle FindReadyModelByPath(const char* path) const;
 
     SoundHandle RequestSound(AssetScopeHandle scope, const char* path);
+    // Main-thread load phase only. Copies mono signed 16-bit PCM; resources
+    // and playback aliases are created by UpdateMainThread and owned by scope.
+    // Reusing a key returns the existing sound, including across live scopes.
+    SoundHandle CreateSoundFromPcm(AssetScopeHandle scope, const char* key,
+            const int16_t* samples, size_t frameCount, unsigned int sampleRate = 48000);
     bool IsReady(SoundHandle handle) const;
     bool IsFinished(SoundHandle handle) const;
     bool HasFailed(SoundHandle handle) const;

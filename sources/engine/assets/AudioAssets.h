@@ -33,6 +33,8 @@ class SoundAssets {
 public:
     void OnScopeCreated(AssetScopeHandle scope);
     SoundHandle RequestSound(AssetScopeHandle scope, const char* path);
+    SoundHandle CreateSoundFromPcm(AssetScopeHandle scope, const char* key,
+            const int16_t* samples, size_t frameCount, unsigned int sampleRate);
 
     bool IsReady(SoundHandle handle) const;
     bool IsFinished(SoundHandle handle) const;
@@ -57,6 +59,8 @@ private:
         uint32_t ownerCount = 0;
         std::string path;
         SoundAsset asset;
+        std::vector<int16_t> generatedPcm;
+        unsigned int generatedSampleRate = 0;
     };
 
     struct ScopeData {

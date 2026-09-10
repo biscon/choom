@@ -166,6 +166,7 @@ struct NpcBoneImpactDefinition {
 struct NpcDefinition {
     std::string id;
     std::string name;
+    std::string voice = "male";
     bool hostile = false;
     std::string aiType;
     bool canOpenDoors = true;

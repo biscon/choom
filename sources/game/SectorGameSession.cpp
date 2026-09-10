@@ -1175,6 +1175,7 @@ bool SectorGameSession::StartNew(
     paused = false;
     consoleInputCaptured = false;
     InitializeSectorCutsceneRuntime(cutscene);
+    engine::BeginLoadDialogueVoices(context.assets, dialogueVoices, ASSETS_PATH);
     InitializeSectorScriptHost(
             scriptHost,
             scene.RuntimeObjects(),
@@ -1195,6 +1196,7 @@ bool SectorGameSession::StartNew(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.dialogueVoices = &dialogueVoices;
     pendingLoadingSave = loadingSave;
     saveGameBlocked = false;
     saveGameBlockedReason.clear();
@@ -1229,7 +1231,9 @@ void SectorGameSession::Shutdown(
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
+    StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, &scene.Navigation());
+    engine::UnloadDialogueVoices(context.assets, dialogueVoices);
     fpsPlayer.End(context.assets, scene.Renderer());
     if (running) {
         LeaveSectorFreeflyController();
@@ -1305,6 +1309,7 @@ void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
     Pause();
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
+    StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, nullptr);
     SetSaveGameBlocked(false);
     pendingItemTake = {};
@@ -1616,6 +1621,7 @@ void SectorGameSession::Update(
             SectorCutscenePlayerDoorHoldId(cutscene));
     if (IsDepleted(playerHealth)) {
         gameOver = true;
+        StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
         ClearPlayerLowHealthCamera(lowHealthCamera);
         StopPlayerHeartbeatAudio(
                 context.assets,
@@ -1642,6 +1648,8 @@ void SectorGameSession::Update(
         UpdateItemHealingEffects(*itemCampaign, playerHealth, dt);
     }
     UpdateSectorScriptOperations(context, scriptHost);
+    UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, dt,
+            applicationSettings == nullptr || applicationSettings->dialogueVoicesEnabled);
     UpdateSectorCutsceneTimelines(cutscene, scripts, dt);
     SectorFpsControllerInput input;
     if (!gameplayInputCaptured) {
@@ -2050,6 +2058,8 @@ void SectorGameSession::Update(
             });
     engine::ScriptSystemUpdate(context, scripts, dt);
     UpdateSectorScriptCutsceneControlOwnership(context, scriptHost);
+    UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.0f,
+            applicationSettings == nullptr || applicationSettings->dialogueVoicesEnabled);
     UpdatePendingItemTake(context, scene);
     UpdatePendingHeldObjectUse();
     UpdateItemPresentations(context, scene, dt);
@@ -2199,6 +2209,7 @@ void SectorGameSession::UpdateLoading(
     if (loading.phase != GameLevelLoadPhase::Loading) return;
 
     scene.UpdateLoadPreparation(context, topologyMap);
+    engine::PrepareDialogueVoices(context.assets, dialogueVoices);
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
         fpsPlayer.Update(
                 context.assets,
@@ -2216,6 +2227,12 @@ void SectorGameSession::UpdateLoading(
     size_t totalAssets = 0;
     scene.AccumulateLoadAssetProgress(
             context.assets, finishedAssets, totalAssets);
+    if (!engine::IsNull(dialogueVoices.scope)) {
+        size_t finished = 0, total = 0;
+        context.assets.GetScopeProgressCounts(dialogueVoices.scope, finished, total);
+        finishedAssets += finished + dialogueVoices.prepared;
+        totalAssets += total + dialogueVoices.pending.size();
+    }
     const engine::AssetScopeHandle viewmodelScope =
             fpsPlayer.State().assetScope;
     if (!engine::IsNull(viewmodelScope)) {
@@ -2250,7 +2267,8 @@ void SectorGameSession::UpdateLoading(
 
     const SectorRuntimeObjectState& objects = scene.RuntimeObjects();
     const bool assetsFinished = scene.AreLoadAssetScopesFinished(context.assets)
-            && ScopeFinishedOrEmpty(context.assets, viewmodelScope);
+            && ScopeFinishedOrEmpty(context.assets, viewmodelScope)
+            && engine::DialogueVoicesFinished(context.assets, dialogueVoices);
     const bool runtimeObjectsFinished =
             objects.spriteAnimationPendingCount == 0
             && objects.staticModelPendingCount == 0;
@@ -2493,7 +2511,9 @@ bool SectorGameSession::RebuildFromMap(
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
+    StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, &scene.Navigation());
+    engine::BeginLoadDialogueVoices(context.assets, dialogueVoices, ASSETS_PATH);
     SetSaveGameBlocked(false);
     pendingItemTake = {};
     heldObjectUse = {};
@@ -2580,6 +2600,7 @@ bool SectorGameSession::RebuildFromMap(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.dialogueVoices = &dialogueVoices;
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};

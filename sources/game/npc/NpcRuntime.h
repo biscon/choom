@@ -1,5 +1,7 @@
 #pragma once
 
+#include "engine/audio/DialogueSpeech.h"
+
 #include "game/npc/NpcDefinitions.h"
 #include "game/npc/NpcCollision.h"
 #include "game/npc/ai/NpcAiTypes.h"
@@ -26,6 +28,9 @@ struct NpcRuntimeInstance {
     float walkSpeed = 1.5f;
     float runSpeed = 3.0f;
     bool actionLockedByAi = false;
+    std::string voice = "male";
+    bool dialogueSpeaking = false;
+    engine::DialogueSelectionHistory dialogueHistory;
 };
 
 enum class NpcAwarenessState : uint8_t {

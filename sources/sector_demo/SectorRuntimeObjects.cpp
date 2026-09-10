@@ -1631,7 +1631,8 @@ void SpawnPlacedRuntimeObjects(
                     definition->canOpenDoors,
                     GetNpcAction(*definition, NpcAction::Walk).movementSpeed,
                     GetNpcAction(*definition, NpcAction::Run).movementSpeed,
-                    false});
+                    false,
+                    definition->voice});
             if (placedObject.npc.patrolEditorId > 0
                     && FindSectorCompiledPatrol(
                             map, placedObject.npc.patrolEditorId) != nullptr) {

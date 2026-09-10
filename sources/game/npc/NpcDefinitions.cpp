@@ -284,6 +284,10 @@ bool ValidateNpcDefinition(
         const NpcDefinition& definition,
         std::string& outError)
 {
+    if (definition.voice != "male" && definition.voice != "female") {
+        outError = "NPC voice must be male or female";
+        return false;
+    }
     if (!IsValidNpcDefinitionId(definition.id)) {
         outError = "NPC id must contain 1-63 letters, digits, underscores, or dashes";
         return false;
@@ -586,7 +590,7 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "aiType", "perception", "headLook", "bodyPartDamage", "boneImpact", "canOpenDoors",
+                {"formatVersion", "id", "name", "voice", "hostile", "aiType", "perception", "headLook", "bodyPartDamage", "boneImpact", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
                  "animationBlendSeconds", "playerDetectedSound",
@@ -602,6 +606,7 @@ bool ParseNpcDefinitionJson(
         NpcDefinition parsed = MakeDefaultNpcDefinition();
         parsed.id = RequireString(root, "id", "NPC definition");
         parsed.name = OptionalString(root, "name", {}, "NPC definition");
+        parsed.voice = OptionalString(root, "voice", "male", "NPC definition");
         parsed.hostile = OptionalBool(root, "hostile", false, "NPC definition");
         parsed.aiType = OptionalString(root, "aiType", {}, "NPC definition");
         parsed.canOpenDoors = OptionalBool(
@@ -902,6 +907,7 @@ bool SerializeNpcDefinitionJson(
         root["formatVersion"] = kNpcDefinitionFormatVersion;
         root["id"] = definition.id;
         if (!definition.name.empty()) root["name"] = definition.name;
+        if (definition.voice != "male") root["voice"] = definition.voice;
         if (definition.hostile) root["hostile"] = true;
         if (!definition.aiType.empty()) root["aiType"] = definition.aiType;
         if (!definition.canOpenDoors) root["canOpenDoors"] = false;

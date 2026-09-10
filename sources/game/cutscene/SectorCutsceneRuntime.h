@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/audio/DialogueSpeech.h"
 #include "engine/ecs/Entity.h"
 #include "engine/scripting/ScriptData.h"
 #include "game/navigation/SectorNavigationTypes.h"
@@ -115,6 +116,22 @@ struct SectorCutsceneCaptionState {
     double elapsedSeconds = 0.0;
     float opacity = 0.0f;
     bool active = false;
+    engine::Entity speaker = engine::NullEntity();
+    engine::DialogueMood mood = engine::DialogueMood::Neutral;
+    engine::DialogueTimeline speechTimeline;
+    bool voiceTiming = true;
+    bool speechDriven = false;
+    bool speechFinished = false;
+};
+
+// Borrowed load-time data used only while constructing a caption.
+struct SectorCutsceneSpeechOptions {
+    engine::Entity speaker = engine::NullEntity();
+    engine::DialogueMood mood = engine::DialogueMood::Neutral;
+    const engine::DialogueVoice* voice = nullptr;
+    const engine::DialogueSelectionHistory* history = nullptr;
+    const engine::DialogueSettings* settings = nullptr;
+    uint32_t seed = 1;
 };
 
 struct SectorCutsceneFadeState {
@@ -145,6 +162,8 @@ struct SectorCutsceneRuntime {
     SectorCutsceneCaptionState caption;
     SectorCutsceneFadeState fade;
     SectorCutscenePresentationState presentation;
+    engine::DialoguePlayback speechPlayback;
+    engine::Entity speechSpeaker = engine::NullEntity();
     engine::ScriptTaskHandle controlsOwnerTask{};
     uint64_t nextToken = 1;
     bool controlsEnabled = true;
@@ -241,12 +260,19 @@ bool BeginSectorCutsceneCaption(
         std::string_view text,
         const double* holdSeconds,
         uint64_t& outToken,
-        std::string& error);
+        std::string& error,
+        const SectorCutsceneSpeechOptions* speech = nullptr);
 void BindSectorCutsceneCaptionOperation(
         SectorCutsceneRuntime& runtime,
         uint64_t token,
         engine::ScriptOperationHandle operation);
 void CancelSectorCutsceneCaption(SectorCutsceneRuntime& runtime, uint64_t token);
+void SetSectorCutsceneCaptionVoiceTiming(SectorCutsceneRuntime& runtime, bool enabled);
+void UpdateSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& world,
+        engine::AssetManager& assets, engine::AudioSystem& audio, float dt,
+        bool voicesEnabled = true);
+void StopSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& world,
+        engine::AssetManager& assets, engine::AudioSystem& audio);
 
 bool BeginSectorCutsceneFade(
         SectorCutsceneRuntime& runtime,

@@ -67,6 +67,7 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
 {
     if (left.id != right.id
             || left.name != right.name
+            || left.voice != right.voice
             || left.hostile != right.hostile
             || left.aiType != right.aiType
             || left.canOpenDoors != right.canOpenDoors
@@ -411,6 +412,12 @@ void SectorEditorNpcEditorService::SetSelectedHostile(bool hostile)
     draft->definition.hostile = hostile;
     if (hostile) draft->definition.headLook.enabled = false;
     state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedVoice(const std::string& voice)
+{
+    if (voice != "male" && voice != "female") return;
+    if (auto* draft = SelectedDraft()) draft->definition.voice = voice;
 }
 
 void SectorEditorNpcEditorService::SetSelectedAiType(const std::string& aiType)

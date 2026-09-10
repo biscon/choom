@@ -276,7 +276,9 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         editor.RefreshAnimationOptions(assets);
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
+        const float voiceRowExtent = RowHeight + RowGap;
         const float contentHeight = 21.0f * (RowHeight + RowGap)
+                + voiceRowExtent
                 + 3.0f * (RowHeight + RowGap) + 4.0f
                 + (selected->definition.boneImpact.enabled
                                 ? 6.0f * (RowHeight + RowGap)
@@ -334,6 +336,15 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                 sizeof(state.nameBuffer) - 1);
         if (nameResult.changed) editor.ApplyNameBuffer();
         y += RowHeight + RowGap;
+
+        drawLabel("Voice");
+        static constexpr const char* voiceOptions[]{"Male", "Female"};
+        int voiceIndex = selected->definition.voice == "female" ? 1 : 0;
+        if (engine::Option(ui, config, input, assets, "sector_editor_npc_voice",
+                Rectangle{fieldX, y, fieldW, RowHeight}, font, voiceOptions, 2, voiceIndex)) {
+            editor.SetSelectedVoice(voiceIndex == 1 ? "female" : "male");
+        }
+        y += voiceRowExtent;
 
         bool hostile = selected->definition.hostile;
         if (engine::Checkbox(

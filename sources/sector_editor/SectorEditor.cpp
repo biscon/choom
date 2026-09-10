@@ -977,6 +977,7 @@ void SectorEditor::RenderUI(
                         previewState.selection.selectedSurface3D);
             }(),
             PreviewAdjustmentActive(),
+            applicationSettings.dialogueVoicesEnabled,
             mainMenuVisible,
             IsMainMenuInteractionEnabled());
     HandleMainMenuCommand(command, ui, assets);
@@ -1697,6 +1698,19 @@ void SectorEditor::HandleMainMenuCommand(
         case SectorEditorMainMenuCommand::OpenColorSettings:
             OpenColorSettingsModal();
             break;
+        case SectorEditorMainMenuCommand::ToggleDialogueVoices: {
+            FpsApplicationSettings candidate = applicationSettings;
+            candidate.dialogueVoicesEnabled = !candidate.dialogueVoicesEnabled;
+            std::string error;
+            if (!SaveFpsApplicationSettings(applicationSettingsPath, candidate, &error)) {
+                statusText = error.empty() ? "Could not save dialogue voice setting" : error;
+                break;
+            }
+            applicationSettings = std::move(candidate);
+            statusText = applicationSettings.dialogueVoicesEnabled
+                    ? "Dialogue voices enabled" : "Dialogue voices disabled";
+            break;
+        }
         case SectorEditorMainMenuCommand::OpenPlayerSettings:
             if (engineContext != nullptr) {
                 BuildPlayerSettingsService().Open(*engineContext);

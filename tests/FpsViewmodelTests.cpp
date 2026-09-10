@@ -1027,6 +1027,7 @@ void SettingsResolutionAndPersistence()
     game::SetFpsWeaponFiringOverride(settings, "pistol", firingOverride);
     settings.firstLevel = "test4";
     settings.consoleEnabled = false;
+    settings.dialogueVoicesEnabled = false;
     settings.hdrBloom={true,2.0f,0.25f,0.5f,2.0f};
     settings.graphics.renderScale = 1.25f;
     settings.graphics.fxaa = false;
@@ -1118,6 +1119,7 @@ void SettingsResolutionAndPersistence()
     assert(game::SamePlayerCameraSettings(loaded.playerCamera, settings.playerCamera));
     assert(loaded.firstLevel == "test4");
     assert(!loaded.consoleEnabled);
+    assert(!loaded.dialogueVoicesEnabled);
     assert(Near(loaded.hdrBloom.threshold,2.0f)
             && Near(loaded.hdrBloom.radius,2.0f));
     assert(Near(loaded.graphics.renderScale, 1.25f));
@@ -1464,11 +1466,14 @@ void SettingsResolutionAndPersistence()
     assert(Near(loaded.playerLiquids.audio.underwaterMuffling, 0.0f));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"consoleEnabled":"yes"})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"dialogueVoicesEnabled":"no"})",loaded,&error));
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1})",
             loaded,
             &error));
     assert(loaded.consoleEnabled);
+    assert(loaded.dialogueVoicesEnabled);
     assert(loaded.graphics.maxDynamicLights == game::DefaultFpsDynamicLights);
     assert(loaded.graphics.maxShadowLightUpdatesPerFrame
             == game::DefaultFpsShadowLightUpdatesPerFrame);

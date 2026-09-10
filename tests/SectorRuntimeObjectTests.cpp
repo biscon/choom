@@ -6633,6 +6633,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     game::NpcDefinition definition = game::MakeDefaultNpcDefinition();
     definition.id = "runtime_test_npc";
     definition.name = "Runtime Test";
+    definition.voice = "female";
     definition.hostile = true;
     definition.canOpenDoors = false;
     definition.baseHealth = 160;
@@ -6693,6 +6694,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
             world.Get<game::SectorObjectTransform>(entity);
     Check(npc.definitionId == "runtime_test_npc"
                   && npc.instanceId == "guard_one"
+                  && npc.voice == "female"
+                  && !npc.dialogueSpeaking
                   && npc.action == game::NpcAction::Idle
                   && npc.hostile
                   && !npc.canOpenDoors

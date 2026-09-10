@@ -77,6 +77,37 @@ class GeneratorTests(FixtureCase):
             with self.subTest(config=config), self.assertRaises(g.GenerationError):
                 g.load_config(path)
 
+    def test_tempo_configuration_defaults_and_validation(self):
+        path = self.root / "config.json"
+        config = copy.deepcopy(self.config)
+        config["moods"]["neutral"].pop("tempo")
+        path.write_text(json.dumps(config))
+        default = g.load_config(path)
+        config["moods"]["neutral"]["tempo"] = 1
+        self.assertEqual(g.processing_fingerprint(default, "neutral"),
+                         g.processing_fingerprint(config, "neutral"))
+        for value in (0.99, 3.01, True, None, "1.4", float("nan"), float("inf")):
+            config["moods"]["neutral"]["tempo"] = value
+            path.write_text(json.dumps(config))
+            with self.subTest(tempo=value), self.assertRaises(g.GenerationError):
+                g.load_config(path)
+
+    def test_tempo_changes_only_affected_processing_cache(self):
+        changed = copy.deepcopy(self.config)
+        changed["moods"]["neutral"]["tempo"] = 1.6
+        self.assertEqual(g.asset_specs(changed), self.specs)  # API cache unchanged
+        specs = [self.specs[0], self.specs[8], self.specs[56]]
+        records = {}
+        for spec in specs:
+            final, _ = g.paths(self.root, spec)
+            g.atomic_bytes(final, wav_bytes())
+            records[spec["asset_id"]] = {"final": {
+                "sha256": g.file_hash(final), "request_fingerprint": spec["request_fingerprint"],
+                "processing_fingerprint": g.processing_fingerprint(self.config, spec["mood"])}}
+        with patch.object(g, "validate_final", return_value={}):
+            plan = g.plan_assets(self.root, changed, specs, records, max_requests=0)
+        self.assertEqual([p["action"] for p in plan], ["stale", "cached", "stale"])
+
     def test_paths_and_traversal(self):
         final, raw = g.paths(self.root, self.specs[0])
         self.assertEqual(final.relative_to(self.root).as_posix(), "assets/audio/dialogue_voices/male/neutral/male_neutral_01.wav")
@@ -124,7 +155,7 @@ class GeneratorTests(FixtureCase):
         spec = self.specs[0]
         final, _ = g.paths(self.root, spec)
         g.atomic_bytes(final, wav_bytes())
-        records = {spec["asset_id"]: {"final": {"sha256": g.file_hash(final), "request_fingerprint": spec["request_fingerprint"], "processing_fingerprint": g.processing_fingerprint(self.config)}}}
+        records = {spec["asset_id"]: {"final": {"sha256": g.file_hash(final), "request_fingerprint": spec["request_fingerprint"], "processing_fingerprint": g.processing_fingerprint(self.config, spec["mood"])}}}
         with patch.object(g, "validate_final", return_value={}):
             self.assertEqual(g.plan_assets(self.root, self.config, [spec], records)[0]["action"], "cached")
             changed = {**spec, "request_fingerprint": "changed"}
@@ -139,7 +170,7 @@ class GeneratorTests(FixtureCase):
         self.assertEqual(manifest["moods"]["neutral"], ["neutral/male_neutral_01.wav"])
         self.assertEqual(manifest["pitch_range"], [0.96, 1.04])
         self.assertEqual(set(manifest["moods"]), set(g.MOODS))
-        for forbidden in ("request", "instructions", "source_text", "voice", "model"):
+        for forbidden in ("request", "instructions", "source_text", "voice", "model", "tempo"):
             self.assertNotIn(forbidden, manifest)
 
     def test_atomic_replace_failure_preserves_original(self):
@@ -216,6 +247,118 @@ class GeneratorTests(FixtureCase):
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "Audio tools required")
 class AudioTests(FixtureCase):
+    def write_samples(self, path, samples):
+        with wave.open(str(path), "wb") as wav:
+            wav.setparams((1, 2, 48000, 0, "NONE", "not compressed"))
+            data = array.array("h", samples)
+            if sys.byteorder != "little": data.byteswap()
+            wav.writeframes(data.tobytes())
+
+    def test_tempo_duration_pitch_padding_and_complete_ending(self):
+        source, final = self.root / "source.wav", self.root / "final.wav"
+        # A final higher-pitched syllable catches truncation of the utterance.
+        samples = [round(8000 * math.sin(2*math.pi*(300 if n < 33600 else 600)*n/48000))
+                   for n in range(48000)]
+        self.write_samples(source, samples)
+        original = source.read_bytes()
+        for tempo in (1.4, 1.65, 2.0, 2.5, 3.0):
+            result = g.process_audio(source, final, self.config["processing"], tempo)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertAlmostEqual(result["duration_ms"], 1000/tempo + 30, delta=35)
+            self.assertAlmostEqual(result["peak_dbfs"], -3, delta=0.02)
+            self.assertEqual(result["clipped_samples"], 0)
+            self.assertEqual(result["leading_boundary_jump"], 0)
+            self.assertEqual(result["trailing_boundary_jump"], 0)
+            output = g.pcm_samples(final)
+            self.assertFalse(any(output[:720]))
+            self.assertFalse(any(output[-720:]))
+            for segment, frequency in ((output[2400:7200], 300), (output[-4080:-1680], 600)):
+                crossings = sum(a <= 0 < b for a, b in zip(segment, segment[1:]))
+                self.assertAlmostEqual(crossings*48000/len(segment), frequency, delta=21)
+            self.assertEqual(result["tempo"], tempo)
+            self.assertAlmostEqual(result["removed_outer_ms"],
+                                   result["source_duration_ms"]-result["retained_duration_ms"])
+
+    def test_reprocess_tempo_uses_raw_without_network_or_compounding(self):
+        state = {"schema_version": 1, "initial_successes": 112, "assets": {}}
+        for spec in self.specs[:8]:
+            final, raw_dir = g.paths(self.root, spec)
+            raw = raw_dir / "take.wav"
+            g.atomic_bytes(raw, wav_bytes(seconds=0.6))
+            g.atomic_bytes(final, wav_bytes(seconds=0.1))  # wrong prior speed
+            state["assets"][spec["asset_id"]] = {"takes": [{
+                "raw_path": raw.relative_to(self.root).as_posix(), "raw_sha256": g.file_hash(raw),
+                "request_fingerprint": spec["request_fingerprint"], "status": "processed"}]}
+        manifest = self.root / "tools/dialogue_voice_generator/authoring_manifest.json"
+        g.atomic_json(manifest, state)
+        args = g.parse_args(["--reprocess", "--profile", "male", "--mood", "neutral", "--max-requests", "0"])
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}), patch.object(g, "speech_request", side_effect=AssertionError("No API calls")), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(g.execute(args, self.root), 0)
+            first = {s["asset_id"]: g.paths(self.root, s)[0].read_bytes() for s in self.specs[:8]}
+            self.assertEqual(g.execute(args, self.root), 0)
+        after = json.loads(manifest.read_text())
+        plan = g.plan_assets(self.root, self.config, self.specs[:8], after["assets"], max_requests=0)
+        self.assertTrue(all(p["action"] == "cached" for p in plan))
+        for spec in self.specs[:8]:
+            self.assertEqual(g.paths(self.root, spec)[0].read_bytes(), first[spec["asset_id"]])
+            entry = after["assets"][spec["asset_id"]]["final"]
+            tempo = self.config["moods"]["neutral"]["tempo"]
+            self.assertAlmostEqual(entry["duration_ms"], 600/tempo + 30, delta=35)
+            self.assertEqual(entry["tempo"], tempo)
+        self.assertEqual(after["initial_successes"], 112)
+        run = json.loads((self.root / "audio_generation/reports/latest_run.json").read_text())
+        self.assertEqual(run["planned_requests"], 0)
+        self.assertEqual(run["completed_requests"], 0)
+
+    def test_noise_tail_breaths_and_isolated_impulse(self):
+        source = self.root / "noise_tail.wav"
+        samples = []
+        for n in range(48000):
+            amplitude = 80 if n < 3840 or 18240 <= n < 22080 else 8000 if n < 18240 else 0
+            samples.append(round(amplitude * math.sin(2*math.pi*300*n/48000)) if amplitude else 30 + n % 3)
+        samples[40000] = 1500  # an isolated late spike must not extend the utterance
+        self.write_samples(source, samples)
+        before = source.read_bytes()
+        result = g.process_audio(source, self.root / "final.wav", self.config["processing"])
+        self.assertEqual(source.read_bytes(), before)
+        self.assertAlmostEqual(result["duration_ms"], 490, delta=3)
+        self.assertEqual(result["leading_boundary_jump"], 0)
+        self.assertEqual(result["trailing_boundary_jump"], 0)
+        self.assertIn("large_outer_trim_review", result["warnings"])
+
+    def test_dc_dominated_source_rejected_and_real_boundary_fades(self):
+        source = self.root / "dc.wav"
+        self.write_samples(source, [30 + n % 3 for n in range(14400)])
+        with self.assertRaises(g.RejectedAudio):
+            g.process_audio(source, self.root / "bad.wav", self.config["processing"])
+        self.write_samples(source, [round(8000*math.cos(2*math.pi*300*n/48000)) for n in range(14400)])
+        result = g.process_audio(source, self.root / "good.wav", self.config["processing"])
+        self.assertEqual(result["leading_boundary_jump"], 0)
+        self.assertEqual(result["trailing_boundary_jump"], 0)
+
+    def test_reprocess_is_offline_and_rejects_bad_existing_final(self):
+        spec = self.specs[0]
+        raw = self.root / "audio_generation/raw/take.wav"
+        raw.parent.mkdir(parents=True)
+        self.write_samples(raw, [30 + n % 3 for n in range(14400)])
+        final, _ = g.paths(self.root, spec)
+        g.atomic_bytes(final, wav_bytes())
+        before = final.read_bytes()
+        record = {"takes": [{"raw_path": raw.relative_to(self.root).as_posix(), "raw_sha256": g.file_hash(raw),
+                             "request_fingerprint": spec["request_fingerprint"], "status": "processed"}],
+                  "final": {"status": "accepted", "sha256": g.file_hash(final), "duration_ms": 500}}
+        state = {"schema_version": 1, "initial_successes": 112, "assets": {spec["asset_id"]: record}}
+        g.atomic_json(self.root / "tools/dialogue_voice_generator/authoring_manifest.json", state)
+        with patch.object(g, "speech_request", side_effect=AssertionError("Reprocessing must never call API")), contextlib.redirect_stdout(io.StringIO()):
+            args = g.parse_args(["--reprocess", "--profile", "male", "--mood", "neutral", "--max-requests", "112"])
+            self.assertEqual(g.execute(args, self.root), 1)
+        state = json.loads((self.root / "tools/dialogue_voice_generator/authoring_manifest.json").read_text())
+        self.assertEqual(state["initial_successes"], 112)
+        self.assertEqual(state["assets"][spec["asset_id"]]["final"]["status"], "rejected")
+        self.assertEqual(g.plan_assets(self.root, self.config, [spec], state["assets"])[0]["action"], "blocked")
+        self.assertEqual(final.read_bytes(), before)  # rejected prior bytes retained for review only
+        self.assertEqual(g.runtime_manifest("male", self.config, self.specs, state["assets"], self.root)["moods"]["neutral"], [])
+
     def test_processing_format_trim_peak_and_padding(self):
         source, final = self.root / "source.wav", self.root / "final.wav"
         source.write_bytes(wav_bytes(channels=2, rate=44100))

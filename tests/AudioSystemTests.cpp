@@ -10,6 +10,8 @@
 #include <iostream>
 #include <set>
 
+namespace engine_test { void TestDialogueSpeech(); }
+
 namespace {
 
 bool Near(float lhs, float rhs, float tolerance = 0.0001f)
@@ -383,6 +385,7 @@ void PlayerLiquidRoomtoneGainTransitions()
 
 int main()
 {
+    engine_test::TestDialogueSpeech();
     ScopeDeduplication();
     Spatialization();
     NpcFootstepSpatialization();
