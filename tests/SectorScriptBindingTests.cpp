@@ -1642,7 +1642,7 @@ end
     game::ResetSectorScriptHost(host);
 }
 
-void CutsceneBindingsControlFadeAndCaptionTimelines()
+void CutsceneBindingsControlFadeAndCaptionTimelines(bool cinematic)
 {
     struct ControlCapture {
         bool enabled = true;
@@ -1685,7 +1685,7 @@ void CutsceneBindingsControlFadeAndCaptionTimelines()
             &player,
             &config,
             controlApi);
-    files.Write(R"(
+    std::string script = R"(
 function init()
     assert(TOP == 1 and CENTER == 2 and BOTTOM == 3)
     assert(enableControls(false))
@@ -1699,11 +1699,20 @@ function init()
     assert(enableControls(true))
     setPersistentBool("sequence_done", true)
 end
-)");
+)";
+    if (cinematic) {
+        script.replace(script.find("enableControls(false)"), 21, "startCutscene()");
+        script.replace(script.find("enableControls(true)"), 20, "endCutscene()");
+        script.insert(script.find("    setPersistentBool(\"faded_out\""),
+                "    assert(startCutscene())\n");
+    }
+    files.Write(script);
     assert(Create(context, runtime, persistent, host, files));
     assert(!runtime.initFinished);
     assert(!capture.enabled && capture.calls == 1);
     assert(!cutscene.controlsEnabled);
+    assert(cutscene.presentation.active == cinematic);
+    assert(cutscene.presentation.progress == 0.0);
 
     bool sawPartialTypewriterText = false;
     for (int frame = 0; frame < 300 && !runtime.initFinished; ++frame) {
@@ -1723,8 +1732,14 @@ end
     assert(persistent.bools.at("say_done"));
     assert(persistent.bools.at("sequence_done"));
     assert(sawPartialTypewriterText);
-    assert(capture.enabled && capture.calls == 2);
+    assert(capture.enabled && capture.calls == (cinematic ? 3 : 2));
     assert(cutscene.controlsEnabled);
+    assert(!cutscene.presentation.active);
+    if (cinematic) {
+        assert(cutscene.presentation.progress == 1.0);
+        game::UpdateSectorCutsceneTimelines(cutscene, runtime, 0.35f);
+        assert(cutscene.presentation.progress < 0.0001);
+    }
     assert(std::fabs(cutscene.fade.opacity) < 0.001f);
 
     engine::ScriptSystemShutdownForMap(context, runtime);
@@ -1838,7 +1853,7 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
     game::ResetSectorCutsceneRuntime(cutscene);
 }
 
-void CutsceneControlOwnershipRecoversAndRejectsCompetingTasks()
+void CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(bool cinematic)
 {
     struct ControlCapture {
         bool enabled = true;
@@ -1883,7 +1898,7 @@ void CutsceneControlOwnershipRecoversAndRejectsCompetingTasks()
             &player,
             &config,
             controlApi);
-    files.Write(R"(
+    std::string script = R"(
 function init() end
 
 function controls_complete()
@@ -1905,7 +1920,15 @@ function controls_compete()
     setPersistentBool("competing_controls_rejected", not ok)
     setPersistentString("competing_controls_reason", reason or "")
 end
-)");
+)";
+    if (cinematic) {
+        size_t position = 0;
+        while ((position = script.find("enableControls(false)", position)) != std::string::npos) {
+            script.replace(position, 21, "startCutscene()");
+            position += 15;
+        }
+    }
+    files.Write(script);
     assert(Create(context, runtime, persistent, host, files));
 
     std::string queueError;
@@ -1915,6 +1938,7 @@ end
     game::UpdateSectorScriptCutsceneControlOwnership(context, host);
     assert(capture.enabled);
     assert(cutscene.controlsEnabled);
+    assert(!cutscene.presentation.active);
     assert(capture.disabledCalls == 1 && capture.enabledCalls == 1);
 
     assert(engine::ScriptSystemQueueBackground(
@@ -1923,6 +1947,7 @@ end
     game::UpdateSectorScriptCutsceneControlOwnership(context, host);
     assert(capture.enabled);
     assert(cutscene.controlsEnabled);
+    assert(!cutscene.presentation.active);
     assert(capture.disabledCalls == 2 && capture.enabledCalls == 2);
 
     assert(engine::ScriptSystemQueueBackground(
@@ -1931,6 +1956,7 @@ end
     game::UpdateSectorScriptCutsceneControlOwnership(context, host);
     assert(!capture.enabled);
     assert(!cutscene.controlsEnabled);
+    assert(cutscene.presentation.active == cinematic);
     assert(engine::IsValid(cutscene.controlsOwnerTask));
 
     assert(engine::ScriptSystemQueueBackground(
@@ -1948,20 +1974,97 @@ end
     game::UpdateSectorScriptCutsceneControlOwnership(context, host);
     assert(capture.enabled);
     assert(cutscene.controlsEnabled);
+    assert(!cutscene.presentation.active);
     assert(!engine::IsValid(cutscene.controlsOwnerTask));
     assert(capture.enabledCalls == 3);
 
     const engine::ScriptConsoleResult consoleDisable =
             engine::ScriptSystemExecuteConsole(
-                    runtime, "enableControls(false)");
+                    runtime, cinematic ? "startCutscene()" : "enableControls(false)");
     assert(consoleDisable.success);
     assert(capture.enabled);
     assert(cutscene.controlsEnabled);
+    assert(!cutscene.presentation.active);
     assert(capture.disabledCalls == 3);
+
+    if (cinematic) {
+        // Both the explicit end command and enableControls(true) are console recovery paths.
+        for (const char* recovery : {"assert(endCutscene()); assert(endCutscene())",
+                "assert(enableControls(true))"}) {
+            assert(engine::ScriptSystemQueueBackground(runtime, "controls_wait", queueError));
+            engine::ScriptSystemUpdate(context, runtime, 0.025f);
+            game::UpdateSectorCutsceneTimelines(cutscene, runtime, 0.175f);
+            assert(cutscene.presentation.active);
+            const double progress = cutscene.presentation.progress;
+            assert(engine::ScriptSystemExecuteConsole(runtime, recovery).success);
+            assert(cutscene.controlsEnabled && !cutscene.presentation.active);
+            assert(cutscene.presentation.progress == progress);
+            assert(engine::ScriptSystemStopFunction(context, runtime, "controls_wait", stopError));
+            engine::ScriptSystemUpdate(context, runtime, 0.025f);
+            game::UpdateSectorScriptCutsceneControlOwnership(context, host);
+        }
+    }
 
     engine::ScriptSystemShutdownForMap(context, runtime);
     game::ResetSectorScriptHost(host);
     game::ResetSectorCutsceneRuntime(cutscene);
+}
+
+void CinematicTransitionsAndCaptionLayout()
+{
+    game::SectorCutsceneRuntime cutscene;
+    engine::ScriptRuntime scripts;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    cutscene.presentation.active = true;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0.175f);
+    assert(std::fabs(cutscene.presentation.progress - 0.5) < 0.0001);
+    cutscene.presentation.active = false;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0.0875f);
+    assert(std::fabs(cutscene.presentation.progress - 0.25) < 0.0001);
+    cutscene.presentation.active = true;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, -1.0f);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, NAN);
+    assert(std::fabs(cutscene.presentation.progress - 0.25) < 0.0001);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 1.0f);
+    assert(cutscene.presentation.progress == 1.0);
+    using Position = game::SectorCutsceneTextPosition;
+    for (Rectangle viewport : {Rectangle{0, 0, 1920, 1080}, Rectangle{30, 70, 640, 360},
+            Rectangle{100, 50, 2560, 1080}}) {
+        for (float blockHeight : {48.0f, 104.0f, 216.0f}) {
+            const auto layout = game::BuildSectorCutscenePresentationLayout(
+                    cutscene.presentation, viewport, Position::Bottom, blockHeight);
+            assert(std::fabs(layout.topBar.height - viewport.height * 0.15f) < 0.001f);
+            assert(layout.topBar.height == layout.bottomBar.height);
+            assert(layout.topBar.x == viewport.x && layout.topBar.y == viewport.y);
+            assert(std::fabs(layout.bottomBar.y + layout.bottomBar.height
+                    - viewport.y - viewport.height) < 0.001f);
+            assert(layout.captionY >= viewport.y);
+            assert(layout.captionY + blockHeight <= viewport.y + viewport.height);
+            if (blockHeight <= viewport.height * 0.12f) {
+                assert(std::fabs(layout.captionY - layout.bottomBar.y
+                        - viewport.height * 0.015f) < 0.001f);
+            }
+            const auto normal = game::BuildSectorCutscenePresentationLayout(
+                    {}, viewport, Position::Bottom, blockHeight);
+            assert(std::fabs(normal.captionY - (viewport.y + viewport.height * 0.88f
+                    - blockHeight)) < 0.001f);
+            for (Position position : {Position::Top, Position::Center}) {
+                const auto plain = game::BuildSectorCutscenePresentationLayout(
+                        {}, viewport, position, blockHeight);
+                const auto cinematic = game::BuildSectorCutscenePresentationLayout(
+                        cutscene.presentation, viewport, position, blockHeight);
+                assert(plain.captionY == cinematic.captionY);
+            }
+        }
+    }
+    cutscene.presentation.active = false;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 1.0f);
+    assert(cutscene.presentation.progress == 0.0);
+    cutscene.presentation.active = true;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 1.0f);
+    game::ResetSectorCutsceneRuntime(cutscene);
+    assert(!cutscene.presentation.active && cutscene.presentation.progress == 0.0);
+    assert(cutscene.controlsEnabled);
 }
 
 } // namespace
@@ -1995,8 +2098,11 @@ void RunSectorScriptBindingTests()
     TravelPreservesFirstRequest();
     TriggerContainmentUsesExplicitCoordinateSpaces();
     MapAudioBindingsForwardOptionalPlaybackSettings();
-    CutsceneBindingsControlFadeAndCaptionTimelines();
+    CutsceneBindingsControlFadeAndCaptionTimelines(false);
+    CutsceneBindingsControlFadeAndCaptionTimelines(true);
     AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();
-    CutsceneControlOwnershipRecoversAndRejectsCompetingTasks();
+    CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(false);
+    CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(true);
+    CinematicTransitionsAndCaptionLayout();
     TriggerDispatchDelayRepeatAndEnableControls();
 }

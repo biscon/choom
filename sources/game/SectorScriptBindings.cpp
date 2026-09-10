@@ -1109,6 +1109,7 @@ bool ApplyCutsceneControlsEnabled(
             host.controls.userData, context, enabled, error)) {
         return false;
     }
+    if (enabled) host.cutscene->presentation.active = false;
     host.cutscene->controlsEnabled = enabled;
     host.cutscene->controlsOwnerTask = enabled
             ? engine::ScriptTaskHandle{} : ownerTask;
@@ -1116,16 +1117,14 @@ bool ApplyCutsceneControlsEnabled(
     return true;
 }
 
-int LuaEnableControls(lua_State* state)
+int SetLuaCutsceneControls(lua_State* state, bool enabled, bool cinematic)
 {
-    luaL_checktype(state, 1, LUA_TBOOLEAN);
     SectorScriptHost& host = HostFromLua(state);
     if (host.cutscene == nullptr || host.controls.setControlsEnabled == nullptr) {
         lua_pushboolean(state, 0);
         lua_pushliteral(state, "cutscene control runtime is unavailable");
         return 2;
     }
-    const bool enabled = lua_toboolean(state, 1) != 0;
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     engine::ScriptTaskHandle ownerTask{};
     if (!enabled) {
@@ -1152,8 +1151,25 @@ int LuaEnableControls(lua_State* state)
         lua_pushlstring(state, error.data(), error.size());
         return 2;
     }
+    if (cinematic) host.cutscene->presentation.active = !enabled;
     lua_pushboolean(state, 1);
     return 1;
+}
+
+int LuaEnableControls(lua_State* state)
+{
+    luaL_checktype(state, 1, LUA_TBOOLEAN);
+    return SetLuaCutsceneControls(state, lua_toboolean(state, 1) != 0, false);
+}
+
+int LuaStartCutscene(lua_State* state)
+{
+    return SetLuaCutsceneControls(state, false, true);
+}
+
+int LuaEndCutscene(lua_State* state)
+{
+    return SetLuaCutsceneControls(state, true, true);
 }
 
 BeginDoorMoveResult BeginDoorMove(
@@ -2210,6 +2226,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "moveNpc", LuaMoveNpc);
     Register(state, "startMoveNpc", LuaStartMoveNpc);
     Register(state, "enableControls", LuaEnableControls);
+    Register(state, "startCutscene", LuaStartCutscene);
+    Register(state, "endCutscene", LuaEndCutscene);
     Register(state, "movePlayer", LuaMovePlayer);
     Register(state, "startMovePlayer", LuaStartMovePlayer);
     Register(state, "lookAtNpc", LuaLookAtNpc);

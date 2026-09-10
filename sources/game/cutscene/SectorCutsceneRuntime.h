@@ -128,11 +128,23 @@ struct SectorCutsceneFadeState {
     bool active = false;
 };
 
+struct SectorCutscenePresentationState {
+    double progress = 0.0;
+    bool active = false;
+};
+
+struct SectorCutscenePresentationLayout {
+    Rectangle topBar{};
+    Rectangle bottomBar{};
+    float captionY = 0.0f;
+};
+
 struct SectorCutsceneRuntime {
     SectorCutscenePlayerMoveState playerMove;
     SectorCutsceneLookState look;
     SectorCutsceneCaptionState caption;
     SectorCutsceneFadeState fade;
+    SectorCutscenePresentationState presentation;
     engine::ScriptTaskHandle controlsOwnerTask{};
     uint64_t nextToken = 1;
     bool controlsEnabled = true;
@@ -252,6 +264,14 @@ void UpdateSectorCutsceneTimelines(
         SectorCutsceneRuntime& runtime,
         engine::ScriptRuntime& scripts,
         float dt);
+SectorCutscenePresentationLayout BuildSectorCutscenePresentationLayout(
+        const SectorCutscenePresentationState& presentation,
+        Rectangle viewport,
+        SectorCutsceneTextPosition captionPosition,
+        float captionBlockHeight);
+void DrawSectorCutsceneLetterbox(
+        const SectorCutsceneRuntime& runtime,
+        Rectangle viewport);
 void DrawSectorCutsceneCaption(
         const SectorCutsceneRuntime& runtime,
         engine::AssetManager& assets,

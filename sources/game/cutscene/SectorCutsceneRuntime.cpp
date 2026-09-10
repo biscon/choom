@@ -984,6 +984,9 @@ void UpdateSectorCutsceneTimelines(
         float dt)
 {
     const double delta = SafeDelta(dt);
+    SectorCutscenePresentationState& presentation = runtime.presentation;
+    presentation.progress = std::clamp(presentation.progress
+            + (presentation.active ? delta : -delta) / 0.35, 0.0, 1.0);
     SectorCutsceneCaptionState& caption = runtime.caption;
     if (caption.active) {
         caption.elapsedSeconds += delta;
@@ -1041,6 +1044,46 @@ void UpdateSectorCutsceneTimelines(
     }
 }
 
+SectorCutscenePresentationLayout BuildSectorCutscenePresentationLayout(
+        const SectorCutscenePresentationState& presentation,
+        Rectangle viewport,
+        SectorCutsceneTextPosition captionPosition,
+        float captionBlockHeight)
+{
+    SectorCutscenePresentationLayout layout;
+    if (viewport.width <= 0.0f || viewport.height <= 0.0f) return layout;
+    const float progress = static_cast<float>(std::clamp(
+            presentation.progress, 0.0, 1.0));
+    const float blend = progress * progress * (3.0f - 2.0f * progress);
+    const float barHeight = viewport.height * 0.15f * blend;
+    layout.topBar = {viewport.x, viewport.y, viewport.width, barHeight};
+    layout.bottomBar = {viewport.x, viewport.y + viewport.height - barHeight,
+            viewport.width, barHeight};
+    layout.captionY = viewport.y + viewport.height * 0.12f;
+    if (captionPosition == SectorCutsceneTextPosition::Center) {
+        layout.captionY = viewport.y + (viewport.height - captionBlockHeight) * 0.5f;
+    } else if (captionPosition == SectorCutsceneTextPosition::Bottom) {
+        const float normalY = viewport.y + viewport.height * 0.88f - captionBlockHeight;
+        const float padding = viewport.height * 0.015f;
+        const float cinematicY = std::max(viewport.y, std::min(
+                viewport.y + viewport.height * 0.85f + padding,
+                viewport.y + viewport.height - padding - captionBlockHeight));
+        layout.captionY = normalY + (cinematicY - normalY) * blend;
+    }
+    return layout;
+}
+
+void DrawSectorCutsceneLetterbox(
+        const SectorCutsceneRuntime& runtime,
+        Rectangle viewport)
+{
+    const SectorCutscenePresentationLayout layout = BuildSectorCutscenePresentationLayout(
+            runtime.presentation, viewport, SectorCutsceneTextPosition::Bottom, 0.0f);
+    if (layout.topBar.height <= 0.0f) return;
+    DrawRectangleRec(layout.topBar, BLACK);
+    DrawRectangleRec(layout.bottomBar, BLACK);
+}
+
 void DrawSectorCutsceneCaption(
         const SectorCutsceneRuntime& runtime,
         engine::AssetManager& assets,
@@ -1060,12 +1103,8 @@ void DrawSectorCutsceneCaption(
             caption.text, font, maximumWidth, lines);
     if (lineCount == 0) return;
     const float blockHeight = static_cast<float>(lineCount) * lineAdvance - 8.0f;
-    float y = viewport.y + viewport.height * 0.12f;
-    if (caption.position == SectorCutsceneTextPosition::Center) {
-        y = viewport.y + (viewport.height - blockHeight) * 0.5f;
-    } else if (caption.position == SectorCutsceneTextPosition::Bottom) {
-        y = viewport.y + viewport.height * 0.88f - blockHeight;
-    }
+    const float y = BuildSectorCutscenePresentationLayout(
+            runtime.presentation, viewport, caption.position, blockHeight).captionY;
     const unsigned char alpha = static_cast<unsigned char>(std::lround(
             std::clamp(caption.opacity, 0.0f, 1.0f) * 255.0f));
     std::array<char, kSectorCutsceneMaximumCaptionBytes + 1> lineBuffer{};

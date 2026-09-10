@@ -14,7 +14,7 @@ end
 
 function intro_trigger_1()
     log("trigger_1")
-    assert(enableControls(false))
+    assert(startCutscene())
     say("Who is there?!!...")
     assert(startPlayNpcAnimation("elin", "Waving"))
     movePlayer("intro_marker_1", "walk", 2.0, {
@@ -34,7 +34,7 @@ function intro_trigger_1()
     startPlayNpcAnimation("elin", "Talking_2")
     say("I've been walking these dark tunnels forever. You're are the first person I met so far.")
 
-    assert(enableControls(true))
+    assert(endCutscene())
 end
 
 function trigger_2()

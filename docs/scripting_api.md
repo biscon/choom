@@ -50,7 +50,7 @@ ranges, return values, behavior, and failure details.
   `startMoveNpc(instanceId, x, z [, gait [, movementSpeed]])`,
   `startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed]])`.
 - **[Player controls and movement](#cutscenes-and-player-camera):**
-  `enableControls(enabled)`,
+  `startCutscene()`, `endCutscene()`, `enableControls(enabled)`,
   `movePlayer(x, z [, gait [, movementSpeed [, options]]])`,
   `movePlayer(levelMarkerId [, gait [, movementSpeed [, options]]])`,
   `startMovePlayer(x, z [, gait [, movementSpeed [, options]]])`,
@@ -656,8 +656,8 @@ hold owned by that move.
 ## Cutscenes and player camera
 
 Cutscene state is transient: player moves, looks, captions, fades, tasks, and
-operations are not saved. A map load resets them, including world fade
-opacity. A typical cutscene disables controls, performs blocking actions, and
+operations and cinematic presentation are not saved. A map load resets them,
+including world fade opacity and letterboxing. A typical cutscene disables controls, performs blocking actions, and
 then restores controls:
 
 ```lua
@@ -669,6 +669,44 @@ function intro()
     assert(enableControls(true))
 end
 ```
+
+### `startCutscene()` / `endCutscene()` → `true | false, reason`
+
+These optional commands return immediately, without an operation handle or
+waiting for their animations. For example:
+
+```lua
+function cinematicIntro()
+    assert(startCutscene())
+    say("Follow me this way...")
+    movePlayer("hall_corner", "walk", 2.0)
+    assert(endCutscene())
+end
+```
+
+`startCutscene()` disables controls exactly like `enableControls(false)` and
+immediately hides gameplay HUD: health, stamina, oxygen, ammo, crosshair, and
+interaction prompts/messages. Equal black bars slide in from the top and bottom
+over 350 ms with smooth easing, each covering 15% of the playable viewport.
+Captions, menus, debug overlays, and the existing weapon viewmodel remain available.
+The bars are overlays and do not change the camera projection or physics.
+
+`say()` and `text(..., BOTTOM)` (including their async forms) move smoothly into
+the lower bar. The first line starts 1.5% of viewport height below its upper edge;
+long wrapped captions move upward when needed to fit. Font size and wrapping
+remain unchanged. Explicit `TOP` and `CENTER` text retain their normal positions.
+
+`endCutscene()` immediately restores controls and HUD while the bars slide out.
+Like `enableControls(true)`, it cancels active scripted player movement and looks.
+Repeated calls are harmless, and reversing a transition preserves its current
+position. A full transition takes 350 ms; reversal retraces the remaining portion.
+
+Starting requires a managed Lua task and uses the same ownership restrictions
+and save gate as `enableControls(false)`. Completion, failure, or cancellation of
+that task restores controls/HUD and slides the bars away automatically.
+`endCutscene()` and `enableControls(true)` can also dismiss cinematic mode from
+the console for recovery. Map changes reset the presentation immediately.
+Scripts using only `enableControls()` keep their existing presentation.
 
 ### `enableControls(enabled) -> true | false, reason`
 

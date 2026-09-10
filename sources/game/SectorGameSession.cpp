@@ -2377,7 +2377,8 @@ void SectorGameSession::RenderHud(
         engine::FontHandle usePromptFont,
         Rectangle playableViewport) const
 {
-    if (IsActive() && weaponRegistry != nullptr) {
+    if (IsActive()) DrawSectorCutsceneLetterbox(cutscene, playableViewport);
+    if (IsActive() && !cutscene.presentation.active && weaponRegistry != nullptr) {
         const bool showAmmo = itemCampaign != nullptr
                 && itemRegistry != nullptr
                 && !fpsPlayer.State().activeWeaponId.empty();
