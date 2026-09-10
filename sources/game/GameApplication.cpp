@@ -424,6 +424,8 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
             case GameGraphicsSettingsAction::Defaults:
                 graphicsSettingsDraft.graphics = FpsGraphicsSettings{};
                 graphicsSettingsDraft.hdrBloom.enabled = true;
+                graphicsSettingsDraft.playerCamera.mouseSensitivity =
+                        PlayerCameraApplicationSettings{}.mouseSensitivity;
                 menuStatus.clear();
                 break;
             case GameGraphicsSettingsAction::None:
@@ -1140,8 +1142,11 @@ bool GameApplication::CommitPendingGraphicsSettings(std::string& error)
         error = "No graphics settings apply is pending";
         return false;
     }
-    FpsApplicationSettings candidate = *pendingGraphicsSettings;
-    candidate.graphics = NormalizeFpsGraphicsSettings(candidate.graphics);
+    FpsApplicationSettings candidate = applicationSettings;
+    candidate.graphics = NormalizeFpsGraphicsSettings(pendingGraphicsSettings->graphics);
+    candidate.hdrBloom.enabled = pendingGraphicsSettings->hdrBloom.enabled;
+    candidate.playerCamera.mouseSensitivity = NormalizePlayerCameraSettings(
+            pendingGraphicsSettings->playerCamera).mouseSensitivity;
     if (!SaveFpsApplicationSettings(ApplicationSettingsPath, candidate, &error)) {
         menuStatus = error;
         pendingGraphicsSettings.reset();

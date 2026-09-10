@@ -167,7 +167,29 @@ void DrawPreviewSettingsModal(
 
     auto drawGeneralTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 13.0f * (rowH + gap) + 12.0f;
+        struct GeneralControl {
+            const char* id;
+            const char* label;
+            float* value;
+            engine::UIFloatInputState* input;
+            float minimum;
+            float maximum;
+            int decimals;
+        };
+        const GeneralControl controls[] = {
+                {"sector_editor_preview_walk_speed", "Walk speed", &modalState.draftConfig.walkSpeed, &modalState.walkSpeedInput, 0.1f, 100.0f, 2},
+                {"sector_editor_preview_run_speed", "Run speed", &modalState.draftConfig.runSpeed, &modalState.runSpeedInput, 0.1f, 200.0f, 2},
+                {"sector_editor_preview_swim_speed", "Swim speed", &modalState.draftConfig.swimSpeed, &modalState.swimSpeedInput, 0.1f, 100.0f, 2},
+                {"sector_editor_preview_eye_height", "Camera eye height", &modalState.draftConfig.eyeHeight, &modalState.eyeHeightInput, 0.1f, 20.0f, 2},
+                {"sector_editor_preview_gravity", "Gravity", &modalState.draftConfig.gravity, &modalState.gravityInput, 0.0f, 200.0f, 2},
+                {"sector_editor_preview_player_radius", "Player radius", &modalState.draftConfig.playerRadius, &modalState.playerRadiusInput, 0.05f, 2.0f, 2},
+                {"sector_editor_preview_player_height", "Player height", &modalState.draftConfig.playerHeight, &modalState.playerHeightInput, 0.5f, 3.0f, 2},
+                {"sector_editor_preview_step_height", "Step height", &modalState.draftConfig.stepHeight, &modalState.stepHeightInput, 0.0f, 2.0f, 2},
+                {"sector_editor_preview_jump_height", "Jump height", &modalState.draftConfig.jumpHeight, &modalState.jumpHeightInput, 0.0f, 3.0f, 2},
+                {"sector_editor_preview_head_bob_strength", "Head bob strength", &modalState.draftConfig.headBobStrength, &modalState.headBobStrengthInput, 0.0f, 0.25f, 3},
+                {"sector_editor_preview_head_bob_frequency", "Head bob frequency", &modalState.draftConfig.headBobFrequency, &modalState.headBobFrequencyInput, 0.0f, 20.0f, 2},
+        };
+        const float contentH = (std::size(controls) + 1u) * (rowH + gap) + 12.0f;
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui,
                 config,
@@ -178,18 +200,10 @@ void DrawPreviewSettingsModal(
                 modalState.generalScroll);
         const float contentW = scroll.viewport.width;
         (void)contentW;
-        drawFloat(contentY, "sector_editor_preview_walk_speed", "Walk speed", modalState.draftConfig.walkSpeed, modalState.walkSpeedInput, 0.1f, 100.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_run_speed", "Run speed", modalState.draftConfig.runSpeed, modalState.runSpeedInput, 0.1f, 200.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_swim_speed", "Swim speed", modalState.draftConfig.swimSpeed, modalState.swimSpeedInput, 0.1f, 100.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_mouse_sensitivity", "Mouse sensitivity", modalState.draftConfig.mouseSensitivity, modalState.mouseSensitivityInput, 0.01f, 20.0f, 3);
-        drawFloat(contentY, "sector_editor_preview_eye_height", "Camera eye height", modalState.draftConfig.eyeHeight, modalState.eyeHeightInput, 0.1f, 20.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_gravity", "Gravity", modalState.draftConfig.gravity, modalState.gravityInput, 0.0f, 200.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_player_radius", "Player radius", modalState.draftConfig.playerRadius, modalState.playerRadiusInput, 0.05f, 2.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_player_height", "Player height", modalState.draftConfig.playerHeight, modalState.playerHeightInput, 0.5f, 3.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_step_height", "Step height", modalState.draftConfig.stepHeight, modalState.stepHeightInput, 0.0f, 2.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_jump_height", "Jump height", modalState.draftConfig.jumpHeight, modalState.jumpHeightInput, 0.0f, 3.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_head_bob_strength", "Head bob strength", modalState.draftConfig.headBobStrength, modalState.headBobStrengthInput, 0.0f, 0.25f, 3);
-        drawFloat(contentY, "sector_editor_preview_head_bob_frequency", "Head bob frequency", modalState.draftConfig.headBobFrequency, modalState.headBobFrequencyInput, 0.0f, 20.0f, 2);
+        for (const GeneralControl& control : controls) {
+            drawFloat(contentY, control.id, control.label, *control.value,
+                    *control.input, control.minimum, control.maximum, control.decimals);
+        }
         if (engine::Checkbox(
                     ui,
                     config,
@@ -575,7 +589,6 @@ void DrawPreviewSettingsModal(
                     DefaultSectorPreviewSettings().npcToNpcCollisionEnabled;
             modalState.walkSpeedInput = engine::UIFloatInputState{};
             modalState.runSpeedInput = engine::UIFloatInputState{};
-            modalState.mouseSensitivityInput = engine::UIFloatInputState{};
             modalState.eyeHeightInput = engine::UIFloatInputState{};
             modalState.gravityInput = engine::UIFloatInputState{};
             modalState.playerRadiusInput = engine::UIFloatInputState{};

@@ -1745,10 +1745,7 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
     if (swimSpeedIt != value.end()) {
         settings.swimSpeed = ReadFloat(value, "swimSpeed", context);
     }
-    const auto mouseSensitivityIt = value.find("mouseSensitivity");
-    if (mouseSensitivityIt != value.end()) {
-        settings.mouseSensitivity = ReadFloat(value, "mouseSensitivity", context);
-    }
+    // Old per-level mouseSensitivity is ignored; camera preferences are global.
     const auto eyeHeightIt = value.find("eyeHeight");
     if (eyeHeightIt != value.end()) {
         settings.eyeHeight = ReadFloat(value, "eyeHeight", context);
@@ -3058,7 +3055,6 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
     RequireFinite(settings.walkSpeed, "previewSettings.walkSpeed");
     RequireFinite(settings.runSpeed, "previewSettings.runSpeed");
     RequireFinite(settings.swimSpeed, "previewSettings.swimSpeed");
-    RequireFinite(settings.mouseSensitivity, "previewSettings.mouseSensitivity");
     RequireFinite(settings.eyeHeight, "previewSettings.eyeHeight");
     RequireFinite(settings.gravity, "previewSettings.gravity");
     RequireFinite(settings.playerRadius, "previewSettings.playerRadius");
@@ -3075,7 +3071,6 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
             {"walkSpeed", normalized.walkSpeed},
             {"runSpeed", normalized.runSpeed},
             {"swimSpeed", normalized.swimSpeed},
-            {"mouseSensitivity", normalized.mouseSensitivity},
             {"eyeHeight", normalized.eyeHeight},
             {"gravity", normalized.gravity},
             {"playerRadius", normalized.playerRadius},

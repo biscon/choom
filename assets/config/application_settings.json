@@ -17,7 +17,7 @@
     "maxShadowLightUpdatesPerFrame": 2,
     "dynamicLightFadeInSeconds": 0.25,
     "depthPrepass": true,
-    "showFpsCounter": false,
+    "showFpsCounter": true,
     "performanceOverlay": false,
     "vsync": true,
     "horizontalFovDegrees": 95
@@ -41,6 +41,12 @@
     "darknessProximityRangeWorld": 4.0,
     "crouchVisualDetectionMultiplier": 0.8500000238418579,
     "crouchMovementNoiseMultiplier": 0.25
+  },
+  "playerCamera": {
+    "mouseSensitivity": 0.6114718914031982,
+    "smoothingStrength": 0.20000000298023224,
+    "deadZonePixels": 5.0,
+    "maxTurnSpeedDegreesPerSecond": 360.0
   },
   "playerFlashlight": {
     "intensity": 2.0,

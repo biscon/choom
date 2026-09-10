@@ -103,9 +103,9 @@ views and maps to world Z for generated 3D geometry.
 - `3D Mode` (`Ctrl+D`, under `View`): rebuild the 3D preview from the current
   in-memory topology map, or return to 2D from preview mode.
 - `Settings -> Player`: open the application-wide Player Settings modal. Its
-  Stamina, Inventory, Audio, Health, Sneaking, Lighting, Liquids, and Ducts tabs
+  Stamina, Inventory, Audio, Health, Sneaking, Lighting, Liquids, Ducts, and Camera tabs
   expose the player-specific values stored in `assets/config/application_settings.json`
-  that do not belong in the end-user Graphics Settings screen. Apply validates
+  that do not belong in the end-user Settings screen. Apply validates
   and saves all player tabs;
   Cancel leaves both the live settings and the JSON file unchanged. Audio sets
   are selected from the discovered footstep/player sound catalogs and can be
@@ -135,9 +135,60 @@ views and maps to world Z for generated 3D geometry.
 - `Copy config` / `Paste config` (`Ctrl+C` / `Ctrl+V`): copy and paste the
   selected compatible editor configuration. Disabled commands do not fire.
 
-The application-wide Graphics Settings screen includes an `FPS counter`
+The application-wide player Settings screen includes an `FPS counter`
 checkbox for raylib's green FPS display. It defaults off and is separate from
 the F9 performance overlay and from level settings.
+
+## Global camera settings
+
+The player-facing main/pause menu's **Settings** screen exposes **Mouse sensitivity**
+(default `1`, range `0–5`; `0` disables mouse turning). Sensitivity is global, not a level authoring value.
+Older levels containing `previewSettings.mouseSensitivity` still load, but that
+obsolete field is ignored and omitted on subsequent saves.
+
+The editor's **Settings → Player → Camera** tab exposes these global author controls:
+
+| Control | Default | Range / disabled value |
+| --- | --- | --- |
+| Smoothing strength | 20% | 0–100%; 0 disables |
+| Dead-zone radius | 0 pixels | 0–10 pixels; 0 disables |
+| Max turn speed | 360 degrees/second | 0–1440; 0 means unlimited |
+
+These three controls are not available in the player-facing Settings screen.
+The editor modal widens to 1254 logical pixels for its ninth tab, preserving the
+existing tab widths and font sizes. Apply saves the author controls without
+changing the player's sensitivity; resetting this tab also preserves sensitivity.
+Player Settings Apply/Defaults changes only player-exposed values, preserving the
+author's camera settings. Both interfaces use draft edits; Cancel does not save.
+
+All camera preferences are stored in `playerCamera` in
+`assets/config/application_settings.json`. Its keys are `mouseSensitivity`,
+`smoothingStrength` (0–1), `deadZonePixels`, and `maxTurnSpeedDegreesPerSecond`.
+Omitted fields use the defaults above. They apply immediately after saving, to
+both gameplay and editor gameplay preview, across every level. Editor freefly is
+unchanged. Camera preferences are excluded from level data and lightmap source
+hashes, and changing them does not invalidate the 2D topology render cache.
+
+The dead zone buffers small accumulated movements within a radial radius and
+emits only the excess. It absorbs tiny jitter while allowing slow deliberate
+movement, with some slack when reversing direction. After sensitivity, the combined
+yaw/pitch turn speed is capped; excess flick input is discarded, never queued.
+Exponential angular-velocity smoothing follows the cap. Strength maps linearly to
+a response time of 0–150 milliseconds (20% means 30 milliseconds). Exact integration
+over frame time keeps the response consistent across frame rates. Smoothing has a
+short settling tail; disabling all three author controls restores direct look.
+
+Quake III's [mouse filter](https://github.com/id-Software/Quake-III-Arena/blob/master/code/client/cl_input.c)
+and Source's [mouse filter](https://github.com/ValveSoftware/source-sdk-2013/blob/master/src/game/client/in_mouse.cpp)
+use optional two-frame averaging. This engine instead uses a time-based filter
+so its configured strength does not depend on the frame count.
+
+Filtering resets when mouse look is interrupted, camera settings or poses change,
+or a level/save is restored. Scripted traversal rotations bypass mouse filtering.
+Invalid input and frame intervals over 100 milliseconds discard the look sample
+and reset filtering to avoid stale or hitch-induced turns. The resulting controller
+orientation drives aiming and movement heading together; collision algorithms,
+sector lookup, physics, and visual headbob/step/landing effects are unchanged.
 
 ## Topology Model
 
@@ -688,7 +739,7 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 
 The left tools pane `Settings` button opens editor-session preview settings.
 The same settings are available from the 3D preview overlay `Controls` tab while
-its UI is visible. The modal edits walk speed, run speed, mouse sensitivity,
+its UI is visible. The modal edits walk speed, run speed,
 camera eye height, gravity, player radius, player height, step height, jump
 height, head bob strength, head bob frequency, and solid NPC-to-NPC collision.
 NPC-to-NPC collision defaults on for backward compatibility. Turning it off

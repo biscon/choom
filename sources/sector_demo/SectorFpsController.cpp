@@ -143,7 +143,6 @@ SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
     config.walkSpeed = settings.walkSpeed;
     config.runSpeed = settings.runSpeed;
     config.swimSpeed = settings.swimSpeed;
-    config.mouseSensitivity = settings.mouseSensitivity;
     config.eyeHeight = settings.eyeHeight;
     config.gravity = settings.gravity;
     config.playerRadius = settings.playerRadius;
@@ -162,7 +161,6 @@ SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
     settings.walkSpeed = config.walkSpeed;
     settings.runSpeed = config.runSpeed;
     settings.swimSpeed = config.swimSpeed;
-    settings.mouseSensitivity = config.mouseSensitivity;
     settings.eyeHeight = config.eyeHeight;
     settings.gravity = config.gravity;
     settings.playerRadius = config.playerRadius;
@@ -540,17 +538,82 @@ void UpdateSectorFpsLandingDip(
     }
 }
 
+void ResetSectorFpsMouseLook(SectorFpsControllerState& state)
+{
+    state.mouseLook = SectorFpsMouseLookState{};
+}
+
 void UpdateSectorFpsMouseLook(
         SectorFpsControllerState& state,
-        const SectorFpsControllerConfig& config,
-        const SectorFpsControllerInput& input)
+        const PlayerCameraApplicationSettings& settings,
+        const SectorFpsControllerInput& input,
+        float dt)
 {
-    const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
-    if (input.mouseLookEnabled) {
-        state.yawRadians += input.mouseDelta.x * MouseRadiansPerPixel * normalized.mouseSensitivity;
-        state.pitchRadians -= input.mouseDelta.y * MouseRadiansPerPixel * normalized.mouseSensitivity;
-        state.pitchRadians = ClampSectorFpsPitch(state.pitchRadians);
+    if (!input.mouseLookEnabled || !std::isfinite(dt) || dt <= 0.0f
+            || dt > 0.1f || !std::isfinite(input.mouseDelta.x)
+            || !std::isfinite(input.mouseDelta.y)) {
+        ResetSectorFpsMouseLook(state);
+        return;
     }
+    const auto normalized = NormalizePlayerCameraSettings(settings);
+    auto& look = state.mouseLook;
+    // A restored/scripted/constrained pose must not inherit old input velocity.
+    if (!look.initialized || !SamePlayerCameraSettings(look.settings, normalized)
+            || state.yawRadians != look.lastRotation.x
+            || state.pitchRadians != look.lastRotation.y) {
+        ResetSectorFpsMouseLook(state);
+        look.settings = normalized;
+        look.initialized = true;
+    }
+
+    Vector2 delta = input.mouseDelta;
+    if (normalized.deadZonePixels > 0.0f) {
+        const Vector2 buffered = Vector2Add(look.deadZoneRemainder, delta);
+        const float length = std::hypot(buffered.x, buffered.y);
+        look.deadZoneRemainder = length > normalized.deadZonePixels
+                ? Vector2Scale(buffered, normalized.deadZonePixels / length)
+                : buffered;
+        delta = Vector2Subtract(buffered, look.deadZoneRemainder);
+    }
+    Vector2 rotation{
+            delta.x * MouseRadiansPerPixel * normalized.mouseSensitivity,
+            -delta.y * MouseRadiansPerPixel * normalized.mouseSensitivity};
+    // Clamp displacement before division, so even a tiny dt cannot produce an
+    // unbounded filtered velocity. Excess input is deliberately discarded.
+    const float maxRotation = normalized.maxTurnSpeedDegreesPerSecond * DEG2RAD * dt;
+    const float length = std::hypot(rotation.x, rotation.y);
+    if (maxRotation > 0.0f && length > maxRotation) {
+        rotation = Vector2Scale(rotation, maxRotation / length);
+    }
+    if (normalized.smoothingStrength > 0.0f) {
+        const Vector2 targetVelocity = Vector2Scale(rotation, 1.0f / dt);
+        if (!std::isfinite(targetVelocity.x) || !std::isfinite(targetVelocity.y)) {
+            ResetSectorFpsMouseLook(state);
+            return;
+        }
+        const float responseSeconds = normalized.smoothingStrength * 0.15f;
+        const float blend = -std::expm1(-dt / responseSeconds);
+        const Vector2 difference = Vector2Subtract(look.angularVelocity, targetVelocity);
+        // Exact integral of v(t) = target + (previous - target) * exp(-t/tau).
+        rotation = Vector2Add(rotation,
+                Vector2Scale(difference, responseSeconds * blend));
+        look.angularVelocity = Vector2Add(targetVelocity,
+                Vector2Scale(difference, 1.0f - blend));
+    } else {
+        look.angularVelocity = {};
+    }
+    if (!std::isfinite(rotation.x) || !std::isfinite(rotation.y)) {
+        ResetSectorFpsMouseLook(state);
+        return;
+    }
+    state.yawRadians += rotation.x;
+    const float pitch = state.pitchRadians + rotation.y;
+    state.pitchRadians = ClampSectorFpsPitch(pitch);
+    if ((state.pitchRadians >= PitchLimitRadians && look.angularVelocity.y > 0.0f)
+            || (state.pitchRadians <= -PitchLimitRadians && look.angularVelocity.y < 0.0f)) {
+        look.angularVelocity.y = 0.0f;
+    }
+    look.lastRotation = {state.yawRadians, state.pitchRadians};
 }
 
 bool SectorFpsInputUsesRunSpeed(
@@ -609,10 +672,11 @@ Vector2 ComputeSectorFpsHorizontalMovementDelta(
 void UpdateSectorFpsController(
         SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
+        const PlayerCameraApplicationSettings& cameraSettings,
         const SectorFpsControllerInput& input,
         float dt)
 {
-    UpdateSectorFpsMouseLook(state, config, input);
+    UpdateSectorFpsMouseLook(state, cameraSettings, input, dt);
     if (input.crouchTogglePressed) {
         TryToggleSectorFpsCrouch(state, true);
     }

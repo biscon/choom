@@ -200,12 +200,28 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     engine::Text(config, assets,
             Rectangle{panel.x + padding, panel.y + 24.0f,
                     panel.width - padding * 2.0f, 54.0f},
-            font, "Graphics Settings", engine::UITextJustify::Center);
+            font, "Settings", engine::UITextJustify::Center);
 
     float y = panel.y + 96.0f;
     const float labelWidth = 225.0f;
     const float controlX = panel.x + padding + labelWidth;
     const float controlWidth = panel.width - padding * 2.0f - labelWidth;
+    constexpr float sensitivityValueWidth = 76.0f;
+    engine::Text(config, assets,
+            Rectangle{panel.x + padding, y, labelWidth, rowHeight},
+            smallFont, "Mouse sensitivity", engine::UITextJustify::Left);
+    engine::Slider(ui, config, input, "settings_mouse_sensitivity",
+            Rectangle{controlX, y, controlWidth - sensitivityValueWidth, rowHeight},
+            0.0f, 5.0f, draft.playerCamera.mouseSensitivity);
+    char sensitivityText[16];
+    std::snprintf(sensitivityText, sizeof(sensitivityText), "%.2f",
+            draft.playerCamera.mouseSensitivity);
+    engine::Text(config, assets,
+            Rectangle{controlX + controlWidth - sensitivityValueWidth, y,
+                    sensitivityValueWidth, rowHeight},
+            smallFont, sensitivityText, engine::UITextJustify::Right);
+    y += rowHeight + 14.0f;
+
     const char* renderScaleOptions[] = {"75%", "100%", "125%", "150%", "200%"};
     const float renderScales[] = {0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
     int renderScaleIndex = 0;

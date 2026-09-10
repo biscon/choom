@@ -217,6 +217,9 @@ void SectorGameSession::RefreshMouseLookCapture()
                     && !inventoryUi.open
                     && cutscene.controlsEnabled
                     && heldObjectUse.phase == ItemHeldUsePhase::Inactive);
+    if (!controller.freeflyController.mouseLookEnabled) {
+        ResetSectorFpsMouseLook(controller.fpsControllerState);
+    }
 }
 
 bool SectorGameSession::SetCutsceneControlsEnabled(
@@ -1318,6 +1321,7 @@ void SectorGameSession::Pause()
         return;
     }
     paused = true;
+    ResetSectorFpsMouseLook(controller.fpsControllerState);
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
@@ -1698,6 +1702,8 @@ void SectorGameSession::Update(
                 SectorFpsInputUsesRunSpeed(input));
     }
 
+    if (cutscene.look.active) input.mouseLookEnabled = false;
+
     const float previousVisualEyeY = scene.Renderer().RendererPose().position.y;
     const Vector2 previousPositionXZ{
             controller.fpsControllerState.feetPosition.x,
@@ -1724,6 +1730,9 @@ void SectorGameSession::Update(
             &topologyMap,
             false,
             input,
+            applicationSettings != nullptr
+                    ? applicationSettings->playerCamera
+                    : PlayerCameraApplicationSettings{},
             applicationSettings != nullptr
                     ? applicationSettings->playerLiquids
                     : PlayerLiquidApplicationSettings{},
@@ -2537,6 +2546,7 @@ bool SectorGameSession::RebuildFromMap(
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
     controller.fpsControllerState = savedPlayer;
+    ResetSectorFpsMouseLook(controller.fpsControllerState);
     if (!BuildCollisionAndPlayer(scene, false, nullptr, &error)) {
         error = collision.sectorCollisionWorldWarning.empty()
                 ? "Could not rebuild the game collision world"

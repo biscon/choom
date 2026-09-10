@@ -53,6 +53,7 @@ void UpdateSectorEditorGameplayPreview(
         const SectorTopologyMap* topologyMap,
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
+        const PlayerCameraApplicationSettings& cameraSettings,
         const PlayerLiquidApplicationSettings& liquidSettings,
         const PlayerDuctTraversalApplicationSettings& ductSettings,
         float previousVisualEyeY,

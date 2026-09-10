@@ -1,5 +1,7 @@
 #pragma once
 
+#include "game/PlayerCameraSettings.h"
+
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorViewPose.h"
 
@@ -11,7 +13,6 @@ struct SectorFpsControllerConfig {
     float walkSpeed = 6.0f;
     float runSpeed = 12.0f;
     float swimSpeed = 6.0f;
-    float mouseSensitivity = 1.0f;
     float eyeHeight = 1.2f;
     float gravity = 25.0f;
     float playerRadius = 0.25f;
@@ -20,6 +21,14 @@ struct SectorFpsControllerConfig {
     float jumpHeight = 0.6f;
     float headBobStrength = 0.020f;
     float headBobFrequency = 2.0f;
+};
+
+struct SectorFpsMouseLookState {
+    Vector2 deadZoneRemainder = {};
+    Vector2 angularVelocity = {};
+    PlayerCameraApplicationSettings settings;
+    Vector2 lastRotation = {};
+    bool initialized = false;
 };
 
 struct SectorFpsControllerState {
@@ -31,6 +40,7 @@ struct SectorFpsControllerState {
     float verticalVelocity = 0.0f;
     bool crouchTargeted = false;
     float crouchAmount = 0.0f;
+    SectorFpsMouseLookState mouseLook;
 };
 
 struct SectorFpsControllerInput {
@@ -208,13 +218,16 @@ Vector2 ComputeSectorFpsHorizontalMovementDelta(
         const SectorFpsControllerConfig& config,
         const SectorFpsControllerInput& input,
         float dt);
+void ResetSectorFpsMouseLook(SectorFpsControllerState& state);
 void UpdateSectorFpsMouseLook(
         SectorFpsControllerState& state,
-        const SectorFpsControllerConfig& config,
-        const SectorFpsControllerInput& input);
+        const PlayerCameraApplicationSettings& settings,
+        const SectorFpsControllerInput& input,
+        float dt);
 void UpdateSectorFpsController(
         SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
+        const PlayerCameraApplicationSettings& cameraSettings,
         const SectorFpsControllerInput& input,
         float dt);
 bool TryStartSectorFpsJump(

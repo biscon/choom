@@ -413,6 +413,13 @@ bool UpdateSectorLadderTraversal(
             -SectorLadderLookYawArcRadians,
             SectorLadderLookYawArcRadians);
     controller.yawRadians = traversal.facingYawRadians + yawDelta;
+    if ((yawDelta >= SectorLadderLookYawArcRadians
+                    && controller.mouseLook.angularVelocity.x > 0.0f)
+            || (yawDelta <= -SectorLadderLookYawArcRadians
+                    && controller.mouseLook.angularVelocity.x < 0.0f)) {
+        controller.mouseLook.angularVelocity.x = 0.0f;
+    }
+    controller.mouseLook.lastRotation.x = controller.yawRadians;
     const int direction = (input.moveForward ? 1 : 0)
             - (input.moveBackward ? 1 : 0);
     controller.feetPosition.y = std::clamp(

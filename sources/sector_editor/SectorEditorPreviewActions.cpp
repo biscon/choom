@@ -704,6 +704,7 @@ void UpdateSectorEditorGameplayPreview(
         const SectorTopologyMap* topologyMap,
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
+        const PlayerCameraApplicationSettings& cameraSettings,
         const PlayerLiquidApplicationSettings& liquidSettings,
         const PlayerDuctTraversalApplicationSettings& ductSettings,
         float previousVisualEyeY,
@@ -717,10 +718,20 @@ void UpdateSectorEditorGameplayPreview(
     const float previousStanceEyeHeight = EffectiveSectorFpsControllerConfig(
             controllerState.fpsControllerState,
             controllerState.fpsControllerConfig).eyeHeight;
+    SectorFpsControllerInput lookInput = controllerInput;
+    const auto ladderPhase = controllerState.ladderTraversal.phase;
+    const auto ductPhase = controllerState.ductTraversal.phase;
+    lookInput.mouseLookEnabled = lookInput.mouseLookEnabled
+            && !previewSettingsModalOpen
+            && ladderPhase != SectorLadderTraversalPhase::Mounting
+            && ladderPhase != SectorLadderTraversalPhase::Dismounting
+            && ductPhase != SectorDuctTraversalPhase::Entering
+            && ductPhase != SectorDuctTraversalPhase::Exiting;
     UpdateSectorFpsMouseLook(
             controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig,
-            controllerInput);
+            cameraSettings,
+            lookInput,
+            dt);
     if (topologyMap != nullptr
             && UpdateSectorDuctTraversal(
                     world,

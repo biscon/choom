@@ -162,8 +162,6 @@ constexpr float PreviewRunSpeedMin = 0.1f;
 constexpr float PreviewRunSpeedMax = 200.0f;
 constexpr float PreviewSwimSpeedMin = 0.1f;
 constexpr float PreviewSwimSpeedMax = 100.0f;
-constexpr float PreviewMouseSensitivityMin = 0.01f;
-constexpr float PreviewMouseSensitivityMax = 20.0f;
 constexpr float PreviewEyeHeightMin = 0.1f;
 constexpr float PreviewEyeHeightMax = 3.0f;
 constexpr float PreviewGravityMin = 0.0f;
@@ -296,11 +294,6 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             PreviewSwimSpeedMin,
             PreviewSwimSpeedMax,
             defaults.swimSpeed);
-    settings.mouseSensitivity = ClampFinite(
-            settings.mouseSensitivity,
-            PreviewMouseSensitivityMin,
-            PreviewMouseSensitivityMax,
-            defaults.mouseSensitivity);
     settings.eyeHeight = ClampFinite(
             settings.eyeHeight,
             PreviewEyeHeightMin,

@@ -754,6 +754,64 @@ void WeaponSlotSchemaAndKeys()
     assert(game::FpsWeaponSlotFromKey(KEY_KP_1) == 0);
 }
 
+void PlayerCameraSettingsValidation()
+{
+    game::FpsApplicationSettings settings;
+    std::string error;
+    assert(game::ParseFpsApplicationSettings(R"({"version":1})", settings, &error));
+    assert(Near(settings.playerCamera.mouseSensitivity, 1.0f));
+    assert(Near(settings.playerCamera.smoothingStrength, 0.2f));
+    assert(Near(settings.playerCamera.deadZonePixels, 0.0f));
+    assert(Near(settings.playerCamera.maxTurnSpeedDegreesPerSecond, 360.0f));
+    assert(game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerCamera":{"mouseSensitivity":2.5}})", settings, &error));
+    assert(Near(settings.playerCamera.mouseSensitivity, 2.5f));
+    assert(Near(settings.playerCamera.smoothingStrength, 0.2f));
+    for (const char* boundary : {
+            R"({"version":1,"playerCamera":{"mouseSensitivity":0}})",
+            R"({"version":1,"playerCamera":{"mouseSensitivity":5}})"}) {
+        assert(game::ParseFpsApplicationSettings(boundary, settings, &error));
+    }
+    for (const char* invalid : {
+            R"({"version":1,"playerCamera":4})",
+            R"({"version":1,"playerCamera":{"mouseSensitivity":"fast"}})",
+            R"({"version":1,"playerCamera":{"mouseSensitivity":-0.01}})",
+            R"({"version":1,"playerCamera":{"mouseSensitivity":5.01}})",
+            R"({"version":1,"playerCamera":{"smoothingStrength":1.1}})",
+            R"({"version":1,"playerCamera":{"deadZonePixels":-1}})",
+            R"({"version":1,"playerCamera":{"maxTurnSpeedDegreesPerSecond":1441}})",
+            R"({"version":1,"playerCamera":{"smoothingStrength":1e999}})"}) {
+        assert(!game::ParseFpsApplicationSettings(invalid, settings, &error));
+        assert(error.find("playerCamera") != std::string::npos
+                || error.find("overflow") != std::string::npos);
+    }
+    auto invalid = game::PlayerCameraApplicationSettings{};
+    invalid.mouseSensitivity = INFINITY;
+    invalid.smoothingStrength = NAN;
+    invalid.deadZonePixels = -5.0f;
+    invalid.maxTurnSpeedDegreesPerSecond = 2000.0f;
+    assert(!game::PlayerCameraSettingsError(invalid).empty());
+    const auto normalized = game::NormalizePlayerCameraSettings(invalid);
+    assert(Near(normalized.mouseSensitivity, 1.0f));
+    assert(Near(normalized.smoothingStrength, 0.2f));
+    assert(Near(normalized.deadZonePixels, 0.0f));
+    assert(Near(normalized.maxTurnSpeedDegreesPerSecond, 1440.0f));
+
+    game::PlayerCameraApplicationSettings live;
+    live.mouseSensitivity = 3.0f;
+    auto editorDraft = live;
+    editorDraft.mouseSensitivity = 1.0f; // stale editor draft
+    editorDraft.smoothingStrength = 0.7f;
+    editorDraft.deadZonePixels = 1.5f;
+    editorDraft.maxTurnSpeedDegreesPerSecond = 180.0f;
+    game::ApplyPlayerCameraAuthorSettings(live, editorDraft);
+    assert(Near(live.mouseSensitivity, 3.0f));
+    assert(Near(live.smoothingStrength, 0.7f));
+    game::ApplyPlayerCameraAuthorSettings(live, {}); // editor Defaults
+    assert(Near(live.mouseSensitivity, 3.0f));
+    assert(Near(live.maxTurnSpeedDegreesPerSecond, 360.0f));
+}
+
 void SettingsResolutionAndPersistence()
 {
     game::FpsViewmodelPresentation defaults;
@@ -1045,6 +1103,10 @@ void SettingsResolutionAndPersistence()
     settings.playerHealth.lowHealthCamera.rollAmplitudeDegrees = 1.8f;
     settings.playerHealth.lowHealthCamera.frequencyHz = 0.7f;
     settings.playerHealth.lowHealthCamera.responseSeconds = 0.5f;
+    settings.playerCamera.mouseSensitivity = 2.75f;
+    settings.playerCamera.smoothingStrength = 0.6f;
+    settings.playerCamera.deadZonePixels = 1.25f;
+    settings.playerCamera.maxTurnSpeedDegreesPerSecond = 240.0f;
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     std::ifstream savedSettingsInput(path);
@@ -1053,6 +1115,7 @@ void SettingsResolutionAndPersistence()
             std::istreambuf_iterator<char>()};
     game::FpsApplicationSettings loaded;
     assert(game::LoadFpsApplicationSettings(path.string(), loaded, &error));
+    assert(game::SamePlayerCameraSettings(loaded.playerCamera, settings.playerCamera));
     assert(loaded.firstLevel == "test4");
     assert(!loaded.consoleEnabled);
     assert(Near(loaded.hdrBloom.threshold,2.0f)
@@ -2800,6 +2863,7 @@ int main()
     PelletDirectionGeneration();
     RegistryValidation(); WeaponSlotSchemaAndKeys();
     SettingsResolutionAndPersistence();
+    PlayerCameraSettingsValidation();
     PreviewSettingsOverrideDeltaCoverage();
     CameraMath(); HolsterTransitionStateAndMath(); RequestedHolsterState();
     AnimationTiming();

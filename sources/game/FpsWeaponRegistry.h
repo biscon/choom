@@ -1,5 +1,7 @@
 #pragma once
 
+#include "game/PlayerCameraSettings.h"
+
 #include "engine/assets/AssetHandles.h"
 #include "engine/render/HdrEffectPolicy.h"
 #include "engine/render/ToneMapping.h"
@@ -342,6 +344,7 @@ struct FpsApplicationSettings {
     PlayerSoundApplicationSettings playerSounds;
     PlayerHealthApplicationSettings playerHealth;
     PlayerFlashlightApplicationSettings playerFlashlight;
+    PlayerCameraApplicationSettings playerCamera;
     PlayerSneakApplicationSettings playerSneak;
     PlayerStaminaApplicationSettings playerStamina;
     PlayerLiquidApplicationSettings playerLiquids;

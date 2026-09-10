@@ -161,6 +161,7 @@ SectorEditorPlayerSettingsService::SaveAndClose(engine::EngineContext& context)
     candidate.playerHealth = state_.draft.playerHealth;
     candidate.playerSneak = state_.draft.playerSneak;
     candidate.playerFlashlight = state_.draft.playerFlashlight;
+    ApplyPlayerCameraAuthorSettings(candidate.playerCamera, state_.draft.playerCamera);
     std::string saveError;
     if (!SaveFpsApplicationSettings(
                 settingsPath_.string(), candidate, &saveError)) {
@@ -190,6 +191,12 @@ void SectorEditorPlayerSettingsService::ResetActiveTab()
 {
     const FpsApplicationSettings defaults;
     switch (state_.activeTab) {
+        case SectorEditorPlayerSettingsTab::Camera:
+            ApplyPlayerCameraAuthorSettings(state_.draft.playerCamera, defaults.playerCamera);
+            state_.cameraSmoothingInput = {};
+            state_.cameraDeadZoneInput = {};
+            state_.cameraMaxTurnSpeedInput = {};
+            break;
         case SectorEditorPlayerSettingsTab::Stamina:
             state_.draft.playerStamina = defaults.playerStamina;
             break;

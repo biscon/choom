@@ -12,6 +12,14 @@
 
 namespace {
 
+game::PlayerCameraApplicationSettings RawCameraSettings()
+{
+    game::PlayerCameraApplicationSettings settings;
+    settings.smoothingStrength = 0.0f;
+    settings.maxTurnSpeedDegreesPerSecond = 0.0f;
+    return settings;
+}
+
 int failures = 0;
 
 void Check(bool condition, const char* description)
@@ -296,7 +304,7 @@ void TestCameraRecoilPoseComposition()
     lookInput.mouseLookEnabled = true;
     lookInput.mouseDelta = Vector2{5.0f, -3.0f};
     game::UpdateSectorFpsMouseLook(
-            lookState, game::SectorFpsControllerConfig{}, lookInput);
+            lookState, RawCameraSettings(), lookInput, 1.0f / 60.0f);
     const game::SectorViewPose movedBase = game::SectorFpsControllerPose(
             lookState, game::SectorFpsControllerConfig{});
     const game::SectorViewPose movedEffective =
@@ -618,7 +626,7 @@ void TestForwardMovementIgnoresPitchAndPreservesY()
     config.walkSpeed = 6.0f;
     game::SectorFpsControllerInput input;
     input.moveForward = true;
-    UpdateSectorFpsController(state, config, input, 0.5f);
+    UpdateSectorFpsController(state, config, RawCameraSettings(), input, 0.5f);
     Check(Near(state.feetPosition, Vector3{3.0f, 3.0f, 0.0f}),
             "forward movement uses yaw and preserves feet Y");
 }
@@ -632,14 +640,14 @@ void TestRunAndWalkSpeeds()
     game::SectorFpsControllerState walking;
     game::SectorFpsControllerInput walkInput;
     walkInput.moveForward = true;
-    UpdateSectorFpsController(walking, config, walkInput, 1.0f);
+    UpdateSectorFpsController(walking, config, RawCameraSettings(), walkInput, 1.0f);
     Check(Near(walking.feetPosition.x, 6.0f), "walk speed is used without run");
 
     game::SectorFpsControllerState running;
     game::SectorFpsControllerInput runInput;
     runInput.moveForward = true;
     runInput.run = true;
-    UpdateSectorFpsController(running, config, runInput, 1.0f);
+    UpdateSectorFpsController(running, config, RawCameraSettings(), runInput, 1.0f);
     Check(Near(running.feetPosition.x, 12.0f), "run speed is used with run input");
 
     game::SectorFpsControllerInput slowedInput;
@@ -926,11 +934,12 @@ void TestMouseLookRawDeltaAndPitchClamp()
 {
     game::SectorFpsControllerState state;
     game::SectorFpsControllerConfig config;
-    config.mouseSensitivity = 2.0f;
+    auto camera = RawCameraSettings();
+    camera.mouseSensitivity = 2.0f;
     game::SectorFpsControllerInput input;
     input.mouseLookEnabled = true;
     input.mouseDelta = Vector2{10.0f, -10000.0f};
-    UpdateSectorFpsController(state, config, input, 123.0f);
+    UpdateSectorFpsController(state, config, camera, input, 1.0f / 60.0f);
     Check(Near(state.yawRadians, 0.06f), "mouse look uses raw delta times sensitivity without dt");
     Check(state.pitchRadians <= 1.5534f && state.pitchRadians >= 1.5532f,
             "pitch clamps to about positive 89 degrees");
@@ -948,13 +957,13 @@ void TestMouseLookCaptureWarmup()
     input.mouseLookEnabled =
             game::AdvanceSectorFreeflyMouseLookCapture(capture);
     game::UpdateSectorFpsMouseLook(
-            view, game::SectorFpsControllerConfig{}, input);
+            view, RawCameraSettings(), input, 1.0f / 60.0f);
     Check(Near(view.yawRadians, 0.0f) && Near(view.pitchRadians, 0.0f),
           "first mouse recapture frame discards its delta");
     input.mouseLookEnabled =
             game::AdvanceSectorFreeflyMouseLookCapture(capture);
     game::UpdateSectorFpsMouseLook(
-            view, game::SectorFpsControllerConfig{}, input);
+            view, RawCameraSettings(), input, 1.0f / 60.0f);
     Check(Near(view.yawRadians, 0.0f) && Near(view.pitchRadians, 0.0f),
           "second mouse recapture frame discards its delta");
 
@@ -962,7 +971,7 @@ void TestMouseLookCaptureWarmup()
     input.mouseLookEnabled =
             game::AdvanceSectorFreeflyMouseLookCapture(capture);
     game::UpdateSectorFpsMouseLook(
-            view, game::SectorFpsControllerConfig{}, input);
+            view, RawCameraSettings(), input, 1.0f / 60.0f);
     Check(input.mouseLookEnabled
                   && Near(view.yawRadians, 0.03f)
                   && Near(view.pitchRadians, 0.015f),
@@ -979,12 +988,150 @@ void TestMouseLookCaptureWarmup()
           "a later recapture starts a fresh warmup");
 }
 
+void TestMouseLookSmoothingAndFrameRates()
+{
+    auto camera = RawCameraSettings();
+    camera.smoothingStrength = 0.2f;
+    const auto run = [&](int frames, bool variable) {
+        game::SectorFpsControllerState state;
+        game::SectorFpsControllerInput input;
+        input.mouseLookEnabled = true;
+        for (int frame = 0; frame < frames; ++frame) {
+            const float dt = (variable ? (frame % 2 == 0 ? 0.5f : 1.5f) : 1.0f)
+                    / frames;
+            input.mouseDelta = {100.0f * dt, -20.0f * dt};
+            game::UpdateSectorFpsMouseLook(state, camera, input, dt);
+        }
+        // Constant input's exact one-second integral, tau = 30 ms.
+        Check(Near(state.yawRadians, 0.3f * (1.0f - 0.03f)),
+                "smoothing matches the continuous-time integral");
+        const float yawBeforeRelease = state.yawRadians;
+        input.mouseDelta = {};
+        for (int frame = 0; frame < frames; ++frame) {
+            game::UpdateSectorFpsMouseLook(state, camera, input, 1.0f / frames);
+        }
+        Check(state.yawRadians > yawBeforeRelease && Near(state.yawRadians, 0.3f),
+                "uncapped smoothing conserves rotation after its settling tail");
+        Check(Near(state.pitchRadians, 0.06f), "pitch uses the same smoothing response");
+        return state.yawRadians;
+    };
+    Check(Near(run(30, false), run(60, false))
+                    && Near(run(144, false), run(60, true)),
+            "smoothing is consistent at 30/60/144 Hz and variable frame times");
+}
+
+void TestMouseLookTurnLimit()
+{
+    for (float strength : {0.0f, 0.2f, 1.0f}) {
+        game::PlayerCameraApplicationSettings camera;
+        camera.smoothingStrength = strength;
+        for (int fps : {30, 60, 144}) {
+            game::SectorFpsControllerState state;
+            game::SectorFpsControllerInput input;
+            input.mouseLookEnabled = true;
+            input.mouseDelta = {10000.0f, -10000.0f};
+            const float dt = 1.0f / fps;
+            const float bound = 360.0f * DEG2RAD * dt;
+            for (int frame = 0; frame < fps * 4; ++frame) {
+                const Vector2 before{state.yawRadians, state.pitchRadians};
+                game::UpdateSectorFpsMouseLook(state, camera, input, dt);
+                Check(std::hypot(state.yawRadians - before.x,
+                                state.pitchRadians - before.y) <= bound + 0.00001f,
+                        "combined diagonal turn speed never exceeds the configured cap");
+                input.mouseDelta = {};
+            }
+            Check(Near(std::hypot(state.yawRadians, state.pitchRadians), bound),
+                    "a capped flick retains only one frame of capped input, no backlog");
+        }
+    }
+}
+
+void TestMouseLookDeadZone()
+{
+    auto camera = RawCameraSettings();
+    camera.deadZonePixels = 2.0f;
+    game::SectorFpsControllerState state;
+    game::SectorFpsControllerInput input;
+    input.mouseLookEnabled = true;
+    for (int i = 0; i < 40; ++i) {
+        input.mouseDelta = {i % 2 == 0 ? 1.0f : -1.0f, 0.0f};
+        game::UpdateSectorFpsMouseLook(state, camera, input, 1.0f / 60.0f);
+    }
+    Check(Near(state.yawRadians, 0.0f), "dead zone absorbs back-and-forth jitter");
+    input.mouseDelta = {0.25f, 0.0f};
+    for (int i = 0; i < 16; ++i) {
+        game::UpdateSectorFpsMouseLook(state, camera, input, 1.0f / 60.0f);
+    }
+    Check(Near(state.yawRadians, 2.0f * 0.003f),
+            "slow deliberate motion crosses the buffer rather than being discarded");
+    input.mouseDelta = {-4.0f, 0.0f};
+    game::UpdateSectorFpsMouseLook(state, camera, input, 1.0f / 60.0f);
+    Check(Near(state.yawRadians, 0.006f), "reversal first crosses the retained buffer");
+    input.mouseDelta = {-1.0f, 0.0f};
+    game::UpdateSectorFpsMouseLook(state, camera, input, 1.0f / 60.0f);
+    Check(Near(state.yawRadians, 0.003f), "reversal emits movement after crossing the buffer");
+}
+
+void TestMouseLookResetsAndLimits()
+{
+    game::PlayerCameraApplicationSettings camera;
+    game::SectorFpsControllerState state;
+    game::SectorFpsControllerInput input;
+    input.mouseLookEnabled = true;
+    input.mouseDelta = {50.0f, 0.0f};
+    game::UpdateSectorFpsMouseLook(state, camera, input, 0.016f);
+    const float beforeCaptureLoss = state.yawRadians;
+    input.mouseLookEnabled = false;
+    game::UpdateSectorFpsMouseLook(state, camera, input, 0.016f);
+    input.mouseLookEnabled = true;
+    input.mouseDelta = {};
+    game::UpdateSectorFpsMouseLook(state, camera, input, 0.016f);
+    Check(Near(state.yawRadians, beforeCaptureLoss), "capture loss clears residual motion");
+
+    for (int mode = 0; mode < 8; ++mode) {
+        input.mouseDelta = {50.0f, 0.0f};
+        game::UpdateSectorFpsMouseLook(state, camera, input, 0.016f);
+        float expected = state.yawRadians;
+        input.mouseDelta = {};
+        if (mode == 0) {
+            camera.smoothingStrength = 0.5f;
+        } else if (mode == 1) {
+            state.yawRadians = expected = 1.0f; // teleport/script/save restore
+        } else if (mode == 2) {
+            game::ResetSectorFpsMouseLook(state); // pause or mode switch
+        } else if (mode == 3) {
+            game::UpdateSectorFpsMouseLook(state, camera, input, 1.0f);
+        } else if (mode == 4) {
+            game::UpdateSectorFpsMouseLook(state, camera, input, 0.0f);
+        } else if (mode == 5) {
+            game::UpdateSectorFpsMouseLook(state, camera, input, -0.1f);
+        } else if (mode == 6) {
+            game::UpdateSectorFpsMouseLook(state, camera, input, NAN);
+        } else {
+            input.mouseDelta = {INFINITY, NAN};
+            game::UpdateSectorFpsMouseLook(state, camera, input, 0.016f);
+            input.mouseDelta = {};
+        }
+        game::UpdateSectorFpsMouseLook(state, camera, input, 0.016f);
+        Check(Near(state.yawRadians, expected), "settings/pose/invalid input resets discard stale velocity");
+    }
+    state = {};
+    state.pitchRadians = game::ClampSectorFpsPitch(100.0f);
+    input.mouseDelta = {0.0f, -100.0f};
+    game::UpdateSectorFpsMouseLook(state, camera, input, 0.016f);
+    Check(Near(state.mouseLook.angularVelocity.y, 0.0f),
+            "pitch clamp clears outward smoothing velocity");
+    input.mouseDelta.y = 1.0f;
+    const float limit = state.pitchRadians;
+    game::UpdateSectorFpsMouseLook(state, camera, input, 0.016f);
+    Check(state.pitchRadians < limit, "pitch can reverse immediately away from its limit");
+}
+
 void TestConfigNormalization()
 {
     game::SectorFpsControllerConfig config;
     config.walkSpeed = -1.0f;
     config.runSpeed = 999.0f;
-    config.mouseSensitivity = INFINITY;
     config.eyeHeight = NAN;
     config.gravity = 500.0f;
     config.playerRadius = -1.0f;
@@ -996,7 +1143,6 @@ void TestConfigNormalization()
     config = game::NormalizeSectorFpsControllerConfig(config);
     Check(Near(config.walkSpeed, 0.1f), "walk speed clamps low");
     Check(Near(config.runSpeed, 200.0f), "run speed clamps high");
-    Check(Near(config.mouseSensitivity, 1.0f), "non-finite mouse sensitivity uses default");
     Check(Near(config.eyeHeight, 1.2f), "non-finite eye height uses default");
     Check(Near(config.gravity, 200.0f), "gravity clamps high");
     Check(Near(config.playerRadius, 0.05f), "player radius clamps low");
@@ -1085,11 +1231,11 @@ void TestJumpInputUsesEdgePress()
     game::SectorFpsControllerInput input;
     input.jumpPressed = true;
 
-    game::UpdateSectorFpsController(state, config, input, 0.0f);
+    game::UpdateSectorFpsController(state, config, RawCameraSettings(), input, 0.0f);
     const float firstVelocity = state.verticalVelocity;
     Check(!state.grounded && firstVelocity > 0.0f, "jump input starts one jump");
 
-    game::UpdateSectorFpsController(state, config, input, 0.0f);
+    game::UpdateSectorFpsController(state, config, RawCameraSettings(), input, 0.0f);
     Check(Near(state.verticalVelocity, firstVelocity),
           "held jump input does not restart while airborne");
 }
@@ -1713,6 +1859,10 @@ int main()
     TestCrouchedMovementSpeedAndVerticalFit();
     TestMouseLookRawDeltaAndPitchClamp();
     TestMouseLookCaptureWarmup();
+    TestMouseLookSmoothingAndFrameRates();
+    TestMouseLookTurnLimit();
+    TestMouseLookDeadZone();
+    TestMouseLookResetsAndLimits();
     TestConfigNormalization();
     TestJumpStart();
     TestJumpInputUsesEdgePress();

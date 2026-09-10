@@ -2879,7 +2879,6 @@ void TestPreviewSettingsRoundTripAndValidation()
     SectorTopologyMap original = MakeSquare();
     original.previewSettings.walkSpeed = 7.25f;
     original.previewSettings.runSpeed = 15.5f;
-    original.previewSettings.mouseSensitivity = 2.75f;
     original.previewSettings.eyeHeight = 1.25f;
     original.previewSettings.gravity = 38.5f;
     original.previewSettings.playerRadius = 0.35f;
@@ -2896,7 +2895,6 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(saved["previewSettings"].is_object(), "preview settings are written");
     Check(Near(saved["previewSettings"]["walkSpeed"].get<float>(), 7.25f)
                   && Near(saved["previewSettings"]["runSpeed"].get<float>(), 15.5f)
-                  && Near(saved["previewSettings"]["mouseSensitivity"].get<float>(), 2.75f)
                   && Near(saved["previewSettings"]["eyeHeight"].get<float>(), 1.25f)
                   && Near(saved["previewSettings"]["gravity"].get<float>(), 38.5f)
                   && Near(saved["previewSettings"]["playerRadius"].get<float>(), 0.35f)
@@ -2914,7 +2912,6 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(LoadText(text, loaded, error), "preview settings JSON loads");
     Check(Near(loaded.previewSettings.walkSpeed, 7.25f)
                   && Near(loaded.previewSettings.runSpeed, 15.5f)
-                  && Near(loaded.previewSettings.mouseSensitivity, 2.75f)
                   && Near(loaded.previewSettings.eyeHeight, 1.25f)
                   && Near(loaded.previewSettings.gravity, 38.5f)
                   && Near(loaded.previewSettings.playerRadius, 0.35f)
@@ -2984,7 +2981,6 @@ void TestPreviewSettingsRoundTripAndValidation()
     const game::SectorPreviewSettings defaults = game::DefaultSectorPreviewSettings();
     Check(Near(oldStyle.previewSettings.walkSpeed, defaults.walkSpeed)
                   && Near(oldStyle.previewSettings.runSpeed, defaults.runSpeed)
-                  && Near(oldStyle.previewSettings.mouseSensitivity, defaults.mouseSensitivity)
                   && Near(oldStyle.previewSettings.eyeHeight, defaults.eyeHeight)
                   && Near(oldStyle.previewSettings.gravity, defaults.gravity)
                   && Near(oldStyle.previewSettings.playerRadius, defaults.playerRadius)
@@ -3000,14 +2996,20 @@ void TestPreviewSettingsRoundTripAndValidation()
                           == defaults.npcToNpcCollisionEnabled,
           "omitted preview settings load defaults");
 
+    Json oldSensitivity = saved;
+    oldSensitivity["previewSettings"]["mouseSensitivity"] = 7.0f;
+    Check(LoadText(oldSensitivity.dump(), loaded, error),
+          "old level sensitivity is accepted and ignored");
+    Check(!saved["previewSettings"].contains("mouseSensitivity"),
+          "new levels do not serialize player sensitivity");
+
     Json invalid = saved;
     invalid["previewSettings"] = 4;
     ExpectRejected(invalid, "non-object preview settings are rejected");
 
-    const std::array<const char*, 12> fields{
+    const std::array<const char*, 11> fields{
             "walkSpeed",
             "runSpeed",
-            "mouseSensitivity",
             "eyeHeight",
             "gravity",
             "playerRadius",
@@ -3084,7 +3086,6 @@ void TestPreviewSettingsRoundTripAndValidation()
     Json clamped = saved;
     clamped["previewSettings"]["walkSpeed"] = -5.0f;
     clamped["previewSettings"]["runSpeed"] = 500.0f;
-    clamped["previewSettings"]["mouseSensitivity"] = 0.001f;
     clamped["previewSettings"]["eyeHeight"] = 40.0f;
     clamped["previewSettings"]["gravity"] = -5.0f;
     clamped["previewSettings"]["playerRadius"] = -1.0f;
@@ -3097,7 +3098,6 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(LoadText(clamped.dump(), loaded, error), "out-of-range preview settings load");
     Check(Near(loaded.previewSettings.walkSpeed, 0.1f)
                   && Near(loaded.previewSettings.runSpeed, 200.0f)
-                  && Near(loaded.previewSettings.mouseSensitivity, 0.01f)
                   && Near(loaded.previewSettings.eyeHeight, 3.0f)
                   && Near(loaded.previewSettings.gravity, 0.0f)
                   && Near(loaded.previewSettings.playerRadius, 0.05f)

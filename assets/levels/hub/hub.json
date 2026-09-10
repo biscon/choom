@@ -6425,6 +6425,140 @@
         -160.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 400,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_400",
+        "modelPath": "assets/models/kitchen/Floor_Drain.gltf",
+        "heightOffsetWorld": -0.019999999552965164
+      },
+      "position": [
+        -76.0,
+        -16.0,
+        -331.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 401,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_401",
+        "modelPath": "assets/models/kitchen/Floor_Drain.gltf",
+        "heightOffsetWorld": -0.019999999552965164
+      },
+      "position": [
+        -96.0,
+        -16.0,
+        -331.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 402,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_402",
+        "modelPath": "assets/models/kitchen/Floor_Drain.gltf",
+        "heightOffsetWorld": -0.019999999552965164
+      },
+      "position": [
+        -116.0,
+        -16.0,
+        -331.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 403,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_403",
+        "modelPath": "assets/models/bathroom/Ventilation_Grille_410.gltf",
+        "heightOffsetWorld": 2.5799994468688965
+      },
+      "position": [
+        -56.079986572265625,
+        -16.0,
+        -317.8799743652344
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 404,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_404",
+        "modelPath": "assets/models/bathroom/Ventilation_Grille_410.gltf",
+        "heightOffsetWorld": 2.5799994468688965
+      },
+      "position": [
+        -135.9199981689453,
+        -16.0,
+        -318.3199462890625
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 405,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_405",
+        "modelPath": "assets/models/bathroom/Ventilation_Grille_410.gltf",
+        "heightOffsetWorld": 2.5799994468688965
+      },
+      "position": [
+        -232.7200164794922,
+        -16.0,
+        -160.0800018310547
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 406,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_406",
+        "modelPath": "assets/models/bathroom/Ventilation_Grille_410.gltf",
+        "heightOffsetWorld": 2.59999942779541
+      },
+      "position": [
+        -232.52012634277344,
+        -16.0,
+        -207.9199981689453
+      ],
+      "yawDegrees": -4.26886799687054e-06
+    },
+    {
+      "id": 407,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_407",
+        "modelPath": "assets/models/bathroom/Floor_Drain_Round.gltf"
+      },
+      "position": [
+        -244.60009765625,
+        -16.0,
+        -183.9998779296875
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 408,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_408",
+        "modelPath": "assets/models/bathroom/Paper_Towel_Dispenser.gltf",
+        "heightOffsetWorld": 1.1999999284744263
+      },
+      "position": [
+        -222.96002197265625,
+        -16.0,
+        -172.35989379882813
+      ],
+      "yawDegrees": 90.0
     }
   ],
   "staticLights": [
@@ -12209,7 +12343,6 @@
     "walkSpeed": 2.5,
     "runSpeed": 5.0,
     "swimSpeed": 6.0,
-    "mouseSensitivity": 0.5,
     "eyeHeight": 1.649999976158142,
     "gravity": 25.0,
     "playerRadius": 0.25,
@@ -12304,7 +12437,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "4634bdd8d0cef8b4",
+    "sourceHash": "84480e4ba14a4987",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -12324,7 +12457,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "4634bdd8d0cef8b4",
+      "sourceHash": "84480e4ba14a4987",
       "count": 3973,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -12344,15 +12477,15 @@
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23838,
-        "rgbChannelsAboveOne": 32
+        "rgbChannelsAboveOne": 34
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "4634bdd8d0cef8b4",
-      "modelCount": 114,
-      "objectCount": 334,
+      "sourceHash": "84480e4ba14a4987",
+      "modelCount": 117,
+      "objectCount": 343,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
@@ -38097,7 +38230,7 @@
           "b": 158,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -38178,7 +38311,7 @@
           "b": 158,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -38325,7 +38458,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -38401,7 +38534,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -38624,7 +38757,7 @@
           "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.029999999329447746,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -38699,7 +38832,7 @@
           "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.029999999329447746,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -38923,7 +39056,7 @@
           "b": 240,
           "a": 255
         },
-        "ambientIntensity": 0.02500000037252903,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -38999,7 +39132,7 @@
           "b": 240,
           "a": 255
         },
-        "ambientIntensity": 0.02500000037252903,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -42273,6 +42406,23 @@
         ],
         "repeat": true,
         "script": "trigger_2"
+      }
+    ],
+    "structuralPrimitives": [
+      {
+        "id": 1,
+        "kind": "cylinder",
+        "x": -4564,
+        "z": -2945,
+        "pitchDegrees": 90.0,
+        "material": {
+          "materialId": "baseboard_painted_white"
+        },
+        "cylinder": {
+          "radius": 32,
+          "bottom": -15.999994277954102,
+          "top": 33.19994354248047
+        }
       }
     ]
   }

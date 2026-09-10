@@ -584,7 +584,7 @@ void TestBuildInputAndSourceHash()
     game::SectorTopologyMap map = MakeSquareMap(64);
     std::vector<game::SectorStaticModelCollider> colliders;
     const uint64_t base = game::ComputeSectorNavigationSourceHash(map, colliders, {});
-    map.previewSettings.mouseSensitivity += 0.25f;
+    map.previewSettings.headBobStrength += 0.01f;
     const uint64_t visual = game::ComputeSectorNavigationSourceHash(map, colliders, {});
     Check(base == visual, "navigation source hash ignores visual preview settings");
     map.previewSettings.npcToNpcCollisionEnabled = false;

@@ -1509,6 +1509,26 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail(sneakContext + "." + sneakError);
             }
         }
+        const auto playerCamera = root.find("playerCamera");
+        if (playerCamera != root.end()) {
+            const std::string cameraContext = "application settings.playerCamera";
+            if (!playerCamera->is_object()) Fail(cameraContext + " must be an object");
+            auto& camera = parsed.playerCamera;
+            camera.mouseSensitivity = OptionalNumber(
+                    *playerCamera, "mouseSensitivity", cameraContext)
+                    .value_or(camera.mouseSensitivity);
+            camera.smoothingStrength = OptionalNumber(
+                    *playerCamera, "smoothingStrength", cameraContext)
+                    .value_or(camera.smoothingStrength);
+            camera.deadZonePixels = OptionalNumber(
+                    *playerCamera, "deadZonePixels", cameraContext)
+                    .value_or(camera.deadZonePixels);
+            camera.maxTurnSpeedDegreesPerSecond = OptionalNumber(
+                    *playerCamera, "maxTurnSpeedDegreesPerSecond", cameraContext)
+                    .value_or(camera.maxTurnSpeedDegreesPerSecond);
+            const std::string cameraError = PlayerCameraSettingsError(camera);
+            if (!cameraError.empty()) Fail(cameraContext + "." + cameraError);
+        }
         const auto playerFlashlight = root.find("playerFlashlight");
         if (playerFlashlight != root.end()) {
             const std::string flashlightContext =
@@ -2519,6 +2539,11 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings playerSneak." + sneakError);
         return false;
     }
+    const std::string cameraError = PlayerCameraSettingsError(settings.playerCamera);
+    if (!cameraError.empty()) {
+        SetError(error, "application settings playerCamera." + cameraError);
+        return false;
+    }
     const std::string flashlightError = PlayerFlashlightSettingsError(
             settings.playerFlashlight);
     if (!flashlightError.empty()) {
@@ -2612,6 +2637,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     settings.playerSneak.crouchVisualDetectionMultiplier},
             {"crouchMovementNoiseMultiplier",
                     settings.playerSneak.crouchMovementNoiseMultiplier}};
+    root["playerCamera"] = {
+            {"mouseSensitivity", settings.playerCamera.mouseSensitivity},
+            {"smoothingStrength", settings.playerCamera.smoothingStrength},
+            {"deadZonePixels", settings.playerCamera.deadZonePixels},
+            {"maxTurnSpeedDegreesPerSecond",
+                    settings.playerCamera.maxTurnSpeedDegreesPerSecond}};
     root["playerFlashlight"] = {
             {"intensity", settings.playerFlashlight.intensity},
             {"reachWorld", settings.playerFlashlight.reachWorld},

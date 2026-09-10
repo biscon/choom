@@ -709,6 +709,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 || uiState.mainMenu.openRootIndex >= 0
                 || HasDocumentModalOpen();
         if (hasBlockingModal) {
+            ResetSectorFpsMouseLook(previewState.controller.fpsControllerState);
             if (previewState.controller.previewControlMode
                     == SectorPreviewControlMode::Gameplay) {
                 ApplyGameplayPoseToPreview();
@@ -3122,7 +3123,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             controllerInput.swimUp = input.IsKeyDown(KEY_SPACE);
             controllerInput.swimDown = input.IsKeyDown(KEY_LEFT_CONTROL)
                     || input.IsKeyDown(KEY_RIGHT_CONTROL);
-            controllerInput.mouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
+            controllerInput.mouseLookEnabled = !previewInputCaptured
+                    && AdvanceSectorFreeflyMouseLookCapture(
+                            previewState.controller.freeflyController);
             controllerInput.mouseDelta = input.MouseDelta();
             const bool canConsumeGameplayActions =
                     state.mode == SectorEditorMode::Preview3D
@@ -3164,6 +3167,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     &TopologyMap(),
                     state.previewSettingsModal.open,
                     controllerInput,
+                    applicationSettings.playerCamera,
                     applicationSettings.playerLiquids,
                     applicationSettings.playerDucts,
                     previousVisualEyeY,

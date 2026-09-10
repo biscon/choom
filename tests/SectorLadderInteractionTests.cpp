@@ -590,6 +590,7 @@ int main()
 
     input.moveForward = true;
     controller.yawRadians = traversal.facingYawRadians + PI;
+    controller.mouseLook.angularVelocity.x = 2.0f;
     UpdateSectorLadderTraversal(
             traversal, controller, config, input, map, nullptr, 0.5f);
     Require(Near(controller.feetPosition.y, 0.75f),
@@ -599,6 +600,8 @@ int main()
                          2.0f * PI),
                          SectorLadderLookYawArcRadians),
             "ladder yaw is clamped to the configured look arc");
+    Require(Near(controller.mouseLook.angularVelocity.x, 0.0f),
+            "ladder yaw limit clears outward smoothed input");
 
     UpdateSectorLadderTraversal(
             traversal, controller, config, input, map, nullptr, 10.0f);

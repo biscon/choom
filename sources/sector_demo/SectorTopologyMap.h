@@ -39,7 +39,6 @@ struct SectorPreviewSettings {
     float walkSpeed = 6.0f;
     float runSpeed = 12.0f;
     float swimSpeed = 6.0f;
-    float mouseSensitivity = 1.0f;
     float eyeHeight = 1.2f;
     float gravity = 25.0f;
     float playerRadius = 0.25f;

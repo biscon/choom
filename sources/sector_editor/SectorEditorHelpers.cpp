@@ -1301,7 +1301,6 @@ bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewS
     return a.walkSpeed == b.walkSpeed
             && a.runSpeed == b.runSpeed
             && a.swimSpeed == b.swimSpeed
-            && a.mouseSensitivity == b.mouseSensitivity
             && a.eyeHeight == b.eyeHeight
             && a.gravity == b.gravity
             && a.playerRadius == b.playerRadius

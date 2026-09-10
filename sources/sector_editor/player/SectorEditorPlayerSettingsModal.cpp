@@ -66,10 +66,18 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             static_cast<int>(EditorWidth),
             static_cast<int>(EditorHeight),
             Color{0, 0, 0, 150});
+    constexpr std::array<const char*, 9> tabNames{
+            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting",
+            "Liquids", "Ducts", "Camera"};
+    constexpr float tabWidth = 126.0f;
+    constexpr float tabGap = 8.0f;
+    constexpr float modalWidth = 56.0f + tabNames.size() * tabWidth
+            + (tabNames.size() - 1u) * tabGap;
+    static_assert(modalWidth == 1254.0f, "New tabs widen the modal, never shrink existing tabs");
     const Rectangle modal{
-            (EditorWidth - 1120.0f) * 0.5f,
+            (EditorWidth - modalWidth) * 0.5f,
             (EditorHeight - 940.0f) * 0.5f,
-            1120.0f,
+            modalWidth,
             940.0f};
     DrawRectangleRec(modal, Color{20, 24, 32, 252});
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
@@ -79,18 +87,15 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
                     modal.width - 56.0f, 42.0f},
             font, "Player Settings");
 
-    const char* tabNames[] = {
-            "Stamina", "Inventory", "Audio", "Health", "Sneaking", "Lighting", "Liquids", "Ducts"};
     const float tabY = modal.y + 70.0f;
-    const float tabWidth = (modal.width - 56.0f - 56.0f) / 8.0f;
-    for (int i = 0; i < 8; ++i) {
-        const bool active = static_cast<int>(state.activeTab) == i;
+    for (size_t i = 0; i < tabNames.size(); ++i) {
+        const bool active = static_cast<size_t>(state.activeTab) == i;
         if (engine::ToolButton(
                     ui, config, input, assets,
-                    TextFormat("sector_editor_player_settings_tab_%d", i),
+                    TextFormat("sector_editor_player_settings_tab_%d", static_cast<int>(i)),
                     Rectangle{modal.x + 28.0f
                                     + static_cast<float>(i)
-                                            * (tabWidth + 8.0f),
+                                            * (tabWidth + tabGap),
                             tabY, tabWidth, 42.0f},
                     smallFont,
                     tabNames[i], active)) {
@@ -104,9 +109,35 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
             modal.y + 126.0f,
             modal.width - 56.0f,
             692.0f};
+    float smoothingPercent = state.draft.playerCamera.smoothingStrength * 100.0f;
+    struct CameraControl {
+        const char* id;
+        const char* label;
+        float* value;
+        engine::UIFloatInputState* input;
+        float minimum;
+        float maximum;
+        int decimals;
+    };
+    const std::array<CameraControl, 3> cameraControls{{
+            {"player_camera_smoothing", "Smoothing strength (%)", &smoothingPercent,
+                    &state.cameraSmoothingInput, 0.0f, 100.0f, 1},
+            {"player_camera_dead_zone", "Dead-zone radius (pixels)",
+                    &state.draft.playerCamera.deadZonePixels,
+                    &state.cameraDeadZoneInput, 0.0f, 10.0f, 2},
+            {"player_camera_max_turn", "Max turn speed (deg/s)",
+                    &state.draft.playerCamera.maxTurnSpeedDegreesPerSecond,
+                    &state.cameraMaxTurnSpeedInput, 0.0f, 1440.0f, 1}}};
+    constexpr float cameraHelpHeight = 100.0f;
+    const float cameraContentHeight = (1.0f + cameraControls.size())
+            * (RowHeight + RowGap) + cameraHelpHeight + RowGap;
     engine::UIScrollState* scrollState = &state.staminaScroll;
     float contentHeight = 900.0f;
     switch (state.activeTab) {
+        case SectorEditorPlayerSettingsTab::Camera:
+            scrollState = &state.cameraScroll;
+            contentHeight = cameraContentHeight;
+            break;
         case SectorEditorPlayerSettingsTab::Stamina:
             scrollState = &state.staminaScroll;
             contentHeight = 980.0f;
@@ -201,7 +232,22 @@ SectorEditorPlayerSettingsSaveResult DrawSectorEditorPlayerSettingsModal(
         y += RowHeight + RowGap;
     };
 
-    if (state.activeTab == SectorEditorPlayerSettingsTab::Stamina) {
+    if (state.activeTab == SectorEditorPlayerSettingsTab::Camera) {
+        section("Global gameplay camera");
+        for (const CameraControl& control : cameraControls) {
+            drawFloat(control.id, control.label, *control.value, *control.input,
+                    control.minimum, control.maximum, control.decimals);
+        }
+        state.draft.playerCamera.smoothingStrength = smoothingPercent / 100.0f;
+        engine::Text(ui, config, assets,
+                Rectangle{0.0f, y, scroll.viewport.width, cameraHelpHeight},
+                smallFont,
+                "Applies to all levels in gameplay and gameplay preview.\n"
+                "0 disables smoothing or dead zone; 0 turn speed means unlimited.\n"
+                "Mouse sensitivity is available in the player's main Settings screen.",
+                engine::UITextJustify::Left, config.mutedTextColor, true);
+        y += cameraHelpHeight + RowGap;
+    } else if (state.activeTab == SectorEditorPlayerSettingsTab::Stamina) {
         PlayerStaminaApplicationSettings& stamina = state.draft.playerStamina;
         section("Stamina");
         drawFloat("player_stamina_maximum", "Maximum", stamina.maximum,

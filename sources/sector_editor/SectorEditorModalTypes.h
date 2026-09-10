@@ -242,7 +242,6 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState swimSpeedInput;
-    engine::UIFloatInputState mouseSensitivityInput;
     engine::UIFloatInputState eyeHeightInput;
     engine::UIFloatInputState gravityInput;
     engine::UIFloatInputState playerRadiusInput;
