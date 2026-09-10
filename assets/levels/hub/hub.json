@@ -2786,21 +2786,6 @@
       "yawDegrees": 94.99999237060547
     },
     {
-      "id": 170,
-      "kind": "npc",
-      "npc": {
-        "definitionId": "TestCharacter",
-        "instanceId": "test_npc",
-        "patrolEditorId": 2
-      },
-      "position": [
-        -81.0,
-        0.0,
-        60.0
-      ],
-      "yawDegrees": 180.0
-    },
-    {
       "id": 171,
       "kind": "dynamic_model",
       "dynamicModel": {
@@ -6703,6 +6688,22 @@
         -72.0
       ],
       "yawDegrees": -90.0
+    },
+    {
+      "id": 418,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "elin",
+        "instanceId": "elin",
+        "scale": 1.100000023841858,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -44.0,
+        0.0,
+        96.0
+      ],
+      "yawDegrees": 90.0
     }
   ],
   "staticLights": [
@@ -42998,6 +42999,22 @@
         "y": 0.0,
         "z": 1008,
         "orientationDegrees": 180.0
+      },
+      {
+        "editorId": 20,
+        "id": "intro_marker_1",
+        "x": -176,
+        "y": 0.0,
+        "z": 1536,
+        "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 21,
+        "id": "intro_marker_2",
+        "x": -512,
+        "y": 0.0,
+        "z": 1536,
+        "orientationDegrees": -90.0
       }
     ],
     "patrols": [
@@ -43086,61 +43103,27 @@
     "triggers": [
       {
         "editorId": 1,
-        "id": "trigger_1",
+        "id": "intro_trigger_1",
         "shape": "rectangle",
         "points": [
           {
             "x": -256,
-            "z": 384
+            "z": 1200
           },
           {
             "x": 384,
-            "z": 384
+            "z": 1200
           },
           {
             "x": 384,
-            "z": 512
-          },
-          {
-            "x": -256,
-            "z": 512
-          }
-        ],
-        "enabled": false,
-        "script": "trigger_1"
-      },
-      {
-        "editorId": 2,
-        "id": "trigger_2",
-        "shape": "polygon",
-        "points": [
-          {
-            "x": -80,
             "z": 1328
           },
           {
-            "x": 128,
-            "z": 1264
-          },
-          {
-            "x": 272,
-            "z": 1424
-          },
-          {
-            "x": 208,
-            "z": 1632
-          },
-          {
-            "x": -32,
-            "z": 1680
-          },
-          {
-            "x": -176,
-            "z": 1536
+            "x": -256,
+            "z": 1328
           }
         ],
-        "repeat": true,
-        "script": "trigger_2"
+        "script": "intro_trigger_1"
       }
     ],
     "structuralPrimitives": [

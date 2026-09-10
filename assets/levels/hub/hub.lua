@@ -12,12 +12,17 @@ function shutdown()
     log("hub script shut down")
 end
 
-function trigger_1()
+function intro_trigger_1()
     log("trigger_1")
     assert(enableControls(false))
-    say("Follow me this way...")
-    movePlayer("wp2", "walk", 2.0)
-    lookAtNpc("test_npc", 750, 0.7)
+    startSay("Who is there?!!...")
+    movePlayer("intro_marker_1", "walk", 2.0)
+    lookAtNpc("elin", 750, 0.7)
+    say("Yes finally another person!!. I've been walking these tunnels for hours.")
+    movePlayer("intro_marker_2", "walk", 2.0)
+    lookAtNpc("elin", 1000, 0.3)
+    lookAtNpc("elin", 1500, 0.7)
+
     assert(enableControls(true))
 end
 

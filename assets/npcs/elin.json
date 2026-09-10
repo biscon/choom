@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "id": "elin",
+  "name": "Elin",
+  "modelPath": "assets/models/characters/Elin.glb",
+  "headLook": {
+    "enabled": true,
+    "boneName": "mixamorig:Head"
+  },
+  "actions": {
+    "idle": {
+      "animation": "Idle"
+    },
+    "walk": {
+      "animation": "Walking",
+      "movementSpeed": 1.5
+    },
+    "run": {
+      "animation": "Running",
+      "movementSpeed": 3.0
+    },
+    "attack": {},
+    "hurt": {},
+    "death": {}
+  }
+}
