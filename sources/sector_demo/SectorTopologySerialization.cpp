@@ -1367,6 +1367,9 @@ SectorPlacedNpc ReadPlacedNpc(const Json& value, const std::string& context)
     }
     SectorPlacedNpc npc;
     npc.definitionId = ReadString(value, "definitionId", context);
+    npc.onUseScript = ReadOptionalString(value, "onUseScript", context, npc.onUseScript);
+    npc.useDistance = ReadOptionalPositiveFloat(value, "useDistance", context, npc.useDistance);
+    if (!IsValidSectorTriggerScriptName(npc.onUseScript)) Fail(context + ".onUseScript is invalid");
     npc.instanceId = ReadOptionalString(value, "instanceId", context, npc.instanceId);
     if (value.contains("patrolEditorId")) {
         npc.patrolEditorId = ReadInt(value, "patrolEditorId", context);
@@ -2706,7 +2709,13 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
                             != SectorDynamicModelShadowMode::Dynamic) {
                 Fail(context + ".npc.shadowMode is invalid");
             }
+            if (!IsValidSectorTriggerScriptName(object.npc.onUseScript)
+                    || !std::isfinite(object.npc.useDistance) || object.npc.useDistance <= 0.0f) {
+                Fail(context + ".npc use settings are invalid");
+            }
             Json npc{{"definitionId", object.npc.definitionId}};
+            if (!object.npc.onUseScript.empty()) npc["onUseScript"] = object.npc.onUseScript;
+            if (object.npc.useDistance != 2.5f) npc["useDistance"] = object.npc.useDistance;
             if (!object.npc.instanceId.empty()) npc["instanceId"] = object.npc.instanceId;
             if (object.npc.patrolEditorId > 0) {
                 npc["patrolEditorId"] = object.npc.patrolEditorId;
@@ -3840,6 +3849,10 @@ void ValidateRuntimeObjects(
                     if (!npcInstanceIds.insert(object.npc.instanceId).second) {
                         Fail(objectContext + ".npc.instanceId duplicates another NPC instance ID");
                     }
+                }
+                if (!IsValidSectorTriggerScriptName(object.npc.onUseScript)
+                        || !std::isfinite(object.npc.useDistance) || object.npc.useDistance <= 0.0f) {
+                    Fail(objectContext + ".npc use settings are invalid");
                 }
                 if (object.npc.patrolEditorId < 0) {
                     Fail(objectContext

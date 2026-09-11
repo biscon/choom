@@ -1,6 +1,7 @@
 #include "sector_editor/tools/placed_objects/SectorEditorNpcInspector.h"
 
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_demo/SectorTriggers.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -17,11 +18,12 @@ float MeasureSectorEditorNpcInspectorContentHeight(
     const SectorEditorNpcPlacementState& state =
             context.editingState.npcPlacement;
     return 38.0f * 2.0f
-            + (context.rowH + context.gap) * 10.0f
+            + (context.rowH + context.gap) * 13.0f
             + (object.npc.patrolEditorId > 0
                     ? (context.rowH + context.gap) * 2.0f : 0.0f)
             + 68.0f
-            + (state.instanceIdError.empty() ? 0.0f : 40.0f);
+            + (state.instanceIdError.empty() ? 0.0f : 40.0f)
+            + (state.useError.empty() ? 0.0f : 40.0f);
 }
 
 void DrawSectorEditorNpcInspector(
@@ -105,6 +107,10 @@ void DrawSectorEditorNpcInspector(
                 sizeof(state.instanceIdBuffer),
                 "%s",
                 object->npc.instanceId.c_str());
+        std::snprintf(state.onUseScriptBuffer, sizeof(state.onUseScriptBuffer),
+                "%s", object->npc.onUseScript.c_str());
+        state.useDistanceInput = {};
+        state.useError.clear();
         state.bufferedObjectId = object->id;
         state.instanceIdError.clear();
     }
@@ -279,6 +285,43 @@ void DrawSectorEditorNpcInspector(
         }
         y += rowH + gap;
     };
+
+    // Stack the script label above its input so long names fit narrow panes.
+    engine::Text(context.ui, context.config, context.assets,
+            Rectangle{0, y, contentW, rowH}, context.font, "On Use",
+            engine::UITextJustify::Left, context.config.mutedTextColor);
+    y += rowH + gap;
+    const auto useResult = engine::TextInput(context.ui, context.config, context.input, context.assets,
+            "sector_editor_npc_on_use", Rectangle{0, y, contentW, rowH}, context.font,
+            state.onUseScriptBuffer, sizeof(state.onUseScriptBuffer), 0,
+            sizeof(state.onUseScriptBuffer) - 1, engine::UITextJustify::Left);
+    if (useResult.submitted) {
+        const std::string value{state.onUseScriptBuffer};
+        if (!IsValidSectorTriggerScriptName(value)) state.useError = "On Use script name is invalid";
+        else {
+            state.useError.clear();
+            context.editing.MutateSelected("Updated NPC On Use", [&value](auto& target) {
+                if (target.kind != "npc" || target.npc.onUseScript == value) return false;
+                target.npc.onUseScript = value;
+                return true;
+            });
+        }
+    }
+    y += rowH + gap;
+    if (!state.useError.empty()) {
+        engine::Text(context.ui, context.config, context.assets,
+                Rectangle{0, y, contentW, 36}, context.smallFont, state.useError.c_str(),
+                engine::UITextJustify::Left, context.config.invalidColor, true);
+        y += 40;
+    }
+    object = context.editing.SelectedObject(); if (object == nullptr) return;
+    drawFloat("sector_editor_npc_use_distance", "Use Dist", object->npc.useDistance,
+            state.useDistanceInput, [](auto& target, float value) {
+                if (target.kind != "npc" || target.npc.useDistance == value) return false;
+                target.npc.useDistance = value;
+                return true;
+            }, 0.001f, 100000.0f);
+    object = context.editing.SelectedObject(); if (object == nullptr) return;
 
     drawFloat(
             "sector_editor_npc_x", "Position X", object->position.x,

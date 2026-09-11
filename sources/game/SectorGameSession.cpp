@@ -1253,6 +1253,7 @@ void SectorGameSession::Shutdown(
         liquidAudio = PlayerLiquidAudioPlaybackState{};
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
+    EndSectorScriptConversation(context, scriptHost);
     ResetSectorDialogueMenu(dialogue);
     ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);
@@ -1333,6 +1334,7 @@ void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
     }
     Pause();
     engine::ScriptSystemShutdownForMap(context, scripts);
+    EndSectorScriptConversation(context, scriptHost);
     ResetSectorDialogueMenu(dialogue);
     ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);
@@ -1439,6 +1441,7 @@ void SectorGameSession::Update(
     if (!running || paused) {
         return;
     }
+    UpdateSectorScriptConversationOwnership(context, scriptHost);
     if (gameOver) {
         UpdatePlayerHitCamera(hitCamera, dt);
         ApplyPlayerPose(scene);
@@ -1660,6 +1663,7 @@ void SectorGameSession::Update(
             SectorCutscenePlayerDoorHoldId(cutscene));
     if (IsDepleted(playerHealth)) {
         gameOver = true;
+        UpdateSectorScriptConversationOwnership(context, scriptHost);
         if (dialogue.active) {
             engine::ScriptSystemCancelOperation(context, scripts, dialogue.operation, "player died");
             ResetSectorDialogueMenu(dialogue);
@@ -1683,6 +1687,7 @@ void SectorGameSession::Update(
         scene.Renderer().SetPlayerFlashlight(nullptr);
         return;
     }
+    UpdateSectorScriptConversationOwnership(context, scriptHost);
     ProcessInventoryAction(context, scene);
     const bool gameplayInputCaptured = consoleInputCaptured
             || dialogueCapturedThisFrame || dialogue.active
@@ -1774,6 +1779,14 @@ void SectorGameSession::Update(
                         dt,
                         nullptr));
     }
+    if (scriptHost.conversation.active && scriptHost.conversation.preparing
+            && !consoleInputCaptured) {
+        input.externalHorizontalMovementDelta = Vector2Add(input.externalHorizontalMovementDelta,
+                PrepareSectorConversationFrame(scriptHost.conversation, controller.fpsControllerState,
+                        controller.fpsControllerConfig,
+                        context.world.Get<SectorObjectTransform>(scriptHost.conversation.npc).position,
+                        collision.sectorCollisionWorldValid ? &collision.sectorCollisionWorld : nullptr, dt));
+    }
     UpdateSectorEditorGameplayPreview(
             context.world,
             objects.dynamicDoorColliders,
@@ -1846,6 +1859,19 @@ void SectorGameSession::Update(
             controller.fpsControllerConfig,
             scripts,
             dt);
+    if (scriptHost.conversation.active && scriptHost.conversation.preparing
+            && !consoleInputCaptured) {
+        auto& conversation = scriptHost.conversation;
+        auto& npcTransform = context.world.Get<SectorObjectTransform>(conversation.npc);
+        if (FinishSectorConversationFrame(conversation, controller.fpsControllerState,
+                controller.fpsControllerConfig, npcTransform.position,
+                SectorConversationTalkPoint(context.world, context.assets, conversation.npc),
+                npcTransform.yawRadians, dt)) {
+            const auto operation = conversation.preparation;
+            conversation.preparation = {};
+            engine::ScriptSystemCompleteOperation(scripts, operation);
+        }
+    }
     playerKnockbackVelocity = Vector2Scale(
             playerKnockbackVelocity,
             std::exp(-8.0f * std::max(0.0f, dt)));
@@ -1972,7 +1998,7 @@ void SectorGameSession::Update(
                         ? applicationSettings->playerDucts.interactionDistanceWorld
                         : PlayerDuctTraversalApplicationSettings{}
                                 .interactionDistanceWorld,
-                controller.fpsControllerState.currentSectorId);
+                controller.fpsControllerState.currentSectorId, &objects);
         UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
         const std::string_view promptTitle = SectorUseTargetTitle(
                 context.world, useTarget);
@@ -2070,6 +2096,23 @@ void SectorGameSession::Update(
                             controller.ductTraversal.weaponHolsterInitialized = true;
                         }
                     }
+                } else if (useTarget.kind == SectorUseTargetKind::Npc
+                        && context.world.IsAlive(useTarget.entity)
+                        && context.world.Has<NpcRuntimeInstance>(useTarget.entity)) {
+                    const auto& npc = context.world.Get<NpcRuntimeInstance>(useTarget.entity);
+                    const std::string instanceId = npc.instanceId;
+                    const std::string onUseScript = npc.onUseScript;
+                    const engine::ScriptValue argument = instanceId;
+                    const auto outcome = engine::ScriptSystemCallForegroundHook(
+                            scripts, onUseScript, &argument, 1);
+                    handled = true;
+                    if (outcome.result == engine::ScriptCallResult::Missing
+                            || outcome.result == engine::ScriptCallResult::Error) {
+                        TraceLog(LOG_WARNING, "[Lua] NPC '%s' On Use '%s': %s",
+                                instanceId.c_str(), onUseScript.c_str(),
+                                outcome.result == engine::ScriptCallResult::Missing
+                                        ? "function is missing" : outcome.error.c_str());
+                    }
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
                         && context.world.IsAlive(useTarget.entity)
                         && context.world.Has<SectorDynamicModel>(useTarget.entity)) {
@@ -2103,6 +2146,7 @@ void SectorGameSession::Update(
                 if (handled) engine::ConsumeEvent(event);
             });
     engine::ScriptSystemUpdate(context, scripts, dt);
+    UpdateSectorScriptConversationOwnership(context, scriptHost);
     UpdateDialogueCameraIdle(dialogueCameraIdle, DialogueCameraIdleSettings{},
             dialogue.active, consoleInputCaptured, dt);
     UpdateSectorScriptCutsceneControlOwnership(context, scriptHost);
@@ -2172,6 +2216,7 @@ void SectorGameSession::Update(
     ApplyPlayerPose(scene);
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
         const bool weaponInputCaptured = gameplayInputCaptured || dialogue.active
+                || !cutscene.controlsEnabled || scriptHost.conversation.active
                 || IsSectorLadderTraversalActive(
                         controller.ladderTraversal)
                 || IsSectorDuctTraversalActive(controller.ductTraversal);
@@ -2477,8 +2522,8 @@ void SectorGameSession::RenderHud(
                     playableViewport,
                     assets.GetFont(usePromptFont),
                     usePromptTitle.data(),
-                    useTarget.kind == SectorUseTargetKind::Item
-                            ? "Take" : "Use");
+                    useTarget.kind == SectorUseTargetKind::Npc ? ""
+                            : useTarget.kind == SectorUseTargetKind::Item ? "Take" : "Use");
         }
     }
     if (IsActive()) {
@@ -2568,6 +2613,7 @@ bool SectorGameSession::RebuildFromMap(
         return false;
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
+    EndSectorScriptConversation(context, scriptHost);
     ResetSectorDialogueMenu(dialogue);
     ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);

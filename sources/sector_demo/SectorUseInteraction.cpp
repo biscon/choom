@@ -6,6 +6,7 @@
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
 #include "game/npc/NpcRuntime.h"
+#include "game/npc/NpcLineOfSight.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorLadderInteraction.h"
@@ -299,7 +300,8 @@ SectorUseTarget FindSectorUseTarget(
         bool includeDynamicProps,
         const SectorTopologyMap* topologyMap,
         float ductInteractionDistanceWorld,
-        int viewerSectorId)
+        int viewerSectorId,
+        const SectorRuntimeObjectState* runtimeObjects)
 {
     SectorUseTarget best;
     if (!Finite(eyePosition) || !Finite(forward)
@@ -382,6 +384,34 @@ SectorUseTarget FindSectorUseTarget(
                             best);
                 });
     }
+
+    world.ForEach<NpcRuntimeInstance, SectorObject, SectorObjectTransform, SectorDynamicModel>(
+            [&](engine::Entity entity, NpcRuntimeInstance& npc, SectorObject& object,
+                    SectorObjectTransform& transform, SectorDynamicModel& model) {
+                if (npc.hostile || npc.conversationHeld || npc.onUseScript.empty()
+                        || !object.visible || model.opacity <= 0.0f
+                        || (world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))
+                        || (world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead)) return;
+                BoundingBox bounds{{-0.3f, 0, -0.3f}, {0.3f, 1.8f, 0.3f}};
+                if (assets && world.Has<engine::AnimatedModelInstance>(entity)) {
+                    const auto* asset = assets->GetModelAsset(world.Get<engine::AnimatedModelInstance>(entity).model);
+                    if (!asset || !asset->hasLocalBounds) return;
+                    bounds = asset->hasAnimatedLocalBounds ? asset->animatedLocalBounds : asset->localBounds;
+                }
+                const Matrix authored = BuildSectorStaticModelAuthoredTransform(transform.position,
+                        transform.rotationXRadians, transform.yawRadians, transform.rotationZRadians, model.scale);
+                bounds = TransformBounds(bounds, authored);
+                // At close range the player's gaze may meet any part of the body,
+                // rather than a single center point outside the facing cone.
+                const Ray ray{eyePosition, forward};
+                const RayCollision hit = GetRayCollisionBox(ray, bounds);
+                const Vector3 point = hit.hit ? hit.point : ClosestPoint(bounds, eyePosition);
+                if (runtimeObjects && collisionWorld
+                        && !HasNpcLineOfSight(*collisionWorld, runtimeObjects->dynamicDoorColliders,
+                                runtimeObjects->physicalModelColliders, eyePosition, point)) return;
+                ConsiderTarget(entity, SectorUseTargetKind::Npc, point, npc.useDistance,
+                        eyePosition, forward, collisionWorld, best);
+            });
 
     world.ForEach<SectorDoor, SectorDoorResolvedAnchor, SectorDoorInteraction>(
             [&](engine::Entity entity,
@@ -529,6 +559,8 @@ std::string_view SectorUseTargetTitle(
 {
     if (target.kind == SectorUseTargetKind::Ladder) return "Ladder";
     if (!world.IsAlive(target.entity)) return {};
+    if (target.kind == SectorUseTargetKind::Npc && world.Has<NpcRuntimeInstance>(target.entity))
+        return world.Get<NpcRuntimeInstance>(target.entity).displayName;
     if (target.kind == SectorUseTargetKind::Item
             && world.Has<SectorItem>(target.entity)) {
         return world.Get<SectorItem>(target.entity).title;
@@ -620,14 +652,14 @@ void DrawSectorUsePrompt(
         std::string_view title,
         std::string_view action)
 {
-    if (font == nullptr || title.empty() || action.empty()) return;
+    if (font == nullptr || title.empty()) return;
     std::array<char, 24> prefix{};
-    std::snprintf(
+    if (!action.empty()) std::snprintf(
             prefix.data(), prefix.size(), "%.*s ",
             static_cast<int>(action.size()), action.data());
     const float size = static_cast<float>(font->pixelSize);
     const float spacing = 1.0f;
-    const Vector2 prefixSize = MeasureTextEx(
+    const Vector2 prefixSize = action.empty() ? Vector2{} : MeasureTextEx(
             font->font, prefix.data(), size, spacing);
     std::array<char, 128> titleText{};
     std::snprintf(

@@ -748,6 +748,7 @@ if(BUILD_TESTING)
             tests/SectorScriptBindingTests.cpp
             tests/SectorDialogueTests.cpp
             tests/DialogueCameraIdleTests.cpp
+            tests/SectorConversationTests.cpp
             sources/game/save/GameSaveRuntime.cpp
             sources/game/items/ItemAssets.cpp
             sources/game/items/ItemDefinitions.cpp
@@ -786,6 +787,7 @@ if(BUILD_TESTING)
             sources/game/cutscene/SectorCutsceneSpeech.cpp
             sources/game/dialogue/SectorDialogue.cpp
             sources/game/dialogue/DialogueCameraIdle.cpp
+            sources/game/dialogue/SectorConversation.cpp
             sources/engine/input/Input.cpp
             sources/engine/audio/DialogueTimeline.cpp
             sources/engine/audio/DialogueSpeech.cpp

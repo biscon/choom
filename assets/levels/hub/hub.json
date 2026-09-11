@@ -6695,6 +6695,7 @@
       "npc": {
         "definitionId": "elin",
         "instanceId": "elin",
+        "onUseScript": "useElin",
         "scale": 1.100000023841858,
         "shadowMode": "dynamic"
       },

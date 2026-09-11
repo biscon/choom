@@ -227,6 +227,7 @@ void UpdateNpcPatrolSystem(
                 }
                 continue;
             }
+            if (npc.conversationHeld) continue;
             // A script body turn pauses patrol timing/facing without changing patrol policy.
             if (HasNpcBodyTurn(navigationRuntime, participant.entity)) continue;
             if (state.phase == NpcPatrolPhase::SuspendedAi) {

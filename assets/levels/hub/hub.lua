@@ -1,3 +1,51 @@
+local function elinConversation()
+    local returning = flag("elin_intro_conversation_finished")
+    runConversationDynamic(returning and "elin_repeat_topics" or "elin_intro_topics", {
+        tunnels = function()
+            say("Do you know a way out of these tunnels?")
+            startPlayNpcAnimation("elin", "Talking_2")
+            say("elin", "Not yet. Every passage seems to lead somewhere darker.", "afraid")
+            setFlag("elin_asked_tunnels", true)
+        end,
+        people = function()
+            say("Have you seen anyone else down here?", { mood = "afraid" })
+            startPlayNpcAnimation("elin", "No")
+            say("elin", "No one I could talk to. I was starting to think I was alone.")
+            startPlayNpcAnimation("elin", "Talking")
+            say("elin", "But there are two of us now. That's a start.", "relieved")
+            startPlayNpcAnimation("elin", "Excited")
+            setFlag("elin_asked_people", true)
+        end,
+        goodbye = function()
+            if returning then
+                say("Talk later.")
+                say("elin", "Talk later.")
+            else
+                say("I'll look around. Stay close.")
+                startPlayNpcAnimation("elin", "Talking")
+                say("elin", "Be careful. And don't disappear on me.")
+            end
+            setFlag("elin_intro_conversation_finished", true)
+            return "exit"
+        end,
+    }, function()
+        return hiddenOptions({
+            tunnels = flag("elin_asked_tunnels"),
+            people = flag("elin_asked_people"),
+        })
+    end)
+end
+
+function useElin(instanceId)
+    local ok, reason = startConversation(instanceId)
+    if not ok then
+        log("Could not start Elin conversation: " .. (reason or "unknown reason"))
+        return
+    end
+    elinConversation()
+    assert(endConversation())
+end
+
 function init()
     log("hub script initialized")
     setPropAnimationProgress("ceiling_switch_01", 0.0, "switch|switchAction")
@@ -45,35 +93,9 @@ function intro_trigger_1()
     npcLookAtPlayer("elin", 500)
     lookAtNpc("elin", 500, 0.7)
 
-    runConversationDynamic("elin_intro_topics", {
-        tunnels = function()
-            say("Do you know a way out of these tunnels?")
-            startPlayNpcAnimation("elin", "Talking_2")
-            say("elin", "Not yet. Every passage seems to lead somewhere darker.", "afraid")
-            setFlag("elin_asked_tunnels", true)
-        end,
-        people = function()
-            say("Have you seen anyone else down here?", { mood = "afraid" })
-            startPlayNpcAnimation("elin", "No")
-            say("elin", "No one I could talk to. I was starting to think I was alone.")
-            startPlayNpcAnimation("elin", "Talking")
-            say("elin", "But there are two of us now. That's a start.", "relieved")
-            startPlayNpcAnimation("elin", "Excited")
-            setFlag("elin_asked_people", true)
-        end,
-        goodbye = function()
-            say("I'll look around. Stay close.")
-            startPlayNpcAnimation("elin", "Talking")
-            say("elin", "Be careful. And don't disappear on me.")
-            setFlag("elin_intro_conversation_finished", true)
-            return "exit"
-        end,
-    }, function()
-        return hiddenOptions({
-            tunnels = flag("elin_asked_tunnels"),
-            people = flag("elin_asked_people"),
-        })
-    end)
+    assert(startConversation("elin", { reposition = false }))
+    elinConversation()
+    assert(endConversation())
     assert(endCutscene())
     startPlayNpcAnimation("elin", "Twerking")
 end

@@ -2670,6 +2670,8 @@ void TestNpcRoundTripDefaultsAndValidation()
     object.yawRadians = 0.75f;
     object.npc.definitionId = "zombie_guard";
     object.npc.instanceId = "guard_at_gate";
+    object.npc.onUseScript = "talkToGuard";
+    object.npc.useDistance = 2.75f;
     object.npc.scale = 1.25f;
     object.npc.shadowMode =
             game::SectorDynamicModelShadowMode::Dynamic;
@@ -2680,6 +2682,8 @@ void TestNpcRoundTripDefaultsAndValidation()
     Check(saved["runtimeObjects"][0]["kind"] == "npc"
                   && payload["definitionId"] == "zombie_guard"
                   && payload["instanceId"] == "guard_at_gate"
+                  && payload["onUseScript"] == "talkToGuard"
+                  && Near(payload["useDistance"].get<float>(), 2.75f)
                   && Near(payload["scale"].get<float>(), 1.25f)
                   && payload["shadowMode"] == "dynamic",
           "NPC placement writes definition, instance, scale, and shadow fields");
@@ -2694,18 +2698,24 @@ void TestNpcRoundTripDefaultsAndValidation()
                   && roundTripped->kind == "npc"
                   && roundTripped->npc.definitionId == "zombie_guard"
                   && roundTripped->npc.instanceId == "guard_at_gate"
+                  && roundTripped->npc.onUseScript == "talkToGuard"
+                  && Near(roundTripped->npc.useDistance, 2.75f)
                   && Near(roundTripped->npc.scale, 1.25f)
                   && roundTripped->npc.shadowMode
                           == game::SectorDynamicModelShadowMode::Dynamic,
           "NPC placement fields round-trip");
 
     map.runtimeObjects[0].npc.instanceId.clear();
+    map.runtimeObjects[0].npc.onUseScript.clear();
+    map.runtimeObjects[0].npc.useDistance = 2.5f;
     map.runtimeObjects[0].npc.scale = 1.0f;
     map.runtimeObjects[0].npc.shadowMode =
             game::SectorDynamicModelShadowMode::Contact;
     const Json defaults = Json::parse(SaveText(map))["runtimeObjects"][0]["npc"];
     Check(defaults["definitionId"] == "zombie_guard"
                   && !defaults.contains("instanceId")
+                  && !defaults.contains("onUseScript")
+                  && !defaults.contains("useDistance")
                   && !defaults.contains("scale")
                   && !defaults.contains("shadowMode"),
           "NPC placement omits optional and default payload fields");
@@ -2719,6 +2729,22 @@ void TestNpcRoundTripDefaultsAndValidation()
     invalid = saved;
     invalid["runtimeObjects"][0]["npc"]["shadowMode"] = "blob";
     ExpectRejected(invalid, "NPC placement rejects an unknown shadow mode");
+
+    invalid = saved;
+    invalid["runtimeObjects"][0]["npc"]["onUseScript"] = "bad hook!";
+    ExpectRejected(invalid, "invalid NPC use hook rejected");
+    invalid = saved;
+    invalid["runtimeObjects"][0]["npc"]["useDistance"] = 0;
+    ExpectRejected(invalid, "non-positive NPC use distance rejected");
+    invalid = saved;
+    invalid["runtimeObjects"][0]["npc"].erase("useDistance");
+    invalid["runtimeObjects"][0]["npc"].erase("onUseScript");
+    Check(LoadText(invalid.dump(), loaded, error), "old NPC data loads");
+    Check(loaded.runtimeObjects[0].npc.useDistance == 2.5f
+            && loaded.runtimeObjects[0].npc.onUseScript.empty(), "old NPC use fields default correctly");
+    auto badMap = map;
+    badMap.runtimeObjects[0].npc.useDistance = std::numeric_limits<float>::infinity();
+    ExpectSaveRejected(badMap, "non-finite NPC use distance rejected on save");
 
     Json legacy = saved;
     legacy["runtimeObjects"][0]["npc"]["shadowMode"] =

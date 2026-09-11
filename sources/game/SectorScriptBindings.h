@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ecs/Entity.h"
+#include "game/dialogue/SectorConversation.h"
 #include "engine/scripting/ScriptData.h"
 
 #include <cstddef>
@@ -112,6 +113,7 @@ struct SectorScriptHost {
     NpcNavigationRuntime* npcNavigation = nullptr;
     SectorCutsceneRuntime* cutscene = nullptr;
     SectorDialogueRuntime* dialogue = nullptr;
+    SectorConversationState conversation;
     SectorFpsControllerState* playerState = nullptr;
     const SectorFpsControllerConfig* playerConfig = nullptr;
     Health* playerHealth = nullptr;
@@ -158,6 +160,8 @@ void InitializeSectorScriptHost(
 void ResetSectorScriptHost(SectorScriptHost& host);
 
 void RegisterSectorScriptBindings(lua_State* state);
+void EndSectorScriptConversation(engine::EngineContext& context, SectorScriptHost& host);
+void UpdateSectorScriptConversationOwnership(engine::EngineContext& context, SectorScriptHost& host);
 
 void UpdateSectorScriptOperations(
         engine::EngineContext& context,

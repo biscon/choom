@@ -460,10 +460,12 @@ void LayoutScrollingAndInputAreBounded()
 }
 
 void RunDialogueCameraIdleTests();
+void RunSectorConversationTests();
 
 void RunSectorDialogueTests()
 {
     RunDialogueCameraIdleTests();
+    RunSectorConversationTests();
     LayoutFitsAndCentersGlyphs();
     AssetsValidateTransactionallyAndFilteringPreservesLabels();
     ConversationsYieldFilterNestAndPersist(false);

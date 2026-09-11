@@ -18,6 +18,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTriggers.h"
 
+#include <raymath.h>
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -2437,6 +2438,47 @@ assert(startNpcLookAtMarker("script_guard", "missing", 100) == nil)
     assert(!game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
 }
 
+void ConversationHoldPausesAndResumesNpcTravel()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto request = game::RequestNpcMove(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, "script_guard", {6, 8},
+            game::NpcMoveGait::Walk, game::NpcMoveAuthority::Patrol);
+    assert(request.accepted);
+    auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+    auto& transform = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc);
+    npc.conversationHeld = true;
+    const Vector3 heldPosition = transform.position;
+    for (int i = 0; i < 20; ++i) fixture.Update(0.05f);
+    assert(Vector3Distance(transform.position, heldPosition) == 0);
+    assert(npc.action == game::NpcAction::Idle);
+    npc.conversationHeld = false;
+    for (int i = 0; i < 20; ++i) fixture.Update(0.05f);
+    assert(Vector3Distance(transform.position, heldPosition) > 0.2f);
+
+    game::SectorCompiledPatrol patrol;
+    patrol.sourceAuthoringPatrolId = 9;
+    patrol.id = "conversation_patrol";
+    patrol.waypoints.push_back({1, 5000, game::SectorPatrolGait::Walk, true, 90.0f});
+    fixture.map.patrols.push_back(patrol);
+    game::NpcPatrolState state;
+    state.patrolEditorId = 9; state.phase = game::NpcPatrolPhase::Waiting;
+    state.waitRemainingSeconds = 5;
+    fixture.context.world.Add(fixture.npc, state);
+    game::NpcPatrolRuntime runtime;
+    game::InitializeNpcPatrolRuntime(runtime, 4);
+    npc.conversationHeld = true;
+    game::UpdateNpcPatrolSystem(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, runtime, fixture.map, 0.2f, false);
+    assert(fixture.context.world.Get<game::NpcPatrolState>(fixture.npc).waitRemainingSeconds == 5);
+    npc.conversationHeld = false;
+    game::UpdateNpcPatrolSystem(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, runtime, fixture.map, 0.2f, false);
+    assert(fixture.context.world.Get<game::NpcPatrolState>(fixture.npc).waitRemainingSeconds < 5);
+}
+
 void NpcLookPatrolPauseAndTargetRemoval()
 {
     NpcScriptFixture fixture;
@@ -2525,6 +2567,7 @@ void RunSectorScriptBindingTests()
     NpcTurnTimingRespectsDoorsReplansAndAngleWrap();
     NpcLookTargetsCompleteAndPreserveHeadAnimation();
     NpcLookValidationReplacementMovementAndLifecycle();
+    ConversationHoldPausesAndResumesNpcTravel();
     NpcLookPatrolPauseAndTargetRemoval();
     NpcFacingCancellationDeathAndRemovalReleaseOwnership();
     DoorCompletionAndCancellationShareTheBackend();

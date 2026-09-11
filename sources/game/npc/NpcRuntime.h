@@ -31,6 +31,10 @@ struct NpcRuntimeInstance {
     std::string voice = "male";
     bool dialogueSpeaking = false;
     engine::DialogueSelectionHistory dialogueHistory;
+    std::string displayName;
+    std::string onUseScript;
+    float useDistance = 2.5f;
+    bool conversationHeld = false;
 };
 
 enum class NpcAwarenessState : uint8_t {

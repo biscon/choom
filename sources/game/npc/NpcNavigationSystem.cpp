@@ -1078,6 +1078,10 @@ bool BeginNpcBodyTurn(engine::World& world, NpcNavigationRuntime& runtime,
         error = "NPC instance was not found";
         return false;
     }
+    if (world.Get<NpcRuntimeInstance>(entity).conversationHeld) {
+        error = "NPC is held by a conversation";
+        return false;
+    }
     if ((world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead)
             || (world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))) {
         error = "NPC is dead";
@@ -1155,6 +1159,9 @@ static NpcMoveRequestResult RequestNpcMoveRecord(
             || !world.Has<SectorObject>(record->entity)) {
         return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC instance was not found");
     }
+    if (world.Has<NpcRuntimeInstance>(record->entity)
+            && world.Get<NpcRuntimeInstance>(record->entity).conversationHeld)
+        return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC is held by a conversation");
     if (authority == NpcMoveAuthority::Script
             && world.Has<NpcAiState>(record->entity)
             && world.Get<NpcAiState>(record->entity).awareness
@@ -1688,6 +1695,7 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
             continue;
         }
         const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
+        if (npc.conversationHeld) continue;
         if (freezeAi && (record.authority == NpcMoveAuthority::Ai
                 || record.authority == NpcMoveAuthority::Patrol)) continue;
         const SectorObjectTransform& transform =
@@ -1956,7 +1964,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const bool frozenAi = freezeAi
                 && (record.authority == NpcMoveAuthority::Ai
                     || record.authority == NpcMoveAuthority::Patrol);
-        if (!staggered && !frozenAi && !record.arrivalReached && IsActive(record.phase)
+        if (!npc.conversationHeld && !staggered && !frozenAi && !record.arrivalReached && IsActive(record.phase)
                 && navigation.IsPathRecordValid(record.pathHandle)
                 && !record.tileReplanPending
                 && record.nextCorner < record.cornerCount
@@ -1974,7 +1982,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
         record.preferredVelocity = preferred;
         record.playerAvoidanceActive = false;
         Vector2 submitted = preferred;
-        if (!npc.hostile && record.doorPhase != NpcDoorTraversalPhase::Crossing) {
+        if (!npc.conversationHeld && !npc.hostile && record.doorPhase != NpcDoorTraversalPhase::Crossing) {
             submitted = ApplyFriendlyPlayerAvoidance(
                     record,
                     transform.position,
@@ -2021,6 +2029,13 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 world.Has<SectorObjectVisualOffset>(record.entity)
                 ? &world.Get<SectorObjectVisualOffset>(record.entity) : nullptr;
         record.actualVelocity = {};
+        if (npc.conversationHeld) {
+            record.desiredVelocity = {};
+            record.footstepEvent = false;
+            record.footstepMovementActive = false;
+            npc.action = NpcAction::Idle;
+            continue;
+        }
         record.replanCooldownSeconds = std::max(
                 0.0f, record.replanCooldownSeconds - dt);
         bool capturedStepOffset = false;
@@ -2168,7 +2183,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 }
             }
         }
-        if (!staggered && !frozenAi && !record.arrivalReached && IsActive(record.phase)
+        if (!npc.conversationHeld && !staggered && !frozenAi && !record.arrivalReached && IsActive(record.phase)
                 && !record.tileReplanPending && dt > 0.0f) {
             const float authoredMovementSpeed = record.gait == NpcMoveGait::Run
                     ? npc.runSpeed : npc.walkSpeed;

@@ -159,10 +159,11 @@ public:
     }
     bool IsGameOver() const { return gameOver; }
     bool CanSaveGame() const {
-        return IsActive() && !gameOver && !saveGameBlocked && !dialogue.active;
+        return IsActive() && !gameOver && !saveGameBlocked && !dialogue.active && !scriptHost.conversation.active;
     }
     const std::string& SaveGameBlockedReason() const {
-        return dialogue.active && !saveGameBlocked ? dialogueSaveBlockedReason : saveGameBlockedReason;
+        return !saveGameBlocked && scriptHost.conversation.active ? conversationSaveBlockedReason
+                : dialogue.active && !saveGameBlocked ? dialogueSaveBlockedReason : saveGameBlockedReason;
     }
     void SetSaveGameBlocked(bool blocked, std::string reason = {});
     bool CaptureCurrentLevelSaveState(
@@ -282,6 +283,7 @@ private:
     bool gameOver = false;
     bool saveGameBlocked = false;
     std::string saveGameBlockedReason;
+    const std::string conversationSaveBlockedReason = "Saving is unavailable during a conversation";
     const std::string dialogueSaveBlockedReason = "Saving is unavailable while choosing dialogue";
     PlayerStamina playerStamina;
     PlayerOxygen playerOxygen;

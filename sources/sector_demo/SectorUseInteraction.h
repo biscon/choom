@@ -17,12 +17,14 @@ namespace game {
 
 class SectorCollisionWorld;
 struct SectorTopologyMap;
+struct SectorRuntimeObjectState;
 
 enum class SectorUseTargetKind {
     None,
     Item,
     StaticProp,
     DynamicProp,
+    Npc,
     Door,
     Ladder,
     DuctAccess
@@ -65,7 +67,8 @@ SectorUseTarget FindSectorUseTarget(
         bool includeDynamicProps = true,
         const SectorTopologyMap* topologyMap = nullptr,
         float ductInteractionDistanceWorld = 1.75f,
-        int viewerSectorId = 0);
+        int viewerSectorId = 0,
+        const SectorRuntimeObjectState* runtimeObjects = nullptr);
 
 void ConsiderSectorObjectUseBounds(
         SectorObjectUseTargetAccumulator& accumulator,

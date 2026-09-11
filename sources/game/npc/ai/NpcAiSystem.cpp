@@ -751,6 +751,7 @@ void UpdateNpcAiSystem(
                     SectorObjectTransform& transform,
                     Health& health,
                     NpcCombatState& combat) {
+        if (npc.conversationHeld && !combat.dead && !IsDepleted(health)) return;
         engine::AnimatedModelAnimator* animator =
                 world.Has<engine::AnimatedModelAnimator>(entity)
                 ? &world.Get<engine::AnimatedModelAnimator>(entity) : nullptr;

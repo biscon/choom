@@ -3,9 +3,35 @@
     {
       "id": "elin_intro_topics",
       "options": [
-        { "id": "tunnels", "text": "Do you know a way out of these tunnels?" },
-        { "id": "people", "text": "Have you seen anyone else down here?" },
-        { "id": "goodbye", "text": "I'll look around. Stay close." }
+        {
+          "id": "tunnels",
+          "text": "Do you know a way out of these tunnels?"
+        },
+        {
+          "id": "people",
+          "text": "Have you seen anyone else down here?"
+        },
+        {
+          "id": "goodbye",
+          "text": "I'll look around. Stay close."
+        }
+      ]
+    },
+    {
+      "id": "elin_repeat_topics",
+      "options": [
+        {
+          "id": "tunnels",
+          "text": "Do you know a way out of these tunnels?"
+        },
+        {
+          "id": "people",
+          "text": "Have you seen anyone else down here?"
+        },
+        {
+          "id": "goodbye",
+          "text": "Talk later."
+        }
       ]
     }
   ]

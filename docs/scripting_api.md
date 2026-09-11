@@ -1011,6 +1011,56 @@ overlay affects the rendered world and viewmodel, but not the HUD, menus,
 the active fade. `fadeOut` leaves the world black until `fadeIn` or a map reset
 changes it.
 
+## NPC use and conversations
+
+NPC instances have **On Use** (`onUseScript`, default empty) and **Use Dist**
+(`useDistance`, default 2.5 world units) in the inspector. A living, visible,
+non-hostile NPC with a configured hook shows its definition's name when in use
+range and under the player's gaze, provided the interaction is unobstructed.
+The prompt says `Elin`, without a `Use` prefix. Pressing E calls the named
+foreground Lua function with the instance ID; it may yield or perform any
+scripted action. Empty hooks disable use. There is no default NPC-use action.
+
+```lua
+function useElin(instanceId)
+    local ok, reason = startConversation(instanceId)
+    if not ok then log(reason); return end
+    runConversationDynamic("elin_intro_topics", handlers, hiddenTopics)
+    assert(endConversation())
+end
+```
+
+`startConversation(npcId [, { reposition = true }])` returns `true`, or
+`false, reason`. It requires a managed Lua task and a living non-hostile NPC.
+It locks player controls and saving for the whole conversation, including
+speech between choice menus, while retaining the current cinematic mode.
+Only one conversation can be active. A conflicting scripted player/NPC move
+or turn is rejected before starting automatic positioning.
+
+By default it yields while the player smoothly turns toward the NPC and backs
+away if closer than about 1.5 m. The player keeps facing the NPC while retreating;
+movement uses normal collision, stops at obstructions/unsupported floor, and
+never takes a detour. Preparation lasts at most about two seconds; limited
+space still allows the conversation. The NPC turns toward the player and pauses
+autonomous travel/patrol timing until the conversation ends. Scripted animation
+commands continue to work. Move/turn requests for the held NPC are rejected;
+use staged mode when scripts need to control its movement.
+
+Use `startConversation("elin", { reposition = false })` for staged scenes,
+including conversations with multiple speakers. It leaves actor positions,
+facing, and NPC behavior to the script and returns immediately after acquiring
+conversation ownership. Existing `say`, `dialogue`, and conversation helpers
+remain usable inside or outside these boundaries.
+
+`endConversation()` returns `true`, or `false, reason` if there is no conversation
+owned by the calling task. It releases only the conversation's control lock and
+NPC hold; an enclosing cutscene remains locked until `endCutscene()`. End the
+conversation before calling `enableControls(true)` or `endCutscene()`. The player
+stays at the adjusted position and facing. Task completion/error/cancellation,
+participant death/removal, or map teardown also cleans up ownership. Pause and
+console capture freeze preparation. Persistent topic flags use the existing
+save store; transient conversation state is not saved.
+
 ## Dialogue choices
 
 ```lua

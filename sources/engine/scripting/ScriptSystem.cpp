@@ -1480,6 +1480,23 @@ ScriptCallOutcome ScriptSystemCallForegroundHook(
             runtime, functionName, ScriptLaunchLane::Foreground, false);
 }
 
+ScriptCallOutcome ScriptSystemCallForegroundHook(
+        ScriptRuntime& runtime, const std::string& functionName,
+        const ScriptValue* arguments, std::size_t argumentCount)
+{
+    return StartManagedFunction(runtime, functionName, ScriptLaunchLane::Foreground,
+            false, false, arguments, argumentCount);
+}
+
+bool ScriptSystemRequestStopTask(ScriptRuntime& runtime, ScriptTaskHandle handle)
+{
+    ScriptTask* task = ResolveTask(runtime, handle);
+    if (task == nullptr) return false;
+    task->stopRequested = true;
+    task->state = ScriptTaskState::StopRequested;
+    return true;
+}
+
 ScriptCallOutcome ScriptSystemCallObservedForegroundHook(
         ScriptRuntime& runtime,
         const std::string& functionName)

@@ -39,6 +39,12 @@ ScriptCallOutcome ScriptSystemCallForegroundHook(
         ScriptRuntime& runtime,
         const std::string& functionName);
 
+ScriptCallOutcome ScriptSystemCallForegroundHook(
+        ScriptRuntime& runtime, const std::string& functionName,
+        const ScriptValue* arguments, std::size_t argumentCount);
+// Requests cancellation at the scheduler's normal safe boundary.
+bool ScriptSystemRequestStopTask(ScriptRuntime& runtime, ScriptTaskHandle task);
+
 // Starts a foreground hook whose eventual result can be collected after a
 // yield. Immediate completions are still returned directly in ScriptCallOutcome.
 ScriptCallOutcome ScriptSystemCallObservedForegroundHook(

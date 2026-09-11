@@ -248,6 +248,8 @@ struct SectorPlacedItem {
 };
 
 struct SectorPlacedNpc {
+    std::string onUseScript;
+    float useDistance = 2.5f;
     std::string definitionId;
     std::string instanceId;
     int patrolEditorId = 0;
