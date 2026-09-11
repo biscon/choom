@@ -39,8 +39,8 @@ local function elinConversation()
     }, function()
         return hiddenOptions({
             identity = flag("elin_asked_identity"),
-            place = flag("elin_asked_place"),
-            people = flag("elin_asked_people"),
+            place = flag("elin_asked_place") or not flag("elin_asked_identity"),
+            people = flag("elin_asked_people")  or not flag("elin_asked_identity"),
         })
     end, function()
         if returning then

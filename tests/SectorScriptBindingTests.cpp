@@ -1796,6 +1796,92 @@ void SpeechCompletionGatesCaptionHold()
     game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
 }
 
+void AutomaticVoicedSpeechReturnsAfterShortHoldAndFade()
+{
+    for (bool player : {false, true}) {
+        for (const std::string& text : {std::string{"Wait."}, std::string{"Wait..."}, std::string(200, 'a') + "."}) {
+            NpcScriptFixture fixture;
+            fixture.files.Write("function init() assert(say(" + std::string(player ? "" : "'script_guard', ")
+                    + "'" + text + "')); setFlag('speech_done', true) end");
+            assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+            auto& caption = fixture.cutscene.caption;
+            assert(!caption.explicitHold && caption.holdSeconds == 0.35);
+            assert(caption.revealSeconds == caption.speechTimeline.reveals.back().seconds);
+            const auto update = [&](float dt) {
+                game::UpdateSectorCutsceneSpeech(fixture.cutscene, fixture.context.world,
+                        fixture.context.assets, fixture.context.audio, dt, true);
+                game::UpdateSectorCutsceneTimelines(fixture.cutscene, fixture.runtime, dt);
+                engine::ScriptSystemUpdate(fixture.context, fixture.runtime, dt);
+            };
+            for (int i = 0; i < 2000 && !caption.speechFinished; ++i) update(0.01f);
+            assert(caption.speechFinished && caption.visibleByteCount == text.size());
+            assert(caption.active && caption.elapsedSeconds == caption.revealSeconds);
+            update(0.34f);
+            assert(caption.active && caption.opacity == 1.0f);
+            const double elapsed = caption.elapsedSeconds;
+            // Frozen gameplay time must not consume the shortened hold.
+            update(0.0f);
+            assert(caption.elapsedSeconds == elapsed && caption.opacity == 1.0f);
+            update(0.02f);
+            assert(caption.active && caption.opacity < 1.0f);
+            update(0.32f);
+            assert(caption.active);
+            assert(fixture.persistent.bools.count("speech_done") == 0);
+            update(0.03f);
+            assert(!caption.active);
+            assert(fixture.persistent.bools.at("speech_done"));
+        }
+    }
+}
+
+void AutomaticCaptionHoldsRespectVoiceModeAndFadeProgress()
+{
+    game::SectorCutsceneRuntime cutscene;
+    engine::ScriptRuntime scripts;
+    uint64_t token = 0;
+    std::string error;
+    const auto begin = [&](game::SectorCutsceneCaptionKind kind, size_t length) {
+        assert(game::BeginSectorCutsceneCaption(cutscene, kind,
+                game::SectorCutsceneTextPosition::Bottom, std::string(length, 'a'),
+                nullptr, token, error));
+    };
+    for (size_t length : {10u, 100u, 300u}) {
+        const double expected = std::clamp(length * 0.045, 1.5, 8.0);
+        begin(game::SectorCutsceneCaptionKind::Text, length);
+        assert(cutscene.caption.holdSeconds == expected);
+        begin(game::SectorCutsceneCaptionKind::Say, length);
+        game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+        assert(cutscene.caption.holdSeconds == expected);
+        assert(cutscene.caption.revealSeconds == length / 40.0);
+    }
+    auto& caption = cutscene.caption;
+    // Toggle during reveal without retracting already visible text.
+    begin(game::SectorCutsceneCaptionKind::Say, 100);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0.25f);
+    const size_t visible = caption.visibleByteCount;
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
+    assert(caption.visibleByteCount == visible && caption.holdSeconds == 0.35);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    assert(caption.holdSeconds == 4.5);
+    caption.elapsedSeconds = caption.revealSeconds + 0.9;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
+    assert(std::fabs(caption.elapsedSeconds - caption.revealSeconds - 0.35) < 0.000001);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    assert(caption.opacity == 1.0f && caption.active);
+    caption.elapsedSeconds += 0.1;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    const float opacity = caption.opacity;
+    assert(opacity < 1.0f);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    assert(std::fabs(caption.opacity - opacity) < 0.000001f);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    assert(std::fabs(caption.opacity - opacity) < 0.000001f);
+}
+
 void DisabledDialogueVoicesKeepTextAndCanBeReenabled()
 {
     engine::EngineContext context;
@@ -2695,6 +2781,8 @@ void RunSectorScriptBindingTests()
     CutsceneBindingsControlFadeAndCaptionTimelines(true);
     AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();
     SpeechCompletionGatesCaptionHold();
+    AutomaticVoicedSpeechReturnsAfterShortHoldAndFade();
+    AutomaticCaptionHoldsRespectVoiceModeAndFadeProgress();
     DisabledDialogueVoicesKeepTextAndCanBeReenabled();
     CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(false);
     CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(true);

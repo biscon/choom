@@ -952,7 +952,8 @@ Disabling fades active chatter out and restores the original steady typewriter:
 40 Unicode codepoints per second, including spaces and punctuation, with no
 speech-driven pauses or dependence on clip lengths or mood. Hold and fade start
 after that text reveal completes. Switching during a line preserves the visible
-text and elapsed hold/fade progress. Re-enabling resumes speech timing at the
+text and elapsed hold progress, capped at the new hold duration. An ongoing fade
+keeps its progress without restarting or brightening. Re-enabling resumes speech timing at the
 visible position and plays subsequent complete words without replaying the
 partially revealed word. Silent text does not consume the voice selection pool.
 
@@ -998,8 +999,14 @@ propagation, and pause/resume on the actual audio device.
 and fades in over 250 ms at the selected vertical position. Both word-wrap
 within 80% of the viewport, use the game's 48-pixel bold font, and fade out
 over 350 ms. `holdMs` is the interval after reveal/fade-in and before fade-out.
-If omitted, it is 45 ms per codepoint, clamped to `1500..8000` ms. Starting a
-new caption replaces and cancels the current caption.
+When omitted for `say`/`startSay` with dialogue voices enabled, the hold is
+350 ms after the final text reveal, with no additional terminal punctuation
+pause. The final audio fragment still finishes before the hold advances. The
+350 ms fade follows, so a blocking `say` normally returns about 700 ms after
+reveal completion. Explicit `holdMs` values retain their existing timing.
+With voices disabled, or for `text`/`startText`, the automatic hold remains
+45 ms per codepoint, clamped to `1500..8000` ms. Starting a new caption replaces
+and cancels the current caption.
 
 ### World fades
 

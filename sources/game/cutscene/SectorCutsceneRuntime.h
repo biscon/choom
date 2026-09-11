@@ -111,6 +111,7 @@ struct SectorCutsceneCaptionState {
     size_t visibleByteCount = 0;
     double revealSeconds = 0.0;
     double holdSeconds = 0.0;
+    bool explicitHold = false;
     double fadeInSeconds = 0.0;
     double fadeOutSeconds = 0.35;
     double elapsedSeconds = 0.0;
