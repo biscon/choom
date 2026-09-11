@@ -378,6 +378,7 @@ void GameApplication::RenderInteractiveUI(
                     : gameSession.SaveGameBlockedReason().c_str();
             pendingMenuAction = DrawGameMainMenu(
                     menuUi,
+                    mainMenuScroll,
                     config,
                     input,
                     assets,
@@ -445,6 +446,9 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         const std::string loadFailure = gameSession.TakeFailureError();
         if (!loadFailure.empty()) {
             menuStatus = loadFailure;
+            mainMenuScroll = {};
+            // Keep the failure in terminal logs as well as persistent menu status.
+            TraceLog(LOG_ERROR, "%s", loadFailure.c_str());
             debugConsole.open = false;
             gameSession.SetConsoleInputCaptured(false);
             MarkApplicationGameStopped(flow);
@@ -519,6 +523,8 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         const std::string scriptFailure = gameSession.TakeFailureError();
         if (!scriptFailure.empty()) {
             menuStatus = scriptFailure;
+            mainMenuScroll = {};
+            TraceLog(LOG_ERROR, "%s", scriptFailure.c_str());
             debugConsole.open = false;
             gameSession.SetConsoleInputCaptured(false);
             MarkApplicationGameStopped(flow);
@@ -1187,6 +1193,7 @@ void GameApplication::TogglePerformanceOverlay()
 
 void GameApplication::StartNewGame(engine::EngineContext& context)
 {
+    mainMenuScroll = {};
     context.audio.StopAll(context.assets);
     editor.SuspendRuntime(context);
     std::string error;

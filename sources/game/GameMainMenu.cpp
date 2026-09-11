@@ -2,6 +2,7 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -27,6 +28,7 @@ const char* MainMenuActionId(MainMenuAction action)
 
 std::optional<MainMenuAction> DrawGameMainMenu(
         engine::UIContext& ui,
+        engine::UIScrollState& scroll,
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
@@ -39,16 +41,34 @@ std::optional<MainMenuAction> DrawGameMainMenu(
 {
     DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
 
-    constexpr float panelWidth = 520.0f;
+    const float panelWidth = std::min(520.0f,
+            std::max(0.0f, config.overlayBounds.width - 48.0f));
     constexpr float buttonHeight = 56.0f;
     constexpr float buttonGap = 12.0f;
-    constexpr float horizontalPadding = 44.0f;
+    const float horizontalPadding = std::min(44.0f, panelWidth * 0.1f);
+    // Reserve the scrollbar width before measuring text so it cannot change
+    // wrapping when the panel becomes scrollable.
+    const float contentWidth = std::max(0.0f, panelWidth - config.scrollbarSize);
+    const float rowWidth = std::max(0.0f, contentWidth - horizontalPadding * 2.0f);
+    engine::UIConfig statusConfig = config;
+    if (const engine::FontAsset* asset = assets.GetFont(smallFont)) {
+        statusConfig.fontSize = static_cast<float>(asset->pixelSize);
+    }
+    const float statusHeight = engine::MeasureWrappedTextHeight(
+            statusConfig, assets, rowWidth, smallFont, statusText);
+    const float blockedHeight = gameRunning && !saveEnabled
+            ? engine::MeasureWrappedTextHeight(
+                    statusConfig, assets, rowWidth, smallFont, saveBlockedReason)
+            : 0.0f;
     const MainMenuItems items = BuildMainMenuItems(gameRunning);
     const float buttonsHeight = static_cast<float>(items.count) * buttonHeight
             + static_cast<float>(items.count > 0 ? items.count - 1 : 0)
                     * buttonGap;
-    const float panelHeight = 150.0f + buttonsHeight
-            + (statusText != nullptr && statusText[0] != '\0' ? 72.0f : 24.0f);
+    const float messageY = 100.0f + buttonsHeight + buttonGap + 2.0f;
+    const float messageHeight = std::max(statusHeight, blockedHeight);
+    const float contentHeight = messageY + messageHeight + 24.0f;
+    const float panelHeight = std::min(contentHeight,
+            std::max(0.0f, config.overlayBounds.height - 48.0f));
     const Rectangle panel{
             config.overlayBounds.x
                     + (config.overlayBounds.width - panelWidth) * 0.5f,
@@ -70,23 +90,24 @@ std::optional<MainMenuAction> DrawGameMainMenu(
             config.borderColor);
 
     engine::BeginUI(ui, input);
+    const engine::UIScrollAreaResult scrollArea = engine::BeginScrollArea(
+            ui, config, input, "main_menu_content", panel,
+            {contentWidth, contentHeight}, scroll, false, 0.0f);
     engine::Text(
-            config,
+            ui, config,
             assets,
-            Rectangle{panel.x + horizontalPadding, panel.y + 28.0f,
-                    panel.width - horizontalPadding * 2.0f, 54.0f},
+            Rectangle{horizontalPadding, 28.0f, rowWidth, 54.0f},
             font,
             "Engine",
             engine::UITextJustify::Center);
 
-    float y = panel.y + 100.0f;
+    float y = 100.0f;
     std::optional<MainMenuAction> selected;
     bool saveHovered = false;
     for (size_t i = 0; i < items.count; ++i) {
         const MainMenuAction action = items.values[i];
         const bool enabled = action != MainMenuAction::SaveGame || saveEnabled;
-        const Rectangle buttonBounds{panel.x + horizontalPadding, y,
-                panel.width - horizontalPadding * 2.0f, buttonHeight};
+        const Rectangle buttonBounds{horizontalPadding, y, rowWidth, buttonHeight};
         if (engine::Button(
                     ui,
                     config,
@@ -101,7 +122,12 @@ std::optional<MainMenuAction> DrawGameMainMenu(
             selected = action;
         }
         if (action == MainMenuAction::SaveGame && !enabled) {
-            saveHovered = CheckCollisionPointRec(ui.mousePosition, buttonBounds);
+            const Rectangle screenBounds{
+                    scrollArea.viewport.x + buttonBounds.x - scroll.offset.x,
+                    scrollArea.viewport.y + buttonBounds.y - scroll.offset.y,
+                    buttonBounds.width, buttonBounds.height};
+            saveHovered = CheckCollisionPointRec(ui.mousePosition, scrollArea.viewport)
+                    && CheckCollisionPointRec(ui.mousePosition, screenBounds);
         }
         y += buttonHeight + buttonGap;
     }
@@ -111,16 +137,16 @@ std::optional<MainMenuAction> DrawGameMainMenu(
             ? saveBlockedReason : statusText;
     if (visibleStatus != nullptr && visibleStatus[0] != '\0') {
         engine::Text(
-                config,
+                ui, statusConfig,
                 assets,
-                Rectangle{panel.x + horizontalPadding, y + 2.0f,
-                        panel.width - horizontalPadding * 2.0f, 56.0f},
+                Rectangle{horizontalPadding, messageY, rowWidth, messageHeight},
                 smallFont,
                 visibleStatus,
-                engine::UITextJustify::Center,
+                engine::UITextJustify::Left,
                 config.invalidColor,
                 true);
     }
+    engine::EndScrollArea(ui, config, input, scrollArea, scroll);
     engine::EndUI(ui, config, input, assets);
     return selected;
 }

@@ -27,6 +27,8 @@ public:
     const ItemDefinition* SelectedItem() const;
     bool SelectIndex(int index);
     void AddItem();
+    bool CanEditSelectedId() const;
+    void ApplyIdBuffer();
     bool RequestDeleteSelected();
     void CancelDelete();
     void ConfirmDeleteSelected();
@@ -43,6 +45,7 @@ public:
 
 private:
     std::string UniqueId() const;
+    bool ValidateDraftIds(std::string& error) const;
     void Close();
     void SyncBuffers();
     void RebuildLabels();

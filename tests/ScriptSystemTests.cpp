@@ -96,6 +96,43 @@ void MissingAndBrokenScriptsFollowLifecyclePolicy()
     assert(runtime.vm == nullptr);
 }
 
+void ScriptFailuresLeadWithTheLuaDiagnostic()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    TestFiles files("diagnostic");
+    for (bool loadingSave : {false, true}) {
+        for (const std::string& source : {
+                std::string{"function door()\n    if true\n        print('locked')\n    end\nend\n"},
+                std::string{"error('top-level failure')\n"},
+                std::string{"function init()\n    error('init failure')\nend\n"}}) {
+            files.Write(files.scriptPath, source);
+            std::string error;
+            assert(!engine::ScriptSystemCreateForMap(
+                    context, runtime, persistent, "diagnostic",
+                    files.mapPath.string(), files.root.string(),
+                    nullptr, nullptr, loadingSave, error));
+            assert(runtime.vm == nullptr);
+            const std::string firstLine = error.substr(0, error.find('\n'));
+            assert(firstLine.find("diagnostic.lua:") != std::string::npos);
+            assert(firstLine.find("[map=") == std::string::npos);
+            assert(error.find("map chunk failed") == std::string::npos);
+            assert(error.find("[map=diagnostic") != std::string::npos);
+            if (source.find("if true") != std::string::npos) {
+                assert(firstLine.find("diagnostic.lua:3:") != std::string::npos);
+                assert(firstLine.find("'then' expected") != std::string::npos);
+                assert(error.find("Lua syntax error") != std::string::npos);
+            } else {
+                const char* expected = source.find("function init") == 0
+                        ? "init failure" : "top-level failure";
+                assert(firstLine.find(expected) != std::string::npos);
+                assert(error.find("stack traceback") != std::string::npos);
+            }
+        }
+    }
+}
+
 void YieldedInitPersistenceAndShutdownWork()
 {
     engine::EngineContext context;
@@ -685,6 +722,7 @@ end
 int main()
 {
     MissingAndBrokenScriptsFollowLifecyclePolicy();
+    ScriptFailuresLeadWithTheLuaDiagnostic();
     YieldedInitPersistenceAndShutdownWork();
     BackgroundStartsAreDeferredAndForegroundIsSerialized();
     ObservedForegroundCallsRetainYieldedReturnValues();

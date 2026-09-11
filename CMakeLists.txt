@@ -949,6 +949,9 @@ if(BUILD_TESTING)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
+            sources/engine/ui/UI.cpp
+            sources/engine/ui/UITextEditLayout.cpp
+            sources/engine/input/Input.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp

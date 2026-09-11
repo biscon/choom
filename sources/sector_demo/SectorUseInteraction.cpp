@@ -129,27 +129,28 @@ void ConsiderTarget(
     best = SectorUseTarget{entity, kind, targetPosition, facing, distance};
 }
 
-} // namespace
+bool CanTargetNpcWithObject(
+        engine::World& world, engine::Entity entity, const NpcRuntimeInstance& npc)
+{
+    return !npc.instanceId.empty() && !npc.hostile && !npc.conversationHeld
+            && !(world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))
+            && !(world.Has<NpcCombatState>(entity)
+                    && world.Get<NpcCombatState>(entity).dead);
+}
 
-void ConsiderSectorObjectUseBounds(
+void ConsiderObjectUseHit(
         SectorObjectUseTargetAccumulator& accumulator,
-        Ray ray,
         engine::Entity entity,
         SectorUseTargetKind kind,
-        BoundingBox bounds,
+        const RayCollision& collision,
         bool selectable)
 {
     if (kind != SectorUseTargetKind::StaticProp
-            && kind != SectorUseTargetKind::DynamicProp) {
+            && kind != SectorUseTargetKind::DynamicProp
+            && kind != SectorUseTargetKind::Door
+            && kind != SectorUseTargetKind::Npc) {
         return;
     }
-    if (!Finite(ray.position) || !Finite(ray.direction)
-            || Vector3LengthSqr(ray.direction) <= 0.000001f
-            || !Finite(bounds.min) || !Finite(bounds.max)) {
-        return;
-    }
-    ray.direction = Vector3Normalize(ray.direction);
-    const RayCollision collision = GetRayCollisionBox(ray, bounds);
     if (!collision.hit || !std::isfinite(collision.distance)
             || collision.distance < 0.0f) {
         return;
@@ -169,6 +170,51 @@ void ConsiderSectorObjectUseBounds(
             1.0f,
             collision.distance};
     accumulator.nearestSelectable = selectable;
+}
+
+} // namespace
+
+void ConsiderSectorObjectUseBounds(
+        SectorObjectUseTargetAccumulator& accumulator,
+        Ray ray,
+        engine::Entity entity,
+        SectorUseTargetKind kind,
+        BoundingBox bounds,
+        bool selectable)
+{
+    if (!Finite(ray.position) || !Finite(ray.direction)
+            || Vector3LengthSqr(ray.direction) <= 0.000001f
+            || !Finite(bounds.min) || !Finite(bounds.max)) return;
+    ray.direction = Vector3Normalize(ray.direction);
+    ConsiderObjectUseHit(accumulator, entity, kind,
+            GetRayCollisionBox(ray, bounds), selectable);
+}
+
+void ConsiderSectorObjectUseTransformedBounds(
+        SectorObjectUseTargetAccumulator& accumulator,
+        Ray ray,
+        engine::Entity entity,
+        SectorUseTargetKind kind,
+        BoundingBox localBounds,
+        Matrix transform,
+        bool selectable)
+{
+    const float determinant = MatrixDeterminant(transform);
+    if (!Finite(ray.position) || !Finite(ray.direction)
+            || Vector3LengthSqr(ray.direction) <= 0.000001f
+            || !Finite(localBounds.min) || !Finite(localBounds.max)
+            || !std::isfinite(determinant) || std::fabs(determinant) < 1e-12f) return;
+    const Matrix inverse = MatrixInvert(transform);
+    Matrix inverseDirection = inverse;
+    inverseDirection.m12 = inverseDirection.m13 = inverseDirection.m14 = 0.0f;
+    const Ray localRay{Vector3Transform(ray.position, inverse),
+            Vector3Normalize(Vector3Transform(ray.direction, inverseDirection))};
+    if (!Finite(localRay.position) || !Finite(localRay.direction)) return;
+    RayCollision hit = GetRayCollisionBox(localRay, localBounds);
+    if (!hit.hit) return;
+    hit.point = Vector3Transform(hit.point, transform);
+    hit.distance = Vector3Distance(ray.position, hit.point);
+    ConsiderObjectUseHit(accumulator, entity, kind, hit, selectable);
 }
 
 SectorUseTarget FinishSectorObjectUseTarget(
@@ -229,7 +275,7 @@ SectorUseTarget FindSectorObjectUseTarget(
                     SectorObject& object,
                     SectorDynamicModel& model,
                     engine::AnimatedModelInstance& instance) {
-                if (!object.visible || world.Has<NpcRuntimeInstance>(entity)
+                if (!object.visible || model.opacity <= 0.0f
                         || !instance.poseReady || instance.poseFailed) {
                     return;
                 }
@@ -253,13 +299,52 @@ SectorUseTarget FindSectorObjectUseTarget(
                         model.scale);
                 const BoundingBox localBounds = asset->hasAnimatedLocalBounds
                         ? asset->animatedLocalBounds : asset->localBounds;
+                const bool isNpc = world.Has<NpcRuntimeInstance>(entity);
+                const bool selectable = isNpc
+                        ? CanTargetNpcWithObject(world, entity,
+                                world.Get<NpcRuntimeInstance>(entity))
+                        : !model.instanceId.empty();
                 ConsiderSectorObjectUseBounds(
                         accumulator,
                         ray,
                         entity,
-                        SectorUseTargetKind::DynamicProp,
+                        isNpc ? SectorUseTargetKind::Npc : SectorUseTargetKind::DynamicProp,
                         TransformBounds(localBounds, authored),
-                        !model.instanceId.empty());
+                        selectable);
+            });
+    world.ForEach<SectorObjectTransform, SectorObject, SectorDoor,
+            SectorDoorResolvedAnchor, SectorDoorRender>(
+            [&world, &assets, ray, &accumulator](engine::Entity entity,
+                    SectorObjectTransform& transform, SectorObject& object,
+                    SectorDoor& door, SectorDoorResolvedAnchor& anchor,
+                    SectorDoorRender& render) {
+                if (!object.visible || !door.enabled || !render.visible) return;
+                if (world.Has<SectorDoorModelRender>(entity)) {
+                    const auto& model = world.Get<SectorDoorModelRender>(entity);
+                    const auto* leaf = assets.GetModelAsset(model.leafModel);
+                    const auto policy = ResolveSectorDoorModelDrawPolicy(
+                            model, leaf != nullptr,
+                            assets.GetModelAsset(model.frameModel) != nullptr);
+                    if (policy.drawLeaf) {
+                        if (leaf->hasLocalBounds) {
+                            ConsiderSectorObjectUseTransformedBounds(accumulator,
+                                    ray, entity, SectorUseTargetKind::Door,
+                                    leaf->localBounds, model.leafMatrix,
+                                    !door.instanceId.empty());
+                        }
+                        return;
+                    }
+                }
+                if (!std::isfinite(render.width) || render.width <= 0.0f
+                        || !std::isfinite(render.height) || render.height <= 0.0f
+                        || !std::isfinite(render.thickness) || render.thickness <= 0.0f) return;
+                const BoundingBox bounds{
+                        {-render.width * 0.5f, -render.height * 0.5f, -render.thickness * 0.5f},
+                        {render.width * 0.5f, render.height * 0.5f, render.thickness * 0.5f}};
+                ConsiderSectorObjectUseTransformedBounds(accumulator,
+                        ray, entity, SectorUseTargetKind::Door, bounds,
+                        BuildSectorDoorSlabModelMatrix(transform, anchor, render),
+                        !door.instanceId.empty());
             });
     float topologyDistance = -1.0f;
     if (collisionWorld != nullptr
@@ -279,6 +364,17 @@ std::string_view SectorObjectUseTargetInstanceId(
         const SectorUseTarget& target)
 {
     if (!world.IsAlive(target.entity)) return {};
+    if (target.kind == SectorUseTargetKind::Door
+            && world.Has<SectorDoor>(target.entity)) {
+        const auto& door = world.Get<SectorDoor>(target.entity);
+        return door.enabled ? std::string_view{door.instanceId} : std::string_view{};
+    }
+    if (target.kind == SectorUseTargetKind::Npc
+            && world.Has<NpcRuntimeInstance>(target.entity)) {
+        const auto& npc = world.Get<NpcRuntimeInstance>(target.entity);
+        return CanTargetNpcWithObject(world, target.entity, npc)
+                ? std::string_view{npc.instanceId} : std::string_view{};
+    }
     if (target.kind == SectorUseTargetKind::StaticProp
             && world.Has<SectorStaticModel>(target.entity)) {
         return world.Get<SectorStaticModel>(target.entity).instanceId;

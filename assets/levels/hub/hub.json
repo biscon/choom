@@ -2623,7 +2623,7 @@
       "id": 158,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_2",
+        "definitionId": "double_barrel_shotgun",
         "instanceId": "boomstick_01",
         "takeDistance": 2.0,
         "rotationZDegrees": 90.0,
@@ -2640,7 +2640,7 @@
       "id": 159,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_3",
+        "definitionId": "bandage",
         "instanceId": "item_159",
         "takeDistance": 2.0,
         "heightOffsetWorld": 1.0950000286102295
@@ -2656,7 +2656,7 @@
       "id": 160,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_4",
+        "definitionId": "health_pack",
         "instanceId": "item_160",
         "takeDistance": 2.0,
         "heightOffsetWorld": 1.0950000286102295
@@ -2672,7 +2672,7 @@
       "id": 161,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_5",
+        "definitionId": "large_health_pack",
         "instanceId": "item_161",
         "takeDistance": 2.0,
         "heightOffsetWorld": 1.0950000286102295
@@ -2688,7 +2688,7 @@
       "id": 162,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_6",
+        "definitionId": "ammo_9mm",
         "instanceId": "item_162",
         "quantity": 12,
         "takeDistance": 2.0,
@@ -2705,7 +2705,7 @@
       "id": 163,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_7",
+        "definitionId": "ammo_buckshot",
         "instanceId": "item_163",
         "quantity": 2,
         "takeDistance": 2.0,
@@ -2722,7 +2722,7 @@
       "id": 166,
       "kind": "item",
       "item": {
-        "definitionId": "new_item",
+        "definitionId": "pistol_9mm",
         "instanceId": "item_166",
         "takeDistance": 2.0,
         "rotationZDegrees": -90.0,
@@ -2739,7 +2739,7 @@
       "id": 167,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_7",
+        "definitionId": "ammo_buckshot",
         "instanceId": "item_167",
         "quantity": 5,
         "takeDistance": 2.0,
@@ -2756,7 +2756,7 @@
       "id": 168,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_6",
+        "definitionId": "ammo_9mm",
         "instanceId": "item_168",
         "quantity": 12,
         "takeDistance": 2.0,
@@ -2774,7 +2774,7 @@
       "id": 169,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_5",
+        "definitionId": "large_health_pack",
         "instanceId": "item_169",
         "heightOffsetWorld": 0.675000011920929,
         "shadowMode": "dynamic"
@@ -6739,6 +6739,23 @@
         80.88002014160156
       ],
       "yawDegrees": 179.99998474121094
+    },
+    {
+      "id": 421,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_8",
+        "instanceId": "pre_entrance_door_key",
+        "onUseScript": "usePreEntranceDoorKey",
+        "heightOffsetWorld": 0.6000000834465027,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -81.56011962890625,
+        0.0,
+        28.919893264770508
+      ],
+      "yawDegrees": 20.0
     }
   ],
   "staticLights": [

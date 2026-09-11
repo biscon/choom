@@ -140,11 +140,22 @@ SectorEditorItemEditorPanelResult DrawSectorEditorItemEditorPanel(
         };
 
         label("ID");
-        engine::Text(
-                ui, config, assets,
-                Rectangle{fieldX, y, fieldWidth, RowHeight},
-                smallFont, definition->id.c_str(), engine::UITextJustify::Left,
-                config.mutedTextColor);
+        if (editor.CanEditSelectedId()) {
+            const engine::UITextInputResult idResult = engine::TextInput(
+                    ui, config, input, assets, "sector_editor_item_id",
+                    Rectangle{fieldX, y, fieldWidth, RowHeight}, smallFont,
+                    state.idBuffer.data(), state.idBuffer.size(), 1,
+                    kMaximumItemIdBytes);
+            if (idResult.changed || idResult.focusLost || idResult.submitted) {
+                editor.ApplyIdBuffer();
+            }
+        } else {
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{fieldX, y, fieldWidth, RowHeight},
+                    smallFont, definition->id.c_str(), engine::UITextJustify::Left,
+                    config.mutedTextColor);
+        }
         y += RowHeight + RowGap;
 
         label("Title");

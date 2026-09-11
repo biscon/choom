@@ -286,7 +286,8 @@ std::string BuildLuaTraceback(
             1);
     const char* traceback = lua_tostring(thread, -1);
     std::ostringstream output;
-    output << (prefix != nullptr ? prefix : "Lua error")
+    output << (traceback != nullptr ? traceback : "<traceback unavailable>")
+           << '\n' << (prefix != nullptr ? prefix : "Lua error")
            << " [map=" << runtime.mapId
            << ", script=" << runtime.mapScriptPath
            << ", phase=" << PhaseName(runtime.phase);
@@ -297,8 +298,7 @@ std::string BuildLuaTraceback(
                 runtime, task->waitingOperation);
         if (operation != nullptr) output << ", operation=" << operation->debugLabel;
     }
-    output << "]: "
-           << (traceback != nullptr ? traceback : "<traceback unavailable>");
+    output << "]";
     return output.str();
 }
 
@@ -1247,10 +1247,15 @@ bool ScriptSystemCreateForMap(
                 bytes.size(),
                 chunkName.c_str(),
                 "t");
-        if (status == LUA_OK) status = lua_pcall(runtime.vm, 0, 0, 0);
+        const char* failureDescription = status == LUA_ERRSYNTAX
+                ? "Lua syntax error" : "Lua script load failed";
+        if (status == LUA_OK) {
+            failureDescription = "Lua script execution failed";
+            status = lua_pcall(runtime.vm, 0, 0, 0);
+        }
         if (status != LUA_OK) {
             error = BuildLuaTraceback(
-                    runtime.vm, runtime, nullptr, "map chunk failed");
+                    runtime.vm, runtime, nullptr, failureDescription);
             lua_settop(runtime.vm, 0);
             ScriptSystemShutdownForMap(engine, runtime);
             return false;

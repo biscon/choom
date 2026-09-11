@@ -49,6 +49,13 @@ local function elinConversation()
             startPlayNpcAnimation("elin", "Excited")
             setFlag("elin_asked_people", true)
         end,
+        locked_door = function()
+            say("Have you seen a key or anything lying around that could be useful for unlocking the door in the hallway?")
+            local anim = startPlayNpcAnimation("elin", "No")
+            say("elin", "No I haven't found anything, have you looked around the office?.")
+            assert(await(anim))
+            setFlag("elin_asked_pre_entrance_door", true)
+        end,
         goodbye = function()
             if returning then
                 say("Talk later.")
@@ -66,6 +73,7 @@ local function elinConversation()
             identity = flag("elin_asked_identity"),
             place = flag("elin_asked_place") or not flag("elin_asked_identity"),
             people = flag("elin_asked_people")  or not flag("elin_asked_identity"),
+            locked_door = flag("elin_asked_pre_entrance_door") or not flag("tried_pre_entrance_door") or not flag("elin_asked_identity")
         })
     end, function()
         if returning then
@@ -215,7 +223,22 @@ function toggleCeilingVent()
 end
 
 function open_pre_entrance_door()
-    playMapSound("door_locked", 1.0)
-    text("It's locked", CENTER)
+    if not flag("pre_entrance_door_unlocked") then
+        playMapSound("door_locked", 0.8)
+        text("It's locked", CENTER)
+        setFlag("tried_pre_entrance_door", true)
+        return false
+    end
+    return true
+end
+
+function usePreEntranceDoorKey(targetInstanceId)
+    -- log("used key on: " .. targetInstanceId)
+    if targetInstanceId == "pre_entrance_door" then
+        setFlag("pre_entrance_door_unlocked", true)
+        say("Voila!. the door is now unlocked.")
+        return true
+    end
+    say("That won't work.")
     return false
 end

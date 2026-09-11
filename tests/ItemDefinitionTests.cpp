@@ -11,6 +11,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -405,6 +406,86 @@ void WriteText(const std::filesystem::path& path, const std::string& text)
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     output << text;
     assert(output.good());
+}
+
+void DraftItemIds()
+{
+    const auto weapons = MakeWeapons();
+    const auto root = MakeTemporaryRoot("draft_ids");
+    const auto registryPath = root / "items.json";
+    game::ItemRegistry registry;
+    registry.items.push_back(MakeObject("existing"));
+    game::SectorEditorItemEditorState state;
+    game::SectorEditorItemEditorSessionState session;
+    std::string status;
+    game::SectorEditorItemEditorService editor(state, session, registry, weapons,
+            false, status, registryPath, root / "levels");
+    const auto editId = [&](const std::string& id) {
+        std::snprintf(state.idBuffer.data(), state.idBuffer.size(), "%s", id.c_str());
+        editor.ApplyIdBuffer();
+    };
+    assert(editor.Open());
+    assert(!editor.CanEditSelectedId());
+    editId("renamed_existing");
+    assert(editor.SelectedItem()->id == "existing");
+    editor.AddItem();
+    editor.SetModelPath("assets/models/box.glb");
+    assert(editor.CanEditSelectedId());
+    editId("blue_key");
+    assert(editor.SelectedItem()->id == "blue_key");
+    assert(session.selectedItemId == "blue_key");
+    assert(state.listLabelStorage.back().find("blue_key") != std::string::npos);
+    assert(editor.SelectIndex(0));
+    assert(!editor.CanEditSelectedId());
+    assert(editor.SelectIndex(1));
+    assert(std::string{state.idBuffer.data()} == "blue_key");
+    editId("blue_door_key");
+    editor.AddItem();
+    editor.SetModelPath("assets/models/box.glb");
+    editId("blue_door_key");
+    assert(!state.validationMessage.empty());
+    assert(!editor.SaveAndClose());
+    assert(state.open && editor.CanEditSelectedId());
+    for (const std::string invalid : {std::string{}, std::string{"bad id"},
+                 std::string{"bad.id"}, std::string{"existing"}}) {
+        editId(invalid);
+        assert(!state.validationMessage.empty());
+        assert(!editor.SaveAndClose());
+        assert(editor.CanEditSelectedId());
+    }
+    const std::string maximumId(game::kMaximumItemIdBytes, 'a');
+    editId(maximumId);
+    assert(state.validationMessage.empty());
+    assert(editor.SelectIndex(1));
+    assert(editor.RequestDeleteSelected());
+    editor.ConfirmDeleteSelected();
+    assert(editor.CanEditSelectedId());
+    assert(editor.SelectedItem()->id == maximumId);
+    assert(editor.SelectIndex(0));
+    assert(!editor.CanEditSelectedId());
+    assert(editor.RequestDeleteSelected());
+    editor.ConfirmDeleteSelected();
+    assert(editor.CanEditSelectedId());
+    editId("existing");
+    assert(!editor.SaveAndClose()); // Deleted persisted IDs remain reserved.
+    editId("custom_item");
+    assert(editor.SaveAndClose());
+    assert(registry.items.size() == 1 && registry.items.front().id == "custom_item");
+    assert(editor.Open());
+    assert(!editor.CanEditSelectedId());
+    editor.AddItem();
+    editId("discarded_item");
+    editor.Cancel();
+    assert(registry.items.size() == 1 && registry.items.front().id == "custom_item");
+    assert(editor.Open());
+    assert(!editor.CanEditSelectedId());
+    editor.Cancel();
+
+    game::ItemRegistry reloaded;
+    std::string error;
+    assert(game::LoadItemRegistry(registryPath, weapons, reloaded, error));
+    assert(reloaded.items.size() == 1 && reloaded.items.front().id == "custom_item");
+    std::filesystem::remove_all(root);
 }
 
 void ReferenceScanningAndEditorService()
@@ -983,6 +1064,7 @@ int main()
     ItemPresentationMotion();
     IconLayoutAndCameraFit();
     ReferenceScanningAndEditorService();
+    DraftItemIds();
     InventoryTransactionsAndCampaignReconciliation();
     WeaponOwnershipAndAmmunitionTransactions();
     InventoryStackTransactions();

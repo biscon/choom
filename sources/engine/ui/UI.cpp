@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -483,14 +484,15 @@ float WrappedTextCodepointAdvance(
             * metrics.scale;
 }
 
-void DrawTextWrappedRaw(
+float LayoutWrappedTextRaw(
         const UIConfig& config,
         AssetManager& assets,
         Rectangle bounds,
         FontHandle font,
         const char* text,
         UITextJustify justify,
-        Color tint)
+        Color tint,
+        bool draw)
 {
     const char* safeText = text == nullptr ? "" : text;
     const size_t byteCount = TextByteLength(safeText);
@@ -508,7 +510,7 @@ void DrawTextWrappedRaw(
             config.textSpacing);
 
     if (byteCount == 0 || contentWidth <= 0.0f || lineHeight <= 0.0f) {
-        return;
+        return 0.0f;
     }
 
     size_t lineStart = 0;
@@ -529,7 +531,7 @@ void DrawTextWrappedRaw(
         if (y + lineHeight > contentBottom) {
             return false;
         }
-        if (start >= end) {
+        if (start >= end || !draw) {
             y += lineAdvance;
             return true;
         }
@@ -567,7 +569,7 @@ void DrawTextWrappedRaw(
 
         if (ch == '\n') {
             if (!drawLine(lineStart, cursor)) {
-                return;
+                return y - bounds.y + config.paddingY;
             }
             lineStart = next;
             lineEnd = next;
@@ -599,7 +601,7 @@ void DrawTextWrappedRaw(
                 && lineEnd > lineStart) {
             const size_t breakEnd = hasBreak && lastBreak > lineStart ? lastBreak : lineEnd;
             if (!drawLine(lineStart, breakEnd)) {
-                return;
+                return y - bounds.y + config.paddingY;
             }
             lineStart = breakEnd;
             while (lineStart < byteCount && (safeText[lineStart] == ' ' || safeText[lineStart] == '\t')) {
@@ -627,6 +629,7 @@ void DrawTextWrappedRaw(
     }
 
     (void)drawLine(lineStart, byteCount);
+    return y - bounds.y + config.paddingY;
 }
 
 void DrawWidgetBackgroundRaw(const UIConfig& config, Rectangle bounds, Color fill, Color border)
@@ -1665,6 +1668,18 @@ void EndScrollArea(
     }
 }
 
+float MeasureWrappedTextHeight(
+        const UIConfig& config,
+        AssetManager& assets,
+        float width,
+        FontHandle font,
+        const char* text)
+{
+    return LayoutWrappedTextRaw(config, assets,
+            {0.0f, 0.0f, width, std::numeric_limits<float>::max()},
+            font, text, UITextJustify::Left, BLANK, false);
+}
+
 void Text(
         const UIConfig& config,
         AssetManager& assets,
@@ -1676,7 +1691,7 @@ void Text(
         bool wordWrap)
 {
     if (wordWrap) {
-        DrawTextWrappedRaw(config, assets, bounds, font, text, justify, tint);
+        LayoutWrappedTextRaw(config, assets, bounds, font, text, justify, tint, true);
         return;
     }
 
@@ -1703,7 +1718,7 @@ void Text(
         bool wordWrap)
 {
     if (wordWrap) {
-        DrawTextWrappedRaw(config, assets, TransformBounds(ui, bounds), font, text, justify, tint);
+        LayoutWrappedTextRaw(config, assets, TransformBounds(ui, bounds), font, text, justify, tint, true);
         return;
     }
 

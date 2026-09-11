@@ -378,9 +378,16 @@ end
 
 An Object placement may provide `onUseScript`. After that item is picked up,
 its inventory Use action enters cursor-targeting mode. Left-clicking a visible,
-ready static or dynamic prop calls the named global function with that prop's
-stable string instance ID. Doors, NPCs, world items, and arbitrary world
-surfaces are not Object-use targets.
+ready static prop, dynamic prop, door leaf, or living non-hostile NPC calls the
+named global function with that target's stable string instance ID. NPCs must
+not already be held in a conversation. The target does not need its own use
+or dialogue script. Hidden targets and NPCs with no visible ready model cannot
+be selected. Door targeting follows the moving leaf, including the procedural
+fallback when a door model is unavailable; frames and empty doorways are not
+targets. World items and arbitrary world surfaces remain excluded.
+
+The nearest intersected target bounds win, subject to world occlusion. Visible
+ineligible NPCs and door leaves without instance IDs block targets behind them.
 
 The callback may yield. Its first return value must be boolean `true` to consume
 exactly one carried Object entry. Boolean `false`, no boolean return value, a
@@ -395,6 +402,19 @@ function useAccessCard(targetInstanceId)
     if targetInstanceId == "security_console" then
         setPersistentBool("security_unlocked", true)
         return true
+    end
+    return false
+end
+```
+
+For example, an Object key can unlock a door whose Can Open script checks the
+same persistent flag:
+
+```lua
+function useDoorKey(targetInstanceId)
+    if targetInstanceId == "pre_entrance_door" then
+        setPersistentBool("pre_entrance_door_unlocked", true)
+        return true -- consume the key
     end
     return false
 end

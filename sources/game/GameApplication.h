@@ -153,6 +153,7 @@ private:
     std::optional<PendingGameSave> pendingGameSave;
     engine::DebugConsoleData debugConsole;
     std::string menuStatus;
+    engine::UIScrollState mainMenuScroll;
     std::optional<MainMenuAction> pendingMenuAction;
     std::optional<GameGraphicsSettingsAction> pendingSettingsAction;
     std::optional<FpsApplicationSettings> pendingGraphicsSettings;

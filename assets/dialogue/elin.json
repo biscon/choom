@@ -9,11 +9,15 @@
                 },
                 {
                     "id": "place",
-                    "text": "What is this place?"
+                    "text": "What is this place?."
                 },
                 {
                     "id": "people",
-                    "text": "Have you seen anyone else down here?"
+                    "text": "Have you seen anyone else down here?."
+                },
+                {
+                    "id": "locked_door",
+                    "text": "Unlocking the door in the hallway."
                 },
                 {
                     "id": "goodbye",
@@ -26,7 +30,7 @@
             "options": [
                 {
                     "id": "elin_arrival",
-                    "text": "How did you get here?"
+                    "text": "How did you get here?."
                 },
                 {
                     "id": "back",

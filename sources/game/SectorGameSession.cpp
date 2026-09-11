@@ -2026,12 +2026,8 @@ void SectorGameSession::Update(
                     if (event.mouseButton.button == MOUSE_BUTTON_RIGHT) {
                         heldInput = ItemHeldUseInput::RightClick;
                     } else if (event.mouseButton.button == MOUSE_BUTTON_LEFT) {
-                        const bool valid =
-                                (useTarget.kind == SectorUseTargetKind::StaticProp
-                                        || useTarget.kind
-                                                == SectorUseTargetKind::DynamicProp)
-                                && !SectorObjectUseTargetInstanceId(
-                                            context.world, useTarget).empty();
+                        const bool valid = !SectorObjectUseTargetInstanceId(
+                                context.world, useTarget).empty();
                         heldInput = valid
                                 ? ItemHeldUseInput::ValidLeftClick
                                 : ItemHeldUseInput::InvalidLeftClick;

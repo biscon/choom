@@ -266,6 +266,14 @@ void EndScrollArea(
         const UIScrollAreaResult& scrollArea,
         UIScrollState& state);
 
+// Includes vertical padding and uses the same line wrapping as Text(wordWrap=true).
+float MeasureWrappedTextHeight(
+        const UIConfig& config,
+        AssetManager& assets,
+        float width,
+        FontHandle font,
+        const char* text);
+
 void Text(
         const UIConfig& config,
         AssetManager& assets,

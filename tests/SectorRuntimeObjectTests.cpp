@@ -311,13 +311,13 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
             excluded,
             ray,
             farther,
-            game::SectorUseTargetKind::Door,
+            game::SectorUseTargetKind::Ladder,
             BoundingBox{Vector3{2.0f, -1.0f, -1.0f},
                     Vector3{3.0f, 1.0f, 1.0f}},
             true);
     Check(game::FinishSectorObjectUseTarget(excluded).kind
                     == game::SectorUseTargetKind::None,
-          "held Object bounds reject items, doors, and non-prop target kinds");
+          "held Object bounds reject items and ladders");
 
     game::SectorObjectUseTargetAccumulator tie;
     game::ConsiderSectorObjectUseBounds(
@@ -340,7 +340,7 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
           "equal-distance held Object targets use stable entity ordering");
 
     engine::World world;
-    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    game::ReserveSectorRuntimeObjectWorld(world, 3);
     const engine::Entity staticProp = world.CreateEntity();
     game::SectorStaticModel staticModel;
     staticModel.instanceId = "crate_4";
@@ -361,7 +361,131 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
     npcTarget.entity = npc;
     npcTarget.kind = game::SectorUseTargetKind::DynamicProp;
     Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
-          "NPC dynamic models are excluded from held Object targets");
+          "NPCs cannot bypass eligibility through the dynamic-prop target kind");
+
+    npcTarget.kind = game::SectorUseTargetKind::Npc;
+    auto& npcInstance = world.Get<game::NpcRuntimeInstance>(npc);
+    npcInstance.instanceId = "friendly_npc";
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget) == "friendly_npc",
+          "NPC targets use the NPC instance ID without requiring a use script");
+    npcInstance.hostile = true;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "hostile NPCs reject held Objects");
+    npcInstance.hostile = false;
+    npcInstance.conversationHeld = true;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "conversation-held NPCs reject held Objects");
+    npcInstance.conversationHeld = false;
+    world.Add(npc, game::Health{});
+    world.Get<game::Health>(npc).current = 0;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "depleted NPCs reject held Objects");
+    world.Get<game::Health>(npc).current = 10;
+    world.Add(npc, game::NpcCombatState{});
+    world.Get<game::NpcCombatState>(npc).dead = true;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "dead combat state rejects held Objects even with health remaining");
+    world.Get<game::NpcCombatState>(npc).dead = false;
+    npcInstance.instanceId.clear();
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "NPCs require a stable instance ID");
+
+    const auto doorEntity = world.CreateEntity();
+    game::SectorDoor door;
+    door.instanceId = "locked_door";
+    world.Add(doorEntity, door);
+    game::SectorUseTarget doorTarget;
+    doorTarget.entity = doorEntity;
+    doorTarget.kind = game::SectorUseTargetKind::Door;
+    Check(game::SectorObjectUseTargetInstanceId(world, doorTarget) == "locked_door",
+          "doors expose their stable instance ID independently of E-key hooks");
+    world.Get<game::SectorDoor>(doorEntity).enabled = false;
+    Check(game::SectorObjectUseTargetInstanceId(world, doorTarget).empty(),
+          "disabled doors reject held Objects");
+    doorTarget.entity.generation += 1;
+    Check(game::SectorObjectUseTargetInstanceId(world, doorTarget).empty(),
+          "stale door entity handles cannot resolve instance IDs");
+}
+
+void TestHeldObjectDoorGeometry()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const auto entity = world.CreateEntity();
+    world.Add(entity, game::SectorObject{});
+    world.Add(entity, game::SectorObjectTransform{Vector3{0.0f, 1.0f, 3.0f}});
+    game::SectorDoor door;
+    door.instanceId = "test_door";
+    world.Add(entity, door);
+    world.Add(entity, game::SectorDoorResolvedAnchor{});
+    game::SectorDoorRender render;
+    render.width = 2.0f;
+    render.height = 2.0f;
+    render.thickness = 0.2f;
+    world.Add(entity, render);
+    const Ray ray{{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}};
+    const auto pick = [&] {
+        return game::FindSectorObjectUseTarget(world, assets, ray, nullptr);
+    };
+    Check(pick().kind == game::SectorUseTargetKind::Door
+                  && std::fabs(pick().distance - 2.9f) < 0.0001f,
+          "closed procedural door is targetable at its visible leaf");
+
+    game::SectorDoorModelRender model;
+    model.modelVisualRequested = true;
+    model.catalogResolved = true;
+    world.Add(entity, model);
+    Check(pick().entity == entity,
+          "pending door models use the same procedural fallback as rendering");
+    world.Get<game::SectorDoorModelRender>(entity).leafFailed = true;
+    Check(pick().entity == entity, "failed door models retain procedural targeting");
+
+    auto& transform = world.Get<game::SectorObjectTransform>(entity);
+    transform.position.y = 4.0f;
+    Check(pick().kind == game::SectorUseTargetKind::None,
+          "a raised sliding leaf leaves its doorway untargetable");
+    transform.position = {1.0f, 1.0f, 4.0f};
+    auto& liveRender = world.Get<game::SectorDoorRender>(entity);
+    liveRender.widthAxis = {0.0f, 1.0f};
+    liveRender.thicknessAxis = {1.0f, 0.0f};
+    Check(pick().kind == game::SectorUseTargetKind::None,
+          "a swung leaf does not target its original doorway");
+    const Ray leafRay{{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}};
+    Check(game::FindSectorObjectUseTarget(world, assets, leafRay, nullptr).entity == entity,
+          "a swung leaf remains targetable at its new position");
+    liveRender.visible = false;
+    Check(game::FindSectorObjectUseTarget(world, assets, leafRay, nullptr).kind
+                    == game::SectorUseTargetKind::None,
+          "hidden door leaves are not targets");
+    liveRender.visible = true;
+    world.Get<game::SectorDoor>(entity).instanceId.clear();
+    Check(game::FindSectorObjectUseTarget(world, assets, leafRay, nullptr).kind
+                    == game::SectorUseTargetKind::None,
+          "door leaves without IDs are not selectable");
+
+    game::SectorObjectUseTargetAccumulator accumulator;
+    const BoundingBox bounds{{-1.0f, -1.0f, -0.1f}, {1.0f, 1.0f, 0.1f}};
+    const Matrix scaled = MatrixMultiply(MatrixScale(2.0f, 2.0f, 2.0f),
+            MatrixTranslate(0.0f, 1.0f, 5.0f));
+    game::ConsiderSectorObjectUseTransformedBounds(accumulator, ray, entity,
+            game::SectorUseTargetKind::Door, bounds, scaled, true);
+    Check(std::fabs(accumulator.nearest.distance - 4.8f) < 0.0001f,
+          "transformed model bounds preserve world-space hit distance under scale");
+    game::ConsiderSectorObjectUseBounds(accumulator, ray, engine::Entity{2, 1},
+            game::SectorUseTargetKind::Npc,
+            BoundingBox{{-0.5f, 0.0f, 2.0f}, {0.5f, 2.0f, 2.5f}}, false);
+    Check(game::FinishSectorObjectUseTarget(accumulator).kind == game::SectorUseTargetKind::None,
+          "an ineligible NPC blocks a door behind it");
+    accumulator = {};
+    game::ConsiderSectorObjectUseBounds(accumulator, ray, engine::Entity{2, 1},
+            game::SectorUseTargetKind::Npc,
+            BoundingBox{{-0.5f, 0.0f, 5.0f}, {0.5f, 2.0f, 5.5f}}, true);
+    game::ConsiderSectorObjectUseTransformedBounds(accumulator, ray, entity,
+            game::SectorUseTargetKind::Door, bounds,
+            MatrixTranslate(0.0f, 1.0f, 3.0f), false);
+    Check(game::FinishSectorObjectUseTarget(accumulator).kind == game::SectorUseTargetKind::None,
+          "a door without an ID blocks an NPC behind it");
 }
 
 void TestItemRuntimeSpawnAndFocusedRemoval()
@@ -12567,6 +12691,7 @@ int main()
     TestSectorUseTargetFindsBothLadderEndpoints();
     TestSectorItemUseTargetFallbackAndPendingGate();
     TestHeldObjectUseRayTargetOrderingAndOcclusion();
+    TestHeldObjectDoorGeometry();
     TestItemRuntimeSpawnAndFocusedRemoval();
     TestSectorUseHighlightPulsesAndReleases();
     TestNpcVocalPriorityDelayAndShufflePolicy();

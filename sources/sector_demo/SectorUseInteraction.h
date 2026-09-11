@@ -77,6 +77,14 @@ void ConsiderSectorObjectUseBounds(
         SectorUseTargetKind kind,
         BoundingBox bounds,
         bool selectable);
+void ConsiderSectorObjectUseTransformedBounds(
+        SectorObjectUseTargetAccumulator& accumulator,
+        Ray ray,
+        engine::Entity entity,
+        SectorUseTargetKind kind,
+        BoundingBox localBounds,
+        Matrix transform,
+        bool selectable);
 SectorUseTarget FinishSectorObjectUseTarget(
         const SectorObjectUseTargetAccumulator& accumulator,
         float topologyHitDistance = -1.0f);
