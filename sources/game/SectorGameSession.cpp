@@ -1220,6 +1220,9 @@ bool SectorGameSession::StartNew(
     scriptHost.controls.dialogueChanged = [](void* userData, bool active) {
         static_cast<SectorGameSession*>(userData)->OnDialogueChanged(active);
     };
+    scriptHost.controls.holsterWeapon = [](void* userData) {
+        static_cast<SectorGameSession*>(userData)->fpsPlayer.HolsterForTraversal();
+    };
     pendingLoadingSave = loadingSave;
     saveGameBlocked = false;
     saveGameBlockedReason.clear();
@@ -2711,6 +2714,9 @@ bool SectorGameSession::RebuildFromMap(
     scriptHost.dialogue = &dialogue;
     scriptHost.controls.dialogueChanged = [](void* userData, bool active) {
         static_cast<SectorGameSession*>(userData)->OnDialogueChanged(active);
+    };
+    scriptHost.controls.holsterWeapon = [](void* userData) {
+        static_cast<SectorGameSession*>(userData)->fpsPlayer.HolsterForTraversal();
     };
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);

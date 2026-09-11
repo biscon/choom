@@ -1936,6 +1936,10 @@ void RequestedHolsterState()
     assert(game::RequestFpsViewmodelHolster(state));
     assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
     assert(Near(state.holsterPose.hiddenAmount, 1.0f));
+    game::AdvanceFpsViewmodelEquipTransition(state, 1.0f);
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(game::ToggleFpsViewmodelHolster(state, true, false));
+    assert(state.equipState == game::FpsViewmodelEquipState::Unholstering);
 }
 
 void AnimationTiming()

@@ -104,6 +104,7 @@ struct SectorScriptControlApi {
     bool (*setControlsEnabled)(void*, engine::EngineContext&, bool,
             std::string&) = nullptr;
     void (*dialogueChanged)(void*, bool) = nullptr;
+    void (*holsterWeapon)(void*) = nullptr;
 };
 
 struct SectorScriptHost {

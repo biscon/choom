@@ -1117,6 +1117,7 @@ int LuaDialogueOperation(lua_State* state)
         }
         host.dialogue->operation = operation;
     }
+    if (host.controls.holsterWeapon) host.controls.holsterWeapon(host.controls.userData);
     if (host.controls.dialogueChanged) host.controls.dialogueChanged(host.controls.userData, true);
     return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
 }
@@ -1453,8 +1454,10 @@ int LuaStartConversation(lua_State* state)
             EndSectorScriptConversation(context, host);
             return PushCutsceneStartError(state, false, "could not allocate conversation preparation");
         }
-        return engine::ScriptSystemYieldForOperation(state, conversation.preparation, originalTop);
     }
+    if (host.controls.holsterWeapon) host.controls.holsterWeapon(host.controls.userData);
+    if (reposition)
+        return engine::ScriptSystemYieldForOperation(state, conversation.preparation, originalTop);
     lua_pushboolean(state, true);
     return 1;
 }

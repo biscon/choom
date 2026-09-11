@@ -1034,6 +1034,9 @@ end
 `false, reason`. It requires a managed Lua task and a living non-hostile NPC.
 It locks player controls and saving for the whole conversation, including
 speech between choice menus, while retaining the current cinematic mode.
+Starting a conversation also holsters the player's weapon using its normal
+animation, cancelling any pending reload or weapon switch. The weapon stays
+holstered when the conversation ends; the player must draw it again manually.
 Only one conversation can be active. A conflicting scripted player/NPC move
 or turn is rejected before starting automatic positioning.
 
@@ -1084,6 +1087,9 @@ Missing sets, malformed hidden lists, all-hidden sets, or busy presentation
 return `nil, reason`. Cancellation also returns `nil, reason` if the caller is
 still running. Blocking calls from the console or top-level map chunk raise an
 error before changing UI state.
+
+Opening a choice menu also holsters the player's weapon, including when used
+without `startConversation()`. Closing the menu does not draw the weapon again.
 
 Each menu belongs to its requesting operation. Another task cannot replace it
 or take its result. Menus and captions are mutually exclusive: finish or cancel

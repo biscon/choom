@@ -49,6 +49,7 @@ struct Fixture {
     game::SectorFpsControllerState player;
     game::SectorFpsControllerConfig config;
     engine::Entity npc{};
+    int holsterRequests = 0;
     std::filesystem::path root = std::filesystem::temp_directory_path()
             / ("engine_conversation_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     Fixture()
@@ -79,6 +80,10 @@ struct Fixture {
                 &cutscene, &player, &config);
         host.dialogue = &dialogue;
         host.controls.setControlsEnabled = [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+        host.controls.userData = this;
+        host.controls.holsterWeapon = [](void* userData) {
+            ++static_cast<Fixture*>(userData)->holsterRequests;
+        };
         dialogue.sets.push_back({"topics", {{"tunnels", "Tunnels?"}, {"people", "People?"}, {"goodbye", "Goodbye"}}});
         dialogue.visible.reserve(3); dialogue.rows.reserve(3); dialogue.lines.reserve(100);
     }
@@ -174,6 +179,7 @@ void BackwardPreparationAndCleanup()
     )");
     f.Call();
     assert(f.host.conversation.preparing && !f.cutscene.controlsEnabled);
+    assert(f.holsterRequests == 1); // Holster before repositioning or the first menu.
     assert(f.context.world.Get<game::NpcRuntimeInstance>(f.npc).conversationHeld);
     for (int i = 0; i < 20; ++i) f.Tick(0.025f, true);
     assert(f.host.conversation.elapsed == 0 && f.player.feetPosition.x == 3.5f);
@@ -187,6 +193,7 @@ void BackwardPreparationAndCleanup()
         assert(std::fabs(std::remainder(f.player.yawRadians - PI, 2 * PI)) < 0.01f);
     }
     assert(f.dialogue.active && f.persistent.bools.at("ready"));
+    assert(f.holsterRequests == 2);
     assert(f.player.feetPosition.x > 4.45f);
     assert(std::fabs(f.context.world.Get<game::SectorObjectTransform>(f.npc).yawRadians - PI / 2) < 0.01f);
     const auto finalPosition = f.player.feetPosition;
@@ -194,6 +201,7 @@ void BackwardPreparationAndCleanup()
     assert(f.persistent.bools.at("finished") && !f.host.conversation.active && f.cutscene.controlsEnabled);
     assert(!f.context.world.Get<game::NpcRuntimeInstance>(f.npc).conversationHeld);
     assert(f.player.feetPosition.x == finalPosition.x);
+    assert(f.holsterRequests == 2); // Ending the conversation does not change weapon state.
 }
 
 void StagingOwnershipAndFailures()
@@ -220,12 +228,14 @@ void StagingOwnershipAndFailures()
     )");
     f.Call();
     assert(f.host.conversation.active && f.cutscene.presentation.active);
+    assert(f.holsterRequests == 2); // Staged cinematic conversations also holster.
     assert(!f.context.world.Get<game::NpcRuntimeInstance>(f.npc).conversationHeld);
     f.Tick(); assert(f.player.feetPosition.x == 3.5f && f.player.yawRadians == PI);
     assert(game::SelectSectorDialogue(f.dialogue, f.scripts, 2)); f.Tick();
     assert(!f.host.conversation.active && !f.cutscene.controlsEnabled && f.cutscene.presentation.active);
     for (int i = 0; i < 22; ++i) f.Tick();
     assert(f.cutscene.controlsEnabled);
+    assert(f.holsterRequests == 2);
     engine::ScriptSystemCallForegroundHook(f.scripts, "failing"); f.Tick();
     assert(!f.host.conversation.active && f.cutscene.controlsEnabled);
     engine::ScriptSystemCallForegroundHook(f.scripts, "held");
@@ -235,6 +245,29 @@ void StagingOwnershipAndFailures()
     engine::ScriptSystemCallForegroundHook(f.scripts, "held");
     f.context.world.Get<game::NpcCombatState>(f.npc).dead = true; f.Tick();
     assert(!f.host.conversation.active && f.cutscene.controlsEnabled);
+}
+
+void StandaloneDialogueHolstersOnlyOnSuccessfulStart()
+{
+    Fixture f;
+    f.Create(R"(
+        function useNpc(id)
+            assert(not startConversation('missing'))
+            assert(not dialogue('missing'))
+            delay(10)
+            assert(dialogue('topics') == 'goodbye')
+            setFlag('finished', true)
+        end
+    )");
+    f.Call();
+    assert(f.holsterRequests == 0);
+    f.Tick();
+    assert(f.dialogue.active && !f.host.conversation.active);
+    assert(f.holsterRequests == 1);
+    assert(game::SelectSectorDialogue(f.dialogue, f.scripts, 2));
+    f.Tick();
+    assert(f.persistent.bools.at("finished") && !f.dialogue.active);
+    assert(f.holsterRequests == 1);
 }
 
 void BlockedRetreatAndRemainingTopics()
@@ -316,5 +349,6 @@ void RunSectorConversationTests()
     UseEligibilityAndOcclusion();
     BackwardPreparationAndCleanup();
     StagingOwnershipAndFailures();
+    StandaloneDialogueHolstersOnlyOnSuccessfulStart();
     BlockedRetreatAndRemainingTopics();
 }
