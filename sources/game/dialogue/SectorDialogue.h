@@ -25,6 +25,8 @@ struct SectorDialogueRow {
 // registry, never to ECS storage. Loading and menu transitions reserve scratch.
 struct SectorDialogueRuntime {
     std::vector<SectorDialogueSet> sets;
+    // Snapshot of this menu's labels, indexed like the selected set's options.
+    std::vector<std::string> labels;
     std::vector<size_t> visible;
     std::vector<SectorDialogueRow> rows;
     std::vector<SectorDialogueLine> lines;
@@ -53,7 +55,8 @@ struct SectorDialogueRuntime {
 void LoadSectorDialogue(SectorDialogueRuntime& runtime, const std::filesystem::path& directory);
 void ResetSectorDialogueMenu(SectorDialogueRuntime& runtime);
 bool BeginSectorDialogue(SectorDialogueRuntime& runtime, const std::string& setId,
-        const std::vector<std::string>& hidden, std::string& error);
+        const std::vector<std::string>& hidden, std::string& error,
+        const std::vector<SectorDialogueOption>& textOverrides = {});
 bool SelectSectorDialogue(SectorDialogueRuntime& runtime, engine::ScriptRuntime& scripts, size_t visibleIndex);
 void LayoutSectorDialogue(SectorDialogueRuntime& runtime, const Font& font,
         int pixelSize, Rectangle viewport, float preferredTop);

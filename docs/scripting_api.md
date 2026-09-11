@@ -24,10 +24,10 @@ ranges, return values, behavior, and failure details.
   `getPersistentInt(key [, default])`, `setPersistentString(key, value)`,
   `getPersistentString(key [, default])`; also `flag`/`setFlag`,
   `getInt`/`setInt`, and `getString`/`setString`.
-- **[Dialogue choices](#dialogue-choices):** `dialogue(setId [, hiddenIds])`,
+- **[Dialogue choices](#dialogue-choices):** `dialogue(setId [, hiddenIds [, textOverrides]])`,
   `appendIf(list, condition, value)`, `hiddenOptions(map)`,
-  `runConversation(setId, handlers [, hiddenIds])`,
-  `runConversationDynamic(setId, handlers [, hiddenOptionsFn])`.
+  `runConversation(setId, handlers [, hiddenIds [, textOverrides]])`,
+  `runConversationDynamic(setId, handlers [, hiddenOptionsFn [, textOverridesFn]])`.
 - **[Logging](#logging):** `log(...)`, `print(...)`.
 - **[Doors](#doors):** `moveDoor(doorId, targetFraction, durationMs)`,
   `startMoveDoor(doorId, targetFraction, durationMs)`, `openDoor(doorId)`,
@@ -1082,7 +1082,7 @@ if choice == "identity" then
 end
 ```
 
-`dialogue(setId [, hiddenIds])` suspends the managed Lua task and returns the
+`dialogue(setId [, hiddenIds [, textOverrides]])` suspends the managed Lua task and returns the
 selected **option ID string**. It neither speaks the label nor remembers the
 selection automatically. `hiddenIds` is a dense array of strings, not a boolean
 map. Unknown IDs have no effect, and filtering never changes the loaded asset.
@@ -1090,6 +1090,19 @@ Missing sets, malformed hidden lists, all-hidden sets, or busy presentation
 return `nil, reason`. Cancellation also returns `nil, reason` if the caller is
 still running. Blocking calls from the console or top-level map chunk raise an
 error before changing UI state.
+
+`textOverrides` is an optional table mapping option IDs to replacement labels:
+
+```lua
+local choice = dialogue("elin_intro_topics", hiddenTopics,
+    returning and { goodbye = "Talk later." } or nil)
+```
+
+Omitted entries use the JSON label. Overrides affect only this menu's display;
+option IDs, order, handlers, and hidden-option filtering do not change. Unknown
+option IDs, non-string keys or values, and labels that are blank, contain NUL,
+or exceed 8192 UTF-8 bytes return `nil, reason` without opening a menu. Overrides
+for known hidden options are allowed. Loaded choice sets remain unchanged.
 
 Opening a choice menu also holsters the player's weapon, including when used
 without `startConversation()`. Closing the menu does not draw the weapon again.
@@ -1156,8 +1169,15 @@ or `require` is needed.
 | --- | --- |
 | `appendIf(list, condition, value)` | Appends when condition is truthy; returns the list. |
 | `hiddenOptions(map)` | Converts truthy `{ optionId = shouldHide }` entries to an ID array. |
-| `runConversation(setId, handlers [, hiddenIds])` | Repeatedly displays the set and dispatches the selected ID to its handler. |
-| `runConversationDynamic(setId, handlers [, hiddenOptionsFn])` | Recomputes the hidden list before each menu. |
+| `runConversation(setId, handlers [, hiddenIds [, textOverrides]])` | Repeatedly displays the set and dispatches the selected ID to its handler. |
+| `runConversationDynamic(setId, handlers [, hiddenOptionsFn [, textOverridesFn]])` | Recomputes the hidden list and text overrides before each menu. |
+
+`runConversation` accepts a fixed override table as its fourth argument.
+`runConversationDynamic` accepts a fourth callback returning an override table
+or `nil`; both callbacks run before every menu, so labels and visibility can
+respond to persistent flags changed by handlers. Pass `nil` for the third
+argument when only overriding text. Override labels are transient; reconstruct
+them from saved flags when reopening a conversation.
 
 Handlers receive the selected ID and run in the same coroutine. They may call
 speech, delays, movement, animations, or nested menus. Returning normally

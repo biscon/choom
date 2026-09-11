@@ -8,8 +8,8 @@
           "text": "I'm James."
         },
         {
-          "id": "tunnels",
-          "text": "Do you know a way out of these tunnels?"
+          "id": "place",
+          "text": "What is this place?"
         },
         {
           "id": "people",
@@ -18,23 +18,6 @@
         {
           "id": "goodbye",
           "text": "I'll look around. Stay close."
-        }
-      ]
-    },
-    {
-      "id": "elin_repeat_topics",
-      "options": [
-        {
-          "id": "tunnels",
-          "text": "Do you know a way out of these tunnels?"
-        },
-        {
-          "id": "people",
-          "text": "Have you seen anyone else down here?"
-        },
-        {
-          "id": "goodbye",
-          "text": "Talk later."
         }
       ]
     }

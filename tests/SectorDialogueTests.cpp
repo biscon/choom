@@ -126,6 +126,92 @@ void AssetsValidateTransactionallyAndFilteringPreservesLabels()
     assert(f.dialogue.sets.empty() && !f.dialogue.active);
 }
 
+void TextOverridesValidateAndPreserveDefaults()
+{
+    DialogueFixture f;
+    f.Create(R"lua(
+        function invalid()
+            for _, overrides in ipairs({false, 'text', {42}, {question=false},
+                    {unknown='Text'}, {question=''}, {question=' \t\n'},
+                    {question=string.rep('x',8193)}, {question='nul\0text'}, {['bad\0id']='Text'}}) do
+                local choice, reason = dialogue('topics', nil, overrides)
+                assert(choice == nil and type(reason) == 'string')
+            end
+        end
+        function static()
+            assert(runConversation('topics', {}, {'question'}, {goodbye='Talk later.'}) == 'goodbye')
+            assert(dialogue('topics') == 'question')
+        end
+    )lua");
+    assert(f.Call("invalid").result == engine::ScriptCallResult::Completed);
+    assert(!f.dialogue.active && f.menuOpens == 0);
+    f.Call("static");
+    assert(f.dialogue.visible == std::vector<size_t>{1});
+    assert(f.dialogue.labels[1] == "Talk later.");
+    assert(f.dialogue.sets[0].options[1].text == "Goodbye.");
+    assert(game::SelectSectorDialogue(f.dialogue, f.scripts, 0)); f.Tick();
+    assert(f.dialogue.labels[1] == "Goodbye.");
+    assert(game::SelectSectorDialogue(f.dialogue, f.scripts, 0)); f.Tick();
+    assert(!f.dialogue.active && f.dialogue.labels.empty());
+    std::string error;
+    assert(game::BeginSectorDialogue(f.dialogue, "topics", {"question"}, error,
+            {{"question", "Hidden replacement"}}));
+    assert(f.dialogue.visible == std::vector<size_t>{1} && f.dialogue.labels[1] == "Goodbye.");
+}
+
+void DynamicLabelsAndRemainingTopicsSurviveReload()
+{
+    const std::string source = R"lua(
+        function talk()
+            local returning = flag('finished')
+            runConversationDynamic('topics', {
+                identity = function()
+                    assert(dialogue('nested') == 'answer')
+                    setFlag('identity', true)
+                end,
+                question = function() setFlag('asked', true) end,
+                goodbye = function() setFlag('finished', true); return 'exit' end,
+            }, function()
+                return hiddenOptions({identity=flag('identity'), question=flag('asked')})
+            end, function()
+                if flag('asked') then return {goodbye='Until next time.'} end
+                if returning then return {goodbye='Talk later.'} end
+            end)
+        end
+    )lua";
+    DialogueFixture first;
+    first.dialogue.sets[0].options.insert(first.dialogue.sets[0].options.begin(), {"identity", "I'm James."});
+    first.Create(source);
+    first.Call("talk");
+    assert(first.dialogue.labels[2] == "Goodbye.");
+    assert(game::SelectSectorDialogue(first.dialogue, first.scripts, 2)); first.Tick();
+    std::string saved, error;
+    assert(engine::SavePersistentScriptStoreToJsonString(first.persistent, saved, error));
+    DialogueFixture returning;
+    returning.dialogue.sets[0].options.insert(returning.dialogue.sets[0].options.begin(), {"identity", "I'm James."});
+    assert(engine::LoadPersistentScriptStoreFromJsonString(saved, returning.persistent, error));
+    returning.Create(source);
+    returning.Call("talk");
+    assert(returning.dialogue.visible == (std::vector<size_t>{0, 1, 2}));
+    assert(returning.dialogue.labels[0] == "I'm James." && returning.dialogue.labels[2] == "Talk later.");
+    assert(game::SelectSectorDialogue(returning.dialogue, returning.scripts, 0)); returning.Tick();
+    assert(returning.dialogue.labels == std::vector<std::string>{"An answer."});
+    assert(game::SelectSectorDialogue(returning.dialogue, returning.scripts, 0)); returning.Tick();
+    assert(returning.dialogue.visible == (std::vector<size_t>{1, 2}));
+    assert(returning.dialogue.labels[2] == "Talk later.");
+    assert(game::SelectSectorDialogue(returning.dialogue, returning.scripts, 0)); returning.Tick();
+    assert(returning.dialogue.visible == std::vector<size_t>{2});
+    assert(returning.dialogue.labels[2] == "Until next time.");
+    assert(game::SelectSectorDialogue(returning.dialogue, returning.scripts, 0)); returning.Tick();
+    assert(engine::SavePersistentScriptStoreToJsonString(returning.persistent, saved, error));
+    engine::ScriptSystemShutdownForMap(returning.context, returning.scripts);
+    assert(engine::LoadPersistentScriptStoreFromJsonString(saved, returning.persistent, error));
+    returning.Create(source);
+    returning.Call("talk");
+    assert(returning.dialogue.visible == std::vector<size_t>{2});
+    assert(returning.dialogue.labels[2] == "Until next time.");
+}
+
 void ConversationsYieldFilterNestAndPersist(bool cinematic)
 {
     DialogueFixture f;
@@ -358,6 +444,14 @@ void LayoutFitsAndCentersGlyphs()
     input.Events().push_back(click);
     game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input);
     assert(!f.dialogue.active);
+    const std::string longLabel(4096, 'W');
+    assert(game::BeginSectorDialogue(f.dialogue, "layout", {}, error, {{"a", longLabel}}));
+    const auto capacity = f.dialogue.lines.capacity();
+    game::LayoutSectorDialogue(f.dialogue, font, 36, {0, 0, 320, 240}, 180);
+    assert(f.dialogue.rows[0].lineCount > 1);
+    assert(f.dialogue.lines.capacity() == capacity);
+    assert(f.dialogue.lines[f.dialogue.rows[0].lineCount - 1].end == longLabel.size());
+    assert(f.dialogue.sets.back().options[0].text == "Wide text");
 }
 
 void LayoutScrollingAndInputAreBounded()
@@ -468,6 +562,8 @@ void RunSectorDialogueTests()
     RunSectorConversationTests();
     LayoutFitsAndCentersGlyphs();
     AssetsValidateTransactionallyAndFilteringPreservesLabels();
+    TextOverridesValidateAndPreserveDefaults();
+    DynamicLabelsAndRemainingTopicsSurviveReload();
     ConversationsYieldFilterNestAndPersist(false);
     ConversationsYieldFilterNestAndPersist(true);
     OwnershipFailureCancellationAndPlayerOverloads();

@@ -22,6 +22,12 @@ constexpr float RowPaddingY = 8.0f;
 constexpr float ScrollbarSpace = 8.0f;
 constexpr float RowRadius = 8.0f;
 
+bool ValidDialogueLabel(const std::string& text)
+{
+    return text.find_first_not_of(" \t\r\n") != std::string::npos
+            && text.size() <= MaximumLabelBytes && text.find('\0') == std::string::npos;
+}
+
 float Roundness(Rectangle bounds, float radius)
 {
     return std::min(1.0f, 2.0f * radius / std::max(1.0f, std::min(bounds.width, bounds.height)));
@@ -83,6 +89,7 @@ void ResetSectorDialogueMenu(SectorDialogueRuntime& runtime)
     runtime.active = false;
     runtime.operation = {};
     runtime.visible.clear();
+    runtime.labels.clear();
     runtime.rows.clear();
     runtime.lines.clear();
     runtime.layoutReady = false;
@@ -125,8 +132,7 @@ void LoadSectorDialogue(SectorDialogueRuntime& runtime, const std::filesystem::p
                     SectorDialogueOption option{rawOption.at("id").get<std::string>(), rawOption.at("text").get<std::string>()};
                     if (option.id.empty() || option.id.find('\0') != std::string::npos || !optionIds.insert(option.id).second)
                         throw std::runtime_error("empty or duplicate option ID in " + set.id);
-                    if (option.text.find_first_not_of(" \t\r\n") == std::string::npos
-                            || option.text.size() > MaximumLabelBytes || option.text.find('\0') != std::string::npos)
+                    if (!ValidDialogueLabel(option.text))
                         throw std::runtime_error("empty or oversized option text in " + set.id);
                     set.options.push_back(std::move(option));
                 }
@@ -145,22 +151,47 @@ void LoadSectorDialogue(SectorDialogueRuntime& runtime, const std::filesystem::p
         }
     }
     runtime.visible.reserve(maximumOptions);
+    runtime.labels.reserve(maximumOptions);
     runtime.rows.reserve(maximumOptions);
     runtime.lines.reserve(maximumBytes);
 }
 
 bool BeginSectorDialogue(SectorDialogueRuntime& runtime, const std::string& setId,
-        const std::vector<std::string>& hidden, std::string& error)
+        const std::vector<std::string>& hidden, std::string& error,
+        const std::vector<SectorDialogueOption>& textOverrides)
 {
     if (runtime.active) { error = "a dialogue menu is already active"; return false; }
     const auto found = std::find_if(runtime.sets.begin(), runtime.sets.end(),
             [&](const auto& set) { return set.id == setId; });
     if (found == runtime.sets.end()) { error = "dialogue choice set was not found: " + setId; return false; }
+    for (const auto& override : textOverrides) {
+        if (std::none_of(found->options.begin(), found->options.end(),
+                [&](const auto& option) { return option.id == override.id; })) {
+            error = "unknown dialogue text override ID: " + override.id;
+            return false;
+        }
+        if (!ValidDialogueLabel(override.text)) {
+            error = "empty, oversized or invalid dialogue text override: " + override.id;
+            return false;
+        }
+    }
     runtime.visible.clear();
     for (size_t i = 0; i < found->options.size(); ++i) {
         if (std::find(hidden.begin(), hidden.end(), found->options[i].id) == hidden.end()) runtime.visible.push_back(i);
     }
     if (runtime.visible.empty()) { error = "dialogue has no visible options"; return false; }
+    runtime.labels.clear();
+    runtime.labels.reserve(found->options.size());
+    size_t labelBytes = 0;
+    for (const auto& option : found->options) {
+        const auto override = std::find_if(textOverrides.begin(), textOverrides.end(),
+                [&](const auto& value) { return value.id == option.id; });
+        runtime.labels.push_back(override == textOverrides.end() ? option.text : override->text);
+        labelBytes += runtime.labels.back().size() + 1;
+    }
+    // Overrides can be longer than loaded labels; reserve before layout/render.
+    runtime.rows.reserve(runtime.visible.size());
+    runtime.lines.reserve(labelBytes);
     runtime.setIndex = static_cast<size_t>(found - runtime.sets.begin());
     runtime.selected = 0;
     runtime.scroll = 0.0f;
@@ -200,7 +231,7 @@ void LayoutSectorDialogue(SectorDialogueRuntime& runtime, const Font& font,
             std::snprintf(number, sizeof(number), "%zu.", i + 1);
             runtime.numberWidth = std::max(runtime.numberWidth,
                     MeasureTextEx(font, number, static_cast<float>(pixelSize), 1).x + 8.0f);
-            const auto& text = runtime.sets[runtime.setIndex].options[runtime.visible[i]].text;
+            const auto& text = runtime.labels[runtime.visible[i]];
             float measured = 0.0f;
             for (size_t cursor = 0; cursor < text.size();) {
                 int bytes = 0;
@@ -217,7 +248,7 @@ void LayoutSectorDialogue(SectorDialogueRuntime& runtime, const Font& font,
                 - runtime.numberWidth - ScrollbarSpace);
         float top = 0;
         for (const size_t index : runtime.visible) {
-            const auto& text = runtime.sets[runtime.setIndex].options[index].text;
+            const auto& text = runtime.labels[index];
             SectorDialogueRow row;
             row.top = top;
             row.firstLine = runtime.lines.size();
@@ -321,7 +352,7 @@ void DrawSectorDialogue(const SectorDialogueRuntime& runtime, const Font& font)
         char number[32];
         std::snprintf(number, sizeof(number), "%zu.", i + 1);
         DrawTextEx(font, number, {std::round(bounds.x + RowPaddingX), std::round(y)}, static_cast<float>(runtime.fontSize), 1, color);
-        const auto& text = runtime.sets[runtime.setIndex].options[runtime.visible[i]].text;
+        const auto& text = runtime.labels[runtime.visible[i]];
         for (size_t n = 0; n < row.lineCount; ++n) {
             const auto& line = runtime.lines[row.firstLine + n];
             const size_t length = line.end - line.begin;

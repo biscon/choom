@@ -1048,11 +1048,13 @@ function hiddenOptions(map)
     return result
 end
 
-function runConversationDynamic(setId, handlers, hiddenOptionsFn)
+function runConversationDynamic(setId, handlers, hiddenOptionsFn, textOverridesFn)
     while true do
         local hidden = nil
         if hiddenOptionsFn ~= nil then hidden = hiddenOptionsFn() end
-        local choice = dialogue(setId, hidden)
+        local textOverrides = nil
+        if textOverridesFn ~= nil then textOverrides = textOverridesFn() end
+        local choice = dialogue(setId, hidden, textOverrides)
         if choice == nil then return nil end
         local handler = handlers and handlers[choice]
         if handler == nil then return choice end
@@ -1061,8 +1063,9 @@ function runConversationDynamic(setId, handlers, hiddenOptionsFn)
     end
 end
 
-function runConversation(setId, handlers, hidden)
-    return runConversationDynamic(setId, handlers, function() return hidden end)
+function runConversation(setId, handlers, hidden, textOverrides)
+    return runConversationDynamic(setId, handlers, function() return hidden end,
+        function() return textOverrides end)
 end
 )lua";
 

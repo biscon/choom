@@ -1065,8 +1065,21 @@ int LuaDialogueOperation(lua_State* state)
     luaL_checktype(state, 1, LUA_TSTRING);
     // Parse without argument errors after allocating C++ temporaries: Lua errors
     // longjmp past destructors in this build.
-    if (originalTop > 2 || (!lua_isnoneornil(state, 2) && !lua_istable(state, 2)))
-        return PushCutsceneStartError(state, false, "dialogue expects a set ID and optional array of hidden IDs");
+    if (originalTop > 3 || (!lua_isnoneornil(state, 2) && !lua_istable(state, 2))
+            || (!lua_isnoneornil(state, 3) && !lua_istable(state, 3)))
+        return PushCutsceneStartError(state, false, "dialogue expects a set ID, optional hidden IDs, and optional text overrides");
+    if (lua_istable(state, 3)) {
+        lua_pushnil(state);
+        while (lua_next(state, 3)) {
+            const bool valid = lua_type(state, -2) == LUA_TSTRING
+                    && lua_type(state, -1) == LUA_TSTRING;
+            lua_pop(state, 1);
+            if (!valid) {
+                lua_pop(state, 1);
+                return PushCutsceneStartError(state, false, "text overrides must map option IDs to strings");
+            }
+        }
+    }
     if (lua_istable(state, 2)) {
         const size_t count = lua_rawlen(state, 2);
         size_t entries = 0;
@@ -1105,8 +1118,19 @@ int LuaDialogueOperation(lua_State* state)
         }
         size_t length = 0;
         const char* id = lua_tolstring(state, 1, &length);
+        std::vector<SectorDialogueOption> textOverrides;
+        if (lua_istable(state, 3)) {
+            lua_pushnil(state);
+            while (lua_next(state, 3)) {
+                size_t keyLength = 0, textLength = 0;
+                const char* key = lua_tolstring(state, -2, &keyLength);
+                const char* text = lua_tolstring(state, -1, &textLength);
+                textOverrides.push_back({std::string{key, keyLength}, std::string{text, textLength}});
+                lua_pop(state, 1);
+            }
+        }
         std::string error;
-        if (!BeginSectorDialogue(*host.dialogue, std::string{id, length}, hidden, error))
+        if (!BeginSectorDialogue(*host.dialogue, std::string{id, length}, hidden, error, textOverrides))
             return PushCutsceneStartError(state, false, error);
         operation = engine::ScriptSystemCreateOperation(scripts,
                 engine::ScriptOperationLaunchStyle::Blocking, owner, "dialogue",

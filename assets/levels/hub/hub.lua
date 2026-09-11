@@ -1,17 +1,19 @@
 local function elinConversation()
     local returning = flag("elin_intro_conversation_finished")
-    runConversationDynamic(returning and "elin_repeat_topics" or "elin_intro_topics", {
+    runConversationDynamic("elin_intro_topics", {
         identity = function()
             say("My name is James. Not Jim, definitely not Jimbo, just James.")
-            startPlayNpcAnimation("elin", "Talking_2")
-            say("elin", "James it is, pleasure to meet you!.", "happy")
+            startPlayNpcAnimation("elin", "Salute")
+            say("elin", "James it is, pleasure to meet you.", "happy")
             setFlag("elin_asked_identity", true)
         end,
-        tunnels = function()
-            say("Do you know a way out of these tunnels?")
+        place = function()
+            say("Do you know what this place is?")
+            startPlayNpcAnimation("elin", "Talking")
+            say("elin", "No. I found this office looking room and decided to stop, catch a breath and reevaluate my options.")
             startPlayNpcAnimation("elin", "Talking_2")
-            say("elin", "Not yet. Every passage seems to lead somewhere darker.", "afraid")
-            setFlag("elin_asked_tunnels", true)
+            say("elin", "Sure beats walking the dark tunnels, seems like somebody have been living here there is even a bed and all.")
+            setFlag("elin_asked_place", true)
         end,
         people = function()
             say("Have you seen anyone else down here?", { mood = "afraid" })
@@ -37,9 +39,13 @@ local function elinConversation()
     }, function()
         return hiddenOptions({
             identity = flag("elin_asked_identity"),
-            tunnels = flag("elin_asked_tunnels"),
+            place = flag("elin_asked_place"),
             people = flag("elin_asked_people"),
         })
+    end, function()
+        if returning then
+            return { goodbye = "Talk later." }
+        end
     end)
 end
 
