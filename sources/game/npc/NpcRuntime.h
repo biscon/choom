@@ -280,6 +280,7 @@ struct NpcNavigationRecord {
     // Request-local override. Zero keeps the authored Walk/Run action speed.
     float movementSpeedOverride = 0.0f;
     NpcBodyTurnState bodyTurn;
+    bool returningFromConversation = false;
     NpcBodyTurnState arrivalTurn;
     bool matchArrivalOrientation = false;
     // Movement retains script ownership until both travel and turning finish.

@@ -1053,9 +1053,13 @@ conversation ownership. Existing `say`, `dialogue`, and conversation helpers
 remain usable inside or outside these boundaries.
 
 `endConversation()` returns `true`, or `false, reason` if there is no conversation
-owned by the calling task. It releases only the conversation's control lock and
-NPC hold; an enclosing cutscene remains locked until `endCutscene()`. End the
-conversation before calling `enableControls(true)` or `endCutscene()`. The player
+owned by the calling task. It releases the conversation's control lock immediately.
+For repositioned conversations, the NPC then smoothly turns back to its orientation
+from before `startConversation()` over about 0.75 seconds, keeping autonomous
+movement paused until the turn finishes. Staged (`reposition = false`)
+conversations do not turn the NPC on exit. An enclosing cutscene remains locked
+until `endCutscene()`. End the conversation before calling `enableControls(true)`
+or `endCutscene()`. The player
 stays at the adjusted position and facing. Task completion/error/cancellation,
 participant death/removal, or map teardown also cleans up ownership. Pause and
 console capture freeze preparation. Persistent topic flags use the existing

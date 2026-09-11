@@ -1466,7 +1466,12 @@ int LuaEndConversation(lua_State* state)
         return PushCutsceneStartError(state, false, "no active conversation");
     if (!(host.conversation.owner == engine::ScriptSystemTryCurrentTaskFromLua(state)))
         return PushCutsceneStartError(state, false, "conversation belongs to another task");
-    EndSectorScriptConversation(engine::ScriptSystemEngineFromLua(state), host);
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    const auto conversation = host.conversation;
+    EndSectorScriptConversation(context, host);
+    if (conversation.reposition && host.npcNavigation)
+        BeginNpcConversationReturn(context.world, *host.npcNavigation,
+                conversation.npc, conversation.npcStartYaw);
     lua_pushboolean(state, true);
     return 1;
 }

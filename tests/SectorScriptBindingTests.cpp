@@ -2479,6 +2479,95 @@ void ConversationHoldPausesAndResumesNpcTravel()
     assert(fixture.context.world.Get<game::NpcPatrolState>(fixture.npc).waitRemainingSeconds < 5);
 }
 
+void EndingConversationRestoresOnlyRepositionedNpcFacing()
+{
+    for (bool reposition : {false, true}) {
+        NpcScriptFixture fixture;
+        fixture.host.controls.setControlsEnabled =
+                [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+        auto& transform = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc);
+        auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+        transform.yawRadians = 170.0f * DEG2RAD;
+        fixture.files.Write(reposition
+                ? "function init() assert(startConversation('script_guard')); assert(endConversation()); ended = true end"
+                : "function init() assert(startConversation('script_guard', {reposition=false})); delay(10); assert(endConversation()); ended = true end");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        assert(fixture.host.conversation.active);
+        assert(!fixture.cutscene.controlsEnabled);
+        // Simulate the prepared facing, including a wrap across +/- pi.
+        transform.yawRadians = -170.0f * DEG2RAD;
+        if (reposition) {
+            const auto preparation = fixture.host.conversation.preparation;
+            fixture.host.conversation.preparing = false;
+            fixture.host.conversation.preparation = {};
+            engine::ScriptSystemCompleteOperation(fixture.runtime, preparation);
+        }
+        engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+        assert(engine::ScriptSystemExecuteConsole(fixture.runtime, "assert(ended)").success);
+        assert(!fixture.host.conversation.active && fixture.cutscene.controlsEnabled);
+        assert(npc.conversationHeld == reposition);
+        assert(game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc) == reposition);
+        assert(std::fabs(transform.yawRadians - (-170.0f * DEG2RAD)) < 0.0001f);
+        const Vector3 position = transform.position;
+        fixture.Update(0.375f);
+        const float halfway = (reposition ? -180.0f : -170.0f) * DEG2RAD;
+        assert(std::fabs(transform.yawRadians - halfway) < 0.0001f);
+        fixture.Update(0.375f);
+        const float finalYaw = (reposition ? -190.0f : -170.0f) * DEG2RAD;
+        assert(std::fabs(transform.yawRadians - finalYaw) < 0.0001f);
+        assert(Vector3Distance(transform.position, position) == 0);
+        assert(!npc.conversationHeld && !game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
+    }
+}
+
+void ConversationReturnPausesTravelAndReleasesItsHold()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto request = game::RequestNpcMove(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, "script_guard", {6, 8},
+            game::NpcMoveGait::Walk, game::NpcMoveAuthority::Patrol);
+    assert(request.accepted);
+    auto& transform = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc);
+    auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+    const Vector3 position = transform.position;
+    assert(game::BeginNpcConversationReturn(fixture.context.world, fixture.npcNavigation, fixture.npc, PI));
+    for (int i = 0; i < 15; ++i) {
+        fixture.Update(0.05f);
+        assert(Vector3Distance(transform.position, position) == 0);
+    }
+    assert(!npc.conversationHeld);
+    assert(std::fabs(std::fabs(transform.yawRadians) - PI) < 0.0001f);
+    for (int i = 0; i < 20; ++i) fixture.Update(0.05f);
+    assert(Vector3Distance(transform.position, position) > 0.2f);
+}
+
+void ConversationReturnInterruptionsReleaseTheNpc()
+{
+    for (int mode = 0; mode < 4; ++mode) {
+        NpcScriptFixture fixture;
+        fixture.files.Write("function init() end");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+        assert(game::BeginNpcConversationReturn(fixture.context.world, fixture.npcNavigation, fixture.npc, PI));
+        assert(npc.conversationHeld);
+        if (mode == 0) {
+            game::CancelNpcBodyTurn(fixture.npcNavigation, fixture.npc, 0, "test cancellation");
+            fixture.Update(0.1f);
+        } else if (mode == 1) {
+            fixture.context.world.Get<game::NpcCombatState>(fixture.npc).dead = true;
+            fixture.Update(0.1f);
+        } else if (mode == 2) {
+            game::DeactivateNpcNavigation(fixture.context.world, fixture.navigation, fixture.npcNavigation, fixture.npc);
+        } else {
+            game::ShutdownNpcNavigationRuntime(fixture.context.world, fixture.navigation, fixture.npcNavigation);
+        }
+        assert(!npc.conversationHeld);
+        assert(!game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
+    }
+}
+
 void NpcLookPatrolPauseAndTargetRemoval()
 {
     NpcScriptFixture fixture;
@@ -2568,6 +2657,9 @@ void RunSectorScriptBindingTests()
     NpcLookTargetsCompleteAndPreserveHeadAnimation();
     NpcLookValidationReplacementMovementAndLifecycle();
     ConversationHoldPausesAndResumesNpcTravel();
+    EndingConversationRestoresOnlyRepositionedNpcFacing();
+    ConversationReturnPausesTravelAndReleasesItsHold();
+    ConversationReturnInterruptionsReleaseTheNpc();
     NpcLookPatrolPauseAndTargetRemoval();
     NpcFacingCancellationDeathAndRemovalReleaseOwnership();
     DoorCompletionAndCancellationShareTheBackend();

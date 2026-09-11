@@ -992,6 +992,8 @@ void ShutdownNpcNavigationRuntime(
         if (world.IsAlive(record.entity)) {
             if (world.Has<NpcRuntimeInstance>(record.entity)) {
                 world.Get<NpcRuntimeInstance>(record.entity).action = NpcAction::Idle;
+                if (record.returningFromConversation)
+                    world.Get<NpcRuntimeInstance>(record.entity).conversationHeld = false;
             }
             if (world.Has<SectorObjectVisualOffset>(record.entity)) {
                 world.Get<SectorObjectVisualOffset>(record.entity).position = {};
@@ -1022,6 +1024,11 @@ bool DeactivateNpcNavigation(
 {
     for (NpcNavigationRecord& record : runtime.records) {
         if (!record.occupied || record.entity != entity) continue;
+        if (record.returningFromConversation) {
+            if (world.IsAlive(entity) && world.Has<NpcRuntimeInstance>(entity))
+                world.Get<NpcRuntimeInstance>(entity).conversationHeld = false;
+            record.returningFromConversation = false;
+        }
         ReleasePath(navigation, record, &world);
         if (!IsNull(record.agentHandle)) {
             navigation.ReleaseAgentRecord(record.agentHandle);
@@ -1116,6 +1123,32 @@ bool BeginNpcBodyTurn(engine::World& world, NpcNavigationRuntime& runtime,
     turn.requestId = AllocateRequestId(runtime);
     record->bodyTurn = turn;
     error.clear();
+    return true;
+}
+
+bool BeginNpcConversationReturn(engine::World& world, NpcNavigationRuntime& runtime,
+        engine::Entity entity, float yawRadians)
+{
+    NpcNavigationRecord* record = FindRecord(runtime, entity);
+    if (!record || !world.IsAlive(entity) || !world.Has<NpcRuntimeInstance>(entity)
+            || !world.Has<SectorObjectTransform>(entity) || !std::isfinite(yawRadians)
+            || HasNpcBodyTurn(runtime, entity)) return false;
+    auto& npc = world.Get<NpcRuntimeInstance>(entity);
+    if (npc.hostile || npc.actionLockedByAi
+            || (world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))
+            || (world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead)
+            || (world.Has<NpcAiState>(entity)
+                    && world.Get<NpcAiState>(entity).awareness != NpcAwarenessState::Unaware)) return false;
+    const float currentYaw = world.Get<SectorObjectTransform>(entity).yawRadians;
+    if (std::fabs(ShortestAngleDelta(currentYaw, yawRadians)) < 0.0001f) return true;
+    record->bodyTurn = {};
+    record->bodyTurn.startYaw = currentYaw;
+    record->bodyTurn.targetYaw = currentYaw + ShortestAngleDelta(currentYaw, yawRadians);
+    record->bodyTurn.started = true;
+    record->bodyTurn.status = NpcBodyTurnStatus::Playing;
+    record->bodyTurn.requestId = AllocateRequestId(runtime);
+    record->returningFromConversation = true;
+    npc.conversationHeld = true;
     return true;
 }
 
@@ -2029,11 +2062,28 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 world.Has<SectorObjectVisualOffset>(record.entity)
                 ? &world.Get<SectorObjectVisualOffset>(record.entity) : nullptr;
         record.actualVelocity = {};
+        if (record.returningFromConversation) {
+            const bool interrupted = npc.hostile || npc.actionLockedByAi
+                    || (world.Has<Health>(record.entity) && IsDepleted(world.Get<Health>(record.entity)))
+                    || (world.Has<NpcCombatState>(record.entity) && world.Get<NpcCombatState>(record.entity).dead)
+                    || (world.Has<NpcAiState>(record.entity)
+                            && world.Get<NpcAiState>(record.entity).awareness != NpcAwarenessState::Unaware);
+            if (interrupted || record.bodyTurn.status != NpcBodyTurnStatus::Playing) {
+                CancelNpcBodyTurn(runtime, record.entity, 0, "conversation return interrupted");
+                record.returningFromConversation = false;
+                npc.conversationHeld = false;
+            }
+        }
         if (npc.conversationHeld) {
             record.desiredVelocity = {};
             record.footstepEvent = false;
             record.footstepMovementActive = false;
             npc.action = NpcAction::Idle;
+            if (record.returningFromConversation
+                    && AdvanceNpcBodyTurn(record.bodyTurn, transform.yawRadians, dt)) {
+                record.returningFromConversation = false;
+                npc.conversationHeld = false;
+            }
             continue;
         }
         record.replanCooldownSeconds = std::max(
