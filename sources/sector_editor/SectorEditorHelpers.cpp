@@ -669,6 +669,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::ReflectionProbe: return "Reflection Probe";
         case SectorEditorTool::Trigger: return "Trigger";
         case SectorEditorTool::LevelMarker: return "Level Marker";
+        case SectorEditorTool::Path: return "Path";
         case SectorEditorTool::SoundEmitter: return "Sound Emitter";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
@@ -690,6 +691,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
             || tool == SectorEditorTool::Ladder
             || tool == SectorEditorTool::AuthoringFogVolume
             || tool == SectorEditorTool::Trigger
+            || tool == SectorEditorTool::Path
             || tool == SectorEditorTool::LevelMarker
             || tool == SectorEditorTool::SoundEmitter
             || tool == SectorEditorTool::AuthoringMove;
@@ -734,6 +736,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringReflectionProbe: return "reflection probe";
         case SectorEditorPickKind::Trigger: return "trigger";
         case SectorEditorPickKind::LevelMarker: return "level marker";
+        case SectorEditorPickKind::Path: return "path";
         case SectorEditorPickKind::SoundEmitter: return "sound emitter";
     }
     return "unknown";
@@ -766,6 +769,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
             return target.id >= 0;
         case SectorEditorPickKind::None:
         case SectorEditorPickKind::AuthoringLine:
+        case SectorEditorPickKind::Path:
         case SectorEditorPickKind::AuthoringFaceAnchor:
             return false;
     }
@@ -795,6 +799,7 @@ int SectorEditorPickPriority(SectorEditorPickKind kind)
         case SectorEditorPickKind::StaticLight: return 6;
         case SectorEditorPickKind::AuthoringVertex: return 7;
         case SectorEditorPickKind::AuthoringLine: return 8;
+        case SectorEditorPickKind::Path: return 1;
         case SectorEditorPickKind::Trigger: return 9;
         case SectorEditorPickKind::AuthoringFaceAnchor: return 10;
         case SectorEditorPickKind::AuthoringFogVolume: return 11;
@@ -1186,6 +1191,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";
         case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place a runtime point light";
         case SectorEditorTool::DynamicSpotLight: return "Dynamic Spot: click inside a sector to place a runtime spot light";
+        case SectorEditorTool::Path: return "Path: click waypoints; Enter confirms; Esc/right click cancels";
         case SectorEditorTool::LevelMarker: return "Level Marker: click inside a sector to place a named entry or reference point";
         case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Select to move selected primitives";
     }

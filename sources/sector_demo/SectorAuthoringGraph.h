@@ -171,6 +171,8 @@ struct SectorAuthoringGraph {
     std::vector<SectorAuthoringReflectionProbe> reflectionProbes;
     std::vector<SectorAuthoringLevelMarker> levelMarkers;
     std::vector<SectorAuthoringPatrol> patrols;
+    std::vector<SectorAuthoringPath> paths;
+    int nextPathId = 1;
     std::vector<SectorAuthoringSoundEmitter> soundEmitters;
     std::vector<SectorAuthoringTrigger> triggers;
     std::vector<SectorAuthoringStructuralPrimitive> structuralPrimitives;
@@ -191,6 +193,7 @@ enum class SectorAuthoringObjectKind {
     ReflectionProbe,
     LevelMarker,
     Patrol,
+    Path,
     SoundEmitter,
     Trigger
     ,StructuralPrimitive

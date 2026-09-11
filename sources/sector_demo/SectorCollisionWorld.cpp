@@ -1,4 +1,5 @@
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorBoxSweep.h"
 
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
@@ -1972,6 +1973,50 @@ bool SectorCollisionWorld::SectorOverlapsFootprint(
         }
     }
     return false;
+}
+
+float SectorCollisionWorld::SweepFlatBox(Vector2 center, Vector2 axisX, Vector2 axisZ,
+        Vector2 half, float bottom, float top, float supportY, Vector2 delta) const
+{
+    return SweepFlatFootprint(center,axisX,axisZ,half,bottom,top,supportY,delta,-1.0f);
+}
+float SectorCollisionWorld::SweepFlatCircle(Vector2 center,float radius,float bottom,float top,
+        float supportY,Vector2 delta) const
+{
+    return SweepFlatFootprint(center,{1,0},{0,1},{radius,radius},bottom,top,supportY,delta,radius);
+}
+float SectorCollisionWorld::SweepFlatFootprint(Vector2 center, Vector2 axisX, Vector2 axisZ,
+        Vector2 half, float bottom, float top, float supportY, Vector2 delta, float circleRadius) const
+{
+    float fraction = 1.0f;
+    const int current = FindSectorContainingPoint(center);
+    const auto* sector = FindSector(current);
+    if (!sector || std::abs(sector->heights.floorZ - supportY) > 0.002f
+            || (sector->ceilingSolid && sector->heights.ceilingZ < top - 0.001f)
+            || bottom < supportY - 0.002f) return 0;
+    const auto sweep = [&](const Vector2* points,size_t count) {
+        return circleRadius >= 0 ? SweepSectorCirclePolygon(center,circleRadius,delta,points,count)
+                : SweepSectorBoxPolygon(center,axisX,axisZ,half,delta,points,count);
+    };
+    for (const auto& s : sectors) {
+        for (const auto& edge : s.edges) {
+            const auto* neighbor = FindSector(edge.neighborSectorId);
+            const bool blocked = edge.kind == SectorCollisionEdgeKind::BlockingWall || edge.blocksPlayer
+                    || !neighbor || std::abs(neighbor->heights.floorZ - supportY) > 0.002f
+                    || (neighbor->ceilingSolid && neighbor->heights.ceilingZ < top - 0.001f)
+                    || neighbor->heights.floorZ > bottom + 0.001f;
+            if (!blocked) continue;
+            // Ignore disconnected floors whose vertical interval cannot affect us.
+            if (s.heights.floorZ >= top || (s.ceilingSolid && s.heights.ceilingZ <= bottom)) continue;
+            const Vector2 points[]{edge.a,edge.b};
+            fraction = std::min(fraction, sweep(points,2));
+        }
+    }
+    for (const auto& primitive : structuralPrimitives) {
+        if (primitive.maximumY <= bottom + 0.001f || primitive.minimumY >= top - 0.001f) continue;
+        fraction = std::min(fraction, sweep(primitive.projectedHull.data(),primitive.projectedHull.size()));
+    }
+    return fraction;
 }
 
 } // namespace game

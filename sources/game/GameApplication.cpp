@@ -514,6 +514,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
                     engine::ConsumeEvent(event);
                 });
         if (menuRequested) {
+            gameSession.ReleaseDraggedProp(context);
             gameSession.Pause();
             context.audio.PauseAll(context.assets);
             OpenApplicationMenu(flow, ApplicationScreen::Game);

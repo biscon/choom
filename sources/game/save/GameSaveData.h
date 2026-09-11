@@ -62,6 +62,8 @@ struct GameSavePropState {
     bool useConsumed = false;
     bool hasAnimator = false;
     GameSaveAnimatorState animator;
+    int dragPathEditorId = 0;
+    float dragDistanceWorld = 0.0f;
 };
 
 struct GameSaveNpcState {

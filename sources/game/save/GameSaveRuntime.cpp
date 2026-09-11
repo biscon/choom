@@ -1,4 +1,5 @@
 #include "game/save/GameSaveRuntime.h"
+#include "sector_demo/SectorPropDragging.h"
 
 #include "engine/assets/ModelAssets.h"
 #include "engine/ecs/World.h"
@@ -323,6 +324,11 @@ GameSaveLevelState CaptureGameSaveLevelState(
             saved.emissiveScale = prop.emissiveScale;
             saved.opacity = prop.opacity;
             saved.useConsumed = prop.useConsumed;
+            if (world.Has<SectorPropDrag>(entity)) {
+                const auto& drag = world.Get<SectorPropDrag>(entity);
+                saved.dragPathEditorId = drag.settings.pathEditorId;
+                saved.dragDistanceWorld = drag.distanceWorld;
+            }
             if (world.Has<engine::AnimatedModelAnimator>(entity)
                     && world.Has<engine::AnimatedModelInstance>(entity)) {
                 saved.hasAnimator = true;
@@ -406,6 +412,19 @@ void ApplyGameSaveLevelRuntimeState(
             prop.emissiveScale = saved.emissiveScale;
             prop.opacity = saved.opacity;
             prop.useConsumed = saved.useConsumed;
+            if (saved.dragPathEditorId > 0) {
+                if (world.Has<SectorPropDrag>(entity) && world.Has<SectorObjectTransform>(entity)
+                        && world.Get<SectorPropDrag>(entity).settings.pathEditorId == saved.dragPathEditorId) {
+                    auto& drag = world.Get<SectorPropDrag>(entity);
+                    if (const auto* path = FindSectorPath(map.paths,saved.dragPathEditorId)) {
+                        drag.distanceWorld = std::clamp(saved.dragDistanceWorld,0.0f,path->length);
+                        const auto p = EvaluateSectorPath(*path,drag.distanceWorld);
+                        auto& transform = world.Get<SectorObjectTransform>(entity);
+                        transform.position.x = p.x; transform.position.z = p.y;
+                        RefreshSectorMovedPropLighting(world,runtimeObjects,map,entity);
+                    }
+                } else TraceLog(LOG_WARNING,"Saved drag path no longer matches prop %d; using authored placement",saved.placedObjectId);
+            }
             if (saved.hasAnimator) ApplyAnimator(world, assets, entity, saved.animator);
         }
     }
@@ -545,6 +564,15 @@ void ApplyGameSaveLevelRuntimeState(
             trigger.remainingDelayMilliseconds = found->remainingDelayMilliseconds;
         }
     }
+    if (runtimeObjects.objectSectorLookupWorldValid)
+        UpdateSectorObjectCurrentSectorSystem(world,runtimeObjects.objectSectorLookupWorld);
+    UpdateSectorStaticModelColliderSystem(world,assets);
+    CollectSectorStaticModelColliders(world,runtimeObjects.staticModelColliders);
+    CollectSectorDynamicModelColliders(world,runtimeObjects.dynamicModelColliders);
+    runtimeObjects.physicalModelColliders = runtimeObjects.staticModelColliders;
+    runtimeObjects.physicalModelColliders.insert(runtimeObjects.physicalModelColliders.end(),
+            runtimeObjects.windowColliders.begin(),runtimeObjects.windowColliders.end());
+    scene.Navigation().UpdateDynamicObstacles(runtimeObjects.dynamicModelColliders,0.0f);
     UpdateSectorObjectBakedLightingSystem(
             world, runtimeObjects.objectLightProbes, &map);
     RefreshSectorDoorSpatialCaches(world, runtimeObjects);

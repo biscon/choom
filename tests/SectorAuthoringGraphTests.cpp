@@ -1,4 +1,7 @@
 #include "sector_demo/SectorAuthoringGraph.h"
+#include "sector_editor/tools/path/SectorEditorPathTool.h"
+#include "engine/input/Input.h"
+#include "sector_editor/services/paths/SectorEditorPathEditingService.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
@@ -15651,8 +15654,160 @@ void TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio()
           "Sound Emitter accepts an intentionally unassigned audio ID");
 }
 
+void TestPathClickCycleAndDragThreshold()
+{
+    using namespace game;
+    SectorEditorState state;
+    SectorEditorDocumentState document;
+    SectorAuthoringGraph graph;
+    InitializeEditorStateWithAuthoringGraph(state,document,graph,MakeAdjacentTwoRoomGraph());
+    state.currentTool = SectorEditorTool::Select;
+    SelectionState selection;
+    SectorEditorPathEditingState editing;
+    std::string status;
+    SectorEditorPathEditingService service({state,MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+            document.map.topologyMap,graph,MakeSectorEditorDerivationDocumentAccess(document.derivation),selection,editing,status});
+    editing.pending = {{1,16,16},{2,64,16}};
+    Check(service.Create(),"create click cycle fixture path");
+    if (!service.Selected()) return;
+    const int pathId = service.Selected()->editorId;
+    engine::Input input;
+    input.ReserveEvents(8);
+    SectorEditorToolContext context{state,state.currentTool,state.pendingAuthoringLine,
+            state.pendingAuthoringRectangle,state.pendingAuthoringInsertVertex,graph,selection,status,
+            document.derivation.authoringDerivationStatus,&input,{0,0,500,500}};
+    context.pathEditing = &service;
+    context.mapToScreen = [](Vector2 p) { return Vector2Scale(p,16); };
+    SectorTopologyCoordPoint snapped{16,16};
+    context.currentSnappedSectorPoint = [&]() { return SectorPoint{float(snapped.x),float(snapped.y)}; };
+    context.toTopologyCoordPoint = [](SectorPoint p,SectorTopologyCoordPoint &out,std::string &) {
+        out = {SectorCoord(p.x),SectorCoord(p.y)}; return true;
+    };
+    const auto release = [&](Vector2 screen) {
+        input.Events().clear();
+        engine::InputEvent event{};
+        event.type = engine::InputEventType::MouseButtonReleased;
+        event.mouseButton = {screen,MOUSE_LEFT_BUTTON};
+        input.Events().push_back(event);
+        event.type = engine::InputEventType::MouseClick;
+        event.mouseClick = {{16,16},screen,MOUSE_LEFT_BUTTON,false};
+        input.Events().push_back(event);
+    };
+    const auto revision = state.topologyRenderRevision;
+    for (Vector2 point : {Vector2{16,16},Vector2{18,18}})
+    {
+        Check(ArmSectorEditorPathMove(context,{16,16}),"path press arms movement");
+        Check(!editing.moving,"press alone does not begin a path edit");
+        release(point);
+        UpdateSectorEditorPathSelection(context);
+        Check(!input.Events()[1].handled && !editing.moveArmed && !editing.moving,
+              "stationary/jitter release reaches shared click cycle");
+        Check(state.topologyRenderRevision==revision && graph.paths[0].waypoints[0].x==16,
+              "click does not mutate path or invalidate cache");
+    }
+    std::vector<SectorEditorPickCandidate> candidates;
+    AppendSectorEditorPathPicks(graph,{16,16},context.mapToScreen,candidates);
+    candidates.push_back({{SectorEditorPickKind::RuntimeObject,99},0});
+    auto next = ChooseSectorEditorPickTarget(candidates,{SectorEditorPickKind::Path,pathId});
+    Check(next.kind==SectorEditorPickKind::RuntimeObject,"click on path cycles to underlying prop");
+    next = ChooseSectorEditorPickTarget(candidates,next);
+    Check(next.kind==SectorEditorPickKind::Path,"next click cycles back to path");
+    SelectSectorEditorPathPart(context,{16,16});
+    Check(editing.waypointId==1,"path selection resolves clicked waypoint");
+    for (float zoom : {1.0f,4.0f,16.0f})
+    {
+        candidates.clear();
+        const auto project = [zoom](Vector2 p) {return Vector2Scale(p,zoom);};
+        const Vector2 screen{zoom+8,zoom};
+        AppendSectorEditorPathPicks(graph,screen,project,candidates);
+        Check(candidates.size()==1,"path waypoint picking uses pixel tolerance at every zoom");
+    }
+    Check(ArmSectorEditorPathMove(context,{16,16}),"arm deliberate waypoint drag");
+    snapped = {32,16};
+    release({32,16});
+    UpdateSectorEditorPathSelection(context);
+    Check(input.Events()[1].handled && graph.paths[0].waypoints[0].x==32
+                  && state.topologyRenderRevision>revision,
+          "drag beyond threshold commits once and consumes release click");
+    snapped = {48,16};
+    Check(ArmSectorEditorPathMove(context,{48,16}),"arm whole path from segment");
+    Check(service.UpdateMoveArm({56,16}) && editing.waypointId==0,"segment drag crosses same threshold");
+    service.Move({64,32});service.Cancel();
+    Check(graph.paths[0].waypoints[0].x==32 && !editing.moveArmed && !editing.moving,
+          "cancelled drag preserves committed geometry");
+    Check(service.ArmMove(1,{32,16},{32,16}),"arm before selection change");
+    selection.selectedAuthoring = {};
+    UpdateSectorEditorPathSelection(context);
+    Check(!editing.moveArmed,"selection change clears armed drag");
+}
+
+void TestAuthoredPaths() {
+    using namespace game;
+    SectorEditorState state;SectorEditorDocumentState document;SectorAuthoringGraph graph;
+    InitializeEditorStateWithAuthoringGraph(state,document,graph,MakeAdjacentTwoRoomGraph());
+    SelectionState selection;SectorEditorPathEditingState editing;std::string status;
+    SectorEditorPathEditingService service({state,MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+            document.map.topologyMap,graph,MakeSectorEditorDerivationDocumentAccess(document.derivation),selection,editing,status});
+    editing.pending={{1,16,16},{2,32,16},{3,48,32}};
+    const auto before=state.topologyRenderRevision;
+    Check(service.Create(),"path creation succeeds");
+    Check(state.topologyRenderRevision>before&&graph.paths.size()==1,"path creation invalidates display");
+    Check(service.Selected()!=nullptr,"path survives selection pruning");
+    if(!service.Selected())return;
+    const int id=service.Selected()->editorId;
+    editing.waypointId=2;
+    Check(service.BeginMove({32,16}),"path waypoint move starts");
+    service.Move({32,32});service.Cancel();
+    Check(graph.paths[0].waypoints[1].z==16,"cancel keeps authored waypoint");
+    Check(service.Insert(0,{24,16}),"insert path waypoint");
+    Check(service.Dissolve(),"dissolve inserted waypoint");
+    Check(service.Rename("cabinet_route"),"rename path");
+    SectorPlacedRuntimeObject prop;prop.id=1;prop.kind="dynamic_model";prop.dynamicModel.instanceId="cabinet";prop.dynamicModel.drag.pathEditorId=id;
+    document.map.topologyMap.runtimeObjects.push_back(prop);
+    Check(!service.Delete(),"assigned path cannot be deleted");
+    Check(service.Rename("cabinet_route_renamed"),"rename keeps numeric assignment");
+    Check(document.map.topologyMap.runtimeObjects[0].dynamicModel.drag.pathEditorId==id,"assignment stable on rename");
+    SectorAuthoringDocument saved;saved.graph=graph;saved.mapData=document.map.topologyMap;
+    saved.derivation=document.derivation.authoringDerivation;
+    std::string json,error;Check(SaveSectorAuthoringDocumentToJsonString(saved,json,&error),"serialize paths");
+    SectorAuthoringDocument loaded;Check(LoadSectorAuthoringDocumentFromJsonString(json,loaded,&error),"load paths");
+    Check(loaded.graph.paths.size()==1&&loaded.graph.paths[0].id=="cabinet_route_renamed","path identity round trips");
+    if(loaded.graph.paths.empty())return;
+    Check(loaded.graph.paths[0].waypoints[1].id==2,"waypoint identity round trips");
+    const auto hash=ComputeSectorLightmapSourceHash(document.map.topologyMap);
+    auto changed=document.map.topologyMap;
+    changed.paths[0].points.back().x+=1;
+    changed.runtimeObjects[0].dynamicModel.drag.speedWorld=2;
+    changed.runtimeObjects[0].dynamicModel.drag.movingSound="scrape";
+    Check(hash==ComputeSectorLightmapSourceHash(changed),"paths and drag settings excluded from lightmap hash");
+    const auto revision=state.topologyRenderRevision;
+    Check(!service.Rename("bad id"),"invalid name rejected");
+    Check(state.topologyRenderRevision==revision,"rejected path edit leaves cache revision unchanged");
+    editing.waypointId = 0;
+    Check(service.BeginMove({16,16}), "whole path move starts");
+    service.Move({32,32});
+    Check(service.FinishMove(), "whole path move commits");
+    Check(graph.paths[0].waypoints.front().x == 32
+                  && graph.paths[0].waypoints.back().z == 48,
+          "whole path move translates every waypoint");
+    Check(state.topologyRenderRevision > revision, "committed move invalidates cache");
+    const auto &movedProp = document.map.topologyMap.runtimeObjects.front();
+    const auto &movedPath = document.map.topologyMap.paths.front();
+    Check(movedProp.position.x == SectorCoordToVisibleAuthoring(32)
+                  && movedProp.position.z == SectorCoordToVisibleAuthoring(32)
+                  && movedPath.points.front().x == SectorCoordToWorldPosition2(32,32).x,
+          "path move synchronizes assigned endpoint and compiled runtime path");
+    document.map.topologyMap.runtimeObjects.clear();Check(service.Delete(),"unused path deletes");
+    editing.pending={{1,16,16},{2,32,16}};Check(service.Create(),"recreate path");
+    Check(graph.paths[0].editorId!=id,"deleted path numeric identity not reused");
+    editing.waypointId=graph.paths[0].waypoints[0].id;
+    Check(!service.Dissolve(),"cannot dissolve below two points");
+}
+
 int main()
 {
+    TestPathClickCycleAndDragThreshold();
+    TestAuthoredPaths();
     TestLevelMarkerAuthoringSelectionCacheAndPicking();
     TestLevelMarkerModulesStayIndependentOfSectorEditor();
     TestAuthoringFogVolumeDerivationAndUnresolvedWarning();

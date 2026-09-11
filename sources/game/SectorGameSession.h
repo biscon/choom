@@ -92,6 +92,7 @@ public:
             engine::FontHandle smallFont,
             engine::FontHandle usePromptFont);
     bool HandleEscape();
+    void ReleaseDraggedProp(engine::EngineContext& context) { EndSectorPropDrag(context,controller.propDrag); }
     bool IsInventoryOpen() const { return inventoryUi.open; }
 
     bool RebuildFromMap(

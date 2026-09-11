@@ -38,6 +38,7 @@ struct SectorUseTarget {
     float distance = 0.0f;
     int ladderPrimitiveId = -1;
     SectorLadderEndpoint ladderEndpoint = SectorLadderEndpoint::Bottom;
+    bool draggable = false;
 };
 
 struct SectorUseHighlight {

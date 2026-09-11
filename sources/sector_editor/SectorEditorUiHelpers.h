@@ -61,6 +61,7 @@ inline constexpr SectorEditorTool SectorEditorMapTools[] = {
         SectorEditorTool::DuctAccess,
         SectorEditorTool::Trigger,
         SectorEditorTool::LevelMarker,
+        SectorEditorTool::Path,
         SectorEditorTool::SoundEmitter,
         SectorEditorTool::AuthoringFogVolume,
         SectorEditorTool::ReflectionProbe,

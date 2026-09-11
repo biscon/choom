@@ -2744,6 +2744,17 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
         }
     }
 
+    std::set<int> pathIds;
+    std::set<std::string> pathNames;
+    for (const auto& path : graph.paths) {
+        std::string error;
+        if (!ValidateSectorPath(path, error) || !pathIds.insert(path.editorId).second
+                || !pathNames.insert(path.id).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::Path, path.editorId,
+                    error.empty() ? "Duplicate path identity" : error);
+        }
+    }
+
     std::set<int> patrolEditorIds;
     std::set<std::string> patrolReferenceIds;
     for (const SectorAuthoringPatrol& patrol : graph.patrols) {
@@ -3338,6 +3349,8 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
         compiled.yawRadians = marker.orientationDegrees * DegreesToRadians;
         result.topology.levelMarkers.push_back(std::move(compiled));
     }
+
+    for (const auto& path : graph.paths) result.topology.paths.push_back(CompileSectorPath(path));
 
     result.topology.patrols.reserve(graph.patrols.size());
     for (const SectorAuthoringPatrol& patrol : graph.patrols) {

@@ -423,6 +423,8 @@ Json LevelJson(const GameSaveLevelState& level)
         Json json{{"placedObjectId", value.placedObjectId}, {"instanceId", value.instanceId},
                 {"emissiveScale", value.emissiveScale}, {"opacity", value.opacity},
                 {"useConsumed", value.useConsumed}, {"hasAnimator", value.hasAnimator}};
+        if (value.dragPathEditorId > 0) json["drag"] = Json{
+                {"pathEditorId", value.dragPathEditorId}, {"distanceWorld", value.dragDistanceWorld}};
         if (value.hasAnimator) json["animator"] = AnimatorJson(value.animator);
         root["props"].push_back(std::move(json));
     }
@@ -523,6 +525,12 @@ GameSaveLevelState ReadLevel(const Json& root)
         state.emissiveScale = value.value("emissiveScale", 1.0f);
         state.opacity = value.value("opacity", 1.0f);
         state.useConsumed = value.value("useConsumed", false);
+        if (value.contains("drag")) {
+            state.dragPathEditorId = value.at("drag").at("pathEditorId").get<int>();
+            state.dragDistanceWorld = value.at("drag").at("distanceWorld").get<float>();
+            RequireFinite(state.dragDistanceWorld,"prop.drag.distanceWorld");
+            Require(state.dragPathEditorId > 0 && state.dragDistanceWorld >= 0,"Invalid prop drag progress");
+        }
         state.hasAnimator = value.value("hasAnimator", false);
         if (state.hasAnimator) state.animator = ReadAnimator(value.at("animator"), "prop.animator");
         Require(state.placedObjectId > 0

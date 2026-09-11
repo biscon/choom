@@ -44,6 +44,9 @@ bool BuildSectorStaticModelCollider(
         float scale,
         SectorStaticModelCollider& outCollider);
 
+float SweepSectorPlayerAgainstModel(Vector2 start, Vector2 delta, float radius,
+        float bottom, float top, const SectorStaticModelCollider& collider);
+
 bool UpdateSectorStaticModelColliderSystem(
         engine::World& world,
         engine::AssetManager& assets);

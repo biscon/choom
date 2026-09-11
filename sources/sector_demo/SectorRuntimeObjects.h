@@ -346,6 +346,9 @@ void UpdateSectorRuntimeObjects(
         const SectorDoorPlayerObstacle* playerObstacle = nullptr,
         const std::vector<SectorDoorPlayerObstacle>* doorObstacles = nullptr);
 
+void RefreshSectorMovedPropLighting(engine::World& world, SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map, engine::Entity entity);
+
 void UpdateSectorObjectCurrentSectorSystem(
         engine::World& world,
         const SectorCollisionWorld& collisionWorld);

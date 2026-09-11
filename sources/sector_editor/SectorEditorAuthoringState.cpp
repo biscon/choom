@@ -29,6 +29,7 @@ bool HasAuthoringGraphData(const SectorAuthoringGraph& graph)
             || !graph.fogVolumes.empty()
             || !graph.levelMarkers.empty()
             || !graph.patrols.empty()
+            || !graph.paths.empty()
             || !graph.soundEmitters.empty()
             || !graph.triggers.empty();
 }
@@ -1569,6 +1570,8 @@ bool IsSectorAuthoringSelectionTargetValid(
                 && target.triggerId == -1
                 && FindSectorAuthoringReflectionProbe(
                         graph, target.reflectionProbeId) != nullptr;
+    case SectorAuthoringSelectionKind::Path:
+        return std::any_of(graph.paths.begin(),graph.paths.end(),[&](const auto& path){return path.editorId==target.pathId;});
     case SectorAuthoringSelectionKind::LevelMarker:
         return target.lineId == -1
                 && target.vertexId == -1

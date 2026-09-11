@@ -1154,6 +1154,7 @@ bool SectorGameSession::StartNew(
                     ? "Could not build the game collision world"
                     : collision.sectorCollisionWorldWarning;
         }
+        EndSectorPropDrag(context, controller.propDrag);
         scene.Shutdown(context);
         topologyMap = SectorTopologyMap{};
         levelName.clear();
@@ -1272,6 +1273,7 @@ void SectorGameSession::Shutdown(
     if (running) {
         LeaveSectorFreeflyController();
     }
+    EndSectorPropDrag(context,controller.propDrag);
     scene.Shutdown(context);
     topologyMap = SectorTopologyMap{};
     controller = SectorEditorPreviewControllerState{};
@@ -1670,6 +1672,7 @@ void SectorGameSession::Update(
             &npcGameplay,
             SectorCutscenePlayerDoorHoldId(cutscene));
     if (IsDepleted(playerHealth)) {
+        EndSectorPropDrag(context,controller.propDrag);
         gameOver = true;
         UpdateSectorScriptConversationOwnership(context, scriptHost);
         if (dialogue.active) {
@@ -1794,6 +1797,20 @@ void SectorGameSession::Update(
                         controller.fpsControllerConfig,
                         context.world.Get<SectorObjectTransform>(scriptHost.conversation.npc).position,
                         collision.sectorCollisionWorldValid ? &collision.sectorCollisionWorld : nullptr, dt));
+    }
+    if (!engine::IsNull(controller.propDrag.entity)) {
+        if (gameplayInputCaptured || IsSectorLadderTraversalActive(controller.ladderTraversal)
+                || IsSectorDuctTraversalActive(controller.ductTraversal) || controller.liquidMovement.swimming)
+            EndSectorPropDrag(context,controller.propDrag);
+        else {
+            context.input.ForEachEvent(engine::InputEventType::KeyPressed,true,[&](engine::InputEvent& event) {
+                if (event.key.key == KEY_E) { EndSectorPropDrag(context,controller.propDrag,true); engine::ConsumeEvent(event); }
+            });
+            UpdateSectorPropDrag(context,topologyMap,objects,collision.sectorCollisionWorld,
+                    scene.NpcNavigation().collisionCylinders,controller.propDrag,controller.fpsControllerState,
+                    controller.fpsControllerConfig,input,dt);
+            scene.Navigation().UpdateDynamicObstacles(objects.dynamicModelColliders,0.0f);
+        }
     }
     UpdateSectorEditorGameplayPreview(
             context.world,
@@ -1984,6 +2001,7 @@ void SectorGameSession::Update(
     } else if (heldObjectUse.phase == ItemHeldUsePhase::Inactive
             && !inventoryUi.open && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active
             && !IsSectorLadderTraversalActive(controller.ladderTraversal)
+            && engine::IsNull(controller.propDrag.entity)
             && (controller.ductTraversal.phase
                             == SectorDuctTraversalPhase::Inactive
                     || controller.ductTraversal.phase
@@ -2120,6 +2138,12 @@ void SectorGameSession::Update(
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
                         && context.world.IsAlive(useTarget.entity)
                         && context.world.Has<SectorDynamicModel>(useTarget.entity)) {
+                    if (context.world.Has<SectorPropDrag>(useTarget.entity)) {
+                        if (!controller.liquidMovement.swimming && !IsSectorDuctTraversalActive(controller.ductTraversal)
+                                && BeginSectorPropDrag(context,topologyMap,controller.propDrag,useTarget.entity,controller.fpsControllerState))
+                            fpsPlayer.HolsterForTraversal();
+                        engine::ConsumeEvent(event); return;
+                    }
                     SectorDynamicModel& prop =
                             context.world.Get<SectorDynamicModel>(useTarget.entity);
                     const engine::ScriptCallOutcome outcome =
@@ -2219,7 +2243,7 @@ void SectorGameSession::Update(
     }
     ApplyPlayerPose(scene);
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
-        const bool weaponInputCaptured = gameplayInputCaptured || dialogue.active
+        const bool weaponInputCaptured = !engine::IsNull(controller.propDrag.entity) || gameplayInputCaptured || dialogue.active
                 || !cutscene.controlsEnabled || scriptHost.conversation.active
                 || IsSectorLadderTraversalActive(
                         controller.ladderTraversal)
@@ -2525,8 +2549,8 @@ void SectorGameSession::RenderHud(
             DrawSectorUsePrompt(
                     playableViewport,
                     assets.GetFont(usePromptFont),
-                    usePromptTitle.data(),
-                    useTarget.kind == SectorUseTargetKind::Npc ? ""
+                    !engine::IsNull(controller.propDrag.entity) ? "E: Release - W/S: Push/Pull" : usePromptTitle.data(),
+                    !engine::IsNull(controller.propDrag.entity) ? "" : useTarget.draggable ? "Drag" : useTarget.kind == SectorUseTargetKind::Npc ? ""
                             : useTarget.kind == SectorUseTargetKind::Item ? "Take" : "Use");
         }
     }

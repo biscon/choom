@@ -12737,8 +12737,11 @@ void TestNpcPatrolPlaybackModes()
           "per-instance script policy permanently stops patrol for the session");
 }
 
+void RunSectorPropDraggingTests();
+
 int main()
 {
+    RunSectorPropDraggingTests();
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
     TestNpcPatrolWaypointFacing();

@@ -506,6 +506,8 @@ if(BUILD_TESTING)
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
+            sources/sector_editor/services/paths/SectorEditorPathEditingService.cpp
+            sources/sector_editor/tools/path/SectorEditorPathTool.cpp
             sources/sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.cpp
             sources/sector_editor/services/triggers/SectorEditorTriggerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
@@ -543,6 +545,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorPropDragging.cpp
             sources/sector_demo/SectorSwingDoorCatalog.cpp
             sources/sector_demo/SectorStaticModelCollision.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -735,6 +738,12 @@ if(BUILD_TESTING)
     target_link_libraries(sector_fps_controller_tests PRIVATE raylib)
     add_test(NAME sector_fps_controller COMMAND sector_fps_controller_tests)
 
+    add_executable(sector_path_math_tests tests/SectorPathMathTests.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp)
+    target_include_directories(sector_path_math_tests PRIVATE sources)
+    target_link_libraries(sector_path_math_tests PRIVATE raylib)
+    add_test(NAME sector_path_math COMMAND sector_path_math_tests)
+
     add_executable(sector_ladder_interaction_tests
             tests/SectorLadderInteractionTests.cpp
             sources/sector_demo/SectorLadderInteraction.cpp
@@ -752,6 +761,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
+            tests/SectorPropDraggingTests.cpp
             tests/SectorScriptBindingTests.cpp
             sources/game/items/ItemInventory.cpp
             tests/SectorDialogueTests.cpp
@@ -824,6 +834,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDuctInteraction.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorPropDragging.cpp
             sources/sector_demo/SectorUseInteraction.cpp
             sources/sector_demo/renderer/SectorImpactParticleSystem.cpp
             sources/sector_demo/SectorSwingDoorCatalog.cpp

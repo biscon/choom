@@ -247,8 +247,24 @@ void IncompatibleVersionIsReportedPerSlot()
 
 } // namespace
 
+void DragProgressRoundTrips() {
+    auto save=MakeSave();auto& prop=save.levels[0].props[0];
+    prop.dragPathEditorId=8;prop.dragDistanceWorld=3.125f;
+    std::string json,error;assert(game::SerializeGameSave(save,json,error));
+    game::GameSaveData restored;assert(game::DeserializeGameSave(json,restored,error));
+    assert(restored.levels[0].props[0].dragPathEditorId==8);
+    assert(restored.levels[0].props[0].dragDistanceWorld==3.125f);
+    auto parsed=nlohmann::ordered_json::parse(json);
+    parsed["levels"][0]["props"][0].erase("drag");
+    assert(game::DeserializeGameSave(parsed.dump(),restored,error));
+    assert(restored.levels[0].props[0].dragPathEditorId==0);
+    parsed["levels"][0]["props"][0]["drag"]={{"pathEditorId",8},{"distanceWorld",-1}};
+    assert(!game::DeserializeGameSave(parsed.dump(),restored,error));
+}
+
 int main()
 {
+    DragProgressRoundTrips();
     InventorySourcesRoundTripAndValidate();
     SerializationRoundTripsStableState();
     FlashlightStateIsBackwardCompatible();

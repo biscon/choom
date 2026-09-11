@@ -1,4 +1,5 @@
 #include "sector_demo/SectorUseInteraction.h"
+#include "sector_demo/SectorPropDragging.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/assets/FontAssets.h"
@@ -99,7 +100,25 @@ bool IsVisible(
     return !hit.hit || hit.distance + UseOcclusionTolerance >= distance;
 }
 
+bool HiddenByDraggableProp(engine::World& world, engine::Entity entity, Vector3 eye, Vector3 targetPosition, float distance)
+{
+    bool hidden = false;
+    world.ForEach<SectorPropDrag, SectorStaticModelCollider>([&](engine::Entity blocker,
+            const SectorPropDrag&, const SectorStaticModelCollider& box) {
+        if (blocker == entity || !box.resolved || distance <= UseOcclusionTolerance) return;
+        const Vector2 relative{eye.x-box.center.x,eye.z-box.center.y};
+        const Vector2 delta{targetPosition.x-eye.x,targetPosition.z-eye.z};
+        const Ray ray{{Vector2DotProduct(relative,box.axisX),eye.y,Vector2DotProduct(relative,box.axisZ)},
+                {Vector2DotProduct(delta,box.axisX)/distance,(targetPosition.y-eye.y)/distance,Vector2DotProduct(delta,box.axisZ)/distance}};
+        const auto hit = GetRayCollisionBox(ray,{{-box.halfExtents.x,box.bottom,-box.halfExtents.y},
+                {box.halfExtents.x,box.top,box.halfExtents.y}});
+        if (hit.hit && hit.distance + UseOcclusionTolerance < distance) hidden = true;
+    });
+    return hidden;
+}
+
 void ConsiderTarget(
+        engine::World& world,
         engine::Entity entity,
         SectorUseTargetKind kind,
         Vector3 targetPosition,
@@ -119,6 +138,7 @@ void ConsiderTarget(
             || !IsVisible(collisionWorld, eye, targetPosition, distance)) {
         return;
     }
+    if (HiddenByDraggableProp(world,entity,eye,targetPosition,distance)) return;
     const bool better = best.kind == SectorUseTargetKind::None
             || facing > best.facingDot + 0.0001f
             || (std::fabs(facing - best.facingDot) <= 0.0001f
@@ -127,6 +147,7 @@ void ConsiderTarget(
                                     && entity.index < best.entity.index)));
     if (!better) return;
     best = SectorUseTarget{entity, kind, targetPosition, facing, distance};
+    best.draggable = world.Has<SectorPropDrag>(entity);
 }
 
 bool CanTargetNpcWithObject(
@@ -434,6 +455,7 @@ SectorUseTarget FindSectorUseTarget(
                     }
                 }
                 ConsiderTarget(
+                        world,
                         entity,
                         SectorUseTargetKind::Item,
                         point,
@@ -444,17 +466,22 @@ SectorUseTarget FindSectorUseTarget(
                         best);
             });
 
-    if (includeDynamicProps) {
+    {
         world.ForEach<SectorDynamicModel, SectorObjectTransform, engine::AnimatedModelInstance>(
                 [&](engine::Entity entity,
                         SectorDynamicModel& prop,
                         SectorObjectTransform& transform,
                         engine::AnimatedModelInstance& instance) {
-                    if (prop.onUseScript.empty() || prop.useConsumed
+                    if ((!world.Has<SectorPropDrag>(entity) && (!includeDynamicProps || prop.onUseScript.empty() || prop.useConsumed))
                             || !std::isfinite(prop.useDistance)
                             || prop.useDistance <= 0.0f) {
                         return;
                     }
+                    if (world.Has<SectorPropDrag>(entity)
+                            && (!world.Has<SectorStaticModelCollider>(entity)
+                                || !world.Get<SectorStaticModelCollider>(entity).resolved
+                                || world.Get<SectorStaticModelCollider>(entity).failed
+                                || (topologyMap && !FindSectorPath(topologyMap->paths,world.Get<SectorPropDrag>(entity).settings.pathEditorId)))) return;
                     Vector3 point = transform.position;
                     if (assets != nullptr) {
                         const engine::ModelAsset* asset = assets->GetModelAsset(instance.model);
@@ -471,6 +498,7 @@ SectorUseTarget FindSectorUseTarget(
                         }
                     }
                     ConsiderTarget(
+                            world,
                             entity,
                             SectorUseTargetKind::DynamicProp,
                             point,
@@ -506,7 +534,7 @@ SectorUseTarget FindSectorUseTarget(
                 if (runtimeObjects && collisionWorld
                         && !HasNpcLineOfSight(*collisionWorld, runtimeObjects->dynamicDoorColliders,
                                 runtimeObjects->physicalModelColliders, eyePosition, point)) return;
-                ConsiderTarget(entity, SectorUseTargetKind::Npc, point, npc.useDistance,
+                ConsiderTarget(world, entity, SectorUseTargetKind::Npc, point, npc.useDistance,
                         eyePosition, forward, collisionWorld, best);
             });
 
@@ -531,6 +559,7 @@ SectorUseTarget FindSectorUseTarget(
                         std::clamp(eyePosition.y, minimumY, maximumY),
                         pointXZ.y};
                 ConsiderTarget(
+                        world,
                         entity,
                         SectorUseTargetKind::Door,
                         point,
@@ -563,7 +592,7 @@ SectorUseTarget FindSectorUseTarget(
                         std::clamp(eyePosition.y,
                                 access.openingBottom, access.openingTop),
                         closestXZ.y};
-                ConsiderTarget(entity, SectorUseTargetKind::DuctAccess,
+                ConsiderTarget(world, entity, SectorUseTargetKind::DuctAccess,
                         point, ductInteractionDistanceWorld, eyePosition,
                         forward, collisionWorld, best);
             });
@@ -628,7 +657,8 @@ SectorUseTarget FindSectorUseTarget(
                                 targetDistance)) {
                     continue;
                 }
-                const bool better = best.kind == SectorUseTargetKind::None
+                if (HiddenByDraggableProp(world,engine::NullEntity(),eyePosition,target,targetDistance)) continue;
+                    const bool better = best.kind == SectorUseTargetKind::None
                         || facing > best.facingDot + 0.0001f
                         || (std::fabs(facing - best.facingDot) <= 0.0001f
                                 && distance < best.distance - 0.0001f)

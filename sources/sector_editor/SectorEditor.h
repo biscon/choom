@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_editor/services/paths/SectorEditorPathEditingService.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/EngineContext.h"
@@ -655,6 +656,8 @@ private:
     ReflectionProbeEditingUiState reflectionProbeEditingUiState;
     std::optional<SectorEditorAuthoringFogVolumeEditingService> fogVolumeEditingService;
     std::optional<SectorEditorReflectionProbeEditingService> reflectionProbeEditingService;
+    SectorEditorPathEditingState pathEditingState;
+    std::optional<SectorEditorPathEditingService> pathEditingService;
     LevelMarkerEditingState levelMarkerEditingState;
     LevelMarkerEditingUiState levelMarkerEditingUiState;
     SectorEditorAuthoringFaceMergeState authoringFaceMergeState;

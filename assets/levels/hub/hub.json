@@ -6748,6 +6748,9 @@
       "dynamicModel": {
         "instanceId": "office_bed",
         "useTitle": "Bed",
+        "drag": {
+          "pathEditorId": 1
+        },
         "modelPath": "assets/models/retro_lowpoly_bed.glb",
         "heightOffsetWorld": 0.31000006198883057,
         "collision": true,
@@ -6755,7 +6758,7 @@
         "shadowMode": "dynamic"
       },
       "position": [
-        -105.68003845214844,
+        -105.0,
         0.0,
         71.0
       ],
@@ -12705,7 +12708,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "357335b43472fda1",
+    "sourceHash": "7d74fa5a07415800",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -12725,7 +12728,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "357335b43472fda1",
+      "sourceHash": "7d74fa5a07415800",
       "count": 3917,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -12751,9 +12754,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "357335b43472fda1",
-      "modelCount": 117,
-      "objectCount": 349,
+      "sourceHash": "7d74fa5a07415800",
+      "modelCount": 116,
+      "objectCount": 348,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
@@ -43113,18 +43116,38 @@
       {
         "editorId": 22,
         "id": "intro_marker_3",
-        "x": -1632,
+        "x": -1408,
         "y": 0.0,
-        "z": 832,
-        "orientationDegrees": 90.0
+        "z": 576,
+        "orientationDegrees": 0.0
       },
       {
         "editorId": 23,
         "id": "intro_marker_4",
-        "x": -1440,
+        "x": -1408,
         "y": 0.0,
-        "z": 832,
-        "orientationDegrees": -90.0
+        "z": 912,
+        "orientationDegrees": 180.0
+      }
+    ],
+    "nextPathId": 2,
+    "paths": [
+      {
+        "editorId": 1,
+        "id": "bed_path",
+        "nextWaypointId": 3,
+        "waypoints": [
+          {
+            "id": 1,
+            "x": -1680,
+            "z": 1136
+          },
+          {
+            "id": 2,
+            "x": -1680,
+            "z": 896
+          }
+        ]
       }
     ],
     "patrols": [

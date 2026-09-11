@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sector_demo/SectorPaths.h"
+
 #include "game/items/ItemSourceQuantity.h"
 
 #include "sector_demo/SectorLightmapTypes.h"
@@ -216,6 +218,7 @@ enum class SectorDynamicModelShadowMode {
 };
 
 struct SectorPlacedDynamicModel {
+    SectorPropDragSettings drag;
     std::string modelPath;
     std::string instanceId;
     std::string useTitle = "object";
@@ -463,6 +466,7 @@ struct SectorTopologyMap {
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     std::vector<SectorCompiledLevelMarker> levelMarkers;
     std::vector<SectorCompiledPatrol> patrols;
+    std::vector<SectorCompiledPath> paths;
     std::vector<SectorCompiledSoundEmitter> soundEmitters;
     std::vector<SectorCompiledTrigger> triggers;
     std::vector<SectorCompiledStructuralPrimitive> compiledStructuralPrimitives;

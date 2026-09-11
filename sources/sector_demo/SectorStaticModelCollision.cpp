@@ -470,6 +470,15 @@ bool BuildSectorStaticModelCollider(
     return outCollider.resolved;
 }
 
+float SweepSectorPlayerAgainstModel(Vector2 start, Vector2 delta, float radius,
+        float bottom, float top, const SectorStaticModelCollider& collider)
+{
+    if (bottom >= collider.top - 0.001f || top <= collider.bottom + 0.001f) return 1.0f;
+    float time = 1.0f; Vector2 normal;
+    if (!SweepCircleAgainstCollider(start,delta,radius,collider,time,normal)) return 1.0f;
+    return std::clamp(time - 0.0001f/std::max(std::hypot(delta.x,delta.y),0.0001f),0.0f,1.0f);
+}
+
 bool UpdateSectorStaticModelColliderSystem(
         engine::World& world,
         engine::AssetManager& assets)

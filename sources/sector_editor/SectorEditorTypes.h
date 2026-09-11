@@ -44,6 +44,7 @@ enum class SectorEditorTool {
     ReflectionProbe,
     Trigger,
     LevelMarker,
+    Path,
     SoundEmitter,
     StaticLight,
     StaticSpotLight,

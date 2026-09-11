@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <limits>
 #include <set>
+#include <climits>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -1336,6 +1337,16 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
     model.onUseScript = ReadOptionalString(
             value, "onUseScript", context, model.onUseScript);
     model.singleUse = ReadOptionalBool(value, "singleUse", context, model.singleUse);
+    if (value.contains("drag")) {
+        const auto& drag = value.at("drag");
+        model.drag.pathEditorId = ReadInt(drag, "pathEditorId", context + ".drag");
+        if (model.drag.pathEditorId <= 0) Fail(context + ".drag.pathEditorId must be positive");
+        model.drag.startAtEnd = ReadOptionalBool(drag, "startAtEnd", context, false);
+        model.drag.speedWorld = ReadOptionalPositiveFloat(drag, "speedWorld", context, 0.5f);
+        model.drag.startSound = ReadOptionalString(drag, "startSound", context, "");
+        model.drag.movingSound = ReadOptionalString(drag, "movingSound", context, "");
+        model.drag.endSound = ReadOptionalString(drag, "endSound", context, "");
+    }
     model.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
             value, "rotationXDegrees", context, 0.0f));
     model.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
@@ -2634,6 +2645,17 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (model.useDistance != 1.5f) dynamicModel["useDistance"] = model.useDistance;
             if (!model.onUseScript.empty()) dynamicModel["onUseScript"] = model.onUseScript;
             if (model.singleUse) dynamicModel["singleUse"] = true;
+            if (model.drag.pathEditorId > 0) {
+                if (!std::isfinite(model.drag.speedWorld) || model.drag.speedWorld <= 0)
+                    Fail(context + ".dynamicModel.drag.speedWorld must be positive and finite");
+                Json drag{{"pathEditorId", model.drag.pathEditorId}};
+                if (model.drag.startAtEnd) drag["startAtEnd"] = true;
+                if (model.drag.speedWorld != 0.5f) drag["speedWorld"] = model.drag.speedWorld;
+                if (!model.drag.startSound.empty()) drag["startSound"] = model.drag.startSound;
+                if (!model.drag.movingSound.empty()) drag["movingSound"] = model.drag.movingSound;
+                if (!model.drag.endSound.empty()) drag["endSound"] = model.drag.endSound;
+                dynamicModel["drag"] = std::move(drag);
+            }
             if (!model.modelPath.empty()) dynamicModel["modelPath"] = model.modelPath;
             if (rotationXDegrees != 0.0f) dynamicModel["rotationXDegrees"] = rotationXDegrees;
             if (rotationZDegrees != 0.0f) dynamicModel["rotationZDegrees"] = rotationZDegrees;
@@ -4802,6 +4824,28 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    graph.nextPathId = value.value("nextPathId", 1);
+    if (value.contains("paths")) {
+        if (!value.at("paths").is_array()) Fail("authoringGraph.paths must be an array");
+        for (const auto& p : value.at("paths")) {
+            SectorAuthoringPath path;
+            path.editorId = ReadInt(p, "editorId", "path");
+            path.id = ReadString(p, "id", "path");
+            if (!p.at("waypoints").is_array()) Fail("path.waypoints must be an array");
+            for (const auto& w : p.at("waypoints")) {
+                path.waypoints.push_back({ReadInt(w, "id", "waypoint"),
+                        ReadCoord(w, "x", "waypoint"), ReadCoord(w, "z", "waypoint")});
+                if (path.waypoints.back().id >= INT_MAX) Fail("Waypoint identity exhausted");
+                path.nextWaypointId = std::max(path.nextWaypointId, path.waypoints.back().id + 1);
+            }
+            path.nextWaypointId = std::max(path.nextWaypointId, p.value("nextWaypointId", 1));
+            std::string error;
+            if (!ValidateSectorPath(path, error)) Fail(error);
+            if (path.editorId >= INT_MAX) Fail("Path identity exhausted");
+            graph.nextPathId = std::max(graph.nextPathId, path.editorId + 1);
+            graph.paths.push_back(std::move(path));
+        }
+    }
     const auto patrolsIt = value.find("patrols");
     if (patrolsIt != value.end()) {
         if (!patrolsIt->is_array()) {
@@ -5421,6 +5465,17 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         }
     }
 
+    if (graph.nextPathId > 1) graphJson["nextPathId"] = graph.nextPathId;
+    if (!graph.paths.empty()) {
+        graphJson["paths"] = Json::array();
+        for (const auto& path : graph.paths) {
+            Json p{{"editorId", path.editorId}, {"id", path.id},
+                    {"nextWaypointId", path.nextWaypointId}, {"waypoints", Json::array()}};
+            for (const auto& w : path.waypoints)
+                p["waypoints"].push_back(Json{{"id", w.id}, {"x", w.x}, {"z", w.z}});
+            graphJson["paths"].push_back(std::move(p));
+        }
+    }
     if (!graph.patrols.empty()) {
         const std::vector<SectorAuthoringValidationIssue> issues =
                 ValidateSectorAuthoringGraphReferences(graph);

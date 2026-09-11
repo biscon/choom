@@ -1,4 +1,5 @@
 #include "sector_editor/tools/placed_objects/SectorEditorDynamicModelInspector.h"
+#include "sector_editor/tools/placed_objects/SectorEditorPropDragInspector.h"
 
 #include "engine/components/AnimatedModel.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
@@ -32,9 +33,10 @@ const engine::AnimatedModelInstance* RuntimeModelInstance(
 
 float MeasureSectorEditorDynamicModelInspectorContentHeight(
         const SectorEditorPlacedObjectInspectorMeasureContext& context,
-        const SectorPlacedRuntimeObject&)
+        const SectorPlacedRuntimeObject& object)
 {
-    return 38.0f * 2.0f
+    return MeasureSectorEditorPropDragInspector(context.rowH,context.gap,object.dynamicModel.drag.pathEditorId>0)
+            + 38.0f * 2.0f
             + 48.0f * 19.0f
             + 8.0f * 16.0f
             + 70.0f
@@ -158,6 +160,8 @@ void DrawSectorEditorDynamicModelInspector(
     }
     y += rowH + gap;
 
+    DrawSectorEditorPropDragInspector(context,y);
+    object = context.editing.SelectedObject(); if (!object) return;
     const auto drawFloat = [&] (
             const char* id,
             const char* label,
@@ -189,6 +193,7 @@ void DrawSectorEditorDynamicModelInspector(
         y += rowH + gap;
     };
 
+    if (!object->dynamicModel.drag.pathEditorId) {
     drawFloat("sector_editor_dynamic_x", "Position X", object->position.x,
             context.uiState.xInput, [](auto& target, float value) {
                 if (target.kind != "dynamic_model" || target.position.x == value) return false;
@@ -200,6 +205,7 @@ void DrawSectorEditorDynamicModelInspector(
                 if (target.kind != "dynamic_model" || target.position.z == value) return false;
                 target.position.z = value; return true;
             });
+    }
     constexpr float radiansToDegrees = 180.0f / PI;
     constexpr float degreesToRadians = PI / 180.0f;
     object = context.editing.SelectedObject(); if (object == nullptr) return;
@@ -392,7 +398,7 @@ void DrawSectorEditorDynamicModelInspector(
                 return true;
             });
     object = context.editing.SelectedObject(); if (object == nullptr) return;
-    drawTextField(
+    if (!object->dynamicModel.drag.pathEditorId) drawTextField(
             "sector_editor_dynamic_on_use_script",
             "On Use",
             context.uiState.dynamicModelOnUseScriptBuffer,
@@ -420,7 +426,7 @@ void DrawSectorEditorDynamicModelInspector(
             100000.0f);
     object = context.editing.SelectedObject(); if (object == nullptr) return;
     bool singleUse = object->dynamicModel.singleUse;
-    if (engine::Checkbox(
+    if (!object->dynamicModel.drag.pathEditorId && engine::Checkbox(
                 context.ui, context.config, context.input, context.assets,
                 "sector_editor_dynamic_single_use",
                 Rectangle{0.0f, y, contentW, rowH},
@@ -439,7 +445,7 @@ void DrawSectorEditorDynamicModelInspector(
     y += rowH + gap;
     object = context.editing.SelectedObject(); if (object == nullptr) return;
     bool collision = object->dynamicModel.collision;
-    if (engine::Checkbox(context.ui, context.config, context.input, context.assets,
+    if (!object->dynamicModel.drag.pathEditorId && engine::Checkbox(context.ui, context.config, context.input, context.assets,
                 "sector_editor_dynamic_collision", Rectangle{0.0f, y, contentW, rowH},
                 context.font, "Collision", collision)) {
         context.editing.MutateSelected("Updated dynamic prop collision", [collision](auto& target) {

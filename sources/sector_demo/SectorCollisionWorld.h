@@ -147,6 +147,12 @@ public:
             Vector3 origin,
             Vector3 direction,
             float maximumDistance) const;
+    // Flat-ground kinematic prop query; ordinary actor movement is unchanged.
+    float SweepFlatBox(Vector2 center, Vector2 axisX, Vector2 axisZ,
+            Vector2 halfExtents, float bottom, float top, float supportY,
+            Vector2 delta) const;
+    float SweepFlatCircle(Vector2 center, float radius, float bottom, float top,
+            float supportY, Vector2 delta) const;
     bool AllowsPrismPlacement(
             Vector2 center,
             float radius,
@@ -158,6 +164,9 @@ public:
             int ignoredSupportingStructuralPrimitiveId = -1) const;
 
 private:
+    float SweepFlatFootprint(Vector2 center, Vector2 axisX, Vector2 axisZ,
+            Vector2 half, float bottom, float top, float supportY, Vector2 delta,
+            float circleRadius) const;
     bool SectorContainsPoint(const SectorCollisionSector& sector, Vector2 xz) const;
     bool SectorOverlapsFootprint(
             const SectorCollisionSector& sector,

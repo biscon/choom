@@ -1,4 +1,5 @@
 #include "sector_demo/SectorSceneRuntime.h"
+#include "sector_demo/SectorPropDragging.h"
 
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorAudioOcclusion.h"
@@ -945,6 +946,11 @@ void SectorSceneRuntime::BeginLevelAudio(
 
 void SectorSceneRuntime::BindRuntimeObjectAudio(engine::World& world)
 {
+    world.ForEach<SectorPropDrag>([this](engine::Entity, SectorPropDrag& drag) {
+        drag.startSound = FindLevelSound(drag.settings.startSound);
+        drag.movingSound = FindLevelSound(drag.settings.movingSound);
+        drag.endSound = FindLevelSound(drag.settings.endSound);
+    });
     world.ForEach<SectorDoor, SectorDoorAudio>(
             [this](engine::Entity, SectorDoor&, SectorDoorAudio& audio) {
                 audio.openSound = FindLevelSound(audio.openSoundId);
