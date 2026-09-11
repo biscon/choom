@@ -14,6 +14,7 @@
 #include "game/PlayerFlashlight.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/dialogue/SectorDialogue.h"
+#include "game/dialogue/DialogueCameraIdle.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
 #include "game/save/GameSaveData.h"
@@ -65,6 +66,7 @@ public:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle usePromptFont,
+            engine::FontHandle dialogueFont,
             Rectangle playableViewport) const;
     void RenderNavigationDebugWorld(const SectorSceneRuntime& scene) const;
     void RenderAiDebugWorld(
@@ -287,6 +289,7 @@ private:
     float oxygenHudAlpha = 0.0f;
     PlayerWindedCameraState windedCamera;
     PlayerLowHealthCameraState lowHealthCamera;
+    DialogueCameraIdleState dialogueCameraIdle;
     PlayerHitCameraState hitCamera;
     PlayerBreathingAudioRuntime breathingAudio;
     PlayerHeartbeatAudioRuntime heartbeatAudio;

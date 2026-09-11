@@ -9,13 +9,32 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <unordered_set>
 
 namespace game {
 namespace {
 constexpr size_t MaximumLabelBytes = 8192;
-constexpr float Padding = 12.0f;
+constexpr float Padding = 20.0f;
+constexpr float RowPaddingX = 12.0f;
+constexpr float RowPaddingY = 8.0f;
+constexpr float ScrollbarSpace = 8.0f;
+constexpr float RowRadius = 8.0f;
+
+float Roundness(Rectangle bounds, float radius)
+{
+    return std::min(1.0f, 2.0f * radius / std::max(1.0f, std::min(bounds.width, bounds.height)));
+}
+
+bool PointInRoundedRow(Vector2 point, Rectangle bounds)
+{
+    if (!CheckCollisionPointRec(point, bounds)) return false;
+    const float radius = std::min(RowRadius, std::min(bounds.width, bounds.height) * 0.5f);
+    const float dx = point.x - std::clamp(point.x, bounds.x + radius, bounds.x + bounds.width - radius);
+    const float dy = point.y - std::clamp(point.y, bounds.y + radius, bounds.y + bounds.height - radius);
+    return dx * dx + dy * dy <= radius * radius;
+}
 
 bool AdvancePress(const engine::InputEvent& event)
 {
@@ -55,7 +74,7 @@ float GlyphWidth(const Font& font, int codepoint, float size)
 void ClampScroll(SectorDialogueRuntime& runtime)
 {
     runtime.scroll = std::clamp(runtime.scroll, 0.0f,
-            std::max(0.0f, runtime.contentHeight - runtime.panel.height + 2 * Padding));
+            std::max(0.0f, runtime.contentHeight - runtime.contentBounds.height));
 }
 }
 
@@ -173,16 +192,35 @@ void LayoutSectorDialogue(SectorDialogueRuntime& runtime, const Font& font,
     if (rebuild) {
         runtime.rows.clear();
         runtime.lines.clear();
-        runtime.lineHeight = static_cast<float>(pixelSize) + 8.0f;
-        char widestNumber[32];
-        std::snprintf(widestNumber, sizeof(widestNumber), "%zu. ", runtime.visible.size());
-        runtime.numberWidth = MeasureTextEx(font, widestNumber, static_cast<float>(pixelSize), 1).x + 8.0f;
-        runtime.panel.width = viewport.width * 0.8f;
-        const float width = std::max(1.0f, runtime.panel.width - 2 * Padding - runtime.numberWidth - 8.0f);
+        runtime.lineHeight = static_cast<float>(pixelSize) + 6.0f;
+        runtime.numberWidth = 0.0f;
+        float longestLine = 0.0f;
+        for (size_t i = 0; i < runtime.visible.size(); ++i) {
+            char number[32];
+            std::snprintf(number, sizeof(number), "%zu.", i + 1);
+            runtime.numberWidth = std::max(runtime.numberWidth,
+                    MeasureTextEx(font, number, static_cast<float>(pixelSize), 1).x + 8.0f);
+            const auto& text = runtime.sets[runtime.setIndex].options[runtime.visible[i]].text;
+            float measured = 0.0f;
+            for (size_t cursor = 0; cursor < text.size();) {
+                int bytes = 0;
+                const int cp = GetCodepointNext(text.c_str() + cursor, &bytes);
+                if (cp == '\n') measured = 0.0f;
+                else measured += GlyphWidth(font, cp, static_cast<float>(pixelSize));
+                longestLine = std::max(longestLine, measured);
+                cursor += static_cast<size_t>(std::max(1, bytes));
+            }
+        }
+        runtime.panel.width = std::min(viewport.width * 0.8f,
+                longestLine + runtime.numberWidth + 2 * (Padding + RowPaddingX) + ScrollbarSpace);
+        const float width = std::max(1.0f, runtime.panel.width - 2 * (Padding + RowPaddingX)
+                - runtime.numberWidth - ScrollbarSpace);
         float top = 0;
         for (const size_t index : runtime.visible) {
             const auto& text = runtime.sets[runtime.setIndex].options[index].text;
-            SectorDialogueRow row{top, 0, runtime.lines.size(), 0};
+            SectorDialogueRow row;
+            row.top = top;
+            row.firstLine = runtime.lines.size();
             size_t start = 0;
             while (start < text.size()) {
                 size_t cursor = start, lastSpace = std::string::npos;
@@ -204,7 +242,33 @@ void LayoutSectorDialogue(SectorDialogueRuntime& runtime, const Font& font,
                 else while (start < text.size() && (text[start] == ' ' || text[start] == '\t')) ++start;
             }
             row.lineCount = runtime.lines.size() - row.firstLine;
-            row.height = static_cast<float>(row.lineCount) * runtime.lineHeight + Padding;
+            // Center the visible glyph bounds, including the first-line number,
+            // instead of centering the font's nominal em box (which has extra descent).
+            float inkTop = std::numeric_limits<float>::max();
+            float inkBottom = std::numeric_limits<float>::lowest();
+            const float scale = static_cast<float>(pixelSize) / font.baseSize;
+            auto includeGlyph = [&](int cp, float lineY) {
+                if (cp == ' ' || cp == '\t') return;
+                const int glyph = GetGlyphIndex(font, cp);
+                const float y = lineY + font.glyphs[glyph].offsetY * scale;
+                inkTop = std::min(inkTop, y);
+                inkBottom = std::max(inkBottom, y + font.recs[glyph].height * scale);
+            };
+            char number[32];
+            std::snprintf(number, sizeof(number), "%zu.", runtime.rows.size() + 1);
+            for (const char* cp = number; *cp; ++cp) includeGlyph(*cp, 0.0f);
+            for (size_t n = 0; n < row.lineCount; ++n) {
+                const auto& line = runtime.lines[row.firstLine + n];
+                for (size_t cursor = line.begin; cursor < line.end;) {
+                    int bytes = 0;
+                    const int cp = GetCodepointNext(text.c_str() + cursor, &bytes);
+                    includeGlyph(cp, static_cast<float>(n) * runtime.lineHeight);
+                    cursor += static_cast<size_t>(std::max(1, bytes));
+                }
+            }
+            row.textHeight = inkBottom - inkTop;
+            row.height = row.textHeight + 2 * RowPaddingY;
+            row.textOffsetY = RowPaddingY - inkTop;
             top += row.height;
             runtime.rows.push_back(row);
         }
@@ -218,9 +282,11 @@ void LayoutSectorDialogue(SectorDialogueRuntime& runtime, const Font& font,
     runtime.panel.x = viewport.x + (viewport.width - runtime.panel.width) * 0.5f;
     runtime.panel.y = std::clamp(preferredTop, viewport.y + Padding,
             std::max(viewport.y + Padding, viewport.y + viewport.height - runtime.panel.height - Padding));
+    runtime.contentBounds = {runtime.panel.x + Padding, runtime.panel.y + Padding,
+            runtime.panel.width - 2 * Padding - ScrollbarSpace, runtime.panel.height - 2 * Padding};
     if (runtime.ensureSelectionVisible && runtime.selected < runtime.rows.size()) {
         const auto& row = runtime.rows[runtime.selected];
-        const float visibleHeight = runtime.panel.height - 2 * Padding;
+        const float visibleHeight = runtime.contentBounds.height;
         if (row.top < runtime.scroll) runtime.scroll = row.top;
         else if (row.top + row.height > runtime.scroll + visibleHeight)
             runtime.scroll = row.top + std::min(row.height, visibleHeight) - visibleHeight;
@@ -229,39 +295,48 @@ void LayoutSectorDialogue(SectorDialogueRuntime& runtime, const Font& font,
     ClampScroll(runtime);
 }
 
+Rectangle SectorDialogueRowBounds(const SectorDialogueRuntime& runtime, size_t rowIndex)
+{
+    const auto& row = runtime.rows[rowIndex];
+    return {runtime.contentBounds.x, runtime.contentBounds.y + row.top - runtime.scroll,
+            runtime.contentBounds.width, row.height};
+}
+
 void DrawSectorDialogue(const SectorDialogueRuntime& runtime, const Font& font)
 {
     if (!runtime.active || !runtime.layoutReady) return;
-    DrawRectangleRec(runtime.panel, Color{12, 15, 20, 225});
-    BeginScissorMode(static_cast<int>(runtime.panel.x), static_cast<int>(runtime.panel.y + Padding),
-            static_cast<int>(runtime.panel.width), std::max(0, static_cast<int>(runtime.panel.height - 2 * Padding)));
+    DrawRectangleRounded(runtime.panel, Roundness(runtime.panel, 12.0f), 8, Color{12, 15, 20, 225});
+    BeginScissorMode(static_cast<int>(runtime.contentBounds.x), static_cast<int>(runtime.contentBounds.y),
+            static_cast<int>(runtime.contentBounds.width), std::max(0, static_cast<int>(runtime.contentBounds.height)));
     std::array<char, MaximumLabelBytes + 1> buffer{};
     for (size_t i = 0; i < runtime.rows.size(); ++i) {
         const auto& row = runtime.rows[i];
-        const float y = runtime.panel.y + Padding + row.top - runtime.scroll;
-        if (y + row.height < runtime.panel.y || y > runtime.panel.y + runtime.panel.height) continue;
+        const Rectangle bounds = SectorDialogueRowBounds(runtime, i);
+        const float y = bounds.y + row.textOffsetY;
+        if (bounds.y + bounds.height < runtime.contentBounds.y
+                || bounds.y > runtime.contentBounds.y + runtime.contentBounds.height) continue;
         const bool selected = runtime.selected == i;
-        if (selected) DrawRectangleRec({runtime.panel.x + 4, y - 2, runtime.panel.width - 12, row.height}, Color{60, 70, 84, 230});
+        if (selected) DrawRectangleRounded(bounds, Roundness(bounds, RowRadius), 8, Color{60, 70, 84, 230});
         const Color color = selected ? Color{255, 225, 155, 255} : Color{245, 245, 240, 255};
         char number[32];
         std::snprintf(number, sizeof(number), "%zu.", i + 1);
-        DrawTextEx(font, number, {runtime.panel.x + Padding, y}, static_cast<float>(runtime.fontSize), 1, color);
+        DrawTextEx(font, number, {std::round(bounds.x + RowPaddingX), std::round(y)}, static_cast<float>(runtime.fontSize), 1, color);
         const auto& text = runtime.sets[runtime.setIndex].options[runtime.visible[i]].text;
         for (size_t n = 0; n < row.lineCount; ++n) {
             const auto& line = runtime.lines[row.firstLine + n];
             const size_t length = line.end - line.begin;
             std::memcpy(buffer.data(), text.data() + line.begin, length);
             buffer[length] = '\0';
-            DrawTextEx(font, buffer.data(), {runtime.panel.x + Padding + runtime.numberWidth,
-                    y + static_cast<float>(n) * runtime.lineHeight}, static_cast<float>(runtime.fontSize), 1, color);
+            DrawTextEx(font, buffer.data(), {std::round(bounds.x + RowPaddingX + runtime.numberWidth),
+                    std::round(y + static_cast<float>(n) * runtime.lineHeight)}, static_cast<float>(runtime.fontSize), 1, color);
         }
     }
     EndScissorMode();
-    const float viewHeight = runtime.panel.height - 2 * Padding;
+    const float viewHeight = runtime.contentBounds.height;
     if (runtime.contentHeight > viewHeight && viewHeight > 0) {
         const float thumb = std::max(8.0f, viewHeight * viewHeight / runtime.contentHeight);
         const float y = runtime.panel.y + Padding + runtime.scroll / (runtime.contentHeight - viewHeight) * (viewHeight - thumb);
-        DrawRectangleRec({runtime.panel.x + runtime.panel.width - 6, y, 3, thumb}, Color{190, 195, 205, 230});
+        DrawRectangleRec({runtime.contentBounds.x + runtime.contentBounds.width + 4, y, 3, thumb}, Color{190, 195, 205, 230});
     }
 }
 
@@ -282,11 +357,9 @@ void UpdateSectorDialogueInput(SectorDialogueRuntime& runtime, engine::ScriptRun
     };
     const Vector2 mouse = presentationPoint(input.MousePosition());
     auto pick = [&](Vector2 position) -> size_t {
-        const Rectangle inner{runtime.panel.x, runtime.panel.y + Padding, runtime.panel.width, runtime.panel.height - 2 * Padding};
-        if (!runtime.layoutReady || !CheckCollisionPointRec(position, inner)) return runtime.visible.size();
-        const float y = position.y - runtime.panel.y - Padding + runtime.scroll;
+        if (!runtime.layoutReady || !CheckCollisionPointRec(position, runtime.contentBounds)) return runtime.visible.size();
         for (size_t i = 0; i < runtime.rows.size(); ++i)
-            if (y >= runtime.rows[i].top && y < runtime.rows[i].top + runtime.rows[i].height) return i;
+            if (PointInRoundedRow(position, SectorDialogueRowBounds(runtime, i))) return i;
         return runtime.visible.size();
     };
     if (mouse.x != runtime.previousMouse.x || mouse.y != runtime.previousMouse.y) {

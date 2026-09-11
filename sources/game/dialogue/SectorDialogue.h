@@ -15,6 +15,8 @@ struct SectorDialogueLine { size_t begin = 0; size_t end = 0; };
 struct SectorDialogueRow {
     float top = 0.0f;
     float height = 0.0f;
+    float textOffsetY = 0.0f;
+    float textHeight = 0.0f;
     size_t firstLine = 0;
     size_t lineCount = 0;
 };
@@ -39,6 +41,7 @@ struct SectorDialogueRuntime {
     float lineHeight = 0.0f;
     float numberWidth = 0.0f;
     Rectangle panel{};
+    Rectangle contentBounds{};
     Rectangle layoutViewport{};
     unsigned int fontTexture = 0;
     int fontSize = 0;
@@ -54,6 +57,7 @@ bool BeginSectorDialogue(SectorDialogueRuntime& runtime, const std::string& setI
 bool SelectSectorDialogue(SectorDialogueRuntime& runtime, engine::ScriptRuntime& scripts, size_t visibleIndex);
 void LayoutSectorDialogue(SectorDialogueRuntime& runtime, const Font& font,
         int pixelSize, Rectangle viewport, float preferredTop);
+Rectangle SectorDialogueRowBounds(const SectorDialogueRuntime& runtime, size_t rowIndex);
 void DrawSectorDialogue(const SectorDialogueRuntime& runtime, const Font& font);
 void UpdateSectorDialogueInput(SectorDialogueRuntime& runtime, engine::ScriptRuntime& scripts,
         engine::Input& input, Rectangle inputViewport = {});

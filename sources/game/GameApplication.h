@@ -160,6 +160,7 @@ private:
     bool graphicsSettingsOpen = false;
     bool pendingGameOverMainMenu = false;
     bool editorAttachedToGame = false;
+    engine::FontHandle dialogueFont = engine::NullFontHandle();
     engine::FontHandle usePromptFont = engine::NullFontHandle();
     bool initialized = false;
     bool itemIconDiagnosticReported = false;

@@ -52,6 +52,12 @@ bool GameApplication::Init(
             22,
             engine::FontLoad_BilinearFilter);
     engine::DebugConsoleInitialize(debugConsole, consoleFont);
+    dialogueFont = context.assets.RequestFont(
+            context.assets.GlobalScope(),
+            "game_dialogue_ibm_plex_sans_bold_36",
+            ASSETS_PATH "fonts/IBMPlexSans-Bold.ttf",
+            36,
+            engine::FontLoad_BilinearFilter);
     usePromptFont = context.assets.RequestFont(
             context.assets.GlobalScope(),
             "game_use_prompt_ibm_plex_sans_bold_48",
@@ -840,7 +846,7 @@ void GameApplication::Render3DHud(
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameSession.RenderHud(
-                assets, font, usePromptFont, playableViewport);
+                assets, font, usePromptFont, dialogueFont, playableViewport);
         if (flow.screen == ApplicationScreen::Game) {
             gameSession.RenderAiDebugHud(
                     world, assets, font, playableViewport, gameScene);

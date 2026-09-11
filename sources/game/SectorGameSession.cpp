@@ -13,6 +13,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -1038,6 +1039,8 @@ bool SectorGameSession::StartNew(
         std::string& error)
 {
     failureError.clear();
+    dialogueCameraIdle.randomState = static_cast<uint32_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count());
     playerHealth = MakeHealth(100);
     playerKnockbackVelocity = {};
     playerStunRemainingSeconds = 0.0f;
@@ -1052,6 +1055,7 @@ bool SectorGameSession::StartNew(
     oxygenHudAlpha = 0.0f;
     ClearPlayerWindedCamera(windedCamera);
     ClearPlayerLowHealthCamera(lowHealthCamera);
+    ClearDialogueCameraIdle(dialogueCameraIdle);
     ClearPlayerHitCamera(hitCamera);
     breathingAudio = PlayerBreathingAudioRuntime{};
     heartbeatAudio = PlayerHeartbeatAudioRuntime{};
@@ -1250,6 +1254,7 @@ void SectorGameSession::Shutdown(
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorDialogueMenu(dialogue);
+    ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);
     StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, &scene.Navigation());
@@ -1329,6 +1334,7 @@ void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
     Pause();
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorDialogueMenu(dialogue);
+    ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);
     StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, nullptr);
@@ -1661,6 +1667,7 @@ void SectorGameSession::Update(
         }
         StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
         ClearPlayerLowHealthCamera(lowHealthCamera);
+        ClearDialogueCameraIdle(dialogueCameraIdle);
         StopPlayerHeartbeatAudio(
                 context.assets,
                 context.audio,
@@ -2096,6 +2103,8 @@ void SectorGameSession::Update(
                 if (handled) engine::ConsumeEvent(event);
             });
     engine::ScriptSystemUpdate(context, scripts, dt);
+    UpdateDialogueCameraIdle(dialogueCameraIdle, DialogueCameraIdleSettings{},
+            dialogue.active, consoleInputCaptured, dt);
     UpdateSectorScriptCutsceneControlOwnership(context, scriptHost);
     UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 0.0f,
             applicationSettings == nullptr || applicationSettings->dialogueVoicesEnabled);
@@ -2432,6 +2441,7 @@ void SectorGameSession::RenderHud(
         engine::AssetManager& assets,
         engine::FontHandle font,
         engine::FontHandle usePromptFont,
+        engine::FontHandle dialogueFont,
         Rectangle playableViewport) const
 {
     if (IsActive()) DrawSectorCutsceneLetterbox(cutscene, playableViewport);
@@ -2475,7 +2485,7 @@ void SectorGameSession::RenderHud(
         DrawSectorCutsceneCaption(
                 cutscene, assets, usePromptFont, playableViewport);
         if (dialogue.active) {
-            if (const auto* asset = assets.GetFont(usePromptFont)) {
+            if (const auto* asset = assets.GetFont(dialogueFont)) {
                 const float top = BuildSectorCutscenePresentationLayout(
                         cutscene.presentation, playableViewport,
                         SectorCutsceneTextPosition::Bottom, 0).captionY;
@@ -2559,6 +2569,7 @@ bool SectorGameSession::RebuildFromMap(
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorDialogueMenu(dialogue);
+    ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);
     StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, &scene.Navigation());
@@ -2889,24 +2900,27 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
             std::cos(presentationPose.yawRadians),
             0.0f,
             std::sin(presentationPose.yawRadians)};
+    const Vector3 localCameraOffset = Vector3Add(
+            lowHealthCamera.positionOffsetLocal, dialogueCameraIdle.positionOffsetLocal);
     presentationPose.position = Vector3Add(
             presentationPose.position,
             Vector3Add(
                     Vector3Scale(
                             cameraRight,
-                            lowHealthCamera.positionOffsetLocal.x),
+                            localCameraOffset.x),
                     Vector3Add(
                             Vector3{0.0f,
-                                    lowHealthCamera.positionOffsetLocal.y,
+                                    localCameraOffset.y,
                                     0.0f},
                             Vector3Scale(
                                     cameraForward,
-                                    lowHealthCamera.positionOffsetLocal.z))));
+                                    localCameraOffset.z))));
     Vector3 cameraRotation =
             fpsPlayer.State().firing.cameraRecoil.rotationDegrees;
     cameraRotation = Vector3Add(
             cameraRotation,
             lowHealthCamera.rotationDegrees);
+    cameraRotation = Vector3Add(cameraRotation, dialogueCameraIdle.rotationDegrees);
     cameraRotation.x += hitCamera.rotationDegrees.x;
     cameraRotation.y += hitCamera.rotationDegrees.y;
     cameraRotation.z += hitCamera.rotationDegrees.z;

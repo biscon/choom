@@ -292,6 +292,74 @@ void OwnershipFailureCancellationAndPlayerOverloads()
     assert(!engine::ScriptSystemCompleteOperation(f.scripts, operation, {std::string{"stale"}}));
 }
 
+void LayoutFitsAndCentersGlyphs()
+{
+    DialogueFixture f;
+    f.dialogue.sets.push_back({"layout", {{"a", "Wide text"}, {"b", "Two\nlines"}}});
+    std::array<GlyphInfo, 128> glyphs{};
+    std::array<Rectangle, 128> rectangles{};
+    Font font{};
+    font.baseSize = 36;
+    font.glyphCount = static_cast<int>(glyphs.size());
+    font.glyphs = glyphs.data();
+    font.recs = rectangles.data();
+    for (size_t i = 0; i < glyphs.size(); ++i) {
+        glyphs[i].value = static_cast<int>(i);
+        glyphs[i].advanceX = 18;
+        glyphs[i].offsetY = 7;
+        rectangles[i] = {0, 0, 18, 24};
+    }
+    // Different ascenders/descenders ensure centering uses visible glyphs.
+    glyphs['W'].offsetY = 4;
+    rectangles['W'].height = 28;
+    rectangles['x'].height = 27;
+    std::string error;
+    assert(game::BeginSectorDialogue(f.dialogue, "layout", {}, error));
+    const Rectangle viewport{30, 50, 1920, 1080};
+    game::LayoutSectorDialogue(f.dialogue, font, 36, viewport, 900);
+    assert(f.dialogue.fontSize == font.baseSize);
+    assert(f.dialogue.panel.width < viewport.width * 0.8f);
+    assert(std::fabs(f.dialogue.panel.x + f.dialogue.panel.width * 0.5f
+            - (viewport.x + viewport.width * 0.5f)) < 0.001f);
+    assert(f.dialogue.contentBounds.x - f.dialogue.panel.x == 20);
+    assert(f.dialogue.contentBounds.y - f.dialogue.panel.y == 20);
+    assert(f.dialogue.panel.height == f.dialogue.contentHeight + 40);
+    assert(f.dialogue.rows[0].lineCount == 1 && f.dialogue.rows[1].lineCount == 2);
+    const auto& first = f.dialogue.rows[0];
+    const auto& second = f.dialogue.rows[1];
+    assert(first.textHeight == 30); // top W=4, bottom x=7+27
+    assert(first.textOffsetY + 4 == 8);
+    assert(first.height - (first.textOffsetY + 34) == 8);
+    assert(second.textOffsetY + 7 == 8);
+    assert(second.height - (second.textOffsetY + f.dialogue.lineHeight + 31) == 8);
+    const auto lastBounds = game::SectorDialogueRowBounds(f.dialogue, 1);
+    assert(lastBounds.y + lastBounds.height == f.dialogue.contentBounds.y + f.dialogue.contentBounds.height);
+    const float fullWidth = f.dialogue.panel.width;
+    game::ResetSectorDialogueMenu(f.dialogue);
+    assert(game::BeginSectorDialogue(f.dialogue, "layout", {"a"}, error));
+    game::LayoutSectorDialogue(f.dialogue, font, 36, viewport, 900);
+    assert(f.dialogue.panel.width < fullWidth);
+
+    // Padding and the rounded corner lie outside the selectable row.
+    auto& input = f.context.input;
+    engine::InputEvent click{};
+    click.type = engine::InputEventType::MouseButtonPressed;
+    click.mouseButton = {{f.dialogue.panel.x + 1, f.dialogue.panel.y + 1}, MOUSE_BUTTON_LEFT};
+    input.Events().push_back(click);
+    game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input);
+    assert(f.dialogue.active && input.Events()[0].handled);
+    input.BeginFrame();
+    click.mouseButton.position = {f.dialogue.contentBounds.x + 1, f.dialogue.contentBounds.y + 1};
+    input.Events().push_back(click);
+    game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input);
+    assert(f.dialogue.active && input.Events()[0].handled);
+    input.BeginFrame();
+    click.mouseButton.position = {f.dialogue.contentBounds.x + 12, f.dialogue.contentBounds.y + 12};
+    input.Events().push_back(click);
+    game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input);
+    assert(!f.dialogue.active);
+}
+
 void LayoutScrollingAndInputAreBounded()
 {
     DialogueFixture f;
@@ -318,17 +386,17 @@ void LayoutScrollingAndInputAreBounded()
     assert(game::BeginSectorDialogue(f.dialogue, "long", {}, error));
     const auto rowsCapacity = f.dialogue.rows.capacity(), linesCapacity = f.dialogue.lines.capacity();
     for (const Rectangle viewport : {Rectangle{0, 0, 1920, 1080}, Rectangle{30, 50, 640, 360}, Rectangle{10, 20, 320, 240}}) {
-        for (const int size : {20, 48}) {
+        for (const int size : {20, 36, 48}) {
             game::LayoutSectorDialogue(f.dialogue, font, size, viewport, viewport.y + viewport.height * 0.85f);
             assert(f.dialogue.layoutReady && f.dialogue.rows.size() == 12);
             assert(f.dialogue.panel.x >= viewport.x && f.dialogue.panel.y >= viewport.y);
             assert(f.dialogue.panel.y + f.dialogue.panel.height <= viewport.y + viewport.height);
-            assert(f.dialogue.numberWidth + 32 < f.dialogue.panel.width);
+            assert(f.dialogue.numberWidth + 24 < f.dialogue.contentBounds.width);
             f.dialogue.selected = 11;
             f.dialogue.ensureSelectionVisible = true;
             game::LayoutSectorDialogue(f.dialogue, font, size, viewport, viewport.y + viewport.height * 0.85f);
             const auto& last = f.dialogue.rows.back();
-            const float innerHeight = f.dialogue.panel.height - 24;
+            const float innerHeight = f.dialogue.contentBounds.height;
             assert(last.top >= f.dialogue.scroll - 0.001f);
             assert(last.top < f.dialogue.scroll + innerHeight);
             assert(f.dialogue.scroll <= f.dialogue.contentHeight - innerHeight + 0.001f);
@@ -353,9 +421,10 @@ void LayoutScrollingAndInputAreBounded()
     wheel.wheel.value = -1000;
     input.Events().push_back(wheel);
     game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input);
-    assert(f.dialogue.scroll == f.dialogue.contentHeight - f.dialogue.panel.height + 24);
+    assert(f.dialogue.scroll == f.dialogue.contentHeight - f.dialogue.contentBounds.height);
     input.BeginFrame();
-    click.mouseButton.position = {f.dialogue.panel.x + 20, f.dialogue.panel.y + f.dialogue.panel.height - 13};
+    click.mouseButton.position = {f.dialogue.contentBounds.x + 12,
+            f.dialogue.contentBounds.y + f.dialogue.contentBounds.height - 9};
     input.Events().push_back(click);
     game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input);
     assert(!f.dialogue.active); // last row remains clickable at maximum scroll
@@ -382,7 +451,7 @@ void LayoutScrollingAndInputAreBounded()
     const Rectangle logical{0, 0, 1920, 1080};
     game::LayoutSectorDialogue(f.dialogue, font, 20, physical, 400);
     input.BeginFrame();
-    const Vector2 target{f.dialogue.panel.x + 30, f.dialogue.panel.y + 14};
+    const Vector2 target{f.dialogue.contentBounds.x + 12, f.dialogue.contentBounds.y + 12};
     click.mouseButton.position = {(target.x - physical.x) * 2, (target.y - physical.y) * 2};
     input.Events().push_back(click);
     game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input, logical);
@@ -390,8 +459,12 @@ void LayoutScrollingAndInputAreBounded()
 }
 }
 
+void RunDialogueCameraIdleTests();
+
 void RunSectorDialogueTests()
 {
+    RunDialogueCameraIdleTests();
+    LayoutFitsAndCentersGlyphs();
     AssetsValidateTransactionallyAndFilteringPreservesLabels();
     ConversationsYieldFilterNestAndPersist(false);
     ConversationsYieldFilterNestAndPersist(true);

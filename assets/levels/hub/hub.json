@@ -6704,6 +6704,39 @@
         96.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 419,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_419",
+        "modelPath": "assets/models/cafeteria/Wall_Clock_360.gltf",
+        "heightOffsetWorld": 2.0999996662139893,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -32.24000549316406,
+        0.0,
+        43.4000244140625
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 420,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_420",
+        "modelPath": "assets/models/cafeteria/Painting_Quiet_Farmland.gltf",
+        "heightOffsetWorld": 1.399999737739563,
+        "scale": 1.5
+      },
+      "position": [
+        -71.80001831054688,
+        0.0,
+        80.88002014160156
+      ],
+      "yawDegrees": 179.99998474121094
     }
   ],
   "staticLights": [
@@ -10175,60 +10208,6 @@
       }
     },
     {
-      "id": 2,
-      "position": [
-        -96.0,
-        26.0,
-        52.0
-      ],
-      "target": [
-        -96.0,
-        8.0,
-        52.0
-      ],
-      "width": 8.0,
-      "height": 2.0,
-      "range": 53.0,
-      "intensity": 1.5,
-      "color": {
-        "r": 255,
-        "g": 250,
-        "b": 242,
-        "a": 255
-      },
-      "rollDegrees": 90.0,
-      "startFeather": 4.0,
-      "atmosphere": {
-        "proxy": {
-          "shaft": {
-            "enabled": true,
-            "originOffsetWorld": [
-              0.0,
-              0.33899998664855957,
-              0.0
-            ],
-            "lengthScale": 0.4000000059604645,
-            "widthScale": 1.0,
-            "maxExtinction": 0.0,
-            "edgeSoftness": 0.75,
-            "scatteringTint": {
-              "r": 255,
-              "g": 250,
-              "b": 242,
-              "a": 255
-            }
-          }
-        },
-        "dust": {
-          "enabled": true,
-          "amount": 32,
-          "extentScale": 0.25,
-          "minimumSizeWorld": 0.004999999888241291,
-          "maximumSizeWorld": 0.012000000104308128
-        }
-      }
-    },
-    {
       "id": 3,
       "position": [
         -200.0,
@@ -12528,6 +12507,63 @@
           "opacity": 0.11999999731779099
         }
       }
+    },
+    {
+      "id": 4,
+      "position": [
+        -96.0,
+        26.0,
+        52.0
+      ],
+      "target": [
+        -96.0,
+        8.0,
+        52.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 53.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 242,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "instanceId": "light_rect_4",
+      "castsShadow": true,
+      "shadowStrength": 0.8999999761581421,
+      "shadowSoftness": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.0,
+              0.33899998664855957,
+              0.0
+            ],
+            "lengthScale": 0.4000000059604645,
+            "widthScale": 1.0,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 242,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 32,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.012000000104308128
+        }
+      }
     }
   ],
   "lightmapSettings": {
@@ -12538,7 +12574,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -12638,7 +12674,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "a90ac7deb6be3681",
+    "sourceHash": "357335b43472fda1",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -12646,19 +12682,19 @@
         0.0
       ],
       "rgbMax": [
-        2.203125,
-        1.564453125,
-        1.564453125
+        2.2421875,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 239
+      "sampleCount": 12582912,
+      "rgbChannelsAboveOne": 1445
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "a90ac7deb6be3681",
+      "sourceHash": "357335b43472fda1",
       "count": 3917,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -12671,24 +12707,36 @@
           0.0
         ],
         "rgbMax": [
-          2.204270601272583,
-          1.935850739479065,
-          1.8489267826080322
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23502,
-        "rgbChannelsAboveOne": 40
+        "rgbChannelsAboveOne": 36
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "a90ac7deb6be3681",
+      "sourceHash": "357335b43472fda1",
       "modelCount": 117,
-      "objectCount": 347,
+      "objectCount": 349,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/hub/hub.lightmap.2.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1
@@ -20283,11 +20331,11 @@
               0.5925925970077515
             ],
             "offset": [
-              19.6875,
+              7.0625,
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20314,6 +20362,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20330,7 +20382,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20357,6 +20409,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20369,11 +20425,11 @@
               0.5925925970077515
             ],
             "offset": [
-              10.625,
+              7.0625,
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20400,6 +20456,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20412,11 +20472,11 @@
               0.5925925970077515
             ],
             "offset": [
-              15.625,
+              7.0625,
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20443,6 +20503,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20455,11 +20519,11 @@
               0.5925925970077515
             ],
             "offset": [
-              19.1875,
+              7.0625,
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20486,6 +20550,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20525,10 +20593,10 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.6875
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         }
       },
       {
@@ -41079,7 +41147,8 @@
             ]
           }
         },
-        "floorMaterialId": "worn_gray_metal_step_512"
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "plastered_wall_02"
       },
       {
         "id": 82,

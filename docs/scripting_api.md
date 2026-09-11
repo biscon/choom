@@ -1061,7 +1061,9 @@ Invalid files are rejected as a whole with a warning identifying the file;
 other valid files remain available. A missing directory is an empty registry.
 Restart/reload the level after editing these assets.
 
-Choices appear near the bottom, adapting to cinematic bars. Select using mouse
+Choices appear near the bottom, adapting to cinematic bars. The rounded panel
+fits the visible choices up to 80% of the viewport width; text uses a dedicated
+36-pixel font loaded and rendered at that size. Select using mouse
 hover and left/right click, Up/Down and Enter, or number keys 1–9. Long lists
 scroll with the mouse wheel; keyboard navigation brings the selected row into
 view. Outside clicks are consumed without selecting. Escape opens the ordinary
@@ -1074,6 +1076,13 @@ lock. World simulation keeps running. Speech between menus leaves controls
 alone; use `enableControls(false)` or `startCutscene()` to lock the entire
 conversation. Scripts remain responsible for positioning and facing both actors
 and for playing animations.
+
+While choices are visible, the rendered camera occasionally makes a small,
+randomized idle movement: an initial 1–3 second wait, then 2–3 second movements
+separated by 3–5 seconds of stillness. Selecting a reply smoothly settles any
+remaining movement; spoken lines do not start another one. Pause and console
+capture freeze idle timing. These offsets affect only camera presentation,
+not player position, scripted facing, collision, or saved state.
 
 ### Conversation helpers and memory
 
