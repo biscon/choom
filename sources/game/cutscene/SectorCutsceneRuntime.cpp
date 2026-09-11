@@ -31,6 +31,7 @@ constexpr double AutomaticHoldSecondsPerCodepoint = 0.045;
 constexpr double MinimumAutomaticHoldSeconds = 1.5;
 constexpr double MaximumAutomaticHoldSeconds = 8.0;
 constexpr double VoicedAutomaticHoldSeconds = 0.35;
+constexpr double SkippedSpeechHoldSeconds = 2.0;
 constexpr double TextFadeInSeconds = 0.25;
 constexpr double CaptionFadeOutSeconds = 0.35;
 constexpr size_t MaximumWrappedLines = 64;
@@ -912,6 +913,7 @@ bool BeginSectorCutsceneCaption(
     caption.voiceTiming = true;
     caption.speechDriven = false;
     caption.speechFinished = false;
+    caption.skippedForReading = false;
     caption.token = runtime.nextToken++;
     caption.operation = {};
     caption.kind = kind;
@@ -948,7 +950,7 @@ void SetSectorCutsceneCaptionVoiceTiming(SectorCutsceneRuntime& runtime, bool en
 {
     auto& caption = runtime.caption;
     if (!caption.active || caption.kind != SectorCutsceneCaptionKind::Say
-            || caption.voiceTiming == enabled) return;
+            || caption.skippedForReading || caption.voiceTiming == enabled) return;
 
     const double oldRevealSeconds = caption.revealSeconds;
     const double newRevealSeconds = enabled ? caption.speechTimeline.seconds
@@ -1012,10 +1014,21 @@ void CancelSectorCutsceneCaption(SectorCutsceneRuntime& runtime, uint64_t token)
     }
 }
 
-bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts)
+bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts,
+        bool voicesEnabled)
 {
     auto& caption = runtime.caption;
     if (!caption.active || caption.kind != SectorCutsceneCaptionKind::Say) return false;
+    if (voicesEnabled && !caption.skippedForReading) {
+        caption.skippedForReading = true;
+        caption.speechFinished = true;
+        caption.speechDriven = false;
+        caption.visibleByteCount = caption.text.size();
+        caption.holdSeconds = SkippedSpeechHoldSeconds;
+        caption.elapsedSeconds = caption.fadeInSeconds + caption.revealSeconds;
+        caption.opacity = 1.0f;
+        return true;
+    }
     const auto operation = caption.operation;
     caption.active = false;
     caption.operation = {};
@@ -1092,7 +1105,7 @@ void UpdateSectorCutsceneTimelines(
                     (caption.elapsedSeconds - holdEnd)
                     / caption.fadeOutSeconds));
         }
-        if (caption.kind == SectorCutsceneCaptionKind::Say) {
+        if (caption.kind == SectorCutsceneCaptionKind::Say && !caption.skippedForReading) {
             const double revealElapsed = std::clamp(
                     caption.elapsedSeconds - revealStart,
                     0.0,

@@ -1467,7 +1467,8 @@ void SectorGameSession::Update(
                 !inventoryUi.open && heldObjectUse.phase == ItemHeldUsePhase::Inactive
                         && cutscene.caption.active
                         && cutscene.caption.kind == SectorCutsceneCaptionKind::Say)) {
-            AdvanceSectorCutsceneSpeech(cutscene, scripts);
+            AdvanceSectorCutsceneSpeech(cutscene, scripts,
+                    applicationSettings == nullptr || applicationSettings->dialogueVoicesEnabled);
         }
     }
     UpdatePlayerHitCamera(hitCamera, dt);

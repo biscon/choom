@@ -48,15 +48,16 @@ void UpdateSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& w
         position.y += 1.35f;
     }
     const auto* started = engine::UpdateDialoguePlayback(assets, audio, runtime.speechPlayback,
-            caption.speechTimeline, caption.token, active && caption.voiceTiming,
+            caption.speechTimeline, caption.token,
+            active && caption.voiceTiming && !caption.skippedForReading,
             speaking || playerSpeaking, position, dt, !caption.playerSpeaker);
     if (started && speaking)
         engine::CommitDialogueSelection(world.Get<NpcRuntimeInstance>(speaker).dialogueHistory, *started);
     if (started && playerSpeaking)
         engine::CommitDialogueSelection(runtime.playerSpeechHistory, *started);
-    if (active && !caption.voiceTiming) {
-        // The regular caption update owns the steady typewriter clock. Audio
-        // release and speech punctuation must not hold up silent text.
+    if (active && (!caption.voiceTiming || caption.skippedForReading)) {
+        // The regular caption update owns silent reveal and skipped reading
+        // holds. Audio release must not hold up either clock or advance it twice.
         caption.speechDriven = audio.IsPaused();
         return;
     }

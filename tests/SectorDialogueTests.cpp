@@ -258,8 +258,8 @@ void ConversationsYieldFilterNestAndPersist(bool cinematic)
     input.Events().push_back(Key(KEY_ENTER));
     input.Events().push_back(Key(KEY_ENTER));
     assert(game::ConsumeSectorSpeechAdvance(f.dialogue, input, true));
-    assert(game::AdvanceSectorCutsceneSpeech(f.cutscene, f.scripts));
-    assert(!game::AdvanceSectorCutsceneSpeech(f.cutscene, f.scripts));
+    assert(game::AdvanceSectorCutsceneSpeech(f.cutscene, f.scripts, false));
+    assert(!game::AdvanceSectorCutsceneSpeech(f.cutscene, f.scripts, false));
     f.Tick(0);
     assert(!f.dialogue.active && !f.persistent.bools["asked"]); // delay is a separate wait
     f.Tick(0.025f);
@@ -288,6 +288,80 @@ void ConversationsYieldFilterNestAndPersist(bool cinematic)
     engine::PersistentScriptStore loaded;
     assert(engine::LoadPersistentScriptStoreFromJsonString(json, loaded, error));
     assert(loaded.bools.at("asked") && loaded.ints.at("count") == 42 && loaded.strings.at("result") == "goodbye");
+}
+
+void VoicedSkipInputsHoldThenDismissWithoutLeaking()
+{
+    for (int inputKind = 0; inputKind < 3; ++inputKind) {
+        DialogueFixture f;
+        f.Create(R"lua(
+            function talk()
+                assert(say("Read the whole first line."))
+                setFlag("first_done", true)
+                assert(say("Read the next line."))
+                setFlag("second_done", true)
+                dialogue("topics")
+            end
+        )lua");
+        assert(f.Call("talk").result == engine::ScriptCallResult::Started);
+        auto& input = f.context.input;
+        const int button = inputKind == 1 ? MOUSE_BUTTON_LEFT : MOUSE_BUTTON_RIGHT;
+        const auto press = [&]() {
+            auto event = Key(KEY_ENTER);
+            if (inputKind != 0) {
+                event = {};
+                event.type = engine::InputEventType::MouseButtonPressed;
+                event.mouseButton.button = button;
+            }
+            input.Events().push_back(event);
+        };
+        const auto consume = [&]() {
+            if (game::ConsumeSectorSpeechAdvance(f.dialogue, input, f.cutscene.caption.active)) {
+                assert(game::AdvanceSectorCutsceneSpeech(f.cutscene, f.scripts, true));
+                return true;
+            }
+            return false;
+        };
+        // Even multiple presses queued in one pass produce only the first skip.
+        press();
+        press();
+        assert(consume());
+        f.Tick(0);
+        assert(f.cutscene.caption.active && f.cutscene.caption.skippedForReading);
+        assert(f.cutscene.caption.visibleByteCount == f.cutscene.caption.text.size());
+        assert(!f.persistent.bools.count("first_done"));
+        for (const auto& event : input.Events()) assert(event.handled);
+        input.BeginFrame();
+        press();
+        assert(consume());
+        f.Tick(0);
+        assert(f.persistent.bools.at("first_done"));
+        assert(f.cutscene.caption.active && !f.cutscene.caption.skippedForReading);
+        assert(f.cutscene.caption.text == "Read the next line.");
+        for (const auto& event : input.Events()) assert(event.handled);
+        if (inputKind != 0) {
+            input.BeginFrame();
+            engine::InputEvent release{};
+            release.type = engine::InputEventType::MouseButtonReleased;
+            release.mouseButton.button = button;
+            engine::InputEvent click{};
+            click.type = engine::InputEventType::MouseClick;
+            click.mouseClick.button = button;
+            input.Events().push_back(release);
+            input.Events().push_back(click);
+            assert(!consume());
+            for (const auto& event : input.Events()) assert(event.handled);
+        }
+        for (int skip = 0; skip < 2; ++skip) {
+            input.BeginFrame();
+            press();
+            assert(consume());
+            f.Tick(0);
+        }
+        assert(f.persistent.bools.at("second_done") && f.dialogue.active);
+        game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input);
+        assert(f.dialogue.active); // The dismissing press cannot select a menu item.
+    }
 }
 
 void OwnershipFailureCancellationAndPlayerOverloads()
@@ -566,6 +640,7 @@ void RunSectorDialogueTests()
     DynamicLabelsAndRemainingTopicsSurviveReload();
     ConversationsYieldFilterNestAndPersist(false);
     ConversationsYieldFilterNestAndPersist(true);
+    VoicedSkipInputsHoldThenDismissWithoutLeaking();
     OwnershipFailureCancellationAndPlayerOverloads();
     LayoutScrollingAndInputAreBounded();
 }

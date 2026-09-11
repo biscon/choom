@@ -1895,6 +1895,107 @@ void AutomaticVoicedSpeechReturnsAfterShortHoldAndFade()
     }
 }
 
+void SkippedVoicedSpeechHoldsBeforeCompletingScript()
+{
+    for (bool player : {false, true}) {
+        for (bool async : {false, true}) {
+            for (int phase = 0; phase < 3; ++phase) {
+                NpcScriptFixture fixture;
+                const std::string text = u8"Wait, élan! Another person...";
+                const std::string arguments = (player ? "" : "'script_guard', ")
+                        + std::string("'") + text + "'"
+                        + (async ? (player ? ", {holdMs=5000}" : ", nil, 5000") : "");
+                const std::string call = (async ? "await(startSay(" : "say(")
+                        + arguments + (async ? "))" : ")");
+                fixture.files.Write("function init() assert(" + call
+                        + "); setInt('completions', getInt('completions') + 1) end");
+                assert(Create(fixture.context, fixture.runtime, fixture.persistent,
+                        fixture.host, fixture.files));
+                auto& caption = fixture.cutscene.caption;
+                auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+                const auto update = [&](float dt, bool voices = true) {
+                    game::UpdateSectorCutsceneSpeech(fixture.cutscene, fixture.context.world,
+                            fixture.context.assets, fixture.context.audio, dt, voices);
+                    game::UpdateSectorCutsceneTimelines(fixture.cutscene, fixture.runtime, dt);
+                    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, dt);
+                };
+                update(0.01f);
+                assert(caption.visibleByteCount < text.size());
+                if (phase > 0) {
+                    for (int frame = 0; frame < 2000 && !caption.speechFinished; ++frame)
+                        update(0.01f);
+                    assert(caption.speechFinished && caption.active);
+                    if (phase == 2) {
+                        update(static_cast<float>(caption.holdSeconds + 0.1));
+                        assert(caption.active && caption.opacity < 1.0f);
+                    }
+                }
+                assert(game::AdvanceSectorCutsceneSpeech(fixture.cutscene, fixture.runtime, true));
+                assert(caption.active && caption.skippedForReading && caption.speechFinished);
+                assert(caption.visibleByteCount == text.size() && caption.opacity == 1.0f);
+                const auto nextCue = fixture.cutscene.speechPlayback.sequence.nextCue;
+                update(0);
+                assert(!npc.dialogueSpeaking && engine::IsNull(fixture.cutscene.speechSpeaker));
+                update(0.75f);
+                const double elapsed = caption.elapsedSeconds;
+                // A paused game does not advance gameplay time (no audio device in this fixture).
+                update(0.0f);
+                assert(caption.elapsedSeconds == elapsed && caption.opacity == 1.0f);
+                update(0.75f, false);
+                update(0.49f, true);
+                assert(caption.active && caption.opacity == 1.0f);
+                assert(caption.visibleByteCount == text.size());
+                assert(fixture.cutscene.speechPlayback.sequence.nextCue == nextCue);
+                assert(fixture.persistent.ints.count("completions") == 0);
+                update(0.02f);
+                assert(caption.active && caption.opacity > 0.0f && caption.opacity < 1.0f);
+                const float opacity = caption.opacity;
+                update(0, false);
+                update(0, true);
+                assert(caption.opacity == opacity);
+                update(0.32f);
+                assert(caption.active && fixture.persistent.ints.count("completions") == 0);
+                update(0.03f);
+                assert(!caption.active && fixture.persistent.ints.at("completions") == 1);
+                assert(!game::AdvanceSectorCutsceneSpeech(fixture.cutscene, fixture.runtime, true));
+                update(1.0f);
+                assert(fixture.persistent.ints.at("completions") == 1);
+            }
+        }
+    }
+}
+
+void SkippedSpeechReplacementResetsReadingState()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime scripts;
+    game::SectorCutsceneRuntime cutscene;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    uint64_t token = 0;
+    std::string error;
+    const auto begin = [&](game::SectorCutsceneCaptionKind kind) {
+        assert(game::BeginSectorCutsceneCaption(cutscene, kind,
+                game::SectorCutsceneTextPosition::Bottom, "Another line.", nullptr, token, error));
+    };
+    begin(game::SectorCutsceneCaptionKind::Say);
+    // The current setting, rather than a stale voiceTiming value, decides skipping.
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, true));
+    assert(cutscene.caption.active && cutscene.caption.skippedForReading);
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 1.0f, true);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 1.0f);
+    assert(cutscene.caption.opacity == 1.0f);
+    assert(cutscene.caption.visibleByteCount == cutscene.caption.text.size());
+    begin(game::SectorCutsceneCaptionKind::Say);
+    assert(!cutscene.caption.skippedForReading && !cutscene.caption.speechFinished);
+    assert(cutscene.caption.visibleByteCount == 0 && cutscene.caption.holdSeconds == 0.35);
+    assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, false));
+    assert(!cutscene.caption.active);
+    begin(game::SectorCutsceneCaptionKind::Text);
+    assert(!game::AdvanceSectorCutsceneSpeech(cutscene, scripts, true));
+    assert(cutscene.caption.active && !cutscene.caption.skippedForReading);
+}
+
 void AutomaticCaptionHoldsRespectVoiceModeAndFadeProgress()
 {
     game::SectorCutsceneRuntime cutscene;
@@ -2844,6 +2945,8 @@ void RunSectorScriptBindingTests()
     AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();
     SpeechCompletionGatesCaptionHold();
     AutomaticVoicedSpeechReturnsAfterShortHoldAndFade();
+    SkippedVoicedSpeechHoldsBeforeCompletingScript();
+    SkippedSpeechReplacementResetsReadingState();
     AutomaticCaptionHoldsRespectVoiceModeAndFadeProgress();
     DisabledDialogueVoicesKeepTextAndCanBeReenabled();
     CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(false);

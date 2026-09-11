@@ -64,7 +64,7 @@ Rectangle SectorDialogueRowBounds(const SectorDialogueRuntime& runtime, size_t r
 void DrawSectorDialogue(const SectorDialogueRuntime& runtime, const Font& font);
 void UpdateSectorDialogueInput(SectorDialogueRuntime& runtime, engine::ScriptRuntime& scripts,
         engine::Input& input, Rectangle inputViewport = {});
-// Returns true once per input pass; the caller completes the current speech.
+// Returns true once per input pass; the caller advances the current speech.
 bool ConsumeSectorSpeechAdvance(SectorDialogueRuntime& runtime, engine::Input& input, bool speechActive);
 
 } // namespace game

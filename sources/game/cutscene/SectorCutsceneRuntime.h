@@ -124,6 +124,7 @@ struct SectorCutsceneCaptionState {
     bool voiceTiming = true;
     bool speechDriven = false;
     bool speechFinished = false;
+    bool skippedForReading = false;
 };
 
 // Borrowed load-time data used only while constructing a caption.
@@ -271,7 +272,9 @@ void BindSectorCutsceneCaptionOperation(
         uint64_t token,
         engine::ScriptOperationHandle operation);
 void CancelSectorCutsceneCaption(SectorCutsceneRuntime& runtime, uint64_t token);
-bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts);
+// First voiced advance reveals and holds; the next advance dismisses immediately.
+bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts,
+        bool voicesEnabled);
 void SetSectorCutsceneCaptionVoiceTiming(SectorCutsceneRuntime& runtime, bool enabled);
 void UpdateSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& world,
         engine::AssetManager& assets, engine::AudioSystem& audio, float dt,

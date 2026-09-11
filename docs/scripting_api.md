@@ -992,9 +992,16 @@ say("I'm here.")
 say("What was that?", { mood = "afraid", holdMs = 2000 })
 ```
 
-Enter or a left/right mouse press finishes the current spoken line, including
-its remaining reveal and hold, and returns `true` to the waiting script. Audio
-uses the existing short interruption release. One press affects only that line;
+With dialogue voices enabled, Enter or a left/right mouse press reveals the
+entire current spoken line and interrupts its audio using the existing short
+release. The text stays fully visible for **2 seconds**, then fades out over
+350 ms before returning `true` to the waiting script. This fresh reading hold
+replaces any remaining reveal or hold, including explicit `holdMs` values, and
+also applies when the first press occurs during the normal hold or fade.
+A second press immediately dismisses the line and returns `true`. Pausing freezes
+the reading hold and fade; toggling voices preserves their progress without
+restarting speech. With voices disabled, a press immediately finishes the line,
+including its remaining reveal and hold. One input pass affects only that line;
 it does not select a subsequently opened menu, skip another line, fire, or become
 a world interaction. The line also completes automatically through its normal
 timing. `startSay` lines are equally skippable; `text` is unchanged. Console,
