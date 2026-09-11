@@ -1254,6 +1254,7 @@ void SpawnPlacedRuntimeObjects(
                             SectorDoorClosedCenter(runtimeAnchor, runtimeRender),
                             SectorDoorMotionOffset(runtimeAnchor, runtimeMotion));
             SectorObject object;
+            object.itemDropTarget = placedObject.door.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId = state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
                         Vector2{worldPosition.x, worldPosition.z},
@@ -1517,6 +1518,7 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.position);
             worldPosition.y += placedObject.staticModel.heightOffsetWorld;
             SectorObject object;
+            object.itemDropTarget = placedObject.staticModel.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId =
                         state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
@@ -1601,6 +1603,7 @@ void SpawnPlacedRuntimeObjects(
             Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
                     placedObject.position);
             SectorObject object;
+            object.itemDropTarget = placedObject.npc.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId =
                         state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
@@ -1810,6 +1813,7 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.position);
             worldPosition.y += placedObject.dynamicModel.heightOffsetWorld;
             SectorObject object;
+            object.itemDropTarget = placedObject.dynamicModel.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId =
                         state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(

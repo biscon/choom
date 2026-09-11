@@ -204,6 +204,7 @@ struct SectorPlacedStaticModel {
     bool castsShadow = true;
     // Transient bake input. Refreshed only during explicit model preparation.
     std::string geometryFingerprint;
+    bool itemDropTarget = false;
 };
 
 enum class SectorDynamicModelShadowMode {
@@ -228,6 +229,7 @@ struct SectorPlacedDynamicModel {
     bool loop = true;
     float animationSpeed = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
+    bool itemDropTarget = false;
 };
 
 struct SectorPlacedItem {
@@ -258,6 +260,7 @@ struct SectorPlacedNpc {
     bool scriptMoveStopsPatrol = false;
     float scale = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
+    bool itemDropTarget = false;
 };
 
 enum class SectorDoorMotionType {
@@ -332,6 +335,7 @@ struct SectorPlacedDoor {
     std::string openSoundId;
     std::string closeSoundId;
     SectorDoorFaceUvSet faceUvs;
+    bool itemDropTarget = false;
 };
 
 // Windows share the stable portal-anchor schema with doors, but remain a

@@ -318,7 +318,7 @@ inline float SectorEditorDoorInspectorContentHeight(
     float height = 0.0f;
     height += 38.0f;
     height += 34.0f;
-    height += (rowH + gap) * 4.0f;
+    height += (rowH + gap) * 5.0f; // Instance/use fields and item-drop opt-in.
     height += 36.0f; // Optional door script-instance ID validation message.
     height += anchorStatusHeight + gap;
     height += (rowH + gap) * 4.0f;

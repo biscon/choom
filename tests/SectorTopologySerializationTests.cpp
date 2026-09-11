@@ -2419,6 +2419,66 @@ void TestDuctAccessRoundTripAndLightmapExclusion()
             "crawlspace sectors cannot also contain liquid");
 }
 
+void TestItemDropTargetSerialization()
+{
+    const char* kinds[] = {"static_model", "dynamic_model", "door", "npc"};
+    const char* payloads[] = {"staticModel", "dynamicModel", "door", "npc"};
+    for (int index = 0; index < 4; ++index) {
+        SectorTopologyMap map = MakeAdjacentSquares();
+        auto object = MakeDoorRuntimeObject(41);
+        object.kind = kinds[index];
+        object.staticModel.instanceId = "static_receiver";
+        object.dynamicModel.instanceId = "dynamic_receiver";
+        object.npc.definitionId = "test_npc";
+        object.npc.instanceId = "npc_receiver";
+        map.runtimeObjects.push_back(object);
+        Json saved = Json::parse(SaveText(map));
+        Check(!saved["runtimeObjects"][0][payloads[index]].contains("itemDropTarget"),
+              "default-false item drop target is omitted for every receiver kind");
+        SectorTopologyMap loaded;
+        std::string error;
+        Check(LoadText(saved.dump(), loaded, error), "old receiver payload loads without opt-in field");
+        auto enabled = [](const SectorPlacedRuntimeObject& value) {
+            if (value.kind == "static_model") return value.staticModel.itemDropTarget;
+            if (value.kind == "dynamic_model") return value.dynamicModel.itemDropTarget;
+            if (value.kind == "door") return value.door.itemDropTarget;
+            return value.npc.itemDropTarget;
+        };
+        Check(!loaded.runtimeObjects.empty() && !enabled(loaded.runtimeObjects[0]),
+              "missing opt-in field defaults to disabled");
+        saved["runtimeObjects"][0][payloads[index]]["itemDropTarget"] = true;
+        Check(LoadText(saved.dump(), loaded, error), "explicit opt-in loads");
+        Check(!loaded.runtimeObjects.empty() && enabled(loaded.runtimeObjects[0]),
+              "explicit opt-in survives parsing");
+        Check(Json::parse(SaveText(loaded))["runtimeObjects"][0][payloads[index]]["itemDropTarget"] == true,
+              "enabled receiver survives save round trip");
+        auto authoring = MakeAuthoringDocumentFromMap(loaded);
+        if (index == 2) {
+            auto& anchor = authoring.mapData.runtimeObjects.front().door.anchor;
+            const auto* line = game::FindSectorTopologyLineDef(
+                    authoring.derivation.topology, anchor.lineDefId);
+            Check(line != nullptr, "authoring receiver fixture retains its door portal");
+            if (line != nullptr) {
+                anchor.frontSideDefId = line->frontSideDefId;
+                anchor.backSideDefId = line->backSideDefId;
+            }
+        }
+        game::SectorAuthoringDocument restored;
+        Check(LoadAuthoringText(SaveAuthoringText(authoring), restored, error)
+                      && !restored.mapData.runtimeObjects.empty()
+                      && enabled(restored.mapData.runtimeObjects.front()),
+              "item drop target survives graph-native editor save and load");
+        saved["runtimeObjects"][0][payloads[index]]["itemDropTarget"] = false;
+        Check(LoadText(saved.dump(), loaded, error), "explicit opt-out loads");
+        Check(!Json::parse(SaveText(loaded))["runtimeObjects"][0][payloads[index]].contains("itemDropTarget"),
+              "explicit false normalizes to omitted default");
+        for (const Json malformed : {Json(1), Json("true"), Json(nullptr)}) {
+            saved["runtimeObjects"][0][payloads[index]]["itemDropTarget"] = malformed;
+            ExpectRejected(saved, "item drop target rejects non-boolean values");
+        }
+    }
+}
+
 void TestDynamicModelRoundTripAndDefaultOmission()
 {
     SectorTopologyMap map = MakeSquare();
@@ -5911,6 +5971,7 @@ int main()
     TestRuntimeObjectsRoundTripAndValidation();
     TestDuctAccessRoundTripAndLightmapExclusion();
     TestDynamicModelRoundTripAndDefaultOmission();
+    TestItemDropTargetSerialization();
     TestItemRoundTripDefaultsValidationAndLightmapExclusion();
     TestNpcRoundTripDefaultsAndValidation();
     TestRuntimeObjectEditAndDeleteHelpers();

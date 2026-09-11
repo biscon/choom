@@ -40,7 +40,7 @@ float MeasureSectorEditorDynamicModelInspectorContentHeight(
             + 70.0f
             + context.rowH
             + context.gap
-            + 40.0f;
+            + 40.0f + context.rowH + context.gap;
 }
 
 void DrawSectorEditorDynamicModelInspector(
@@ -88,6 +88,23 @@ void DrawSectorEditorDynamicModelInspector(
             modelStatus, engine::UITextJustify::Left,
             modelAsset != nullptr ? context.config.accentColor : context.config.mutedTextColor);
     y += 34.0f + gap;
+
+    bool itemDropTarget = object->dynamicModel.itemDropTarget;
+    if (engine::Checkbox(
+                context.ui, context.config, context.input, context.assets,
+                "sector_editor_dynamic_model_item_drop_target",
+                Rectangle{0.0f, y, contentW, rowH}, context.font,
+                "Item drop target", itemDropTarget)) {
+        context.editing.MutateSelected(
+                "Updated item drop target",
+                [itemDropTarget](SectorPlacedRuntimeObject& target) {
+                    if (target.kind != "dynamic_model"
+                            || target.dynamicModel.itemDropTarget == itemDropTarget) return false;
+                    target.dynamicModel.itemDropTarget = itemDropTarget;
+                    return true;
+                });
+    }
+    y += rowH + gap;
 
     if (context.uiState.dynamicModelInstanceIdObjectId != object->id) {
         std::snprintf(

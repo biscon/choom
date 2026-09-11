@@ -345,9 +345,13 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
     game::SectorStaticModel staticModel;
     staticModel.instanceId = "crate_4";
     world.Add(staticProp, staticModel);
+    world.Add(staticProp, game::SectorObject{});
     game::SectorUseTarget staticTarget;
     staticTarget.entity = staticProp;
     staticTarget.kind = game::SectorUseTargetKind::StaticProp;
+    Check(game::SectorObjectUseTargetInstanceId(world, staticTarget).empty(),
+          "static props reject inventory use by default");
+    world.Get<game::SectorObject>(staticProp).itemDropTarget = true;
     Check(game::SectorObjectUseTargetInstanceId(world, staticTarget)
                     == "crate_4",
           "held Object targeting exposes static prop stable IDs");
@@ -357,6 +361,7 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
     npcModel.instanceId = "should_not_be_targeted";
     world.Add(npc, npcModel);
     world.Add(npc, game::NpcRuntimeInstance{});
+    world.Add(npc, game::SectorObject{-1, true, true});
     game::SectorUseTarget npcTarget;
     npcTarget.entity = npc;
     npcTarget.kind = game::SectorUseTargetKind::DynamicProp;
@@ -394,6 +399,7 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
     game::SectorDoor door;
     door.instanceId = "locked_door";
     world.Add(doorEntity, door);
+    world.Add(doorEntity, game::SectorObject{-1, true, true});
     game::SectorUseTarget doorTarget;
     doorTarget.entity = doorEntity;
     doorTarget.kind = game::SectorUseTargetKind::Door;
@@ -405,6 +411,33 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
     doorTarget.entity.generation += 1;
     Check(game::SectorObjectUseTargetInstanceId(world, doorTarget).empty(),
           "stale door entity handles cannot resolve instance IDs");
+}
+
+void TestItemDropTargetOptIn()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const auto check = [&](game::SectorUseTargetKind kind, auto component) {
+        const auto entity = world.CreateEntity();
+        component.instanceId = "receiver";
+        world.Add(entity, component);
+        world.Add(entity, game::SectorObject{});
+        game::SectorUseTarget target;
+        target.entity = entity;
+        target.kind = kind;
+        Check(game::SectorObjectUseTargetInstanceId(world, target).empty(),
+              "inventory receiver defaults to disabled");
+        world.Get<game::SectorObject>(entity).itemDropTarget = true;
+        Check(game::SectorObjectUseTargetInstanceId(world, target) == "receiver",
+              "opted-in inventory receiver resolves its instance ID");
+        world.Get<game::SectorObject>(entity).itemDropTarget = false;
+        Check(game::SectorObjectUseTargetInstanceId(world, target).empty(),
+              "disabling a receiver also rejects a previously selected target");
+    };
+    check(game::SectorUseTargetKind::StaticProp, game::SectorStaticModel{});
+    check(game::SectorUseTargetKind::DynamicProp, game::SectorDynamicModel{});
+    check(game::SectorUseTargetKind::Door, game::SectorDoor{});
+    check(game::SectorUseTargetKind::Npc, game::NpcRuntimeInstance{});
 }
 
 void TestHeldObjectDoorGeometry()
@@ -428,6 +461,9 @@ void TestHeldObjectDoorGeometry()
     const auto pick = [&] {
         return game::FindSectorObjectUseTarget(world, assets, ray, nullptr);
     };
+    Check(pick().kind == game::SectorUseTargetKind::None,
+          "visible door leaves reject inventory targeting by default");
+    world.Get<game::SectorObject>(entity).itemDropTarget = true;
     Check(pick().kind == game::SectorUseTargetKind::Door
                   && std::fabs(pick().distance - 2.9f) < 0.0001f,
           "closed procedural door is targetable at its visible leaf");
@@ -2712,6 +2748,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
     door.materialId = "test_door";
     door.openSoundId = "door_open";
     door.closeSoundId = "door_close";
+    door.itemDropTarget = true;
     map.runtimeObjects.push_back(MakePlacedDoor(35, door));
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -2729,6 +2766,8 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
             "valid placed door preserves door anchor diagnostic counts");
 
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Get<game::SectorObject>(entity).itemDropTarget,
+          "door spawn preserves authored inventory-target opt-in");
     const float expectedMotionOffset = game::SmootherStep01(door.initialOpenFraction)
             * EffectiveDoorOpenDistance(door.openDistance);
     Check(world.IsAlive(entity), "valid placed door mapped entity is alive");
@@ -6529,6 +6568,7 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
     object.staticModel.heightOffsetWorld = 0.625f;
     object.staticModel.scale = 1.75f;
     object.staticModel.collision = true;
+    object.staticModel.itemDropTarget = true;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -6548,6 +6588,8 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
           "assigned static prop reports its queued model request");
 
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Get<game::SectorObject>(entity).itemDropTarget,
+          "staticModel spawn preserves authored inventory-target opt-in");
     Check(world.IsAlive(entity)
                   && world.Has<game::SectorStaticModel>(entity)
                   && world.Has<game::SectorStaticModelCollider>(entity)
@@ -6665,6 +6707,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.5f;
     object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    object.dynamicModel.itemDropTarget = true;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -6672,6 +6715,8 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     Check(state.placedObjectEntities.size() == 1,
           "unassigned dynamic prop still spawns one runtime entity");
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Get<game::SectorObject>(entity).itemDropTarget,
+          "dynamicModel spawn preserves authored inventory-target opt-in");
     Check(world.Has<game::SectorDynamicModel>(entity)
                   && world.Has<engine::AnimatedModelInstance>(entity)
                   && world.Has<engine::AnimatedModelAnimator>(entity)
@@ -6754,6 +6799,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     object.npc.scale = 1.4f;
     object.npc.shadowMode =
             game::SectorDynamicModelShadowMode::Dynamic;
+    object.npc.itemDropTarget = true;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -6789,6 +6835,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
           "resolved NPC placement spawns one runtime entity");
     if (state.placedObjectEntities.empty()) return;
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Get<game::SectorObject>(entity).itemDropTarget,
+          "npc spawn preserves authored inventory-target opt-in");
     Check(world.Has<game::NpcRuntimeInstance>(entity)
                   && world.Has<game::NpcAnimationState>(entity)
                   && world.Has<game::Health>(entity)
@@ -12692,6 +12740,7 @@ int main()
     TestSectorItemUseTargetFallbackAndPendingGate();
     TestHeldObjectUseRayTargetOrderingAndOcclusion();
     TestHeldObjectDoorGeometry();
+    TestItemDropTargetOptIn();
     TestItemRuntimeSpawnAndFocusedRemoval();
     TestSectorUseHighlightPulsesAndReleases();
     TestNpcVocalPriorityDelayAndShufflePolicy();

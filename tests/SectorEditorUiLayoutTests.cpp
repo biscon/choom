@@ -405,7 +405,7 @@ void TestDoorInspectorHeightCountsConditionalRows()
     const float stacked =
             game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
     const float scriptRowsAndValidation =
-            (rowH + gap) * 4.0f + 36.0f;
+            (rowH + gap) * 5.0f + 36.0f; // Includes Item drop target.
     const float expectedProceduralSlideHeight =
             38.0f + 34.0f
             + scriptRowsAndValidation

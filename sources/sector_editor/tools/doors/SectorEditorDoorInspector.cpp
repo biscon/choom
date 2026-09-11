@@ -474,6 +474,22 @@ void DrawSectorEditorDoorInspector(
         if (result.submitted) submit(std::string{buffer});
         y += rowH + gap;
     };
+    bool itemDropTarget = selectedObject->door.itemDropTarget;
+    if (engine::Checkbox(
+                ui, config, input, assets, "sector_editor_door_item_drop_target",
+                Rectangle{0.0f, y, contentW, rowH}, font,
+                "Item drop target", itemDropTarget)) {
+        editing.MutateSelected(
+                "Updated item drop target",
+                [itemDropTarget](SectorPlacedRuntimeObject& object) {
+                    if (object.kind != "door"
+                            || object.door.itemDropTarget == itemDropTarget) return false;
+                    object.door.itemDropTarget = itemDropTarget;
+                    return true;
+                });
+    }
+    y += rowH + gap;
+
     drawDoorText(
             "sector_editor_door_instance_id",
             "Instance ID",

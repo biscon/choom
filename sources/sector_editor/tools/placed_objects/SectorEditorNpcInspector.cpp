@@ -18,7 +18,7 @@ float MeasureSectorEditorNpcInspectorContentHeight(
     const SectorEditorNpcPlacementState& state =
             context.editingState.npcPlacement;
     return 38.0f * 2.0f
-            + (context.rowH + context.gap) * 13.0f
+            + (context.rowH + context.gap) * 14.0f
             + (object.npc.patrolEditorId > 0
                     ? (context.rowH + context.gap) * 2.0f : 0.0f)
             + 68.0f
@@ -114,6 +114,23 @@ void DrawSectorEditorNpcInspector(
         state.bufferedObjectId = object->id;
         state.instanceIdError.clear();
     }
+    bool itemDropTarget = object->npc.itemDropTarget;
+    if (engine::Checkbox(
+                context.ui, context.config, context.input, context.assets,
+                "sector_editor_npc_item_drop_target",
+                Rectangle{0.0f, y, contentW, rowH}, context.font,
+                "Item drop target", itemDropTarget)) {
+        context.editing.MutateSelected(
+                "Updated item drop target",
+                [itemDropTarget](SectorPlacedRuntimeObject& target) {
+                    if (target.kind != "npc"
+                            || target.npc.itemDropTarget == itemDropTarget) return false;
+                    target.npc.itemDropTarget = itemDropTarget;
+                    return true;
+                });
+    }
+    y += rowH + gap;
+
     engine::Text(
             context.ui, context.config, context.assets,
             Rectangle{0.0f, y, 118.0f, rowH},

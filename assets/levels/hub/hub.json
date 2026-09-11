@@ -409,6 +409,7 @@
             1616
           ]
         },
+        "itemDropTarget": true,
         "canOpenScript": "open_pre_entrance_door",
         "width": 1.25,
         "height": 2.75,
@@ -12663,6 +12664,10 @@
       },
       "door_open_01": {
         "path": "doors/door_open_01.mp3",
+        "type": "sound"
+      },
+      "door_unlock": {
+        "path": "doors/door_unlock.wav",
         "type": "sound"
       },
       "horror_ambience": {
@@ -43199,7 +43204,6 @@
             "z": 1328
           }
         ],
-        "repeat": true,
         "script": "intro_trigger_1"
       }
     ],

@@ -73,7 +73,8 @@ local function elinConversation()
             identity = flag("elin_asked_identity"),
             place = flag("elin_asked_place") or not flag("elin_asked_identity"),
             people = flag("elin_asked_people")  or not flag("elin_asked_identity"),
-            locked_door = flag("elin_asked_pre_entrance_door") or not flag("tried_pre_entrance_door") or not flag("elin_asked_identity")
+            locked_door = flag("elin_asked_pre_entrance_door") or not flag("tried_pre_entrance_door") or not flag("elin_asked_identity"),
+            goodbye = not flag("elin_asked_identity")
         })
     end, function()
         if returning then
@@ -235,10 +236,12 @@ end
 function usePreEntranceDoorKey(targetInstanceId)
     -- log("used key on: " .. targetInstanceId)
     if targetInstanceId == "pre_entrance_door" then
+        playMapSound("door_unlock", 0.8)
         setFlag("pre_entrance_door_unlocked", true)
-        say("Voila!. the door is now unlocked.")
+        setFlag("tried_pre_entrance_door", false)
+        delay(2300)
+        say("That did it.")
         return true
     end
-    say("That won't work.")
     return false
 end

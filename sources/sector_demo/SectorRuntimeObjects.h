@@ -48,6 +48,7 @@ struct SectorObjectTransform {
 struct SectorObject {
     int currentSectorId = -1;
     bool visible = true;
+    bool itemDropTarget = false;
 };
 
 struct SectorObjectLighting {

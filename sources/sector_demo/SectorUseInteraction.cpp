@@ -262,7 +262,7 @@ SectorUseTarget FindSectorObjectUseTarget(
                         entity,
                         SectorUseTargetKind::StaticProp,
                         TransformBounds(asset->localBounds, authored),
-                        !model.instanceId.empty());
+                        object.itemDropTarget && !model.instanceId.empty());
             });
     world.ForEach<
             SectorObjectTransform,
@@ -310,7 +310,7 @@ SectorUseTarget FindSectorObjectUseTarget(
                         entity,
                         isNpc ? SectorUseTargetKind::Npc : SectorUseTargetKind::DynamicProp,
                         TransformBounds(localBounds, authored),
-                        selectable);
+                        object.itemDropTarget && selectable);
             });
     world.ForEach<SectorObjectTransform, SectorObject, SectorDoor,
             SectorDoorResolvedAnchor, SectorDoorRender>(
@@ -330,7 +330,7 @@ SectorUseTarget FindSectorObjectUseTarget(
                             ConsiderSectorObjectUseTransformedBounds(accumulator,
                                     ray, entity, SectorUseTargetKind::Door,
                                     leaf->localBounds, model.leafMatrix,
-                                    !door.instanceId.empty());
+                                    object.itemDropTarget && !door.instanceId.empty());
                         }
                         return;
                     }
@@ -344,7 +344,7 @@ SectorUseTarget FindSectorObjectUseTarget(
                 ConsiderSectorObjectUseTransformedBounds(accumulator,
                         ray, entity, SectorUseTargetKind::Door, bounds,
                         BuildSectorDoorSlabModelMatrix(transform, anchor, render),
-                        !door.instanceId.empty());
+                        object.itemDropTarget && !door.instanceId.empty());
             });
     float topologyDistance = -1.0f;
     if (collisionWorld != nullptr
@@ -363,7 +363,8 @@ std::string_view SectorObjectUseTargetInstanceId(
         engine::World& world,
         const SectorUseTarget& target)
 {
-    if (!world.IsAlive(target.entity)) return {};
+    if (!world.IsAlive(target.entity) || !world.Has<SectorObject>(target.entity)
+            || !world.Get<SectorObject>(target.entity).itemDropTarget) return {};
     if (target.kind == SectorUseTargetKind::Door
             && world.Has<SectorDoor>(target.entity)) {
         const auto& door = world.Get<SectorDoor>(target.entity);

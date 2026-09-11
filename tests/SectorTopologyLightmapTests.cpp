@@ -1403,6 +1403,27 @@ LightmapImageMetrics BakeAlphaMiddleDirectionalLight(const std::filesystem::path
     return BakeAndMeasure(map, fileName);
 }
 
+void TestItemDropTargetDoesNotChangeLightmapHash()
+{
+    game::SectorTopologyMap map;
+    const char* kinds[] = {"static_model", "dynamic_model", "door", "npc"};
+    for (int index = 0; index < 4; ++index) {
+        game::SectorPlacedRuntimeObject object;
+        object.id = index + 1;
+        object.kind = kinds[index];
+        map.runtimeObjects.push_back(object);
+    }
+    const auto before = game::ComputeSectorLightmapSourceHash(map);
+    for (auto& object : map.runtimeObjects) {
+        object.staticModel.itemDropTarget = true;
+        object.dynamicModel.itemDropTarget = true;
+        object.door.itemDropTarget = true;
+        object.npc.itemDropTarget = true;
+        Check(game::ComputeSectorLightmapSourceHash(map) == before,
+              "item-drop eligibility is excluded from lightmap source hashes");
+    }
+}
+
 void TestSourceHashChanges()
 {
     const game::SectorTopologyMap base = MakeSquare();
@@ -5291,6 +5312,7 @@ int main()
     TestObjectLightProbeOcclusionAndAlphaOcclusion();
     TestObjectLightProbeAmbientAndDegenerateFiniteOutput();
     TestSourceHashChanges();
+    TestItemDropTargetDoesNotChangeLightmapHash();
     TestSourceHashIncludesMiddleTextureData();
     TestSourceHashStableWhenVectorsReordered();
     TestBakeVersionInvalidatesOldLightmaps();

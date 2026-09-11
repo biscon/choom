@@ -70,7 +70,8 @@ bool SameDoorFaceUvs(
 
 bool SameDoorConfig(const SectorPlacedDoor& a, const SectorPlacedDoor& b)
 {
-    return a.useTitle == b.useTitle
+    return a.itemDropTarget == b.itemDropTarget
+            && a.useTitle == b.useTitle
             && a.canOpenScript == b.canOpenScript
             && a.canCloseScript == b.canCloseScript
             && a.width == b.width
@@ -103,7 +104,8 @@ bool SameStaticModelConfig(
         const SectorPlacedStaticModel& a,
         const SectorPlacedStaticModel& b)
 {
-    return a.modelPath == b.modelPath
+    return a.itemDropTarget == b.itemDropTarget
+            && a.modelPath == b.modelPath
             && a.rotationXRadians == b.rotationXRadians
             && a.rotationZRadians == b.rotationZRadians
             && a.heightOffsetWorld == b.heightOffsetWorld
@@ -116,7 +118,8 @@ bool SameDynamicModelConfig(
         const SectorPlacedDynamicModel& a,
         const SectorPlacedDynamicModel& b)
 {
-    return a.modelPath == b.modelPath
+    return a.itemDropTarget == b.itemDropTarget
+            && a.modelPath == b.modelPath
             && a.useTitle == b.useTitle
             && a.useDistance == b.useDistance
             && a.onUseScript == b.onUseScript

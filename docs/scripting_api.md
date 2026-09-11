@@ -377,7 +377,14 @@ end
 ## Carried Object use callbacks
 
 An Object placement may provide `onUseScript`. After that item is picked up,
-its inventory Use action enters cursor-targeting mode. Left-clicking a visible,
+its inventory Use action enters cursor-targeting mode. Receivers must opt in
+using the **Item drop target** checkbox in the static-prop, dynamic-prop, door,
+or NPC placement inspector. This per-placement setting (`itemDropTarget` in
+level JSON) defaults to false, including in older levels that omit it. Unchecked
+objects neither highlight nor accept inventory Use/Give callbacks, but still
+block targets behind them. The setting does not affect normal E-key interaction.
+
+Left-clicking an opted-in, visible,
 ready static prop, dynamic prop, door leaf, or living non-hostile NPC calls the
 named global function with that target's stable string instance ID. NPCs must
 not already be held in a conversation. The target does not need its own use

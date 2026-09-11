@@ -12947,6 +12947,24 @@ void TestDoorConfigClipboardPreservesAnchorAndInstanceId()
                   && renderCache.valid
                   && !documentState.lifecycle.topologyDocumentDirty,
           "repeating an identical door config paste is a clean no-op");
+    Check(editing.CopySelectedConfig(clipboard), "door receiver config can be copied");
+    auto* dropConfig = std::get_if<game::SectorPlacedDoor>(&clipboard.payload);
+    Check(dropConfig != nullptr, "door receiver clipboard has the expected payload");
+    if (dropConfig != nullptr) {
+        dropConfig->itemDropTarget = !dropConfig->itemDropTarget;
+        const auto previousRevision = renderRevision;
+        const auto previousHash = game::ComputeSectorLightmapSourceHash(map);
+        Check(editing.PasteSelectedConfig(clipboard)
+                      && renderRevision == previousRevision + 1
+                      && !renderCache.valid
+                      && documentState.lifecycle.topologyDocumentDirty,
+              "changing only door item-drop opt-in invalidates the editor cache");
+        Check(game::ComputeSectorLightmapSourceHash(map) == previousHash,
+              "door item-drop opt-in does not invalidate baked lighting");
+        Check(!editing.PasteSelectedConfig(clipboard),
+              "repeating the same door item-drop opt-in paste is a no-op");
+    }
+
 }
 
 void TestStaticPropConfigClipboardPreservesPlacementAndIdentity()
@@ -13056,6 +13074,24 @@ void TestStaticPropConfigClipboardPreservesPlacementAndIdentity()
                   && renderCache.valid
                   && !documentState.lifecycle.topologyDocumentDirty,
           "repeating an identical 3D prop config paste is a clean no-op");
+    Check(editing.CopySelectedConfig(clipboard), "receiver config can be copied");
+    auto* dropConfig = std::get_if<game::SectorEditorStaticModelConfig>(&clipboard.payload);
+    Check(dropConfig != nullptr, "receiver clipboard has the expected payload");
+    if (dropConfig != nullptr) {
+        dropConfig->model.itemDropTarget = !dropConfig->model.itemDropTarget;
+        const auto previousRevision = renderRevision;
+        const auto previousHash = game::ComputeSectorLightmapSourceHash(map);
+        Check(editing.PasteSelectedConfig(clipboard)
+                      && renderRevision == previousRevision + 1
+                      && !renderCache.valid
+                      && documentState.lifecycle.topologyDocumentDirty,
+              "changing only item-drop opt-in through paste edits the document and invalidates its cache");
+        Check(game::ComputeSectorLightmapSourceHash(map) == previousHash,
+              "item-drop opt-in does not invalidate baked lighting");
+        Check(!editing.PasteSelectedConfig(clipboard),
+              "repeating the same item-drop opt-in paste is a no-op");
+    }
+
 }
 
 void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
@@ -13672,6 +13708,24 @@ void TestDynamicPropConfigClipboardPreservesPlacementAndIdentity()
     mismatched.payload = game::SectorEditorStaticModelConfig{};
     Check(!editing.PasteSelectedConfig(mismatched),
           "dynamic props reject copied 3D prop configs");
+    Check(editing.CopySelectedConfig(clipboard), "receiver config can be copied");
+    auto* dropConfig = std::get_if<game::SectorEditorDynamicModelConfig>(&clipboard.payload);
+    Check(dropConfig != nullptr, "receiver clipboard has the expected payload");
+    if (dropConfig != nullptr) {
+        dropConfig->model.itemDropTarget = !dropConfig->model.itemDropTarget;
+        const auto previousRevision = renderRevision;
+        const auto previousHash = game::ComputeSectorLightmapSourceHash(map);
+        Check(editing.PasteSelectedConfig(clipboard)
+                      && renderRevision == previousRevision + 1
+                      && !renderCache.valid
+                      && documentState.lifecycle.topologyDocumentDirty,
+              "changing only item-drop opt-in through paste edits the document and invalidates its cache");
+        Check(game::ComputeSectorLightmapSourceHash(map) == previousHash,
+              "item-drop opt-in does not invalidate baked lighting");
+        Check(!editing.PasteSelectedConfig(clipboard),
+              "repeating the same item-drop opt-in paste is a no-op");
+    }
+
 }
 
 void TestConfigClipboardTargetResolutionPrefersPreviewSurface()
@@ -14760,6 +14814,16 @@ void TestNpcEditingPlacementSelectionPickingAndFloorRelativeDrag()
           "NPC drag follows snapped XZ and reanchors to the destination sector floor");
     Check(editing.FinishDrag() && !renderCache.valid,
           "NPC drag commit invalidates the derived 2D cache");
+    editing.SelectObject(firstNpcId);
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    const auto previousRevision = renderRevision;
+    Check(editing.MutateSelected("Updated item drop target", [](auto& object) {
+                if (object.kind != "npc") return false;
+                object.npc.itemDropTarget = true;
+                return true;
+            }) && renderRevision == previousRevision + 1 && !renderCache.valid,
+          "NPC item-drop opt-in uses the document/cache invalidation path");
+
 }
 
 void TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor()

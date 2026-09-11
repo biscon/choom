@@ -1091,6 +1091,7 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
     }
 
     SectorPlacedDoor door;
+    door.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     door.instanceId = ReadOptionalString(value, "instanceId", context, door.instanceId);
     door.useTitle = ReadOptionalString(value, "useTitle", context, door.useTitle);
     door.canOpenScript = ReadOptionalString(
@@ -1282,6 +1283,7 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
     }
 
     SectorPlacedStaticModel staticModel;
+    staticModel.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     staticModel.modelPath = ReadOptionalString(value, "modelPath", context, staticModel.modelPath);
     staticModel.instanceId = ReadOptionalString(
             value, "instanceId", context, staticModel.instanceId);
@@ -1325,6 +1327,7 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
     }
 
     SectorPlacedDynamicModel model;
+    model.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     model.modelPath = ReadOptionalString(value, "modelPath", context, model.modelPath);
     model.instanceId = ReadOptionalString(value, "instanceId", context, model.instanceId);
     model.useTitle = ReadOptionalString(value, "useTitle", context, model.useTitle);
@@ -1366,6 +1369,7 @@ SectorPlacedNpc ReadPlacedNpc(const Json& value, const std::string& context)
         Fail(context + " must be an object");
     }
     SectorPlacedNpc npc;
+    npc.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     npc.definitionId = ReadString(value, "definitionId", context);
     npc.onUseScript = ReadOptionalString(value, "onUseScript", context, npc.onUseScript);
     npc.useDistance = ReadOptionalPositiveFloat(value, "useDistance", context, npc.useDistance);
@@ -2352,6 +2356,7 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
             {"instanceId", door.instanceId},
             {"anchor", WriteSectorDoorAnchor(door.anchor)}
     };
+    if (door.itemDropTarget) json["itemDropTarget"] = true;
     if (door.useTitle != "door") json["useTitle"] = door.useTitle;
     if (!door.canOpenScript.empty()) json["canOpenScript"] = door.canOpenScript;
     if (!door.canCloseScript.empty()) json["canCloseScript"] = door.canCloseScript;
@@ -2576,6 +2581,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (!IsValidSectorScriptInstanceId(object.staticModel.instanceId)) {
                 Fail(context + ".staticModel.instanceId is invalid");
             }
+            if (object.staticModel.itemDropTarget) staticModel["itemDropTarget"] = true;
             staticModel["instanceId"] = object.staticModel.instanceId;
             if (!object.staticModel.modelPath.empty()) {
                 staticModel["modelPath"] = object.staticModel.modelPath;
@@ -2622,6 +2628,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (!IsValidSectorDynamicModelInstanceId(model.instanceId)) {
                 Fail(context + ".dynamicModel.instanceId is invalid");
             }
+            if (model.itemDropTarget) dynamicModel["itemDropTarget"] = true;
             dynamicModel["instanceId"] = model.instanceId;
             if (model.useTitle != "object") dynamicModel["useTitle"] = model.useTitle;
             if (model.useDistance != 1.5f) dynamicModel["useDistance"] = model.useDistance;
@@ -2714,6 +2721,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
                 Fail(context + ".npc use settings are invalid");
             }
             Json npc{{"definitionId", object.npc.definitionId}};
+            if (object.npc.itemDropTarget) npc["itemDropTarget"] = true;
             if (!object.npc.onUseScript.empty()) npc["onUseScript"] = object.npc.onUseScript;
             if (object.npc.useDistance != 2.5f) npc["useDistance"] = object.npc.useDistance;
             if (!object.npc.instanceId.empty()) npc["instanceId"] = object.npc.instanceId;
