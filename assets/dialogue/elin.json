@@ -1,25 +1,38 @@
 {
-  "choiceSets": [
-    {
-      "id": "elin_intro_topics",
-      "options": [
+    "choiceSets": [
         {
-          "id": "identity",
-          "text": "I'm James."
+            "id": "elin_intro_topics",
+            "options": [
+                {
+                    "id": "identity",
+                    "text": "I'm James."
+                },
+                {
+                    "id": "place",
+                    "text": "What is this place?"
+                },
+                {
+                    "id": "people",
+                    "text": "Have you seen anyone else down here?"
+                },
+                {
+                    "id": "goodbye",
+                    "text": "I'll look around. Stay close."
+                }
+            ]
         },
         {
-          "id": "place",
-          "text": "What is this place?"
-        },
-        {
-          "id": "people",
-          "text": "Have you seen anyone else down here?"
-        },
-        {
-          "id": "goodbye",
-          "text": "I'll look around. Stay close."
+            "id": "elin_place_questions",
+            "options": [
+                {
+                    "id": "elin_arrival",
+                    "text": "How did you get here?"
+                },
+                {
+                    "id": "back",
+                    "text": "Let me ask you something else."
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }

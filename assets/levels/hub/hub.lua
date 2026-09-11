@@ -1,3 +1,26 @@
+local function elinPlaceQuestions()
+    runConversationDynamic("elin_place_questions", {
+        elin_arrival = function()
+          say("How did you get here?")
+          startPlayNpcAnimation("elin", "Talking_2")
+          say("elin", "I was at a subway station when the chaos started. A security person ushered me into a side tunnel.")
+          startPlayNpcAnimation("elin", "Rejected")
+          say("elin", "He then went back to look for more people and left me to wander alone in these dark tunnels..", "afraid")
+          setFlag("elin_asked_arrival", true)
+        end,
+        back = function()
+          say("Let me ask you something else.")
+          say("elin", "Yes?")
+          return "exit"
+        end,
+    }, function()
+        return hiddenOptions({
+          elin_arrival = flag("elin_asked_arrival"),
+        })
+    end)
+end
+
+
 local function elinConversation()
     local returning = flag("elin_intro_conversation_finished")
     runConversationDynamic("elin_intro_topics", {
@@ -13,7 +36,9 @@ local function elinConversation()
             say("elin", "No. I found this office looking room and decided to stop, catch a breath and reevaluate my options.")
             startPlayNpcAnimation("elin", "Talking_2")
             say("elin", "Sure beats walking the dark tunnels, seems like somebody have been living here there is even a bed and all.")
-            setFlag("elin_asked_place", true)
+
+            elinPlaceQuestions()
+            setFlag("elin_asked_place", flag("elin_asked_arrival"))
         end,
         people = function()
             say("Have you seen anyone else down here?", { mood = "afraid" })
