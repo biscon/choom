@@ -393,7 +393,7 @@
       "id": 30,
       "kind": "door",
       "door": {
-        "instanceId": "door_30",
+        "instanceId": "pre_entrance_door",
         "anchor": {
           "lineDefId": 119,
           "frontSectorId": 29,
@@ -409,6 +409,7 @@
             1616
           ]
         },
+        "canOpenScript": "open_pre_entrance_door",
         "width": 1.25,
         "height": 2.75,
         "normalOffset": 0.125,
@@ -6694,8 +6695,8 @@
       "kind": "npc",
       "npc": {
         "definitionId": "elin",
-        "instanceId": "elin",
         "onUseScript": "useElin",
+        "instanceId": "elin",
         "scale": 1.100000023841858,
         "shadowMode": "dynamic"
       },
@@ -12637,6 +12638,10 @@
       },
       "door_close_02": {
         "path": "doors/door_close_02.mp3",
+        "type": "sound"
+      },
+      "door_locked": {
+        "path": "doors/door_locked.wav",
         "type": "sound"
       },
       "door_open_01": {

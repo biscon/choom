@@ -241,6 +241,13 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(ui_text_edit_layout_tests
+            tests/UITextEditLayoutTests.cpp
+            sources/engine/ui/UITextEditLayout.cpp)
+    target_include_directories(ui_text_edit_layout_tests PRIVATE sources)
+    target_link_libraries(ui_text_edit_layout_tests PRIVATE raylib)
+    add_test(NAME ui_text_edit_layout COMMAND ui_text_edit_layout_tests)
+
     add_executable(shader_source_tests tests/ShaderSourceTests.cpp)
     target_link_libraries(shader_source_tests PRIVATE shader_source)
     target_compile_definitions(shader_source_tests PRIVATE

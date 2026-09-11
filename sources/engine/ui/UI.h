@@ -181,6 +181,8 @@ struct UIContext {
     Vector2 scrollDragOffsetStart = {};
     size_t textCursorByteIndex = 0;
     double textCursorBlinkStartTime = 0.0;
+    uint32_t textScrollOwnerId = 0;
+    float textScrollOffsetX = 0.0f;
     Vector2 mousePosition = {};
     bool mouseDown = false;
     bool inScrollArea = false;

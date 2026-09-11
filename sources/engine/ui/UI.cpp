@@ -1,4 +1,5 @@
 #include "engine/ui/UI.h"
+#include "engine/ui/UITextEditLayout.h"
 
 #include <raylib.h>
 
@@ -1052,44 +1053,62 @@ void DrawTextEditField(
         const char* text,
         uint32_t widgetId,
         bool valid,
-        UITextJustify justify)
+        UITextJustify justify,
+        bool tintInvalidText = true)
 {
     const Color border = valid ? config.borderColor : config.invalidColor;
-    const Color textColor = valid ? config.textColor : config.invalidColor;
+    const Color textColor = valid || !tintInvalidText
+            ? config.textColor : config.invalidColor;
     DrawWidgetBackground(ui, config, bounds, InteractiveFill(config, ui, widgetId), border);
-    Text(ui, config, assets, bounds, font, text == nullptr ? "" : text, justify, textColor);
 
-    if (ui.focusedId != widgetId || text == nullptr) {
-        return;
+    const char* displayText = text == nullptr ? "" : text;
+    const bool focused = ui.focusedId == widgetId && text != nullptr;
+    if (focused) {
+        ui.textCursorByteIndex = ClampToUtf8Boundary(text, ui.textCursorByteIndex);
     }
+    const WrappedTextMetrics metrics = ResolveWrappedTextMetrics(
+            assets, font, config.fontSize, config.textSpacing);
+    const float textWidth = MeasureUITextEditPrefix(
+            metrics.font, metrics.fontSize, metrics.spacing,
+            displayText, TextByteLength(displayText));
+    const float prefixWidth = focused ? MeasureUITextEditPrefix(
+            metrics.font, metrics.fontSize, metrics.spacing,
+            displayText, ui.textCursorByteIndex) : 0.0f;
+    const UITextEditLayout layout = BuildUITextEditLayout(
+            ui, config, widgetId, TransformBounds(ui, bounds),
+            textWidth, prefixWidth, justify);
 
-    ui.textCursorByteIndex = ClampToUtf8Boundary(text, ui.textCursorByteIndex);
+    // Raylib scissor calls do not stack. Intersect with the enclosing UI pane,
+    // then explicitly restore its scissor after drawing this field.
+    const int left = static_cast<int>(std::ceil(layout.clipBounds.x));
+    const int top = static_cast<int>(std::ceil(layout.clipBounds.y));
+    const int right = static_cast<int>(std::floor(
+            layout.clipBounds.x + layout.clipBounds.width));
+    const int bottom = static_cast<int>(std::floor(
+            layout.clipBounds.y + layout.clipBounds.height));
+    if (right <= left || bottom <= top) return;
 
-    const double elapsed = GetTime() - ui.textCursorBlinkStartTime;
-    const double blinkInterval = std::max(0.01f, config.caretBlinkInterval);
-    const bool caretVisible = (static_cast<int>(elapsed / blinkInterval) % 2) == 0;
-    if (!caretVisible) {
-        return;
+    BeginScissorMode(left, top, right - left, bottom - top);
+    if (metrics.valid) {
+        DrawTextEx(metrics.font, displayText, layout.textPosition,
+                metrics.fontSize, metrics.spacing, textColor);
     }
-
-    char prefix[128] = {};
-    const size_t prefixBytes = std::min(ui.textCursorByteIndex, sizeof(prefix) - 1);
-    std::memcpy(prefix, text, prefixBytes);
-    prefix[prefixBytes] = '\0';
-
-    const Vector2 textPos = TextPosition(ui, config, assets, bounds, font, text, justify);
-    const Vector2 prefixSize = MeasureTextWithFont(
-            assets,
-            font,
-            prefix,
-            config.fontSize,
-            config.textSpacing
-    );
-
-    const Rectangle drawBounds = TransformBounds(ui, bounds);
-    const float caretX = std::min(drawBounds.x + drawBounds.width - config.paddingX, textPos.x + prefixSize.x + 2.0f);
-    const Rectangle caret{caretX, drawBounds.y + config.paddingY, config.caretWidth, drawBounds.height - config.paddingY * 2.0f};
-    DrawRectangleRec(caret, textColor);
+    if (focused) {
+        const double elapsed = GetTime() - ui.textCursorBlinkStartTime;
+        const double interval = std::max(0.01f, config.caretBlinkInterval);
+        if ((static_cast<int>(elapsed / interval) % 2) == 0) {
+            DrawRectangleRec(layout.caretBounds, textColor);
+        }
+    }
+    if (ui.inScrollArea) {
+        BeginScissorMode(
+                static_cast<int>(std::round(ui.scrollViewport.x)),
+                static_cast<int>(std::round(ui.scrollViewport.y)),
+                static_cast<int>(std::round(ui.scrollViewport.width)),
+                static_cast<int>(std::round(ui.scrollViewport.height)));
+    } else {
+        EndScissorMode();
+    }
 }
 
 bool StepButton(
@@ -1175,6 +1194,10 @@ uint32_t ScrollAxisId(uint32_t baseId, int axis)
 
 void BeginUI(UIContext& ui, Input& input)
 {
+    if (ui.textScrollOwnerId != ui.focusedId) {
+        ui.textScrollOwnerId = 0;
+        ui.textScrollOffsetX = 0.0f;
+    }
     ui.hotId = 0;
     ui.mousePosition = input.MousePosition();
     ui.mouseDown = input.IsMouseButtonDown(MOUSE_LEFT_BUTTON);
@@ -1840,38 +1863,8 @@ UITextInputResult TextInput(
     characterCount = CountUtf8Characters(buffer);
     result.valid = characterCount >= minCharacters && characterCount <= maxCharacters;
 
-    const Color border = result.valid ? config.borderColor : config.invalidColor;
-    DrawWidgetBackground(ui, config, bounds, InteractiveFill(config, ui, widgetId), border);
-
-    const char* displayText = buffer == nullptr ? "" : buffer;
-    Text(ui, config, assets, bounds, font, displayText, justify, config.textColor);
-
-    if (ui.focusedId == widgetId && buffer != nullptr) {
-        ui.textCursorByteIndex = ClampToUtf8Boundary(buffer, ui.textCursorByteIndex);
-
-        const double elapsed = GetTime() - ui.textCursorBlinkStartTime;
-        const double blinkInterval = std::max(0.01f, config.caretBlinkInterval);
-        const bool caretVisible = (static_cast<int>(elapsed / blinkInterval) % 2) == 0;
-
-        const Vector2 textPos = TextPosition(ui, config, assets, bounds, font, displayText, justify);
-        const char restored = buffer[ui.textCursorByteIndex];
-        buffer[ui.textCursorByteIndex] = '\0';
-        const Vector2 prefixSize = MeasureTextWithFont(
-                assets,
-                font,
-                displayText,
-                config.fontSize,
-                config.textSpacing
-        );
-        buffer[ui.textCursorByteIndex] = restored;
-
-        if (caretVisible) {
-            const Rectangle drawBounds = TransformBounds(ui, bounds);
-            const float caretX = std::min(drawBounds.x + drawBounds.width - config.paddingX, textPos.x + prefixSize.x + 2.0f);
-            const Rectangle caret{caretX, drawBounds.y + config.paddingY, config.caretWidth, drawBounds.height - config.paddingY * 2.0f};
-            DrawRectangleRec(caret, config.textColor);
-        }
-    }
+    DrawTextEditField(ui, config, assets, bounds, font, buffer,
+            widgetId, result.valid, justify, false);
 
     return result;
 }
