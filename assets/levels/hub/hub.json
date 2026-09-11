@@ -6732,13 +6732,13 @@
         "definitionId": "new_item_8",
         "instanceId": "pre_entrance_door_key",
         "onUseScript": "usePreEntranceDoorKey",
-        "heightOffsetWorld": 0.6000000834465027,
+        "scale": 2.0,
         "shadowMode": "dynamic"
       },
       "position": [
-        -81.56011962890625,
+        -106.0,
         0.0,
-        28.919893264770508
+        75.0
       ],
       "yawDegrees": 20.0
     },
@@ -6748,8 +6748,10 @@
       "dynamicModel": {
         "instanceId": "office_bed",
         "useTitle": "Bed",
+        "useDistance": 0.8500000238418579,
         "drag": {
-          "pathEditorId": 1
+          "pathEditorId": 1,
+          "movingSound": "furniture_dragging"
         },
         "modelPath": "assets/models/retro_lowpoly_bed.glb",
         "heightOffsetWorld": 0.31000006198883057,
@@ -12674,6 +12676,10 @@
       },
       "door_unlock": {
         "path": "doors/door_unlock.wav",
+        "type": "sound"
+      },
+      "furniture_dragging": {
+        "path": "sfx/furniture_dragging.wav",
         "type": "sound"
       },
       "horror_ambience": {

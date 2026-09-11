@@ -11,6 +11,7 @@ namespace engine {
 class AssetManager;
 class World;
 struct FontAsset;
+struct ModelAsset;
 }
 
 namespace game {
@@ -70,6 +71,17 @@ SectorUseTarget FindSectorUseTarget(
         float ductInteractionDistanceWorld = 1.75f,
         int viewerSectorId = 0,
         const SectorRuntimeObjectState* runtimeObjects = nullptr);
+
+// Also accepts CPU-only model bounds; animation envelopes do not define Talk targeting.
+void ConsiderSectorNpcUseTarget(
+        engine::World& world,
+        engine::Entity entity,
+        const engine::ModelAsset* modelAsset,
+        Vector3 eyePosition,
+        Vector3 forward,
+        const SectorCollisionWorld* collisionWorld,
+        const SectorRuntimeObjectState* runtimeObjects,
+        SectorUseTarget& best);
 
 void ConsiderSectorObjectUseBounds(
         SectorObjectUseTargetAccumulator& accumulator,

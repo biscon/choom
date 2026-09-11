@@ -134,6 +134,142 @@ void TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps()
           "use targeting rejects objects outside the forward view cone");
 }
 
+void TestNpcUseFacingAndNearbyHealthPacks()
+{
+    using namespace game;
+    engine::World world;
+    ReserveSectorRuntimeObjectWorld(world, 4);
+    const auto npcEntity = world.CreateEntity();
+    NpcRuntimeInstance npc;
+    npc.instanceId = "elin_fixture";
+    npc.displayName = "Elin";
+    npc.onUseScript = "useElin";
+    world.Add(npcEntity, npc);
+    world.Add(npcEntity, SectorObject{});
+    world.Add(npcEntity, SectorObjectTransform{{-11, 0, 4.5f}});
+    SectorDynamicModel model;
+    model.scale = 1.1f;
+    model.onUseScript = "must_not_bypass_npc_rules";
+    model.useDistance = 10;
+    world.Add(npcEntity, model);
+    world.Add(npcEntity, engine::AnimatedModelInstance{});
+    world.Add(npcEntity, Health{});
+    world.Add(npcEntity, NpcCombatState{});
+    engine::ModelAsset asset;
+    asset.hasLocalBounds = true;
+    asset.localBounds = {{-0.3f, 0, -0.3f}, {0.3f, 1.8f, 0.3f}};
+    asset.hasAnimatedLocalBounds = true;
+    asset.animatedLocalBounds = {{-4, 0, -4}, {4, 3, 4}};
+
+    // Relevant hub positions copied into a generated fixture; never load the
+    // user's editable level. Elin is at intro_marker_3, packs on the shelf behind.
+    const Vector3 eye{-11, 1.2f, 3.9f};
+    const Vector3 packs[]{{-10.125f, 1.095f, 3.375f}, {-10.75f, 1.095f, 3.375f}};
+    std::array<engine::Entity, 2> items;
+    for (size_t i = 0; i < items.size(); ++i) {
+        items[i] = world.CreateEntity();
+        SectorItem item;
+        item.title = i ? "Large health pack" : "Health pack";
+        item.takeDistance = 2;
+        world.Add(items[i], item);
+        world.Add(items[i], SectorObjectTransform{packs[i]});
+    }
+    const auto targetNpc = [&](Vector3 viewer, Vector3 forward) {
+        SectorUseTarget target;
+        ConsiderSectorNpcUseTarget(world, npcEntity, &asset, viewer, forward, nullptr, nullptr,
+                                   target);
+        return target;
+    };
+    for (size_t i = 0; i < items.size(); ++i) {
+        const Vector3 forward = Vector3Normalize(Vector3Subtract(packs[i], eye));
+        auto target = FindSectorUseTarget(world, nullptr, eye, forward, nullptr);
+        Check(target.kind == SectorUseTargetKind::Item && target.entity == items[i],
+              "looking at a health pack behind Elin selects that pack");
+        ConsiderSectorNpcUseTarget(world, npcEntity, &asset, eye, forward, nullptr, nullptr,
+                                   target);
+        Check(target.kind == SectorUseTargetKind::Item && target.entity == items[i],
+              "surrounding animation envelope cannot steal health-pack selection");
+        Check(targetNpc(eye, forward).kind == SectorUseTargetKind::None,
+              "NPC behind the camera is ineligible even inside its animation envelope");
+    }
+    auto towardNpc = FindSectorUseTarget(world, nullptr, eye, {0, 0, 1}, nullptr);
+    Check(towardNpc.entity == npcEntity && towardNpc.kind == SectorUseTargetKind::Npc,
+          "turning back toward Elin selects her through the NPC branch");
+    Check(targetNpc(eye, {0, 0, 1}).entity == npcEntity,
+          "stable NPC body remains targetable at close range");
+    for (const Vector3 offset :
+         {Vector3{1, 0, 0}, Vector3{-1, 0, 0}, Vector3{0, 0, 1}, Vector3{0, 0, -1}}) {
+        const Vector3 viewer = Vector3Add({-11, 1.2f, 4.5f}, offset);
+        Check(targetNpc(viewer, Vector3Negate(offset)).entity == npcEntity,
+              "NPC can be approached from any side when the player faces its body");
+    }
+    Check(targetNpc({-12, 1.2f, 4.5f}, {0.66f, 0, std::sqrt(1 - 0.66f * 0.66f)}).entity ==
+                  npcEntity,
+          "NPC retains forgiving facing cone");
+    Check(targetNpc({-12, 1.2f, 4.5f}, {0.64f, 0, std::sqrt(1 - 0.64f * 0.64f)}).kind ==
+                  SectorUseTargetKind::None,
+          "NPC outside facing cone is rejected");
+    Check(targetNpc({-11, 1.2f, 4.5f}, {1, 0, 0}).kind == SectorUseTargetKind::None,
+          "coincident body anchor never receives automatic perfect alignment");
+    Check(targetNpc({-11.1f, 1.2f, 4.5f}, {-1, 0, 0}).kind == SectorUseTargetKind::None,
+          "inside stable bounds still requires looking toward the body");
+    Check(targetNpc({-11.1f, 1.2f, 4.5f}, {1, 0, 0}).entity == npcEntity,
+          "inside stable bounds can face toward a noncoincident body anchor");
+    Check(targetNpc({-13.8f, 1.2f, 4.5f}, {1, 0, 0}).entity == npcEntity,
+          "NPC reach is measured to stable body surface, not center");
+    Check(targetNpc({-14, 1.2f, 4.5f}, {1, 0, 0}).kind == SectorUseTargetKind::None,
+          "NPC surface outside authored reach is rejected");
+
+    // More-centered objects win without granting unconditional item priority.
+    const Vector3 sideEye{-12, 1.2f, 4.5f};
+    const Vector3 aim = Vector3Normalize({1, 0, 0.2f});
+    SectorUseTarget centered{items[0], SectorUseTargetKind::Item, {}, 1, 1};
+    ConsiderSectorNpcUseTarget(world, npcEntity, &asset, sideEye, aim, nullptr, nullptr, centered);
+    Check(centered.entity == items[0], "centered item beats off-center NPC");
+    centered.kind = SectorUseTargetKind::DynamicProp;
+    ConsiderSectorNpcUseTarget(world, npcEntity, &asset, sideEye, aim, nullptr, nullptr, centered);
+    Check(centered.entity == items[0], "centered prop beats off-center NPC");
+    centered.kind = SectorUseTargetKind::Item;
+    centered.facingDot = 0.7f;
+    ConsiderSectorNpcUseTarget(world, npcEntity, &asset, sideEye, {1, 0, 0}, nullptr, nullptr,
+                               centered);
+    Check(centered.entity == npcEntity, "centered NPC beats less-aligned item");
+
+    for (const auto item : items)
+        world.Get<SectorItem>(item).takePending = true;
+    auto& runtimeNpc = world.Get<NpcRuntimeInstance>(npcEntity);
+    const auto rejected = [&]() {
+        return targetNpc(sideEye, {1, 0, 0}).kind == SectorUseTargetKind::None &&
+               FindSectorUseTarget(world, nullptr, sideEye, {1, 0, 0}, nullptr).kind ==
+                       SectorUseTargetKind::None;
+    };
+    runtimeNpc.hostile = true;
+    Check(rejected(), "hostile NPC cannot fall through to prop Use");
+    runtimeNpc.hostile = false;
+    runtimeNpc.conversationHeld = true;
+    Check(rejected(), "conversation-held NPC cannot fall through to prop Use");
+    runtimeNpc.conversationHeld = false;
+    world.Get<SectorObject>(npcEntity).visible = false;
+    Check(rejected(), "invisible NPC is not usable");
+    world.Get<SectorObject>(npcEntity).visible = true;
+    world.Get<SectorDynamicModel>(npcEntity).opacity = 0;
+    Check(rejected(), "transparent NPC is not usable");
+    world.Get<SectorDynamicModel>(npcEntity).opacity = 1;
+    world.Get<Health>(npcEntity).current = 0;
+    Check(rejected(), "depleted NPC is not usable");
+    world.Get<Health>(npcEntity).current = 100;
+    world.Get<NpcCombatState>(npcEntity).dead = true;
+    Check(rejected(), "dead NPC is not usable");
+    world.Get<NpcCombatState>(npcEntity).dead = false;
+    runtimeNpc.useDistance = 0;
+    Check(rejected(), "zero NPC use distance is rejected");
+    runtimeNpc.useDistance = std::numeric_limits<float>::quiet_NaN();
+    Check(rejected(), "nonfinite NPC use distance is rejected");
+    runtimeNpc.useDistance = 2.5f;
+    runtimeNpc.onUseScript.clear();
+    Check(rejected(), "NPC without a Use hook cannot use generic prop hook");
+}
+
 void TestSectorUseTargetFindsBothLadderEndpoints()
 {
     engine::World world;
@@ -979,6 +1115,52 @@ game::SectorTopologyMap MakeNavigationSquareMap()
     map.sectors.push_back(Sector(10));
     AddSectorLoop(map, 10, {{0, 0}, {2048, 0}, {2048, 2048}, {0, 2048}});
     return map;
+}
+
+void TestNpcUseRetainsOcclusion()
+{
+    using namespace game;
+    engine::World world;
+    ReserveSectorRuntimeObjectWorld(world, 1);
+    const auto entity = world.CreateEntity();
+    NpcRuntimeInstance npc;
+    npc.onUseScript = "talk";
+    world.Add(entity, npc);
+    world.Add(entity, SectorObject{});
+    world.Add(entity, SectorDynamicModel{});
+    world.Add(entity, SectorObjectTransform{{17, 0, 8}});
+    SectorCollisionWorld collision;
+    Check(collision.BuildFromTopology(MakeNavigationSquareMap()),
+          "build generated NPC visibility room");
+    SectorRuntimeObjectState objects;
+    const auto query = [&](Vector3 eye) {
+        return FindSectorUseTarget(world, nullptr, eye, {1, 0, 0}, &collision, true, nullptr, 1.75f,
+                                   10, &objects);
+    };
+    Check(query({15, 1.2f, 8}).kind == SectorUseTargetKind::None,
+          "wall conceals NPC beyond room boundary");
+    world.Get<SectorObjectTransform>(entity).position = {4, 0, 8};
+    Check(query({2, 1.2f, 8}).entity == entity, "unobstructed NPC remains usable");
+    SectorStaticModelCollider blocker;
+    blocker.center = {3, 8};
+    blocker.halfExtents = {0.1f, 1};
+    blocker.bottom = 0;
+    blocker.top = 2;
+    blocker.resolved = true;
+    objects.physicalModelColliders.push_back(blocker);
+    Check(query({2, 1.2f, 8}).kind == SectorUseTargetKind::None,
+          "solid prop conceals NPC body anchor");
+    objects.physicalModelColliders.clear();
+    SectorDynamicDoorCollider door;
+    door.center = {3, 8};
+    door.halfExtents = {0.1f, 1};
+    door.bottom = 0;
+    door.top = 2;
+    objects.dynamicDoorColliders.push_back(door);
+    Check(query({2, 1.2f, 8}).kind == SectorUseTargetKind::None,
+          "closed door conceals NPC body anchor");
+    objects.dynamicDoorColliders.clear();
+    Check(query({2, 1.2f, 8}).entity == entity, "removing obstruction restores NPC use");
 }
 
 game::SectorTopologyMap MakeNavigationStairMap()
@@ -12747,6 +12929,8 @@ int main()
     TestNpcPatrolWaypointFacing();
     TestNpcPatrolPlaybackModes();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
+    TestNpcUseFacingAndNearbyHealthPacks();
+    TestNpcUseRetainsOcclusion();
     TestSectorUseTargetFindsBothLadderEndpoints();
     TestSectorItemUseTargetFallbackAndPendingGate();
     TestHeldObjectUseRayTargetOrderingAndOcclusion();

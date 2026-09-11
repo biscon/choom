@@ -126,19 +126,21 @@ void ConsiderTarget(
         Vector3 eye,
         Vector3 forward,
         const SectorCollisionWorld* collisionWorld,
-        SectorUseTarget& best)
+        SectorUseTarget& best,
+        float reachDistance = -1.0f)
 {
     const Vector3 offset = Vector3Subtract(targetPosition, eye);
-    const float distance = Vector3Length(offset);
-    if (!std::isfinite(distance) || distance > maximumDistance) return;
-    const float facing = distance > 0.0001f
-            ? Vector3DotProduct(forward, Vector3Scale(offset, 1.0f / distance))
+    const float targetDistance = Vector3Length(offset);
+    const float distance = reachDistance >= 0.0f ? reachDistance : targetDistance;
+    if (!std::isfinite(targetDistance) || !std::isfinite(distance) || distance > maximumDistance) return;
+    const float facing = targetDistance > 0.0001f
+            ? Vector3DotProduct(forward, Vector3Scale(offset, 1.0f / targetDistance))
             : 1.0f;
     if (facing < UseFacingDotThreshold
-            || !IsVisible(collisionWorld, eye, targetPosition, distance)) {
+            || !IsVisible(collisionWorld, eye, targetPosition, targetDistance)) {
         return;
     }
-    if (HiddenByDraggableProp(world,entity,eye,targetPosition,distance)) return;
+    if (HiddenByDraggableProp(world,entity,eye,targetPosition,targetDistance)) return;
     const bool better = best.kind == SectorUseTargetKind::None
             || facing > best.facingDot + 0.0001f
             || (std::fabs(facing - best.facingDot) <= 0.0001f
@@ -194,6 +196,56 @@ void ConsiderObjectUseHit(
 }
 
 } // namespace
+
+void ConsiderSectorNpcUseTarget(engine::World& world, engine::Entity entity,
+                                const engine::ModelAsset* modelAsset, Vector3 eyePosition,
+                                Vector3 forward, const SectorCollisionWorld* collisionWorld,
+                                const SectorRuntimeObjectState* runtimeObjects,
+                                SectorUseTarget& best)
+{
+    if (!world.IsAlive(entity) || !world.Has<NpcRuntimeInstance>(entity) ||
+        !world.Has<SectorObject>(entity) || !world.Has<SectorObjectTransform>(entity) ||
+        !world.Has<SectorDynamicModel>(entity) || !Finite(eyePosition) || !Finite(forward) ||
+        Vector3LengthSqr(forward) <= 0.000001f)
+        return;
+    const auto& npc = world.Get<NpcRuntimeInstance>(entity);
+    const auto& object = world.Get<SectorObject>(entity);
+    const auto& transform = world.Get<SectorObjectTransform>(entity);
+    const auto& model = world.Get<SectorDynamicModel>(entity);
+    if (npc.hostile || npc.conversationHeld || npc.onUseScript.empty() ||
+        !std::isfinite(npc.useDistance) || npc.useDistance <= 0.0f || !object.visible ||
+        model.opacity <= 0.0f ||
+        (world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity))) ||
+        (world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead))
+        return;
+
+    BoundingBox bounds{{-0.3f, 0, -0.3f}, {0.3f, 1.8f, 0.3f}};
+    if (modelAsset != nullptr) {
+        if (!modelAsset->hasLocalBounds)
+            return;
+        bounds = modelAsset->localBounds;
+    }
+    const Matrix authored = BuildSectorStaticModelAuthoredTransform(
+            transform.position, transform.rotationXRadians, transform.yawRadians,
+            transform.rotationZRadians, model.scale);
+    bounds = TransformBounds(bounds, authored);
+    if (!Finite(bounds.min) || !Finite(bounds.max))
+        return;
+    // Score the direction to the body, never an exit point from a surrounding
+    // animation envelope. Keep close-range reach measured to the body surface.
+    const Vector3 point{(bounds.min.x + bounds.max.x) * 0.5f,
+                        std::clamp(eyePosition.y, bounds.min.y, bounds.max.y),
+                        (bounds.min.z + bounds.max.z) * 0.5f};
+    if (Vector3DistanceSqr(point, eyePosition) <= 0.00000001f)
+        return;
+    const float reachDistance = Vector3Distance(ClosestPoint(bounds, eyePosition), eyePosition);
+    if (runtimeObjects && collisionWorld &&
+        !HasNpcLineOfSight(*collisionWorld, runtimeObjects->dynamicDoorColliders,
+                           runtimeObjects->physicalModelColliders, eyePosition, point))
+        return;
+    ConsiderTarget(world, entity, SectorUseTargetKind::Npc, point, npc.useDistance, eyePosition,
+                   Vector3Normalize(forward), collisionWorld, best, reachDistance);
+}
 
 void ConsiderSectorObjectUseBounds(
         SectorObjectUseTargetAccumulator& accumulator,
@@ -472,6 +524,7 @@ SectorUseTarget FindSectorUseTarget(
                         SectorDynamicModel& prop,
                         SectorObjectTransform& transform,
                         engine::AnimatedModelInstance& instance) {
+                    if (world.Has<NpcRuntimeInstance>(entity)) return;
                     if ((!world.Has<SectorPropDrag>(entity) && (!includeDynamicProps || prop.onUseScript.empty() || prop.useConsumed))
                             || !std::isfinite(prop.useDistance)
                             || prop.useDistance <= 0.0f) {
@@ -511,31 +564,15 @@ SectorUseTarget FindSectorUseTarget(
     }
 
     world.ForEach<NpcRuntimeInstance, SectorObject, SectorObjectTransform, SectorDynamicModel>(
-            [&](engine::Entity entity, NpcRuntimeInstance& npc, SectorObject& object,
-                    SectorObjectTransform& transform, SectorDynamicModel& model) {
-                if (npc.hostile || npc.conversationHeld || npc.onUseScript.empty()
-                        || !object.visible || model.opacity <= 0.0f
-                        || (world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))
-                        || (world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead)) return;
-                BoundingBox bounds{{-0.3f, 0, -0.3f}, {0.3f, 1.8f, 0.3f}};
+            [&](engine::Entity entity, NpcRuntimeInstance&, SectorObject&,
+                    SectorObjectTransform&, SectorDynamicModel&) {
+                const engine::ModelAsset* modelAsset = nullptr;
                 if (assets && world.Has<engine::AnimatedModelInstance>(entity)) {
-                    const auto* asset = assets->GetModelAsset(world.Get<engine::AnimatedModelInstance>(entity).model);
-                    if (!asset || !asset->hasLocalBounds) return;
-                    bounds = asset->hasAnimatedLocalBounds ? asset->animatedLocalBounds : asset->localBounds;
+                    modelAsset = assets->GetModelAsset(world.Get<engine::AnimatedModelInstance>(entity).model);
+                    if (!modelAsset) return;
                 }
-                const Matrix authored = BuildSectorStaticModelAuthoredTransform(transform.position,
-                        transform.rotationXRadians, transform.yawRadians, transform.rotationZRadians, model.scale);
-                bounds = TransformBounds(bounds, authored);
-                // At close range the player's gaze may meet any part of the body,
-                // rather than a single center point outside the facing cone.
-                const Ray ray{eyePosition, forward};
-                const RayCollision hit = GetRayCollisionBox(ray, bounds);
-                const Vector3 point = hit.hit ? hit.point : ClosestPoint(bounds, eyePosition);
-                if (runtimeObjects && collisionWorld
-                        && !HasNpcLineOfSight(*collisionWorld, runtimeObjects->dynamicDoorColliders,
-                                runtimeObjects->physicalModelColliders, eyePosition, point)) return;
-                ConsiderTarget(world, entity, SectorUseTargetKind::Npc, point, npc.useDistance,
-                        eyePosition, forward, collisionWorld, best);
+                ConsiderSectorNpcUseTarget(world, entity, modelAsset, eyePosition, forward,
+                        collisionWorld, runtimeObjects, best);
             });
 
     world.ForEach<SectorDoor, SectorDoorResolvedAnchor, SectorDoorInteraction>(
