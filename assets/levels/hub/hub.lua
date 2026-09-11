@@ -1,6 +1,12 @@
 local function elinConversation()
     local returning = flag("elin_intro_conversation_finished")
     runConversationDynamic(returning and "elin_repeat_topics" or "elin_intro_topics", {
+        identity = function()
+            say("My name is James. Not Jim, definitely not Jimbo, just James.")
+            startPlayNpcAnimation("elin", "Talking_2")
+            say("elin", "James it is, pleasure to meet you!.", "happy")
+            setFlag("elin_asked_identity", true)
+        end,
         tunnels = function()
             say("Do you know a way out of these tunnels?")
             startPlayNpcAnimation("elin", "Talking_2")
@@ -19,7 +25,7 @@ local function elinConversation()
         goodbye = function()
             if returning then
                 say("Talk later.")
-                say("elin", "Talk later.")
+                say("elin", "Later.")
             else
                 say("I'll look around. Stay close.")
                 startPlayNpcAnimation("elin", "Talking")
@@ -30,6 +36,7 @@ local function elinConversation()
         end,
     }, function()
         return hiddenOptions({
+            identity = flag("elin_asked_identity"),
             tunnels = flag("elin_asked_tunnels"),
             people = flag("elin_asked_people"),
         })
@@ -81,7 +88,7 @@ function intro_trigger_1()
     })
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "I've been walking these dark tunnels forever. You're are the first person I met so far.")
+    say("elin", "I've been walking these dark tunnels forever. You're are the first person I met so far. Follow me.")
     local elinArrival = assert(startMoveNpc("elin", "intro_marker_3", "walk", 1.5, true))
     delay(1500)
     movePlayer("intro_marker_4", "walk", 1.25, {
@@ -93,11 +100,14 @@ function intro_trigger_1()
     npcLookAtPlayer("elin", 500)
     lookAtNpc("elin", 500, 0.7)
 
+    startPlayNpcAnimation("elin", "Talking_2")
+    say("elin", "My name is Elin by the way, what is yours?. ")
+
     assert(startConversation("elin", { reposition = false }))
     elinConversation()
     assert(endConversation())
     assert(endCutscene())
-    startPlayNpcAnimation("elin", "Twerking")
+    startPlayNpcAnimation("elin", "Thankful")
 end
 
 function trigger_2()
