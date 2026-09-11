@@ -5223,6 +5223,206 @@ void TestSectorDoorNavigationHoldsAndSlidingObstruction()
           "closing sliding slab detects a cylinder in its swept volume and retargets open");
 }
 
+struct OpenDoorApproachFixture {
+    game::SectorTopologyMap map;
+    game::SectorCollisionWorld collision;
+    game::SectorNavigationWorld navigation;
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState objects;
+    game::NpcNavigationRuntime npcs;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    std::vector<game::SectorStaticModelCollider> staticColliders;
+    engine::Entity npc;
+    Vector2 destination;
+    bool ready = false;
+
+    OpenDoorApproachFixture(int widthScale, bool reverse, bool angled, bool run)
+    {
+        using namespace game;
+        map = MakeDoorPortalMap();
+        for (auto& vertex : map.vertices) {
+            vertex.x *= 16;
+            vertex.y *= widthScale;
+        }
+        for (auto& sector : map.sectors) {
+            sector.floorZ = 0;
+            sector.ceilingZ = 32;
+        }
+        auto door = MakeDoorOnPortal();
+        door.anchor.endpointAX = 1024;
+        door.anchor.endpointBX = 1024;
+        door.anchor.endpointBY = 64 * widthScale;
+        door.initialOpenFraction = 1;
+        map.runtimeObjects.push_back(MakePlacedDoor(77, door));
+        if (!collision.BuildFromTopology(map)) return;
+        navigation.Initialize();
+        navigation.RequestRebuild();
+        FinishNavigationBuild(navigation, map);
+        if (navigation.State() != SectorNavigationState::Ready) return;
+        RefreshSectorRuntimeObjectMapData(objects, map);
+        SpawnPlacedRuntimeObjects(world, assets, objects, map);
+        const float middle = widthScale * 0.25f;
+        const float startZ = middle + (angled ? middle * 0.35f : 0);
+        npc = SpawnNavigationTestNpc(world, "door_approach", 501,
+                {reverse ? 14.0f : 2.0f, 0, startZ}, reverse ? 20 : 10, 1.5f, 3.0f);
+        InitializeNpcNavigationRuntime(world, navigation, npcs);
+        CollectSectorDoorDynamicColliders(world, objects.dynamicDoorColliders);
+        SynchronizeSectorNavigationDoorLinksSystem(world, navigation, objects.dynamicDoorColliders);
+        destination = {reverse ? 2.0f : 14.0f, middle};
+        ready = RequestNpcMove(world, navigation, collision, npcs, "door_approach", destination,
+                run ? NpcMoveGait::Run : NpcMoveGait::Walk,
+                run ? NpcMoveAuthority::Ai : NpcMoveAuthority::Programmatic)
+                        .accepted;
+    }
+    void Prepare(float dt)
+    {
+        game::PrepareNpcDoorTraversalAndHoldsSystem(
+                world, navigation, npcs, objects.dynamicDoorColliders, dt);
+    }
+    void Move(float dt)
+    {
+        game::UpdateNpcNavigationAndLocomotionSystem(world, assets, navigation, npcs, definitions,
+                collision, objects.dynamicDoorColliders, staticColliders, probes, map, dt);
+    }
+};
+
+void CheckOpenDoorApproach(int width, bool reverse, bool angled, bool run, int fps)
+{
+    using namespace game;
+    OpenDoorApproachFixture fixture(width, reverse, angled, run);
+    Check(fixture.ready, "open door approach fixture builds and accepts movement");
+    if (!fixture.ready) return;
+    auto& record = fixture.npcs.records[0];
+    auto& transform = fixture.world.Get<SectorObjectTransform>(fixture.npc);
+    bool crossed = false, recovered = false, backwards = false, stoppedBeforeCrossing = false;
+    float handoffDistance = -1;
+    float maxApproachSpeed = 0;
+    const float sign = reverse ? -1.0f : 1.0f;
+    for (int frame = 0; frame < 20 * fps; ++frame) {
+        const float dt = 1.0f / fps;
+        const auto beforePhase = record.doorPhase;
+        fixture.Prepare(dt);
+        if (record.doorPhase == NpcDoorTraversalPhase::Crossing
+                && beforePhase != record.doorPhase) {
+            const auto& stage = record.corners[record.nextCorner];
+            handoffDistance = Vector2Distance(
+                    {stage.x, stage.z}, {transform.position.x, transform.position.z});
+            crossed = true;
+        }
+        const auto phase = record.doorPhase;
+        const float previousX = transform.position.x;
+        const float beforeStage = record.nextCorner < record.cornerCount
+                ? Vector2Distance({transform.position.x, transform.position.z},
+                          {record.corners[record.nextCorner].x,
+                                  record.corners[record.nextCorner].z})
+                : 0;
+        fixture.Move(dt);
+        recovered |= record.steeringRecoveryActive;
+        if (phase == NpcDoorTraversalPhase::Approaching && beforeStage > 0.301f) {
+            backwards |= (transform.position.x - previousX) * sign < -0.001f;
+            stoppedBeforeCrossing |= Vector2Length(record.actualVelocity) < 0.001f;
+            if (beforeStage < 0.5f)
+                maxApproachSpeed
+                        = std::max(maxApproachSpeed, Vector2Length(record.preferredVelocity));
+        }
+        if (GetNpcMoveStatus(fixture.npcs, "door_approach").phase == NpcMovePhase::Arrived) break;
+    }
+    const bool arrived
+            = GetNpcMoveStatus(fixture.npcs, "door_approach").phase == NpcMovePhase::Arrived;
+    if (!arrived || !crossed || recovered || backwards || stoppedBeforeCrossing) {
+        std::fprintf(stderr,
+                "door approach width=%d reverse=%d angle=%d run=%d fps=%d "
+                "arrived=%d crossed=%d recovery=%d backward=%d stopped=%d "
+                "phase=%s diagnostic=%s\n",
+                width, reverse, angled, run, fps, arrived, crossed, recovered, backwards,
+                stoppedBeforeCrossing, NpcDoorTraversalPhaseName(record.doorPhase),
+                GetNpcMoveStatus(fixture.npcs, "door_approach").message.data());
+    }
+    Check(arrived && crossed && !recovered && !backwards && !stoppedBeforeCrossing,
+            "open doorway crosses without approach orbit, pause, or recovery");
+    Check(handoffDistance > 0.10f && handoffDistance <= 0.301f,
+            "door handoff occurs in expanded 30 cm area");
+    Check(!run || (maxApproachSpeed > 0 && maxApproachSpeed < 3),
+            "running approach brakes before staging");
+    Check(Vector2Distance({transform.position.x, transform.position.z}, fixture.destination)
+                    <= 0.101f,
+            "ordinary destination retains 10 cm precision");
+}
+
+void TestOpenDoorApproachDoesNotOrbit()
+{
+    for (int width : {2, 8})
+        for (bool reverse : {false, true})
+            for (bool angled : {false, true})
+                for (bool run : {false, true})
+                    for (int fps : {30, 60, 144})
+                        CheckOpenDoorApproach(width, reverse, angled, run, fps);
+}
+
+void TestDoorApproachClearanceAndSweptArrival()
+{
+    using namespace game;
+    OpenDoorApproachFixture fixture(8, false, false, true);
+    Check(fixture.ready, "door clearance fixture builds");
+    if (!fixture.ready) return;
+    auto& record = fixture.npcs.records[0];
+    auto& transform = fixture.world.Get<SectorObjectTransform>(fixture.npc);
+    size_t doorCorner = 0;
+    while (doorCorner < record.cornerCount && record.cornerDoorIds[doorCorner] == 0)
+        ++doorCorner;
+    Check(doorCorner < record.cornerCount, "fixture has door waypoint");
+    if (doorCorner >= record.cornerCount) return;
+    record.nextCorner = doorCorner;
+    const Vector3 stage = record.corners[doorCorner];
+    transform.position = {stage.x, stage.y, stage.z + 0.25f};
+    fixture.Prepare(1.0f / 60);
+    Check(record.doorPhase == NpcDoorTraversalPhase::Crossing,
+            "already-open door hands off from 25 cm on first update");
+
+    record.doorPhase = NpcDoorTraversalPhase::Approaching;
+    SectorDynamicDoorCollider blocker;
+    blocker.placedObjectId = 77;
+    blocker.center = {stage.x, stage.z + 0.51f};
+    blocker.halfExtents = {0.02f, 0.02f};
+    blocker.bottom = 0;
+    blocker.top = 2;
+    fixture.objects.dynamicDoorColliders.push_back(blocker);
+    Check(SectorDoorTraversalIsClear(
+                  77, stage, record.doorLanding, 0.25f, 1.6f, fixture.objects.dynamicDoorColliders),
+            "canonical crossing clear in offset-obstruction fixture");
+    fixture.Prepare(1.0f / 60);
+    Check(record.doorPhase == NpcDoorTraversalPhase::WaitingForClearance,
+            "actual offset approach must also clear door collision");
+    fixture.objects.dynamicDoorColliders.pop_back();
+    fixture.Prepare(1.0f / 60);
+    Check(record.doorPhase == NpcDoorTraversalPhase::Crossing,
+            "clearing offset obstruction allows crossing");
+
+    // Start outside the area with enough motion to cross its boundary in one update.
+    record.doorPhase = NpcDoorTraversalPhase::Approaching;
+    transform.position = {stage.x - 0.45f, stage.y, stage.z};
+    record.steeringRecoveryActive = true; // deterministic direct velocity isolates the capture rule
+    fixture.Move(0.5f);
+    Check(std::abs(Vector2Distance({transform.position.x, transform.position.z}, {stage.x, stage.z})
+                  - 0.3f)
+                    < 0.001f,
+            "swept approach captures entry instead of overshooting staging");
+    Check(record.nextCorner == doorCorner,
+            "captured door waypoint is preserved for clearance handoff");
+    fixture.Prepare(1.0f / 60);
+    Check(record.doorPhase == NpcDoorTraversalPhase::Crossing,
+            "captured approach crosses on next update");
+    const Vector3 landing = record.doorLanding;
+    transform.position = {landing.x - 0.05f, landing.y, landing.z};
+    fixture.Move(0.25f);
+    Check(Vector3Distance(transform.position, {landing.x - 0.05f, landing.y, landing.z}) < 0.001f,
+            "completed crossing discards stale steering for remainder of frame");
+    Check(record.nextCorner == doorCorner + 1 && record.doorPhase == NpcDoorTraversalPhase::None,
+            "landing advances one corner and keeps 10 cm completion tolerance");
+}
+
 void TestNpcDoorTraversalStagesWaitsCrossesAndReleases()
 {
     game::SectorTopologyMap map = MakeDoorPortalMap();
@@ -12995,6 +13195,8 @@ int main()
     TestSectorSwingDoorFullyOpenClearsApertureButStillCollides();
     TestSectorSwingDoorClosingSweepReopensWithoutTunneling();
     TestSectorDoorNavigationHoldsAndSlidingObstruction();
+    TestOpenDoorApproachDoesNotOrbit();
+    TestDoorApproachClearanceAndSweptArrival();
     TestNpcDoorTraversalStagesWaitsCrossesAndReleases();
     TestCutscenePlayerDoorTraversalHoldsOpensCrossesAndReleases();
     TestCrowdQueuesNpcAgentsThroughDoor();
