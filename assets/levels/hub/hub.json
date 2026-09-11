@@ -125,22 +125,6 @@
       "yawDegrees": 90.0
     },
     {
-      "id": 13,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_13",
-        "modelPath": "assets/models/retro_lowpoly_bed.glb",
-        "heightOffsetWorld": 0.2639999985694885,
-        "collision": true
-      },
-      "position": [
-        -105.0,
-        0.0,
-        71.0
-      ],
-      "yawDegrees": 90.0
-    },
-    {
       "id": 15,
       "kind": "static_model",
       "staticModel": {
@@ -6757,6 +6741,25 @@
         28.919893264770508
       ],
       "yawDegrees": 20.0
+    },
+    {
+      "id": 422,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "office_bed",
+        "useTitle": "Bed",
+        "modelPath": "assets/models/retro_lowpoly_bed.glb",
+        "heightOffsetWorld": 0.31000006198883057,
+        "collision": true,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -105.68003845214844,
+        0.0,
+        71.0
+      ],
+      "yawDegrees": 89.99999237060547
     }
   ],
   "staticLights": [
