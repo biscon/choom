@@ -598,6 +598,7 @@ void TestItemRuntimeSpawnAndFocusedRemoval()
     dropped.id = 72;
     dropped.item.instanceId = "item_72";
     dropped.item.sessionDrop = true;
+    dropped.item.sourceQuantities = {{"original_ammo", 3}, {"other_ammo", 5}};
     engine::Entity droppedEntity = engine::NullEntity();
     Check(game::SpawnSectorItemRuntimeObject(
                   world,
@@ -617,6 +618,13 @@ void TestItemRuntimeSpawnAndFocusedRemoval()
     Check(world.Get<game::SectorItem>(droppedEntity).origin
                   == game::SectorItemOrigin::SessionDrop,
           "incremental drop spawn preserves session provenance");
+    const auto& sources = world.Get<game::SectorItem>(droppedEntity).sourceQuantities;
+    Check(sources.size() == 2
+                  && sources[0].instanceId == "original_ammo"
+                  && sources[0].quantity == 3
+                  && sources[1].instanceId == "other_ammo"
+                  && sources[1].quantity == 5,
+          "incremental drop spawn retains original quantities separately from its world ID");
 }
 
 bool Near(float actual, float expected, float epsilon = 0.00001f)

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "game/items/ItemSourceQuantity.h"
+
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorReflectionProbeTypes.h"
 #include "sector_demo/SectorStructuralPrimitives.h"
@@ -247,6 +249,8 @@ struct SectorPlacedItem {
             SectorDynamicModelShadowMode::Contact;
     // Runtime-only campaign provenance. Never serialized into level JSON.
     bool sessionDrop = false;
+    // Runtime-only; persisted in campaign saves, never authored level JSON.
+    std::vector<ItemSourceQuantity> sourceQuantities;
 };
 
 struct SectorPlacedNpc {

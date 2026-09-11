@@ -115,6 +115,7 @@ struct SectorItem {
     SectorItemOrigin origin = SectorItemOrigin::Authored;
     bool takePending = false;
     ItemPresentationState presentation;
+    std::vector<ItemSourceQuantity> sourceQuantities;
 };
 
 struct SectorWindow {

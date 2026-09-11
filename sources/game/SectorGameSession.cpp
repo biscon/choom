@@ -634,6 +634,7 @@ bool SectorGameSession::DropInventoryEntry(
     drop.item.onUseScript = definition->type == ItemType::Object
             ? entryIt->onUseScript : std::string{};
     drop.item.sessionDrop = true;
+    drop.item.sourceQuantities = entryIt->sourceQuantities;
     engine::Entity spawned = engine::NullEntity();
     if (!scene.SpawnItemRuntimeObject(
                 context, topologyMap, drop, &spawned)) {
@@ -820,7 +821,10 @@ bool SectorGameSession::CommitItemTake(
             applicationSettings->playerInventory,
             item.definitionId,
             item.quantity,
-            item.onUseScript);
+            item.onUseScript,
+            item.origin == SectorItemOrigin::Authored
+                    ? std::string_view{item.instanceId} : std::string_view{},
+            &item.sourceQuantities);
     if (plan.result != ItemPickupCapacityResult::Fits) {
         item.takePending = false;
         if (plan.result == ItemPickupCapacityResult::WeightLimit
@@ -1214,6 +1218,7 @@ bool SectorGameSession::StartNew(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.playerInventory = itemCampaign != nullptr ? &itemCampaign->inventory : nullptr;
     scriptHost.dialogueVoices = &dialogueVoices;
     LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
     scriptHost.dialogue = &dialogue;
@@ -2705,6 +2710,7 @@ bool SectorGameSession::RebuildFromMap(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.playerInventory = itemCampaign != nullptr ? &itemCampaign->inventory : nullptr;
     scriptHost.dialogueVoices = &dialogueVoices;
     LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
     scriptHost.dialogue = &dialogue;

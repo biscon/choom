@@ -136,11 +136,55 @@ GameSaveAnimatorState ReadAnimator(const Json& value, const std::string& name)
     return result;
 }
 
+std::vector<ItemSourceQuantity> ReadSourceQuantities(
+        const Json& value, std::uint64_t quantity)
+{
+    std::vector<ItemSourceQuantity> result;
+    const auto found = value.find("sourceQuantities");
+    if (found == value.end()) return result;
+    Require(found->is_array(), "sourceQuantities must be an array");
+    if (found->empty()) return result; // All stock is anonymous.
+    result.reserve(std::max<std::size_t>(4, found->size()));
+    std::uint64_t remaining = quantity;
+    for (const Json& source : *found) {
+        Require(source.is_object() && source.contains("instanceId")
+                        && source.at("instanceId").is_string()
+                        && source.contains("quantity")
+                        && source.at("quantity").is_number_unsigned(),
+                "source quantity has invalid identity or quantity");
+        const auto count = source.at("quantity").get<std::uint64_t>();
+        Require(count > 0 && count <= remaining,
+                "source quantities exceed item quantity or contain zero");
+        result.push_back({source.at("instanceId").get<std::string>(), count});
+        remaining -= count;
+    }
+    Require(remaining == 0, "source quantities do not match item quantity");
+    return result;
+}
+
+void WriteSourceQuantities(Json& value,
+        const std::vector<ItemSourceQuantity>& sources, std::uint64_t quantity)
+{
+    if (sources.empty()) return;
+    auto& encoded = value["sourceQuantities"] = Json::array();
+    std::uint64_t remaining = quantity;
+    for (const ItemSourceQuantity& source : sources) {
+        Require(source.quantity > 0 && source.quantity <= remaining,
+                "source quantities exceed item quantity or contain zero");
+        encoded.push_back(Json{{"instanceId", source.instanceId},
+                {"quantity", source.quantity}});
+        remaining -= source.quantity;
+    }
+    Require(remaining == 0, "source quantities do not match item quantity");
+}
+
 Json InventoryEntryJson(const ItemInventoryEntry& entry)
 {
-    return Json{{"runtimeId", entry.runtimeId}, {"definitionId", entry.definitionId},
+    Json result{{"runtimeId", entry.runtimeId}, {"definitionId", entry.definitionId},
             {"quantity", entry.quantity}, {"onUseScript", entry.onUseScript},
             {"slotIndex", entry.slotIndex}};
+    WriteSourceQuantities(result, entry.sourceQuantities, entry.quantity);
+    return result;
 }
 
 ItemInventoryEntry ReadInventoryEntry(const Json& value)
@@ -153,12 +197,13 @@ ItemInventoryEntry ReadInventoryEntry(const Json& value)
     result.slotIndex = value.at("slotIndex").get<int>();
     Require(result.runtimeId != 0 && !result.definitionId.empty() && result.quantity != 0,
             "inventory entry has invalid identity or quantity");
+    result.sourceQuantities = ReadSourceQuantities(value, result.quantity);
     return result;
 }
 
 Json DroppedItemJson(const SectorPlacedRuntimeObject& object)
 {
-    return Json{
+    Json result{
             {"id", object.id}, {"position", Vec3(object.position)},
             {"yawRadians", object.yawRadians},
             {"definitionId", object.item.definitionId},
@@ -172,6 +217,8 @@ Json DroppedItemJson(const SectorPlacedRuntimeObject& object)
             {"heightOffsetWorld", object.item.heightOffsetWorld},
             {"scale", object.item.scale},
             {"shadowMode", static_cast<int>(object.item.shadowMode)}};
+    WriteSourceQuantities(result, object.item.sourceQuantities, object.item.quantity);
+    return result;
 }
 
 SectorPlacedRuntimeObject ReadDroppedItem(const Json& value)
@@ -199,6 +246,7 @@ SectorPlacedRuntimeObject ReadDroppedItem(const Json& value)
     Require(result.id > 0 && !result.item.definitionId.empty()
                     && !result.item.instanceId.empty() && result.item.quantity > 0,
             "dropped item has invalid required fields");
+    result.item.sourceQuantities = ReadSourceQuantities(value, result.item.quantity);
     RequireFinite(result.yawRadians, "dropped item.yawRadians");
     RequireFinite(result.item.takeDistance, "dropped item.takeDistance");
     RequireFinite(result.item.scale, "dropped item.scale");

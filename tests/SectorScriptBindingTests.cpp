@@ -4,6 +4,7 @@
 #include "engine/systems/AnimatedModelSystem.h"
 #include "lua.hpp"
 #include "game/Health.h"
+#include "game/items/ItemInventory.h"
 #include "game/SectorScriptBindings.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/navigation/SectorNavigationWorld.h"
@@ -474,6 +475,66 @@ void NpcAnimationRemovalResolvesOperation()
     fixture.context.world.FlushDestroyedEntities();
     game::UpdateSectorScriptOperations(fixture.context, fixture.host);
     assert(fixture.runtime.operations[operation.index].state == engine::ScriptOperationState::Failed);
+}
+
+void InventoryQueriesReadLiveContents()
+{
+    NpcScriptFixture fixture;
+    game::PlayerInventoryState inventory;
+    inventory.entries.push_back({1, "blue_key", 1, {}, 0,
+            {{"door_key", 1}}});
+    inventory.entries.push_back({2, "blue_key", 1, {}, 1,
+            {{"other_key", 1}}});
+    inventory.entries.push_back({3, "legacy_ammo", 10, {}, 2});
+    fixture.host.playerInventory = &inventory;
+    fixture.files.Write(R"(
+function refreshMenu()
+    local hidden = hiddenOptions({ locked_door = hasInventoryItemInstance("door_key") })
+    setFlag("locked_door_hidden", #hidden == 1 and hidden[1] == "locked_door")
+end
+function init()
+    assert(hasInventoryItemInstance("door_key"))
+    assert(hasInventoryItemInstance("other_key"))
+    assert(hasInventoryItemDefinition("blue_key"))
+    assert(hasInventoryItemDefinition("legacy_ammo"))
+    assert(not hasInventoryItemInstance("legacy_ammo"))
+    assert(not hasInventoryItemInstance("blue_key"))
+    assert(not hasInventoryItemDefinition("door_key"))
+    assert(not hasInventoryItemInstance("DOOR_KEY"))
+    assert(not hasInventoryItemInstance(""))
+    assert(not hasInventoryItemDefinition(""))
+    assert(not hasInventoryItemDefinition("unknown"))
+    assert(not pcall(hasInventoryItemInstance, 123))
+    assert(not pcall(hasInventoryItemDefinition, {}))
+    assert(not pcall(hasInventoryItemInstance))
+    refreshMenu()
+end
+function unavailable()
+    local value, reason = hasInventoryItemInstance("door_key")
+    assert(value == nil and reason == "player inventory is unavailable")
+    value, reason = hasInventoryItemDefinition("blue_key")
+    assert(value == nil and reason == "player inventory is unavailable")
+end
+)");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent,
+            fixture.host, fixture.files));
+    assert(fixture.persistent.bools.at("locked_door_hidden"));
+    assert(game::RemoveInventoryEntryQuantity(inventory, 1, 1));
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "refreshMenu").result
+            == engine::ScriptCallResult::Completed);
+    assert(!fixture.persistent.bools.at("locked_door_hidden"));
+    assert(game::HasInventoryItemDefinition(inventory, "blue_key"));
+    // The query searches the entire inventory, with no current-map filtering.
+    inventory.entries.push_back({4, "blue_key", 1, {}, 3, {{"door_key", 1}}});
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "refreshMenu").result
+            == engine::ScriptCallResult::Completed);
+    assert(fixture.persistent.bools.at("locked_door_hidden"));
+    fixture.host.playerInventory = nullptr;
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "unavailable").result
+            == engine::ScriptCallResult::Completed);
+    fixture.host.playerInventory = &inventory;
+    game::ResetSectorScriptHost(fixture.host);
+    assert(fixture.host.playerInventory == nullptr);
 }
 
 void HealthBindingsSetPlayerAndNpcCurrentHealth()
@@ -2757,6 +2818,7 @@ void RunSectorScriptBindingTests()
     NpcAnimationOperationsCompleteReplaceCancelAndUnload();
     NpcMovementClearsAnimationOverridesOnlyWhenAccepted();
     NpcAnimationRemovalResolvesOperation();
+    InventoryQueriesReadLiveContents();
     HealthBindingsSetPlayerAndNpcCurrentHealth();
     SettingNpcHealthToZeroUsesNpcDeathState();
     BlockingNpcMoveCompletesAfterPhysicalArrival();

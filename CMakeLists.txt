@@ -753,6 +753,7 @@ if(BUILD_TESTING)
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/game/items/ItemInventory.cpp
             tests/SectorDialogueTests.cpp
             tests/DialogueCameraIdleTests.cpp
             tests/SectorConversationTests.cpp

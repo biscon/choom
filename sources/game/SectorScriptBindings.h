@@ -23,6 +23,7 @@ namespace game {
 struct SectorRuntimeObjectState;
 class SectorNavigationWorld;
 struct Health;
+struct PlayerInventoryState;
 struct NpcNavigationRuntime;
 struct SectorCutsceneRuntime;
 struct SectorDialogueRuntime;
@@ -118,6 +119,7 @@ struct SectorScriptHost {
     SectorFpsControllerState* playerState = nullptr;
     const SectorFpsControllerConfig* playerConfig = nullptr;
     Health* playerHealth = nullptr;
+    const PlayerInventoryState* playerInventory = nullptr;
     SectorTopologyMap* map = nullptr;
     SectorScriptAudioApi audio;
     SectorScriptControlApi controls;

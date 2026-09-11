@@ -352,6 +352,46 @@ A callback may yield and must eventually return boolean `true` to allow the
 requested open/close; `false`, no return value, a missing function, or an error
 denies it. A blank callback preserves the default engine behavior.
 
+## Inventory queries
+
+`hasInventoryItemInstance(instanceId)` returns whether the player currently
+carries any quantity from that original item placement. Instance IDs match
+across all levels, using exact, case-sensitive names.
+
+`hasInventoryItemDefinition(definitionId)` returns whether the player carries
+any quantity of that Item Editor definition, regardless of placement.
+
+```lua
+if hasInventoryItemInstance("pre_entrance_door_key") then
+    -- The player carries this particular key.
+end
+if hasInventoryItemDefinition("ammo_9mm") then
+    -- The player carries some 9mm ammo (excludes loaded magazine rounds).
+end
+
+-- In a runConversationDynamic hidden-options callback:
+return hiddenOptions({
+    locked_door = hasInventoryItemInstance("pre_entrance_door_key"),
+})
+```
+
+Both calls are immediate, read-only queries. Empty or unknown IDs return
+`false`; non-string arguments raise a Lua argument error. If no player
+inventory is available, they return `nil, reason`.
+
+An authored stack attributes its entire quantity to its one placement ID.
+Merging preserves those quantities; splitting, transferring, and consuming
+take sources from the beginning of the stack's stored order. Incoming sources
+append to that order. Dropping and re-picking preserves the original IDs even
+though the dropped world object receives a new ID. Consuming or dropping the
+last matching unit makes the query false. These queries do not indicate that
+an item was ever picked up or used; use script flags for historical events.
+
+New saves preserve this information. Older saves without it still load, but
+their existing inventory and dropped items have unknown original placement
+IDs and only match definition queries. Newly collected authored items retain
+their IDs normally. Queries do not require a matching world object to exist.
+
 ## World item pickup callbacks
 
 An authored item's optional `onTakeScript` field names a global Lua function

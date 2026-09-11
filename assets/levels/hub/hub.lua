@@ -73,7 +73,7 @@ local function elinConversation()
             identity = flag("elin_asked_identity"),
             place = flag("elin_asked_place") or not flag("elin_asked_identity"),
             people = flag("elin_asked_people")  or not flag("elin_asked_identity"),
-            locked_door = flag("elin_asked_pre_entrance_door") or not flag("tried_pre_entrance_door") or not flag("elin_asked_identity"),
+            locked_door = flag("elin_asked_pre_entrance_door") or not flag("tried_pre_entrance_door") or not flag("elin_asked_identity") or hasInventoryItemInstance("pre_entrance_door_key"),
             goodbye = not flag("elin_asked_identity")
         })
     end, function()

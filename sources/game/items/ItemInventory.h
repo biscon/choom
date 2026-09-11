@@ -18,6 +18,8 @@ struct ItemInventoryEntry {
     std::uint64_t quantity = 1;
     std::string onUseScript;
     int slotIndex = -1;
+    // Empty means the entire quantity has unknown provenance (legacy saves).
+    std::vector<ItemSourceQuantity> sourceQuantities;
 };
 
 struct PlayerInventoryState {
@@ -92,6 +94,8 @@ struct ItemPickupPlan {
     int maximumSlots = 0;
     std::size_t addedSlots = 0;
     double resultingWeightKg = 0.0;
+    std::string_view sourceInstanceId;
+    const std::vector<ItemSourceQuantity>* sourceQuantities = nullptr;
 };
 
 enum class ItemInventoryTransactionType {
@@ -126,6 +130,11 @@ bool InventoryOwnsWeapon(
         const ItemRegistry& registry,
         std::string_view weaponId);
 
+bool HasInventoryItemInstance(
+        const PlayerInventoryState& inventory, std::string_view instanceId);
+bool HasInventoryItemDefinition(
+        const PlayerInventoryState& inventory, std::string_view definitionId);
+
 std::uint64_t CountInventoryAmmoForWeapon(
         const PlayerInventoryState& inventory,
         const ItemRegistry& registry,
@@ -148,7 +157,9 @@ ItemPickupPlan PreflightItemPickup(
         const PlayerInventoryApplicationSettings& settings,
         std::string_view definitionId,
         std::uint64_t quantity,
-        std::string_view onUseScript = {});
+        std::string_view onUseScript = {},
+        std::string_view sourceInstanceId = {},
+        const std::vector<ItemSourceQuantity>* sourceQuantities = nullptr);
 
 bool CommitItemPickup(
         PlayerInventoryState& inventory,

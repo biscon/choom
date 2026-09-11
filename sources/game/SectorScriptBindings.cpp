@@ -1,4 +1,5 @@
 #include "game/SectorScriptBindings.h"
+#include "game/items/ItemInventory.h"
 
 #include "engine/EngineContext.h"
 #include "engine/scripting/ScriptSystem.h"
@@ -2287,6 +2288,34 @@ int LuaSetPlayerHealth(lua_State* state)
     return 1;
 }
 
+int LuaHasInventoryItem(lua_State* state, bool byInstance)
+{
+    luaL_checktype(state, 1, LUA_TSTRING);
+    size_t length = 0;
+    const char* id = luaL_checklstring(state, 1, &length);
+    const SectorScriptHost& host = HostFromLua(state);
+    if (host.playerInventory == nullptr) {
+        lua_pushnil(state);
+        lua_pushliteral(state, "player inventory is unavailable");
+        return 2;
+    }
+    const std::string_view query{id, length};
+    lua_pushboolean(state, byInstance
+            ? HasInventoryItemInstance(*host.playerInventory, query)
+            : HasInventoryItemDefinition(*host.playerInventory, query));
+    return 1;
+}
+
+int LuaHasInventoryItemInstance(lua_State* state)
+{
+    return LuaHasInventoryItem(state, true);
+}
+
+int LuaHasInventoryItemDefinition(lua_State* state)
+{
+    return LuaHasInventoryItem(state, false);
+}
+
 int LuaSetNpcHealth(lua_State* state)
 {
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
@@ -2547,6 +2576,7 @@ void InitializeSectorScriptHost(
     host.playerState = playerState;
     host.playerConfig = playerConfig;
     host.playerHealth = playerHealth;
+    host.playerInventory = nullptr;
     host.map = &map;
     host.audio = audio;
     host.controls = controls;
@@ -2586,6 +2616,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.playerState = nullptr;
     host.playerConfig = nullptr;
     host.playerHealth = nullptr;
+    host.playerInventory = nullptr;
     host.map = nullptr;
     host.audio = {};
     host.controls = {};
@@ -2626,6 +2657,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "setPropAnimationProgress", LuaSetPropAnimationProgress);
     Register(state, "setPropEmissiveScale", LuaSetPropEmissiveScale);
     Register(state, "setPlayerHealth", LuaSetPlayerHealth);
+    Register(state, "hasInventoryItemInstance", LuaHasInventoryItemInstance);
+    Register(state, "hasInventoryItemDefinition", LuaHasInventoryItemDefinition);
     Register(state, "setNpcHealth", LuaSetNpcHealth);
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);

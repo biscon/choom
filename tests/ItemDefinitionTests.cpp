@@ -599,6 +599,146 @@ game::ItemDefinition MakeInventoryDefinition(
     return definition;
 }
 
+void InventorySourceQuantitiesSurviveTransactions()
+{
+    game::ItemRegistry registry;
+    registry.items.push_back(MakeInventoryDefinition("ammo", game::ItemType::Ammo, 0.0f));
+    registry.items.front().maxStackSize = 10;
+    registry.items.push_back(MakeInventoryDefinition("key", game::ItemType::Object, 0.0f));
+    game::PlayerInventoryApplicationSettings settings;
+    settings.maxSlots = 8;
+    settings.maxCarryWeightKg = 100.0f;
+    game::ItemCampaignState campaign;
+    game::InitializeItemCampaignState(campaign, settings);
+    auto& inventory = campaign.inventory;
+    const auto pickup = [&](const char* definition, std::uint64_t count, const char* id) {
+        const auto plan = game::PreflightItemPickup(inventory, registry, settings,
+                definition, count, "useKey", id);
+        assert(plan.result == game::ItemPickupCapacityResult::Fits);
+        assert(game::CommitItemPickup(inventory, plan));
+    };
+    const auto countSource = [&](const char* id) {
+        std::uint64_t count = 0;
+        for (const auto& entry : inventory.entries) {
+            std::uint64_t total = 0;
+            for (const auto& source : entry.sourceQuantities) {
+                assert(source.quantity > 0);
+                total += source.quantity;
+                if (source.instanceId == id) count += source.quantity;
+            }
+            assert(entry.sourceQuantities.empty() || total == entry.quantity);
+        }
+        return count;
+    };
+    assert(!game::HasInventoryItemInstance(inventory, "key_a"));
+    pickup("key", 1, "key_a");
+    pickup("key", 1, "key_b");
+    assert(game::HasInventoryItemDefinition(inventory, "key"));
+    assert(!game::HasInventoryItemDefinition(inventory, "key_a"));
+    assert(!game::HasInventoryItemInstance(inventory, "key"));
+    assert(!game::HasInventoryItemInstance(inventory, ""));
+    assert(!game::HasInventoryItemDefinition(inventory, ""));
+    assert(!game::HasInventoryItemInstance(inventory, "KEY_A"));
+    assert(game::CompleteObjectInventoryUse(campaign, registry,
+            inventory.entries[0].runtimeId, false) == game::ItemObjectUseResult::Denied);
+    assert(countSource("key_a") == 1);
+    assert(game::CompleteObjectInventoryUse(campaign, registry,
+            inventory.entries[0].runtimeId, true) == game::ItemObjectUseResult::Consumed);
+    assert(!game::HasInventoryItemInstance(inventory, "key_a"));
+    assert(game::HasInventoryItemInstance(inventory, "key_b"));
+    inventory.entries.clear();
+
+    pickup("ammo", 7, "ammo_a");
+    pickup("ammo", 8, "ammo_b"); // [A7 B3], [B5]
+    assert(inventory.entries.size() == 2);
+    assert(countSource("ammo_a") == 7 && countSource("ammo_b") == 8);
+    const auto firstId = inventory.entries[0].runtimeId;
+    auto result = game::SplitItemInventoryEntry(inventory, firstId, 8, 2, 8);
+    assert(result.type == game::ItemInventoryTransactionType::Split);
+    const auto splitId = result.selectedRuntimeId; // [B2], [B5], [A7 B1]
+    assert(countSource("ammo_a") == 7 && countSource("ammo_b") == 8);
+    result = game::TransferItemInventoryEntry(inventory, registry, splitId, 1, 8);
+    assert(result.type == game::ItemInventoryTransactionType::PartiallyMerged);
+    assert(countSource("ammo_a") == 7 && countSource("ammo_b") == 8);
+    result = game::TransferItemInventoryEntry(inventory, registry, splitId, 0, 8);
+    assert(result.type == game::ItemInventoryTransactionType::Merged);
+    assert(countSource("ammo_a") == 7 && countSource("ammo_b") == 8);
+    result = game::TransferItemInventoryEntry(inventory, registry, firstId, 6, 8);
+    assert(result.type == game::ItemInventoryTransactionType::Moved);
+    assert(countSource("ammo_a") == 7);
+    assert(game::ConsumeInventoryAmmoForWeapon(inventory, registry, "pistol", 10) == 10);
+    assert(countSource("ammo_a") == 2 && countSource("ammo_b") == 3);
+    assert(!game::RemoveInventoryEntryQuantity(inventory, firstId, 100));
+    assert(game::SplitItemInventoryEntry(inventory, firstId, 99, 0, 8).type
+            == game::ItemInventoryTransactionType::Rejected);
+    assert(countSource("ammo_a") == 2 && countSource("ammo_b") == 3);
+
+    // Drop a mixed stack, travel to another level, and re-pick it. Its new
+    // world ID must not replace the original source IDs.
+    game::SectorPlacedRuntimeObject drop;
+    drop.id = 100;
+    drop.kind = "item";
+    drop.item.definitionId = "ammo";
+    drop.item.instanceId = "drop_100";
+    drop.item.quantity = 5;
+    drop.item.sessionDrop = true;
+    drop.item.sourceQuantities = inventory.entries[0].sourceQuantities;
+    assert(game::RemoveInventoryEntryQuantity(inventory, firstId, 5));
+    assert(!game::HasInventoryItemInstance(inventory, "ammo_a"));
+    auto& level = game::FindOrCreateItemLevelCampaignState(campaign, "other_level");
+    level.droppedItems.push_back(drop);
+    game::SectorTopologyMap map;
+    game::ReconcileItemCampaignLevel(campaign, "other_level", map);
+    assert(map.runtimeObjects.size() == 1);
+    const auto& restored = map.runtimeObjects.front().item;
+    auto plan = game::PreflightItemPickup(inventory, registry, settings,
+            restored.definitionId, restored.quantity, {}, {}, &restored.sourceQuantities);
+    assert(game::CommitItemPickup(inventory, plan));
+    assert(countSource("ammo_a") == 2 && countSource("ammo_b") == 3);
+    assert(!game::HasInventoryItemInstance(inventory, "drop_100"));
+    assert(game::ConsumeInventoryAmmoForWeapon(inventory, registry, "pistol", 5) == 5);
+    assert(!game::HasInventoryItemDefinition(inventory, "ammo"));
+
+    // Legacy quantities remain anonymous when combined with known pickups.
+    inventory.entries.push_back({1000, "ammo", 2, {}, 0});
+    inventory.nextRuntimeId = 1001;
+    pickup("ammo", 3, "fresh_ammo");
+    assert(game::HasInventoryItemDefinition(inventory, "ammo"));
+    assert(countSource("") == 2 && countSource("fresh_ammo") == 3);
+    assert(game::ConsumeInventoryAmmoForWeapon(inventory, registry, "pistol", 2) == 2);
+    assert(countSource("fresh_ammo") == 3);
+    const std::vector<game::ItemSourceQuantity> invalid{{"bad", 2}};
+    plan = game::PreflightItemPickup(inventory, registry, settings,
+            "ammo", 3, {}, {}, &invalid);
+    assert(plan.result == game::ItemPickupCapacityResult::InvalidQuantity);
+    assert(!game::CommitItemPickup(inventory, plan));
+    assert(countSource("fresh_ammo") == 3);
+    settings.maxSlots = 1;
+    plan = game::PreflightItemPickup(inventory, registry, settings, "ammo", 20, {}, "too_many");
+    assert(plan.result == game::ItemPickupCapacityResult::SlotLimit);
+    assert(!game::CommitItemPickup(inventory, plan));
+    assert(!game::HasInventoryItemInstance(inventory, "too_many"));
+
+    inventory.entries.clear();
+    registry.items.push_back(MakeInventoryDefinition("health", game::ItemType::Health, 0.0f));
+    registry.items.back().maxStackSize = 10;
+    pickup("health", 2, "health_a");
+    pickup("health", 1, "health_b");
+    game::Health health = game::MakeHealth(100);
+    const auto healthId = inventory.entries[0].runtimeId;
+    assert(game::UseHealthInventoryEntry(campaign, registry, health, healthId)
+            == game::ItemHealthUseResult::DisabledAtFullHealth);
+    assert(countSource("health_a") == 2);
+    health.current = 50;
+    assert(game::UseHealthInventoryEntry(campaign, registry, health, healthId)
+            == game::ItemHealthUseResult::AppliedInstantly);
+    assert(countSource("health_a") == 1 && countSource("health_b") == 1);
+    assert(game::UseHealthInventoryEntry(campaign, registry, health, healthId)
+            == game::ItemHealthUseResult::AppliedInstantly);
+    assert(!game::HasInventoryItemInstance(inventory, "health_a"));
+    assert(game::HasInventoryItemInstance(inventory, "health_b"));
+}
+
 void InventoryTransactionsAndCampaignReconciliation()
 {
     game::ItemRegistry registry;
@@ -1065,6 +1205,7 @@ int main()
     IconLayoutAndCameraFit();
     ReferenceScanningAndEditorService();
     DraftItemIds();
+    InventorySourceQuantitiesSurviveTransactions();
     InventoryTransactionsAndCampaignReconciliation();
     WeaponOwnershipAndAmmunitionTransactions();
     InventoryStackTransactions();

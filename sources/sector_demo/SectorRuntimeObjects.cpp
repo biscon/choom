@@ -846,6 +846,7 @@ bool SpawnItemEntity(
     runtimeItem.definitionId = definition->id;
     runtimeItem.title = definition->title;
     runtimeItem.instanceId = placedObject.item.instanceId;
+    runtimeItem.sourceQuantities = placedObject.item.sourceQuantities;
     runtimeItem.quantity = static_cast<std::uint64_t>(
             placedObject.item.quantity);
     runtimeItem.takeDistance = placedObject.item.takeDistance;
