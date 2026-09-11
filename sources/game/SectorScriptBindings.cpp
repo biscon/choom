@@ -1516,6 +1516,8 @@ int SetLuaCutsceneControls(lua_State* state, bool enabled, bool cinematic)
         return 2;
     }
     if (cinematic) host.cutscene->presentation.active = !enabled;
+    if (cinematic && !enabled && host.controls.holsterWeapon)
+        host.controls.holsterWeapon(host.controls.userData);
     lua_pushboolean(state, 1);
     return 1;
 }

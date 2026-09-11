@@ -767,7 +767,10 @@ immediately hides gameplay HUD: health, stamina, oxygen, ammo, crosshair, and
 interaction prompts/messages. Equal black bars at 75% opacity (25% transparent)
 slide in from the top and bottom
 over 350 ms with smooth easing, each covering 15% of the playable viewport.
-Captions, menus, debug overlays, and the existing weapon viewmodel remain available.
+Captions, menus, and debug overlays remain available. Starting a cutscene also
+holsters the weapon using its normal animation and cancels pending reload or
+weapon-switch actions. The weapon stays holstered after `endCutscene()` or task
+cleanup until the player draws it manually.
 The bars are overlays and do not change the camera projection or physics.
 
 `say()` and `text(..., BOTTOM)` (including their async forms) move smoothly into

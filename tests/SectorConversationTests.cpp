@@ -228,14 +228,14 @@ void StagingOwnershipAndFailures()
     )");
     f.Call();
     assert(f.host.conversation.active && f.cutscene.presentation.active);
-    assert(f.holsterRequests == 2); // Staged cinematic conversations also holster.
+    assert(f.holsterRequests == 3); // Cutscene, staged conversation, then menu.
     assert(!f.context.world.Get<game::NpcRuntimeInstance>(f.npc).conversationHeld);
     f.Tick(); assert(f.player.feetPosition.x == 3.5f && f.player.yawRadians == PI);
     assert(game::SelectSectorDialogue(f.dialogue, f.scripts, 2)); f.Tick();
     assert(!f.host.conversation.active && !f.cutscene.controlsEnabled && f.cutscene.presentation.active);
     for (int i = 0; i < 22; ++i) f.Tick();
     assert(f.cutscene.controlsEnabled);
-    assert(f.holsterRequests == 2);
+    assert(f.holsterRequests == 3);
     engine::ScriptSystemCallForegroundHook(f.scripts, "failing"); f.Tick();
     assert(!f.host.conversation.active && f.cutscene.controlsEnabled);
     engine::ScriptSystemCallForegroundHook(f.scripts, "held");
@@ -245,6 +245,30 @@ void StagingOwnershipAndFailures()
     engine::ScriptSystemCallForegroundHook(f.scripts, "held");
     f.context.world.Get<game::NpcCombatState>(f.npc).dead = true; f.Tick();
     assert(!f.host.conversation.active && f.cutscene.controlsEnabled);
+}
+
+void CutsceneStartHolstersWithoutRestoringWeaponOnExit()
+{
+    Fixture f;
+    f.Create(R"(
+        function useNpc(id)
+            assert(enableControls(false))
+            delay(10)
+            assert(startCutscene())
+            delay(10)
+            assert(endCutscene())
+        end
+    )");
+    assert(engine::ScriptSystemExecuteConsole(f.scripts, "assert(not startCutscene())").success);
+    assert(f.holsterRequests == 0);
+    f.Call();
+    assert(!f.cutscene.controlsEnabled && !f.cutscene.presentation.active);
+    assert(f.holsterRequests == 0); // A plain control lock does not holster.
+    f.Tick();
+    assert(f.cutscene.presentation.active && f.holsterRequests == 1);
+    f.Tick();
+    assert(f.cutscene.controlsEnabled && !f.cutscene.presentation.active);
+    assert(f.holsterRequests == 1);
 }
 
 void StandaloneDialogueHolstersOnlyOnSuccessfulStart()
@@ -349,6 +373,7 @@ void RunSectorConversationTests()
     UseEligibilityAndOcclusion();
     BackwardPreparationAndCleanup();
     StagingOwnershipAndFailures();
+    CutsceneStartHolstersWithoutRestoringWeaponOnExit();
     StandaloneDialogueHolstersOnlyOnSuccessfulStart();
     BlockedRetreatAndRemainingTopics();
 }
