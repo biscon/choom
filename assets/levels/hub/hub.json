@@ -12537,7 +12537,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -12637,7 +12638,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "7cb16b16a494bd20",
+    "sourceHash": "a90ac7deb6be3681",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -12645,19 +12646,19 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.203125,
+        1.564453125,
+        1.564453125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 874
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 239
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "7cb16b16a494bd20",
+      "sourceHash": "a90ac7deb6be3681",
       "count": 3917,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -12670,31 +12671,24 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.204270601272583,
+          1.935850739479065,
+          1.8489267826080322
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23502,
-        "rgbChannelsAboveOne": 37
+        "rgbChannelsAboveOne": 40
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "7cb16b16a494bd20",
+      "sourceHash": "a90ac7deb6be3681",
       "modelCount": 117,
       "objectCount": 347,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "editorSettings": {
     "gridSize": 1
@@ -24657,7 +24651,7 @@
               0.0
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         }
       },
       {
@@ -24802,10 +24796,10 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -24841,14 +24835,14 @@
           "uv": {
             "scale": [
               1.0,
-              0.5925925970077515
+              1.0
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -24904,7 +24898,7 @@
               0.9377999901771545
             ]
           },
-          "materialId": "worn_gray_metal_step_512"
+          "materialId": "worn_dark_red_carpet_512"
         },
         "upper": {
           "uv": {
@@ -24913,11 +24907,15 @@
               1.0
             ],
             "offset": [
-              0.0,
-              0.0
+              -1.625,
+              -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -24931,10 +24929,10 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -24974,10 +24972,10 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -25013,14 +25011,14 @@
           "uv": {
             "scale": [
               1.0,
-              0.5
+              1.0
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -25047,6 +25045,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -25063,7 +25065,7 @@
               -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -25090,6 +25092,10 @@
             ]
           },
           "materialId": "painted_plaster_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -25103,10 +25109,10 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -25133,6 +25139,10 @@
             ]
           },
           "materialId": "beige_wall_001"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -25142,14 +25152,14 @@
           "uv": {
             "scale": [
               1.0,
-              0.5
+              1.0
             ],
             "offset": [
               0.0,
-              0.0
+              -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -25176,6 +25186,10 @@
             ]
           },
           "materialId": "dirty_office_wall_baseboard_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -25995,7 +26009,7 @@
               -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -26022,6 +26036,10 @@
             ]
           },
           "materialId": "beige_wall_001"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -26088,11 +26106,11 @@
               1.0
             ],
             "offset": [
-              0.0,
-              0.0
+              -0.5,
+              -0.0
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "upper": {
           "uv": {
@@ -26105,7 +26123,11 @@
               0.0
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {
@@ -26122,7 +26144,7 @@
               -0.9375
             ]
           },
-          "materialId": "painted_plaster_wall"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -26149,6 +26171,10 @@
             ]
           },
           "materialId": "beige_wall_001"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_painted_white"
         }
       },
       {

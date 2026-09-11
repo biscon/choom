@@ -429,6 +429,17 @@ void ApplyGameSaveLevelRuntimeState(
             SectorObjectTransform& transform = world.Get<SectorObjectTransform>(entity);
             transform.position = saved.position;
             transform.yawRadians = saved.yawRadians;
+            if (world.Has<SectorObject>(entity)) {
+                SectorObject& object = world.Get<SectorObject>(entity);
+                // Idle NPCs and corpses may never run a movement query after
+                // loading. Resolve visibility/lighting membership now.
+                const int foundSectorId = runtimeObjects.objectSectorLookupWorldValid
+                        ? runtimeObjects.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                                Vector2{transform.position.x, transform.position.z},
+                                object.currentSectorId)
+                        : 0;
+                object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+            }
         }
         if (world.Has<Health>(entity)) world.Get<Health>(entity) = saved.health;
         bool animatorRestored = false;
@@ -450,7 +461,13 @@ void ApplyGameSaveLevelRuntimeState(
             }
         }
         if (world.Has<SectorDynamicModel>(entity)) {
-            world.Get<SectorDynamicModel>(entity).opacity = saved.opacity;
+            SectorDynamicModel& model = world.Get<SectorDynamicModel>(entity);
+            model.opacity = saved.opacity;
+            if (world.Has<SectorObject>(entity)) {
+                const int sectorId = world.Get<SectorObject>(entity).currentSectorId;
+                model.containingSectorAmbient = ComputeSectorModelAmbient(map, sectorId);
+                model.environmentExposure = ComputeSectorModelEnvironmentExposure(map, sectorId);
+            }
         }
         if (saved.hasAnimator) {
             animatorRestored = ApplyAnimator(

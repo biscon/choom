@@ -746,6 +746,7 @@ if(BUILD_TESTING)
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/game/save/GameSaveRuntime.cpp
             sources/game/items/ItemAssets.cpp
             sources/game/items/ItemDefinitions.cpp
             sources/game/items/ItemIconLayout.cpp

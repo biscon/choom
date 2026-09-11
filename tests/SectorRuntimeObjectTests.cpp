@@ -15,6 +15,9 @@
 #include "game/npc/NpcRuntime.h"
 #include "game/npc/ai/NpcAiSystem.h"
 #include "game/npc/ai/NpcAiDebugData.h"
+#include "game/save/GameSaveRuntime.h"
+#include "game/SectorScriptBindings.h"
+#include "sector_demo/SectorSceneRuntime.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorAudioOcclusion.h"
@@ -10680,6 +10683,149 @@ void TestSectorBillboardDirectionalClipSelectionWraparound()
             "billboard direction selection wraps near negative pi for front-facing camera");
 }
 
+void TestGameSaveRestoresNpcSectorAndLighting()
+{
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    map.sectors[0].ambientColor = RED;
+    map.sectors[0].ambientIntensity = 0.1f;
+    map.sectors[1].ambientColor = Color{64, 128, 255, 255};
+    map.sectors[1].ambientIntensity = 0.5f;
+    map.sectors[1].ceilingSky = true;
+
+    struct RestoreCase {
+        Vector3 position;
+        int expectedSector;
+        bool dead = false;
+        bool despawned = false;
+        bool mismatchedId = false;
+    };
+    const RestoreCase cases[] = {
+            {{0.75f, 0.5f, 0.25f}, 20},
+            {{0.75f, 0.5f, 0.25f}, 20, true},
+            {{0.3f, 0.125f, 0.3f}, 10},
+            {{2.0f, 0.5f, 2.0f}, -1},
+            {{0.75f, 0.5f, 0.25f}, 20, true, true},
+            {{0.75f, 0.5f, 0.25f}, 10, false, false, true}
+    };
+    for (bool withProbes : {false, true}) {
+        for (const RestoreCase& test : cases) {
+            engine::World world;
+            game::ReserveSectorRuntimeObjectWorld(world, 1);
+            engine::AssetManager assets;
+            game::SectorSceneRuntime scene;
+            game::SectorRuntimeObjectState& objects = scene.RuntimeObjects();
+            std::string error;
+            objects.objectSectorLookupWorldValid =
+                    objects.objectSectorLookupWorld.BuildFromTopology(map, &error);
+            Check(objects.objectSectorLookupWorldValid,
+                    "NPC save restore fixture builds its sector lookup world");
+            if (!objects.objectSectorLookupWorldValid) return;
+
+            const Vector3 spawn{0.25f, 0.125f, 0.25f};
+            const Vector3 frontProbe{0.8f, 0.1f, 0.2f};
+            const Vector3 backProbe{0.2f, 0.7f, 0.9f};
+            if (withProbes) {
+                for (int sectorId : {10, 20}) {
+                    game::SectorBakedObjectLightProbe probe;
+                    probe.sectorId = sectorId;
+                    probe.layer = game::SectorBakedObjectLightProbeLayer::Lower;
+                    probe.position = sectorId == 10
+                            ? spawn : Vector3{0.75f, 0.5f, 0.25f};
+                    for (Vector3& face : probe.ambientCube) {
+                        face = sectorId == 10 ? frontProbe : backProbe;
+                    }
+                    const int begin = static_cast<int>(objects.objectLightProbes.probes.size());
+                    objects.objectLightProbes.probes.push_back(probe);
+                    objects.objectLightProbes.sectorRanges.push_back({
+                            sectorId, begin, 1, probe.layer});
+                }
+            }
+
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, game::SectorObjectTransform{spawn, 0.0f});
+            world.Add(entity, game::SectorObject{10, true});
+            world.Add(entity, game::SectorObjectLighting{});
+            game::NpcRuntimeInstance npc;
+            npc.instanceId = "saved_npc";
+            world.Add(entity, std::move(npc));
+            world.Add(entity, game::Health{100, 100, 100});
+            world.Add(entity, game::NpcCombatState{});
+            game::SectorDynamicModel model;
+            model.containingSectorAmbient = game::ComputeSectorModelAmbient(map, 10);
+            model.environmentExposure = game::ComputeSectorModelEnvironmentExposure(map, 10);
+            world.Add(entity, model);
+            // No GPU assets or ready animation pose: spatial restoration must
+            // work even when the renderer cannot yet submit the model.
+            world.Add(entity, engine::AnimatedModelInstance{});
+            world.Add(entity, engine::AnimatedModelAnimator{});
+            objects.placedObjectEntities.push_back({42, entity});
+            objects.placedObjectCount = objects.spawnedObjectCount = 1;
+
+            game::GameSaveNpcState saved;
+            saved.placedObjectId = 42;
+            saved.instanceId = test.mismatchedId ? "different_npc" : "saved_npc";
+            saved.position = test.position;
+            saved.yawRadians = 1.25f;
+            saved.dead = test.dead;
+            saved.deathAnimationComplete = test.dead;
+            saved.despawned = test.despawned;
+            saved.health = {100, 100, test.dead ? 0 : 75};
+            saved.opacity = test.dead ? 0.5f : 1.0f;
+            saved.hasAnimator = true;
+            saved.animator.animationName = "Idle";
+            game::GameSaveLevelState level;
+            level.npcs.push_back(saved);
+            game::SectorScriptHost host;
+            game::ApplyGameSaveLevelRuntimeState(world, assets, scene, map, host, level);
+
+            if (test.despawned) {
+                Check(!world.IsAlive(entity) && objects.placedObjectEntities.empty(),
+                        "NPC save restore preserves despawn removal");
+                continue;
+            }
+            const auto& transform = world.Get<game::SectorObjectTransform>(entity);
+            const auto& object = world.Get<game::SectorObject>(entity);
+            const auto& restoredModel = world.Get<game::SectorDynamicModel>(entity);
+            Check(object.currentSectorId == test.expectedSector,
+                    "NPC save restore resolves sector membership before any movement update");
+            if (test.mismatchedId) {
+                Check(Near(transform.position, spawn) && Near(transform.yawRadians, 0.0f)
+                                && Near(restoredModel.containingSectorAmbient, model.containingSectorAmbient),
+                        "NPC save restore ignores a mismatched stable instance ID");
+                continue;
+            }
+            Check(Near(transform.position, test.position) && Near(transform.yawRadians, saved.yawRadians),
+                    "NPC save restore preserves saved position, height and yaw");
+            Check(world.Get<game::NpcCombatState>(entity).dead == test.dead
+                            && world.Get<game::Health>(entity).current == saved.health.current
+                            && Near(restoredModel.opacity, saved.opacity),
+                    "NPC save restore preserves health, corpse state and opacity");
+            Check(Near(restoredModel.containingSectorAmbient,
+                            game::ComputeSectorModelAmbient(map, test.expectedSector))
+                            && Near(restoredModel.environmentExposure,
+                                    game::ComputeSectorModelEnvironmentExposure(map, test.expectedSector)),
+                    "NPC save restore refreshes ambient and environment exposure immediately");
+            const auto& lighting = world.Get<game::SectorObjectLighting>(entity);
+            if (!withProbes || test.expectedSector > 0) {
+                const Vector3 expected = withProbes
+                        ? (test.expectedSector == 20 ? backProbe : frontProbe)
+                        : game::ComputeSectorModelAmbient(map, test.expectedSector);
+                Check(lighting.baked.valid == withProbes
+                                && Near(lighting.baked.ambientCube[0], expected)
+                                && Near(lighting.vertical.lower.ambientCube[0], expected)
+                                && Near(lighting.vertical.upper.ambientCube[0], expected),
+                        "NPC save restore samples probes or fallback from the restored sector");
+            }
+            game::RuntimePortalVisibilityResult visibility;
+            visibility.validStartSector = true;
+            visibility.visibleSectorIds = {20};
+            Check(game::ShouldDrawRuntimeSectorForVisibility(object.currentSectorId, visibility)
+                            == (test.expectedSector == 20),
+                    "NPC save restore uses destination membership for portal visibility immediately");
+        }
+    }
+}
+
 void TestSectorRuntimeObjectCurrentSectorSystem()
 {
     const game::SectorTopologyMap map = MakeSquareMap();
@@ -12496,6 +12642,7 @@ int main()
     TestSectorBillboardDirectionalClipSelection();
     TestSectorBillboardDirectionalClipSelectionWraparound();
     TestSectorRuntimeObjectCurrentSectorSystem();
+    TestGameSaveRestoresNpcSectorAndLighting();
     TestSectorRuntimeObjectBakedLightingSystem();
     TestSectorRuntimeObjectBakedLightingFallback();
     TestSectorRuntimeObjectBakedLightingUsesMapFallback();
