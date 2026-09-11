@@ -710,6 +710,9 @@ static void ApplyPlayerWeaponImpact(
             && world.Has<Health>(best.entity)
             && world.Has<NpcCombatState>(best.entity)
             && world.Has<SectorObjectTransform>(best.entity)) {
+        // Non-hostile NPCs still block attacks, but receive no damage or hit effects.
+        if (world.Has<NpcRuntimeInstance>(best.entity)
+                && !world.Get<NpcRuntimeInstance>(best.entity).hostile) return;
         Health& health = world.Get<Health>(best.entity);
         NpcCombatState& combat = world.Get<NpcCombatState>(best.entity);
         const int damage = best.bodyPartDamageMatched

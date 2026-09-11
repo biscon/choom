@@ -505,6 +505,7 @@ end
 void SettingNpcHealthToZeroUsesNpcDeathState()
 {
     NpcScriptFixture fixture;
+    assert(!fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc).hostile);
     fixture.files.Write(R"(
 function init()
     assert(setNpcHealth("script_guard", 0))
@@ -876,6 +877,7 @@ end
 void KillingMovingNpcStopsRunawayPatrolWithoutFreezing()
 {
     NpcScriptFixture fixture;
+    fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc).hostile = true;
     fixture.files.Write(R"(
 function init()
     assert(startScript("patrol"))

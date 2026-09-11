@@ -11988,7 +11988,7 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
     game::ReserveSectorRuntimeObjectWorld(world, 8);
     const engine::Entity npc = world.CreateEntity();
     world.Add(npc, game::NpcRuntimeInstance{
-            "test", "target", game::NpcAction::Idle, false, true, 1.5f, 3.0f});
+            "test", "target", game::NpcAction::Idle, true, true, 1.5f, 3.0f});
     world.Add(npc, game::MakeHealth(100));
     game::NpcCombatState combat;
     combat.despawnOnDeath = true;
@@ -12112,6 +12112,98 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
           "corpse is destroyed after its configured fade finishes");
 }
 
+void TestNonHostileNpcsBlockPlayerAttacksHarmlessly()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const auto addNpc = [&](const char* id, float z, bool hostile) {
+        const engine::Entity entity = world.CreateEntity();
+        game::NpcRuntimeInstance npc;
+        npc.instanceId = id;
+        npc.hostile = hostile;
+        world.Add(entity, npc);
+        world.Add(entity, game::MakeHealth(100));
+        world.Add(entity, game::NpcCombatState{});
+        world.Add(entity, game::SectorObjectTransform{{0.0f, 0.0f, z}});
+        world.Add(entity, game::SectorObject{1, true});
+        return entity;
+    };
+    const auto friendly = addNpc("friendly", 0.0f, false);
+    const auto enemy = addNpc("enemy", 3.0f, true);
+    world.Add(friendly, game::NpcAiState{});
+    world.Add(friendly, game::NpcBoneImpactState{});
+    game::SectorNavigationWorld navigation;
+    game::NpcNavigationRuntime npcNavigation;
+    game::NpcNavigationRecord record;
+    record.entity = friendly;
+    record.occupied = true;
+    record.phase = game::NpcMovePhase::FollowingPath;
+    record.requestId = 42;
+    record.authority = game::NpcMoveAuthority::Patrol;
+    npcNavigation.records.push_back(record);
+    game::NpcAudioRuntime npcAudio;
+    game::NpcAudioRecord audio;
+    audio.entity = friendly;
+    audio.occupied = true;
+    audio.hurtSound = engine::SoundHandle{3, 1};
+    audio.deathSound = engine::SoundHandle{4, 1};
+    npcAudio.records.push_back(audio);
+    game::NpcAiRuntime npcAi;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> props;
+    game::FpsWeaponFiringDefinition firing;
+    firing.maximumRangeWorld = 20.0f;
+    firing.pellets = {true, 4, 0.0f};
+    firing.impact.damage = 1000;
+    firing.impact.staggerSeconds = 1.0f;
+    firing.impact.knockbackImpulseWorldPerSecond = 5.0f;
+    firing.impact.blood.enabled = true;
+    firing.impact.surfaceDebris.enabled = true;
+
+    for (bool held : {false, true}) {
+        world.Get<game::NpcRuntimeInstance>(friendly).conversationHeld = held;
+        for (float range : {1.5f, 20.0f}) {
+            game::FpsShotResult shot;
+            game::WeaponImpactEvent event;
+            Check(game::ResolvePlayerWeaponShot(world, nullptr, navigation, npcNavigation,
+                          nullptr, doors, props, {0, 0.8f, -1}, {0, 0, 1}, range,
+                          firing.impact, shot, event, &npcAudio, &npcAi)
+                          && shot.accepted && shot.hitKind == game::FpsShotHitKind::Npc
+                          && shot.targetEntity == friendly && event.kind == game::WeaponImpactKind::None,
+                  "short and long range attacks stop harmlessly at non-hostile NPCs");
+        }
+        game::WeaponPelletVolleyResult volley;
+        Check(game::ResolvePlayerWeaponPelletVolley(world, nullptr, navigation, npcNavigation,
+                      nullptr, doors, props, {0, 0.8f, -1}, {0, 0, 1}, 1, firing,
+                      volley, &npcAudio, &npcAi) && volley.hitCount == 4,
+              "non-hostile NPC blocks every aligned pellet");
+        for (int i = 0; i < volley.pelletCount; ++i) {
+            Check(volley.shots[i].targetEntity == friendly
+                          && volley.impacts[i].kind == game::WeaponImpactKind::None,
+                  "blocked pellets emit neither blood nor surface debris");
+        }
+        const auto& combat = world.Get<game::NpcCombatState>(friendly);
+        const auto& ai = world.Get<game::NpcAiState>(friendly);
+        const auto& bones = world.Get<game::NpcBoneImpactState>(friendly);
+        Check(world.Get<game::Health>(friendly).current == 100
+                      && world.Get<game::Health>(enemy).current == 100
+                      && !combat.dead && !combat.hurtAnimationRequested && !combat.deathAnimationRequested
+                      && Near(combat.staggerRemainingSeconds, 0.0f)
+                      && Near(combat.knockbackVelocity, Vector2{})
+                      && npcAudio.records.front().pendingEvent == game::NpcVocalEvent::None
+                      && ai.awareness == game::NpcAwarenessState::Unaware && !ai.directAlertPending
+                      && std::all_of(bones.activeBones.begin(), bones.activeBones.end(),
+                              [](uint8_t active) { return active == 0; }),
+              "repeated lethal attacks cause no health loss, combat reactions, alerts or pain sounds");
+        Check(world.Get<game::NpcRuntimeInstance>(friendly).conversationHeld == held
+                      && npcNavigation.records.front().occupied
+                      && npcNavigation.records.front().phase == game::NpcMovePhase::FollowingPath
+                      && npcNavigation.records.front().requestId == 42
+                      && Near(world.Get<game::SectorObjectTransform>(friendly).position, Vector3{}),
+              "harmless attacks preserve conversation holds, navigation and position");
+    }
+}
+
 void TestWeaponPelletVolleyDamageAndPretrace()
 {
     const auto addNpc = [](engine::World& world,
@@ -12121,7 +12213,7 @@ void TestWeaponPelletVolleyDamageAndPretrace()
         const engine::Entity entity = world.CreateEntity();
         world.Add(entity, game::NpcRuntimeInstance{
                 "test", instanceId, game::NpcAction::Idle,
-                false, true, 1.5f, 3.0f});
+                true, true, 1.5f, 3.0f});
         world.Add(entity, game::MakeHealth(healthValue));
         world.Add(entity, game::NpcCombatState{});
         world.Add(entity, game::SectorObjectTransform{position});
@@ -12606,6 +12698,7 @@ int main()
     TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
     TestNpcScriptAnimationTimingAndReturnLoop();
     TestNpcWeaponDamageOcclusionAndCorpseFade();
+    TestNonHostileNpcsBlockPlayerAttacksHarmlessly();
     TestWeaponPelletVolleyDamageAndPretrace();
     TestNpcNavigationSmoothsSectorGeometryStairsVisually();
     TestNpcNavigationTraversesTurningStairsRepeatedly();
