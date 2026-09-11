@@ -1941,7 +1941,7 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
         assert(op == nil and type(err) == 'string')
         op, err = startSay('script_guard', 'must not replace', 'happy', -1)
         assert(op == nil and type(err) == 'string')
-        assert(not pcall(function() startSay('obsolete speakerless line') end))
+        assert(not pcall(function() startSay(123) end))
         assert(not pcall(function() startSay('script_guard', 'bad mood type', 25) end))
     )").success);
     assert(cutscene.caption.token == originalToken);
@@ -2519,6 +2519,8 @@ void NpcFacingCancellationDeathAndRemovalReleaseOwnership()
 
 void RunSectorScriptBindingTests()
 {
+    extern void RunSectorDialogueTests();
+    RunSectorDialogueTests();
     NpcMarkerArrivalOrientationTurnsAfterStopping();
     NpcTurnTimingRespectsDoorsReplansAndAngleWrap();
     NpcLookTargetsCompleteAndPreserveHeadAnimation();

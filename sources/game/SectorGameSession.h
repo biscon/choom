@@ -13,6 +13,7 @@
 #include "game/PlayerLightLevel.h"
 #include "game/PlayerFlashlight.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
+#include "game/dialogue/SectorDialogue.h"
 #include "game/SectorScriptBindings.h"
 #include "game/SectorGameNavigationDebug.h"
 #include "game/save/GameSaveData.h"
@@ -156,10 +157,10 @@ public:
     }
     bool IsGameOver() const { return gameOver; }
     bool CanSaveGame() const {
-        return IsActive() && !gameOver && !saveGameBlocked;
+        return IsActive() && !gameOver && !saveGameBlocked && !dialogue.active;
     }
     const std::string& SaveGameBlockedReason() const {
-        return saveGameBlockedReason;
+        return dialogue.active && !saveGameBlocked ? dialogueSaveBlockedReason : saveGameBlockedReason;
     }
     void SetSaveGameBlocked(bool blocked, std::string reason = {});
     bool CaptureCurrentLevelSaveState(
@@ -199,6 +200,7 @@ private:
     void ShowDropRefusal();
     void ShowOutOfAmmo();
     void RefreshMouseLookCapture();
+    void OnDialogueChanged(bool active);
     bool SetCutsceneControlsEnabled(
             engine::EngineContext& context,
             bool enabled,
@@ -265,6 +267,7 @@ private:
     engine::ScriptRuntime scripts;
     SectorScriptHost scriptHost;
     SectorCutsceneRuntime cutscene;
+    mutable SectorDialogueRuntime dialogue;
     engine::DialogueVoiceLibrary dialogueVoices;
     SectorGameNavigationDebugState navigationDebug;
     Health playerHealth = MakeHealth(100);
@@ -277,6 +280,7 @@ private:
     bool gameOver = false;
     bool saveGameBlocked = false;
     std::string saveGameBlockedReason;
+    const std::string dialogueSaveBlockedReason = "Saving is unavailable while choosing dialogue";
     PlayerStamina playerStamina;
     PlayerOxygen playerOxygen;
     PlayerOxygenModifiers playerOxygenModifiers;

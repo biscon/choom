@@ -215,11 +215,25 @@ void SectorGameSession::RefreshMouseLookCapture()
             controller.freeflyController,
             !consoleInputCaptured
                     && !inventoryUi.open
+                    && !dialogue.active
                     && cutscene.controlsEnabled
                     && heldObjectUse.phase == ItemHeldUsePhase::Inactive);
     if (!controller.freeflyController.mouseLookEnabled) {
         ResetSectorFpsMouseLook(controller.fpsControllerState);
     }
+}
+
+void SectorGameSession::OnDialogueChanged(bool active)
+{
+    if (active) {
+        SetInventoryOpen(false);
+        ClearHeldObjectUse();
+        pendingInventoryAction = {};
+        useTarget = {};
+        ResetSectorUseHighlight(useHighlightState);
+        usePromptTitle = {};
+    }
+    RefreshMouseLookCapture();
 }
 
 bool SectorGameSession::SetCutsceneControlsEnabled(
@@ -1197,6 +1211,11 @@ bool SectorGameSession::StartNew(
                                         engine, enabled, callbackError);
                     }});
     scriptHost.dialogueVoices = &dialogueVoices;
+    LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
+    scriptHost.dialogue = &dialogue;
+    scriptHost.controls.dialogueChanged = [](void* userData, bool active) {
+        static_cast<SectorGameSession*>(userData)->OnDialogueChanged(active);
+    };
     pendingLoadingSave = loadingSave;
     saveGameBlocked = false;
     saveGameBlockedReason.clear();
@@ -1230,6 +1249,7 @@ void SectorGameSession::Shutdown(
         liquidAudio = PlayerLiquidAudioPlaybackState{};
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
+    ResetSectorDialogueMenu(dialogue);
     ResetSectorScriptHost(scriptHost);
     StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, &scene.Navigation());
@@ -1308,6 +1328,7 @@ void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
     }
     Pause();
     engine::ScriptSystemShutdownForMap(context, scripts);
+    ResetSectorDialogueMenu(dialogue);
     ResetSectorScriptHost(scriptHost);
     StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, nullptr);
@@ -1418,10 +1439,22 @@ void SectorGameSession::Update(
         scene.Renderer().SetPlayerFlashlight(nullptr);
         return;
     }
+    const bool dialogueCapturedThisFrame = dialogue.active;
+    if (!consoleInputCaptured) {
+        if (dialogueCapturedThisFrame) {
+            UpdateSectorDialogueInput(dialogue, scripts, context.input, logicalViewport);
+            if (!dialogue.active) OnDialogueChanged(false);
+        } else if (ConsumeSectorSpeechAdvance(dialogue, context.input,
+                !inventoryUi.open && heldObjectUse.phase == ItemHeldUsePhase::Inactive
+                        && cutscene.caption.active
+                        && cutscene.caption.kind == SectorCutsceneCaptionKind::Say)) {
+            AdvanceSectorCutsceneSpeech(cutscene, scripts);
+        }
+    }
     UpdatePlayerHitCamera(hitCamera, dt);
     playerStunRemainingSeconds = std::max(
             0.0f, playerStunRemainingSeconds - std::max(0.0f, dt));
-    if (!consoleInputCaptured && cutscene.controlsEnabled) {
+    if (!consoleInputCaptured && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active) {
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
                 true,
@@ -1445,7 +1478,7 @@ void SectorGameSession::Update(
                 });
     }
     if (!consoleInputCaptured
-            && cutscene.controlsEnabled
+            && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active
             && !cutscene.playerMove.active
             && !inventoryUi.open
             && heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
@@ -1621,6 +1654,11 @@ void SectorGameSession::Update(
             SectorCutscenePlayerDoorHoldId(cutscene));
     if (IsDepleted(playerHealth)) {
         gameOver = true;
+        if (dialogue.active) {
+            engine::ScriptSystemCancelOperation(context, scripts, dialogue.operation, "player died");
+            ResetSectorDialogueMenu(dialogue);
+            OnDialogueChanged(false);
+        }
         StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
         ClearPlayerLowHealthCamera(lowHealthCamera);
         StopPlayerHeartbeatAudio(
@@ -1640,6 +1678,7 @@ void SectorGameSession::Update(
     }
     ProcessInventoryAction(context, scene);
     const bool gameplayInputCaptured = consoleInputCaptured
+            || dialogueCapturedThisFrame || dialogue.active
             || inventoryUi.open
             || heldObjectUse.phase != ItemHeldUsePhase::Inactive
             || !cutscene.controlsEnabled
@@ -1652,7 +1691,7 @@ void SectorGameSession::Update(
             applicationSettings == nullptr || applicationSettings->dialogueVoicesEnabled);
     UpdateSectorCutsceneTimelines(cutscene, scripts, dt);
     SectorFpsControllerInput input;
-    if (!gameplayInputCaptured) {
+    if (!gameplayInputCaptured && !dialogue.active) {
         input.moveForward = context.input.IsKeyDown(KEY_W);
         input.moveBackward = context.input.IsKeyDown(KEY_S);
         input.strafeLeft = context.input.IsKeyDown(KEY_A);
@@ -1669,7 +1708,7 @@ void SectorGameSession::Update(
             input.mouseDelta = context.input.MouseDelta();
         }
     }
-    if (!gameplayInputCaptured) context.input.ForEachEvent(
+    if (!gameplayInputCaptured && !dialogue.active) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [this, &input](engine::InputEvent& event) {
@@ -1902,7 +1941,7 @@ void SectorGameSession::Update(
         }
         UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
     } else if (heldObjectUse.phase == ItemHeldUsePhase::Inactive
-            && !inventoryUi.open && cutscene.controlsEnabled
+            && !inventoryUi.open && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active
             && !IsSectorLadderTraversalActive(controller.ladderTraversal)
             && (controller.ductTraversal.phase
                             == SectorDuctTraversalPhase::Inactive
@@ -1976,7 +2015,7 @@ void SectorGameSession::Update(
                     if (decision.consumeEvent) engine::ConsumeEvent(event);
                 });
     }
-    if (!gameplayInputCaptured) context.input.ForEachEvent(
+    if (!gameplayInputCaptured && !dialogue.active) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [this, &context, &scene](engine::InputEvent& event) {
@@ -2123,7 +2162,7 @@ void SectorGameSession::Update(
     }
     ApplyPlayerPose(scene);
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
-        const bool weaponInputCaptured = gameplayInputCaptured
+        const bool weaponInputCaptured = gameplayInputCaptured || dialogue.active
                 || IsSectorLadderTraversalActive(
                         controller.ladderTraversal)
                 || IsSectorDuctTraversalActive(controller.ductTraversal);
@@ -2137,7 +2176,7 @@ void SectorGameSession::Update(
                         : nullptr,
                 scene.Renderer(),
                 true,
-                !gameplayInputCaptured,
+                !gameplayInputCaptured && !dialogue.active,
                 weaponInputCaptured,
                 itemRegistry,
                 itemCampaign);
@@ -2422,7 +2461,7 @@ void SectorGameSession::RenderHud(
                     assets.GetFont(usePromptFont),
                     itemMessage.data(),
                     itemMessageElapsedSeconds);
-        } else if (!inventoryUi.open
+        } else if (!inventoryUi.open && !dialogue.active
                 && heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
             DrawSectorUsePrompt(
                     playableViewport,
@@ -2435,6 +2474,15 @@ void SectorGameSession::RenderHud(
     if (IsActive()) {
         DrawSectorCutsceneCaption(
                 cutscene, assets, usePromptFont, playableViewport);
+        if (dialogue.active) {
+            if (const auto* asset = assets.GetFont(usePromptFont)) {
+                const float top = BuildSectorCutscenePresentationLayout(
+                        cutscene.presentation, playableViewport,
+                        SectorCutsceneTextPosition::Bottom, 0).captionY;
+                LayoutSectorDialogue(dialogue, asset->font, asset->pixelSize, playableViewport, top);
+                DrawSectorDialogue(dialogue, asset->font);
+            }
+        }
     }
 }
 
@@ -2510,6 +2558,7 @@ bool SectorGameSession::RebuildFromMap(
         return false;
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
+    ResetSectorDialogueMenu(dialogue);
     ResetSectorScriptHost(scriptHost);
     StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
     ResetSectorCutsceneRuntime(cutscene, &scene.Navigation());
@@ -2601,6 +2650,11 @@ bool SectorGameSession::RebuildFromMap(
                                         engine, enabled, callbackError);
                     }});
     scriptHost.dialogueVoices = &dialogueVoices;
+    LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
+    scriptHost.dialogue = &dialogue;
+    scriptHost.controls.dialogueChanged = [](void* userData, bool active) {
+        static_cast<SectorGameSession*>(userData)->OnDialogueChanged(active);
+    };
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};

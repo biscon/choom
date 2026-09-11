@@ -911,6 +911,7 @@ bool BeginSectorCutsceneCaption(
     caption.operation = {};
     caption.kind = kind;
     caption.speaker = speech ? speech->speaker : engine::NullEntity();
+    caption.playerSpeaker = speech && speech->playerSpeaker;
     caption.mood = speech ? speech->mood : engine::DialogueMood::Neutral;
     caption.position = position;
     caption.text.assign(text.data(), text.size());
@@ -994,6 +995,17 @@ void CancelSectorCutsceneCaption(SectorCutsceneRuntime& runtime, uint64_t token)
     if (runtime.caption.active && runtime.caption.token == token) {
         runtime.caption.active = false;
     }
+}
+
+bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts)
+{
+    auto& caption = runtime.caption;
+    if (!caption.active || caption.kind != SectorCutsceneCaptionKind::Say) return false;
+    const auto operation = caption.operation;
+    caption.active = false;
+    caption.operation = {};
+    engine::ScriptSystemCompleteOperation(scripts, operation);
+    return true;
 }
 
 bool BeginSectorCutsceneFade(

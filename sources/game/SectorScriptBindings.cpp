@@ -5,6 +5,7 @@
 #include "engine/systems/AnimatedModelSystem.h"
 #include "game/Health.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
+#include "game/dialogue/SectorDialogue.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
@@ -1046,6 +1047,78 @@ int LuaStartLookAtProp(lua_State* state)
     return StartLook(state, SectorCutsceneLookTargetKind::Prop, true);
 }
 
+void CancelScriptDialogue(engine::EngineContext&, void* context, uint64_t token)
+{
+    auto& host = *static_cast<SectorScriptHost*>(context);
+    if (host.dialogue && host.dialogue->active && host.dialogue->token == token) {
+        ResetSectorDialogueMenu(*host.dialogue);
+        if (host.controls.dialogueChanged) host.controls.dialogueChanged(host.controls.userData, false);
+    }
+}
+
+int LuaDialogueOperation(lua_State* state)
+{
+    const int originalTop = lua_gettop(state);
+    auto& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    const auto owner = engine::ScriptSystemCurrentTaskFromLua(state);
+    auto& host = HostFromLua(state);
+    luaL_checktype(state, 1, LUA_TSTRING);
+    // Parse without argument errors after allocating C++ temporaries: Lua errors
+    // longjmp past destructors in this build.
+    if (originalTop > 2 || (!lua_isnoneornil(state, 2) && !lua_istable(state, 2)))
+        return PushCutsceneStartError(state, false, "dialogue expects a set ID and optional array of hidden IDs");
+    if (lua_istable(state, 2)) {
+        const size_t count = lua_rawlen(state, 2);
+        size_t entries = 0;
+        lua_pushnil(state);
+        while (lua_next(state, 2)) {
+            const bool valid = lua_isinteger(state, -2) && lua_tointeger(state, -2) >= 1
+                    && static_cast<lua_Unsigned>(lua_tointeger(state, -2)) <= count
+                    && lua_type(state, -1) == LUA_TSTRING;
+            lua_pop(state, 1);
+            if (!valid) {
+                lua_pop(state, 1);
+                return PushCutsceneStartError(state, false, "hidden IDs must be a dense array of strings");
+            }
+            ++entries;
+        }
+        if (entries != count) return PushCutsceneStartError(state, false, "hidden IDs must be a dense array of strings");
+    }
+    if (!host.dialogue) return PushCutsceneStartError(state, false, "dialogue runtime is unavailable");
+    if (host.cutscene && host.cutscene->caption.active)
+        return PushCutsceneStartError(state, false, "a caption is already active");
+    engine::ScriptOperationHandle operation;
+    {
+        std::vector<std::string> hidden;
+        if (lua_istable(state, 2)) {
+            const size_t count = lua_rawlen(state, 2);
+            hidden.reserve(count);
+            for (size_t i = 1; i <= count; ++i) {
+                lua_rawgeti(state, 2, static_cast<lua_Integer>(i));
+                size_t length = 0;
+                const char* value = lua_tolstring(state, -1, &length);
+                hidden.emplace_back(value, length);
+                lua_pop(state, 1);
+            }
+        }
+        size_t length = 0;
+        const char* id = lua_tolstring(state, 1, &length);
+        std::string error;
+        if (!BeginSectorDialogue(*host.dialogue, std::string{id, length}, hidden, error))
+            return PushCutsceneStartError(state, false, error);
+        operation = engine::ScriptSystemCreateOperation(scripts,
+                engine::ScriptOperationLaunchStyle::Blocking, owner, "dialogue",
+                host.dialogue->token, CancelScriptDialogue);
+        if (!engine::IsValid(operation)) {
+            ResetSectorDialogueMenu(*host.dialogue);
+            return PushCutsceneStartError(state, false, "could not allocate dialogue operation");
+        }
+        host.dialogue->operation = operation;
+    }
+    if (host.controls.dialogueChanged) host.controls.dialogueChanged(host.controls.userData, true);
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
 int StartCaption(
         lua_State* state,
         SectorCutsceneCaptionKind kind,
@@ -1066,15 +1139,46 @@ int StartCaption(
         return PushCutsceneStartError(
                 state, async, "cutscene caption runtime is unavailable");
     }
+    if (host.dialogue && host.dialogue->active)
+        return PushCutsceneStartError(state, async, "a dialogue menu is already active");
     size_t textLength = 0;
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     const bool spoken = kind == SectorCutsceneCaptionKind::Say;
-    luaL_checktype(state, spoken ? 2 : 1, LUA_TSTRING);
-    const char* rawText = luaL_checklstring(state, spoken ? 2 : 1, &textLength);
+    const bool player = spoken && (originalTop == 1 || lua_istable(state, 2) || lua_isnil(state, 2));
+    const int textArgument = spoken && !player ? 2 : 1;
+    luaL_checktype(state, textArgument, LUA_TSTRING);
+    const char* rawText = luaL_checklstring(state, textArgument, &textLength);
     SectorCutsceneSpeechOptions speech;
     SectorCutsceneTextPosition position = SectorCutsceneTextPosition::Bottom;
     int holdArgument = 4;
-    if (spoken) {
+    if (player) {
+        if (originalTop > 2) return PushCutsceneStartError(state, async, "player say expects message and optional mood/holdMs table");
+        speech.playerSpeaker = true;
+        speech.history = &host.cutscene->playerSpeechHistory;
+        speech.seed = 2166136261u ^ static_cast<uint32_t>(host.cutscene->nextToken);
+        for (size_t i = 0; i < textLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(rawText[i])) * 16777619u;
+        if (lua_istable(state, 2)) {
+            lua_getfield(state, 2, "mood");
+            if (!lua_isnil(state, -1)) {
+                luaL_checktype(state, -1, LUA_TSTRING);
+                size_t length = 0;
+                const char* mood = lua_tolstring(state, -1, &length);
+                if (!engine::ParseDialogueMood(std::string_view{mood, length}, speech.mood))
+                    return PushCutsceneStartError(state, async, "unknown dialogue mood");
+            }
+            lua_pop(state, 1);
+            lua_getfield(state, 2, "holdMs");
+            holdArgument = lua_gettop(state);
+        } else {
+            holdArgument = originalTop + 1;
+        }
+        speech.seed ^= static_cast<uint32_t>(speech.mood) * 0x9e3779b9u;
+        if (host.dialogueVoices) {
+            speech.settings = &host.dialogueVoices->settings;
+            speech.voice = engine::FindDialogueVoice(*host.dialogueVoices, "male");
+        }
+    }
+    if (spoken && !player) {
         luaL_checktype(state, 1, LUA_TSTRING);
         size_t idLength = 0;
         const char* id = luaL_checklstring(state, 1, &idLength);
@@ -1122,6 +1226,7 @@ int StartCaption(
         holdSeconds = static_cast<double>(holdMs) / 1000.0;
         hold = &holdSeconds;
     }
+    lua_settop(state, originalTop);
     const engine::ScriptOperationHandle replacedOperation =
             host.cutscene->caption.operation;
     std::string error;
@@ -2310,6 +2415,7 @@ void InitializeSectorScriptHost(
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
     host.cutscene = cutscene;
+    host.dialogue = nullptr;
     host.dialogueVoices = nullptr;
     host.playerState = playerState;
     host.playerConfig = playerConfig;
@@ -2348,6 +2454,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.navigation = nullptr;
     host.npcNavigation = nullptr;
     host.cutscene = nullptr;
+    host.dialogue = nullptr;
     host.dialogueVoices = nullptr;
     host.playerState = nullptr;
     host.playerConfig = nullptr;
@@ -2367,6 +2474,19 @@ void ResetSectorScriptHost(SectorScriptHost& host)
 
 void RegisterSectorScriptBindings(lua_State* state)
 {
+    // Capture the native operation function as a Lua upvalue; only the public
+    // choice-ID contract is installed as a global.
+    constexpr const char* dialogueWrapper = R"lua(
+        local operation = ...
+        function dialogue(...)
+            local ok, value = operation(...)
+            if ok then return value end
+            return nil, value
+        end
+    )lua";
+    if (luaL_loadstring(state, dialogueWrapper) != LUA_OK) lua_error(state);
+    lua_pushcfunction(state, LuaDialogueOperation);
+    if (lua_pcall(state, 1, 0, 0) != LUA_OK) lua_error(state);
     Register(state, "moveDoor", LuaMoveDoor);
     Register(state, "startMoveDoor", LuaStartMoveDoor);
     Register(state, "openDoor", LuaOpenDoor);

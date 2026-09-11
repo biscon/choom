@@ -1023,10 +1023,48 @@ void RegisterCoreBindings(lua_State* state)
     RegisterFunction(state, "getPersistentInt", LuaGetPersistentInt);
     RegisterFunction(state, "setPersistentString", LuaSetPersistentString);
     RegisterFunction(state, "getPersistentString", LuaGetPersistentString);
+    RegisterFunction(state, "setFlag", LuaSetPersistentBool);
+    RegisterFunction(state, "flag", LuaGetPersistentBool);
+    RegisterFunction(state, "setInt", LuaSetPersistentInt);
+    RegisterFunction(state, "getInt", LuaGetPersistentInt);
+    RegisterFunction(state, "setString", LuaSetPersistentString);
+    RegisterFunction(state, "getString", LuaGetPersistentString);
     RegisterFunction(state, "log", LuaLog);
     RegisterFunction(state, "print", LuaLog);
     RegisterFunction(state, "isLoadingSave", LuaIsLoadingSave);
 }
+
+constexpr const char* ConversationHelpers = R"lua(
+function appendIf(list, condition, value)
+    if condition then list[#list + 1] = value end
+    return list
+end
+
+function hiddenOptions(map)
+    local result = {}
+    for id, hidden in pairs(map) do
+        appendIf(result, hidden, id)
+    end
+    return result
+end
+
+function runConversationDynamic(setId, handlers, hiddenOptionsFn)
+    while true do
+        local hidden = nil
+        if hiddenOptionsFn ~= nil then hidden = hiddenOptionsFn() end
+        local choice = dialogue(setId, hidden)
+        if choice == nil then return nil end
+        local handler = handlers and handlers[choice]
+        if handler == nil then return choice end
+        local result = handler(choice)
+        if result == "exit" or result == "break" then return choice end
+    end
+end
+
+function runConversation(setId, handlers, hidden)
+    return runConversationDynamic(setId, handlers, function() return hidden end)
+end
+)lua";
 
 std::string NormalizeLuaPath(const std::filesystem::path& path)
 {
@@ -1174,6 +1212,11 @@ bool ScriptSystemCreateForMap(
             &runtime, &engine, &persistent, hostContext};
     SetLuaContext(runtime.vm, &runtime.luaContext);
     RegisterCoreBindings(runtime.vm);
+    if (luaL_dostring(runtime.vm, ConversationHelpers) != LUA_OK) {
+        error = lua_tostring(runtime.vm, -1);
+        ScriptSystemShutdownForMap(engine, runtime);
+        return false;
+    }
     if (registerHostBindings != nullptr) registerHostBindings(runtime.vm);
     ConfigurePackagePaths(runtime.vm, scriptPath.parent_path(), assetRoot);
     lua_pushnumber(runtime.vm, 0.0);

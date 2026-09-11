@@ -22,7 +22,12 @@ ranges, return values, behavior, and failure details.
 - **[Persistent values](#persistent-values):** `setPersistentBool(key, value)`,
   `getPersistentBool(key [, default])`, `setPersistentInt(key, value)`,
   `getPersistentInt(key [, default])`, `setPersistentString(key, value)`,
-  `getPersistentString(key [, default])`.
+  `getPersistentString(key [, default])`; also `flag`/`setFlag`,
+  `getInt`/`setInt`, and `getString`/`setString`.
+- **[Dialogue choices](#dialogue-choices):** `dialogue(setId [, hiddenIds])`,
+  `appendIf(list, condition, value)`, `hiddenOptions(map)`,
+  `runConversation(setId, handlers [, hiddenIds])`,
+  `runConversationDynamic(setId, handlers [, hiddenOptionsFn])`.
 - **[Logging](#logging):** `log(...)`, `print(...)`.
 - **[Doors](#doors):** `moveDoor(doorId, targetFraction, durationMs)`,
   `startMoveDoor(doorId, targetFraction, durationMs)`, `openDoor(doorId)`,
@@ -69,6 +74,7 @@ ranges, return values, behavior, and failure details.
   `startLookAtProp(instanceId, durationMs [, targetHeight])`.
 - **[Captions](#captions):** `say(npcId, message [, mood [, holdMs]])`,
   `startSay(npcId, message [, mood [, holdMs]])`,
+  `say(message [, options])`, `startSay(message [, options])` for the player,
   `text(message, TOP|CENTER|BOTTOM [, holdMs])`,
   `startText(message, TOP|CENTER|BOTTOM [, holdMs])`.
 - **[World fades](#world-fades):** `fadeOut(durationMs)`,
@@ -883,6 +889,8 @@ instance-ID namespace. Only one scripted look may be active.
 ```text
 say(npcId, message [, mood [, holdMs]]) -> true | false, reason
 startSay(npcId, message [, mood [, holdMs]]) -> operation | nil, reason
+say(message [, options]) -> true | false, reason
+startSay(message [, options]) -> operation | nil, reason
 text(message, TOP|CENTER|BOTTOM [, holdMs]) -> true | false, reason
 startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 ```
@@ -893,19 +901,34 @@ startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 directly in the non-yielding debug console to preview captions; direct console
 calls to the blocking forms are rejected before changing caption state.
 
-`say` requires a placed NPC instance ID (the same IDs used by `moveNpc`). The
+The NPC form requires a placed NPC instance ID (the same IDs used by `moveNpc`). The
 NPC editor's Voice setting selects `male` or `female`; older definitions default
 to male. The optional mood is `neutral` (default), `happy`, `angry`, `afraid`,
 `panicked`, `pained`, or `relieved`. Pass `nil` for mood to specify only `holdMs`.
-Unknown NPC IDs or moods fail before replacing the current caption. The old
-speakerless `say(message)` form is no longer supported; use `text` for silent
-captions.
+Unknown NPC IDs or moods fail before replacing the current caption.
+
+`say(message)` speaks as the player using the **male** voice, with independent
+session-only clip history and local, non-positional playback. Its optional second
+argument is a table with `mood` and `holdMs`; omitted fields use the same defaults
+as NPC speech. A second string selects the existing NPC signature. `startSay`
+accepts both forms and retains the same shared-caption operation behavior.
+Use `text` for silent captions.
 
 ```lua
 say("elin", "Yes finally another person!!. Come closer.", "relieved")
 say("elin", "Stay here.", nil, 2000)
 local operation = startSay("elin", "What was that?", "afraid")
+say("I'm here.")
+say("What was that?", { mood = "afraid", holdMs = 2000 })
 ```
+
+Enter or a left/right mouse press finishes the current spoken line, including
+its remaining reveal and hold, and returns `true` to the waiting script. Audio
+uses the existing short interruption release. One press affects only that line;
+it does not select a subsequently opened menu, skip another line, fire, or become
+a world interaction. The line also completes automatically through its normal
+timing. `startSay` lines are equally skippable; `text` is unchanged. Console,
+pause, inventory, and held-item UI retain input priority over speech advancing.
 
 `say` is bottom-centered. Text follows complete spoken fragments. Each English
 word gets a recording, except two adjacent words of at most three letters each
@@ -987,6 +1010,117 @@ overlay affects the rendered world and viewmodel, but not the HUD, menus,
 `say`, or `text`, so captions remain readable over black. A new fade replaces
 the active fade. `fadeOut` leaves the world black until `fadeIn` or a map reset
 changes it.
+
+## Dialogue choices
+
+```lua
+local choice, reason = dialogue("guard_topics", { "already_discussed" })
+if choice == "identity" then
+    say("Who are you?")
+    say("guard", "Station security.")
+    setFlag("asked_guard_identity", true)
+end
+```
+
+`dialogue(setId [, hiddenIds])` suspends the managed Lua task and returns the
+selected **option ID string**. It neither speaks the label nor remembers the
+selection automatically. `hiddenIds` is a dense array of strings, not a boolean
+map. Unknown IDs have no effect, and filtering never changes the loaded asset.
+Missing sets, malformed hidden lists, all-hidden sets, or busy presentation
+return `nil, reason`. Cancellation also returns `nil, reason` if the caller is
+still running. Blocking calls from the console or top-level map chunk raise an
+error before changing UI state.
+
+Each menu belongs to its requesting operation. Another task cannot replace it
+or take its result. Menus and captions are mutually exclusive: finish or cancel
+an async caption before opening a menu. Stopping its task, map teardown, and
+player death clear a menu. Result delivery clears it before resuming Lua, so a
+handler can immediately open another menu.
+
+The session loads `.json` files directly inside `assets/dialogue/` during level
+loading, in sorted filename order. Each file uses this format:
+
+```json
+{
+  "choiceSets": [
+    {
+      "id": "guard_topics",
+      "options": [
+        { "id": "identity", "text": "Who are you?" },
+        { "id": "goodbye", "text": "That's all." }
+      ]
+    }
+  ]
+}
+```
+
+Set IDs are globally unique; option IDs are unique within their set. IDs and
+labels must be nonempty, labels cannot be whitespace-only or exceed 8192 UTF-8
+bytes, and options must be a nonempty array. IDs and labels cannot contain NUL.
+Invalid files are rejected as a whole with a warning identifying the file;
+other valid files remain available. A missing directory is an empty registry.
+Restart/reload the level after editing these assets.
+
+Choices appear near the bottom, adapting to cinematic bars. Select using mouse
+hover and left/right click, Up/Down and Enter, or number keys 1–9. Long lists
+scroll with the mouse wheel; keyboard navigation brings the selected row into
+view. Outside clicks are consumed without selecting. Escape opens the ordinary
+pause menu; leaving a conversation uses a scripted goodbye choice.
+
+Only an open choice menu automatically captures player movement, look, weapons,
+interaction, and inventory controls. Opening it closes inventory/held-item UI
+and releases mouse capture. Closing it preserves any existing cutscene/control
+lock. World simulation keeps running. Speech between menus leaves controls
+alone; use `enableControls(false)` or `startCutscene()` to lock the entire
+conversation. Scripts remain responsible for positioning and facing both actors
+and for playing animations.
+
+### Conversation helpers and memory
+
+All helpers are globals installed before the map script loads; no `Adv` object
+or `require` is needed.
+
+| Helper | Behavior |
+| --- | --- |
+| `appendIf(list, condition, value)` | Appends when condition is truthy; returns the list. |
+| `hiddenOptions(map)` | Converts truthy `{ optionId = shouldHide }` entries to an ID array. |
+| `runConversation(setId, handlers [, hiddenIds])` | Repeatedly displays the set and dispatches the selected ID to its handler. |
+| `runConversationDynamic(setId, handlers [, hiddenOptionsFn])` | Recomputes the hidden list before each menu. |
+
+Handlers receive the selected ID and run in the same coroutine. They may call
+speech, delays, movement, animations, or nested menus. Returning normally
+redisplays the outer menu. Returning `"exit"` or `"break"` ends the helper with
+the selected ID; an unhandled choice also returns that ID. A `nil` menu result
+ends the helper with `nil`, avoiding an endless retry loop.
+
+```lua
+runConversationDynamic("guard_topics", {
+    identity = function()
+        say("Who are you?")
+        say("guard", "Station security.")
+        setFlag("asked_guard_identity", true)
+    end,
+    goodbye = function()
+        say("That's all.")
+        return "exit"
+    end,
+}, function()
+    return hiddenOptions({ identity = flag("asked_guard_identity") })
+end)
+```
+
+`flag`/`setFlag`, `getInt`/`setInt`, and `getString`/`setString` alias the existing
+persistent boolean, integer, and string functions. They share keys and save
+storage with the longer names, including optional getter defaults. Missing
+values default to `false`, `0`, and `""`. No new save format is required.
+
+Open menus block saving independently of other save restrictions. Only persistent
+values are saved: menus, operation handles, Lua stacks, voice selection history,
+and the current conversation position are transient and reset on load. Outside
+a control lock, saving between menus retains recorded state but cannot resume
+the suspended conversation; scripts should reconstruct progress from flags.
+The cinematic example at the end of `intro_trigger_1` in `assets/levels/hub/hub.lua`
+demonstrates Elin's topics, animations, and remembered questions.
 
 ## Map travel
 

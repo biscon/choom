@@ -34,14 +34,48 @@ function intro_trigger_1()
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
     say("elin", "I've been walking these dark tunnels forever. You're are the first person I met so far.")
-    startMoveNpc("elin", "intro_marker_3", "walk", 1.5, true)
+    local elinArrival = assert(startMoveNpc("elin", "intro_marker_3", "walk", 1.5, true))
     delay(1500)
     movePlayer("intro_marker_4", "walk", 1.25, {
         lookAtNpc = "elin",
         turnDurationMs = 750,
         targetHeight = 0.7,
     })
+    assert(await(elinArrival))
+    npcLookAtPlayer("elin", 500)
+    lookAtNpc("elin", 500, 0.7)
+
+    runConversationDynamic("elin_intro_topics", {
+        tunnels = function()
+            say("Do you know a way out of these tunnels?")
+            startPlayNpcAnimation("elin", "Talking_2")
+            say("elin", "Not yet. Every passage seems to lead somewhere darker.", "afraid")
+            setFlag("elin_asked_tunnels", true)
+        end,
+        people = function()
+            say("Have you seen anyone else down here?", { mood = "afraid" })
+            startPlayNpcAnimation("elin", "No")
+            say("elin", "No one I could talk to. I was starting to think I was alone.")
+            startPlayNpcAnimation("elin", "Talking")
+            say("elin", "But there are two of us now. That's a start.", "relieved")
+            startPlayNpcAnimation("elin", "Excited")
+            setFlag("elin_asked_people", true)
+        end,
+        goodbye = function()
+            say("I'll look around. Stay close.")
+            startPlayNpcAnimation("elin", "Talking")
+            say("elin", "Be careful. And don't disappear on me.")
+            setFlag("elin_intro_conversation_finished", true)
+            return "exit"
+        end,
+    }, function()
+        return hiddenOptions({
+            tunnels = flag("elin_asked_tunnels"),
+            people = flag("elin_asked_people"),
+        })
+    end)
     assert(endCutscene())
+    startPlayNpcAnimation("elin", "Twerking")
 end
 
 function trigger_2()

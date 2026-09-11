@@ -29,6 +29,7 @@ void UpdateSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& w
     const engine::Entity speaker = caption.speaker;
     const bool active = caption.active && caption.kind == SectorCutsceneCaptionKind::Say;
     SetSectorCutsceneCaptionVoiceTiming(runtime, voicesEnabled);
+    const bool playerSpeaking = voicesEnabled && active && !caption.speechFinished && caption.playerSpeaker;
     bool speaking = voicesEnabled && active && !caption.speechFinished
             && world.IsAlive(speaker) && world.Has<NpcRuntimeInstance>(speaker)
             && world.Has<SectorObjectTransform>(speaker);
@@ -47,9 +48,12 @@ void UpdateSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& w
         position.y += 1.35f;
     }
     const auto* started = engine::UpdateDialoguePlayback(assets, audio, runtime.speechPlayback,
-            caption.speechTimeline, caption.token, active && caption.voiceTiming, speaking, position, dt);
+            caption.speechTimeline, caption.token, active && caption.voiceTiming,
+            speaking || playerSpeaking, position, dt, !caption.playerSpeaker);
     if (started && speaking)
         engine::CommitDialogueSelection(world.Get<NpcRuntimeInstance>(speaker).dialogueHistory, *started);
+    if (started && playerSpeaking)
+        engine::CommitDialogueSelection(runtime.playerSpeechHistory, *started);
     if (active && !caption.voiceTiming) {
         // The regular caption update owns the steady typewriter clock. Audio
         // release and speech punctuation must not hold up silent text.

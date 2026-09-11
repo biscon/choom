@@ -746,6 +746,7 @@ if(BUILD_TESTING)
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp
+            tests/SectorDialogueTests.cpp
             sources/game/save/GameSaveRuntime.cpp
             sources/game/items/ItemAssets.cpp
             sources/game/items/ItemDefinitions.cpp
@@ -782,6 +783,8 @@ if(BUILD_TESTING)
             sources/game/SectorScriptBindings.cpp
             sources/game/cutscene/SectorCutsceneRuntime.cpp
             sources/game/cutscene/SectorCutsceneSpeech.cpp
+            sources/game/dialogue/SectorDialogue.cpp
+            sources/engine/input/Input.cpp
             sources/engine/audio/DialogueTimeline.cpp
             sources/engine/audio/DialogueSpeech.cpp
             sources/engine/audio/AudioSystem.cpp

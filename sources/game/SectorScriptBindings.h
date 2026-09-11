@@ -24,6 +24,7 @@ class SectorNavigationWorld;
 struct Health;
 struct NpcNavigationRuntime;
 struct SectorCutsceneRuntime;
+struct SectorDialogueRuntime;
 struct SectorFpsControllerConfig;
 struct SectorFpsControllerState;
 struct SectorTopologyMap;
@@ -101,6 +102,7 @@ struct SectorScriptControlApi {
     void* userData = nullptr;
     bool (*setControlsEnabled)(void*, engine::EngineContext&, bool,
             std::string&) = nullptr;
+    void (*dialogueChanged)(void*, bool) = nullptr;
 };
 
 struct SectorScriptHost {
@@ -109,6 +111,7 @@ struct SectorScriptHost {
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;
     SectorCutsceneRuntime* cutscene = nullptr;
+    SectorDialogueRuntime* dialogue = nullptr;
     SectorFpsControllerState* playerState = nullptr;
     const SectorFpsControllerConfig* playerConfig = nullptr;
     Health* playerHealth = nullptr;
