@@ -450,7 +450,7 @@
       "id": 33,
       "kind": "door",
       "door": {
-        "instanceId": "door_33",
+        "instanceId": "entrance_door",
         "anchor": {
           "lineDefId": 127,
           "frontSectorId": 33,
@@ -466,6 +466,7 @@
             1712
           ]
         },
+        "canOpenScript": "canOpenEntranceDoor",
         "width": 2.625,
         "height": 2.75,
         "normalOffset": -0.20000000298023224,
@@ -6765,6 +6766,43 @@
         71.0
       ],
       "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 423,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "itemDropTarget": true,
+        "instanceId": "entrance_keypad",
+        "useTitle": "Keypad",
+        "modelPath": "assets/models/simple_keypad.glb",
+        "heightOffsetWorld": 1.100000023841858,
+        "scale": 0.5,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -150.19992065429688,
+        -27.0,
+        85.11998748779297
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 424,
+      "kind": "item",
+      "item": {
+        "definitionId": "blue_key_card",
+        "instanceId": "blue_key_card",
+        "onUseScript": "useBlueKeyCard",
+        "scale": 1.5,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -148.0,
+        -27.0,
+        103.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -43134,6 +43172,14 @@
         "y": 0.0,
         "z": 912,
         "orientationDegrees": 180.0
+      },
+      {
+        "editorId": 24,
+        "id": "intro_marker_5",
+        "x": -2368,
+        "y": -27.0,
+        "z": 1552,
+        "orientationDegrees": -90.0
       }
     ],
     "nextPathId": 2,
@@ -43237,6 +43283,30 @@
           }
         ],
         "script": "intro_trigger_1"
+      },
+      {
+        "editorId": 2,
+        "id": "entrance_trigger",
+        "shape": "rectangle",
+        "points": [
+          {
+            "x": -1712,
+            "z": 1360
+          },
+          {
+            "x": -1680,
+            "z": 1360
+          },
+          {
+            "x": -1680,
+            "z": 1728
+          },
+          {
+            "x": -1712,
+            "z": 1728
+          }
+        ],
+        "script": "entrance_trigger"
       }
     ],
     "structuralPrimitives": [

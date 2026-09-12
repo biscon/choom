@@ -2,23 +2,23 @@
   "version": 1,
   "items": [
     {
-      "id": "pistol_9mm",
-      "title": "Pistol 9mm",
-      "description": "It's a pistol, point it at things you want to die.",
-      "modelPath": "assets/models/weapons/pistol.glb",
-      "type": "weapon",
-      "weightKg": 1.0,
-      "maxStackSize": 1,
+      "id": "ammo_9mm",
+      "title": "9mm Ammo",
+      "description": "Standard 9mm handgun ammunition.\nSi vis pacem, para bellum.",
+      "modelPath": "assets/models/items/9mm_ammo_box.glb",
+      "type": "ammo",
+      "weightKg": 0.012000000104308128,
+      "maxStackSize": 30,
       "weaponId": "pistol"
     },
     {
-      "id": "double_barrel_shotgun",
-      "title": "Boomstick",
-      "description": "A double-barreled shotgun.",
-      "modelPath": "assets/models/weapons/double_barrel_shotgun.glb",
-      "type": "weapon",
-      "weightKg": 3.5999999046325684,
-      "maxStackSize": 1,
+      "id": "ammo_buckshot",
+      "title": "Buckshot",
+      "description": "Each cartridge contains 8 pellets of hot lead, making sure that somebody is gonna have a bad day.",
+      "modelPath": "assets/models/items/shotgun_ammo_box.glb",
+      "type": "ammo",
+      "weightKg": 0.04600000008940697,
+      "maxStackSize": 5,
       "weaponId": "shotgun"
     },
     {
@@ -32,6 +32,25 @@
       "healAmount": 25,
       "healOverTime": true,
       "healDurationSeconds": 5.0
+    },
+    {
+      "id": "blue_key_card",
+      "title": "Blue Key Card",
+      "description": "Belonging to some guy called Joe Mama.\n",
+      "modelPath": "assets/models/items/keys/Keycard_Blue_Access02.gltf",
+      "type": "object",
+      "weightKg": 0.10000000149011612,
+      "maxStackSize": 1
+    },
+    {
+      "id": "double_barrel_shotgun",
+      "title": "Boomstick",
+      "description": "A double-barreled shotgun.",
+      "modelPath": "assets/models/weapons/double_barrel_shotgun.glb",
+      "type": "weapon",
+      "weightKg": 3.5999999046325684,
+      "maxStackSize": 1,
+      "weaponId": "shotgun"
     },
     {
       "id": "health_pack",
@@ -54,26 +73,6 @@
       "healAmount": 100
     },
     {
-      "id": "ammo_9mm",
-      "title": "9mm Ammo",
-      "description": "Standard 9mm handgun ammunition.\nSi vis pacem, para bellum.",
-      "modelPath": "assets/models/items/9mm_ammo_box.glb",
-      "type": "ammo",
-      "weightKg": 0.012000000104308128,
-      "maxStackSize": 30,
-      "weaponId": "pistol"
-    },
-    {
-      "id": "ammo_buckshot",
-      "title": "Buckshot",
-      "description": "Each cartridge contains 8 pellets of hot lead, making sure that somebody is gonna have a bad day.",
-      "modelPath": "assets/models/items/shotgun_ammo_box.glb",
-      "type": "ammo",
-      "weightKg": 0.04600000008940697,
-      "maxStackSize": 5,
-      "weaponId": "shotgun"
-    },
-    {
       "id": "new_item_8",
       "title": "Blue Door Key",
       "description": "This key unlocks a door somewhere.\n",
@@ -81,6 +80,16 @@
       "type": "object",
       "weightKg": 0.10000000149011612,
       "maxStackSize": 1
+    },
+    {
+      "id": "pistol_9mm",
+      "title": "Pistol 9mm",
+      "description": "It's a pistol, point it at things you want to die.",
+      "modelPath": "assets/models/weapons/pistol.glb",
+      "type": "weapon",
+      "weightKg": 1.0,
+      "maxStackSize": 1,
+      "weaponId": "pistol"
     }
   ]
 }

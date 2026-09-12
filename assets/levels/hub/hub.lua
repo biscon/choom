@@ -105,7 +105,6 @@ function shutdown()
 end
 
 function intro_trigger_1()
-    log("trigger_1")
     assert(startCutscene())
     openDoor("office_door")
     say("elin", "Who is there?!!...", "afraid")
@@ -145,6 +144,17 @@ function intro_trigger_1()
     assert(endConversation())
     assert(endCutscene())
     startPlayNpcAnimation("elin", "Thankful")
+end
+
+function entrance_trigger()
+    assert(startCutscene())
+    delay(1000)
+    say("I wonder what it will take to get through this one.")
+    movePlayer("intro_marker_5", "walk", 1.5, {
+        lookAtProp = "entrance_keypad",
+    })
+    say("Looks like it will require a key card and probably a code as well.")
+    assert(endCutscene())
 end
 
 local ceilingVentOn = true
@@ -242,6 +252,22 @@ function usePreEntranceDoorKey(targetInstanceId)
         delay(2300)
         say("That did it.")
         return true
+    end
+    return false
+end
+
+function canOpenEntranceDoor()
+    if not flag("entrance_door_unlocked") then
+        text("It won't budge.", CENTER)
+        return false
+    end
+    return true
+end
+
+function useBlueKeyCard(targetInstanceId)
+    if targetInstanceId == "entrance_keypad" then
+        setFlag("entrance_door_unlocked", true)
+        -- do not consume key card it can be used in other places
     end
     return false
 end
