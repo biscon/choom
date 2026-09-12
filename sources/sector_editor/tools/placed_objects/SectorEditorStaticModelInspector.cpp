@@ -64,11 +64,11 @@ StaticModelPreviewStatusText ModelStatus(
 } // namespace
 
 float MeasureSectorEditorStaticModelInspectorContentHeight(
-        const SectorEditorPlacedObjectInspectorMeasureContext&,
+        const SectorEditorPlacedObjectInspectorMeasureContext& context,
         const SectorPlacedRuntimeObject&)
 {
     return 38.0f * 2.0f + 48.0f * 10.0f + 8.0f * 12.0f + 80.0f
-            + 48.0f;
+            + 48.0f + context.rowH + context.gap;
 }
 
 void DrawSectorEditorStaticModelInspector(
@@ -124,6 +124,23 @@ void DrawSectorEditorStaticModelInspector(
                             ? context.config.accentColor
                             : context.config.mutedTextColor));
     y += 34.0f + gap;
+
+    bool itemDropTarget = object->staticModel.itemDropTarget;
+    if (engine::Checkbox(
+                context.ui, context.config, context.input, context.assets,
+                "sector_editor_static_model_item_drop_target",
+                Rectangle{0.0f, y, contentW, rowH}, context.font,
+                "Item drop target", itemDropTarget)) {
+        context.editing.MutateSelected(
+                "Updated item drop target",
+                [itemDropTarget](SectorPlacedRuntimeObject& target) {
+                    if (target.kind != "static_model"
+                            || target.staticModel.itemDropTarget == itemDropTarget) return false;
+                    target.staticModel.itemDropTarget = itemDropTarget;
+                    return true;
+                });
+    }
+    y += rowH + gap;
 
     if (context.uiState.staticModelInstanceIdObjectId != object->id) {
         std::snprintf(

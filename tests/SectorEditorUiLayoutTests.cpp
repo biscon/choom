@@ -42,6 +42,32 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.y + a.height > b.y;
 }
 
+void TestWrappedDiagnosticHeight()
+{
+    engine::AssetManager assets;
+    engine::UIConfig config;
+    // Exercise the missing-font path without a window or user-owned assets.
+    const auto height = [&](const char* text, float width = 420.0f) {
+        return engine::MeasureWrappedTextHeight(
+                config, assets, width, engine::NullFontHandle(), text);
+    };
+    Check(Near(height(""), 0.0f) && Near(height(nullptr), 0.0f),
+            "empty menu status reserves no text rows");
+    Check(Near(height("failure", 0.0f), 0.0f),
+            "collapsed status width has no drawable text");
+    const char* diagnostic = "hub.lua:227: 'then' expected near 'playMapSound'\n"
+            "stack traceback:\nLua syntax error [map=hub]";
+    Check(height(diagnostic) > 56.0f
+                    && height(diagnostic) >= config.paddingY * 2.0f
+                            + config.fontSize * 3.0f,
+            "multiline diagnostics reserve all rows instead of the old 56-pixel box");
+    Check(height("failure\n\ndetails") > height("failure\ndetails"),
+            "blank diagnostic lines contribute to scroll extent");
+    const std::string longDiagnostic(5000, 'x');
+    Check(height(longDiagnostic.c_str()) >= config.fontSize * 3.0f,
+            "long diagnostic lines include the renderer's buffer-length wraps");
+}
+
 void TestMainMenuShortcutMatching()
 {
     const engine::UIMenuShortcut save{KEY_S, true, false, false};
@@ -379,7 +405,7 @@ void TestDoorInspectorHeightCountsConditionalRows()
     const float stacked =
             game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
     const float scriptRowsAndValidation =
-            (rowH + gap) * 4.0f + 36.0f;
+            (rowH + gap) * 5.0f + 36.0f; // Includes Item drop target.
     const float expectedProceduralSlideHeight =
             38.0f + 34.0f
             + scriptRowsAndValidation
@@ -520,7 +546,7 @@ void TestMainMenuWorkspaceAndToolsLayouts()
     Check(Near(itemExpanded - collapsed, rowH + gap),
           "tools content height includes the conditional Item definition row");
     Check(Near(collapsed, 26.0f + 5.0f * (rowH + gap)
-                  + 22.0f + 26.0f + 21.0f * (rowH + gap)
+                  + 22.0f + 26.0f + 22.0f * (rowH + gap)
                   + 22.0f + 26.0f + gap + 2.0f * (rowH + gap)
                   + 22.0f + (rowH + gap) + 12.0f),
           "tools content height reaches the final Grid control with padding");
@@ -986,6 +1012,7 @@ void TestBaseboardLayout()
 
 int main()
 {
+    TestWrappedDiagnosticHeight();
     TestBaseboardLayout();
     TestMainMenuShortcutMatching();
     TestKeyboardPanModifierPolicy();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ecs/Entity.h"
+#include "game/dialogue/SectorConversation.h"
 #include "engine/scripting/ScriptData.h"
 
 #include <cstddef>
@@ -22,8 +23,10 @@ namespace game {
 struct SectorRuntimeObjectState;
 class SectorNavigationWorld;
 struct Health;
+struct PlayerInventoryState;
 struct NpcNavigationRuntime;
 struct SectorCutsceneRuntime;
+struct SectorDialogueRuntime;
 struct SectorFpsControllerConfig;
 struct SectorFpsControllerState;
 struct SectorTopologyMap;
@@ -101,6 +104,8 @@ struct SectorScriptControlApi {
     void* userData = nullptr;
     bool (*setControlsEnabled)(void*, engine::EngineContext&, bool,
             std::string&) = nullptr;
+    void (*dialogueChanged)(void*, bool) = nullptr;
+    void (*holsterWeapon)(void*) = nullptr;
 };
 
 struct SectorScriptHost {
@@ -109,9 +114,12 @@ struct SectorScriptHost {
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;
     SectorCutsceneRuntime* cutscene = nullptr;
+    SectorDialogueRuntime* dialogue = nullptr;
+    SectorConversationState conversation;
     SectorFpsControllerState* playerState = nullptr;
     const SectorFpsControllerConfig* playerConfig = nullptr;
     Health* playerHealth = nullptr;
+    const PlayerInventoryState* playerInventory = nullptr;
     SectorTopologyMap* map = nullptr;
     SectorScriptAudioApi audio;
     SectorScriptControlApi controls;
@@ -155,6 +163,8 @@ void InitializeSectorScriptHost(
 void ResetSectorScriptHost(SectorScriptHost& host);
 
 void RegisterSectorScriptBindings(lua_State* state);
+void EndSectorScriptConversation(engine::EngineContext& context, SectorScriptHost& host);
+void UpdateSectorScriptConversationOwnership(engine::EngineContext& context, SectorScriptHost& host);
 
 void UpdateSectorScriptOperations(
         engine::EngineContext& context,

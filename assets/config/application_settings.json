@@ -11,7 +11,7 @@
     "landingNoiseRadiusWorld": 12.0
   },
   "graphics": {
-    "renderScale": 1.25,
+    "renderScale": 1.0,
     "fxaa": true,
     "shadowQuality": "high",
     "maxDynamicLights": 32,
@@ -62,8 +62,8 @@
     "hotspotRadiusRatio": 0.44999998807907104,
     "spillBrightness": 0.5,
     "edgeSoftness": 0.5,
-    "castsShadows": false,
-    "shadowStrength": 0.75,
+    "castsShadows": true,
+    "shadowStrength": 0.8999999761581421,
     "shadowSoftness": 2.0,
     "shadowContactOffsetWorld": 0.05000000074505806,
     "heightAboveEyeWorld": 0.11999999731779099,

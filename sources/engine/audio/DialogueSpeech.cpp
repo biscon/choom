@@ -155,7 +155,7 @@ void StopDialoguePlayback(AssetManager& assets, AudioSystem& audio, DialoguePlay
 
 const DialogueCue* UpdateDialoguePlayback(AssetManager& assets, AudioSystem& audio,
         DialoguePlayback& playback, const DialogueTimeline& timeline, uint64_t token,
-        bool active, bool audible, Vector3 position, float rawDt)
+        bool active, bool audible, Vector3 position, float rawDt, bool positional)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     if (audio.IsPaused()) return nullptr;
@@ -184,7 +184,7 @@ const DialogueCue* UpdateDialoguePlayback(AssetManager& assets, AudioSystem& aud
     if (!devicePlaying) {
         playback.handle = {};
         playback.releasing = false;
-    } else {
+    } else if (positional) {
         audio.SetSoundPosition(playback.handle, position);
     }
     if (!active) return nullptr;
@@ -195,7 +195,8 @@ const DialogueCue* UpdateDialoguePlayback(AssetManager& assets, AudioSystem& aud
     spatial.minimumDistanceWorld = 1.0f;
     spatial.maximumDistanceWorld = 25.0f;
     playback.mix = SoundPlaybackSettings{cue->volume, cue->pitch, 0.0f};
-    playback.handle = audio.PlaySoundAt(assets, cue->sound, spatial, playback.mix);
+    playback.handle = positional ? audio.PlaySoundAt(assets, cue->sound, spatial, playback.mix)
+            : audio.PlaySound(assets, cue->sound, playback.mix);
     playback.sequence.usesDevice = !IsNull(playback.handle);
     return playback.sequence.usesDevice ? cue : nullptr;
 }

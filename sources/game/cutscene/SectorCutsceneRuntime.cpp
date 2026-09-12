@@ -30,6 +30,8 @@ constexpr double SayCodepointsPerSecond = 40.0;
 constexpr double AutomaticHoldSecondsPerCodepoint = 0.045;
 constexpr double MinimumAutomaticHoldSeconds = 1.5;
 constexpr double MaximumAutomaticHoldSeconds = 8.0;
+constexpr double VoicedAutomaticHoldSeconds = 0.35;
+constexpr double SkippedSpeechHoldSeconds = 2.0;
 constexpr double TextFadeInSeconds = 0.25;
 constexpr double CaptionFadeOutSeconds = 0.35;
 constexpr size_t MaximumWrappedLines = 64;
@@ -903,14 +905,20 @@ bool BeginSectorCutsceneCaption(
             error = "could not construct dialogue timeline";
             return false;
         }
+        if (holdSeconds == nullptr && !caption.speechTimeline.reveals.empty()) {
+            // Terminal punctuation must not add a second pause after the last reveal.
+            caption.speechTimeline.seconds = caption.speechTimeline.reveals.back().seconds;
+        }
     }
     caption.voiceTiming = true;
     caption.speechDriven = false;
     caption.speechFinished = false;
+    caption.skippedForReading = false;
     caption.token = runtime.nextToken++;
     caption.operation = {};
     caption.kind = kind;
     caption.speaker = speech ? speech->speaker : engine::NullEntity();
+    caption.playerSpeaker = speech && speech->playerSpeaker;
     caption.mood = speech ? speech->mood : engine::DialogueMood::Neutral;
     caption.position = position;
     caption.text.assign(text.data(), text.size());
@@ -921,9 +929,10 @@ bool BeginSectorCutsceneCaption(
             ? caption.speechTimeline.seconds : 0.0;
     caption.fadeInSeconds = kind == SectorCutsceneCaptionKind::Text
             ? TextFadeInSeconds : 0.0;
+    caption.explicitHold = holdSeconds != nullptr;
     caption.holdSeconds = holdSeconds != nullptr
             ? *holdSeconds
-            : std::clamp(
+            : kind == SectorCutsceneCaptionKind::Say ? VoicedAutomaticHoldSeconds : std::clamp(
                     static_cast<double>(codepoints)
                             * AutomaticHoldSecondsPerCodepoint,
                     MinimumAutomaticHoldSeconds,
@@ -941,14 +950,22 @@ void SetSectorCutsceneCaptionVoiceTiming(SectorCutsceneRuntime& runtime, bool en
 {
     auto& caption = runtime.caption;
     if (!caption.active || caption.kind != SectorCutsceneCaptionKind::Say
-            || caption.voiceTiming == enabled) return;
+            || caption.skippedForReading || caption.voiceTiming == enabled) return;
 
     const double oldRevealSeconds = caption.revealSeconds;
     const double newRevealSeconds = enabled ? caption.speechTimeline.seconds
             : static_cast<double>(caption.codepointCount) / SayCodepointsPerSecond;
+    const double newHoldSeconds = caption.explicitHold ? caption.holdSeconds
+            : enabled ? VoicedAutomaticHoldSeconds : std::clamp(
+                    static_cast<double>(caption.codepointCount) * AutomaticHoldSecondsPerCodepoint,
+                    MinimumAutomaticHoldSeconds, MaximumAutomaticHoldSeconds);
     if (caption.elapsedSeconds >= oldRevealSeconds) {
-        // Keep elapsed hold/fade time when switching after the text is revealed.
-        caption.elapsedSeconds = newRevealSeconds + caption.elapsedSeconds - oldRevealSeconds;
+        const double elapsedHold = caption.elapsedSeconds - oldRevealSeconds;
+        // Preserve a fade already in progress; a shorter hold starts fading now
+        // instead of consuming the entire fade or restoring opacity.
+        caption.elapsedSeconds = newRevealSeconds + (elapsedHold >= caption.holdSeconds
+                ? newHoldSeconds + elapsedHold - caption.holdSeconds
+                : std::min(elapsedHold, newHoldSeconds));
     } else if (enabled) {
         caption.elapsedSeconds = 0.0;
         for (const auto& reveal : caption.speechTimeline.reveals) {
@@ -962,6 +979,7 @@ void SetSectorCutsceneCaptionVoiceTiming(SectorCutsceneRuntime& runtime, bool en
         caption.elapsedSeconds = static_cast<double>(shown) / SayCodepointsPerSecond;
     }
     caption.revealSeconds = newRevealSeconds;
+    caption.holdSeconds = newHoldSeconds;
     caption.voiceTiming = enabled;
     caption.speechDriven = enabled;
     caption.speechFinished = caption.elapsedSeconds >= newRevealSeconds;
@@ -994,6 +1012,28 @@ void CancelSectorCutsceneCaption(SectorCutsceneRuntime& runtime, uint64_t token)
     if (runtime.caption.active && runtime.caption.token == token) {
         runtime.caption.active = false;
     }
+}
+
+bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts,
+        bool voicesEnabled)
+{
+    auto& caption = runtime.caption;
+    if (!caption.active || caption.kind != SectorCutsceneCaptionKind::Say) return false;
+    if (voicesEnabled && !caption.skippedForReading) {
+        caption.skippedForReading = true;
+        caption.speechFinished = true;
+        caption.speechDriven = false;
+        caption.visibleByteCount = caption.text.size();
+        caption.holdSeconds = SkippedSpeechHoldSeconds;
+        caption.elapsedSeconds = caption.fadeInSeconds + caption.revealSeconds;
+        caption.opacity = 1.0f;
+        return true;
+    }
+    const auto operation = caption.operation;
+    caption.active = false;
+    caption.operation = {};
+    engine::ScriptSystemCompleteOperation(scripts, operation);
+    return true;
 }
 
 bool BeginSectorCutsceneFade(
@@ -1065,7 +1105,7 @@ void UpdateSectorCutsceneTimelines(
                     (caption.elapsedSeconds - holdEnd)
                     / caption.fadeOutSeconds));
         }
-        if (caption.kind == SectorCutsceneCaptionKind::Say) {
+        if (caption.kind == SectorCutsceneCaptionKind::Say && !caption.skippedForReading) {
             const double revealElapsed = std::clamp(
                     caption.elapsedSeconds - revealStart,
                     0.0,

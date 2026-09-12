@@ -52,6 +52,12 @@ bool GameApplication::Init(
             22,
             engine::FontLoad_BilinearFilter);
     engine::DebugConsoleInitialize(debugConsole, consoleFont);
+    dialogueFont = context.assets.RequestFont(
+            context.assets.GlobalScope(),
+            "game_dialogue_ibm_plex_sans_bold_36",
+            ASSETS_PATH "fonts/IBMPlexSans-Bold.ttf",
+            36,
+            engine::FontLoad_BilinearFilter);
     usePromptFont = context.assets.RequestFont(
             context.assets.GlobalScope(),
             "game_use_prompt_ibm_plex_sans_bold_48",
@@ -372,6 +378,7 @@ void GameApplication::RenderInteractiveUI(
                     : gameSession.SaveGameBlockedReason().c_str();
             pendingMenuAction = DrawGameMainMenu(
                     menuUi,
+                    mainMenuScroll,
                     config,
                     input,
                     assets,
@@ -439,6 +446,9 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         const std::string loadFailure = gameSession.TakeFailureError();
         if (!loadFailure.empty()) {
             menuStatus = loadFailure;
+            mainMenuScroll = {};
+            // Keep the failure in terminal logs as well as persistent menu status.
+            TraceLog(LOG_ERROR, "%s", loadFailure.c_str());
             debugConsole.open = false;
             gameSession.SetConsoleInputCaptured(false);
             MarkApplicationGameStopped(flow);
@@ -504,6 +514,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
                     engine::ConsumeEvent(event);
                 });
         if (menuRequested) {
+            gameSession.ReleaseDraggedProp(context);
             gameSession.Pause();
             context.audio.PauseAll(context.assets);
             OpenApplicationMenu(flow, ApplicationScreen::Game);
@@ -513,6 +524,8 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         const std::string scriptFailure = gameSession.TakeFailureError();
         if (!scriptFailure.empty()) {
             menuStatus = scriptFailure;
+            mainMenuScroll = {};
+            TraceLog(LOG_ERROR, "%s", scriptFailure.c_str());
             debugConsole.open = false;
             gameSession.SetConsoleInputCaptured(false);
             MarkApplicationGameStopped(flow);
@@ -840,7 +853,7 @@ void GameApplication::Render3DHud(
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameSession.RenderHud(
-                assets, font, usePromptFont, playableViewport);
+                assets, font, usePromptFont, dialogueFont, playableViewport);
         if (flow.screen == ApplicationScreen::Game) {
             gameSession.RenderAiDebugHud(
                     world, assets, font, playableViewport, gameScene);
@@ -1181,6 +1194,7 @@ void GameApplication::TogglePerformanceOverlay()
 
 void GameApplication::StartNewGame(engine::EngineContext& context)
 {
+    mainMenuScroll = {};
     context.audio.StopAll(context.assets);
     editor.SuspendRuntime(context);
     std::string error;

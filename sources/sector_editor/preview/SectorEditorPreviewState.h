@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/SectorPropDragging.h"
 
 #include "sector_editor/SectorEditorPreviewTypes.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
@@ -48,6 +49,7 @@ struct SectorEditorPreviewControllerState {
     SectorFpsFrameEvents frameEvents;
     SectorFpsLandingDipState landingDipState;
     SectorLadderTraversalState ladderTraversal;
+    SectorPropDragSession propDrag;
     SectorDuctTraversalState ductTraversal;
     SectorLiquidMovementState liquidMovement;
     bool hasPreviewPose = false;

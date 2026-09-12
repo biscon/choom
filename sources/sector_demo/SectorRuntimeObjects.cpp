@@ -1,4 +1,5 @@
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorPropDragging.h"
 
 #include "game/npc/NpcRuntime.h"
 #include "game/npc/NpcPatrolSystem.h"
@@ -155,13 +156,14 @@ Vector3 SectorDuctCoverSettledOffset(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(35);
+    world.ReserveComponentTypes(36);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
     world.ReserveComponent<SectorObjectVisualOffset>(objectCapacity);
     world.ReserveComponent<SectorStaticModel>(objectCapacity);
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
+    world.ReserveComponent<SectorPropDrag>(objectCapacity);
     world.ReserveComponent<SectorItem>(objectCapacity);
     world.ReserveComponent<SectorWindow>(objectCapacity);
     world.ReserveComponent<SectorDuctAccess>(objectCapacity);
@@ -846,6 +848,7 @@ bool SpawnItemEntity(
     runtimeItem.definitionId = definition->id;
     runtimeItem.title = definition->title;
     runtimeItem.instanceId = placedObject.item.instanceId;
+    runtimeItem.sourceQuantities = placedObject.item.sourceQuantities;
     runtimeItem.quantity = static_cast<std::uint64_t>(
             placedObject.item.quantity);
     runtimeItem.takeDistance = placedObject.item.takeDistance;
@@ -1254,6 +1257,7 @@ void SpawnPlacedRuntimeObjects(
                             SectorDoorClosedCenter(runtimeAnchor, runtimeRender),
                             SectorDoorMotionOffset(runtimeAnchor, runtimeMotion));
             SectorObject object;
+            object.itemDropTarget = placedObject.door.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId = state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
                         Vector2{worldPosition.x, worldPosition.z},
@@ -1517,6 +1521,7 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.position);
             worldPosition.y += placedObject.staticModel.heightOffsetWorld;
             SectorObject object;
+            object.itemDropTarget = placedObject.staticModel.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId =
                         state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
@@ -1601,6 +1606,7 @@ void SpawnPlacedRuntimeObjects(
             Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
                     placedObject.position);
             SectorObject object;
+            object.itemDropTarget = placedObject.npc.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId =
                         state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
@@ -1633,6 +1639,10 @@ void SpawnPlacedRuntimeObjects(
                     GetNpcAction(*definition, NpcAction::Run).movementSpeed,
                     false,
                     definition->voice});
+            auto& npcInstance = world.Get<NpcRuntimeInstance>(entity);
+            npcInstance.displayName = definition->name;
+            npcInstance.onUseScript = placedObject.npc.onUseScript;
+            npcInstance.useDistance = placedObject.npc.useDistance;
             if (placedObject.npc.patrolEditorId > 0
                     && FindSectorCompiledPatrol(
                             map, placedObject.npc.patrolEditorId) != nullptr) {
@@ -1804,8 +1814,19 @@ void SpawnPlacedRuntimeObjects(
 
             Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
                     placedObject.position);
+            const auto* dragPath = FindSectorPath(map.paths,placedObject.dynamicModel.drag.pathEditorId);
+            if (dragPath && !dragPath->points.empty()) {
+                const Vector2 point = placedObject.dynamicModel.drag.startAtEnd ? dragPath->points.back() : dragPath->points.front();
+                worldPosition.x = point.x; worldPosition.z = point.y;
+                if (state.objectSectorLookupWorldValid) {
+                    const int sectorId = state.objectSectorLookupWorld.FindSectorContainingPoint(point);
+                    SectorCollisionHeights heights;
+                    if (state.objectSectorLookupWorld.GetSectorFloorCeiling(sectorId,&heights)) worldPosition.y = heights.floorZ;
+                }
+            }
             worldPosition.y += placedObject.dynamicModel.heightOffsetWorld;
             SectorObject object;
+            object.itemDropTarget = placedObject.dynamicModel.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId =
                         state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
@@ -1851,7 +1872,26 @@ void SpawnPlacedRuntimeObjects(
             animator.loop = placedObject.dynamicModel.loop;
             animator.playing = placedObject.dynamicModel.loop;
             world.Add(entity, animator);
-            if (placedObject.dynamicModel.collision) {
+            if (placedObject.dynamicModel.drag.pathEditorId > 0) {
+                SectorPropDrag drag;
+                drag.settings = placedObject.dynamicModel.drag;
+                drag.distanceWorld = drag.settings.startAtEnd && dragPath ? dragPath->length : 0.0f;
+                if (!dragPath) recordWarning("Dynamic prop drag path is missing; dragging is disabled");
+                drag.supportY = worldPosition.y - placedObject.dynamicModel.heightOffsetWorld;
+                if (dragPath && state.objectSectorLookupWorldValid) {
+                    for (const auto p : dragPath->points) {
+                        SectorCollisionHeights h;
+                        if (!state.objectSectorLookupWorld.GetSectorFloorCeiling(
+                                    state.objectSectorLookupWorld.FindSectorContainingPoint(p),&h)
+                                || std::abs(h.floorZ-drag.supportY)>0.002f) {
+                            recordWarning("Drag path crosses unsupported or uneven ground; movement will stop at the boundary");
+                            break;
+                        }
+                    }
+                }
+                world.Add(entity,std::move(drag));
+            }
+            if (placedObject.dynamicModel.collision || dragPath) {
                 world.Add(entity, SectorStaticModelCollider{placedObject.id});
             }
             state.placedObjectEntities.push_back(
@@ -2143,6 +2183,24 @@ bool QueueRemoveSectorRuntimeObjectByEntity(
     return true;
 }
 
+
+void RefreshSectorMovedPropLighting(engine::World& world, SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map, engine::Entity entity)
+{
+    if (!world.IsAlive(entity) || !world.Has<SectorObjectTransform>(entity) || !world.Has<SectorObject>(entity)) return;
+    const auto position = world.Get<SectorObjectTransform>(entity).position;
+    auto& object = world.Get<SectorObject>(entity);
+    if (state.objectSectorLookupWorldValid)
+        object.currentSectorId = state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                {position.x,position.z},object.currentSectorId);
+    if (world.Has<SectorObjectLighting>(entity))
+        world.Get<SectorObjectLighting>(entity) = SampleSectorObjectLighting(state.objectLightProbes,position,object.currentSectorId,&map);
+    if (world.Has<SectorDynamicModel>(entity)) {
+        auto& model = world.Get<SectorDynamicModel>(entity);
+        model.containingSectorAmbient = StaticModelSectorAmbient(map,object.currentSectorId);
+        model.environmentExposure = StaticModelEnvironmentExposure(map,object.currentSectorId,model.containingSectorAmbient);
+    }
+}
 
 void UpdateSectorObjectCurrentSectorSystem(
         engine::World& world,

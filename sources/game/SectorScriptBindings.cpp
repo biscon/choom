@@ -1,10 +1,12 @@
 #include "game/SectorScriptBindings.h"
+#include "game/items/ItemInventory.h"
 
 #include "engine/EngineContext.h"
 #include "engine/scripting/ScriptSystem.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "game/Health.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
+#include "game/dialogue/SectorDialogue.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
@@ -1046,6 +1048,105 @@ int LuaStartLookAtProp(lua_State* state)
     return StartLook(state, SectorCutsceneLookTargetKind::Prop, true);
 }
 
+void CancelScriptDialogue(engine::EngineContext&, void* context, uint64_t token)
+{
+    auto& host = *static_cast<SectorScriptHost*>(context);
+    if (host.dialogue && host.dialogue->active && host.dialogue->token == token) {
+        ResetSectorDialogueMenu(*host.dialogue);
+        if (host.controls.dialogueChanged) host.controls.dialogueChanged(host.controls.userData, false);
+    }
+}
+
+int LuaDialogueOperation(lua_State* state)
+{
+    const int originalTop = lua_gettop(state);
+    auto& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    const auto owner = engine::ScriptSystemCurrentTaskFromLua(state);
+    auto& host = HostFromLua(state);
+    luaL_checktype(state, 1, LUA_TSTRING);
+    // Parse without argument errors after allocating C++ temporaries: Lua errors
+    // longjmp past destructors in this build.
+    if (originalTop > 3 || (!lua_isnoneornil(state, 2) && !lua_istable(state, 2))
+            || (!lua_isnoneornil(state, 3) && !lua_istable(state, 3)))
+        return PushCutsceneStartError(state, false, "dialogue expects a set ID, optional hidden IDs, and optional text overrides");
+    if (lua_istable(state, 3)) {
+        lua_pushnil(state);
+        while (lua_next(state, 3)) {
+            const bool valid = lua_type(state, -2) == LUA_TSTRING
+                    && lua_type(state, -1) == LUA_TSTRING;
+            lua_pop(state, 1);
+            if (!valid) {
+                lua_pop(state, 1);
+                return PushCutsceneStartError(state, false, "text overrides must map option IDs to strings");
+            }
+        }
+    }
+    if (lua_istable(state, 2)) {
+        const size_t count = lua_rawlen(state, 2);
+        size_t entries = 0;
+        lua_pushnil(state);
+        while (lua_next(state, 2)) {
+            const bool valid = lua_isinteger(state, -2) && lua_tointeger(state, -2) >= 1
+                    && static_cast<lua_Unsigned>(lua_tointeger(state, -2)) <= count
+                    && lua_type(state, -1) == LUA_TSTRING;
+            lua_pop(state, 1);
+            if (!valid) {
+                lua_pop(state, 1);
+                return PushCutsceneStartError(state, false, "hidden IDs must be a dense array of strings");
+            }
+            ++entries;
+        }
+        if (entries != count) return PushCutsceneStartError(state, false, "hidden IDs must be a dense array of strings");
+    }
+    if (host.conversation.active && !(host.conversation.owner == owner))
+        return PushCutsceneStartError(state, false, "conversation belongs to another task");
+    if (!host.dialogue) return PushCutsceneStartError(state, false, "dialogue runtime is unavailable");
+    if (host.cutscene && host.cutscene->caption.active)
+        return PushCutsceneStartError(state, false, "a caption is already active");
+    engine::ScriptOperationHandle operation;
+    {
+        std::vector<std::string> hidden;
+        if (lua_istable(state, 2)) {
+            const size_t count = lua_rawlen(state, 2);
+            hidden.reserve(count);
+            for (size_t i = 1; i <= count; ++i) {
+                lua_rawgeti(state, 2, static_cast<lua_Integer>(i));
+                size_t length = 0;
+                const char* value = lua_tolstring(state, -1, &length);
+                hidden.emplace_back(value, length);
+                lua_pop(state, 1);
+            }
+        }
+        size_t length = 0;
+        const char* id = lua_tolstring(state, 1, &length);
+        std::vector<SectorDialogueOption> textOverrides;
+        if (lua_istable(state, 3)) {
+            lua_pushnil(state);
+            while (lua_next(state, 3)) {
+                size_t keyLength = 0, textLength = 0;
+                const char* key = lua_tolstring(state, -2, &keyLength);
+                const char* text = lua_tolstring(state, -1, &textLength);
+                textOverrides.push_back({std::string{key, keyLength}, std::string{text, textLength}});
+                lua_pop(state, 1);
+            }
+        }
+        std::string error;
+        if (!BeginSectorDialogue(*host.dialogue, std::string{id, length}, hidden, error, textOverrides))
+            return PushCutsceneStartError(state, false, error);
+        operation = engine::ScriptSystemCreateOperation(scripts,
+                engine::ScriptOperationLaunchStyle::Blocking, owner, "dialogue",
+                host.dialogue->token, CancelScriptDialogue);
+        if (!engine::IsValid(operation)) {
+            ResetSectorDialogueMenu(*host.dialogue);
+            return PushCutsceneStartError(state, false, "could not allocate dialogue operation");
+        }
+        host.dialogue->operation = operation;
+    }
+    if (host.controls.holsterWeapon) host.controls.holsterWeapon(host.controls.userData);
+    if (host.controls.dialogueChanged) host.controls.dialogueChanged(host.controls.userData, true);
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
 int StartCaption(
         lua_State* state,
         SectorCutsceneCaptionKind kind,
@@ -1066,15 +1167,48 @@ int StartCaption(
         return PushCutsceneStartError(
                 state, async, "cutscene caption runtime is unavailable");
     }
+    if (host.conversation.active && !(host.conversation.owner == ownerTask))
+        return PushCutsceneStartError(state, async, "conversation belongs to another task");
+    if (host.dialogue && host.dialogue->active)
+        return PushCutsceneStartError(state, async, "a dialogue menu is already active");
     size_t textLength = 0;
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     const bool spoken = kind == SectorCutsceneCaptionKind::Say;
-    luaL_checktype(state, spoken ? 2 : 1, LUA_TSTRING);
-    const char* rawText = luaL_checklstring(state, spoken ? 2 : 1, &textLength);
+    const bool player = spoken && (originalTop == 1 || lua_istable(state, 2) || lua_isnil(state, 2));
+    const int textArgument = spoken && !player ? 2 : 1;
+    luaL_checktype(state, textArgument, LUA_TSTRING);
+    const char* rawText = luaL_checklstring(state, textArgument, &textLength);
     SectorCutsceneSpeechOptions speech;
     SectorCutsceneTextPosition position = SectorCutsceneTextPosition::Bottom;
     int holdArgument = 4;
-    if (spoken) {
+    if (player) {
+        if (originalTop > 2) return PushCutsceneStartError(state, async, "player say expects message and optional mood/holdMs table");
+        speech.playerSpeaker = true;
+        speech.history = &host.cutscene->playerSpeechHistory;
+        speech.seed = 2166136261u ^ static_cast<uint32_t>(host.cutscene->nextToken);
+        for (size_t i = 0; i < textLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(rawText[i])) * 16777619u;
+        if (lua_istable(state, 2)) {
+            lua_getfield(state, 2, "mood");
+            if (!lua_isnil(state, -1)) {
+                luaL_checktype(state, -1, LUA_TSTRING);
+                size_t length = 0;
+                const char* mood = lua_tolstring(state, -1, &length);
+                if (!engine::ParseDialogueMood(std::string_view{mood, length}, speech.mood))
+                    return PushCutsceneStartError(state, async, "unknown dialogue mood");
+            }
+            lua_pop(state, 1);
+            lua_getfield(state, 2, "holdMs");
+            holdArgument = lua_gettop(state);
+        } else {
+            holdArgument = originalTop + 1;
+        }
+        speech.seed ^= static_cast<uint32_t>(speech.mood) * 0x9e3779b9u;
+        if (host.dialogueVoices) {
+            speech.settings = &host.dialogueVoices->settings;
+            speech.voice = engine::FindDialogueVoice(*host.dialogueVoices, "male");
+        }
+    }
+    if (spoken && !player) {
         luaL_checktype(state, 1, LUA_TSTRING);
         size_t idLength = 0;
         const char* id = luaL_checklstring(state, 1, &idLength);
@@ -1122,6 +1256,7 @@ int StartCaption(
         holdSeconds = static_cast<double>(holdMs) / 1000.0;
         hold = &holdSeconds;
     }
+    lua_settop(state, originalTop);
     const engine::ScriptOperationHandle replacedOperation =
             host.cutscene->caption.operation;
     std::string error;
@@ -1275,9 +1410,105 @@ bool ApplyCutsceneControlsEnabled(
     return true;
 }
 
+void CancelScriptConversation(engine::EngineContext& context, void* hostContext, uint64_t token)
+{
+    auto& host = *static_cast<SectorScriptHost*>(hostContext);
+    if (host.conversation.active && host.conversation.token == token)
+        EndSectorScriptConversation(context, host);
+}
+
+int LuaStartConversation(lua_State* state)
+{
+    luaL_checktype(state, 1, LUA_TSTRING);
+    if (!lua_isnoneornil(state, 2)) luaL_checktype(state, 2, LUA_TTABLE);
+    const int originalTop = lua_gettop(state);
+    auto& host = HostFromLua(state);
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    const auto owner = engine::ScriptSystemTryCurrentTaskFromLua(state);
+    bool reposition = true;
+    if (lua_istable(state, 2)) {
+        lua_getfield(state, 2, "reposition");
+        if (!lua_isnil(state, -1) && !lua_isboolean(state, -1))
+            return PushCutsceneStartError(state, false, "reposition must be a boolean");
+        if (!lua_isnil(state, -1)) reposition = lua_toboolean(state, -1);
+        lua_pop(state, 1);
+    }
+    if (!engine::IsValid(owner) || !host.cutscene || !host.playerState || !host.playerConfig
+            || !host.controls.setControlsEnabled)
+        return PushCutsceneStartError(state, false, "conversation requires a managed task and player runtime");
+    if (host.conversation.active || (host.dialogue && host.dialogue->active)
+            || host.cutscene->caption.active || host.cutscene->playerMove.active || host.cutscene->look.active)
+        return PushCutsceneStartError(state, false, "conversation or scripted presentation is already active");
+    if (!host.cutscene->controlsEnabled && engine::IsValid(host.cutscene->controlsOwnerTask)
+            && !(host.cutscene->controlsOwnerTask == owner))
+        return PushCutsceneStartError(state, false, "controls belong to another task");
+    const auto npc = FindNpcEntity(context.world, lua_tostring(state, 1));
+    if (!IsConversationNpcAvailable(context.world, npc))
+        return PushCutsceneStartError(state, false, "conversation NPC is unavailable");
+    if (reposition && host.npcNavigation) {
+        const auto move = GetNpcMoveStatusForEntity(*host.npcNavigation, npc);
+        if ((move.found && move.phase == NpcMovePhase::FollowingPath
+                && (move.authority == NpcMoveAuthority::Script || move.authority == NpcMoveAuthority::Programmatic))
+                || HasNpcBodyTurn(*host.npcNavigation, npc))
+            return PushCutsceneStartError(state, false, "NPC has an active scripted move or turn");
+    }
+    const bool acquire = host.cutscene->controlsEnabled;
+    {
+        std::string error;
+        if (acquire && !ApplyCutsceneControlsEnabled(context, host, false, owner, error))
+            return PushCutsceneStartError(state, false, error);
+    }
+    auto& conversation = host.conversation;
+    conversation = {};
+    conversation.active = true;
+    conversation.preparing = reposition;
+    conversation.reposition = reposition;
+    conversation.acquiredControls = acquire;
+    conversation.npc = npc;
+    conversation.owner = owner;
+    conversation.token = host.cutscene->nextToken++;
+    conversation.startYaw = host.playerState->yawRadians;
+    conversation.startPitch = host.playerState->pitchRadians;
+    conversation.npcStartYaw = context.world.Get<SectorObjectTransform>(npc).yawRadians;
+    if (reposition) {
+        context.world.Get<NpcRuntimeInstance>(npc).conversationHeld = true;
+        conversation.preparation = engine::ScriptSystemCreateOperation(*host.scripts,
+                engine::ScriptOperationLaunchStyle::Blocking, owner, "startConversation",
+                conversation.token, CancelScriptConversation);
+        if (!engine::IsValid(conversation.preparation)) {
+            EndSectorScriptConversation(context, host);
+            return PushCutsceneStartError(state, false, "could not allocate conversation preparation");
+        }
+    }
+    if (host.controls.holsterWeapon) host.controls.holsterWeapon(host.controls.userData);
+    if (reposition)
+        return engine::ScriptSystemYieldForOperation(state, conversation.preparation, originalTop);
+    lua_pushboolean(state, true);
+    return 1;
+}
+
+int LuaEndConversation(lua_State* state)
+{
+    auto& host = HostFromLua(state);
+    if (!host.conversation.active)
+        return PushCutsceneStartError(state, false, "no active conversation");
+    if (!(host.conversation.owner == engine::ScriptSystemTryCurrentTaskFromLua(state)))
+        return PushCutsceneStartError(state, false, "conversation belongs to another task");
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    const auto conversation = host.conversation;
+    EndSectorScriptConversation(context, host);
+    if (conversation.reposition && host.npcNavigation)
+        BeginNpcConversationReturn(context.world, *host.npcNavigation,
+                conversation.npc, conversation.npcStartYaw);
+    lua_pushboolean(state, true);
+    return 1;
+}
+
 int SetLuaCutsceneControls(lua_State* state, bool enabled, bool cinematic)
 {
     SectorScriptHost& host = HostFromLua(state);
+    if (enabled && host.conversation.active)
+        return PushCutsceneStartError(state, false, "endConversation must release its controls first");
     if (host.cutscene == nullptr || host.controls.setControlsEnabled == nullptr) {
         lua_pushboolean(state, 0);
         lua_pushliteral(state, "cutscene control runtime is unavailable");
@@ -1310,6 +1541,8 @@ int SetLuaCutsceneControls(lua_State* state, bool enabled, bool cinematic)
         return 2;
     }
     if (cinematic) host.cutscene->presentation.active = !enabled;
+    if (cinematic && !enabled && host.controls.holsterWeapon)
+        host.controls.holsterWeapon(host.controls.userData);
     lua_pushboolean(state, 1);
     return 1;
 }
@@ -2055,6 +2288,34 @@ int LuaSetPlayerHealth(lua_State* state)
     return 1;
 }
 
+int LuaHasInventoryItem(lua_State* state, bool byInstance)
+{
+    luaL_checktype(state, 1, LUA_TSTRING);
+    size_t length = 0;
+    const char* id = luaL_checklstring(state, 1, &length);
+    const SectorScriptHost& host = HostFromLua(state);
+    if (host.playerInventory == nullptr) {
+        lua_pushnil(state);
+        lua_pushliteral(state, "player inventory is unavailable");
+        return 2;
+    }
+    const std::string_view query{id, length};
+    lua_pushboolean(state, byInstance
+            ? HasInventoryItemInstance(*host.playerInventory, query)
+            : HasInventoryItemDefinition(*host.playerInventory, query));
+    return 1;
+}
+
+int LuaHasInventoryItemInstance(lua_State* state)
+{
+    return LuaHasInventoryItem(state, true);
+}
+
+int LuaHasInventoryItemDefinition(lua_State* state)
+{
+    return LuaHasInventoryItem(state, false);
+}
+
 int LuaSetNpcHealth(lua_State* state)
 {
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
@@ -2310,10 +2571,12 @@ void InitializeSectorScriptHost(
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
     host.cutscene = cutscene;
+    host.dialogue = nullptr;
     host.dialogueVoices = nullptr;
     host.playerState = playerState;
     host.playerConfig = playerConfig;
     host.playerHealth = playerHealth;
+    host.playerInventory = nullptr;
     host.map = &map;
     host.audio = audio;
     host.controls = controls;
@@ -2348,10 +2611,12 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.navigation = nullptr;
     host.npcNavigation = nullptr;
     host.cutscene = nullptr;
+    host.dialogue = nullptr;
     host.dialogueVoices = nullptr;
     host.playerState = nullptr;
     host.playerConfig = nullptr;
     host.playerHealth = nullptr;
+    host.playerInventory = nullptr;
     host.map = nullptr;
     host.audio = {};
     host.controls = {};
@@ -2367,6 +2632,19 @@ void ResetSectorScriptHost(SectorScriptHost& host)
 
 void RegisterSectorScriptBindings(lua_State* state)
 {
+    // Capture the native operation function as a Lua upvalue; only the public
+    // choice-ID contract is installed as a global.
+    constexpr const char* dialogueWrapper = R"lua(
+        local operation = ...
+        function dialogue(...)
+            local ok, value = operation(...)
+            if ok then return value end
+            return nil, value
+        end
+    )lua";
+    if (luaL_loadstring(state, dialogueWrapper) != LUA_OK) lua_error(state);
+    lua_pushcfunction(state, LuaDialogueOperation);
+    if (lua_pcall(state, 1, 0, 0) != LUA_OK) lua_error(state);
     Register(state, "moveDoor", LuaMoveDoor);
     Register(state, "startMoveDoor", LuaStartMoveDoor);
     Register(state, "openDoor", LuaOpenDoor);
@@ -2379,6 +2657,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "setPropAnimationProgress", LuaSetPropAnimationProgress);
     Register(state, "setPropEmissiveScale", LuaSetPropEmissiveScale);
     Register(state, "setPlayerHealth", LuaSetPlayerHealth);
+    Register(state, "hasInventoryItemInstance", LuaHasInventoryItemInstance);
+    Register(state, "hasInventoryItemDefinition", LuaHasInventoryItemDefinition);
     Register(state, "setNpcHealth", LuaSetNpcHealth);
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
@@ -2397,6 +2677,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "moveNpc", LuaMoveNpc);
     Register(state, "startMoveNpc", LuaStartMoveNpc);
     Register(state, "enableControls", LuaEnableControls);
+    Register(state, "startConversation", LuaStartConversation);
+    Register(state, "endConversation", LuaEndConversation);
     Register(state, "startCutscene", LuaStartCutscene);
     Register(state, "endCutscene", LuaEndCutscene);
     Register(state, "movePlayer", LuaMovePlayer);
@@ -2690,6 +2972,33 @@ void UpdateSectorScriptOperations(
                         return !move.active;
                     }),
             host.npcMoves.end());
+}
+
+void EndSectorScriptConversation(engine::EngineContext& context, SectorScriptHost& host)
+{
+    if (!host.conversation.active) return;
+    const auto conversation = host.conversation;
+    host.conversation = {}; // Cancel callback is allowed to reenter cleanup.
+    if (conversation.reposition && context.world.IsAlive(conversation.npc)
+            && context.world.Has<NpcRuntimeInstance>(conversation.npc))
+        context.world.Get<NpcRuntimeInstance>(conversation.npc).conversationHeld = false;
+    if (engine::IsValid(conversation.preparation) && host.scripts)
+        engine::ScriptSystemCancelOperation(context, *host.scripts, conversation.preparation, "conversation ended");
+    if (conversation.acquiredControls && host.cutscene
+            && host.cutscene->controlsOwnerTask == conversation.owner) {
+        std::string error;
+        ApplyCutsceneControlsEnabled(context, host, true, {}, error);
+    }
+}
+
+void UpdateSectorScriptConversationOwnership(engine::EngineContext& context, SectorScriptHost& host)
+{
+    if (!host.conversation.active || !host.scripts) return;
+    const bool lostTarget = !IsConversationNpcAvailable(context.world, host.conversation.npc)
+            || (host.playerHealth && IsDepleted(*host.playerHealth));
+    if (lostTarget) engine::ScriptSystemRequestStopTask(*host.scripts, host.conversation.owner);
+    if (lostTarget || !engine::ScriptSystemIsTaskActive(*host.scripts, host.conversation.owner))
+        EndSectorScriptConversation(context, host);
 }
 
 void UpdateSectorScriptCutsceneControlOwnership(

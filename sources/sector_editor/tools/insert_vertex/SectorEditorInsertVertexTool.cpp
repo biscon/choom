@@ -1,4 +1,5 @@
 #include "sector_editor/tools/insert_vertex/SectorEditorInsertVertexTool.h"
+#include "sector_editor/tools/path/SectorEditorPathTool.h"
 
 #include "engine/input/Input.h"
 #include "engine/input/InputEvents.h"
@@ -46,6 +47,10 @@ bool CancelInsertVertexTool(SectorEditorToolContext& context, const char* messag
 
 void UpdateInsertVertexToolHover(SectorEditorToolContext& context, Vector2 mapPoint)
 {
+    if (context.pathEditing && context.pathEditing->Selected()) {
+        context.pendingAuthoringInsertVertex = {};
+        return;
+    }
     PendingAuthoringInsertVertex& pending = context.pendingAuthoringInsertVertex;
     pending.hasPreviewPoint = false;
     pending.errorMessage.clear();
@@ -85,6 +90,7 @@ void UpdateInsertVertexToolHover(SectorEditorToolContext& context, Vector2 mapPo
 
 void CommitInsertVertexTool(SectorEditorToolContext& context, Vector2 screenPoint)
 {
+    if (InsertSectorEditorPathWaypoint(context,screenPoint)) return;
     const int lineId = context.pendingAuthoringInsertVertex.active
             ? context.pendingAuthoringInsertVertex.lineId
             : (context.findAuthoringLineNearScreenPoint

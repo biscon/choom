@@ -134,6 +134,142 @@ void TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps()
           "use targeting rejects objects outside the forward view cone");
 }
 
+void TestNpcUseFacingAndNearbyHealthPacks()
+{
+    using namespace game;
+    engine::World world;
+    ReserveSectorRuntimeObjectWorld(world, 4);
+    const auto npcEntity = world.CreateEntity();
+    NpcRuntimeInstance npc;
+    npc.instanceId = "elin_fixture";
+    npc.displayName = "Elin";
+    npc.onUseScript = "useElin";
+    world.Add(npcEntity, npc);
+    world.Add(npcEntity, SectorObject{});
+    world.Add(npcEntity, SectorObjectTransform{{-11, 0, 4.5f}});
+    SectorDynamicModel model;
+    model.scale = 1.1f;
+    model.onUseScript = "must_not_bypass_npc_rules";
+    model.useDistance = 10;
+    world.Add(npcEntity, model);
+    world.Add(npcEntity, engine::AnimatedModelInstance{});
+    world.Add(npcEntity, Health{});
+    world.Add(npcEntity, NpcCombatState{});
+    engine::ModelAsset asset;
+    asset.hasLocalBounds = true;
+    asset.localBounds = {{-0.3f, 0, -0.3f}, {0.3f, 1.8f, 0.3f}};
+    asset.hasAnimatedLocalBounds = true;
+    asset.animatedLocalBounds = {{-4, 0, -4}, {4, 3, 4}};
+
+    // Relevant hub positions copied into a generated fixture; never load the
+    // user's editable level. Elin is at intro_marker_3, packs on the shelf behind.
+    const Vector3 eye{-11, 1.2f, 3.9f};
+    const Vector3 packs[]{{-10.125f, 1.095f, 3.375f}, {-10.75f, 1.095f, 3.375f}};
+    std::array<engine::Entity, 2> items;
+    for (size_t i = 0; i < items.size(); ++i) {
+        items[i] = world.CreateEntity();
+        SectorItem item;
+        item.title = i ? "Large health pack" : "Health pack";
+        item.takeDistance = 2;
+        world.Add(items[i], item);
+        world.Add(items[i], SectorObjectTransform{packs[i]});
+    }
+    const auto targetNpc = [&](Vector3 viewer, Vector3 forward) {
+        SectorUseTarget target;
+        ConsiderSectorNpcUseTarget(world, npcEntity, &asset, viewer, forward, nullptr, nullptr,
+                                   target);
+        return target;
+    };
+    for (size_t i = 0; i < items.size(); ++i) {
+        const Vector3 forward = Vector3Normalize(Vector3Subtract(packs[i], eye));
+        auto target = FindSectorUseTarget(world, nullptr, eye, forward, nullptr);
+        Check(target.kind == SectorUseTargetKind::Item && target.entity == items[i],
+              "looking at a health pack behind Elin selects that pack");
+        ConsiderSectorNpcUseTarget(world, npcEntity, &asset, eye, forward, nullptr, nullptr,
+                                   target);
+        Check(target.kind == SectorUseTargetKind::Item && target.entity == items[i],
+              "surrounding animation envelope cannot steal health-pack selection");
+        Check(targetNpc(eye, forward).kind == SectorUseTargetKind::None,
+              "NPC behind the camera is ineligible even inside its animation envelope");
+    }
+    auto towardNpc = FindSectorUseTarget(world, nullptr, eye, {0, 0, 1}, nullptr);
+    Check(towardNpc.entity == npcEntity && towardNpc.kind == SectorUseTargetKind::Npc,
+          "turning back toward Elin selects her through the NPC branch");
+    Check(targetNpc(eye, {0, 0, 1}).entity == npcEntity,
+          "stable NPC body remains targetable at close range");
+    for (const Vector3 offset :
+         {Vector3{1, 0, 0}, Vector3{-1, 0, 0}, Vector3{0, 0, 1}, Vector3{0, 0, -1}}) {
+        const Vector3 viewer = Vector3Add({-11, 1.2f, 4.5f}, offset);
+        Check(targetNpc(viewer, Vector3Negate(offset)).entity == npcEntity,
+              "NPC can be approached from any side when the player faces its body");
+    }
+    Check(targetNpc({-12, 1.2f, 4.5f}, {0.66f, 0, std::sqrt(1 - 0.66f * 0.66f)}).entity ==
+                  npcEntity,
+          "NPC retains forgiving facing cone");
+    Check(targetNpc({-12, 1.2f, 4.5f}, {0.64f, 0, std::sqrt(1 - 0.64f * 0.64f)}).kind ==
+                  SectorUseTargetKind::None,
+          "NPC outside facing cone is rejected");
+    Check(targetNpc({-11, 1.2f, 4.5f}, {1, 0, 0}).kind == SectorUseTargetKind::None,
+          "coincident body anchor never receives automatic perfect alignment");
+    Check(targetNpc({-11.1f, 1.2f, 4.5f}, {-1, 0, 0}).kind == SectorUseTargetKind::None,
+          "inside stable bounds still requires looking toward the body");
+    Check(targetNpc({-11.1f, 1.2f, 4.5f}, {1, 0, 0}).entity == npcEntity,
+          "inside stable bounds can face toward a noncoincident body anchor");
+    Check(targetNpc({-13.8f, 1.2f, 4.5f}, {1, 0, 0}).entity == npcEntity,
+          "NPC reach is measured to stable body surface, not center");
+    Check(targetNpc({-14, 1.2f, 4.5f}, {1, 0, 0}).kind == SectorUseTargetKind::None,
+          "NPC surface outside authored reach is rejected");
+
+    // More-centered objects win without granting unconditional item priority.
+    const Vector3 sideEye{-12, 1.2f, 4.5f};
+    const Vector3 aim = Vector3Normalize({1, 0, 0.2f});
+    SectorUseTarget centered{items[0], SectorUseTargetKind::Item, {}, 1, 1};
+    ConsiderSectorNpcUseTarget(world, npcEntity, &asset, sideEye, aim, nullptr, nullptr, centered);
+    Check(centered.entity == items[0], "centered item beats off-center NPC");
+    centered.kind = SectorUseTargetKind::DynamicProp;
+    ConsiderSectorNpcUseTarget(world, npcEntity, &asset, sideEye, aim, nullptr, nullptr, centered);
+    Check(centered.entity == items[0], "centered prop beats off-center NPC");
+    centered.kind = SectorUseTargetKind::Item;
+    centered.facingDot = 0.7f;
+    ConsiderSectorNpcUseTarget(world, npcEntity, &asset, sideEye, {1, 0, 0}, nullptr, nullptr,
+                               centered);
+    Check(centered.entity == npcEntity, "centered NPC beats less-aligned item");
+
+    for (const auto item : items)
+        world.Get<SectorItem>(item).takePending = true;
+    auto& runtimeNpc = world.Get<NpcRuntimeInstance>(npcEntity);
+    const auto rejected = [&]() {
+        return targetNpc(sideEye, {1, 0, 0}).kind == SectorUseTargetKind::None &&
+               FindSectorUseTarget(world, nullptr, sideEye, {1, 0, 0}, nullptr).kind ==
+                       SectorUseTargetKind::None;
+    };
+    runtimeNpc.hostile = true;
+    Check(rejected(), "hostile NPC cannot fall through to prop Use");
+    runtimeNpc.hostile = false;
+    runtimeNpc.conversationHeld = true;
+    Check(rejected(), "conversation-held NPC cannot fall through to prop Use");
+    runtimeNpc.conversationHeld = false;
+    world.Get<SectorObject>(npcEntity).visible = false;
+    Check(rejected(), "invisible NPC is not usable");
+    world.Get<SectorObject>(npcEntity).visible = true;
+    world.Get<SectorDynamicModel>(npcEntity).opacity = 0;
+    Check(rejected(), "transparent NPC is not usable");
+    world.Get<SectorDynamicModel>(npcEntity).opacity = 1;
+    world.Get<Health>(npcEntity).current = 0;
+    Check(rejected(), "depleted NPC is not usable");
+    world.Get<Health>(npcEntity).current = 100;
+    world.Get<NpcCombatState>(npcEntity).dead = true;
+    Check(rejected(), "dead NPC is not usable");
+    world.Get<NpcCombatState>(npcEntity).dead = false;
+    runtimeNpc.useDistance = 0;
+    Check(rejected(), "zero NPC use distance is rejected");
+    runtimeNpc.useDistance = std::numeric_limits<float>::quiet_NaN();
+    Check(rejected(), "nonfinite NPC use distance is rejected");
+    runtimeNpc.useDistance = 2.5f;
+    runtimeNpc.onUseScript.clear();
+    Check(rejected(), "NPC without a Use hook cannot use generic prop hook");
+}
+
 void TestSectorUseTargetFindsBothLadderEndpoints()
 {
     engine::World world;
@@ -311,13 +447,13 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
             excluded,
             ray,
             farther,
-            game::SectorUseTargetKind::Door,
+            game::SectorUseTargetKind::Ladder,
             BoundingBox{Vector3{2.0f, -1.0f, -1.0f},
                     Vector3{3.0f, 1.0f, 1.0f}},
             true);
     Check(game::FinishSectorObjectUseTarget(excluded).kind
                     == game::SectorUseTargetKind::None,
-          "held Object bounds reject items, doors, and non-prop target kinds");
+          "held Object bounds reject items and ladders");
 
     game::SectorObjectUseTargetAccumulator tie;
     game::ConsiderSectorObjectUseBounds(
@@ -340,14 +476,18 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
           "equal-distance held Object targets use stable entity ordering");
 
     engine::World world;
-    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    game::ReserveSectorRuntimeObjectWorld(world, 3);
     const engine::Entity staticProp = world.CreateEntity();
     game::SectorStaticModel staticModel;
     staticModel.instanceId = "crate_4";
     world.Add(staticProp, staticModel);
+    world.Add(staticProp, game::SectorObject{});
     game::SectorUseTarget staticTarget;
     staticTarget.entity = staticProp;
     staticTarget.kind = game::SectorUseTargetKind::StaticProp;
+    Check(game::SectorObjectUseTargetInstanceId(world, staticTarget).empty(),
+          "static props reject inventory use by default");
+    world.Get<game::SectorObject>(staticProp).itemDropTarget = true;
     Check(game::SectorObjectUseTargetInstanceId(world, staticTarget)
                     == "crate_4",
           "held Object targeting exposes static prop stable IDs");
@@ -357,11 +497,167 @@ void TestHeldObjectUseRayTargetOrderingAndOcclusion()
     npcModel.instanceId = "should_not_be_targeted";
     world.Add(npc, npcModel);
     world.Add(npc, game::NpcRuntimeInstance{});
+    world.Add(npc, game::SectorObject{-1, true, true});
     game::SectorUseTarget npcTarget;
     npcTarget.entity = npc;
     npcTarget.kind = game::SectorUseTargetKind::DynamicProp;
     Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
-          "NPC dynamic models are excluded from held Object targets");
+          "NPCs cannot bypass eligibility through the dynamic-prop target kind");
+
+    npcTarget.kind = game::SectorUseTargetKind::Npc;
+    auto& npcInstance = world.Get<game::NpcRuntimeInstance>(npc);
+    npcInstance.instanceId = "friendly_npc";
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget) == "friendly_npc",
+          "NPC targets use the NPC instance ID without requiring a use script");
+    npcInstance.hostile = true;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "hostile NPCs reject held Objects");
+    npcInstance.hostile = false;
+    npcInstance.conversationHeld = true;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "conversation-held NPCs reject held Objects");
+    npcInstance.conversationHeld = false;
+    world.Add(npc, game::Health{});
+    world.Get<game::Health>(npc).current = 0;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "depleted NPCs reject held Objects");
+    world.Get<game::Health>(npc).current = 10;
+    world.Add(npc, game::NpcCombatState{});
+    world.Get<game::NpcCombatState>(npc).dead = true;
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "dead combat state rejects held Objects even with health remaining");
+    world.Get<game::NpcCombatState>(npc).dead = false;
+    npcInstance.instanceId.clear();
+    Check(game::SectorObjectUseTargetInstanceId(world, npcTarget).empty(),
+          "NPCs require a stable instance ID");
+
+    const auto doorEntity = world.CreateEntity();
+    game::SectorDoor door;
+    door.instanceId = "locked_door";
+    world.Add(doorEntity, door);
+    world.Add(doorEntity, game::SectorObject{-1, true, true});
+    game::SectorUseTarget doorTarget;
+    doorTarget.entity = doorEntity;
+    doorTarget.kind = game::SectorUseTargetKind::Door;
+    Check(game::SectorObjectUseTargetInstanceId(world, doorTarget) == "locked_door",
+          "doors expose their stable instance ID independently of E-key hooks");
+    world.Get<game::SectorDoor>(doorEntity).enabled = false;
+    Check(game::SectorObjectUseTargetInstanceId(world, doorTarget).empty(),
+          "disabled doors reject held Objects");
+    doorTarget.entity.generation += 1;
+    Check(game::SectorObjectUseTargetInstanceId(world, doorTarget).empty(),
+          "stale door entity handles cannot resolve instance IDs");
+}
+
+void TestItemDropTargetOptIn()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const auto check = [&](game::SectorUseTargetKind kind, auto component) {
+        const auto entity = world.CreateEntity();
+        component.instanceId = "receiver";
+        world.Add(entity, component);
+        world.Add(entity, game::SectorObject{});
+        game::SectorUseTarget target;
+        target.entity = entity;
+        target.kind = kind;
+        Check(game::SectorObjectUseTargetInstanceId(world, target).empty(),
+              "inventory receiver defaults to disabled");
+        world.Get<game::SectorObject>(entity).itemDropTarget = true;
+        Check(game::SectorObjectUseTargetInstanceId(world, target) == "receiver",
+              "opted-in inventory receiver resolves its instance ID");
+        world.Get<game::SectorObject>(entity).itemDropTarget = false;
+        Check(game::SectorObjectUseTargetInstanceId(world, target).empty(),
+              "disabling a receiver also rejects a previously selected target");
+    };
+    check(game::SectorUseTargetKind::StaticProp, game::SectorStaticModel{});
+    check(game::SectorUseTargetKind::DynamicProp, game::SectorDynamicModel{});
+    check(game::SectorUseTargetKind::Door, game::SectorDoor{});
+    check(game::SectorUseTargetKind::Npc, game::NpcRuntimeInstance{});
+}
+
+void TestHeldObjectDoorGeometry()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const auto entity = world.CreateEntity();
+    world.Add(entity, game::SectorObject{});
+    world.Add(entity, game::SectorObjectTransform{Vector3{0.0f, 1.0f, 3.0f}});
+    game::SectorDoor door;
+    door.instanceId = "test_door";
+    world.Add(entity, door);
+    world.Add(entity, game::SectorDoorResolvedAnchor{});
+    game::SectorDoorRender render;
+    render.width = 2.0f;
+    render.height = 2.0f;
+    render.thickness = 0.2f;
+    world.Add(entity, render);
+    const Ray ray{{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}};
+    const auto pick = [&] {
+        return game::FindSectorObjectUseTarget(world, assets, ray, nullptr);
+    };
+    Check(pick().kind == game::SectorUseTargetKind::None,
+          "visible door leaves reject inventory targeting by default");
+    world.Get<game::SectorObject>(entity).itemDropTarget = true;
+    Check(pick().kind == game::SectorUseTargetKind::Door
+                  && std::fabs(pick().distance - 2.9f) < 0.0001f,
+          "closed procedural door is targetable at its visible leaf");
+
+    game::SectorDoorModelRender model;
+    model.modelVisualRequested = true;
+    model.catalogResolved = true;
+    world.Add(entity, model);
+    Check(pick().entity == entity,
+          "pending door models use the same procedural fallback as rendering");
+    world.Get<game::SectorDoorModelRender>(entity).leafFailed = true;
+    Check(pick().entity == entity, "failed door models retain procedural targeting");
+
+    auto& transform = world.Get<game::SectorObjectTransform>(entity);
+    transform.position.y = 4.0f;
+    Check(pick().kind == game::SectorUseTargetKind::None,
+          "a raised sliding leaf leaves its doorway untargetable");
+    transform.position = {1.0f, 1.0f, 4.0f};
+    auto& liveRender = world.Get<game::SectorDoorRender>(entity);
+    liveRender.widthAxis = {0.0f, 1.0f};
+    liveRender.thicknessAxis = {1.0f, 0.0f};
+    Check(pick().kind == game::SectorUseTargetKind::None,
+          "a swung leaf does not target its original doorway");
+    const Ray leafRay{{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}};
+    Check(game::FindSectorObjectUseTarget(world, assets, leafRay, nullptr).entity == entity,
+          "a swung leaf remains targetable at its new position");
+    liveRender.visible = false;
+    Check(game::FindSectorObjectUseTarget(world, assets, leafRay, nullptr).kind
+                    == game::SectorUseTargetKind::None,
+          "hidden door leaves are not targets");
+    liveRender.visible = true;
+    world.Get<game::SectorDoor>(entity).instanceId.clear();
+    Check(game::FindSectorObjectUseTarget(world, assets, leafRay, nullptr).kind
+                    == game::SectorUseTargetKind::None,
+          "door leaves without IDs are not selectable");
+
+    game::SectorObjectUseTargetAccumulator accumulator;
+    const BoundingBox bounds{{-1.0f, -1.0f, -0.1f}, {1.0f, 1.0f, 0.1f}};
+    const Matrix scaled = MatrixMultiply(MatrixScale(2.0f, 2.0f, 2.0f),
+            MatrixTranslate(0.0f, 1.0f, 5.0f));
+    game::ConsiderSectorObjectUseTransformedBounds(accumulator, ray, entity,
+            game::SectorUseTargetKind::Door, bounds, scaled, true);
+    Check(std::fabs(accumulator.nearest.distance - 4.8f) < 0.0001f,
+          "transformed model bounds preserve world-space hit distance under scale");
+    game::ConsiderSectorObjectUseBounds(accumulator, ray, engine::Entity{2, 1},
+            game::SectorUseTargetKind::Npc,
+            BoundingBox{{-0.5f, 0.0f, 2.0f}, {0.5f, 2.0f, 2.5f}}, false);
+    Check(game::FinishSectorObjectUseTarget(accumulator).kind == game::SectorUseTargetKind::None,
+          "an ineligible NPC blocks a door behind it");
+    accumulator = {};
+    game::ConsiderSectorObjectUseBounds(accumulator, ray, engine::Entity{2, 1},
+            game::SectorUseTargetKind::Npc,
+            BoundingBox{{-0.5f, 0.0f, 5.0f}, {0.5f, 2.0f, 5.5f}}, true);
+    game::ConsiderSectorObjectUseTransformedBounds(accumulator, ray, entity,
+            game::SectorUseTargetKind::Door, bounds,
+            MatrixTranslate(0.0f, 1.0f, 3.0f), false);
+    Check(game::FinishSectorObjectUseTarget(accumulator).kind == game::SectorUseTargetKind::None,
+          "a door without an ID blocks an NPC behind it");
 }
 
 void TestItemRuntimeSpawnAndFocusedRemoval()
@@ -438,6 +734,7 @@ void TestItemRuntimeSpawnAndFocusedRemoval()
     dropped.id = 72;
     dropped.item.instanceId = "item_72";
     dropped.item.sessionDrop = true;
+    dropped.item.sourceQuantities = {{"original_ammo", 3}, {"other_ammo", 5}};
     engine::Entity droppedEntity = engine::NullEntity();
     Check(game::SpawnSectorItemRuntimeObject(
                   world,
@@ -457,6 +754,13 @@ void TestItemRuntimeSpawnAndFocusedRemoval()
     Check(world.Get<game::SectorItem>(droppedEntity).origin
                   == game::SectorItemOrigin::SessionDrop,
           "incremental drop spawn preserves session provenance");
+    const auto& sources = world.Get<game::SectorItem>(droppedEntity).sourceQuantities;
+    Check(sources.size() == 2
+                  && sources[0].instanceId == "original_ammo"
+                  && sources[0].quantity == 3
+                  && sources[1].instanceId == "other_ammo"
+                  && sources[1].quantity == 5,
+          "incremental drop spawn retains original quantities separately from its world ID");
 }
 
 bool Near(float actual, float expected, float epsilon = 0.00001f)
@@ -811,6 +1115,52 @@ game::SectorTopologyMap MakeNavigationSquareMap()
     map.sectors.push_back(Sector(10));
     AddSectorLoop(map, 10, {{0, 0}, {2048, 0}, {2048, 2048}, {0, 2048}});
     return map;
+}
+
+void TestNpcUseRetainsOcclusion()
+{
+    using namespace game;
+    engine::World world;
+    ReserveSectorRuntimeObjectWorld(world, 1);
+    const auto entity = world.CreateEntity();
+    NpcRuntimeInstance npc;
+    npc.onUseScript = "talk";
+    world.Add(entity, npc);
+    world.Add(entity, SectorObject{});
+    world.Add(entity, SectorDynamicModel{});
+    world.Add(entity, SectorObjectTransform{{17, 0, 8}});
+    SectorCollisionWorld collision;
+    Check(collision.BuildFromTopology(MakeNavigationSquareMap()),
+          "build generated NPC visibility room");
+    SectorRuntimeObjectState objects;
+    const auto query = [&](Vector3 eye) {
+        return FindSectorUseTarget(world, nullptr, eye, {1, 0, 0}, &collision, true, nullptr, 1.75f,
+                                   10, &objects);
+    };
+    Check(query({15, 1.2f, 8}).kind == SectorUseTargetKind::None,
+          "wall conceals NPC beyond room boundary");
+    world.Get<SectorObjectTransform>(entity).position = {4, 0, 8};
+    Check(query({2, 1.2f, 8}).entity == entity, "unobstructed NPC remains usable");
+    SectorStaticModelCollider blocker;
+    blocker.center = {3, 8};
+    blocker.halfExtents = {0.1f, 1};
+    blocker.bottom = 0;
+    blocker.top = 2;
+    blocker.resolved = true;
+    objects.physicalModelColliders.push_back(blocker);
+    Check(query({2, 1.2f, 8}).kind == SectorUseTargetKind::None,
+          "solid prop conceals NPC body anchor");
+    objects.physicalModelColliders.clear();
+    SectorDynamicDoorCollider door;
+    door.center = {3, 8};
+    door.halfExtents = {0.1f, 1};
+    door.bottom = 0;
+    door.top = 2;
+    objects.dynamicDoorColliders.push_back(door);
+    Check(query({2, 1.2f, 8}).kind == SectorUseTargetKind::None,
+          "closed door conceals NPC body anchor");
+    objects.dynamicDoorColliders.clear();
+    Check(query({2, 1.2f, 8}).entity == entity, "removing obstruction restores NPC use");
 }
 
 game::SectorTopologyMap MakeNavigationStairMap()
@@ -2588,6 +2938,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
     door.materialId = "test_door";
     door.openSoundId = "door_open";
     door.closeSoundId = "door_close";
+    door.itemDropTarget = true;
     map.runtimeObjects.push_back(MakePlacedDoor(35, door));
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -2605,6 +2956,8 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
             "valid placed door preserves door anchor diagnostic counts");
 
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Get<game::SectorObject>(entity).itemDropTarget,
+          "door spawn preserves authored inventory-target opt-in");
     const float expectedMotionOffset = game::SmootherStep01(door.initialOpenFraction)
             * EffectiveDoorOpenDistance(door.openDistance);
     Check(world.IsAlive(entity), "valid placed door mapped entity is alive");
@@ -4870,6 +5223,206 @@ void TestSectorDoorNavigationHoldsAndSlidingObstruction()
           "closing sliding slab detects a cylinder in its swept volume and retargets open");
 }
 
+struct OpenDoorApproachFixture {
+    game::SectorTopologyMap map;
+    game::SectorCollisionWorld collision;
+    game::SectorNavigationWorld navigation;
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState objects;
+    game::NpcNavigationRuntime npcs;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    std::vector<game::SectorStaticModelCollider> staticColliders;
+    engine::Entity npc;
+    Vector2 destination;
+    bool ready = false;
+
+    OpenDoorApproachFixture(int widthScale, bool reverse, bool angled, bool run)
+    {
+        using namespace game;
+        map = MakeDoorPortalMap();
+        for (auto& vertex : map.vertices) {
+            vertex.x *= 16;
+            vertex.y *= widthScale;
+        }
+        for (auto& sector : map.sectors) {
+            sector.floorZ = 0;
+            sector.ceilingZ = 32;
+        }
+        auto door = MakeDoorOnPortal();
+        door.anchor.endpointAX = 1024;
+        door.anchor.endpointBX = 1024;
+        door.anchor.endpointBY = 64 * widthScale;
+        door.initialOpenFraction = 1;
+        map.runtimeObjects.push_back(MakePlacedDoor(77, door));
+        if (!collision.BuildFromTopology(map)) return;
+        navigation.Initialize();
+        navigation.RequestRebuild();
+        FinishNavigationBuild(navigation, map);
+        if (navigation.State() != SectorNavigationState::Ready) return;
+        RefreshSectorRuntimeObjectMapData(objects, map);
+        SpawnPlacedRuntimeObjects(world, assets, objects, map);
+        const float middle = widthScale * 0.25f;
+        const float startZ = middle + (angled ? middle * 0.35f : 0);
+        npc = SpawnNavigationTestNpc(world, "door_approach", 501,
+                {reverse ? 14.0f : 2.0f, 0, startZ}, reverse ? 20 : 10, 1.5f, 3.0f);
+        InitializeNpcNavigationRuntime(world, navigation, npcs);
+        CollectSectorDoorDynamicColliders(world, objects.dynamicDoorColliders);
+        SynchronizeSectorNavigationDoorLinksSystem(world, navigation, objects.dynamicDoorColliders);
+        destination = {reverse ? 2.0f : 14.0f, middle};
+        ready = RequestNpcMove(world, navigation, collision, npcs, "door_approach", destination,
+                run ? NpcMoveGait::Run : NpcMoveGait::Walk,
+                run ? NpcMoveAuthority::Ai : NpcMoveAuthority::Programmatic)
+                        .accepted;
+    }
+    void Prepare(float dt)
+    {
+        game::PrepareNpcDoorTraversalAndHoldsSystem(
+                world, navigation, npcs, objects.dynamicDoorColliders, dt);
+    }
+    void Move(float dt)
+    {
+        game::UpdateNpcNavigationAndLocomotionSystem(world, assets, navigation, npcs, definitions,
+                collision, objects.dynamicDoorColliders, staticColliders, probes, map, dt);
+    }
+};
+
+void CheckOpenDoorApproach(int width, bool reverse, bool angled, bool run, int fps)
+{
+    using namespace game;
+    OpenDoorApproachFixture fixture(width, reverse, angled, run);
+    Check(fixture.ready, "open door approach fixture builds and accepts movement");
+    if (!fixture.ready) return;
+    auto& record = fixture.npcs.records[0];
+    auto& transform = fixture.world.Get<SectorObjectTransform>(fixture.npc);
+    bool crossed = false, recovered = false, backwards = false, stoppedBeforeCrossing = false;
+    float handoffDistance = -1;
+    float maxApproachSpeed = 0;
+    const float sign = reverse ? -1.0f : 1.0f;
+    for (int frame = 0; frame < 20 * fps; ++frame) {
+        const float dt = 1.0f / fps;
+        const auto beforePhase = record.doorPhase;
+        fixture.Prepare(dt);
+        if (record.doorPhase == NpcDoorTraversalPhase::Crossing
+                && beforePhase != record.doorPhase) {
+            const auto& stage = record.corners[record.nextCorner];
+            handoffDistance = Vector2Distance(
+                    {stage.x, stage.z}, {transform.position.x, transform.position.z});
+            crossed = true;
+        }
+        const auto phase = record.doorPhase;
+        const float previousX = transform.position.x;
+        const float beforeStage = record.nextCorner < record.cornerCount
+                ? Vector2Distance({transform.position.x, transform.position.z},
+                          {record.corners[record.nextCorner].x,
+                                  record.corners[record.nextCorner].z})
+                : 0;
+        fixture.Move(dt);
+        recovered |= record.steeringRecoveryActive;
+        if (phase == NpcDoorTraversalPhase::Approaching && beforeStage > 0.301f) {
+            backwards |= (transform.position.x - previousX) * sign < -0.001f;
+            stoppedBeforeCrossing |= Vector2Length(record.actualVelocity) < 0.001f;
+            if (beforeStage < 0.5f)
+                maxApproachSpeed
+                        = std::max(maxApproachSpeed, Vector2Length(record.preferredVelocity));
+        }
+        if (GetNpcMoveStatus(fixture.npcs, "door_approach").phase == NpcMovePhase::Arrived) break;
+    }
+    const bool arrived
+            = GetNpcMoveStatus(fixture.npcs, "door_approach").phase == NpcMovePhase::Arrived;
+    if (!arrived || !crossed || recovered || backwards || stoppedBeforeCrossing) {
+        std::fprintf(stderr,
+                "door approach width=%d reverse=%d angle=%d run=%d fps=%d "
+                "arrived=%d crossed=%d recovery=%d backward=%d stopped=%d "
+                "phase=%s diagnostic=%s\n",
+                width, reverse, angled, run, fps, arrived, crossed, recovered, backwards,
+                stoppedBeforeCrossing, NpcDoorTraversalPhaseName(record.doorPhase),
+                GetNpcMoveStatus(fixture.npcs, "door_approach").message.data());
+    }
+    Check(arrived && crossed && !recovered && !backwards && !stoppedBeforeCrossing,
+            "open doorway crosses without approach orbit, pause, or recovery");
+    Check(handoffDistance > 0.10f && handoffDistance <= 0.301f,
+            "door handoff occurs in expanded 30 cm area");
+    Check(!run || (maxApproachSpeed > 0 && maxApproachSpeed < 3),
+            "running approach brakes before staging");
+    Check(Vector2Distance({transform.position.x, transform.position.z}, fixture.destination)
+                    <= 0.101f,
+            "ordinary destination retains 10 cm precision");
+}
+
+void TestOpenDoorApproachDoesNotOrbit()
+{
+    for (int width : {2, 8})
+        for (bool reverse : {false, true})
+            for (bool angled : {false, true})
+                for (bool run : {false, true})
+                    for (int fps : {30, 60, 144})
+                        CheckOpenDoorApproach(width, reverse, angled, run, fps);
+}
+
+void TestDoorApproachClearanceAndSweptArrival()
+{
+    using namespace game;
+    OpenDoorApproachFixture fixture(8, false, false, true);
+    Check(fixture.ready, "door clearance fixture builds");
+    if (!fixture.ready) return;
+    auto& record = fixture.npcs.records[0];
+    auto& transform = fixture.world.Get<SectorObjectTransform>(fixture.npc);
+    size_t doorCorner = 0;
+    while (doorCorner < record.cornerCount && record.cornerDoorIds[doorCorner] == 0)
+        ++doorCorner;
+    Check(doorCorner < record.cornerCount, "fixture has door waypoint");
+    if (doorCorner >= record.cornerCount) return;
+    record.nextCorner = doorCorner;
+    const Vector3 stage = record.corners[doorCorner];
+    transform.position = {stage.x, stage.y, stage.z + 0.25f};
+    fixture.Prepare(1.0f / 60);
+    Check(record.doorPhase == NpcDoorTraversalPhase::Crossing,
+            "already-open door hands off from 25 cm on first update");
+
+    record.doorPhase = NpcDoorTraversalPhase::Approaching;
+    SectorDynamicDoorCollider blocker;
+    blocker.placedObjectId = 77;
+    blocker.center = {stage.x, stage.z + 0.51f};
+    blocker.halfExtents = {0.02f, 0.02f};
+    blocker.bottom = 0;
+    blocker.top = 2;
+    fixture.objects.dynamicDoorColliders.push_back(blocker);
+    Check(SectorDoorTraversalIsClear(
+                  77, stage, record.doorLanding, 0.25f, 1.6f, fixture.objects.dynamicDoorColliders),
+            "canonical crossing clear in offset-obstruction fixture");
+    fixture.Prepare(1.0f / 60);
+    Check(record.doorPhase == NpcDoorTraversalPhase::WaitingForClearance,
+            "actual offset approach must also clear door collision");
+    fixture.objects.dynamicDoorColliders.pop_back();
+    fixture.Prepare(1.0f / 60);
+    Check(record.doorPhase == NpcDoorTraversalPhase::Crossing,
+            "clearing offset obstruction allows crossing");
+
+    // Start outside the area with enough motion to cross its boundary in one update.
+    record.doorPhase = NpcDoorTraversalPhase::Approaching;
+    transform.position = {stage.x - 0.45f, stage.y, stage.z};
+    record.steeringRecoveryActive = true; // deterministic direct velocity isolates the capture rule
+    fixture.Move(0.5f);
+    Check(std::abs(Vector2Distance({transform.position.x, transform.position.z}, {stage.x, stage.z})
+                  - 0.3f)
+                    < 0.001f,
+            "swept approach captures entry instead of overshooting staging");
+    Check(record.nextCorner == doorCorner,
+            "captured door waypoint is preserved for clearance handoff");
+    fixture.Prepare(1.0f / 60);
+    Check(record.doorPhase == NpcDoorTraversalPhase::Crossing,
+            "captured approach crosses on next update");
+    const Vector3 landing = record.doorLanding;
+    transform.position = {landing.x - 0.05f, landing.y, landing.z};
+    fixture.Move(0.25f);
+    Check(Vector3Distance(transform.position, {landing.x - 0.05f, landing.y, landing.z}) < 0.001f,
+            "completed crossing discards stale steering for remainder of frame");
+    Check(record.nextCorner == doorCorner + 1 && record.doorPhase == NpcDoorTraversalPhase::None,
+            "landing advances one corner and keeps 10 cm completion tolerance");
+}
+
 void TestNpcDoorTraversalStagesWaitsCrossesAndReleases()
 {
     game::SectorTopologyMap map = MakeDoorPortalMap();
@@ -6405,6 +6958,7 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
     object.staticModel.heightOffsetWorld = 0.625f;
     object.staticModel.scale = 1.75f;
     object.staticModel.collision = true;
+    object.staticModel.itemDropTarget = true;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -6424,6 +6978,8 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
           "assigned static prop reports its queued model request");
 
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Get<game::SectorObject>(entity).itemDropTarget,
+          "staticModel spawn preserves authored inventory-target opt-in");
     Check(world.IsAlive(entity)
                   && world.Has<game::SectorStaticModel>(entity)
                   && world.Has<game::SectorStaticModelCollider>(entity)
@@ -6541,6 +7097,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.5f;
     object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    object.dynamicModel.itemDropTarget = true;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -6548,6 +7105,8 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     Check(state.placedObjectEntities.size() == 1,
           "unassigned dynamic prop still spawns one runtime entity");
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Get<game::SectorObject>(entity).itemDropTarget,
+          "dynamicModel spawn preserves authored inventory-target opt-in");
     Check(world.Has<game::SectorDynamicModel>(entity)
                   && world.Has<engine::AnimatedModelInstance>(entity)
                   && world.Has<engine::AnimatedModelAnimator>(entity)
@@ -6630,6 +7189,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     object.npc.scale = 1.4f;
     object.npc.shadowMode =
             game::SectorDynamicModelShadowMode::Dynamic;
+    object.npc.itemDropTarget = true;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -6665,6 +7225,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
           "resolved NPC placement spawns one runtime entity");
     if (state.placedObjectEntities.empty()) return;
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Get<game::SectorObject>(entity).itemDropTarget,
+          "npc spawn preserves authored inventory-target opt-in");
     Check(world.Has<game::NpcRuntimeInstance>(entity)
                   && world.Has<game::NpcAnimationState>(entity)
                   && world.Has<game::Health>(entity)
@@ -11988,7 +12550,7 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
     game::ReserveSectorRuntimeObjectWorld(world, 8);
     const engine::Entity npc = world.CreateEntity();
     world.Add(npc, game::NpcRuntimeInstance{
-            "test", "target", game::NpcAction::Idle, false, true, 1.5f, 3.0f});
+            "test", "target", game::NpcAction::Idle, true, true, 1.5f, 3.0f});
     world.Add(npc, game::MakeHealth(100));
     game::NpcCombatState combat;
     combat.despawnOnDeath = true;
@@ -12112,6 +12674,98 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
           "corpse is destroyed after its configured fade finishes");
 }
 
+void TestNonHostileNpcsBlockPlayerAttacksHarmlessly()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const auto addNpc = [&](const char* id, float z, bool hostile) {
+        const engine::Entity entity = world.CreateEntity();
+        game::NpcRuntimeInstance npc;
+        npc.instanceId = id;
+        npc.hostile = hostile;
+        world.Add(entity, npc);
+        world.Add(entity, game::MakeHealth(100));
+        world.Add(entity, game::NpcCombatState{});
+        world.Add(entity, game::SectorObjectTransform{{0.0f, 0.0f, z}});
+        world.Add(entity, game::SectorObject{1, true});
+        return entity;
+    };
+    const auto friendly = addNpc("friendly", 0.0f, false);
+    const auto enemy = addNpc("enemy", 3.0f, true);
+    world.Add(friendly, game::NpcAiState{});
+    world.Add(friendly, game::NpcBoneImpactState{});
+    game::SectorNavigationWorld navigation;
+    game::NpcNavigationRuntime npcNavigation;
+    game::NpcNavigationRecord record;
+    record.entity = friendly;
+    record.occupied = true;
+    record.phase = game::NpcMovePhase::FollowingPath;
+    record.requestId = 42;
+    record.authority = game::NpcMoveAuthority::Patrol;
+    npcNavigation.records.push_back(record);
+    game::NpcAudioRuntime npcAudio;
+    game::NpcAudioRecord audio;
+    audio.entity = friendly;
+    audio.occupied = true;
+    audio.hurtSound = engine::SoundHandle{3, 1};
+    audio.deathSound = engine::SoundHandle{4, 1};
+    npcAudio.records.push_back(audio);
+    game::NpcAiRuntime npcAi;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> props;
+    game::FpsWeaponFiringDefinition firing;
+    firing.maximumRangeWorld = 20.0f;
+    firing.pellets = {true, 4, 0.0f};
+    firing.impact.damage = 1000;
+    firing.impact.staggerSeconds = 1.0f;
+    firing.impact.knockbackImpulseWorldPerSecond = 5.0f;
+    firing.impact.blood.enabled = true;
+    firing.impact.surfaceDebris.enabled = true;
+
+    for (bool held : {false, true}) {
+        world.Get<game::NpcRuntimeInstance>(friendly).conversationHeld = held;
+        for (float range : {1.5f, 20.0f}) {
+            game::FpsShotResult shot;
+            game::WeaponImpactEvent event;
+            Check(game::ResolvePlayerWeaponShot(world, nullptr, navigation, npcNavigation,
+                          nullptr, doors, props, {0, 0.8f, -1}, {0, 0, 1}, range,
+                          firing.impact, shot, event, &npcAudio, &npcAi)
+                          && shot.accepted && shot.hitKind == game::FpsShotHitKind::Npc
+                          && shot.targetEntity == friendly && event.kind == game::WeaponImpactKind::None,
+                  "short and long range attacks stop harmlessly at non-hostile NPCs");
+        }
+        game::WeaponPelletVolleyResult volley;
+        Check(game::ResolvePlayerWeaponPelletVolley(world, nullptr, navigation, npcNavigation,
+                      nullptr, doors, props, {0, 0.8f, -1}, {0, 0, 1}, 1, firing,
+                      volley, &npcAudio, &npcAi) && volley.hitCount == 4,
+              "non-hostile NPC blocks every aligned pellet");
+        for (int i = 0; i < volley.pelletCount; ++i) {
+            Check(volley.shots[i].targetEntity == friendly
+                          && volley.impacts[i].kind == game::WeaponImpactKind::None,
+                  "blocked pellets emit neither blood nor surface debris");
+        }
+        const auto& combat = world.Get<game::NpcCombatState>(friendly);
+        const auto& ai = world.Get<game::NpcAiState>(friendly);
+        const auto& bones = world.Get<game::NpcBoneImpactState>(friendly);
+        Check(world.Get<game::Health>(friendly).current == 100
+                      && world.Get<game::Health>(enemy).current == 100
+                      && !combat.dead && !combat.hurtAnimationRequested && !combat.deathAnimationRequested
+                      && Near(combat.staggerRemainingSeconds, 0.0f)
+                      && Near(combat.knockbackVelocity, Vector2{})
+                      && npcAudio.records.front().pendingEvent == game::NpcVocalEvent::None
+                      && ai.awareness == game::NpcAwarenessState::Unaware && !ai.directAlertPending
+                      && std::all_of(bones.activeBones.begin(), bones.activeBones.end(),
+                              [](uint8_t active) { return active == 0; }),
+              "repeated lethal attacks cause no health loss, combat reactions, alerts or pain sounds");
+        Check(world.Get<game::NpcRuntimeInstance>(friendly).conversationHeld == held
+                      && npcNavigation.records.front().occupied
+                      && npcNavigation.records.front().phase == game::NpcMovePhase::FollowingPath
+                      && npcNavigation.records.front().requestId == 42
+                      && Near(world.Get<game::SectorObjectTransform>(friendly).position, Vector3{}),
+              "harmless attacks preserve conversation holds, navigation and position");
+    }
+}
+
 void TestWeaponPelletVolleyDamageAndPretrace()
 {
     const auto addNpc = [](engine::World& world,
@@ -12121,7 +12775,7 @@ void TestWeaponPelletVolleyDamageAndPretrace()
         const engine::Entity entity = world.CreateEntity();
         world.Add(entity, game::NpcRuntimeInstance{
                 "test", instanceId, game::NpcAction::Idle,
-                false, true, 1.5f, 3.0f});
+                true, true, 1.5f, 3.0f});
         world.Add(entity, game::MakeHealth(healthValue));
         world.Add(entity, game::NpcCombatState{});
         world.Add(entity, game::SectorObjectTransform{position});
@@ -12465,16 +13119,23 @@ void TestNpcPatrolPlaybackModes()
           "per-instance script policy permanently stops patrol for the session");
 }
 
+void RunSectorPropDraggingTests();
+
 int main()
 {
+    RunSectorPropDraggingTests();
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
     TestNpcPatrolWaypointFacing();
     TestNpcPatrolPlaybackModes();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
+    TestNpcUseFacingAndNearbyHealthPacks();
+    TestNpcUseRetainsOcclusion();
     TestSectorUseTargetFindsBothLadderEndpoints();
     TestSectorItemUseTargetFallbackAndPendingGate();
     TestHeldObjectUseRayTargetOrderingAndOcclusion();
+    TestHeldObjectDoorGeometry();
+    TestItemDropTargetOptIn();
     TestItemRuntimeSpawnAndFocusedRemoval();
     TestSectorUseHighlightPulsesAndReleases();
     TestNpcVocalPriorityDelayAndShufflePolicy();
@@ -12534,6 +13195,8 @@ int main()
     TestSectorSwingDoorFullyOpenClearsApertureButStillCollides();
     TestSectorSwingDoorClosingSweepReopensWithoutTunneling();
     TestSectorDoorNavigationHoldsAndSlidingObstruction();
+    TestOpenDoorApproachDoesNotOrbit();
+    TestDoorApproachClearanceAndSweptArrival();
     TestNpcDoorTraversalStagesWaitsCrossesAndReleases();
     TestCutscenePlayerDoorTraversalHoldsOpensCrossesAndReleases();
     TestCrowdQueuesNpcAgentsThroughDoor();
@@ -12606,6 +13269,7 @@ int main()
     TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
     TestNpcScriptAnimationTimingAndReturnLoop();
     TestNpcWeaponDamageOcclusionAndCorpseFade();
+    TestNonHostileNpcsBlockPlayerAttacksHarmlessly();
     TestWeaponPelletVolleyDamageAndPretrace();
     TestNpcNavigationSmoothsSectorGeometryStairsVisually();
     TestNpcNavigationTraversesTurningStairsRepeatedly();

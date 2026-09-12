@@ -18,11 +18,14 @@ struct SectorEditorItemEditorSessionState {
 struct SectorEditorItemEditorState {
     bool open = false;
     ItemRegistry draftRegistry;
+    // Parallel to draftRegistry.items; identity protection must not depend on editable IDs.
+    std::vector<bool> newItems;
     int selectedIndex = -1;
     std::vector<std::string> listLabelStorage;
     std::vector<const char*> listLabels;
     std::vector<std::string> weaponLabelStorage;
     std::vector<const char*> weaponLabels;
+    std::array<char, kMaximumItemIdBytes + 1> idBuffer{};
     std::array<char, 385> titleBuffer{};
     std::array<char, 8193> descriptionBuffer{};
     std::array<char, 1024> modelPathBuffer{};

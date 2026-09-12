@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <limits>
 #include <set>
+#include <climits>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -1091,6 +1092,7 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
     }
 
     SectorPlacedDoor door;
+    door.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     door.instanceId = ReadOptionalString(value, "instanceId", context, door.instanceId);
     door.useTitle = ReadOptionalString(value, "useTitle", context, door.useTitle);
     door.canOpenScript = ReadOptionalString(
@@ -1282,6 +1284,7 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
     }
 
     SectorPlacedStaticModel staticModel;
+    staticModel.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     staticModel.modelPath = ReadOptionalString(value, "modelPath", context, staticModel.modelPath);
     staticModel.instanceId = ReadOptionalString(
             value, "instanceId", context, staticModel.instanceId);
@@ -1325,6 +1328,7 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
     }
 
     SectorPlacedDynamicModel model;
+    model.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     model.modelPath = ReadOptionalString(value, "modelPath", context, model.modelPath);
     model.instanceId = ReadOptionalString(value, "instanceId", context, model.instanceId);
     model.useTitle = ReadOptionalString(value, "useTitle", context, model.useTitle);
@@ -1333,6 +1337,16 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
     model.onUseScript = ReadOptionalString(
             value, "onUseScript", context, model.onUseScript);
     model.singleUse = ReadOptionalBool(value, "singleUse", context, model.singleUse);
+    if (value.contains("drag")) {
+        const auto& drag = value.at("drag");
+        model.drag.pathEditorId = ReadInt(drag, "pathEditorId", context + ".drag");
+        if (model.drag.pathEditorId <= 0) Fail(context + ".drag.pathEditorId must be positive");
+        model.drag.startAtEnd = ReadOptionalBool(drag, "startAtEnd", context, false);
+        model.drag.speedWorld = ReadOptionalPositiveFloat(drag, "speedWorld", context, 0.5f);
+        model.drag.startSound = ReadOptionalString(drag, "startSound", context, "");
+        model.drag.movingSound = ReadOptionalString(drag, "movingSound", context, "");
+        model.drag.endSound = ReadOptionalString(drag, "endSound", context, "");
+    }
     model.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
             value, "rotationXDegrees", context, 0.0f));
     model.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
@@ -1366,7 +1380,11 @@ SectorPlacedNpc ReadPlacedNpc(const Json& value, const std::string& context)
         Fail(context + " must be an object");
     }
     SectorPlacedNpc npc;
+    npc.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     npc.definitionId = ReadString(value, "definitionId", context);
+    npc.onUseScript = ReadOptionalString(value, "onUseScript", context, npc.onUseScript);
+    npc.useDistance = ReadOptionalPositiveFloat(value, "useDistance", context, npc.useDistance);
+    if (!IsValidSectorTriggerScriptName(npc.onUseScript)) Fail(context + ".onUseScript is invalid");
     npc.instanceId = ReadOptionalString(value, "instanceId", context, npc.instanceId);
     if (value.contains("patrolEditorId")) {
         npc.patrolEditorId = ReadInt(value, "patrolEditorId", context);
@@ -2349,6 +2367,7 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
             {"instanceId", door.instanceId},
             {"anchor", WriteSectorDoorAnchor(door.anchor)}
     };
+    if (door.itemDropTarget) json["itemDropTarget"] = true;
     if (door.useTitle != "door") json["useTitle"] = door.useTitle;
     if (!door.canOpenScript.empty()) json["canOpenScript"] = door.canOpenScript;
     if (!door.canCloseScript.empty()) json["canCloseScript"] = door.canCloseScript;
@@ -2573,6 +2592,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (!IsValidSectorScriptInstanceId(object.staticModel.instanceId)) {
                 Fail(context + ".staticModel.instanceId is invalid");
             }
+            if (object.staticModel.itemDropTarget) staticModel["itemDropTarget"] = true;
             staticModel["instanceId"] = object.staticModel.instanceId;
             if (!object.staticModel.modelPath.empty()) {
                 staticModel["modelPath"] = object.staticModel.modelPath;
@@ -2619,11 +2639,23 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (!IsValidSectorDynamicModelInstanceId(model.instanceId)) {
                 Fail(context + ".dynamicModel.instanceId is invalid");
             }
+            if (model.itemDropTarget) dynamicModel["itemDropTarget"] = true;
             dynamicModel["instanceId"] = model.instanceId;
             if (model.useTitle != "object") dynamicModel["useTitle"] = model.useTitle;
             if (model.useDistance != 1.5f) dynamicModel["useDistance"] = model.useDistance;
             if (!model.onUseScript.empty()) dynamicModel["onUseScript"] = model.onUseScript;
             if (model.singleUse) dynamicModel["singleUse"] = true;
+            if (model.drag.pathEditorId > 0) {
+                if (!std::isfinite(model.drag.speedWorld) || model.drag.speedWorld <= 0)
+                    Fail(context + ".dynamicModel.drag.speedWorld must be positive and finite");
+                Json drag{{"pathEditorId", model.drag.pathEditorId}};
+                if (model.drag.startAtEnd) drag["startAtEnd"] = true;
+                if (model.drag.speedWorld != 0.5f) drag["speedWorld"] = model.drag.speedWorld;
+                if (!model.drag.startSound.empty()) drag["startSound"] = model.drag.startSound;
+                if (!model.drag.movingSound.empty()) drag["movingSound"] = model.drag.movingSound;
+                if (!model.drag.endSound.empty()) drag["endSound"] = model.drag.endSound;
+                dynamicModel["drag"] = std::move(drag);
+            }
             if (!model.modelPath.empty()) dynamicModel["modelPath"] = model.modelPath;
             if (rotationXDegrees != 0.0f) dynamicModel["rotationXDegrees"] = rotationXDegrees;
             if (rotationZDegrees != 0.0f) dynamicModel["rotationZDegrees"] = rotationZDegrees;
@@ -2706,7 +2738,14 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
                             != SectorDynamicModelShadowMode::Dynamic) {
                 Fail(context + ".npc.shadowMode is invalid");
             }
+            if (!IsValidSectorTriggerScriptName(object.npc.onUseScript)
+                    || !std::isfinite(object.npc.useDistance) || object.npc.useDistance <= 0.0f) {
+                Fail(context + ".npc use settings are invalid");
+            }
             Json npc{{"definitionId", object.npc.definitionId}};
+            if (object.npc.itemDropTarget) npc["itemDropTarget"] = true;
+            if (!object.npc.onUseScript.empty()) npc["onUseScript"] = object.npc.onUseScript;
+            if (object.npc.useDistance != 2.5f) npc["useDistance"] = object.npc.useDistance;
             if (!object.npc.instanceId.empty()) npc["instanceId"] = object.npc.instanceId;
             if (object.npc.patrolEditorId > 0) {
                 npc["patrolEditorId"] = object.npc.patrolEditorId;
@@ -3841,6 +3880,10 @@ void ValidateRuntimeObjects(
                         Fail(objectContext + ".npc.instanceId duplicates another NPC instance ID");
                     }
                 }
+                if (!IsValidSectorTriggerScriptName(object.npc.onUseScript)
+                        || !std::isfinite(object.npc.useDistance) || object.npc.useDistance <= 0.0f) {
+                    Fail(objectContext + ".npc use settings are invalid");
+                }
                 if (object.npc.patrolEditorId < 0) {
                     Fail(objectContext
                             + ".npc.patrolEditorId must be zero or a positive integer");
@@ -4781,6 +4824,28 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    graph.nextPathId = value.value("nextPathId", 1);
+    if (value.contains("paths")) {
+        if (!value.at("paths").is_array()) Fail("authoringGraph.paths must be an array");
+        for (const auto& p : value.at("paths")) {
+            SectorAuthoringPath path;
+            path.editorId = ReadInt(p, "editorId", "path");
+            path.id = ReadString(p, "id", "path");
+            if (!p.at("waypoints").is_array()) Fail("path.waypoints must be an array");
+            for (const auto& w : p.at("waypoints")) {
+                path.waypoints.push_back({ReadInt(w, "id", "waypoint"),
+                        ReadCoord(w, "x", "waypoint"), ReadCoord(w, "z", "waypoint")});
+                if (path.waypoints.back().id >= INT_MAX) Fail("Waypoint identity exhausted");
+                path.nextWaypointId = std::max(path.nextWaypointId, path.waypoints.back().id + 1);
+            }
+            path.nextWaypointId = std::max(path.nextWaypointId, p.value("nextWaypointId", 1));
+            std::string error;
+            if (!ValidateSectorPath(path, error)) Fail(error);
+            if (path.editorId >= INT_MAX) Fail("Path identity exhausted");
+            graph.nextPathId = std::max(graph.nextPathId, path.editorId + 1);
+            graph.paths.push_back(std::move(path));
+        }
+    }
     const auto patrolsIt = value.find("patrols");
     if (patrolsIt != value.end()) {
         if (!patrolsIt->is_array()) {
@@ -5400,6 +5465,17 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         }
     }
 
+    if (graph.nextPathId > 1) graphJson["nextPathId"] = graph.nextPathId;
+    if (!graph.paths.empty()) {
+        graphJson["paths"] = Json::array();
+        for (const auto& path : graph.paths) {
+            Json p{{"editorId", path.editorId}, {"id", path.id},
+                    {"nextWaypointId", path.nextWaypointId}, {"waypoints", Json::array()}};
+            for (const auto& w : path.waypoints)
+                p["waypoints"].push_back(Json{{"id", w.id}, {"x", w.x}, {"z", w.z}});
+            graphJson["paths"].push_back(std::move(p));
+        }
+    }
     if (!graph.patrols.empty()) {
         const std::vector<SectorAuthoringValidationIssue> issues =
                 ValidateSectorAuthoringGraphReferences(graph);

@@ -11,18 +11,21 @@ namespace engine {
 class AssetManager;
 class World;
 struct FontAsset;
+struct ModelAsset;
 }
 
 namespace game {
 
 class SectorCollisionWorld;
 struct SectorTopologyMap;
+struct SectorRuntimeObjectState;
 
 enum class SectorUseTargetKind {
     None,
     Item,
     StaticProp,
     DynamicProp,
+    Npc,
     Door,
     Ladder,
     DuctAccess
@@ -36,6 +39,7 @@ struct SectorUseTarget {
     float distance = 0.0f;
     int ladderPrimitiveId = -1;
     SectorLadderEndpoint ladderEndpoint = SectorLadderEndpoint::Bottom;
+    bool draggable = false;
 };
 
 struct SectorUseHighlight {
@@ -65,7 +69,19 @@ SectorUseTarget FindSectorUseTarget(
         bool includeDynamicProps = true,
         const SectorTopologyMap* topologyMap = nullptr,
         float ductInteractionDistanceWorld = 1.75f,
-        int viewerSectorId = 0);
+        int viewerSectorId = 0,
+        const SectorRuntimeObjectState* runtimeObjects = nullptr);
+
+// Also accepts CPU-only model bounds; animation envelopes do not define Talk targeting.
+void ConsiderSectorNpcUseTarget(
+        engine::World& world,
+        engine::Entity entity,
+        const engine::ModelAsset* modelAsset,
+        Vector3 eyePosition,
+        Vector3 forward,
+        const SectorCollisionWorld* collisionWorld,
+        const SectorRuntimeObjectState* runtimeObjects,
+        SectorUseTarget& best);
 
 void ConsiderSectorObjectUseBounds(
         SectorObjectUseTargetAccumulator& accumulator,
@@ -73,6 +89,14 @@ void ConsiderSectorObjectUseBounds(
         engine::Entity entity,
         SectorUseTargetKind kind,
         BoundingBox bounds,
+        bool selectable);
+void ConsiderSectorObjectUseTransformedBounds(
+        SectorObjectUseTargetAccumulator& accumulator,
+        Ray ray,
+        engine::Entity entity,
+        SectorUseTargetKind kind,
+        BoundingBox localBounds,
+        Matrix transform,
         bool selectable);
 SectorUseTarget FinishSectorObjectUseTarget(
         const SectorObjectUseTargetAccumulator& accumulator,

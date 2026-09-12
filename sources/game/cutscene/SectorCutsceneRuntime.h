@@ -111,22 +111,26 @@ struct SectorCutsceneCaptionState {
     size_t visibleByteCount = 0;
     double revealSeconds = 0.0;
     double holdSeconds = 0.0;
+    bool explicitHold = false;
     double fadeInSeconds = 0.0;
     double fadeOutSeconds = 0.35;
     double elapsedSeconds = 0.0;
     float opacity = 0.0f;
     bool active = false;
     engine::Entity speaker = engine::NullEntity();
+    bool playerSpeaker = false;
     engine::DialogueMood mood = engine::DialogueMood::Neutral;
     engine::DialogueTimeline speechTimeline;
     bool voiceTiming = true;
     bool speechDriven = false;
     bool speechFinished = false;
+    bool skippedForReading = false;
 };
 
 // Borrowed load-time data used only while constructing a caption.
 struct SectorCutsceneSpeechOptions {
     engine::Entity speaker = engine::NullEntity();
+    bool playerSpeaker = false;
     engine::DialogueMood mood = engine::DialogueMood::Neutral;
     const engine::DialogueVoice* voice = nullptr;
     const engine::DialogueSelectionHistory* history = nullptr;
@@ -164,6 +168,7 @@ struct SectorCutsceneRuntime {
     SectorCutscenePresentationState presentation;
     engine::DialoguePlayback speechPlayback;
     engine::Entity speechSpeaker = engine::NullEntity();
+    engine::DialogueSelectionHistory playerSpeechHistory;
     engine::ScriptTaskHandle controlsOwnerTask{};
     uint64_t nextToken = 1;
     bool controlsEnabled = true;
@@ -267,6 +272,9 @@ void BindSectorCutsceneCaptionOperation(
         uint64_t token,
         engine::ScriptOperationHandle operation);
 void CancelSectorCutsceneCaption(SectorCutsceneRuntime& runtime, uint64_t token);
+// First voiced advance reveals and holds; the next advance dismisses immediately.
+bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts,
+        bool voicesEnabled);
 void SetSectorCutsceneCaptionVoiceTiming(SectorCutsceneRuntime& runtime, bool enabled);
 void UpdateSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& world,
         engine::AssetManager& assets, engine::AudioSystem& audio, float dt,

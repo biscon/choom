@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_editor/services/paths/SectorEditorPathEditingService.h"
 
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
@@ -76,6 +77,9 @@ struct SectorEditorToolContext {
     std::function<SectorEditorPickTarget()> currentPickSelectionTarget;
     std::function<SectorEditorSelectionServiceContext()> buildSelectionServiceContext;
     std::function<SectorEditorManipulationServiceContext()> buildManipulationServiceContext;
+    SectorEditorPathEditingService* pathEditing = nullptr;
+    int highlightedPathId = 0;
+
 };
 
 struct SectorEditorToolModule {

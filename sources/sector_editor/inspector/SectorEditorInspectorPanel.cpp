@@ -1,4 +1,6 @@
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
+#include "sector_editor/inspector/SectorEditorPathInspector.h"
+#include "sector_editor/services/paths/SectorEditorPathEditingService.h"
 
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
@@ -842,6 +844,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     bool deleteRuntimeObjectRequested = false;
     const auto inspectorContentHeight = [&]() {
+        if (context.pathEditing && context.pathEditing->Selected()) return MeasureSectorEditorPathInspector(rowH,gap);
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
             return 120.0f;
         }
@@ -1024,6 +1027,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     const float contentW = scroll.viewport.width;
     float y = 0.0f;
+    if (context.pathEditing && context.pathEditing->Selected()) {
+        DrawSectorEditorPathInspector(context,contentW,rowH,gap);
+        engine::EndScrollArea(ui,config,input,scroll,uiState.inspectorScroll);
+        engine::EndPanel(ui,config,panel); return result;
+    }
 
     if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
         engine::Text(

@@ -241,6 +241,13 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(ui_text_edit_layout_tests
+            tests/UITextEditLayoutTests.cpp
+            sources/engine/ui/UITextEditLayout.cpp)
+    target_include_directories(ui_text_edit_layout_tests PRIVATE sources)
+    target_link_libraries(ui_text_edit_layout_tests PRIVATE raylib)
+    add_test(NAME ui_text_edit_layout COMMAND ui_text_edit_layout_tests)
+
     add_executable(shader_source_tests tests/ShaderSourceTests.cpp)
     target_link_libraries(shader_source_tests PRIVATE shader_source)
     target_compile_definitions(shader_source_tests PRIVATE
@@ -499,6 +506,8 @@ if(BUILD_TESTING)
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
+            sources/sector_editor/services/paths/SectorEditorPathEditingService.cpp
+            sources/sector_editor/tools/path/SectorEditorPathTool.cpp
             sources/sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.cpp
             sources/sector_editor/services/triggers/SectorEditorTriggerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
@@ -536,6 +545,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorPropDragging.cpp
             sources/sector_demo/SectorSwingDoorCatalog.cpp
             sources/sector_demo/SectorStaticModelCollision.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -728,6 +738,12 @@ if(BUILD_TESTING)
     target_link_libraries(sector_fps_controller_tests PRIVATE raylib)
     add_test(NAME sector_fps_controller COMMAND sector_fps_controller_tests)
 
+    add_executable(sector_path_math_tests tests/SectorPathMathTests.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp)
+    target_include_directories(sector_path_math_tests PRIVATE sources)
+    target_link_libraries(sector_path_math_tests PRIVATE raylib)
+    add_test(NAME sector_path_math COMMAND sector_path_math_tests)
+
     add_executable(sector_ladder_interaction_tests
             tests/SectorLadderInteractionTests.cpp
             sources/sector_demo/SectorLadderInteraction.cpp
@@ -745,7 +761,12 @@ if(BUILD_TESTING)
 
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
+            tests/SectorPropDraggingTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/game/items/ItemInventory.cpp
+            tests/SectorDialogueTests.cpp
+            tests/DialogueCameraIdleTests.cpp
+            tests/SectorConversationTests.cpp
             sources/game/save/GameSaveRuntime.cpp
             sources/game/items/ItemAssets.cpp
             sources/game/items/ItemDefinitions.cpp
@@ -782,6 +803,10 @@ if(BUILD_TESTING)
             sources/game/SectorScriptBindings.cpp
             sources/game/cutscene/SectorCutsceneRuntime.cpp
             sources/game/cutscene/SectorCutsceneSpeech.cpp
+            sources/game/dialogue/SectorDialogue.cpp
+            sources/game/dialogue/DialogueCameraIdle.cpp
+            sources/game/dialogue/SectorConversation.cpp
+            sources/engine/input/Input.cpp
             sources/engine/audio/DialogueTimeline.cpp
             sources/engine/audio/DialogueSpeech.cpp
             sources/engine/audio/AudioSystem.cpp
@@ -809,6 +834,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDuctInteraction.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorPropDragging.cpp
             sources/sector_demo/SectorUseInteraction.cpp
             sources/sector_demo/renderer/SectorImpactParticleSystem.cpp
             sources/sector_demo/SectorSwingDoorCatalog.cpp
@@ -935,6 +961,9 @@ if(BUILD_TESTING)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
+            sources/engine/ui/UI.cpp
+            sources/engine/ui/UITextEditLayout.cpp
+            sources/engine/input/Input.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp

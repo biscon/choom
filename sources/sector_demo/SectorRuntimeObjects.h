@@ -48,6 +48,7 @@ struct SectorObjectTransform {
 struct SectorObject {
     int currentSectorId = -1;
     bool visible = true;
+    bool itemDropTarget = false;
 };
 
 struct SectorObjectLighting {
@@ -114,6 +115,7 @@ struct SectorItem {
     SectorItemOrigin origin = SectorItemOrigin::Authored;
     bool takePending = false;
     ItemPresentationState presentation;
+    std::vector<ItemSourceQuantity> sourceQuantities;
 };
 
 struct SectorWindow {
@@ -343,6 +345,9 @@ void UpdateSectorRuntimeObjects(
         const Vector3* playerPosition = nullptr,
         const SectorDoorPlayerObstacle* playerObstacle = nullptr,
         const std::vector<SectorDoorPlayerObstacle>* doorObstacles = nullptr);
+
+void RefreshSectorMovedPropLighting(engine::World& world, SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map, engine::Entity entity);
 
 void UpdateSectorObjectCurrentSectorSystem(
         engine::World& world,

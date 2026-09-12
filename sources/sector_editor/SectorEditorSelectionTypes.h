@@ -52,6 +52,7 @@ enum class SectorAuthoringSelectionKind {
     FogVolume,
     ReflectionProbe,
     LevelMarker,
+    Path,
     SoundEmitter,
     Trigger,
     StructuralPrimitive
@@ -65,6 +66,7 @@ struct SectorAuthoringSelectionTarget {
     int fogVolumeId = -1;
     int reflectionProbeId = -1;
     int levelMarkerId = -1;
+    int pathId = -1;
     int soundEmitterId = -1;
     int triggerId = -1;
     int structuralPrimitiveId = -1;
@@ -145,6 +147,7 @@ enum class SectorEditorPickKind {
     AuthoringFogVolume,
     AuthoringReflectionProbe,
     LevelMarker,
+    Path,
     SoundEmitter,
     Trigger
 };

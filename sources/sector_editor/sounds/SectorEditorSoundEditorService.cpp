@@ -286,6 +286,11 @@ std::vector<std::string> SectorEditorSoundEditorService::UsageLabels(std::string
                 + std::to_string(emitter.id) + ")");
     }
     for (const SectorPlacedRuntimeObject& object : topologyMap_.runtimeObjects) {
+        if (object.kind == "dynamic_model") {
+            const auto& drag = object.dynamicModel.drag;
+            if (drag.startSound == id || drag.movingSound == id || drag.endSound == id)
+                labels.push_back("Dynamic prop " + object.dynamicModel.useTitle + " drag sound");
+        }
         if (object.kind != "door") continue;
         const std::string doorName = object.door.instanceId.empty()
                 ? "Door " + std::to_string(object.id)
@@ -389,6 +394,11 @@ bool SectorEditorSoundEditorService::ValidateDrafts(std::string& error) const
         }
         if (draft.definition.type != SectorSoundType::Sound) {
             for (const SectorPlacedRuntimeObject& object : topologyMap_.runtimeObjects) {
+                const auto& drag = object.dynamicModel.drag;
+                if (object.kind == "dynamic_model" && (drag.startSound == draft.definition.id
+                        || drag.movingSound == draft.definition.id || drag.endSound == draft.definition.id)) {
+                    error = "Drag sound '" + draft.definition.id + "' must be Sound"; return false;
+                }
                 if (object.kind == "door" && (object.door.openSoundId == draft.definition.id
                         || object.door.closeSoundId == draft.definition.id)) {
                     error = "Door sound '" + draft.definition.id + "' must be Sound";

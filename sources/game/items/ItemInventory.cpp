@@ -17,6 +17,65 @@ void WarnCapacity(const char* collection, std::uint64_t& counter)
             collection);
 }
 
+void AppendSource(
+        ItemInventoryEntry& target, std::string_view instanceId,
+        std::uint64_t quantity, std::uint64_t& warnings)
+{
+    if (quantity == 0) return;
+    auto& sources = target.sourceQuantities;
+    if (!sources.empty() && sources.back().instanceId == instanceId) {
+        sources.back().quantity += quantity;
+        return;
+    }
+    if (sources.size() == sources.capacity()) {
+        WarnCapacity("item source quantity", warnings);
+        sources.reserve(std::max<std::size_t>(4, sources.size() * 2));
+    }
+    sources.push_back({std::string{instanceId}, quantity});
+}
+
+// Append before increasing target.quantity. Missing sources represent anonymous
+// legacy stock, not the identity of a newly generated world drop.
+void AppendSourceRange(
+        ItemInventoryEntry& target,
+        const std::vector<ItemSourceQuantity>* sources,
+        std::string_view fallbackId, std::uint64_t offset,
+        std::uint64_t quantity, std::uint64_t& warnings)
+{
+    if (quantity == 0) return;
+    if (target.sourceQuantities.empty() && target.quantity != 0) {
+        AppendSource(target, {}, target.quantity, warnings);
+    }
+    if (sources == nullptr || sources->empty()) {
+        AppendSource(target, fallbackId, quantity, warnings);
+        return;
+    }
+    for (const ItemSourceQuantity& source : *sources) {
+        if (offset >= source.quantity) {
+            offset -= source.quantity;
+            continue;
+        }
+        const std::uint64_t transfer = std::min(quantity, source.quantity - offset);
+        AppendSource(target, source.instanceId, transfer, warnings);
+        quantity -= transfer;
+        offset = 0;
+        if (quantity == 0) break;
+    }
+}
+
+void RemoveSourcePrefix(ItemInventoryEntry& entry, std::uint64_t quantity)
+{
+    auto& sources = entry.sourceQuantities;
+    std::size_t removed = 0;
+    while (removed < sources.size() && quantity != 0) {
+        const std::uint64_t transfer = std::min(quantity, sources[removed].quantity);
+        sources[removed].quantity -= transfer;
+        quantity -= transfer;
+        if (sources[removed].quantity == 0) ++removed;
+    }
+    sources.erase(sources.begin(), sources.begin() + removed);
+}
+
 bool EntriesCanStack(
         const ItemInventoryEntry& left,
         const ItemInventoryEntry& right)
@@ -110,6 +169,29 @@ bool InventoryOwnsWeapon(
     return false;
 }
 
+bool HasInventoryItemInstance(
+        const PlayerInventoryState& inventory, std::string_view instanceId)
+{
+    if (instanceId.empty()) return false;
+    for (const ItemInventoryEntry& entry : inventory.entries) {
+        if (entry.quantity == 0) continue;
+        for (const ItemSourceQuantity& source : entry.sourceQuantities) {
+            if (source.quantity != 0 && source.instanceId == instanceId) return true;
+        }
+    }
+    return false;
+}
+
+bool HasInventoryItemDefinition(
+        const PlayerInventoryState& inventory, std::string_view definitionId)
+{
+    if (definitionId.empty()) return false;
+    for (const ItemInventoryEntry& entry : inventory.entries) {
+        if (entry.quantity != 0 && entry.definitionId == definitionId) return true;
+    }
+    return false;
+}
+
 std::uint64_t CountInventoryAmmoForWeapon(
         const PlayerInventoryState& inventory,
         const ItemRegistry& registry,
@@ -157,6 +239,7 @@ std::uint64_t ConsumeInventoryAmmoForWeapon(
         if (best == inventory.entries.end()) break;
         const std::uint64_t transfer = std::min(
                 maximumQuantity - consumed, best->quantity);
+        RemoveSourcePrefix(*best, transfer);
         best->quantity -= transfer;
         consumed += transfer;
         if (best->quantity == 0) inventory.entries.erase(best);
@@ -187,6 +270,7 @@ bool RemoveInventoryEntryQuantity(
         inventory.entries.erase(found);
         if (removedIndex != nullptr) *removedIndex = affectedSlot;
     } else {
+        RemoveSourcePrefix(*found, quantity);
         found->quantity -= quantity;
         if (removedIndex != nullptr) *removedIndex = affectedSlot;
     }
@@ -342,16 +426,34 @@ ItemPickupPlan PreflightItemPickup(
         const PlayerInventoryApplicationSettings& settings,
         std::string_view definitionId,
         std::uint64_t quantity,
-        std::string_view onUseScript)
+        std::string_view onUseScript,
+        std::string_view sourceInstanceId,
+        const std::vector<ItemSourceQuantity>* sourceQuantities)
 {
     ItemPickupPlan plan;
     plan.quantity = quantity;
+    plan.sourceInstanceId = sourceInstanceId;
+    plan.sourceQuantities = sourceQuantities;
     plan.maximumSlots = settings.maxSlots;
     plan.definition = FindItemDefinition(registry, definitionId);
     if (plan.definition == nullptr) return plan;
     if (quantity == 0 || quantity > 1000000u) {
         plan.result = ItemPickupCapacityResult::InvalidQuantity;
         return plan;
+    }
+    if (sourceQuantities != nullptr && !sourceQuantities->empty()) {
+        std::uint64_t remainingSources = quantity;
+        for (const ItemSourceQuantity& source : *sourceQuantities) {
+            if (source.quantity == 0 || source.quantity > remainingSources) {
+                plan.result = ItemPickupCapacityResult::InvalidQuantity;
+                return plan;
+            }
+            remainingSources -= source.quantity;
+        }
+        if (remainingSources != 0) {
+            plan.result = ItemPickupCapacityResult::InvalidQuantity;
+            return plan;
+        }
     }
     bool validWeight = false;
     const double currentWeight = ComputeInventoryWeightKg(
@@ -457,6 +559,8 @@ bool CommitItemPickup(
         const std::uint64_t available = entry->quantity < maximum
                 ? maximum - entry->quantity : 0u;
         const std::uint64_t transfer = std::min(remaining, available);
+        AppendSourceRange(*entry, plan.sourceQuantities, plan.sourceInstanceId,
+                plan.quantity - remaining, transfer, inventory.capacityWarnings);
         entry->quantity += transfer;
         remaining -= transfer;
     }
@@ -471,7 +575,12 @@ bool CommitItemPickup(
         ItemInventoryEntry entry;
         entry.runtimeId = inventory.nextRuntimeId++;
         entry.definitionId = plan.definition->id;
-        entry.quantity = std::min(remaining, maximum);
+        entry.quantity = 0;
+        entry.sourceQuantities.reserve(4);
+        const std::uint64_t transfer = std::min(remaining, maximum);
+        AppendSourceRange(entry, plan.sourceQuantities, plan.sourceInstanceId,
+                plan.quantity - remaining, transfer, inventory.capacityWarnings);
+        entry.quantity = transfer;
         entry.onUseScript = retainedUse;
         entry.slotIndex = slotIndex;
         inventory.entries.push_back(std::move(entry));
@@ -547,6 +656,9 @@ ItemInventoryTransactionResult TransferItemInventoryEntry(
     const std::uint64_t transfer = std::min(sourceIt->quantity, available);
     if (transfer == 0) return result;
     const std::uint64_t targetRuntimeId = target->runtimeId;
+    AppendSourceRange(*target, &sourceIt->sourceQuantities, {}, 0, transfer,
+            inventory.capacityWarnings);
+    RemoveSourcePrefix(*sourceIt, transfer);
     target->quantity += transfer;
     sourceIt->quantity -= transfer;
     if (sourceIt->quantity != 0) {
@@ -592,8 +704,15 @@ ItemInventoryTransactionResult SplitItemInventoryEntry(
         inventory.entries.reserve(inventory.entries.size() + 1u);
     }
     ItemInventoryEntry& source = inventory.entries[sourceIndex];
+    ItemInventoryEntry split;
+    split.definitionId = source.definitionId;
+    split.onUseScript = source.onUseScript;
+    split.quantity = 0;
+    split.sourceQuantities.reserve(std::max<std::size_t>(4, source.sourceQuantities.size()));
+    AppendSourceRange(split, &source.sourceQuantities, {}, 0, quantity,
+            inventory.capacityWarnings);
+    RemoveSourcePrefix(source, quantity);
     source.quantity -= quantity;
-    ItemInventoryEntry split = source;
     split.runtimeId = inventory.nextRuntimeId++;
     split.quantity = quantity;
     split.slotIndex = targetSlotIndex;

@@ -727,8 +727,11 @@ void UpdateSectorEditorGameplayPreview(
             && ladderPhase != SectorLadderTraversalPhase::Dismounting
             && ductPhase != SectorDuctTraversalPhase::Entering
             && ductPhase != SectorDuctTraversalPhase::Exiting;
-    UpdateSectorFpsMouseLook(
+    UpdateSectorPropDragMouseLook(
+            world,
+            controllerState.propDrag,
             controllerState.fpsControllerState,
+            controllerState.fpsControllerConfig,
             cameraSettings,
             lookInput,
             dt);

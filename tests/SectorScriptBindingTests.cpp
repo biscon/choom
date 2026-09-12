@@ -4,6 +4,7 @@
 #include "engine/systems/AnimatedModelSystem.h"
 #include "lua.hpp"
 #include "game/Health.h"
+#include "game/items/ItemInventory.h"
 #include "game/SectorScriptBindings.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/navigation/SectorNavigationWorld.h"
@@ -18,6 +19,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTriggers.h"
 
+#include <raymath.h>
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -475,6 +477,66 @@ void NpcAnimationRemovalResolvesOperation()
     assert(fixture.runtime.operations[operation.index].state == engine::ScriptOperationState::Failed);
 }
 
+void InventoryQueriesReadLiveContents()
+{
+    NpcScriptFixture fixture;
+    game::PlayerInventoryState inventory;
+    inventory.entries.push_back({1, "blue_key", 1, {}, 0,
+            {{"door_key", 1}}});
+    inventory.entries.push_back({2, "blue_key", 1, {}, 1,
+            {{"other_key", 1}}});
+    inventory.entries.push_back({3, "legacy_ammo", 10, {}, 2});
+    fixture.host.playerInventory = &inventory;
+    fixture.files.Write(R"(
+function refreshMenu()
+    local hidden = hiddenOptions({ locked_door = hasInventoryItemInstance("door_key") })
+    setFlag("locked_door_hidden", #hidden == 1 and hidden[1] == "locked_door")
+end
+function init()
+    assert(hasInventoryItemInstance("door_key"))
+    assert(hasInventoryItemInstance("other_key"))
+    assert(hasInventoryItemDefinition("blue_key"))
+    assert(hasInventoryItemDefinition("legacy_ammo"))
+    assert(not hasInventoryItemInstance("legacy_ammo"))
+    assert(not hasInventoryItemInstance("blue_key"))
+    assert(not hasInventoryItemDefinition("door_key"))
+    assert(not hasInventoryItemInstance("DOOR_KEY"))
+    assert(not hasInventoryItemInstance(""))
+    assert(not hasInventoryItemDefinition(""))
+    assert(not hasInventoryItemDefinition("unknown"))
+    assert(not pcall(hasInventoryItemInstance, 123))
+    assert(not pcall(hasInventoryItemDefinition, {}))
+    assert(not pcall(hasInventoryItemInstance))
+    refreshMenu()
+end
+function unavailable()
+    local value, reason = hasInventoryItemInstance("door_key")
+    assert(value == nil and reason == "player inventory is unavailable")
+    value, reason = hasInventoryItemDefinition("blue_key")
+    assert(value == nil and reason == "player inventory is unavailable")
+end
+)");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent,
+            fixture.host, fixture.files));
+    assert(fixture.persistent.bools.at("locked_door_hidden"));
+    assert(game::RemoveInventoryEntryQuantity(inventory, 1, 1));
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "refreshMenu").result
+            == engine::ScriptCallResult::Completed);
+    assert(!fixture.persistent.bools.at("locked_door_hidden"));
+    assert(game::HasInventoryItemDefinition(inventory, "blue_key"));
+    // The query searches the entire inventory, with no current-map filtering.
+    inventory.entries.push_back({4, "blue_key", 1, {}, 3, {{"door_key", 1}}});
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "refreshMenu").result
+            == engine::ScriptCallResult::Completed);
+    assert(fixture.persistent.bools.at("locked_door_hidden"));
+    fixture.host.playerInventory = nullptr;
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "unavailable").result
+            == engine::ScriptCallResult::Completed);
+    fixture.host.playerInventory = &inventory;
+    game::ResetSectorScriptHost(fixture.host);
+    assert(fixture.host.playerInventory == nullptr);
+}
+
 void HealthBindingsSetPlayerAndNpcCurrentHealth()
 {
     NpcScriptFixture fixture;
@@ -504,6 +566,7 @@ end
 void SettingNpcHealthToZeroUsesNpcDeathState()
 {
     NpcScriptFixture fixture;
+    assert(!fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc).hostile);
     fixture.files.Write(R"(
 function init()
     assert(setNpcHealth("script_guard", 0))
@@ -875,6 +938,7 @@ end
 void KillingMovingNpcStopsRunawayPatrolWithoutFreezing()
 {
     NpcScriptFixture fixture;
+    fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc).hostile = true;
     fixture.files.Write(R"(
 function init()
     assert(startScript("patrol"))
@@ -1793,6 +1857,193 @@ void SpeechCompletionGatesCaptionHold()
     game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
 }
 
+void AutomaticVoicedSpeechReturnsAfterShortHoldAndFade()
+{
+    for (bool player : {false, true}) {
+        for (const std::string& text : {std::string{"Wait."}, std::string{"Wait..."}, std::string(200, 'a') + "."}) {
+            NpcScriptFixture fixture;
+            fixture.files.Write("function init() assert(say(" + std::string(player ? "" : "'script_guard', ")
+                    + "'" + text + "')); setFlag('speech_done', true) end");
+            assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+            auto& caption = fixture.cutscene.caption;
+            assert(!caption.explicitHold && caption.holdSeconds == 0.35);
+            assert(caption.revealSeconds == caption.speechTimeline.reveals.back().seconds);
+            const auto update = [&](float dt) {
+                game::UpdateSectorCutsceneSpeech(fixture.cutscene, fixture.context.world,
+                        fixture.context.assets, fixture.context.audio, dt, true);
+                game::UpdateSectorCutsceneTimelines(fixture.cutscene, fixture.runtime, dt);
+                engine::ScriptSystemUpdate(fixture.context, fixture.runtime, dt);
+            };
+            for (int i = 0; i < 2000 && !caption.speechFinished; ++i) update(0.01f);
+            assert(caption.speechFinished && caption.visibleByteCount == text.size());
+            assert(caption.active && caption.elapsedSeconds == caption.revealSeconds);
+            update(0.34f);
+            assert(caption.active && caption.opacity == 1.0f);
+            const double elapsed = caption.elapsedSeconds;
+            // Frozen gameplay time must not consume the shortened hold.
+            update(0.0f);
+            assert(caption.elapsedSeconds == elapsed && caption.opacity == 1.0f);
+            update(0.02f);
+            assert(caption.active && caption.opacity < 1.0f);
+            update(0.32f);
+            assert(caption.active);
+            assert(fixture.persistent.bools.count("speech_done") == 0);
+            update(0.03f);
+            assert(!caption.active);
+            assert(fixture.persistent.bools.at("speech_done"));
+        }
+    }
+}
+
+void SkippedVoicedSpeechHoldsBeforeCompletingScript()
+{
+    for (bool player : {false, true}) {
+        for (bool async : {false, true}) {
+            for (int phase = 0; phase < 3; ++phase) {
+                NpcScriptFixture fixture;
+                const std::string text = u8"Wait, élan! Another person...";
+                const std::string arguments = (player ? "" : "'script_guard', ")
+                        + std::string("'") + text + "'"
+                        + (async ? (player ? ", {holdMs=5000}" : ", nil, 5000") : "");
+                const std::string call = (async ? "await(startSay(" : "say(")
+                        + arguments + (async ? "))" : ")");
+                fixture.files.Write("function init() assert(" + call
+                        + "); setInt('completions', getInt('completions') + 1) end");
+                assert(Create(fixture.context, fixture.runtime, fixture.persistent,
+                        fixture.host, fixture.files));
+                auto& caption = fixture.cutscene.caption;
+                auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+                const auto update = [&](float dt, bool voices = true) {
+                    game::UpdateSectorCutsceneSpeech(fixture.cutscene, fixture.context.world,
+                            fixture.context.assets, fixture.context.audio, dt, voices);
+                    game::UpdateSectorCutsceneTimelines(fixture.cutscene, fixture.runtime, dt);
+                    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, dt);
+                };
+                update(0.01f);
+                assert(caption.visibleByteCount < text.size());
+                if (phase > 0) {
+                    for (int frame = 0; frame < 2000 && !caption.speechFinished; ++frame)
+                        update(0.01f);
+                    assert(caption.speechFinished && caption.active);
+                    if (phase == 2) {
+                        update(static_cast<float>(caption.holdSeconds + 0.1));
+                        assert(caption.active && caption.opacity < 1.0f);
+                    }
+                }
+                assert(game::AdvanceSectorCutsceneSpeech(fixture.cutscene, fixture.runtime, true));
+                assert(caption.active && caption.skippedForReading && caption.speechFinished);
+                assert(caption.visibleByteCount == text.size() && caption.opacity == 1.0f);
+                const auto nextCue = fixture.cutscene.speechPlayback.sequence.nextCue;
+                update(0);
+                assert(!npc.dialogueSpeaking && engine::IsNull(fixture.cutscene.speechSpeaker));
+                update(0.75f);
+                const double elapsed = caption.elapsedSeconds;
+                // A paused game does not advance gameplay time (no audio device in this fixture).
+                update(0.0f);
+                assert(caption.elapsedSeconds == elapsed && caption.opacity == 1.0f);
+                update(0.75f, false);
+                update(0.49f, true);
+                assert(caption.active && caption.opacity == 1.0f);
+                assert(caption.visibleByteCount == text.size());
+                assert(fixture.cutscene.speechPlayback.sequence.nextCue == nextCue);
+                assert(fixture.persistent.ints.count("completions") == 0);
+                update(0.02f);
+                assert(caption.active && caption.opacity > 0.0f && caption.opacity < 1.0f);
+                const float opacity = caption.opacity;
+                update(0, false);
+                update(0, true);
+                assert(caption.opacity == opacity);
+                update(0.32f);
+                assert(caption.active && fixture.persistent.ints.count("completions") == 0);
+                update(0.03f);
+                assert(!caption.active && fixture.persistent.ints.at("completions") == 1);
+                assert(!game::AdvanceSectorCutsceneSpeech(fixture.cutscene, fixture.runtime, true));
+                update(1.0f);
+                assert(fixture.persistent.ints.at("completions") == 1);
+            }
+        }
+    }
+}
+
+void SkippedSpeechReplacementResetsReadingState()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime scripts;
+    game::SectorCutsceneRuntime cutscene;
+    game::InitializeSectorCutsceneRuntime(cutscene);
+    uint64_t token = 0;
+    std::string error;
+    const auto begin = [&](game::SectorCutsceneCaptionKind kind) {
+        assert(game::BeginSectorCutsceneCaption(cutscene, kind,
+                game::SectorCutsceneTextPosition::Bottom, "Another line.", nullptr, token, error));
+    };
+    begin(game::SectorCutsceneCaptionKind::Say);
+    // The current setting, rather than a stale voiceTiming value, decides skipping.
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, true));
+    assert(cutscene.caption.active && cutscene.caption.skippedForReading);
+    game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 1.0f, true);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 1.0f);
+    assert(cutscene.caption.opacity == 1.0f);
+    assert(cutscene.caption.visibleByteCount == cutscene.caption.text.size());
+    begin(game::SectorCutsceneCaptionKind::Say);
+    assert(!cutscene.caption.skippedForReading && !cutscene.caption.speechFinished);
+    assert(cutscene.caption.visibleByteCount == 0 && cutscene.caption.holdSeconds == 0.35);
+    assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, false));
+    assert(!cutscene.caption.active);
+    begin(game::SectorCutsceneCaptionKind::Text);
+    assert(!game::AdvanceSectorCutsceneSpeech(cutscene, scripts, true));
+    assert(cutscene.caption.active && !cutscene.caption.skippedForReading);
+}
+
+void AutomaticCaptionHoldsRespectVoiceModeAndFadeProgress()
+{
+    game::SectorCutsceneRuntime cutscene;
+    engine::ScriptRuntime scripts;
+    uint64_t token = 0;
+    std::string error;
+    const auto begin = [&](game::SectorCutsceneCaptionKind kind, size_t length) {
+        assert(game::BeginSectorCutsceneCaption(cutscene, kind,
+                game::SectorCutsceneTextPosition::Bottom, std::string(length, 'a'),
+                nullptr, token, error));
+    };
+    for (size_t length : {10u, 100u, 300u}) {
+        const double expected = std::clamp(length * 0.045, 1.5, 8.0);
+        begin(game::SectorCutsceneCaptionKind::Text, length);
+        assert(cutscene.caption.holdSeconds == expected);
+        begin(game::SectorCutsceneCaptionKind::Say, length);
+        game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+        assert(cutscene.caption.holdSeconds == expected);
+        assert(cutscene.caption.revealSeconds == length / 40.0);
+    }
+    auto& caption = cutscene.caption;
+    // Toggle during reveal without retracting already visible text.
+    begin(game::SectorCutsceneCaptionKind::Say, 100);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0.25f);
+    const size_t visible = caption.visibleByteCount;
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
+    assert(caption.visibleByteCount == visible && caption.holdSeconds == 0.35);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    assert(caption.holdSeconds == 4.5);
+    caption.elapsedSeconds = caption.revealSeconds + 0.9;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
+    assert(std::fabs(caption.elapsedSeconds - caption.revealSeconds - 0.35) < 0.000001);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    assert(caption.opacity == 1.0f && caption.active);
+    caption.elapsedSeconds += 0.1;
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    const float opacity = caption.opacity;
+    assert(opacity < 1.0f);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    assert(std::fabs(caption.opacity - opacity) < 0.000001f);
+    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
+    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+    assert(std::fabs(caption.opacity - opacity) < 0.000001f);
+}
+
 void DisabledDialogueVoicesKeepTextAndCanBeReenabled()
 {
     engine::EngineContext context;
@@ -1941,7 +2192,7 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
         assert(op == nil and type(err) == 'string')
         op, err = startSay('script_guard', 'must not replace', 'happy', -1)
         assert(op == nil and type(err) == 'string')
-        assert(not pcall(function() startSay('obsolete speakerless line') end))
+        assert(not pcall(function() startSay(123) end))
         assert(not pcall(function() startSay('script_guard', 'bad mood type', 25) end))
     )").success);
     assert(cutscene.caption.token == originalToken);
@@ -2437,6 +2688,136 @@ assert(startNpcLookAtMarker("script_guard", "missing", 100) == nil)
     assert(!game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
 }
 
+void ConversationHoldPausesAndResumesNpcTravel()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto request = game::RequestNpcMove(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, "script_guard", {6, 8},
+            game::NpcMoveGait::Walk, game::NpcMoveAuthority::Patrol);
+    assert(request.accepted);
+    auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+    auto& transform = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc);
+    npc.conversationHeld = true;
+    const Vector3 heldPosition = transform.position;
+    for (int i = 0; i < 20; ++i) fixture.Update(0.05f);
+    assert(Vector3Distance(transform.position, heldPosition) == 0);
+    assert(npc.action == game::NpcAction::Idle);
+    npc.conversationHeld = false;
+    for (int i = 0; i < 20; ++i) fixture.Update(0.05f);
+    assert(Vector3Distance(transform.position, heldPosition) > 0.2f);
+
+    game::SectorCompiledPatrol patrol;
+    patrol.sourceAuthoringPatrolId = 9;
+    patrol.id = "conversation_patrol";
+    patrol.waypoints.push_back({1, 5000, game::SectorPatrolGait::Walk, true, 90.0f});
+    fixture.map.patrols.push_back(patrol);
+    game::NpcPatrolState state;
+    state.patrolEditorId = 9; state.phase = game::NpcPatrolPhase::Waiting;
+    state.waitRemainingSeconds = 5;
+    fixture.context.world.Add(fixture.npc, state);
+    game::NpcPatrolRuntime runtime;
+    game::InitializeNpcPatrolRuntime(runtime, 4);
+    npc.conversationHeld = true;
+    game::UpdateNpcPatrolSystem(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, runtime, fixture.map, 0.2f, false);
+    assert(fixture.context.world.Get<game::NpcPatrolState>(fixture.npc).waitRemainingSeconds == 5);
+    npc.conversationHeld = false;
+    game::UpdateNpcPatrolSystem(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, runtime, fixture.map, 0.2f, false);
+    assert(fixture.context.world.Get<game::NpcPatrolState>(fixture.npc).waitRemainingSeconds < 5);
+}
+
+void EndingConversationRestoresOnlyRepositionedNpcFacing()
+{
+    for (bool reposition : {false, true}) {
+        NpcScriptFixture fixture;
+        fixture.host.controls.setControlsEnabled =
+                [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+        auto& transform = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc);
+        auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+        transform.yawRadians = 170.0f * DEG2RAD;
+        fixture.files.Write(reposition
+                ? "function init() assert(startConversation('script_guard')); assert(endConversation()); ended = true end"
+                : "function init() assert(startConversation('script_guard', {reposition=false})); delay(10); assert(endConversation()); ended = true end");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        assert(fixture.host.conversation.active);
+        assert(!fixture.cutscene.controlsEnabled);
+        // Simulate the prepared facing, including a wrap across +/- pi.
+        transform.yawRadians = -170.0f * DEG2RAD;
+        if (reposition) {
+            const auto preparation = fixture.host.conversation.preparation;
+            fixture.host.conversation.preparing = false;
+            fixture.host.conversation.preparation = {};
+            engine::ScriptSystemCompleteOperation(fixture.runtime, preparation);
+        }
+        engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+        assert(engine::ScriptSystemExecuteConsole(fixture.runtime, "assert(ended)").success);
+        assert(!fixture.host.conversation.active && fixture.cutscene.controlsEnabled);
+        assert(npc.conversationHeld == reposition);
+        assert(game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc) == reposition);
+        assert(std::fabs(transform.yawRadians - (-170.0f * DEG2RAD)) < 0.0001f);
+        const Vector3 position = transform.position;
+        fixture.Update(0.375f);
+        const float halfway = (reposition ? -180.0f : -170.0f) * DEG2RAD;
+        assert(std::fabs(transform.yawRadians - halfway) < 0.0001f);
+        fixture.Update(0.375f);
+        const float finalYaw = (reposition ? -190.0f : -170.0f) * DEG2RAD;
+        assert(std::fabs(transform.yawRadians - finalYaw) < 0.0001f);
+        assert(Vector3Distance(transform.position, position) == 0);
+        assert(!npc.conversationHeld && !game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
+    }
+}
+
+void ConversationReturnPausesTravelAndReleasesItsHold()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto request = game::RequestNpcMove(fixture.context.world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, "script_guard", {6, 8},
+            game::NpcMoveGait::Walk, game::NpcMoveAuthority::Patrol);
+    assert(request.accepted);
+    auto& transform = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc);
+    auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+    const Vector3 position = transform.position;
+    assert(game::BeginNpcConversationReturn(fixture.context.world, fixture.npcNavigation, fixture.npc, PI));
+    for (int i = 0; i < 15; ++i) {
+        fixture.Update(0.05f);
+        assert(Vector3Distance(transform.position, position) == 0);
+    }
+    assert(!npc.conversationHeld);
+    assert(std::fabs(std::fabs(transform.yawRadians) - PI) < 0.0001f);
+    for (int i = 0; i < 20; ++i) fixture.Update(0.05f);
+    assert(Vector3Distance(transform.position, position) > 0.2f);
+}
+
+void ConversationReturnInterruptionsReleaseTheNpc()
+{
+    for (int mode = 0; mode < 4; ++mode) {
+        NpcScriptFixture fixture;
+        fixture.files.Write("function init() end");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+        assert(game::BeginNpcConversationReturn(fixture.context.world, fixture.npcNavigation, fixture.npc, PI));
+        assert(npc.conversationHeld);
+        if (mode == 0) {
+            game::CancelNpcBodyTurn(fixture.npcNavigation, fixture.npc, 0, "test cancellation");
+            fixture.Update(0.1f);
+        } else if (mode == 1) {
+            fixture.context.world.Get<game::NpcCombatState>(fixture.npc).dead = true;
+            fixture.Update(0.1f);
+        } else if (mode == 2) {
+            game::DeactivateNpcNavigation(fixture.context.world, fixture.navigation, fixture.npcNavigation, fixture.npc);
+        } else {
+            game::ShutdownNpcNavigationRuntime(fixture.context.world, fixture.navigation, fixture.npcNavigation);
+        }
+        assert(!npc.conversationHeld);
+        assert(!game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
+    }
+}
+
 void NpcLookPatrolPauseAndTargetRemoval()
 {
     NpcScriptFixture fixture;
@@ -2519,10 +2900,16 @@ void NpcFacingCancellationDeathAndRemovalReleaseOwnership()
 
 void RunSectorScriptBindingTests()
 {
+    extern void RunSectorDialogueTests();
+    RunSectorDialogueTests();
     NpcMarkerArrivalOrientationTurnsAfterStopping();
     NpcTurnTimingRespectsDoorsReplansAndAngleWrap();
     NpcLookTargetsCompleteAndPreserveHeadAnimation();
     NpcLookValidationReplacementMovementAndLifecycle();
+    ConversationHoldPausesAndResumesNpcTravel();
+    EndingConversationRestoresOnlyRepositionedNpcFacing();
+    ConversationReturnPausesTravelAndReleasesItsHold();
+    ConversationReturnInterruptionsReleaseTheNpc();
     NpcLookPatrolPauseAndTargetRemoval();
     NpcFacingCancellationDeathAndRemovalReleaseOwnership();
     DoorCompletionAndCancellationShareTheBackend();
@@ -2532,6 +2919,7 @@ void RunSectorScriptBindingTests()
     NpcAnimationOperationsCompleteReplaceCancelAndUnload();
     NpcMovementClearsAnimationOverridesOnlyWhenAccepted();
     NpcAnimationRemovalResolvesOperation();
+    InventoryQueriesReadLiveContents();
     HealthBindingsSetPlayerAndNpcCurrentHealth();
     SettingNpcHealthToZeroUsesNpcDeathState();
     BlockingNpcMoveCompletesAfterPhysicalArrival();
@@ -2556,6 +2944,10 @@ void RunSectorScriptBindingTests()
     CutsceneBindingsControlFadeAndCaptionTimelines(true);
     AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();
     SpeechCompletionGatesCaptionHold();
+    AutomaticVoicedSpeechReturnsAfterShortHoldAndFade();
+    SkippedVoicedSpeechHoldsBeforeCompletingScript();
+    SkippedSpeechReplacementResetsReadingState();
+    AutomaticCaptionHoldsRespectVoiceModeAndFadeProgress();
     DisabledDialogueVoicesKeepTextAndCanBeReenabled();
     CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(false);
     CutsceneControlOwnershipRecoversAndRejectsCompetingTasks(true);

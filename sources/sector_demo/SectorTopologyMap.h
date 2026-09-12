@@ -1,5 +1,9 @@
 #pragma once
 
+#include "sector_demo/SectorPaths.h"
+
+#include "game/items/ItemSourceQuantity.h"
+
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorReflectionProbeTypes.h"
 #include "sector_demo/SectorStructuralPrimitives.h"
@@ -204,6 +208,7 @@ struct SectorPlacedStaticModel {
     bool castsShadow = true;
     // Transient bake input. Refreshed only during explicit model preparation.
     std::string geometryFingerprint;
+    bool itemDropTarget = false;
 };
 
 enum class SectorDynamicModelShadowMode {
@@ -213,6 +218,7 @@ enum class SectorDynamicModelShadowMode {
 };
 
 struct SectorPlacedDynamicModel {
+    SectorPropDragSettings drag;
     std::string modelPath;
     std::string instanceId;
     std::string useTitle = "object";
@@ -228,6 +234,7 @@ struct SectorPlacedDynamicModel {
     bool loop = true;
     float animationSpeed = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
+    bool itemDropTarget = false;
 };
 
 struct SectorPlacedItem {
@@ -245,9 +252,13 @@ struct SectorPlacedItem {
             SectorDynamicModelShadowMode::Contact;
     // Runtime-only campaign provenance. Never serialized into level JSON.
     bool sessionDrop = false;
+    // Runtime-only; persisted in campaign saves, never authored level JSON.
+    std::vector<ItemSourceQuantity> sourceQuantities;
 };
 
 struct SectorPlacedNpc {
+    std::string onUseScript;
+    float useDistance = 2.5f;
     std::string definitionId;
     std::string instanceId;
     int patrolEditorId = 0;
@@ -256,6 +267,7 @@ struct SectorPlacedNpc {
     bool scriptMoveStopsPatrol = false;
     float scale = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
+    bool itemDropTarget = false;
 };
 
 enum class SectorDoorMotionType {
@@ -330,6 +342,7 @@ struct SectorPlacedDoor {
     std::string openSoundId;
     std::string closeSoundId;
     SectorDoorFaceUvSet faceUvs;
+    bool itemDropTarget = false;
 };
 
 // Windows share the stable portal-anchor schema with doors, but remain a
@@ -453,6 +466,7 @@ struct SectorTopologyMap {
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     std::vector<SectorCompiledLevelMarker> levelMarkers;
     std::vector<SectorCompiledPatrol> patrols;
+    std::vector<SectorCompiledPath> paths;
     std::vector<SectorCompiledSoundEmitter> soundEmitters;
     std::vector<SectorCompiledTrigger> triggers;
     std::vector<SectorCompiledStructuralPrimitive> compiledStructuralPrimitives;

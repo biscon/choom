@@ -125,22 +125,6 @@
       "yawDegrees": 90.0
     },
     {
-      "id": 13,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_13",
-        "modelPath": "assets/models/retro_lowpoly_bed.glb",
-        "heightOffsetWorld": 0.2639999985694885,
-        "collision": true
-      },
-      "position": [
-        -105.0,
-        0.0,
-        71.0
-      ],
-      "yawDegrees": 90.0
-    },
-    {
       "id": 15,
       "kind": "static_model",
       "staticModel": {
@@ -393,7 +377,7 @@
       "id": 30,
       "kind": "door",
       "door": {
-        "instanceId": "door_30",
+        "instanceId": "pre_entrance_door",
         "anchor": {
           "lineDefId": 119,
           "frontSectorId": 29,
@@ -409,6 +393,8 @@
             1616
           ]
         },
+        "itemDropTarget": true,
+        "canOpenScript": "open_pre_entrance_door",
         "width": 1.25,
         "height": 2.75,
         "normalOffset": 0.125,
@@ -464,7 +450,7 @@
       "id": 33,
       "kind": "door",
       "door": {
-        "instanceId": "door_33",
+        "instanceId": "entrance_door",
         "anchor": {
           "lineDefId": 127,
           "frontSectorId": 33,
@@ -480,6 +466,7 @@
             1712
           ]
         },
+        "canOpenScript": "canOpenEntranceDoor",
         "width": 2.625,
         "height": 2.75,
         "normalOffset": -0.20000000298023224,
@@ -2622,7 +2609,7 @@
       "id": 158,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_2",
+        "definitionId": "double_barrel_shotgun",
         "instanceId": "boomstick_01",
         "takeDistance": 2.0,
         "rotationZDegrees": 90.0,
@@ -2639,7 +2626,7 @@
       "id": 159,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_3",
+        "definitionId": "bandage",
         "instanceId": "item_159",
         "takeDistance": 2.0,
         "heightOffsetWorld": 1.0950000286102295
@@ -2655,7 +2642,7 @@
       "id": 160,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_4",
+        "definitionId": "health_pack",
         "instanceId": "item_160",
         "takeDistance": 2.0,
         "heightOffsetWorld": 1.0950000286102295
@@ -2671,7 +2658,7 @@
       "id": 161,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_5",
+        "definitionId": "large_health_pack",
         "instanceId": "item_161",
         "takeDistance": 2.0,
         "heightOffsetWorld": 1.0950000286102295
@@ -2687,7 +2674,7 @@
       "id": 162,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_6",
+        "definitionId": "ammo_9mm",
         "instanceId": "item_162",
         "quantity": 12,
         "takeDistance": 2.0,
@@ -2704,7 +2691,7 @@
       "id": 163,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_7",
+        "definitionId": "ammo_buckshot",
         "instanceId": "item_163",
         "quantity": 2,
         "takeDistance": 2.0,
@@ -2721,7 +2708,7 @@
       "id": 166,
       "kind": "item",
       "item": {
-        "definitionId": "new_item",
+        "definitionId": "pistol_9mm",
         "instanceId": "item_166",
         "takeDistance": 2.0,
         "rotationZDegrees": -90.0,
@@ -2738,7 +2725,7 @@
       "id": 167,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_7",
+        "definitionId": "ammo_buckshot",
         "instanceId": "item_167",
         "quantity": 5,
         "takeDistance": 2.0,
@@ -2755,7 +2742,7 @@
       "id": 168,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_6",
+        "definitionId": "ammo_9mm",
         "instanceId": "item_168",
         "quantity": 12,
         "takeDistance": 2.0,
@@ -2773,7 +2760,7 @@
       "id": 169,
       "kind": "item",
       "item": {
-        "definitionId": "new_item_5",
+        "definitionId": "large_health_pack",
         "instanceId": "item_169",
         "heightOffsetWorld": 0.675000011920929,
         "shadowMode": "dynamic"
@@ -6694,6 +6681,7 @@
       "kind": "npc",
       "npc": {
         "definitionId": "elin",
+        "onUseScript": "useElin",
         "instanceId": "elin",
         "scale": 1.100000023841858,
         "shadowMode": "dynamic"
@@ -6704,6 +6692,117 @@
         96.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 419,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_419",
+        "modelPath": "assets/models/cafeteria/Wall_Clock_360.gltf",
+        "heightOffsetWorld": 2.0999996662139893,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        -32.24000549316406,
+        0.0,
+        43.4000244140625
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 420,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_420",
+        "modelPath": "assets/models/cafeteria/Painting_Quiet_Farmland.gltf",
+        "heightOffsetWorld": 1.399999737739563,
+        "scale": 1.5
+      },
+      "position": [
+        -71.80001831054688,
+        0.0,
+        80.88002014160156
+      ],
+      "yawDegrees": 179.99998474121094
+    },
+    {
+      "id": 421,
+      "kind": "item",
+      "item": {
+        "definitionId": "new_item_8",
+        "instanceId": "pre_entrance_door_key",
+        "onUseScript": "usePreEntranceDoorKey",
+        "scale": 2.0,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -106.0,
+        0.0,
+        75.0
+      ],
+      "yawDegrees": 20.0
+    },
+    {
+      "id": 422,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "office_bed",
+        "useTitle": "Bed",
+        "useDistance": 0.8500000238418579,
+        "drag": {
+          "pathEditorId": 1,
+          "movingSound": "furniture_dragging"
+        },
+        "modelPath": "assets/models/retro_lowpoly_bed.glb",
+        "heightOffsetWorld": 0.31000006198883057,
+        "collision": true,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -105.0,
+        0.0,
+        71.0
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 423,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "itemDropTarget": true,
+        "instanceId": "entrance_keypad",
+        "useTitle": "Keypad",
+        "modelPath": "assets/models/simple_keypad.glb",
+        "heightOffsetWorld": 1.100000023841858,
+        "scale": 0.5,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -150.19992065429688,
+        -27.0,
+        85.11998748779297
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 424,
+      "kind": "item",
+      "item": {
+        "definitionId": "blue_key_card",
+        "instanceId": "blue_key_card",
+        "onUseScript": "useBlueKeyCard",
+        "scale": 1.5,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -148.0,
+        -27.0,
+        103.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -10175,60 +10274,6 @@
       }
     },
     {
-      "id": 2,
-      "position": [
-        -96.0,
-        26.0,
-        52.0
-      ],
-      "target": [
-        -96.0,
-        8.0,
-        52.0
-      ],
-      "width": 8.0,
-      "height": 2.0,
-      "range": 53.0,
-      "intensity": 1.5,
-      "color": {
-        "r": 255,
-        "g": 250,
-        "b": 242,
-        "a": 255
-      },
-      "rollDegrees": 90.0,
-      "startFeather": 4.0,
-      "atmosphere": {
-        "proxy": {
-          "shaft": {
-            "enabled": true,
-            "originOffsetWorld": [
-              0.0,
-              0.33899998664855957,
-              0.0
-            ],
-            "lengthScale": 0.4000000059604645,
-            "widthScale": 1.0,
-            "maxExtinction": 0.0,
-            "edgeSoftness": 0.75,
-            "scatteringTint": {
-              "r": 255,
-              "g": 250,
-              "b": 242,
-              "a": 255
-            }
-          }
-        },
-        "dust": {
-          "enabled": true,
-          "amount": 32,
-          "extentScale": 0.25,
-          "minimumSizeWorld": 0.004999999888241291,
-          "maximumSizeWorld": 0.012000000104308128
-        }
-      }
-    },
-    {
       "id": 3,
       "position": [
         -200.0,
@@ -12528,6 +12573,63 @@
           "opacity": 0.11999999731779099
         }
       }
+    },
+    {
+      "id": 4,
+      "position": [
+        -96.0,
+        26.0,
+        52.0
+      ],
+      "target": [
+        -96.0,
+        8.0,
+        52.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 53.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 242,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "instanceId": "light_rect_4",
+      "castsShadow": true,
+      "shadowStrength": 0.8999999761581421,
+      "shadowSoftness": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.0,
+              0.33899998664855957,
+              0.0
+            ],
+            "lengthScale": 0.4000000059604645,
+            "widthScale": 1.0,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 242,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 32,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.012000000104308128
+        }
+      }
     }
   ],
   "lightmapSettings": {
@@ -12538,7 +12640,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -12602,8 +12704,20 @@
         "path": "doors/door_close_02.mp3",
         "type": "sound"
       },
+      "door_locked": {
+        "path": "doors/door_locked.wav",
+        "type": "sound"
+      },
       "door_open_01": {
         "path": "doors/door_open_01.mp3",
+        "type": "sound"
+      },
+      "door_unlock": {
+        "path": "doors/door_unlock.wav",
+        "type": "sound"
+      },
+      "furniture_dragging": {
+        "path": "sfx/furniture_dragging.wav",
         "type": "sound"
       },
       "horror_ambience": {
@@ -12638,7 +12752,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "a90ac7deb6be3681",
+    "sourceHash": "7d74fa5a07415800",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -12646,19 +12760,19 @@
         0.0
       ],
       "rgbMax": [
-        2.203125,
-        1.564453125,
-        1.564453125
+        2.2421875,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 239
+      "sampleCount": 12582912,
+      "rgbChannelsAboveOne": 1445
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "a90ac7deb6be3681",
+      "sourceHash": "7d74fa5a07415800",
       "count": 3917,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -12671,24 +12785,36 @@
           0.0
         ],
         "rgbMax": [
-          2.204270601272583,
-          1.935850739479065,
-          1.8489267826080322
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23502,
-        "rgbChannelsAboveOne": 40
+        "rgbChannelsAboveOne": 36
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "a90ac7deb6be3681",
-      "modelCount": 117,
-      "objectCount": 347,
+      "sourceHash": "7d74fa5a07415800",
+      "modelCount": 116,
+      "objectCount": 348,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/hub/hub.lightmap.2.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1
@@ -20283,11 +20409,11 @@
               0.5925925970077515
             ],
             "offset": [
-              19.6875,
+              7.0625,
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20314,6 +20440,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20330,7 +20460,7 @@
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20357,6 +20487,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20369,11 +20503,11 @@
               0.5925925970077515
             ],
             "offset": [
-              10.625,
+              7.0625,
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20400,6 +20534,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20412,11 +20550,11 @@
               0.5925925970077515
             ],
             "offset": [
-              15.625,
+              7.0625,
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20443,6 +20581,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20455,11 +20597,11 @@
               0.5925925970077515
             ],
             "offset": [
-              19.1875,
+              7.0625,
               0.0
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         },
         "lower": {
           "uv": {
@@ -20486,6 +20628,10 @@
             ]
           },
           "materialId": "brick_repair_512"
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_wood"
         }
       },
       {
@@ -20525,10 +20671,10 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -1.6875
             ]
           },
-          "materialId": "dirty_office_wall_baseboard_512"
+          "materialId": "worn_white_wall"
         }
       },
       {
@@ -41079,7 +41225,8 @@
             ]
           }
         },
-        "floorMaterialId": "worn_gray_metal_step_512"
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "plastered_wall_02"
       },
       {
         "id": 82,
@@ -43013,18 +43160,46 @@
       {
         "editorId": 22,
         "id": "intro_marker_3",
-        "x": -1632,
+        "x": -1408,
         "y": 0.0,
-        "z": 832,
-        "orientationDegrees": 90.0
+        "z": 576,
+        "orientationDegrees": 0.0
       },
       {
         "editorId": 23,
         "id": "intro_marker_4",
-        "x": -1440,
+        "x": -1408,
         "y": 0.0,
-        "z": 832,
+        "z": 912,
+        "orientationDegrees": 180.0
+      },
+      {
+        "editorId": 24,
+        "id": "intro_marker_5",
+        "x": -2368,
+        "y": -27.0,
+        "z": 1552,
         "orientationDegrees": -90.0
+      }
+    ],
+    "nextPathId": 2,
+    "paths": [
+      {
+        "editorId": 1,
+        "id": "bed_path",
+        "nextWaypointId": 3,
+        "waypoints": [
+          {
+            "id": 1,
+            "x": -1680,
+            "z": 1136
+          },
+          {
+            "id": 2,
+            "x": -1680,
+            "z": 896
+          }
+        ]
       }
     ],
     "patrols": [
@@ -43107,8 +43282,31 @@
             "z": 1328
           }
         ],
-        "repeat": true,
         "script": "intro_trigger_1"
+      },
+      {
+        "editorId": 2,
+        "id": "entrance_trigger",
+        "shape": "rectangle",
+        "points": [
+          {
+            "x": -1712,
+            "z": 1360
+          },
+          {
+            "x": -1680,
+            "z": 1360
+          },
+          {
+            "x": -1680,
+            "z": 1728
+          },
+          {
+            "x": -1712,
+            "z": 1728
+          }
+        ],
+        "script": "entrance_trigger"
       }
     ],
     "structuralPrimitives": [

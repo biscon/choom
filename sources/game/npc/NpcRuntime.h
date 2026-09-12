@@ -31,6 +31,10 @@ struct NpcRuntimeInstance {
     std::string voice = "male";
     bool dialogueSpeaking = false;
     engine::DialogueSelectionHistory dialogueHistory;
+    std::string displayName;
+    std::string onUseScript;
+    float useDistance = 2.5f;
+    bool conversationHeld = false;
 };
 
 enum class NpcAwarenessState : uint8_t {
@@ -276,6 +280,7 @@ struct NpcNavigationRecord {
     // Request-local override. Zero keeps the authored Walk/Run action speed.
     float movementSpeedOverride = 0.0f;
     NpcBodyTurnState bodyTurn;
+    bool returningFromConversation = false;
     NpcBodyTurnState arrivalTurn;
     bool matchArrivalOrientation = false;
     // Movement retains script ownership until both travel and turning finish.

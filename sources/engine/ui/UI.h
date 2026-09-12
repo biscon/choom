@@ -181,6 +181,8 @@ struct UIContext {
     Vector2 scrollDragOffsetStart = {};
     size_t textCursorByteIndex = 0;
     double textCursorBlinkStartTime = 0.0;
+    uint32_t textScrollOwnerId = 0;
+    float textScrollOffsetX = 0.0f;
     Vector2 mousePosition = {};
     bool mouseDown = false;
     bool inScrollArea = false;
@@ -263,6 +265,14 @@ void EndScrollArea(
         Input& input,
         const UIScrollAreaResult& scrollArea,
         UIScrollState& state);
+
+// Includes vertical padding and uses the same line wrapping as Text(wordWrap=true).
+float MeasureWrappedTextHeight(
+        const UIConfig& config,
+        AssetManager& assets,
+        float width,
+        FontHandle font,
+        const char* text);
 
 void Text(
         const UIConfig& config,

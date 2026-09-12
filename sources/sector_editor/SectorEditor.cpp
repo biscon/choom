@@ -1,4 +1,5 @@
 #include "sector_editor/SectorEditor.h"
+#include "sector_editor/tools/path/SectorEditorPathTool.h"
 #include "sector_editor/services/static_model_picker/SectorEditorModelPickerModal.h"
 
 #include "engine/input/InputEvents.h"
@@ -345,6 +346,8 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     manipulationState,
                     statusText});
+    pathEditingService.emplace(SectorEditorPathEditingContext{state,Lifecycle(),TopologyMap(),AuthoringGraph(),
+            MakeLiveDerivationAccess(documentState.derivation),selectionState,pathEditingState,statusText});
     levelMarkerEditingService.emplace(
             SectorEditorLevelMarkerEditingServiceContext{
                     Lifecycle(),
@@ -405,6 +408,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     }
     lightmapBake.Shutdown();
     EndFpsViewmodel(assets);
+    EndSectorPropDrag(context,previewState.controller.propDrag);
     sceneRuntime.Shutdown(context);
     if (engineContext != nullptr) {
         BuildSoundService().Shutdown();
@@ -439,6 +443,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     materialEditingUiState = MaterialEditingUiState{};
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     reflectionProbeEditingUiState = ReflectionProbeEditingUiState{};
+    pathEditingState = {};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
@@ -449,6 +454,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     fogVolumeEditingService.reset();
     reflectionProbeEditingService.reset();
     authoringFaceMergeService.reset();
+    pathEditingService.reset();
     levelMarkerEditingService.reset();
     soundEmitterEditingService.reset();
     triggerEditingService.reset();
@@ -768,6 +774,20 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                         if (event.key.key != KEY_E) {
                             return;
                         }
+                        if (!engine::IsNull(previewState.controller.propDrag.entity)) {
+                            EndSectorPropDrag(context,previewState.controller.propDrag,true); engine::ConsumeEvent(event); return;
+                        }
+                        if (previewUseTarget.draggable && !previewState.controller.liquidMovement.swimming
+                                && !IsSectorDuctTraversalActive(previewState.controller.ductTraversal)) {
+                            // Inspector edits respawn props; resolve already-loaded sound handles on grab.
+                            auto& drag = context.world.Get<SectorPropDrag>(previewUseTarget.entity);
+                            drag.startSound = sceneRuntime.FindLevelSound(drag.settings.startSound);
+                            drag.movingSound = sceneRuntime.FindLevelSound(drag.settings.movingSound);
+                            drag.endSound = sceneRuntime.FindLevelSound(drag.settings.endSound);
+                            if (BeginSectorPropDrag(context,TopologyMap(),previewState.controller.propDrag,
+                                    previewUseTarget.entity,previewState.controller.fpsControllerState)) fpsPlayer.HolsterForTraversal();
+                            engine::ConsumeEvent(event); return;
+                        }
                         if (previewUseTarget.kind == SectorUseTargetKind::Ladder) {
                             if (BeginSectorLadderTraversal(
                                         previewState.controller.ladderTraversal,
@@ -830,6 +850,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                         previewState.controller.ladderTraversal)
                     && !IsSectorDuctTraversalActive(
                         previewState.controller.ductTraversal)
+                    && engine::IsNull(previewState.controller.propDrag.entity)
                     && ProcessFpsWeaponFire(input)) {
                 ApplyGameplayPoseToPreview();
             }
@@ -1316,6 +1337,7 @@ void SectorEditor::SuspendRuntime(engine::EngineContext& context)
     if (state.mode == SectorEditorMode::Preview3D) {
         LeavePreview3D();
     }
+    EndSectorPropDrag(context,previewState.controller.propDrag);
     sceneRuntime.Shutdown(context);
 }
 
@@ -1359,6 +1381,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
     context.reflectionProbeEditing = reflectionProbeEditingService
             ? &reflectionProbeEditingService.value()
             : nullptr;
+    context.pathEditing = pathEditingService ? &*pathEditingService : nullptr;
+    if (const auto* object = FindSectorPlacedRuntimeObject(TopologyMap(),selectionState.selectedRuntimeObjectId))
+        context.highlightedPathId = object->kind == "dynamic_model" ? object->dynamicModel.drag.pathEditorId : 0;
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
             : nullptr;
@@ -1882,6 +1907,15 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
             engine::InputEventType::KeyPressed,
             true,
             [this, &input](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE && pathEditingService
+                        && (pathEditingState.moveArmed || pathEditingState.moving || !pathEditingState.pending.empty())) {
+                    pathEditingService->Cancel(); statusText = "Path edit cancelled";
+                    engine::ConsumeEvent(event); return;
+                }
+                if (event.key.key == KEY_DELETE && pathEditingService && pathEditingService->Selected()) {
+                    if (pathEditingState.waypointId) pathEditingService->Dissolve(); else pathEditingService->Delete();
+                    engine::ConsumeEvent(event); return;
+                }
                 if (event.key.key == KEY_ESCAPE) {
                     SectorEditorManipulationServiceContext manipulationContext =
                             BuildManipulationServiceContext();
@@ -2259,6 +2293,8 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
 SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
 {
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Path)
+        return {SectorEditorPickKind::Path,selectionState.selectedAuthoring.pathId};
     if (selectionState.selectedRuntimeObjectId >= 0) {
         return SectorEditorPickTarget{SectorEditorPickKind::RuntimeObject, selectionState.selectedRuntimeObjectId};
     }
@@ -2396,6 +2432,8 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             screenPoint,
             ScreenLightPickPixels,
             candidates);
+    AppendSectorEditorPathPicks(AuthoringGraph(), screenPoint,
+            [this](Vector2 point) { return MapToScreen(point); }, candidates);
     AppendCachedLevelMarkerPickCandidates(
             state.topologyRenderCache,
             pickContext,
@@ -2955,7 +2993,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             || itemEditorState.open
             || patrolEditorState.open
             || weaponEditorState.open;
-    const bool weaponInputCaptured = previewInputCaptured
+    const bool weaponInputCaptured = !engine::IsNull(previewState.controller.propDrag.entity) || previewInputCaptured
             || IsSectorLadderTraversalActive(
                     previewState.controller.ladderTraversal);
     fpsPlayer.HandleWeaponSlotInput(
@@ -3171,6 +3209,14 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 );
             }
             if (engineContext == nullptr) return;
+            if (!engine::IsNull(previewState.controller.propDrag.entity)) {
+                if (!canConsumeGameplayActions || previewInputCaptured)
+                    EndSectorPropDrag(*engineContext,previewState.controller.propDrag);
+                else UpdateSectorPropDrag(*engineContext,TopologyMap(),sceneRuntime.RuntimeObjects(),
+                        previewState.collision.sectorCollisionWorld,sceneRuntime.NpcNavigation().collisionCylinders,
+                        previewState.controller.propDrag,previewState.controller.fpsControllerState,
+                        previewState.controller.fpsControllerConfig,controllerInput,dt);
+            }
             UpdateSectorEditorGameplayPreview(
                     engineContext->world,
                     sceneRuntime.RuntimeObjects().dynamicDoorColliders,
@@ -4970,7 +5016,9 @@ void SectorEditor::RenderPreview3DHud(
         DrawSectorUsePrompt(
                 playableViewport,
                 assets.GetFont(usePromptFont),
-                previewUsePromptTitle.data());
+                !engine::IsNull(previewState.controller.propDrag.entity)
+                        ? "E: Release - W/S: Push/Pull" : previewUsePromptTitle.data(),
+                !engine::IsNull(previewState.controller.propDrag.entity) ? "" : previewUseTarget.draggable ? "Drag" : "Use");
     }
 }
 
@@ -5507,6 +5555,7 @@ void SectorEditor::DrawTopologyDocument()
                 "DR");
     }
     DrawCachedRuntimeObjects(state.topologyRenderCache, drawContext);
+    { auto pathContext = BuildToolContext(nullptr); DrawSectorEditorPaths(pathContext); }
     DrawCachedLevelMarkers(
             state.topologyRenderCache,
             drawContext,
@@ -6308,6 +6357,7 @@ void SectorEditor::DrawToolsPanel(
         if (state.pendingAuthoringInsertVertex.active && tool != SectorEditorTool::AuthoringInsertVertex) {
             CancelPendingAuthoringInsertVertex("Insert Vertex cancelled");
         }
+        if (pathEditingService && tool != state.currentTool) pathEditingService->Cancel();
         if (triggerEditingState.pending.active && tool != SectorEditorTool::Trigger) {
             triggerEditingState.pending = PendingTriggerDrawState{};
             statusText = "Trigger drawing cancelled";
@@ -6612,6 +6662,7 @@ void SectorEditor::DrawSectorsPanel(
             authoringFaceMergeService.value(),
             structuralPrimitiveEditing,
             engineContext};
+    context.pathEditing = pathEditingService ? &*pathEditingService : nullptr;
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
     for (int i = 0; i < result.requestCount; ++i) {
         const SectorEditorInspectorPanelRequest& request = result.requests[static_cast<size_t>(i)];
@@ -7500,6 +7551,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
     lightmapBake.Shutdown();
+    EndSectorPropDrag(context,previewState.controller.propDrag);
     sceneRuntime.Shutdown(context);
     BuildSoundService().Shutdown();
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
@@ -7525,6 +7577,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     lightEditingState = LightEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
+    pathEditingState = {};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
@@ -7566,6 +7619,7 @@ bool SectorEditor::LoadLevel(
         return false;
     }
 
+    EndSectorPropDrag(context,previewState.controller.propDrag);
     sceneRuntime.Shutdown(context);
     BuildSoundService().Shutdown();
     if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
@@ -7674,6 +7728,7 @@ bool SectorEditor::LoadLevel(
     selectionState.hoveredTopologyVertexId = -1;
     selectionState.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     manipulationState = ManipulationState{};
+    pathEditingState = {};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
@@ -8001,6 +8056,7 @@ void SectorEditor::LeavePreview3D()
                 engineContext->audio,
                 liquidAudio);
         engineContext->audio.StopAll(engineContext->assets);
+        EndSectorPropDrag(*engineContext,previewState.controller.propDrag);
         sceneRuntime.StopLevelAudio(*engineContext);
         EndFpsViewmodel(engineContext->assets);
     }
@@ -8037,6 +8093,7 @@ void SectorEditor::ApplyGameplayPoseToPreview()
 
 void SectorEditor::TogglePreviewControlMode()
 {
+    if (engineContext) EndSectorPropDrag(*engineContext,previewState.controller.propDrag);
     ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
     if (!ToggleSectorEditorPreviewControlMode(
                 state.mode == SectorEditorMode::Preview3D,

@@ -127,7 +127,8 @@ const DialogueVoice* FindDialogueVoice(const DialogueVoiceLibrary& library, std:
 
 const DialogueCue* UpdateDialoguePlayback(AssetManager& assets, AudioSystem& audio,
         DialoguePlayback& playback, const DialogueTimeline& timeline,
-        uint64_t token, bool active, bool audible, Vector3 position, float dt);
+        uint64_t token, bool active, bool audible, Vector3 position, float dt,
+        bool positional = true);
 void StopDialoguePlayback(AssetManager& assets, AudioSystem& audio,
         DialoguePlayback& playback);
 

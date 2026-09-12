@@ -119,6 +119,9 @@ bool DeactivateNpcNavigation(
 
 NpcBodyTurnState* FindNpcBodyTurn(NpcNavigationRuntime& runtime, engine::Entity entity);
 bool HasNpcBodyTurn(const NpcNavigationRuntime& runtime, engine::Entity entity);
+// Keeps autonomous travel paused while restoring a conversation's captured yaw.
+bool BeginNpcConversationReturn(engine::World& world, NpcNavigationRuntime& runtime,
+        engine::Entity entity, float yawRadians);
 bool BeginNpcBodyTurn(
         engine::World& world, NpcNavigationRuntime& runtime, engine::Entity entity,
         NpcBodyTurnState turn, const Vector3* playerPosition, std::string& error);

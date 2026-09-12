@@ -293,8 +293,9 @@ Add a versioned `assets/config/items.json`:
 
 Definition contract:
 
-- `id`: generated `new_item`, `new_item_2`, etc.; immutable and displayed
-  read-only.
+- `id`: defaults to `new_item`, `new_item_2`, etc.; editable for new items until
+  their first successful Save, then immutable and displayed read-only. IDs use
+  1–63 ASCII letters, digits, underscores or hyphens and must be unique.
 - `title`: required human-readable UTF-8 text, maximum 96 codepoints.
 - `description`: required multiline UTF-8 text, maximum 2048 codepoints.
 - `modelPath`: required repository asset path selected by the existing model

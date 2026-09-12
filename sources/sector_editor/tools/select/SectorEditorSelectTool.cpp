@@ -1,4 +1,5 @@
 #include "sector_editor/tools/select/SectorEditorSelectTool.h"
+#include "sector_editor/tools/path/SectorEditorPathTool.h"
 
 #include "engine/input/Input.h"
 #include "engine/input/InputEvents.h"
@@ -111,6 +112,9 @@ bool SelectPickTarget(
             return context.selectionState.selectedAuthoring.kind
                             == SectorAuthoringSelectionKind::ReflectionProbe
                     && context.selectionState.selectedAuthoring.reflectionProbeId == target.id;
+        case SectorEditorPickKind::Path:
+            ClearSectorEditorSelection(selectionContext);
+            return context.pathEditing && context.pathEditing->Select(target.id);
         case SectorEditorPickKind::LevelMarker:
             SelectSectorEditorAuthoringLevelMarkerTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
@@ -204,6 +208,7 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
 
 bool UpdateSelectToolEarly(SectorEditorToolContext& context)
 {
+    if (UpdateSectorEditorPathSelection(context)) return true;
     if (context.input == nullptr || !context.buildManipulationServiceContext) {
         return false;
     }
@@ -227,6 +232,8 @@ bool UpdateSelectToolEarly(SectorEditorToolContext& context)
 
 bool HandleSelectMousePress(SectorEditorToolContext& context, const engine::InputEvent& event)
 {
+    if (event.mouseButton.button == MOUSE_LEFT_BUTTON
+            && ArmSectorEditorPathMove(context,event.mouseButton.position)) return true;
     if (event.mouseButton.button != MOUSE_LEFT_BUTTON
             || !CheckCollisionPointRec(event.mouseButton.position, context.canvasRect)
             || !context.buildManipulationServiceContext) {
@@ -313,6 +320,10 @@ bool UpdateSelectTool(SectorEditorToolContext& context)
                                    context,
                                    target,
                                    additiveFaceSelection)) {
+                    if (target.kind == SectorEditorPickKind::Path)
+                        SelectSectorEditorPathPart(context, event.mouseClick.releasePosition);
+                    else if (context.pathEditing)
+                        context.pathEditing->Cancel();
                     const char* kindName = SectorEditorPickKindName(target.kind);
                     if (target.kind == SectorEditorPickKind::AuthoringFaceAnchor
                             && additiveFaceSelection) {

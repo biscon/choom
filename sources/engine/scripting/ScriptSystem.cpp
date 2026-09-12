@@ -286,7 +286,8 @@ std::string BuildLuaTraceback(
             1);
     const char* traceback = lua_tostring(thread, -1);
     std::ostringstream output;
-    output << (prefix != nullptr ? prefix : "Lua error")
+    output << (traceback != nullptr ? traceback : "<traceback unavailable>")
+           << '\n' << (prefix != nullptr ? prefix : "Lua error")
            << " [map=" << runtime.mapId
            << ", script=" << runtime.mapScriptPath
            << ", phase=" << PhaseName(runtime.phase);
@@ -297,8 +298,7 @@ std::string BuildLuaTraceback(
                 runtime, task->waitingOperation);
         if (operation != nullptr) output << ", operation=" << operation->debugLabel;
     }
-    output << "]: "
-           << (traceback != nullptr ? traceback : "<traceback unavailable>");
+    output << "]";
     return output.str();
 }
 
@@ -1023,10 +1023,51 @@ void RegisterCoreBindings(lua_State* state)
     RegisterFunction(state, "getPersistentInt", LuaGetPersistentInt);
     RegisterFunction(state, "setPersistentString", LuaSetPersistentString);
     RegisterFunction(state, "getPersistentString", LuaGetPersistentString);
+    RegisterFunction(state, "setFlag", LuaSetPersistentBool);
+    RegisterFunction(state, "flag", LuaGetPersistentBool);
+    RegisterFunction(state, "setInt", LuaSetPersistentInt);
+    RegisterFunction(state, "getInt", LuaGetPersistentInt);
+    RegisterFunction(state, "setString", LuaSetPersistentString);
+    RegisterFunction(state, "getString", LuaGetPersistentString);
     RegisterFunction(state, "log", LuaLog);
     RegisterFunction(state, "print", LuaLog);
     RegisterFunction(state, "isLoadingSave", LuaIsLoadingSave);
 }
+
+constexpr const char* ConversationHelpers = R"lua(
+function appendIf(list, condition, value)
+    if condition then list[#list + 1] = value end
+    return list
+end
+
+function hiddenOptions(map)
+    local result = {}
+    for id, hidden in pairs(map) do
+        appendIf(result, hidden, id)
+    end
+    return result
+end
+
+function runConversationDynamic(setId, handlers, hiddenOptionsFn, textOverridesFn)
+    while true do
+        local hidden = nil
+        if hiddenOptionsFn ~= nil then hidden = hiddenOptionsFn() end
+        local textOverrides = nil
+        if textOverridesFn ~= nil then textOverrides = textOverridesFn() end
+        local choice = dialogue(setId, hidden, textOverrides)
+        if choice == nil then return nil end
+        local handler = handlers and handlers[choice]
+        if handler == nil then return choice end
+        local result = handler(choice)
+        if result == "exit" or result == "break" then return choice end
+    end
+end
+
+function runConversation(setId, handlers, hidden, textOverrides)
+    return runConversationDynamic(setId, handlers, function() return hidden end,
+        function() return textOverrides end)
+end
+)lua";
 
 std::string NormalizeLuaPath(const std::filesystem::path& path)
 {
@@ -1174,6 +1215,11 @@ bool ScriptSystemCreateForMap(
             &runtime, &engine, &persistent, hostContext};
     SetLuaContext(runtime.vm, &runtime.luaContext);
     RegisterCoreBindings(runtime.vm);
+    if (luaL_dostring(runtime.vm, ConversationHelpers) != LUA_OK) {
+        error = lua_tostring(runtime.vm, -1);
+        ScriptSystemShutdownForMap(engine, runtime);
+        return false;
+    }
     if (registerHostBindings != nullptr) registerHostBindings(runtime.vm);
     ConfigurePackagePaths(runtime.vm, scriptPath.parent_path(), assetRoot);
     lua_pushnumber(runtime.vm, 0.0);
@@ -1201,10 +1247,15 @@ bool ScriptSystemCreateForMap(
                 bytes.size(),
                 chunkName.c_str(),
                 "t");
-        if (status == LUA_OK) status = lua_pcall(runtime.vm, 0, 0, 0);
+        const char* failureDescription = status == LUA_ERRSYNTAX
+                ? "Lua syntax error" : "Lua script load failed";
+        if (status == LUA_OK) {
+            failureDescription = "Lua script execution failed";
+            status = lua_pcall(runtime.vm, 0, 0, 0);
+        }
         if (status != LUA_OK) {
             error = BuildLuaTraceback(
-                    runtime.vm, runtime, nullptr, "map chunk failed");
+                    runtime.vm, runtime, nullptr, failureDescription);
             lua_settop(runtime.vm, 0);
             ScriptSystemShutdownForMap(engine, runtime);
             return false;
@@ -1435,6 +1486,23 @@ ScriptCallOutcome ScriptSystemCallForegroundHook(
 {
     return StartManagedFunction(
             runtime, functionName, ScriptLaunchLane::Foreground, false);
+}
+
+ScriptCallOutcome ScriptSystemCallForegroundHook(
+        ScriptRuntime& runtime, const std::string& functionName,
+        const ScriptValue* arguments, std::size_t argumentCount)
+{
+    return StartManagedFunction(runtime, functionName, ScriptLaunchLane::Foreground,
+            false, false, arguments, argumentCount);
+}
+
+bool ScriptSystemRequestStopTask(ScriptRuntime& runtime, ScriptTaskHandle handle)
+{
+    ScriptTask* task = ResolveTask(runtime, handle);
+    if (task == nullptr) return false;
+    task->stopRequested = true;
+    task->state = ScriptTaskState::StopRequested;
+    return true;
 }
 
 ScriptCallOutcome ScriptSystemCallObservedForegroundHook(

@@ -10,6 +10,7 @@ namespace game {
 
 std::optional<MainMenuAction> DrawGameMainMenu(
         engine::UIContext& ui,
+        engine::UIScrollState& scroll,
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,

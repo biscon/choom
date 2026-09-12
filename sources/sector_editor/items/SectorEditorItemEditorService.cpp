@@ -47,6 +47,7 @@ bool SectorEditorItemEditorService::Open()
     state_ = SectorEditorItemEditorState{};
     state_.open = true;
     state_.draftRegistry = registry_;
+    state_.newItems.assign(state_.draftRegistry.items.size(), false);
     RebuildLabels();
     if (!session_.selectedItemId.empty()) {
         const auto found = std::find_if(
@@ -83,6 +84,7 @@ void SectorEditorItemEditorService::Shutdown()
 
 bool SectorEditorItemEditorService::SaveAndClose()
 {
+    ApplyIdBuffer();
     ApplyTitleBuffer();
     ApplyDescriptionBuffer();
     ApplyModelPathBuffer();
@@ -93,7 +95,8 @@ bool SectorEditorItemEditorService::SaveAndClose()
         return false;
     }
     std::string error;
-    if (!ValidateItemRegistry(state_.draftRegistry, weapons_, error)
+    if (!ValidateDraftIds(error)
+            || !ValidateItemRegistry(state_.draftRegistry, weapons_, error)
             || !ScanDeletedReferences(error)
             || !SaveItemRegistry(
                     registryPath_, state_.draftRegistry, weapons_, error)) {
@@ -151,7 +154,7 @@ bool SectorEditorItemEditorService::SelectIndex(int index)
 std::string SectorEditorItemEditorService::UniqueId() const
 {
     const auto used = [this](const std::string& id) {
-        return std::any_of(
+        return FindItemDefinition(registry_, id) != nullptr || std::any_of(
                 state_.draftRegistry.items.begin(),
                 state_.draftRegistry.items.end(),
                 [&id](const ItemDefinition& definition) {
@@ -170,12 +173,56 @@ void SectorEditorItemEditorService::AddItem()
     ItemDefinition definition = MakeDefaultItemDefinition();
     definition.id = UniqueId();
     state_.draftRegistry.items.push_back(std::move(definition));
+    state_.newItems.push_back(true);
     state_.selectedIndex = static_cast<int>(
             state_.draftRegistry.items.size()) - 1;
     session_.selectedItemId = SelectedItem()->id;
     session_.formScroll = {};
     RebuildLabels();
     SyncBuffers();
+}
+
+bool SectorEditorItemEditorService::CanEditSelectedId() const
+{
+    return SelectedItem() != nullptr
+            && static_cast<size_t>(state_.selectedIndex) < state_.newItems.size()
+            && state_.newItems[static_cast<size_t>(state_.selectedIndex)];
+}
+
+bool SectorEditorItemEditorService::ValidateDraftIds(std::string& error) const
+{
+    const auto& items = state_.draftRegistry.items;
+    for (size_t index = 0; index < items.size(); ++index) {
+        const std::string& id = items[index].id;
+        if (!IsValidItemDefinitionId(id)) {
+            error = "Item ID must contain 1-63 letters, digits, underscores or hyphens";
+            return false;
+        }
+        if (state_.newItems[index] && FindItemDefinition(registry_, id) != nullptr) {
+            error = "Item ID '" + id + "' belongs to an existing item";
+            return false;
+        }
+        for (size_t previous = 0; previous < index; ++previous) {
+            if (items[previous].id == id) {
+                error = "Duplicate item ID '" + id + "'";
+                return false;
+            }
+        }
+    }
+    error.clear();
+    return true;
+}
+
+void SectorEditorItemEditorService::ApplyIdBuffer()
+{
+    if (!CanEditSelectedId()) return;
+    ItemDefinition& selected = *SelectedItem();
+    if (selected.id != state_.idBuffer.data()) {
+        selected.id = state_.idBuffer.data();
+        session_.selectedItemId = selected.id;
+        RebuildLabels();
+    }
+    ValidateDraftIds(state_.validationMessage);
 }
 
 bool SectorEditorItemEditorService::RequestDeleteSelected()
@@ -210,6 +257,7 @@ void SectorEditorItemEditorService::ConfirmDeleteSelected()
     if (!state_.deleteConfirmationOpen || SelectedItem() == nullptr) return;
     state_.draftRegistry.items.erase(
             state_.draftRegistry.items.begin() + state_.selectedIndex);
+    state_.newItems.erase(state_.newItems.begin() + state_.selectedIndex);
     state_.selectedIndex = state_.draftRegistry.items.empty()
             ? -1
             : std::min(state_.selectedIndex,
@@ -305,6 +353,7 @@ void SectorEditorItemEditorService::SyncBuffers()
     const ItemDefinition* selected = SelectedItem();
     const ItemDefinition empty;
     const ItemDefinition& definition = selected == nullptr ? empty : *selected;
+    Copy(state_.idBuffer, definition.id);
     Copy(state_.titleBuffer, definition.title);
     Copy(state_.descriptionBuffer, definition.description);
     Copy(state_.modelPathBuffer, definition.modelPath);

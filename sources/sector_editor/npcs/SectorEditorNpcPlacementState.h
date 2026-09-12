@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/npc/NpcDefinitions.h"
+#include "engine/ui/UI.h"
 
 #include <cstdint>
 #include <string>
@@ -20,6 +21,9 @@ struct SectorEditorNpcPlacementState {
     std::vector<const char*> inspectorOptionLabels;
 
     char instanceIdBuffer[64] = {};
+    char onUseScriptBuffer[128] = {};
+    engine::UIFloatInputState useDistanceInput;
+    std::string useError;
     int bufferedObjectId = -1;
     std::string instanceIdError;
 };

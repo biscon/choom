@@ -70,7 +70,8 @@ bool SameDoorFaceUvs(
 
 bool SameDoorConfig(const SectorPlacedDoor& a, const SectorPlacedDoor& b)
 {
-    return a.useTitle == b.useTitle
+    return a.itemDropTarget == b.itemDropTarget
+            && a.useTitle == b.useTitle
             && a.canOpenScript == b.canOpenScript
             && a.canCloseScript == b.canCloseScript
             && a.width == b.width
@@ -103,7 +104,8 @@ bool SameStaticModelConfig(
         const SectorPlacedStaticModel& a,
         const SectorPlacedStaticModel& b)
 {
-    return a.modelPath == b.modelPath
+    return a.itemDropTarget == b.itemDropTarget
+            && a.modelPath == b.modelPath
             && a.rotationXRadians == b.rotationXRadians
             && a.rotationZRadians == b.rotationZRadians
             && a.heightOffsetWorld == b.heightOffsetWorld
@@ -116,7 +118,8 @@ bool SameDynamicModelConfig(
         const SectorPlacedDynamicModel& a,
         const SectorPlacedDynamicModel& b)
 {
-    return a.modelPath == b.modelPath
+    return a.itemDropTarget == b.itemDropTarget
+            && a.modelPath == b.modelPath
             && a.useTitle == b.useTitle
             && a.useDistance == b.useDistance
             && a.onUseScript == b.onUseScript
@@ -629,6 +632,14 @@ bool SectorEditorRuntimeObjectEditingService::MutateSelected(
     if (!mutate(*object)) {
         return false;
     }
+    if (object->kind == "dynamic_model" && object->dynamicModel.drag.pathEditorId > 0) {
+        if (const auto* path = FindSectorPath(context_.map.paths,object->dynamicModel.drag.pathEditorId)) {
+            const auto p = object->dynamicModel.drag.startAtEnd ? path->points.back() : path->points.front();
+            object->position.x = SectorWorldToAuthoringDistance(p.x);
+            object->position.z = SectorWorldToAuthoringDistance(p.y);
+            object->dynamicModel.collision = true;
+        }
+    }
     if ((object->kind == "static_model"
                 || object->kind == "dynamic_model"
                 || object->kind == "item"
@@ -1006,6 +1017,10 @@ SectorEditorRuntimeObjectEditingService::PreviewNudge(
     if (heightOffset == nullptr) return result;
     const float previousHeight = *heightOffset;
 
+    if (object->kind == "dynamic_model" && object->dynamicModel.drag.pathEditorId > 0
+            && (deltaXWorld != 0.0f || deltaZWorld != 0.0f)) {
+        context_.statusText = "Move the assigned path to reposition this prop"; return result;
+    }
     object->position.x += SectorWorldToAuthoringDistance(deltaXWorld);
     object->position.z += SectorWorldToAuthoringDistance(deltaZWorld);
     *heightOffset += deltaHeightWorld;
@@ -1154,6 +1169,9 @@ bool SectorEditorRuntimeObjectEditingService::BeginDrag(int objectId)
                 : "Door movement unavailable: doors stay anchored to portal lines";
         return false;
     }
+    if (object->kind == "dynamic_model" && object->dynamicModel.drag.pathEditorId > 0) {
+        context_.statusText = "Move the assigned path to reposition this prop"; return false;
+    }
     SelectObject(objectId);
     context_.editingState.drag.active = true;
     context_.editingState.drag.objectId = objectId;
@@ -1177,6 +1195,14 @@ void SectorEditorRuntimeObjectEditingService::UpdateDrag(Vector2 snappedMapPoint
     }
 
     float baseFloor = object->position.y;
+    if (object->kind == "dynamic_model" && object->dynamicModel.drag.pathEditorId > 0) {
+        if (const auto* path = FindSectorPath(context_.map.paths,object->dynamicModel.drag.pathEditorId)) {
+            const auto p = object->dynamicModel.drag.startAtEnd ? path->points.back() : path->points.front();
+            object->position.x = SectorWorldToAuthoringDistance(p.x);
+            object->position.z = SectorWorldToAuthoringDistance(p.y);
+            object->dynamicModel.collision = true;
+        }
+    }
     if ((object->kind == "static_model"
                 || object->kind == "dynamic_model"
                 || object->kind == "npc")

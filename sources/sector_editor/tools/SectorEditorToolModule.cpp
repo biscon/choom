@@ -1,4 +1,5 @@
 #include "sector_editor/tools/SectorEditorToolModule.h"
+#include "sector_editor/tools/path/SectorEditorPathTool.h"
 
 #include "sector_editor/tools/insert_vertex/SectorEditorInsertVertexTool.h"
 #include "sector_editor/tools/fog_volume/SectorEditorFogVolumeTool.h"
@@ -15,6 +16,7 @@ namespace game {
 
 const SectorEditorToolModule* FindSectorEditorToolModule(SectorEditorTool tool)
 {
+    if (tool == SectorEditorTool::Path) return &SectorEditorPathToolModule();
     if (tool == SectorEditorTool::AuthoringLine) {
         return &SectorEditorLineToolModule();
     }

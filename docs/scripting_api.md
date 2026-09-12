@@ -22,7 +22,12 @@ ranges, return values, behavior, and failure details.
 - **[Persistent values](#persistent-values):** `setPersistentBool(key, value)`,
   `getPersistentBool(key [, default])`, `setPersistentInt(key, value)`,
   `getPersistentInt(key [, default])`, `setPersistentString(key, value)`,
-  `getPersistentString(key [, default])`.
+  `getPersistentString(key [, default])`; also `flag`/`setFlag`,
+  `getInt`/`setInt`, and `getString`/`setString`.
+- **[Dialogue choices](#dialogue-choices):** `dialogue(setId [, hiddenIds [, textOverrides]])`,
+  `appendIf(list, condition, value)`, `hiddenOptions(map)`,
+  `runConversation(setId, handlers [, hiddenIds [, textOverrides]])`,
+  `runConversationDynamic(setId, handlers [, hiddenOptionsFn [, textOverridesFn]])`.
 - **[Logging](#logging):** `log(...)`, `print(...)`.
 - **[Doors](#doors):** `moveDoor(doorId, targetFraction, durationMs)`,
   `startMoveDoor(doorId, targetFraction, durationMs)`, `openDoor(doorId)`,
@@ -69,6 +74,7 @@ ranges, return values, behavior, and failure details.
   `startLookAtProp(instanceId, durationMs [, targetHeight])`.
 - **[Captions](#captions):** `say(npcId, message [, mood [, holdMs]])`,
   `startSay(npcId, message [, mood [, holdMs]])`,
+  `say(message [, options])`, `startSay(message [, options])` for the player,
   `text(message, TOP|CENTER|BOTTOM [, holdMs])`,
   `startText(message, TOP|CENTER|BOTTOM [, holdMs])`.
 - **[World fades](#world-fades):** `fadeOut(durationMs)`,
@@ -346,6 +352,46 @@ A callback may yield and must eventually return boolean `true` to allow the
 requested open/close; `false`, no return value, a missing function, or an error
 denies it. A blank callback preserves the default engine behavior.
 
+## Inventory queries
+
+`hasInventoryItemInstance(instanceId)` returns whether the player currently
+carries any quantity from that original item placement. Instance IDs match
+across all levels, using exact, case-sensitive names.
+
+`hasInventoryItemDefinition(definitionId)` returns whether the player carries
+any quantity of that Item Editor definition, regardless of placement.
+
+```lua
+if hasInventoryItemInstance("pre_entrance_door_key") then
+    -- The player carries this particular key.
+end
+if hasInventoryItemDefinition("ammo_9mm") then
+    -- The player carries some 9mm ammo (excludes loaded magazine rounds).
+end
+
+-- In a runConversationDynamic hidden-options callback:
+return hiddenOptions({
+    locked_door = hasInventoryItemInstance("pre_entrance_door_key"),
+})
+```
+
+Both calls are immediate, read-only queries. Empty or unknown IDs return
+`false`; non-string arguments raise a Lua argument error. If no player
+inventory is available, they return `nil, reason`.
+
+An authored stack attributes its entire quantity to its one placement ID.
+Merging preserves those quantities; splitting, transferring, and consuming
+take sources from the beginning of the stack's stored order. Incoming sources
+append to that order. Dropping and re-picking preserves the original IDs even
+though the dropped world object receives a new ID. Consuming or dropping the
+last matching unit makes the query false. These queries do not indicate that
+an item was ever picked up or used; use script flags for historical events.
+
+New saves preserve this information. Older saves without it still load, but
+their existing inventory and dropped items have unknown original placement
+IDs and only match definition queries. Newly collected authored items retain
+their IDs normally. Queries do not require a matching world object to exist.
+
 ## World item pickup callbacks
 
 An authored item's optional `onTakeScript` field names a global Lua function
@@ -371,10 +417,24 @@ end
 ## Carried Object use callbacks
 
 An Object placement may provide `onUseScript`. After that item is picked up,
-its inventory Use action enters cursor-targeting mode. Left-clicking a visible,
-ready static or dynamic prop calls the named global function with that prop's
-stable string instance ID. Doors, NPCs, world items, and arbitrary world
-surfaces are not Object-use targets.
+its inventory Use action enters cursor-targeting mode. Receivers must opt in
+using the **Item drop target** checkbox in the static-prop, dynamic-prop, door,
+or NPC placement inspector. This per-placement setting (`itemDropTarget` in
+level JSON) defaults to false, including in older levels that omit it. Unchecked
+objects neither highlight nor accept inventory Use/Give callbacks, but still
+block targets behind them. The setting does not affect normal E-key interaction.
+
+Left-clicking an opted-in, visible,
+ready static prop, dynamic prop, door leaf, or living non-hostile NPC calls the
+named global function with that target's stable string instance ID. NPCs must
+not already be held in a conversation. The target does not need its own use
+or dialogue script. Hidden targets and NPCs with no visible ready model cannot
+be selected. Door targeting follows the moving leaf, including the procedural
+fallback when a door model is unavailable; frames and empty doorways are not
+targets. World items and arbitrary world surfaces remain excluded.
+
+The nearest intersected target bounds win, subject to world occlusion. Visible
+ineligible NPCs and door leaves without instance IDs block targets behind them.
 
 The callback may yield. Its first return value must be boolean `true` to consume
 exactly one carried Object entry. Boolean `false`, no boolean return value, a
@@ -389,6 +449,19 @@ function useAccessCard(targetInstanceId)
     if targetInstanceId == "security_console" then
         setPersistentBool("security_unlocked", true)
         return true
+    end
+    return false
+end
+```
+
+For example, an Object key can unlock a door whose Can Open script checks the
+same persistent flag:
+
+```lua
+function useDoorKey(targetInstanceId)
+    if targetInstanceId == "pre_entrance_door" then
+        setPersistentBool("pre_entrance_door_unlocked", true)
+        return true -- consume the key
     end
     return false
 end
@@ -761,7 +834,10 @@ immediately hides gameplay HUD: health, stamina, oxygen, ammo, crosshair, and
 interaction prompts/messages. Equal black bars at 75% opacity (25% transparent)
 slide in from the top and bottom
 over 350 ms with smooth easing, each covering 15% of the playable viewport.
-Captions, menus, debug overlays, and the existing weapon viewmodel remain available.
+Captions, menus, and debug overlays remain available. Starting a cutscene also
+holsters the weapon using its normal animation and cancels pending reload or
+weapon-switch actions. The weapon stays holstered after `endCutscene()` or task
+cleanup until the player draws it manually.
 The bars are overlays and do not change the camera projection or physics.
 
 `say()` and `text(..., BOTTOM)` (including their async forms) move smoothly into
@@ -883,6 +959,8 @@ instance-ID namespace. Only one scripted look may be active.
 ```text
 say(npcId, message [, mood [, holdMs]]) -> true | false, reason
 startSay(npcId, message [, mood [, holdMs]]) -> operation | nil, reason
+say(message [, options]) -> true | false, reason
+startSay(message [, options]) -> operation | nil, reason
 text(message, TOP|CENTER|BOTTOM [, holdMs]) -> true | false, reason
 startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 ```
@@ -893,19 +971,41 @@ startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 directly in the non-yielding debug console to preview captions; direct console
 calls to the blocking forms are rejected before changing caption state.
 
-`say` requires a placed NPC instance ID (the same IDs used by `moveNpc`). The
+The NPC form requires a placed NPC instance ID (the same IDs used by `moveNpc`). The
 NPC editor's Voice setting selects `male` or `female`; older definitions default
 to male. The optional mood is `neutral` (default), `happy`, `angry`, `afraid`,
 `panicked`, `pained`, or `relieved`. Pass `nil` for mood to specify only `holdMs`.
-Unknown NPC IDs or moods fail before replacing the current caption. The old
-speakerless `say(message)` form is no longer supported; use `text` for silent
-captions.
+Unknown NPC IDs or moods fail before replacing the current caption.
+
+`say(message)` speaks as the player using the **male** voice, with independent
+session-only clip history and local, non-positional playback. Its optional second
+argument is a table with `mood` and `holdMs`; omitted fields use the same defaults
+as NPC speech. A second string selects the existing NPC signature. `startSay`
+accepts both forms and retains the same shared-caption operation behavior.
+Use `text` for silent captions.
 
 ```lua
 say("elin", "Yes finally another person!!. Come closer.", "relieved")
 say("elin", "Stay here.", nil, 2000)
 local operation = startSay("elin", "What was that?", "afraid")
+say("I'm here.")
+say("What was that?", { mood = "afraid", holdMs = 2000 })
 ```
+
+With dialogue voices enabled, Enter or a left/right mouse press reveals the
+entire current spoken line and interrupts its audio using the existing short
+release. The text stays fully visible for **2 seconds**, then fades out over
+350 ms before returning `true` to the waiting script. This fresh reading hold
+replaces any remaining reveal or hold, including explicit `holdMs` values, and
+also applies when the first press occurs during the normal hold or fade.
+A second press immediately dismisses the line and returns `true`. Pausing freezes
+the reading hold and fade; toggling voices preserves their progress without
+restarting speech. With voices disabled, a press immediately finishes the line,
+including its remaining reveal and hold. One input pass affects only that line;
+it does not select a subsequently opened menu, skip another line, fire, or become
+a world interaction. The line also completes automatically through its normal
+timing. `startSay` lines are equally skippable; `text` is unchanged. Console,
+pause, inventory, and held-item UI retain input priority over speech advancing.
 
 `say` is bottom-centered. Text follows complete spoken fragments. Each English
 word gets a recording, except two adjacent words of at most three letters each
@@ -926,7 +1026,8 @@ Disabling fades active chatter out and restores the original steady typewriter:
 40 Unicode codepoints per second, including spaces and punctuation, with no
 speech-driven pauses or dependence on clip lengths or mood. Hold and fade start
 after that text reveal completes. Switching during a line preserves the visible
-text and elapsed hold/fade progress. Re-enabling resumes speech timing at the
+text and elapsed hold progress, capped at the new hold duration. An ongoing fade
+keeps its progress without restarting or brightening. Re-enabling resumes speech timing at the
 visible position and plays subsequent complete words without replaying the
 partially revealed word. Silent text does not consume the voice selection pool.
 
@@ -972,8 +1073,14 @@ propagation, and pause/resume on the actual audio device.
 and fades in over 250 ms at the selected vertical position. Both word-wrap
 within 80% of the viewport, use the game's 48-pixel bold font, and fade out
 over 350 ms. `holdMs` is the interval after reveal/fade-in and before fade-out.
-If omitted, it is 45 ms per codepoint, clamped to `1500..8000` ms. Starting a
-new caption replaces and cancels the current caption.
+When omitted for `say`/`startSay` with dialogue voices enabled, the hold is
+350 ms after the final text reveal, with no additional terminal punctuation
+pause. The final audio fragment still finishes before the hold advances. The
+350 ms fade follows, so a blocking `say` normally returns about 700 ms after
+reveal completion. Explicit `holdMs` values retain their existing timing.
+With voices disabled, or for `text`/`startText`, the automatic hold remains
+45 ms per codepoint, clamped to `1500..8000` ms. Starting a new caption replaces
+and cancels the current caption.
 
 ### World fades
 
@@ -987,6 +1094,206 @@ overlay affects the rendered world and viewmodel, but not the HUD, menus,
 `say`, or `text`, so captions remain readable over black. A new fade replaces
 the active fade. `fadeOut` leaves the world black until `fadeIn` or a map reset
 changes it.
+
+## NPC use and conversations
+
+NPC instances have **On Use** (`onUseScript`, default empty) and **Use Dist**
+(`useDistance`, default 2.5 world units) in the inspector. A living, visible,
+non-hostile NPC with a configured hook shows its definition's name when in use
+range and under the player's gaze, provided the interaction is unobstructed.
+The prompt says `Elin`, without a `Use` prefix. Pressing E calls the named
+foreground Lua function with the instance ID; it may yield or perform any
+scripted action. Empty hooks disable use. There is no default NPC-use action.
+
+```lua
+function useElin(instanceId)
+    local ok, reason = startConversation(instanceId)
+    if not ok then log(reason); return end
+    runConversationDynamic("elin_intro_topics", handlers, hiddenTopics)
+    assert(endConversation())
+end
+```
+
+`startConversation(npcId [, { reposition = true }])` returns `true`, or
+`false, reason`. It requires a managed Lua task and a living non-hostile NPC.
+It locks player controls and saving for the whole conversation, including
+speech between choice menus, while retaining the current cinematic mode.
+Starting a conversation also holsters the player's weapon using its normal
+animation, cancelling any pending reload or weapon switch. The weapon stays
+holstered when the conversation ends; the player must draw it again manually.
+Only one conversation can be active. A conflicting scripted player/NPC move
+or turn is rejected before starting automatic positioning.
+
+By default it yields while the player smoothly turns toward the NPC and backs
+away if closer than about 1.5 m. The player keeps facing the NPC while retreating;
+movement uses normal collision, stops at obstructions/unsupported floor, and
+never takes a detour. Preparation lasts at most about two seconds; limited
+space still allows the conversation. The NPC turns toward the player and pauses
+autonomous travel/patrol timing until the conversation ends. Scripted animation
+commands continue to work. Move/turn requests for the held NPC are rejected;
+use staged mode when scripts need to control its movement.
+
+Use `startConversation("elin", { reposition = false })` for staged scenes,
+including conversations with multiple speakers. It leaves actor positions,
+facing, and NPC behavior to the script and returns immediately after acquiring
+conversation ownership. Existing `say`, `dialogue`, and conversation helpers
+remain usable inside or outside these boundaries.
+
+`endConversation()` returns `true`, or `false, reason` if there is no conversation
+owned by the calling task. It releases the conversation's control lock immediately.
+For repositioned conversations, the NPC then smoothly turns back to its orientation
+from before `startConversation()` over about 0.75 seconds, keeping autonomous
+movement paused until the turn finishes. Staged (`reposition = false`)
+conversations do not turn the NPC on exit. An enclosing cutscene remains locked
+until `endCutscene()`. End the conversation before calling `enableControls(true)`
+or `endCutscene()`. The player
+stays at the adjusted position and facing. Task completion/error/cancellation,
+participant death/removal, or map teardown also cleans up ownership. Pause and
+console capture freeze preparation. Persistent topic flags use the existing
+save store; transient conversation state is not saved.
+
+## Dialogue choices
+
+```lua
+local choice, reason = dialogue("guard_topics", { "already_discussed" })
+if choice == "identity" then
+    say("Who are you?")
+    say("guard", "Station security.")
+    setFlag("asked_guard_identity", true)
+end
+```
+
+`dialogue(setId [, hiddenIds [, textOverrides]])` suspends the managed Lua task and returns the
+selected **option ID string**. It neither speaks the label nor remembers the
+selection automatically. `hiddenIds` is a dense array of strings, not a boolean
+map. Unknown IDs have no effect, and filtering never changes the loaded asset.
+Missing sets, malformed hidden lists, all-hidden sets, or busy presentation
+return `nil, reason`. Cancellation also returns `nil, reason` if the caller is
+still running. Blocking calls from the console or top-level map chunk raise an
+error before changing UI state.
+
+`textOverrides` is an optional table mapping option IDs to replacement labels:
+
+```lua
+local choice = dialogue("elin_intro_topics", hiddenTopics,
+    returning and { goodbye = "Talk later." } or nil)
+```
+
+Omitted entries use the JSON label. Overrides affect only this menu's display;
+option IDs, order, handlers, and hidden-option filtering do not change. Unknown
+option IDs, non-string keys or values, and labels that are blank, contain NUL,
+or exceed 8192 UTF-8 bytes return `nil, reason` without opening a menu. Overrides
+for known hidden options are allowed. Loaded choice sets remain unchanged.
+
+Opening a choice menu also holsters the player's weapon, including when used
+without `startConversation()`. Closing the menu does not draw the weapon again.
+
+Each menu belongs to its requesting operation. Another task cannot replace it
+or take its result. Menus and captions are mutually exclusive: finish or cancel
+an async caption before opening a menu. Stopping its task, map teardown, and
+player death clear a menu. Result delivery clears it before resuming Lua, so a
+handler can immediately open another menu.
+
+The session loads `.json` files directly inside `assets/dialogue/` during level
+loading, in sorted filename order. Each file uses this format:
+
+```json
+{
+  "choiceSets": [
+    {
+      "id": "guard_topics",
+      "options": [
+        { "id": "identity", "text": "Who are you?" },
+        { "id": "goodbye", "text": "That's all." }
+      ]
+    }
+  ]
+}
+```
+
+Set IDs are globally unique; option IDs are unique within their set. IDs and
+labels must be nonempty, labels cannot be whitespace-only or exceed 8192 UTF-8
+bytes, and options must be a nonempty array. IDs and labels cannot contain NUL.
+Invalid files are rejected as a whole with a warning identifying the file;
+other valid files remain available. A missing directory is an empty registry.
+Restart/reload the level after editing these assets.
+
+Choices appear near the bottom, adapting to cinematic bars. The rounded panel
+fits the visible choices up to 80% of the viewport width; text uses a dedicated
+36-pixel font loaded and rendered at that size. Select using mouse
+hover and left/right click, Up/Down and Enter, or number keys 1–9. Long lists
+scroll with the mouse wheel; keyboard navigation brings the selected row into
+view. Outside clicks are consumed without selecting. Escape opens the ordinary
+pause menu; leaving a conversation uses a scripted goodbye choice.
+
+Only an open choice menu automatically captures player movement, look, weapons,
+interaction, and inventory controls. Opening it closes inventory/held-item UI
+and releases mouse capture. Closing it preserves any existing cutscene/control
+lock. World simulation keeps running. Speech between menus leaves controls
+alone; use `enableControls(false)` or `startCutscene()` to lock the entire
+conversation. Scripts remain responsible for positioning and facing both actors
+and for playing animations.
+
+While choices are visible, the rendered camera occasionally makes a small,
+randomized idle movement: an initial 1–3 second wait, then 2–3 second movements
+separated by 3–5 seconds of stillness. Selecting a reply smoothly settles any
+remaining movement; spoken lines do not start another one. Pause and console
+capture freeze idle timing. These offsets affect only camera presentation,
+not player position, scripted facing, collision, or saved state.
+
+### Conversation helpers and memory
+
+All helpers are globals installed before the map script loads; no `Adv` object
+or `require` is needed.
+
+| Helper | Behavior |
+| --- | --- |
+| `appendIf(list, condition, value)` | Appends when condition is truthy; returns the list. |
+| `hiddenOptions(map)` | Converts truthy `{ optionId = shouldHide }` entries to an ID array. |
+| `runConversation(setId, handlers [, hiddenIds [, textOverrides]])` | Repeatedly displays the set and dispatches the selected ID to its handler. |
+| `runConversationDynamic(setId, handlers [, hiddenOptionsFn [, textOverridesFn]])` | Recomputes the hidden list and text overrides before each menu. |
+
+`runConversation` accepts a fixed override table as its fourth argument.
+`runConversationDynamic` accepts a fourth callback returning an override table
+or `nil`; both callbacks run before every menu, so labels and visibility can
+respond to persistent flags changed by handlers. Pass `nil` for the third
+argument when only overriding text. Override labels are transient; reconstruct
+them from saved flags when reopening a conversation.
+
+Handlers receive the selected ID and run in the same coroutine. They may call
+speech, delays, movement, animations, or nested menus. Returning normally
+redisplays the outer menu. Returning `"exit"` or `"break"` ends the helper with
+the selected ID; an unhandled choice also returns that ID. A `nil` menu result
+ends the helper with `nil`, avoiding an endless retry loop.
+
+```lua
+runConversationDynamic("guard_topics", {
+    identity = function()
+        say("Who are you?")
+        say("guard", "Station security.")
+        setFlag("asked_guard_identity", true)
+    end,
+    goodbye = function()
+        say("That's all.")
+        return "exit"
+    end,
+}, function()
+    return hiddenOptions({ identity = flag("asked_guard_identity") })
+end)
+```
+
+`flag`/`setFlag`, `getInt`/`setInt`, and `getString`/`setString` alias the existing
+persistent boolean, integer, and string functions. They share keys and save
+storage with the longer names, including optional getter defaults. Missing
+values default to `false`, `0`, and `""`. No new save format is required.
+
+Open menus block saving independently of other save restrictions. Only persistent
+values are saved: menus, operation handles, Lua stacks, voice selection history,
+and the current conversation position are transient and reset on load. Outside
+a control lock, saving between menus retains recorded state but cannot resume
+the suspended conversation; scripts should reconstruct progress from flags.
+The cinematic example at the end of `intro_trigger_1` in `assets/levels/hub/hub.lua`
+demonstrates Elin's topics, animations, and remembered questions.
 
 ## Map travel
 

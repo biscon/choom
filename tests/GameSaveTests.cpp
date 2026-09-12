@@ -1,5 +1,6 @@
 #include "game/save/GameSaveSerialization.h"
 #include "game/save/GameSaveStorage.h"
+#include "util/json.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -91,6 +92,57 @@ game::GameSaveData MakeSave()
             {"generator_trigger", false, true, false, true, 0.0f});
     save.levels.push_back(std::move(level));
     return save;
+}
+
+void InventorySourcesRoundTripAndValidate()
+{
+    auto save = MakeSave();
+    save.itemCampaign.inventory.entries[0].sourceQuantities = {{"medkit_a", 1}, {"", 1}};
+    save.itemCampaign.levels[0].droppedItems[0].item.sourceQuantities =
+            {{"ammo_a", 5}, {"ammo_b", 7}};
+    std::string encoded, error;
+    assert(game::SerializeGameSave(save, encoded, error));
+    game::GameSaveData restored;
+    assert(game::DeserializeGameSave(encoded, restored, error));
+    const auto& inventorySources = restored.itemCampaign.inventory.entries[0].sourceQuantities;
+    assert(inventorySources.size() == 2);
+    assert(inventorySources[0].instanceId == "medkit_a" && inventorySources[0].quantity == 1);
+    assert(inventorySources[1].instanceId.empty() && inventorySources[1].quantity == 1);
+    const auto& dropSources = restored.itemCampaign.levels[0].droppedItems[0].item.sourceQuantities;
+    assert(dropSources.size() == 2);
+    assert(dropSources[0].instanceId == "ammo_a" && dropSources[0].quantity == 5);
+    assert(dropSources[1].instanceId == "ammo_b" && dropSources[1].quantity == 7);
+    using Json = nlohmann::ordered_json;
+    const auto root = Json::parse(encoded);
+    for (bool dropped : {false, true}) {
+        const auto target = [dropped](Json& value) -> Json& {
+            auto& campaign = value["itemCampaign"];
+            return dropped ? campaign["levels"][0]["droppedItems"][0]
+                           : campaign["inventory"]["entries"][0];
+        };
+        for (const Json& invalid : {Json(nullptr), Json::object(),
+                Json::array({Json{{"instanceId", "a"}, {"quantity", 0}}}),
+                Json::array({Json{{"instanceId", "a"}, {"quantity", -1}}}),
+                Json::array({Json{{"instanceId", "a"}, {"quantity", 1.5}}}),
+                Json::array({Json{{"instanceId", "a"}, {"quantity", 1}}}),
+                Json::array({Json{{"instanceId", "a"}, {"quantity", 999}}}),
+                Json::array({Json{{"instanceId", 7}, {"quantity", 2}}})}) {
+            auto changed = root;
+            target(changed)["sourceQuantities"] = invalid;
+            assert(!game::DeserializeGameSave(changed.dump(), restored, error));
+            assert(restored.itemCampaign.inventory.entries[0].sourceQuantities.size() == 2);
+        }
+        auto legacy = root;
+        target(legacy).erase("sourceQuantities");
+        assert(game::DeserializeGameSave(legacy.dump(), restored, error));
+        const auto& sources = dropped
+                ? restored.itemCampaign.levels[0].droppedItems[0].item.sourceQuantities
+                : restored.itemCampaign.inventory.entries[0].sourceQuantities;
+        assert(sources.empty());
+        assert(game::DeserializeGameSave(encoded, restored, error));
+    }
+    save.itemCampaign.inventory.entries[0].sourceQuantities[0].quantity = 100;
+    assert(!game::SerializeGameSave(save, encoded, error));
 }
 
 void SerializationRoundTripsStableState()
@@ -195,8 +247,25 @@ void IncompatibleVersionIsReportedPerSlot()
 
 } // namespace
 
+void DragProgressRoundTrips() {
+    auto save=MakeSave();auto& prop=save.levels[0].props[0];
+    prop.dragPathEditorId=8;prop.dragDistanceWorld=3.125f;
+    std::string json,error;assert(game::SerializeGameSave(save,json,error));
+    game::GameSaveData restored;assert(game::DeserializeGameSave(json,restored,error));
+    assert(restored.levels[0].props[0].dragPathEditorId==8);
+    assert(restored.levels[0].props[0].dragDistanceWorld==3.125f);
+    auto parsed=nlohmann::ordered_json::parse(json);
+    parsed["levels"][0]["props"][0].erase("drag");
+    assert(game::DeserializeGameSave(parsed.dump(),restored,error));
+    assert(restored.levels[0].props[0].dragPathEditorId==0);
+    parsed["levels"][0]["props"][0]["drag"]={{"pathEditorId",8},{"distanceWorld",-1}};
+    assert(!game::DeserializeGameSave(parsed.dump(),restored,error));
+}
+
 int main()
 {
+    DragProgressRoundTrips();
+    InventorySourcesRoundTripAndValidate();
     SerializationRoundTripsStableState();
     FlashlightStateIsBackwardCompatible();
     InvalidInputDoesNotReplaceDestination();

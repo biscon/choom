@@ -34,6 +34,7 @@ namespace game {
 
 class SectorEditorTextureCatalogService;
 class SectorEditorSoundService;
+class SectorEditorPathEditingService;
 
 enum class SectorEditorInspectorPanelRequestKind {
     RebuildSectorCollisionWorld,
@@ -110,6 +111,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorAuthoringFaceMergeService& authoringFaceMerge;
     SectorEditorStructuralPrimitiveEditingService& structuralPrimitiveEditing;
     engine::EngineContext* engineContext = nullptr;
+    SectorEditorPathEditingService* pathEditing = nullptr;
 };
 
 inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(

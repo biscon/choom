@@ -82,6 +82,7 @@ struct RuntimeObjectEditingUiState {
     char dynamicModelInstanceIdBuffer[64] = {};
     int dynamicModelInstanceIdObjectId = -1;
     std::string dynamicModelInstanceIdError;
+    engine::UIFloatInputState dragSpeedInput;
     char dynamicModelUseTitleBuffer[128] = {};
     char dynamicModelOnUseScriptBuffer[128] = {};
     std::string dynamicModelUseError;
