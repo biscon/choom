@@ -14,10 +14,15 @@ instead of being loaded.
 
 ## Persisted state
 
-A save contains campaign-wide player inventory, equipped weapon and magazine
-state, timed healing effects, collected and dropped items, player health,
+A save contains campaign-wide player inventory, selected weapon, weapon holster
+and magazine state, timed healing effects, collected and dropped items, player health,
 stamina, position and view angles. It also contains the campaign-wide Lua
 persistent bool, integer, and string stores.
+
+Holstering weapons restore fully holstered; temporary lowering during reloads
+or weapon switches does not count as holstering. Older saves without the optional
+`player.weaponHolstered` field retain the previous behavior of drawing the
+selected weapon on load.
 
 Each visited level has an engine-owned snapshot keyed by stable authored
 object IDs and string instance IDs. The snapshot contains door position and

@@ -146,6 +146,7 @@ struct GameSavePlayerState {
     PlayerOxygen oxygen;
     bool hasOxygenState = false;
     bool flashlightEnabled = false;
+    bool weaponHolstered = false;
 };
 
 struct GameSaveData {

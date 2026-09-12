@@ -1942,6 +1942,29 @@ void RequestedHolsterState()
     assert(state.equipState == game::FpsViewmodelEquipState::Unholstering);
 }
 
+void RestoreHolsterBeforeLoadingUpdates()
+{
+    game::FpsViewmodelRuntimeState state;
+    state.activeWeaponId = "pistol";
+    state.loadState = game::FpsViewmodelLoadState::Pending;
+    game::BeginFpsWeaponSlotTargetUnholster(state);
+    assert(game::RequestFpsViewmodelHolster(state));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(Near(state.equipProgress, 0.0f));
+    assert(Near(state.holsterPose.hiddenAmount, 1.0f));
+
+    game::AdvanceFpsViewmodelEquipTransition(state, 1.0f);
+    state.loadState = game::FpsViewmodelLoadState::Ready;
+    game::AdvanceFpsViewmodelEquipTransition(state, 1.0f);
+    assert(!game::IsFpsViewmodelPresentationVisible(state));
+    assert(!game::IsFpsViewmodelReadyForUse(state));
+    assert(state.activeWeaponId == "pistol");
+
+    assert(game::ToggleFpsViewmodelHolster(state, true, false));
+    game::AdvanceFpsViewmodelEquipTransition(state, 1.0f);
+    assert(game::IsFpsViewmodelReadyForUse(state));
+}
+
 void AnimationTiming()
 {
     float a=0,b=0,c=0;
@@ -2875,6 +2898,7 @@ int main()
     PlayerCameraSettingsValidation();
     PreviewSettingsOverrideDeltaCoverage();
     CameraMath(); HolsterTransitionStateAndMath(); RequestedHolsterState();
+    RestoreHolsterBeforeLoadingUpdates();
     AnimationTiming();
     AttachmentMathAndBoneResolution();
     PreparedPistolFrameTwentyFit(); BrightnessMapping();

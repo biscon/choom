@@ -1192,6 +1192,10 @@ bool SectorGameSession::StartNew(
                     settings,
                     campaign.weapons.activeWeaponId,
                     &campaign.weapons);
+            if (pendingPlayerRestore && pendingPlayerRestore->weaponHolstered) {
+                // Restore before loading updates can advance the equip animation.
+                fpsPlayer.HolsterForTraversal();
+            }
         } else {
             campaign.weapons.activeWeaponId.clear();
         }
@@ -1447,6 +1451,12 @@ GameSavePlayerState SectorGameSession::CapturePlayerSaveState() const
     result.oxygen = playerOxygen;
     result.hasOxygenState = true;
     result.flashlightEnabled = flashlight.enabled;
+    const FpsViewmodelRuntimeState& weapon = fpsPlayer.State();
+    // Reloads and weapon switches only lower the weapon temporarily.
+    result.weaponHolstered = !IsFpsWeaponReloading(weapon)
+            && !fpsPlayer.IsWeaponSwitchInProgress()
+            && (weapon.equipState == FpsViewmodelEquipState::Holstered
+                    || weapon.equipState == FpsViewmodelEquipState::Holstering);
     return result;
 }
 

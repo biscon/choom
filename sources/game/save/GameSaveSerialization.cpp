@@ -679,6 +679,9 @@ bool SerializeGameSave(
         if (save.player.flashlightEnabled) {
             root["player"]["flashlightEnabled"] = true;
         }
+        if (save.player.weaponHolstered) {
+            root["player"]["weaponHolstered"] = true;
+        }
         root["itemCampaign"] = ItemCampaignJson(save.itemCampaign);
         root["persistentScripts"] = PersistentJson(save.persistentScripts);
         root["levels"] = Json::array();
@@ -767,6 +770,8 @@ bool DeserializeGameSave(
         }
         candidate.player.flashlightEnabled = player.value(
                 "flashlightEnabled", false);
+        candidate.player.weaponHolstered = player.value(
+                "weaponHolstered", false);
         RequireFinite(candidate.player.stamina.maximum, "player.stamina.maximum");
         RequireFinite(candidate.player.stamina.current, "player.stamina.current");
         Require(candidate.player.stamina.maximum > 0.0f
