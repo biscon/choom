@@ -472,7 +472,7 @@
         "normalOffset": -0.20000000298023224,
         "openDistance": 2.75,
         "speed": 1.75,
-        "interactionDistance": 3.5,
+        "interactionDistance": 2.5,
         "autoOpenDistance": 2.5,
         "materialId": "hydraulic_blast_door_512",
         "openSoundId": "slidingdoor_03",
@@ -570,6 +570,8 @@
       "npc": {
         "definitionId": "Zombie1",
         "instanceId": "zombie02",
+        "patrolEditorId": 1,
+        "randomPatrolStart": true,
         "shadowMode": "dynamic"
       },
       "position": [
@@ -6774,6 +6776,7 @@
         "itemDropTarget": true,
         "instanceId": "entrance_keypad",
         "useTitle": "Keypad",
+        "onUseScript": "useEntranceKeypad",
         "modelPath": "assets/models/simple_keypad.glb",
         "heightOffsetWorld": 1.100000023841858,
         "scale": 0.5,
@@ -12723,6 +12726,10 @@
       "horror_ambience": {
         "path": "ambience/horror_ambience.ogg",
         "type": "music"
+      },
+      "keycard_accept": {
+        "path": "sfx/keycard_accept.wav",
+        "type": "sound"
       },
       "light_switch_on_01": {
         "path": "sfx/light-switch-on-01.wav",

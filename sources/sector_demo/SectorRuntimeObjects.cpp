@@ -352,6 +352,10 @@ void RefreshPlacedRuntimeObjectDiagnostics(
                     ++modelRequestedCount;
                     if (assets.IsReady(staticModel.model)) {
                         ++modelReadyCount;
+                        if (const auto* asset = assets.GetModelAsset(staticModel.model)) {
+                            if (staticModel.emissiveColors.size() != asset->materials.size())
+                                staticModel.emissiveColors.resize(asset->materials.size());
+                        }
                     } else if (!assets.IsFinished(staticModel.model)) {
                         ++modelPendingCount;
                     } else if (assets.HasFailed(staticModel.model)) {
@@ -659,6 +663,7 @@ void ResolveDynamicModelAnimations(
                     return;
                 }
 
+                dynamicModel.emissiveColors.resize(asset->materials.size());
                 const size_t clipCount =
                         engine::ModelAnimationClipCount(*asset);
                 if (clipCount == 0) {

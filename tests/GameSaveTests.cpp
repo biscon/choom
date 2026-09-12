@@ -61,6 +61,7 @@ game::GameSaveData MakeSave()
     prop.placedObjectId = 11;
     prop.instanceId = "generator_lever";
     prop.emissiveScale = 2.0f;
+    prop.emissiveColors.push_back({"Light", {0.015f, 0.12f, 1.0f}});
     prop.useConsumed = true;
     prop.hasAnimator = true;
     prop.animator.animationName = "pull";
@@ -172,6 +173,9 @@ void SerializationRoundTripsStableState()
     assert(restored.levels[0].ductAccesses[0].removalSide
             == game::SectorDuctCoverRemovalSide::Crawlspace);
     assert(restored.levels[0].props[0].animator.frame == 13.5f);
+    assert(restored.levels[0].props[0].emissiveColors.size() == 1);
+    assert(restored.levels[0].props[0].emissiveColors[0].material == "Light");
+    assert(restored.levels[0].props[0].emissiveColors[0].color.z == 1.0f);
     assert(restored.levels[0].npcs[0].dead);
     assert(restored.levels[0].npcs[0].deathAnimationComplete);
     assert(restored.levels[0].npcs[0].shuffleOrder.size() == 3);

@@ -423,6 +423,8 @@ Json LevelJson(const GameSaveLevelState& level)
         Json json{{"placedObjectId", value.placedObjectId}, {"instanceId", value.instanceId},
                 {"emissiveScale", value.emissiveScale}, {"opacity", value.opacity},
                 {"useConsumed", value.useConsumed}, {"hasAnimator", value.hasAnimator}};
+        for (const auto& color : value.emissiveColors)
+            json["emissiveColors"].push_back(Json{{"material", color.material}, {"color", Vec3(color.color)}});
         if (value.dragPathEditorId > 0) json["drag"] = Json{
                 {"pathEditorId", value.dragPathEditorId}, {"distanceWorld", value.dragDistanceWorld}};
         if (value.hasAnimator) json["animator"] = AnimatorJson(value.animator);
@@ -523,6 +525,19 @@ GameSaveLevelState ReadLevel(const Json& root)
         state.placedObjectId = value.at("placedObjectId").get<int>();
         state.instanceId = value.value("instanceId", std::string{});
         state.emissiveScale = value.value("emissiveScale", 1.0f);
+        if (value.contains("emissiveColors")) {
+            Require(value.at("emissiveColors").is_array(), "prop.emissiveColors must be an array");
+            std::set<std::string> names;
+            for (const auto& color : value.at("emissiveColors")) {
+                SectorSavedEmissionColor saved;
+                saved.material = color.at("material").get<std::string>();
+                Require(!saved.material.empty() && saved.material.find('\0') == std::string::npos && names.insert(saved.material).second,
+                        "invalid or duplicate emissive material name");
+                saved.color = ReadVec3(color.at("color"), "prop.emissiveColor");
+                for (float c : {saved.color.x, saved.color.y, saved.color.z}) Require(c >= 0 && c <= 1, "emissive colour must be in 0..1");
+                state.emissiveColors.push_back(saved);
+            }
+        }
         state.opacity = value.value("opacity", 1.0f);
         state.useConsumed = value.value("useConsumed", false);
         if (value.contains("drag")) {

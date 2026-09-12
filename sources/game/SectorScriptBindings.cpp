@@ -7,6 +7,7 @@
 #include "game/Health.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/dialogue/SectorDialogue.h"
+#include "game/keypad/SectorKeypad.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
@@ -1100,6 +1101,7 @@ int LuaDialogueOperation(lua_State* state)
     }
     if (host.conversation.active && !(host.conversation.owner == owner))
         return PushCutsceneStartError(state, false, "conversation belongs to another task");
+    if (host.keypad && host.keypad->active) return PushCutsceneStartError(state, false, "a keypad is already active");
     if (!host.dialogue) return PushCutsceneStartError(state, false, "dialogue runtime is unavailable");
     if (host.cutscene && host.cutscene->caption.active)
         return PushCutsceneStartError(state, false, "a caption is already active");
@@ -1169,6 +1171,8 @@ int StartCaption(
     }
     if (host.conversation.active && !(host.conversation.owner == ownerTask))
         return PushCutsceneStartError(state, async, "conversation belongs to another task");
+    if (host.keypad && host.keypad->active)
+        return PushCutsceneStartError(state, async, "a keypad is already active");
     if (host.dialogue && host.dialogue->active)
         return PushCutsceneStartError(state, async, "a dialogue menu is already active");
     size_t textLength = 0;
@@ -1436,7 +1440,7 @@ int LuaStartConversation(lua_State* state)
     if (!engine::IsValid(owner) || !host.cutscene || !host.playerState || !host.playerConfig
             || !host.controls.setControlsEnabled)
         return PushCutsceneStartError(state, false, "conversation requires a managed task and player runtime");
-    if (host.conversation.active || (host.dialogue && host.dialogue->active)
+    if ((host.keypad && host.keypad->active) || host.conversation.active || (host.dialogue && host.dialogue->active)
             || host.cutscene->caption.active || host.cutscene->playerMove.active || host.cutscene->look.active)
         return PushCutsceneStartError(state, false, "conversation or scripted presentation is already active");
     if (!host.cutscene->controlsEnabled && engine::IsValid(host.cutscene->controlsOwnerTask)
@@ -2239,6 +2243,46 @@ int LuaSetDynamicLightColor(lua_State* state)
     return 1;
 }
 
+int LuaSetPropEmissiveColor(lua_State* state)
+{
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    HostFromLua(state);
+    size_t idLength = 0, nameLength = 0;
+    const char* id = luaL_checklstring(state, 1, &idLength);
+    const char* name = luaL_checklstring(state, 2, &nameLength);
+    const bool reset = lua_isnil(state, 3) && lua_gettop(state) == 3;
+    float rgb[3]{};
+    if (!reset) {
+        if (lua_gettop(state) != 5) return PushBindingError(state, "expected RGB values or nil to restore authored colour");
+        for (int i = 0; i < 3; ++i) {
+            if (lua_type(state, i+3) != LUA_TNUMBER) return PushBindingError(state, "colour must be numeric");
+            rgb[i] = static_cast<float>(lua_tonumber(state, i+3));
+            if (!std::isfinite(rgb[i]) || rgb[i] < 0 || rgb[i] > 1)
+                return PushBindingError(state, "colour must be finite linear RGB in 0..1");
+        }
+    }
+    const auto entity = FindAnyPropEntity(context.world, std::string_view{id, idLength});
+    if (engine::IsNull(entity)) return PushBindingError(state, "prop was not found");
+    engine::ModelHandle model{};
+    SectorPropEmissionColors* colors = nullptr;
+    if (context.world.Has<SectorStaticModel>(entity)) {
+        auto& prop = context.world.Get<SectorStaticModel>(entity);
+        model = prop.model;
+        colors = &prop.emissiveColors;
+    } else if (context.world.Has<engine::AnimatedModelInstance>(entity)) {
+        model = context.world.Get<engine::AnimatedModelInstance>(entity).model;
+        colors = &context.world.Get<SectorDynamicModel>(entity).emissiveColors;
+    }
+    const auto* asset = context.assets.GetModelAsset(model);
+    if (!asset || !colors) return PushBindingError(state, "prop model is unavailable");
+    std::string error;
+    const std::optional<Vector3> color = reset ? std::nullopt : std::optional<Vector3>{{rgb[0], rgb[1], rgb[2]}};
+    if (!SetSectorPropEmissionColor(*colors, *asset, std::string{name, nameLength}, color, error))
+        return PushBindingError(state, error);
+    lua_pushboolean(state, true);
+    return 1;
+}
+
 int LuaSetPropEmissiveScale(lua_State* state)
 {
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
@@ -2572,6 +2616,8 @@ void InitializeSectorScriptHost(
     host.npcNavigation = npcNavigation;
     host.cutscene = cutscene;
     host.dialogue = nullptr;
+    host.keypad = nullptr;
+    host.inventoryInteractionActive = false;
     host.dialogueVoices = nullptr;
     host.playerState = playerState;
     host.playerConfig = playerConfig;
@@ -2612,6 +2658,8 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.npcNavigation = nullptr;
     host.cutscene = nullptr;
     host.dialogue = nullptr;
+    host.keypad = nullptr;
+    host.inventoryInteractionActive = false;
     host.dialogueVoices = nullptr;
     host.playerState = nullptr;
     host.playerConfig = nullptr;
@@ -2632,6 +2680,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
 
 void RegisterSectorScriptBindings(lua_State* state)
 {
+    RegisterSectorKeypadBindings(state);
     // Capture the native operation function as a Lua upvalue; only the public
     // choice-ID contract is installed as a global.
     constexpr const char* dialogueWrapper = R"lua(
@@ -2656,6 +2705,7 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "stopPropAnimation", LuaStopPropAnimation);
     Register(state, "setPropAnimationProgress", LuaSetPropAnimationProgress);
     Register(state, "setPropEmissiveScale", LuaSetPropEmissiveScale);
+    Register(state, "setPropEmissiveColor", LuaSetPropEmissiveColor);
     Register(state, "setPlayerHealth", LuaSetPlayerHealth);
     Register(state, "hasInventoryItemInstance", LuaHasInventoryItemInstance);
     Register(state, "hasInventoryItemDefinition", LuaHasInventoryItemDefinition);

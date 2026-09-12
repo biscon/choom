@@ -1809,6 +1809,12 @@ void* ScriptSystemHostContextFromLua(lua_State* state)
 ScriptTaskHandle ScriptSystemCurrentTaskFromLua(lua_State* state)
 {
     ScriptRuntime& runtime = ScriptSystemRuntimeFromLua(state);
+    // Reject synchronous callbacks before a binding creates an operation or
+    // changes presentation state. A later lua_yield error would leave that
+    // backend action running (e.g. a delay inside keypad validation).
+    if (!lua_isyieldable(state)) {
+        luaL_error(state, "blocking operations are not allowed in a non-yielding callback");
+    }
     if (runtime.phase == ScriptRuntimePhase::ShuttingDown) {
         luaL_error(state, "blocking Lua operations are not allowed during shutdown()");
     }

@@ -216,7 +216,7 @@ void SectorGameSession::RefreshMouseLookCapture()
             controller.freeflyController,
             !consoleInputCaptured
                     && !inventoryUi.open
-                    && !dialogue.active
+                    && !dialogue.active && !keypad.active
                     && cutscene.controlsEnabled
                     && heldObjectUse.phase == ItemHeldUsePhase::Inactive);
     if (!controller.freeflyController.mouseLookEnabled) {
@@ -263,6 +263,7 @@ void SectorGameSession::SetInventoryOpen(bool open)
 {
     if (inventoryUi.open == open) return;
     inventoryUi.open = open;
+    scriptHost.inventoryInteractionActive = open || heldObjectUse.phase != ItemHeldUsePhase::Inactive;
     if (!open) ClearItemInventoryInteraction(inventoryUi);
     if (open) {
         if (itemCampaign != nullptr) {
@@ -425,6 +426,7 @@ void SectorGameSession::UpdatePendingHeldObjectUse()
 
 bool SectorGameSession::HandleEscape()
 {
+    if (keypad.active) { keypad.cancelRequested = true; return true; }
     if (inventoryUi.open) {
         if (CancelItemInventorySplit(inventoryUi)) return true;
         SetInventoryOpen(false);
@@ -1223,6 +1225,11 @@ bool SectorGameSession::StartNew(
     scriptHost.dialogueVoices = &dialogueVoices;
     LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
     scriptHost.dialogue = &dialogue;
+    LoadSectorKeypads(context.assets, keypad, ASSETS_PATH);
+    scriptHost.keypad = &keypad;
+    scriptHost.controls.keypadChanged = [](void* userData, bool active) {
+        static_cast<SectorGameSession*>(userData)->OnDialogueChanged(active);
+    };
     scriptHost.controls.dialogueChanged = [](void* userData, bool active) {
         static_cast<SectorGameSession*>(userData)->OnDialogueChanged(active);
     };
@@ -1263,6 +1270,8 @@ void SectorGameSession::Shutdown(
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     EndSectorScriptConversation(context, scriptHost);
+    CancelSectorKeypad(scriptHost, "session ended");
+    UnloadSectorKeypads(context.assets, keypad);
     ResetSectorDialogueMenu(dialogue);
     ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);
@@ -1345,6 +1354,8 @@ void SectorGameSession::SuspendForEditor(engine::EngineContext& context)
     Pause();
     engine::ScriptSystemShutdownForMap(context, scripts);
     EndSectorScriptConversation(context, scriptHost);
+    CancelSectorKeypad(scriptHost, "session ended");
+    UnloadSectorKeypads(context.assets, keypad);
     ResetSectorDialogueMenu(dialogue);
     ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);
@@ -1458,12 +1469,14 @@ void SectorGameSession::Update(
         scene.Renderer().SetPlayerFlashlight(nullptr);
         return;
     }
-    const bool dialogueCapturedThisFrame = dialogue.active;
+    const bool keypadCapturedThisFrame = keypad.active;
+    const bool dialogueCapturedThisFrame = dialogue.active || keypadCapturedThisFrame;
+    if (!consoleInputCaptured) UpdateSectorKeypad(context, scriptHost, logicalViewport, dt);
     if (!consoleInputCaptured) {
-        if (dialogueCapturedThisFrame) {
+        if (dialogue.active) {
             UpdateSectorDialogueInput(dialogue, scripts, context.input, logicalViewport);
-            if (!dialogue.active) OnDialogueChanged(false);
-        } else if (ConsumeSectorSpeechAdvance(dialogue, context.input,
+            if (!dialogue.active && !keypad.active) OnDialogueChanged(false);
+        } else if (!keypadCapturedThisFrame && ConsumeSectorSpeechAdvance(dialogue, context.input,
                 !inventoryUi.open && heldObjectUse.phase == ItemHeldUsePhase::Inactive
                         && cutscene.caption.active
                         && cutscene.caption.kind == SectorCutsceneCaptionKind::Say)) {
@@ -1474,7 +1487,7 @@ void SectorGameSession::Update(
     UpdatePlayerHitCamera(hitCamera, dt);
     playerStunRemainingSeconds = std::max(
             0.0f, playerStunRemainingSeconds - std::max(0.0f, dt));
-    if (!consoleInputCaptured && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active) {
+    if (!consoleInputCaptured && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active && !keypad.active) {
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
                 true,
@@ -1498,7 +1511,7 @@ void SectorGameSession::Update(
                 });
     }
     if (!consoleInputCaptured
-            && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active
+            && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active && !keypad.active
             && !cutscene.playerMove.active
             && !inventoryUi.open
             && heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
@@ -1675,6 +1688,7 @@ void SectorGameSession::Update(
     if (IsDepleted(playerHealth)) {
         EndSectorPropDrag(context,controller.propDrag);
         gameOver = true;
+        CancelSectorKeypad(scriptHost, "player died");
         UpdateSectorScriptConversationOwnership(context, scriptHost);
         if (dialogue.active) {
             engine::ScriptSystemCancelOperation(context, scripts, dialogue.operation, "player died");
@@ -1710,12 +1724,13 @@ void SectorGameSession::Update(
     if (itemCampaign != nullptr) {
         UpdateItemHealingEffects(*itemCampaign, playerHealth, dt);
     }
+    scriptHost.inventoryInteractionActive = inventoryUi.open || heldObjectUse.phase != ItemHeldUsePhase::Inactive;
     UpdateSectorScriptOperations(context, scriptHost);
     UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, dt,
             applicationSettings == nullptr || applicationSettings->dialogueVoicesEnabled);
     UpdateSectorCutsceneTimelines(cutscene, scripts, dt);
     SectorFpsControllerInput input;
-    if (!gameplayInputCaptured && !dialogue.active) {
+    if (!gameplayInputCaptured && !dialogue.active && !keypad.active) {
         input.moveForward = context.input.IsKeyDown(KEY_W);
         input.moveBackward = context.input.IsKeyDown(KEY_S);
         input.strafeLeft = context.input.IsKeyDown(KEY_A);
@@ -1732,7 +1747,7 @@ void SectorGameSession::Update(
             input.mouseDelta = context.input.MouseDelta();
         }
     }
-    if (!gameplayInputCaptured && !dialogue.active) context.input.ForEachEvent(
+    if (!gameplayInputCaptured && !dialogue.active && !keypad.active) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [this, &input](engine::InputEvent& event) {
@@ -2000,7 +2015,7 @@ void SectorGameSession::Update(
         }
         UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
     } else if (heldObjectUse.phase == ItemHeldUsePhase::Inactive
-            && !inventoryUi.open && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active
+            && !inventoryUi.open && cutscene.controlsEnabled && !dialogueCapturedThisFrame && !dialogue.active && !keypad.active
             && !IsSectorLadderTraversalActive(controller.ladderTraversal)
             && engine::IsNull(controller.propDrag.entity)
             && (controller.ductTraversal.phase
@@ -2071,7 +2086,7 @@ void SectorGameSession::Update(
                     if (decision.consumeEvent) engine::ConsumeEvent(event);
                 });
     }
-    if (!gameplayInputCaptured && !dialogue.active) context.input.ForEachEvent(
+    if (!gameplayInputCaptured && !dialogue.active && !keypad.active) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [this, &context, &scene](engine::InputEvent& event) {
@@ -2244,7 +2259,7 @@ void SectorGameSession::Update(
     }
     ApplyPlayerPose(scene);
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
-        const bool weaponInputCaptured = !engine::IsNull(controller.propDrag.entity) || gameplayInputCaptured || dialogue.active
+        const bool weaponInputCaptured = !engine::IsNull(controller.propDrag.entity) || gameplayInputCaptured || dialogue.active || keypad.active
                 || !cutscene.controlsEnabled || scriptHost.conversation.active
                 || IsSectorLadderTraversalActive(
                         controller.ladderTraversal)
@@ -2259,7 +2274,7 @@ void SectorGameSession::Update(
                         : nullptr,
                 scene.Renderer(),
                 true,
-                !gameplayInputCaptured && !dialogue.active,
+                !gameplayInputCaptured && !dialogue.active && !keypad.active,
                 weaponInputCaptured,
                 itemRegistry,
                 itemCampaign);
@@ -2355,6 +2370,11 @@ void SectorGameSession::UpdateLoading(
         finishedAssets += finished + dialogueVoices.prepared;
         totalAssets += total + dialogueVoices.pending.size();
     }
+    if (!engine::IsNull(keypad.scope)) {
+        size_t finished = 0, total = 0;
+        context.assets.GetScopeProgressCounts(keypad.scope, finished, total);
+        finishedAssets += finished; totalAssets += total;
+    }
     const engine::AssetScopeHandle viewmodelScope =
             fpsPlayer.State().assetScope;
     if (!engine::IsNull(viewmodelScope)) {
@@ -2390,7 +2410,9 @@ void SectorGameSession::UpdateLoading(
     const SectorRuntimeObjectState& objects = scene.RuntimeObjects();
     const bool assetsFinished = scene.AreLoadAssetScopesFinished(context.assets)
             && ScopeFinishedOrEmpty(context.assets, viewmodelScope)
-            && engine::DialogueVoicesFinished(context.assets, dialogueVoices);
+            && engine::DialogueVoicesFinished(context.assets, dialogueVoices)
+            && ScopeFinishedOrEmpty(context.assets, keypad.scope);
+    if (assetsFinished) PrepareSectorKeypadAssets(context.assets, keypad);
     const bool runtimeObjectsFinished =
             objects.spriteAnimationPendingCount == 0
             && objects.staticModelPendingCount == 0;
@@ -2500,7 +2522,7 @@ void SectorGameSession::RenderViewmodel(
         engine::AssetManager& assets,
         SectorSceneRuntime& scene)
 {
-    if (!running || IsLoadScreenOpaque()) {
+    if (!running || IsLoadScreenOpaque() || keypad.active) {
         return;
     }
     fpsPlayer.Render(
@@ -2545,7 +2567,7 @@ void SectorGameSession::RenderHud(
                     assets.GetFont(usePromptFont),
                     itemMessage.data(),
                     itemMessageElapsedSeconds);
-        } else if (!inventoryUi.open && !dialogue.active
+        } else if (!inventoryUi.open && !dialogue.active && !keypad.active
                 && heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
             DrawSectorUsePrompt(
                     playableViewport,
@@ -2554,6 +2576,10 @@ void SectorGameSession::RenderHud(
                     !engine::IsNull(controller.propDrag.entity) ? "" : useTarget.draggable ? "Drag" : useTarget.kind == SectorUseTargetKind::Npc ? ""
                             : useTarget.kind == SectorUseTargetKind::Item ? "Take" : "Use");
         }
+    }
+    if (IsActive() && keypad.active) {
+        LayoutSectorKeypad(keypad, playableViewport);
+        DrawSectorKeypad(assets, keypad);
     }
     if (IsActive()) {
         DrawSectorCutsceneCaption(
@@ -2643,6 +2669,8 @@ bool SectorGameSession::RebuildFromMap(
     }
     engine::ScriptSystemShutdownForMap(context, scripts);
     EndSectorScriptConversation(context, scriptHost);
+    CancelSectorKeypad(scriptHost, "session ended");
+    UnloadSectorKeypads(context.assets, keypad);
     ResetSectorDialogueMenu(dialogue);
     ClearDialogueCameraIdle(dialogueCameraIdle);
     ResetSectorScriptHost(scriptHost);
@@ -2739,6 +2767,11 @@ bool SectorGameSession::RebuildFromMap(
     scriptHost.dialogueVoices = &dialogueVoices;
     LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
     scriptHost.dialogue = &dialogue;
+    LoadSectorKeypads(context.assets, keypad, ASSETS_PATH);
+    scriptHost.keypad = &keypad;
+    scriptHost.controls.keypadChanged = [](void* userData, bool active) {
+        static_cast<SectorGameSession*>(userData)->OnDialogueChanged(active);
+    };
     scriptHost.controls.dialogueChanged = [](void* userData, bool active) {
         static_cast<SectorGameSession*>(userData)->OnDialogueChanged(active);
     };

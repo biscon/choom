@@ -976,7 +976,8 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         const std::vector<Matrix>* meshNodeMatrices,
         float emissiveScale,
         float opacity,
-        float interactionHighlightStrength)
+        float interactionHighlightStrength,
+        const SectorPropEmissionColors* emissiveColors)
 {
     if (captureCulling && !AcceptSectorReflectionObject(captureCulling,
             TransformSectorDoorModelBounds(modelAsset.localBounds, modelTransform),
@@ -1093,6 +1094,7 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
                     maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
         }
         pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
+        if (emissiveColors) pbrMaterial.emissiveFactor = SectorPropEmissionFactor(*emissiveColors, materialIndex, pbrMaterial.emissiveFactor);
         pbrMaterial.emissiveStrength = ScaleSectorPbrEmissiveStrength(
                 pbrMaterial.emissiveStrength,
                 emissiveScale);
@@ -1552,6 +1554,7 @@ void SectorStaticModelRenderer::Draw(
                                 maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
                     }
                     pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
+                    pbrMaterial.emissiveFactor = SectorPropEmissionFactor(staticModel.emissiveColors, materialIndex, pbrMaterial.emissiveFactor);
                     pbrMaterial.emissiveStrength = ScaleSectorPbrEmissiveStrength(
                             pbrMaterial.emissiveStrength,
                             staticModel.emissiveScale);
@@ -1756,7 +1759,8 @@ void SectorStaticModelRenderer::Draw(
                         dynamicModel.opacity,
                         entity == useHighlight.entity
                                 ? useHighlight.strength
-                                : 0.0f);
+                                : 0.0f,
+                        &dynamicModel.emissiveColors);
                 if (fading) {
                     rlDisableColorBlend();
                     rlEnableDepthMask();

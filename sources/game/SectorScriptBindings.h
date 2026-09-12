@@ -27,6 +27,7 @@ struct PlayerInventoryState;
 struct NpcNavigationRuntime;
 struct SectorCutsceneRuntime;
 struct SectorDialogueRuntime;
+struct SectorKeypadRuntime;
 struct SectorFpsControllerConfig;
 struct SectorFpsControllerState;
 struct SectorTopologyMap;
@@ -105,6 +106,7 @@ struct SectorScriptControlApi {
     bool (*setControlsEnabled)(void*, engine::EngineContext&, bool,
             std::string&) = nullptr;
     void (*dialogueChanged)(void*, bool) = nullptr;
+    void (*keypadChanged)(void*, bool) = nullptr;
     void (*holsterWeapon)(void*) = nullptr;
 };
 
@@ -115,6 +117,8 @@ struct SectorScriptHost {
     NpcNavigationRuntime* npcNavigation = nullptr;
     SectorCutsceneRuntime* cutscene = nullptr;
     SectorDialogueRuntime* dialogue = nullptr;
+    SectorKeypadRuntime* keypad = nullptr;
+    bool inventoryInteractionActive = false;
     SectorConversationState conversation;
     SectorFpsControllerState* playerState = nullptr;
     const SectorFpsControllerConfig* playerConfig = nullptr;

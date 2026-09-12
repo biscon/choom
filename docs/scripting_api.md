@@ -28,6 +28,7 @@ ranges, return values, behavior, and failure details.
   `appendIf(list, condition, value)`, `hiddenOptions(map)`,
   `runConversation(setId, handlers [, hiddenIds [, textOverrides]])`,
   `runConversationDynamic(setId, handlers [, hiddenOptionsFn [, textOverridesFn]])`.
+- **[Keypads](#keypads):** `promptPinCode(options)`.
 - **[Logging](#logging):** `log(...)`, `print(...)`.
 - **[Doors](#doors):** `moveDoor(doorId, targetFraction, durationMs)`,
   `startMoveDoor(doorId, targetFraction, durationMs)`, `openDoor(doorId)`,
@@ -38,7 +39,8 @@ ranges, return values, behavior, and failure details.
   `stopPropAnimation(propId)`,
   `setPropAnimationProgress(propId, progress [, animationName])`.
 - **[Prop emission](#3d-prop-emission):**
-  `setPropEmissiveScale(propId, scale)`.
+  `setPropEmissiveScale(propId, scale)`,
+  `setPropEmissiveColor(propId, materialName, r, g, b)`.
 - **[Dynamic lights](#dynamic-lights):**
   `setDynamicLightEnabled(lightId, enabled)`,
   `setDynamicLightIntensity(lightId, intensity)`,
@@ -539,6 +541,78 @@ local function setHallLamp(enabled)
     setPropEmissiveScale("hall_lamp", enabled and 1.0 or 0.0)
 end
 ```
+
+### `setPropEmissiveColor(propId, materialName, r, g, b) -> true | false, reason`
+
+Overrides the named glTF material's emissive factor in one static or dynamic
+prop instance. RGB components are finite **linear** values from `0` to `1`.
+This replaces the authored factor; it does not multiply the authored hue.
+Authored emissive textures and strength still apply, and
+`setPropEmissiveScale()` remains an independent brightness multiplier.
+
+```lua
+setPropEmissiveColor("entrance_keypad", "Light", 0.015, 0.12, 1.0)
+setPropEmissiveScale("entrance_keypad", 0.35)
+setPropEmissiveColor("entrance_keypad", "Light", nil) -- restore authored factor
+```
+
+Names are exact and case-sensitive. Missing/ambiguous material names, missing
+props, unavailable models, and invalid colours return `false, reason`.
+Overrides are saved by material name. Other instances sharing the model are
+unaffected. Emission is visual-only: it does not create a world light, change
+collision, invalidate topology caches, or change the lightmap source hash.
+
+## Keypads
+
+### `promptPinCode(options) -> string | nil, reason`
+
+Opens a skinned 2D keypad and yields the current managed Lua task. The world
+continues running; player movement, aiming, firing, inventory, and Use input
+are captured. Opening holsters the weapon; closing does not redraw it.
+
+```lua
+local code, reason = promptPinCode({
+    skin = "simple_keypad",
+    digits = 4,
+    indicatorColor = {0.015, 0.12, 1.0}, -- optional linear RGB
+    validate = function(candidate)
+        return candidate == "1984"
+    end,
+})
+if code then setFlag("entrance_pin_accepted", true) end
+```
+
+`skin` is a loaded skin ID; `digits` is an integer from 1 to 8. Results are
+strings, so leading zeroes are retained. Optional `indicatorColor` overrides
+the skin's default indicator colour for this presentation only.
+
+Without `validate`, any complete submission returns. A validator runs in the
+requesting task and must return boolean: `true` accepts and closes; `false`
+shows `ERROR` for 650 ms, clears the entry, and waits for another attempt in
+the same panel. Validators **must not yield**; errors and non-boolean returns
+close the panel and propagate as script errors. Keep puzzle mutations after
+successful return.
+
+Mouse buttons and keyboard/numpad digits operate the keypad. Backspace deletes;
+Enter/the lower-right button submits. Partial codes cannot submit. Escape
+returns `nil, "cancelled"`, preserving puzzle state. A keypad cannot overlap
+another keypad, dialogue, captions, conversations, or inventory targeting.
+Unavailable assets or conflicting presentation return `nil, reason`.
+Calling outside a managed task raises an error before opening UI.
+
+Pause and console capture suspend keypad input. Task termination, death, map
+teardown, and return to the editor clear ownership. Saving is unavailable
+while a keypad is open; partial input and pending operations are not saved.
+
+Skins load from JSON files directly in `assets/keypads/` during level loading.
+Each defines `id`, relative `image` and `indicatorImage` paths (matching image
+dimensions), normalised `display` and `indicator` rectangles `[x,y,w,h]`,
+`indicatorColor` (linear RGB), `displayColor` (RGB bytes), twelve `buttons`, and
+three `sounds` paths in button/rejected/accepted order. Each button has a
+non-overlapping `rect` and one unique `action`: `"0"`–`"9"`, `"backspace"`,
+or `"submit"`. Images and sounds resolve relative to `assets/keypads/`.
+The indicator image is a full-frame transparent layer aligned with the panel.
+See `tools/keypad/prepare_keypad.py` for the supplied asset's preparation recipe.
 
 ## Dynamic lights
 
