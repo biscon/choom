@@ -5018,7 +5018,7 @@ void SectorEditor::RenderPreview3DHud(
                 assets.GetFont(usePromptFont),
                 !engine::IsNull(previewState.controller.propDrag.entity)
                         ? "E: Release - W/S: Push/Pull" : previewUsePromptTitle.data(),
-                !engine::IsNull(previewState.controller.propDrag.entity) ? "" : previewUseTarget.draggable ? "Drag" : "Use");
+                !engine::IsNull(previewState.controller.propDrag.entity) ? "" : previewUseTarget.draggable ? "Drag" : previewUseTarget.action);
     }
 }
 

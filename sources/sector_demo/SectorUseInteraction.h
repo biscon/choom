@@ -19,6 +19,7 @@ namespace game {
 class SectorCollisionWorld;
 struct SectorTopologyMap;
 struct SectorRuntimeObjectState;
+struct SectorDoorMotion;
 
 enum class SectorUseTargetKind {
     None,
@@ -40,6 +41,7 @@ struct SectorUseTarget {
     int ladderPrimitiveId = -1;
     SectorLadderEndpoint ladderEndpoint = SectorLadderEndpoint::Bottom;
     bool draggable = false;
+    std::string_view action = "Use";
 };
 
 struct SectorUseHighlight {
@@ -113,6 +115,8 @@ std::string_view SectorObjectUseTargetInstanceId(
 std::string_view SectorUseTargetTitle(
         engine::World& world,
         const SectorUseTarget& target);
+
+std::string_view SectorDoorUsePromptAction(const SectorDoorMotion& motion);
 
 void ResetSectorUseHighlight(SectorUseHighlightState& state);
 

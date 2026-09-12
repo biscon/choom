@@ -61,6 +61,7 @@ game::GameSaveData MakeSave()
     prop.placedObjectId = 11;
     prop.instanceId = "generator_lever";
     prop.emissiveScale = 2.0f;
+    prop.emissiveColors.push_back({"Light", {0.015f, 0.12f, 1.0f}});
     prop.useConsumed = true;
     prop.hasAnimator = true;
     prop.animator.animationName = "pull";
@@ -172,6 +173,9 @@ void SerializationRoundTripsStableState()
     assert(restored.levels[0].ductAccesses[0].removalSide
             == game::SectorDuctCoverRemovalSide::Crawlspace);
     assert(restored.levels[0].props[0].animator.frame == 13.5f);
+    assert(restored.levels[0].props[0].emissiveColors.size() == 1);
+    assert(restored.levels[0].props[0].emissiveColors[0].material == "Light");
+    assert(restored.levels[0].props[0].emissiveColors[0].color.z == 1.0f);
     assert(restored.levels[0].npcs[0].dead);
     assert(restored.levels[0].npcs[0].deathAnimationComplete);
     assert(restored.levels[0].npcs[0].shuffleOrder.size() == 3);
@@ -196,6 +200,38 @@ void FlashlightStateIsBackwardCompatible()
     assert(encoded.find("flashlightEnabled") == std::string::npos);
     assert(game::DeserializeGameSave(encoded, restored, error));
     assert(!restored.player.flashlightEnabled);
+}
+
+void WeaponHolsterStateIsBackwardCompatible()
+{
+    game::GameSaveData source = MakeSave();
+    source.player.weaponHolstered = true;
+    std::string encoded;
+    std::string error;
+    assert(game::SerializeGameSave(source, encoded, error));
+    auto root = nlohmann::ordered_json::parse(encoded);
+    assert(root["player"]["weaponHolstered"] == true);
+    game::GameSaveData restored;
+    assert(game::DeserializeGameSave(encoded, restored, error));
+    assert(restored.player.weaponHolstered);
+    assert(restored.itemCampaign.weapons.activeWeaponId == "pistol");
+    assert(restored.itemCampaign.weapons.magazines[0].loadedRounds == 6);
+
+    root["player"]["weaponHolstered"] = "true";
+    assert(!game::DeserializeGameSave(root.dump(), restored, error));
+    assert(restored.player.weaponHolstered);
+
+    root["player"]["weaponHolstered"] = false;
+    assert(game::DeserializeGameSave(root.dump(), restored, error));
+    assert(!restored.player.weaponHolstered);
+
+    source.player.weaponHolstered = false;
+    assert(game::SerializeGameSave(source, encoded, error));
+    assert(encoded.find("weaponHolstered") == std::string::npos);
+    restored.player.weaponHolstered = true;
+    assert(game::DeserializeGameSave(encoded, restored, error));
+    assert(!restored.player.weaponHolstered);
+    assert(restored.itemCampaign.weapons.activeWeaponId == "pistol");
 }
 
 void InvalidInputDoesNotReplaceDestination()
@@ -268,6 +304,7 @@ int main()
     InventorySourcesRoundTripAndValidate();
     SerializationRoundTripsStableState();
     FlashlightStateIsBackwardCompatible();
+    WeaponHolsterStateIsBackwardCompatible();
     InvalidInputDoesNotReplaceDestination();
     StorageScansSlotsAndRejectsUnsafeNames();
     IncompatibleVersionIsReportedPerSlot();

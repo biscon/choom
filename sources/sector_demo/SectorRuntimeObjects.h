@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/SectorPropEmission.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/components/AnimatedModel.h"
@@ -71,6 +72,7 @@ struct SectorStaticModel {
     bool castsShadow = true;
     std::string instanceId;
     float emissiveScale = 1.0f;
+    SectorPropEmissionColors emissiveColors;
 };
 
 struct SectorDynamicModel {
@@ -90,6 +92,7 @@ struct SectorDynamicModel {
     bool singleUse = false;
     bool useConsumed = false;
     float emissiveScale = 1.0f;
+    SectorPropEmissionColors emissiveColors;
 };
 
 enum class SectorItemOrigin {

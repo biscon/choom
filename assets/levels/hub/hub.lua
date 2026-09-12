@@ -93,8 +93,47 @@ function useElin(instanceId)
     assert(endConversation())
 end
 
+local function entranceIndicatorColor()
+    local card = flag("entrance_card_accepted")
+    local pin = flag("entrance_pin_accepted")
+    if card and pin then return {0.015, 1.0, 0.05} end
+    if card or pin then return {0.015, 0.12, 1.0} end
+    return nil -- skin/model authored colour
+end
+
+local function refreshEntranceAccess()
+    setFlag("entrance_door_unlocked",
+        flag("entrance_card_accepted") and flag("entrance_pin_accepted"))
+    local color = entranceIndicatorColor()
+    local ok, reason
+    if color then
+        ok, reason = setPropEmissiveColor("entrance_keypad", "Light", color[1], color[2], color[3])
+    else
+        ok, reason = setPropEmissiveColor("entrance_keypad", "Light", nil)
+    end
+    -- Keep accepted colours saturated below the renderer's bright-core whitening.
+    setPropEmissiveScale("entrance_keypad", color and 0.35 or 1.0)
+    if not ok then log("Keypad indicator: " .. (reason or "unavailable")) end
+end
+
+function useEntranceKeypad()
+    local code, reason = promptPinCode({
+        skin = "simple_keypad",
+        digits = 4,
+        indicatorColor = entranceIndicatorColor(),
+        validate = function(candidate) return candidate == "1984" end,
+    })
+    if code then
+        setFlag("entrance_pin_accepted", true)
+        refreshEntranceAccess()
+    elseif reason ~= "cancelled" then
+        log("Keypad: " .. (reason or "unavailable"))
+    end
+end
+
 function init()
     log("hub script initialized")
+    refreshEntranceAccess()
     setPropAnimationProgress("ceiling_switch_01", 0.0, "switch|switchAction")
     setPropAnimationProgress("ceiling_vent_01", 0.0, "Ventilator")
     playPropAnimation("ceiling_vent_01", "Ventilator", "loop")
@@ -266,7 +305,9 @@ end
 
 function useBlueKeyCard(targetInstanceId)
     if targetInstanceId == "entrance_keypad" then
-        setFlag("entrance_door_unlocked", true)
+        playMapSound("keycard_accept", 0.8)
+        setFlag("entrance_card_accepted", true)
+        refreshEntranceAccess()
         -- do not consume key card it can be used in other places
     end
     return false

@@ -191,6 +191,8 @@ struct ModelAsset {
     ModelGltfSkinAsset gltfSkin;
     std::vector<ModelNodeAnimationClip> nodeAnimationClips;
     std::vector<ModelMaterialAsset> materials;
+    // Kept separately: renderer copies numeric material metadata per draw.
+    std::vector<std::string> materialNames;
     BoundingBox localBounds = {};
     // Conservative bounds covering loaded skeletal and glTF node animation
     // poses. These are generated once during model finalization and are used

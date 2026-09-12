@@ -2900,6 +2900,8 @@ void NpcFacingCancellationDeathAndRemovalReleaseOwnership()
 
 void RunSectorScriptBindingTests()
 {
+    extern void RunSectorKeypadTests();
+    RunSectorKeypadTests();
     extern void RunSectorDialogueTests();
     RunSectorDialogueTests();
     NpcMarkerArrivalOrientationTurnsAfterStopping();

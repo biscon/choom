@@ -314,6 +314,7 @@ GameSaveLevelState CaptureGameSaveLevelState(
             const SectorStaticModel& prop = world.Get<SectorStaticModel>(entity);
             result.props.push_back(GameSavePropState{
                     prop.placedObjectId, prop.instanceId, prop.emissiveScale});
+            result.props.back().emissiveColors = CaptureSectorPropEmissionColors(prop.emissiveColors, assets.GetModelAsset(prop.model));
             continue;
         }
         if (world.Has<SectorDynamicModel>(entity)) {
@@ -322,6 +323,8 @@ GameSaveLevelState CaptureGameSaveLevelState(
             saved.placedObjectId = prop.placedObjectId;
             saved.instanceId = prop.instanceId;
             saved.emissiveScale = prop.emissiveScale;
+            if (world.Has<engine::AnimatedModelInstance>(entity))
+                saved.emissiveColors = CaptureSectorPropEmissionColors(prop.emissiveColors, assets.GetModelAsset(world.Get<engine::AnimatedModelInstance>(entity).model));
             saved.opacity = prop.opacity;
             saved.useConsumed = prop.useConsumed;
             if (world.Has<SectorPropDrag>(entity)) {
@@ -405,11 +408,14 @@ void ApplyGameSaveLevelRuntimeState(
             SectorStaticModel& prop = world.Get<SectorStaticModel>(entity);
             if (!saved.instanceId.empty() && prop.instanceId != saved.instanceId) continue;
             prop.emissiveScale = saved.emissiveScale;
+            RestoreSectorPropEmissionColors(prop.emissiveColors, assets.GetModelAsset(prop.model), saved.emissiveColors);
         } else if (world.Has<SectorDynamicModel>(entity)
                 && !world.Has<NpcRuntimeInstance>(entity)) {
             SectorDynamicModel& prop = world.Get<SectorDynamicModel>(entity);
             if (!saved.instanceId.empty() && prop.instanceId != saved.instanceId) continue;
             prop.emissiveScale = saved.emissiveScale;
+            if (world.Has<engine::AnimatedModelInstance>(entity))
+                RestoreSectorPropEmissionColors(prop.emissiveColors, assets.GetModelAsset(world.Get<engine::AnimatedModelInstance>(entity).model), saved.emissiveColors);
             prop.opacity = saved.opacity;
             prop.useConsumed = saved.useConsumed;
             if (saved.dragPathEditorId > 0) {

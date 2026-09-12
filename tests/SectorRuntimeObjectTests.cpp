@@ -1163,6 +1163,147 @@ void TestNpcUseRetainsOcclusion()
     Check(query({2, 1.2f, 8}).entity == entity, "removing obstruction restores NPC use");
 }
 
+void TestSwingDoorUsePromptAndMovingLeafTarget()
+{
+    using namespace game;
+    engine::World world;
+    engine::AssetManager assets;
+    ReserveSectorRuntimeObjectWorld(world, 1);
+    const auto entity = world.CreateEntity();
+    world.Add(entity, SectorDoor{1, true, "swing_door"});
+    world.Add(entity, SectorObject{});
+    world.Add(entity, SectorObjectTransform{});
+    SectorDoorResolvedAnchor anchor;
+    anchor.endpointA = {-1, 0};
+    anchor.endpointB = {1, 0};
+    anchor.openTop = 2;
+    world.Add(entity, anchor);
+    SectorDoorRender render;
+    render.width = 2;
+    render.height = 2;
+    render.thickness = 0.2f;
+    world.Add(entity, render);
+    world.Add(entity, SectorDoorCollider{});
+    world.Add(entity, SectorDoorPortalBlocker{});
+    SectorDoorMotion motion;
+    motion.motion = SectorDoorMotionType::Swing;
+    motion.travelAmount = PI * 0.5f;
+    world.Add(entity, motion);
+    SectorDoorInteraction interaction;
+    interaction.interactionDistance = 1.5f;
+    interaction.useTitle = "Maintenance Office";
+    world.Add(entity, interaction);
+    auto& liveMotion = world.Get<SectorDoorMotion>(entity);
+    const auto query = [&](Vector3 eye, Vector3 forward,
+                           const SectorCollisionWorld* collision = nullptr) {
+        return FindSectorUseTarget(world, &assets, eye, forward, collision);
+    };
+
+    for (const auto hinge : {SectorDoorHinge::Start, SectorDoorHinge::End}) {
+        for (const auto side : {SectorDoorSwingSide::Front, SectorDoorSwingSide::Back}) {
+            for (float fraction : {0.0f, 0.3f, 1.0f}) {
+                liveMotion.hinge = hinge;
+                liveMotion.swingSide = side;
+                liveMotion.openFraction = fraction;
+                liveMotion.targetOpenFraction = fraction;
+                UpdateSectorDoorDerivedStateSystem(world);
+                const auto pose = BuildSectorDoorSwingPose(anchor, liveMotion, render, 1, fraction);
+                for (float face : {-1.0f, 1.0f}) {
+                    const Vector3 normal{pose.thicknessAxis.x * face, 0,
+                                         pose.thicknessAxis.y * face};
+                    const Vector3 eye = Vector3Add(pose.center, Vector3Scale(normal, 1.5f));
+                    const Vector3 forward = Vector3Negate(normal);
+                    const auto target = query(eye, forward);
+                    Check(target.entity == entity && target.kind == SectorUseTargetKind::Door,
+                          "swing use follows the current leaf from either side for both hinges/directions");
+                    Check(Near(target.distance, 1.4f), "swing use reach is measured to the leaf surface");
+                    Check(SectorUseTargetTitle(world, target) == "Maintenance Office",
+                          "swing prompt retains the inspector-authored title");
+                    Check(target.action == (fraction > 0.5f ? "Close" : "Open"),
+                          "swing target carries its current door action");
+                    Check(query(Vector3Add(eye, Vector3Scale(normal, 0.2f)), forward).kind
+                                    == SectorUseTargetKind::None,
+                          "swing leaf outside interaction reach is rejected");
+                    Check(query(eye, normal).kind == SectorUseTargetKind::None,
+                          "looking away from the swing leaf rejects use");
+
+                    SectorObjectUseTargetAccumulator modelHit;
+                    ConsiderSectorObjectUseTransformedBounds(modelHit, {eye, forward}, entity,
+                            SectorUseTargetKind::Door, {{0, 0, -0.1f}, {2, 2, 0.1f}},
+                            pose.leafMatrix, true);
+                    Check(modelHit.nearest.entity == entity && Near(modelHit.nearest.distance, 1.4f),
+                          "hinged model-local leaf bounds follow the same moving surface");
+                }
+                if (fraction == 1.0f) {
+                    Check(query({0, 1, 1}, {0, 0, -1}).kind == SectorUseTargetKind::None,
+                          "empty swing doorway is not a use target");
+                }
+            }
+        }
+    }
+
+    for (const auto fractions : {Vector2{0, 0}, Vector2{0, 1}, Vector2{1, 1},
+                                Vector2{0.8f, 0}, Vector2{0.2f, 0}, Vector2{0.5f, 0.5f}}) {
+        liveMotion.openFraction = fractions.x;
+        liveMotion.targetOpenFraction = fractions.y;
+        Check(SectorDoorUsePromptAction(liveMotion)
+                        == (fractions.x > 0.5f || fractions.y > 0.5f ? "Close" : "Open"),
+              "swing prompt matches player toggle during opening and closing");
+    }
+
+    liveMotion.openFraction = liveMotion.targetOpenFraction = 0;
+    UpdateSectorDoorDerivedStateSystem(world);
+    SectorDoorModelRender model;
+    model.modelVisualRequested = true;
+    model.catalogResolved = true;
+    world.Add(entity, model);
+    Check(query({0, 1, 1}, {0, 0, -1}).entity == entity,
+          "pending swing model targets the procedural fallback leaf");
+    world.Get<SectorDoorModelRender>(entity).leafFailed = true;
+    Check(query({0, 1, 1}, {0, 0, -1}).entity == entity,
+          "failed swing model targets the procedural fallback leaf");
+    world.Get<SectorDoorInteraction>(entity).autoOpen = true;
+    Check(query({0, 1, 1}, {0, 0, -1}).kind == SectorUseTargetKind::None,
+          "automatic swing doors remain excluded from manual use");
+    world.Get<SectorDoorInteraction>(entity).autoOpen = false;
+    world.Get<SectorDoor>(entity).enabled = false;
+    Check(query({0, 1, 1}, {0, 0, -1}).kind == SectorUseTargetKind::None,
+          "disabled swing doors remain excluded from manual use");
+    world.Get<SectorDoor>(entity).enabled = true;
+
+    for (const auto slide : {SectorDoorMotionType::SlideVertical,
+                            SectorDoorMotionType::SlideLeft, SectorDoorMotionType::SlideRight}) {
+        liveMotion.motion = slide;
+        liveMotion.travelAmount = 3;
+        for (const auto fractions : {Vector2{0, 0}, Vector2{0, 1}, Vector2{1, 1},
+                                    Vector2{0.8f, 0}, Vector2{0.2f, 0}}) {
+            liveMotion.openFraction = fractions.x;
+            liveMotion.targetOpenFraction = fractions.y;
+            UpdateSectorDoorDerivedStateSystem(world);
+            const auto target = query({0, 1, 1}, {0, 0, -1});
+            Check(target.entity == entity
+                            && SectorUseTargetTitle(world, target) == "Maintenance Office",
+                  "sliding doors retain inspector title and doorway targeting throughout motion");
+            Check(target.action == (fractions.x > 0.5f || fractions.y > 0.5f ? "Close" : "Open"),
+                  "sliding door prompts match the Open/Close action throughout motion");
+        }
+    }
+
+    liveMotion.motion = SectorDoorMotionType::Swing;
+    world.Get<SectorObjectTransform>(entity).position = {17, 1, 8};
+    auto& liveRender = world.Get<SectorDoorRender>(entity);
+    liveRender.widthAxis = {0, 1};
+    liveRender.thicknessAxis = {1, 0};
+    world.Get<SectorDoorInteraction>(entity).interactionDistance = 3;
+    SectorCollisionWorld collision;
+    Check(collision.BuildFromTopology(MakeNavigationSquareMap()),
+          "build generated swing use occlusion fixture");
+    Check(query({15, 1, 8}, {1, 0, 0}).entity == entity,
+          "swing leaf is within reach before applying wall occlusion");
+    Check(query({15, 1, 8}, {1, 0, 0}, &collision).kind == SectorUseTargetKind::None,
+          "wall conceals swing leaf beyond room boundary");
+}
+
 game::SectorTopologyMap MakeNavigationStairMap()
 {
     game::SectorTopologyMap map;
@@ -13131,6 +13272,7 @@ int main()
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
     TestNpcUseFacingAndNearbyHealthPacks();
     TestNpcUseRetainsOcclusion();
+    TestSwingDoorUsePromptAndMovingLeafTarget();
     TestSectorUseTargetFindsBothLadderEndpoints();
     TestSectorItemUseTargetFallbackAndPendingGate();
     TestHeldObjectUseRayTargetOrderingAndOcclusion();

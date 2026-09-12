@@ -29,6 +29,7 @@ static_assert(PbrMaterialMapCount == static_cast<int>(ModelMaterialTextureRoleCo
 
 struct ParsedModelMaterials {
     std::vector<ModelMaterialAsset> materials;
+    std::vector<std::string> materialNames;
     std::vector<std::array<std::string, PbrMaterialMapCount>> textureSources;
     bool hasUnsupportedMaterial = false;
 };
@@ -610,6 +611,7 @@ ParsedModelMaterials ParseModelMaterials(
     ParsedModelMaterials parsed;
     parsed.materials.resize(static_cast<size_t>(std::max(0, raylibMaterialCount)));
     parsed.textureSources.resize(parsed.materials.size());
+    parsed.materialNames.resize(parsed.materials.size());
     if (!IsFileExtension(path.c_str(), ".gltf;.glb")) {
         return parsed;
     }
@@ -633,6 +635,7 @@ ParsedModelMaterials ParseModelMaterials(
     for (size_t i = 0; i < count; ++i) {
         const cgltf_material& source = data->materials[i];
         ModelMaterialAsset& material = parsed.materials[i + 1];
+        if (source.name) parsed.materialNames[i + 1] = source.name;
         ReadGltfRasterMetadata(material, &source);
         auto& textureSources = parsed.textureSources[i + 1];
         material.pbrMetallicRoughness = source.has_pbr_metallic_roughness;
@@ -2044,6 +2047,7 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                     slot.asset.nodeAnimationClips = std::move(
                             nodeAnimationAsset.nodeAnimationClips);
                     slot.asset.materials = std::move(parsed.materials);
+                    slot.asset.materialNames = std::move(parsed.materialNames);
                     slot.asset.localBounds = localBounds;
                     slot.asset.animatedLocalBounds = animatedLocalBounds;
                     slot.asset.localCollisionBounds = localCollisionBounds;

@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/SectorPropEmission.h"
 #include "sector_demo/renderer/SectorReflectionSampling.h"
 
 #include "engine/assets/AssetHandles.h"
@@ -433,7 +434,8 @@ private:
             const std::vector<Matrix>* meshNodeMatrices = nullptr,
             float emissiveScale = 1.0f,
             float opacity = 1.0f,
-            float interactionHighlightStrength = 0.0f);
+            float interactionHighlightStrength = 0.0f,
+            const SectorPropEmissionColors* emissiveColors = nullptr);
     void UploadInteractionHighlightStrength(float strength);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,

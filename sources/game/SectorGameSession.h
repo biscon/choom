@@ -8,6 +8,7 @@
 #include "game/items/ItemAssets.h"
 #include "game/items/ItemInventory.h"
 #include "game/items/ItemInventoryUI.h"
+#include "game/keypad/SectorKeypad.h"
 #include "game/PlayerAudio.h"
 #include "game/PlayerHitCamera.h"
 #include "game/PlayerLightLevel.h"
@@ -160,10 +161,11 @@ public:
     }
     bool IsGameOver() const { return gameOver; }
     bool CanSaveGame() const {
-        return IsActive() && !gameOver && !saveGameBlocked && !dialogue.active && !scriptHost.conversation.active;
+        return IsActive() && !gameOver && !saveGameBlocked && !keypad.active && !dialogue.active && !scriptHost.conversation.active;
     }
     const std::string& SaveGameBlockedReason() const {
-        return !saveGameBlocked && scriptHost.conversation.active ? conversationSaveBlockedReason
+        return !saveGameBlocked && keypad.active ? keypadSaveBlockedReason
+                : !saveGameBlocked && scriptHost.conversation.active ? conversationSaveBlockedReason
                 : dialogue.active && !saveGameBlocked ? dialogueSaveBlockedReason : saveGameBlockedReason;
     }
     void SetSaveGameBlocked(bool blocked, std::string reason = {});
@@ -307,6 +309,8 @@ private:
     float itemMessageElapsedSeconds = 0.0f;
     PendingItemTake pendingItemTake;
     ItemInventoryUIState inventoryUi;
+    mutable SectorKeypadRuntime keypad;
+    const std::string keypadSaveBlockedReason = "Saving is unavailable while using a keypad";
     ItemInventoryUIAction pendingInventoryAction;
     HeldObjectUseState heldObjectUse;
     std::vector<engine::Entity> completedItemPresentations;

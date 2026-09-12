@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/SectorPropEmission.h"
 
 #include "engine/scripting/ScriptData.h"
 #include "game/Health.h"
@@ -62,6 +63,7 @@ struct GameSavePropState {
     bool useConsumed = false;
     bool hasAnimator = false;
     GameSaveAnimatorState animator;
+    std::vector<SectorSavedEmissionColor> emissiveColors;
     int dragPathEditorId = 0;
     float dragDistanceWorld = 0.0f;
 };
@@ -144,6 +146,7 @@ struct GameSavePlayerState {
     PlayerOxygen oxygen;
     bool hasOxygenState = false;
     bool flashlightEnabled = false;
+    bool weaponHolstered = false;
 };
 
 struct GameSaveData {
