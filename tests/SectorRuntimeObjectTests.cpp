@@ -3239,7 +3239,7 @@ void TestUnknownModelSwingDoorUsesAnimatedProceduralFallback()
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
 
-    Check(state.swingDoorCatalogLoaded && state.swingDoorCatalog.assets.size() == 20,
+    Check(state.swingDoorCatalogLoaded && state.swingDoorCatalog.assets.size() == 16,
           "runtime map refresh retains the generated CPU swing door catalog");
     Check(state.doorFallbackCount == 1 && state.doorFallbackDiagnostics.size() == 1,
           "unknown model style records one stable fallback diagnostic");

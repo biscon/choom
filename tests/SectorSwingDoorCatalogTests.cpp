@@ -68,7 +68,7 @@ void TestGeneratedCatalogLoadsAndLooksUpByStableId()
                   catalog,
                   error),
           "generated swing door catalog loads");
-    Check(error.empty() && catalog.formatVersion == 1 && catalog.assets.size() == 20,
+    Check(error.empty() && catalog.formatVersion == 1 && catalog.assets.size() == 16,
           "generated swing door catalog has expected version and style count");
 
     game::SectorSwingDoorCatalogAsset asset;
@@ -87,6 +87,24 @@ void TestGeneratedCatalogLoadsAndLooksUpByStableId()
     Check(!game::FindSectorSwingDoorCatalogAsset(
                   catalog, "unknown_style", asset),
           "unknown catalog ID lookup fails without invalidating catalog");
+
+    for (const auto& entry : catalog.assets) {
+        Check(entry.id.find("industrial_metal_") != 0
+                      && entry.id.find("worn_wooden_") != 0,
+              "removed downloaded collections are absent from the catalog");
+    }
+    for (const char* id : {"wood_walnut_panel", "painted_ivory_panel",
+                          "painted_sage_panel", "kitchen_service",
+                          "industrial_charcoal", "security_reinforced",
+                          "security_institutional"}) {
+        Check(game::FindSectorSwingDoorCatalogAsset(catalog, id, asset),
+              "authored door resolves by stable ID");
+        Check(asset.hasFrame && asset.hasFrameAlignment
+                      && Near(asset.nominalWidth, 0.9f)
+                      && Near(asset.nominalHeight, 2.05f)
+                      && asset.nominalThickness >= 0.045f,
+              "authored door supplies canonical leaf and frame measurements");
+    }
 }
 
 void TestCatalogValidation()
@@ -279,7 +297,10 @@ void TestGeneratedScreenshotStylesFitCompleteHubAperture()
           "generated catalog loads for hub aperture regression");
     constexpr float hubWidth = 1.625f;
     constexpr float hubHeight = 2.75f;
-    for (const char* id : {"industrial_metal_003", "wooden_interior_001"}) {
+    for (const char* id : {"wooden_interior_001", "wood_walnut_panel",
+                          "painted_ivory_panel", "painted_sage_panel",
+                          "kitchen_service", "industrial_charcoal",
+                          "security_reinforced", "security_institutional"}) {
         game::SectorSwingDoorCatalogAsset asset;
         Check(game::FindSectorSwingDoorCatalogAsset(catalog, id, asset),
               "screenshot door style resolves for hub aperture regression");
