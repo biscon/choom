@@ -758,7 +758,6 @@ SectorUseTarget FindSectorUseTarget(
 
 std::string_view SectorDoorUsePromptAction(const SectorDoorMotion& motion)
 {
-    if (motion.motion != SectorDoorMotionType::Swing) return "Use";
     // Match the existing player-use toggle, including doors already in motion.
     return motion.targetOpenFraction > 0.5f || motion.openFraction > 0.5f
             ? "Close" : "Open";

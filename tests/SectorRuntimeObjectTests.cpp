@@ -1274,13 +1274,19 @@ void TestSwingDoorUsePromptAndMovingLeafTarget()
     for (const auto slide : {SectorDoorMotionType::SlideVertical,
                             SectorDoorMotionType::SlideLeft, SectorDoorMotionType::SlideRight}) {
         liveMotion.motion = slide;
-        liveMotion.openFraction = liveMotion.targetOpenFraction = 1;
         liveMotion.travelAmount = 3;
-        UpdateSectorDoorDerivedStateSystem(world);
-        const auto target = query({0, 1, 1}, {0, 0, -1});
-        Check(target.entity == entity && target.action == "Use"
-                        && SectorUseTargetTitle(world, target) == "Maintenance Office",
-              "fully retracted sliding doors retain Use plus inspector title and doorway targeting");
+        for (const auto fractions : {Vector2{0, 0}, Vector2{0, 1}, Vector2{1, 1},
+                                    Vector2{0.8f, 0}, Vector2{0.2f, 0}}) {
+            liveMotion.openFraction = fractions.x;
+            liveMotion.targetOpenFraction = fractions.y;
+            UpdateSectorDoorDerivedStateSystem(world);
+            const auto target = query({0, 1, 1}, {0, 0, -1});
+            Check(target.entity == entity
+                            && SectorUseTargetTitle(world, target) == "Maintenance Office",
+                  "sliding doors retain inspector title and doorway targeting throughout motion");
+            Check(target.action == (fractions.x > 0.5f || fractions.y > 0.5f ? "Close" : "Open"),
+                  "sliding door prompts match the Open/Close action throughout motion");
+        }
     }
 
     liveMotion.motion = SectorDoorMotionType::Swing;
