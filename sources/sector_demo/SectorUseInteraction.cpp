@@ -161,6 +161,43 @@ bool CanTargetNpcWithObject(
                     && world.Get<NpcCombatState>(entity).dead);
 }
 
+void ConsiderDoorLeafBounds(
+        SectorObjectUseTargetAccumulator& accumulator,
+        engine::World& world,
+        const engine::AssetManager* assets,
+        Ray ray,
+        engine::Entity entity,
+        const SectorObjectTransform& transform,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        bool selectable)
+{
+    if (world.Has<SectorDoorModelRender>(entity)) {
+        const auto& model = world.Get<SectorDoorModelRender>(entity);
+        const auto* leaf = assets ? assets->GetModelAsset(model.leafModel) : nullptr;
+        const auto policy = ResolveSectorDoorModelDrawPolicy(
+                model, leaf != nullptr,
+                assets && assets->GetModelAsset(model.frameModel) != nullptr);
+        if (policy.drawLeaf) {
+            if (leaf->hasLocalBounds) {
+                ConsiderSectorObjectUseTransformedBounds(accumulator,
+                        ray, entity, SectorUseTargetKind::Door,
+                        leaf->localBounds, model.leafMatrix, selectable);
+            }
+            return;
+        }
+    }
+    if (!std::isfinite(render.width) || render.width <= 0.0f
+            || !std::isfinite(render.height) || render.height <= 0.0f
+            || !std::isfinite(render.thickness) || render.thickness <= 0.0f) return;
+    const BoundingBox bounds{
+            {-render.width * 0.5f, -render.height * 0.5f, -render.thickness * 0.5f},
+            {render.width * 0.5f, render.height * 0.5f, render.thickness * 0.5f}};
+    ConsiderSectorObjectUseTransformedBounds(accumulator,
+            ray, entity, SectorUseTargetKind::Door, bounds,
+            BuildSectorDoorSlabModelMatrix(transform, anchor, render), selectable);
+}
+
 void ConsiderObjectUseHit(
         SectorObjectUseTargetAccumulator& accumulator,
         engine::Entity entity,
@@ -392,31 +429,8 @@ SectorUseTarget FindSectorObjectUseTarget(
                     SectorDoor& door, SectorDoorResolvedAnchor& anchor,
                     SectorDoorRender& render) {
                 if (!object.visible || !door.enabled || !render.visible) return;
-                if (world.Has<SectorDoorModelRender>(entity)) {
-                    const auto& model = world.Get<SectorDoorModelRender>(entity);
-                    const auto* leaf = assets.GetModelAsset(model.leafModel);
-                    const auto policy = ResolveSectorDoorModelDrawPolicy(
-                            model, leaf != nullptr,
-                            assets.GetModelAsset(model.frameModel) != nullptr);
-                    if (policy.drawLeaf) {
-                        if (leaf->hasLocalBounds) {
-                            ConsiderSectorObjectUseTransformedBounds(accumulator,
-                                    ray, entity, SectorUseTargetKind::Door,
-                                    leaf->localBounds, model.leafMatrix,
-                                    object.itemDropTarget && !door.instanceId.empty());
-                        }
-                        return;
-                    }
-                }
-                if (!std::isfinite(render.width) || render.width <= 0.0f
-                        || !std::isfinite(render.height) || render.height <= 0.0f
-                        || !std::isfinite(render.thickness) || render.thickness <= 0.0f) return;
-                const BoundingBox bounds{
-                        {-render.width * 0.5f, -render.height * 0.5f, -render.thickness * 0.5f},
-                        {render.width * 0.5f, render.height * 0.5f, render.thickness * 0.5f}};
-                ConsiderSectorObjectUseTransformedBounds(accumulator,
-                        ray, entity, SectorUseTargetKind::Door, bounds,
-                        BuildSectorDoorSlabModelMatrix(transform, anchor, render),
+                ConsiderDoorLeafBounds(accumulator, world, &assets, ray,
+                        entity, transform, anchor, render,
                         object.itemDropTarget && !door.instanceId.empty());
             });
     float topologyDistance = -1.0f;
@@ -585,6 +599,27 @@ SectorUseTarget FindSectorUseTarget(
                         || interaction.interactionDistance <= 0.0f) {
                     return;
                 }
+                if (world.Has<SectorDoorMotion>(entity)
+                        && world.Get<SectorDoorMotion>(entity).motion
+                                == SectorDoorMotionType::Swing) {
+                    if (!world.Has<SectorObjectTransform>(entity)
+                            || !world.Has<SectorDoorRender>(entity)
+                            || !world.Get<SectorDoorRender>(entity).visible
+                            || (world.Has<SectorObject>(entity)
+                                    && !world.Get<SectorObject>(entity).visible)) return;
+                    SectorObjectUseTargetAccumulator leafHit;
+                    ConsiderDoorLeafBounds(leafHit, world, assets,
+                            Ray{eyePosition, forward}, entity,
+                            world.Get<SectorObjectTransform>(entity), anchor,
+                            world.Get<SectorDoorRender>(entity), true);
+                    if (leafHit.nearest.kind == SectorUseTargetKind::Door) {
+                        ConsiderTarget(world, entity, SectorUseTargetKind::Door,
+                                leafHit.nearest.targetPosition,
+                                interaction.interactionDistance, eyePosition,
+                                forward, collisionWorld, best);
+                    }
+                    return;
+                }
                 const Vector2 pointXZ = ClosestPointOnSegment(
                         Vector2{eyePosition.x, eyePosition.z},
                         anchor.endpointA,
@@ -714,7 +749,19 @@ SectorUseTarget FindSectorUseTarget(
             }
         }
     }
+    if (best.kind == SectorUseTargetKind::Door
+            && world.Has<SectorDoorMotion>(best.entity)) {
+        best.action = SectorDoorUsePromptAction(world.Get<SectorDoorMotion>(best.entity));
+    }
     return best;
+}
+
+std::string_view SectorDoorUsePromptAction(const SectorDoorMotion& motion)
+{
+    if (motion.motion != SectorDoorMotionType::Swing) return "Use";
+    // Match the existing player-use toggle, including doors already in motion.
+    return motion.targetOpenFraction > 0.5f || motion.openFraction > 0.5f
+            ? "Close" : "Open";
 }
 
 std::string_view SectorUseTargetTitle(

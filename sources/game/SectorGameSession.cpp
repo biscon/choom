@@ -2584,7 +2584,7 @@ void SectorGameSession::RenderHud(
                     assets.GetFont(usePromptFont),
                     !engine::IsNull(controller.propDrag.entity) ? "E: Release - W/S: Push/Pull" : usePromptTitle.data(),
                     !engine::IsNull(controller.propDrag.entity) ? "" : useTarget.draggable ? "Drag" : useTarget.kind == SectorUseTargetKind::Npc ? ""
-                            : useTarget.kind == SectorUseTargetKind::Item ? "Take" : "Use");
+                            : useTarget.kind == SectorUseTargetKind::Item ? "Take" : useTarget.action);
         }
     }
     if (IsActive() && keypad.active) {
