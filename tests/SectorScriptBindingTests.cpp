@@ -3296,6 +3296,8 @@ void NpcFacingCancellationDeathAndRemovalReleaseOwnership()
 
 void RunSectorScriptBindingTests()
 {
+    extern void RunSectorNoteTests();
+    RunSectorNoteTests();
     extern void RunSectorKeypadTests();
     RunSectorKeypadTests();
     MarkerTeleportsApplyExactPositionsAndFacingImmediately();

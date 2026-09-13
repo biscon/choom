@@ -8,6 +8,7 @@
 #include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/dialogue/SectorDialogue.h"
 #include "game/keypad/SectorKeypad.h"
+#include "game/note/SectorNote.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
@@ -1328,6 +1329,7 @@ int LuaDialogueOperation(lua_State* state)
     }
     if (host.conversation.active && !(host.conversation.owner == owner))
         return PushCutsceneStartError(state, false, "conversation belongs to another task");
+    if (host.note && host.note->active) return PushCutsceneStartError(state, false, "a note is already active");
     if (host.keypad && host.keypad->active) return PushCutsceneStartError(state, false, "a keypad is already active");
     if (!host.dialogue) return PushCutsceneStartError(state, false, "dialogue runtime is unavailable");
     if (host.cutscene && host.cutscene->caption.active)
@@ -1398,6 +1400,8 @@ int StartCaption(
     }
     if (host.conversation.active && !(host.conversation.owner == ownerTask))
         return PushCutsceneStartError(state, async, "conversation belongs to another task");
+    if (host.note && host.note->active)
+        return PushCutsceneStartError(state, async, "a note is already active");
     if (host.keypad && host.keypad->active)
         return PushCutsceneStartError(state, async, "a keypad is already active");
     if (host.dialogue && host.dialogue->active)
@@ -1667,7 +1671,7 @@ int LuaStartConversation(lua_State* state)
     if (!engine::IsValid(owner) || !host.cutscene || !host.playerState || !host.playerConfig
             || !host.controls.setControlsEnabled)
         return PushCutsceneStartError(state, false, "conversation requires a managed task and player runtime");
-    if ((host.keypad && host.keypad->active) || host.conversation.active || (host.dialogue && host.dialogue->active)
+    if ((host.note && host.note->active) || (host.keypad && host.keypad->active) || host.conversation.active || (host.dialogue && host.dialogue->active)
             || host.cutscene->caption.active || host.cutscene->playerMove.active || host.cutscene->look.active)
         return PushCutsceneStartError(state, false, "conversation or scripted presentation is already active");
     if (!host.cutscene->controlsEnabled && engine::IsValid(host.cutscene->controlsOwnerTask)
@@ -2844,6 +2848,7 @@ void InitializeSectorScriptHost(
     host.cutscene = cutscene;
     host.dialogue = nullptr;
     host.keypad = nullptr;
+    host.note = nullptr;
     host.inventoryInteractionActive = false;
     host.dialogueVoices = nullptr;
     host.playerState = playerState;
@@ -2886,6 +2891,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.cutscene = nullptr;
     host.dialogue = nullptr;
     host.keypad = nullptr;
+    host.note = nullptr;
     host.inventoryInteractionActive = false;
     host.dialogueVoices = nullptr;
     host.playerState = nullptr;
@@ -2908,6 +2914,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
 void RegisterSectorScriptBindings(lua_State* state)
 {
     RegisterSectorKeypadBindings(state);
+    RegisterSectorNoteBindings(state);
     // Capture the native operation function as a Lua upvalue; only the public
     // choice-ID contract is installed as a global.
     constexpr const char* dialogueWrapper = R"lua(

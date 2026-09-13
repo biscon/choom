@@ -192,23 +192,26 @@ function entrance_trigger()
     movePlayer("intro_marker_5", "walk", 1.5, {
         lookAtProp = "entrance_keypad",
     })
-    say("Looks like it will require a key card and probably a code as well.")
+    say("Looks like it will require a key card and a code as well.")
     assert(teleportNpc("elin", "intro_marker_6"))
-    startSay("elin", "What have you found?")
-    --delay(500)
+
     local elinArrival = assert(startMoveNpc("elin", "intro_marker_7", "walk", nil, true))
+    delay(1000)
+    startSay("elin", "What have you found?")
     startLookAtNpc("elin", 2000, 0.7)
     delay(2000)
-    startLookAtNpc("elin", 5000, 0.7)
+    startLookAtNpc("elin", 4000, 0.7)
     assert(await(elinArrival))
     lookAtNpc("elin", 350, 0.7)
     startPlayNpcAnimation("elin", "Excited_2")
     say("elin", "Wow! that is a big door! How do we open it?")
     say("It requires a key card and a pincode.")
     if hasInventoryItemInstance("blue_key_card") then
-        say("I found a key card in the storage room.")
+        say("I found a key card in the storage room. But I don't know the pincode.")
+    else
+        say("I have neither.")
     end
-    say("elin", "Are we opening it then? you should probably be careful. I don't like the noises coming from in there.")
+    say("elin", "You should probably be careful. I don't like the noises coming from in there.")
     say("elin", "I'll hang out back in the office.")
     startMoveNpc("elin", "intro_marker_3", "walk", nil, true)
     startLookAtNpc("elin", 2000, 0.55)
@@ -308,8 +311,6 @@ function useStorageDoorKey(targetInstanceId)
         playMapSound("door_unlock", 0.8)
         setFlag("storage_door_unlocked", true)
         setFlag("tried_storage_door", false)
-        delay(2300)
-        say("That did it.")
         return true
     end
     return false
@@ -334,6 +335,5 @@ function useBlueKeyCard(targetInstanceId)
 end
 
 function usePasswordNote()
-    say("Password: im2good")
-    say("Apparently not at coming up with passwords.")
+    showNote("Login:", "user: user\npassword: im2good")
 end

@@ -774,6 +774,7 @@ if(BUILD_TESTING)
             tests/SectorPropDraggingTests.cpp
             tests/SectorScriptBindingTests.cpp
             sources/game/items/ItemInventory.cpp
+            tests/SectorNoteTests.cpp
             tests/SectorKeypadTests.cpp
             tests/SectorDialogueTests.cpp
             tests/DialogueCameraIdleTests.cpp
@@ -814,6 +815,7 @@ if(BUILD_TESTING)
             sources/game/SectorScriptBindings.cpp
             sources/game/cutscene/SectorCutsceneRuntime.cpp
             sources/game/cutscene/SectorCutsceneSpeech.cpp
+            sources/game/note/SectorNote.cpp
             sources/game/keypad/SectorKeypad.cpp
             sources/game/dialogue/SectorDialogue.cpp
             sources/game/dialogue/DialogueCameraIdle.cpp

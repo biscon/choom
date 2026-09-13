@@ -28,6 +28,7 @@ struct NpcNavigationRuntime;
 struct SectorCutsceneRuntime;
 struct SectorDialogueRuntime;
 struct SectorKeypadRuntime;
+struct SectorNoteRuntime;
 struct SectorFpsControllerConfig;
 struct SectorFpsControllerState;
 struct SectorTopologyMap;
@@ -107,6 +108,7 @@ struct SectorScriptControlApi {
             std::string&) = nullptr;
     void (*dialogueChanged)(void*, bool) = nullptr;
     void (*keypadChanged)(void*, bool) = nullptr;
+    void (*noteChanged)(void*, bool) = nullptr;
     void (*holsterWeapon)(void*) = nullptr;
     // Runs immediately after a validated player teleport commits its pose.
     void (*playerTeleported)(void*, engine::EngineContext&) = nullptr;
@@ -120,6 +122,7 @@ struct SectorScriptHost {
     SectorCutsceneRuntime* cutscene = nullptr;
     SectorDialogueRuntime* dialogue = nullptr;
     SectorKeypadRuntime* keypad = nullptr;
+    SectorNoteRuntime* note = nullptr;
     bool inventoryInteractionActive = false;
     SectorConversationState conversation;
     SectorFpsControllerState* playerState = nullptr;

@@ -32,6 +32,7 @@ ranges, return values, behavior, and failure details.
   `runConversation(setId, handlers [, hiddenIds [, textOverrides]])`,
   `runConversationDynamic(setId, handlers [, hiddenOptionsFn [, textOverridesFn]])`.
 - **[Keypads](#keypads):** `promptPinCode(options)`.
+- **[Notes](#notes):** `showNote(body)`, `showNote(title, body)`.
 - **[Logging](#logging):** `log(...)`, `print(...)`.
 - **[Doors](#doors):** `moveDoor(doorId, targetFraction, durationMs)`,
   `startMoveDoor(doorId, targetFraction, durationMs)`, `openDoor(doorId)`,
@@ -616,7 +617,7 @@ successful return.
 Mouse buttons and keyboard/numpad digits operate the keypad. Backspace deletes;
 Enter/the lower-right button submits. Partial codes cannot submit. Escape
 returns `nil, "cancelled"`, preserving puzzle state. A keypad cannot overlap
-another keypad, dialogue, captions, conversations, or inventory targeting.
+another keypad, note, dialogue, captions, conversations, or inventory targeting.
 Unavailable assets or conflicting presentation return `nil, reason`.
 Calling outside a managed task raises an error before opening UI.
 
@@ -633,6 +634,55 @@ non-overlapping `rect` and one unique `action`: `"0"`–`"9"`, `"backspace"`,
 or `"submit"`. Images and sounds resolve relative to `assets/keypads/`.
 The indicator image is a full-frame transparent layer aligned with the panel.
 See `tools/keypad/prepare_keypad.py` for the supplied asset's preparation recipe.
+
+## Notes
+
+### `showNote(body) -> true | nil, reason`
+### `showNote(title, body) -> true | nil, reason`
+
+Displays a centered cream paper sheet over the dimmed 3D view. The optional
+title appears above the body in a larger font; an empty title uses the titleless
+layout. Both arguments must be strings, without embedded NUL bytes. Empty body
+strings are allowed. Incorrect arguments or calls outside a managed, yieldable
+task raise Lua errors before opening UI.
+
+```lua
+function readReminder()
+    showNote("Reminder", "Meet at midnight.\nBring the key.")
+    setFlag("reminder_read", true) -- Runs after the note has faded out.
+end
+
+showNote([[First paragraph.
+
+Second paragraph, with an actual blank line above it.]])
+```
+
+Quoted Lua strings interpret `\n` as a line break (`\n\n` separates paragraphs).
+Long-bracket `[[...]]` strings preserve actual line breaks; they do not interpret
+backslash escapes. Text wraps to the paper width, preserving blank paragraphs;
+long words wrap at UTF-8 character boundaries. Long notes scroll inside the
+paper, including the title. Use the mouse wheel, Up/Down, Page Up/Page Down, or
+Home/End. Text is plain text, without markup.
+
+A fresh **E** or **Escape** press closes the note. The opening interaction press
+and key repeats do not dismiss it. The paper, text, shadow, and backdrop fade
+in over **350 ms** and out over **350 ms**. Dismissing during fade-in starts
+fade-out from the current opacity. Both keys count as normal dismissal and
+return `true` only when fade-out finishes.
+
+The calling Lua task waits for the entire presentation; gameplay input is
+captured while the world continues updating, as with `promptPinCode`. Pause and
+console capture suspend note input and animation. Notes cannot overlap notes,
+keypads, dialogue, captions, conversations, or inventory targeting. Unavailable
+runtime or conflicting presentation returns `nil, reason` without opening UI.
+Death or other interruption closes immediately and returns `nil, reason` if the
+task survives. Task termination, map teardown, and return to the editor release
+ownership immediately. Saving is unavailable throughout reading and both fades;
+pending notes and scroll positions are not saved.
+
+Paper and font assets load with the level through `AssetManager`. The supplied
+background is `assets/ui/notes/paper.png`; missing or pending paper falls back
+to a cream panel. See the adjacent `README.md` for the image-generation prompt.
 
 ## Dynamic lights
 

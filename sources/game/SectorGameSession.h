@@ -9,6 +9,7 @@
 #include "game/items/ItemInventory.h"
 #include "game/items/ItemInventoryUI.h"
 #include "game/keypad/SectorKeypad.h"
+#include "game/note/SectorNote.h"
 #include "game/PlayerAudio.h"
 #include "game/PlayerHitCamera.h"
 #include "game/PlayerLightLevel.h"
@@ -161,10 +162,11 @@ public:
     }
     bool IsGameOver() const { return gameOver; }
     bool CanSaveGame() const {
-        return IsActive() && !gameOver && !saveGameBlocked && !keypad.active && !dialogue.active && !scriptHost.conversation.active;
+        return IsActive() && !gameOver && !saveGameBlocked && !keypad.active && !note.active && !dialogue.active && !scriptHost.conversation.active;
     }
     const std::string& SaveGameBlockedReason() const {
-        return !saveGameBlocked && keypad.active ? keypadSaveBlockedReason
+        return !saveGameBlocked && note.active ? noteSaveBlockedReason
+                : !saveGameBlocked && keypad.active ? keypadSaveBlockedReason
                 : !saveGameBlocked && scriptHost.conversation.active ? conversationSaveBlockedReason
                 : dialogue.active && !saveGameBlocked ? dialogueSaveBlockedReason : saveGameBlockedReason;
     }
@@ -311,6 +313,8 @@ private:
     PendingItemTake pendingItemTake;
     ItemInventoryUIState inventoryUi;
     mutable SectorKeypadRuntime keypad;
+    mutable SectorNoteRuntime note;
+    const std::string noteSaveBlockedReason = "Saving is unavailable while reading a note";
     const std::string keypadSaveBlockedReason = "Saving is unavailable while using a keypad";
     ItemInventoryUIAction pendingInventoryAction;
     HeldObjectUseState heldObjectUse;

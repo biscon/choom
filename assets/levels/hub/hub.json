@@ -7239,7 +7239,6 @@
         "useTitle": "Read Post-It",
         "useDistance": 2.0,
         "onUseScript": "usePasswordNote",
-        "singleUse": true,
         "modelPath": "assets/models/room_clutter/Sticky_Note_Yellow.gltf",
         "rotationXDegrees": 90.0,
         "rotationZDegrees": 90.0,
