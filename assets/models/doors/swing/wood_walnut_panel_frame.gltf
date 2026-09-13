@@ -6,6 +6,9 @@
   "scene": 0,
   "scenes": [
     {
+      "extras": {
+        "README": "Seven authored opaque swing doors. Separate canonical glTF leaves and frames. See README.md and tools/door_assets/authoring.py."
+      },
       "name": "Scene",
       "nodes": [
         2
@@ -39,24 +42,24 @@
       "normalTexture": {
         "index": 0
       },
-      "occlusionTexture": {
-        "index": 1
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 2
-        },
-        "metallicRoughnessTexture": {
           "index": 1
         },
+        "metallicRoughnessTexture": {
+          "index": 2
+        },
         "baseColorFactor": [
-          0.72,
-          0.76,
-          0.78,
-          1.0
+          1,
+          1,
+          1,
+          1
         ],
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 2
       },
       "alphaMode": "OPAQUE",
       "doubleSided": false
@@ -91,7 +94,7 @@
   ],
   "meshes": [
     {
-      "name": "Cube.429",
+      "name": "Cube.046",
       "primitives": [
         {
           "attributes": {
@@ -106,7 +109,7 @@
       ]
     },
     {
-      "name": "Cube.413",
+      "name": "Cube.030",
       "primitives": [
         {
           "attributes": {
@@ -150,18 +153,18 @@
   "images": [
     {
       "mimeType": "image/png",
-      "name": "steel_normal_opengl",
-      "uri": "textures/steel_normal_opengl.png"
+      "name": "nickel_used_normal_opengl.png",
+      "uri": "textures/nickel_used_normal_opengl.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_orm",
-      "uri": "textures/steel_orm.png"
+      "name": "nickel_used_basecolor.png",
+      "uri": "textures/nickel_used_basecolor.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_basecolor.png",
-      "uri": "textures/steel_basecolor.png"
+      "name": "nickel_used_orm.png",
+      "uri": "textures/nickel_used_orm.png"
     },
     {
       "mimeType": "image/png",

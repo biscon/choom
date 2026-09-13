@@ -1,7 +1,7 @@
 {
   "industrial_charcoal": {
     "leaf": {
-      "triangles": 4624,
+      "triangles": 4640,
       "materials": 3,
       "boundsMin": [
         0.0,
@@ -9,10 +9,11 @@
         -0.08509530127048492
       ],
       "boundsMax": [
-        0.9000000357627869,
+        0.8999999761581421,
         2.049999952316284,
         0.08509530127048492
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
     "coverageRaysPerFace": 3237,
     "frame": {
@@ -27,13 +28,66 @@
         0.5339999198913574,
         2.1480000019073486,
         0.08699999749660492
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
-    "totalTriangles": 5772
+    "assemblyPoses": [
+      {
+        "endHinge": false,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      }
+    ],
+    "totalTriangles": 5788
   },
   "kitchen_service": {
     "leaf": {
-      "triangles": 6520,
+      "triangles": 6536,
       "materials": 3,
       "boundsMin": [
         0.0,
@@ -41,10 +95,11 @@
         -0.08259530365467072
       ],
       "boundsMax": [
-        0.9000000357627869,
+        0.8999999761581421,
         2.049999952316284,
         0.08259530365467072
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
     "coverageRaysPerFace": 3237,
     "frame": {
@@ -59,13 +114,66 @@
         0.5339999198913574,
         2.1480000019073486,
         0.08699999749660492
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
-    "totalTriangles": 7668
+    "assemblyPoses": [
+      {
+        "endHinge": false,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      }
+    ],
+    "totalTriangles": 7684
   },
   "painted_ivory_panel": {
     "leaf": {
-      "triangles": 5348,
+      "triangles": 5364,
       "materials": 4,
       "boundsMin": [
         0.0,
@@ -73,10 +181,11 @@
         -0.08259530365467072
       ],
       "boundsMax": [
-        0.9000000357627869,
+        0.8999999761581421,
         2.0500001907348633,
         0.08259530365467072
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
     "coverageRaysPerFace": 3237,
     "frame": {
@@ -91,13 +200,66 @@
         0.5339999198913574,
         2.1480000019073486,
         0.09400000423192978
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
-    "totalTriangles": 6928
+    "assemblyPoses": [
+      {
+        "endHinge": false,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      }
+    ],
+    "totalTriangles": 6944
   },
   "painted_sage_panel": {
     "leaf": {
-      "triangles": 5712,
+      "triangles": 5728,
       "materials": 4,
       "boundsMin": [
         0.0,
@@ -105,10 +267,11 @@
         -0.08259530365467072
       ],
       "boundsMax": [
-        0.9000000357627869,
+        0.8999999761581421,
         2.0500001907348633,
         0.08259530365467072
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
     "coverageRaysPerFace": 3237,
     "frame": {
@@ -123,24 +286,78 @@
         0.5339999198913574,
         2.1480000019073486,
         0.09400000423192978
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
-    "totalTriangles": 7292
+    "assemblyPoses": [
+      {
+        "endHinge": false,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      }
+    ],
+    "totalTriangles": 7308
   },
   "security_institutional": {
     "leaf": {
-      "triangles": 6312,
+      "triangles": 6328,
       "materials": 3,
       "boundsMin": [
         0.0,
         0.0,
-        -0.09759530425071716
+        -0.09759529680013657
       ],
       "boundsMax": [
-        0.9000000357627869,
+        0.8999999761581421,
         2.049999952316284,
         0.09759530425071716
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
     "coverageRaysPerFace": 3237,
     "frame": {
@@ -155,13 +372,66 @@
         0.5370000600814819,
         2.1480000019073486,
         0.1119999960064888
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
-    "totalTriangles": 7460
+    "assemblyPoses": [
+      {
+        "endHinge": false,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      }
+    ],
+    "totalTriangles": 7476
   },
   "security_reinforced": {
     "leaf": {
-      "triangles": 7448,
+      "triangles": 7464,
       "materials": 3,
       "boundsMin": [
         0.0,
@@ -169,10 +439,11 @@
         -0.10509530454874039
       ],
       "boundsMax": [
-        0.9000000357627869,
+        0.8999999761581421,
         2.049999952316284,
         0.10509530454874039
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
     "coverageRaysPerFace": 3237,
     "frame": {
@@ -187,13 +458,66 @@
         0.5370000600814819,
         2.1480000019073486,
         0.1119999960064888
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
-    "totalTriangles": 8596
+    "assemblyPoses": [
+      {
+        "endHinge": false,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      }
+    ],
+    "totalTriangles": 8612
   },
   "wood_walnut_panel": {
     "leaf": {
-      "triangles": 6324,
+      "triangles": 6340,
       "materials": 4,
       "boundsMin": [
         0.0,
@@ -201,10 +525,11 @@
         -0.08259530365467072
       ],
       "boundsMax": [
-        0.9000000357627869,
+        0.8999999761581421,
         2.0500001907348633,
         0.08259530365467072
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
     "coverageRaysPerFace": 3237,
     "frame": {
@@ -219,9 +544,62 @@
         0.5339999198913574,
         2.1480000019073486,
         0.09400000423192978
-      ]
+      ],
+      "coplanarOverlaps": 0
     },
-    "totalTriangles": 7904
+    "assemblyPoses": [
+      {
+        "endHinge": false,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": false,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 0,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 55,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": -90,
+        "coplanarOverlaps": 0
+      },
+      {
+        "endHinge": true,
+        "angleDegrees": 90,
+        "coplanarOverlaps": 0
+      }
+    ],
+    "totalTriangles": 7920
   },
   "wooden_interior_001": {
     "leaf": {

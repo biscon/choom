@@ -10,13 +10,13 @@ as the existing doors. Reload the editor/application to pick up catalog changes.
 
 | Catalog ID | Finish and construction | Leaf thickness | Assembly triangles |
 |---|---|---:|---:|
-| `wood_walnut_panel` | Dark walnut, two raised panels, brass lever and lock | 45 mm | 7,904 |
-| `painted_ivory_panel` | Ivory enamel, two recessed panels, nickel hardware | 45 mm | 6,928 |
-| `painted_sage_panel` | Muted green enamel, three recessed panels, nickel hardware | 45 mm | 7,292 |
-| `kitchen_service` | Ivory flush leaf, stainless kick/push plates | 45 mm | 7,668 |
-| `industrial_charcoal` | Charcoal painted steel, folded seams and scuff plate | 50 mm | 5,772 |
-| `security_reinforced` | Heavy green-gray steel, reinforcement straps and deadlock | 90 mm | 8,596 |
-| `security_institutional` | Plain thick gray steel, large lock plate and deadlock | 75 mm | 7,460 |
+| `wood_walnut_panel` | Dark walnut, two raised panels, brass lever and lock | 45 mm | 7,920 |
+| `painted_ivory_panel` | Ivory enamel, two recessed panels, nickel hardware | 45 mm | 6,944 |
+| `painted_sage_panel` | Muted green enamel, three recessed panels, nickel hardware | 45 mm | 7,308 |
+| `kitchen_service` | Ivory flush leaf, stainless kick/push plates | 45 mm | 7,684 |
+| `industrial_charcoal` | Charcoal painted steel, folded seams and scuff plate | 50 mm | 5,788 |
+| `security_reinforced` | Heavy green-gray steel, reinforcement straps and deadlock | 90 mm | 8,612 |
+| `security_institutional` | Plain thick gray steel, large lock plate and deadlock | 75 mm | 7,476 |
 
 Each leaf is 0.90 m wide and 2.05 m high before the existing uniform fitting scale.
 Frame assemblies are 1.068 m wide (1.074 m for security doors), 2.148 m high.
@@ -42,27 +42,38 @@ Frames and leaves are separate, with transforms baked and one identity root per
 export. No rigs, animations, cameras or lights are exported. Every material is
 opaque and single-sided; each leaf has closed solid coverage on both faces.
 
-The seven assemblies total 51,620 triangles. Leaf meshes are consolidated by
+The seven assemblies total 51,732 triangles. Leaf meshes are consolidated by
 material (three or four materials per leaf); frames use two materials. Geometry
 is limited to visible forms: panel profiles, edge bevels, handles, escutcheons,
 lock cylinders, deadlocks, hinge barrels, screws, straps and protection plates.
 
 ## Materials
 
-Four new base-color images were generated through the built-in ImageGen tool:
-walnut, neutral enamel, brushed steel and brass. They are stored at their native
+The walnut, neutral enamel and brass base-color images were generated through
+the built-in ImageGen tool. They are stored at their native
 **1254 x 1254** resolution; the tool returned this size despite the requested
 2K/1K targets. No old door texture was upscaled. UVs keep the visible material
 region inside the image and orient rail grain horizontally and stile grain
 vertically. The painted colors use glTF base-color factors on the enamel image.
 
-Normal maps and packed ORM maps were baked in Blender at **1024 x 1024**.
+Their normal maps and packed ORM maps were baked in Blender at **1024 x 1024**.
 Normals are tangent-space OpenGL Y+. The microstructure is deliberately subtle;
 panel relief comes from geometry. Base color is sRGB; normals and ORM are linear.
 ORM uses R=neutral occlusion, G=roughness, B=metallic. Painted metal is dielectric
 at its paint surface; exposed steel/brass is metallic. No room lighting or room AO
 is baked into these textures. No custom shader or new runtime material support is
 required.
+
+Silver hardware and protection plates reuse the bathroom kit's corrected
+`nickel_used` base-color, OpenGL normal and ORM images, copied byte-for-byte at
+**512 x 512** into this kit. They use a white base-color factor and the bathroom
+ORM metallic value of 209/255 (about 0.82), retaining diffuse response in the
+engine's room lighting. Brass retains its own images and uses a metallic factor
+of 209/255. The earlier darker generated steel maps are superseded.
+
+Mortise plates sit in actual cut recesses in every leaf. The plate, latch and
+leaf edge have distinct surface depths. Frame stops and bottom trim caps also
+avoid same-facing coplanar surfaces; nominal dimensions and pivots are preserved.
 
 ## Rebuild and validation
 
@@ -71,10 +82,11 @@ From the repository root, using Blender 5.2 (the authoring version):
 ```sh
 blender --background --factory-startup --python tools/prepare_swing_door_assets.py -- --mode all
 python3 tools/door_assets/validate.py
+python3 -m unittest discover -s tools/door_assets -p 'test_*.py'
 ```
 
 The first command rebakes normal/ORM maps and rebuilds the seven authored models
-from `tools/door_assets/authoring.py`. It uses the checked-in ImageGen images and
+from `tools/door_assets/authoring.py`. It uses the checked-in ImageGen and bathroom nickel images and
 preserves the nine original wooden exports. It never needs the removed download
 packs or an API key. `--mode prepare --asset ID` rebuilds one style, `--mode verify`
 checks exports, and `--mode render` produces review images. Blender MCP can call
@@ -84,12 +96,17 @@ The standalone validator requires NumPy and does not need Blender or a GPU.
 Validation checks catalog IDs, file dependencies, opaque materials, PBR slots,
 indices, finite vertices/UVs/normals/tangents, canonical transforms and bounds,
 frame measurements, triangle budgets, and 3,237 sample positions on each face
-for opaque coverage. Review images are rendered from reimported exported glTF,
+for opaque coverage. The seven new leaves and frames are also checked for
+positive-area, same-facing coplanar triangle overlaps, including 70 assembled
+poses (both hinges at 0, ±55 and ±90 degrees). Shared edges and opposing culled
+internal faces are excluded. Six small regression tests exercise that detector.
+Review images are rendered from reimported exported glTF,
 not just from the authoring scene. Review output goes to
 `build/swing_door_asset_work/new_doors/`.
 
-The implementation was checked with a debug build, CTest, the asset validator,
-and Blender renders. Interactive engine testing remains for the user: select
+The asset corrections were checked with a debug build, the asset validator,
+Python regression tests and Blender renders. CTest was skipped for these
+asset-only changes. Interactive engine testing remains for the user: select
 each new style, check fit in intended apertures, open/close from each hinge and
 swing side, and inspect materials under room lighting. No automated GUI smoke
 test was performed.

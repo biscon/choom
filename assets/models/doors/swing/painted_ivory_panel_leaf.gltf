@@ -6,6 +6,9 @@
   "scene": 0,
   "scenes": [
     {
+      "extras": {
+        "README": "Seven authored opaque swing doors. Separate canonical glTF leaves and frames. See README.md and tools/door_assets/authoring.py."
+      },
       "name": "Scene",
       "nodes": [
         4
@@ -49,15 +52,12 @@
       "normalTexture": {
         "index": 0
       },
-      "occlusionTexture": {
-        "index": 1
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 2
+          "index": 1
         },
         "metallicRoughnessTexture": {
-          "index": 1
+          "index": 2
         },
         "baseColorFactor": [
           0.018,
@@ -68,6 +68,9 @@
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
       },
+      "occlusionTexture": {
+        "index": 2
+      },
       "alphaMode": "OPAQUE",
       "doubleSided": false
     },
@@ -76,15 +79,12 @@
       "normalTexture": {
         "index": 3
       },
-      "occlusionTexture": {
-        "index": 4
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 5
+          "index": 4
         },
         "metallicRoughnessTexture": {
-          "index": 4
+          "index": 5
         },
         "baseColorFactor": [
           0.88,
@@ -95,6 +95,9 @@
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
       },
+      "occlusionTexture": {
+        "index": 5
+      },
       "alphaMode": "OPAQUE",
       "doubleSided": false
     },
@@ -103,24 +106,24 @@
       "normalTexture": {
         "index": 6
       },
-      "occlusionTexture": {
-        "index": 7
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 8
-        },
-        "metallicRoughnessTexture": {
           "index": 7
         },
+        "metallicRoughnessTexture": {
+          "index": 8
+        },
         "baseColorFactor": [
-          0.92,
-          0.91,
-          0.87,
-          1.0
+          1,
+          1,
+          1,
+          1
         ],
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 8
       },
       "alphaMode": "OPAQUE",
       "doubleSided": false
@@ -130,24 +133,24 @@
       "normalTexture": {
         "index": 9
       },
-      "occlusionTexture": {
-        "index": 10
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 11
-        },
-        "metallicRoughnessTexture": {
           "index": 10
         },
+        "metallicRoughnessTexture": {
+          "index": 11
+        },
         "baseColorFactor": [
-          0.72,
-          0.76,
-          0.78,
-          1.0
+          1,
+          1,
+          1,
+          1
         ],
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 11
       },
       "alphaMode": "OPAQUE",
       "doubleSided": false
@@ -155,7 +158,7 @@
   ],
   "meshes": [
     {
-      "name": "Cube.436",
+      "name": "Cube.054",
       "primitives": [
         {
           "attributes": {
@@ -170,7 +173,7 @@
       ]
     },
     {
-      "name": "Cube.430",
+      "name": "Cube.047",
       "primitives": [
         {
           "attributes": {
@@ -185,7 +188,7 @@
       ]
     },
     {
-      "name": "Cylinder.319",
+      "name": "Cylinder.028",
       "primitives": [
         {
           "attributes": {
@@ -200,7 +203,7 @@
       ]
     },
     {
-      "name": "Cylinder.322",
+      "name": "Cylinder.031",
       "primitives": [
         {
           "attributes": {
@@ -273,28 +276,28 @@
     },
     {
       "mimeType": "image/png",
-      "name": "enamel_orm",
-      "uri": "textures/enamel_orm.png"
-    },
-    {
-      "mimeType": "image/png",
       "name": "enamel_basecolor.png",
       "uri": "textures/enamel_basecolor.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_normal_opengl",
-      "uri": "textures/steel_normal_opengl.png"
+      "name": "enamel_orm",
+      "uri": "textures/enamel_orm.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_orm",
-      "uri": "textures/steel_orm.png"
+      "name": "nickel_used_normal_opengl.png",
+      "uri": "textures/nickel_used_normal_opengl.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_basecolor.png",
-      "uri": "textures/steel_basecolor.png"
+      "name": "nickel_used_basecolor.png",
+      "uri": "textures/nickel_used_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "nickel_used_orm.png",
+      "uri": "textures/nickel_used_orm.png"
     }
   ],
   "accessors": [
@@ -341,7 +344,7 @@
     {
       "bufferView": 5,
       "componentType": 5126,
-      "count": 1052,
+      "count": 1076,
       "max": [
         0.8999999761581421,
         2.0500001907348633,
@@ -357,25 +360,25 @@
     {
       "bufferView": 6,
       "componentType": 5126,
-      "count": 1052,
+      "count": 1076,
       "type": "VEC3"
     },
     {
       "bufferView": 7,
       "componentType": 5126,
-      "count": 1052,
+      "count": 1076,
       "type": "VEC2"
     },
     {
       "bufferView": 8,
       "componentType": 5126,
-      "count": 1052,
+      "count": 1076,
       "type": "VEC4"
     },
     {
       "bufferView": 9,
       "componentType": 5123,
-      "count": 3288,
+      "count": 3336,
       "type": "SCALAR"
     },
     {
@@ -423,7 +426,7 @@
       "componentType": 5126,
       "count": 304,
       "max": [
-        0.9000000357627869,
+        0.8999999761581421,
         1.100000023841858,
         0.03200000151991844
       ],
@@ -492,92 +495,92 @@
     },
     {
       "buffer": 0,
-      "byteLength": 12624,
+      "byteLength": 12912,
       "byteOffset": 20544,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 12624,
-      "byteOffset": 33168,
+      "byteLength": 12912,
+      "byteOffset": 33456,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 8416,
-      "byteOffset": 45792,
+      "byteLength": 8608,
+      "byteOffset": 46368,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 16832,
-      "byteOffset": 54208,
+      "byteLength": 17216,
+      "byteOffset": 54976,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 6576,
-      "byteOffset": 71040,
+      "byteLength": 6672,
+      "byteOffset": 72192,
       "target": 34963
     },
     {
       "buffer": 0,
       "byteLength": 36864,
-      "byteOffset": 77616,
+      "byteOffset": 78864,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 36864,
-      "byteOffset": 114480,
+      "byteOffset": 115728,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 24576,
-      "byteOffset": 151344,
+      "byteOffset": 152592,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 49152,
-      "byteOffset": 175920,
+      "byteOffset": 177168,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 21384,
-      "byteOffset": 225072,
+      "byteOffset": 226320,
       "target": 34963
     },
     {
       "buffer": 0,
       "byteLength": 3648,
-      "byteOffset": 246456,
+      "byteOffset": 247704,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 3648,
-      "byteOffset": 250104,
+      "byteOffset": 251352,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 2432,
-      "byteOffset": 253752,
+      "byteOffset": 255000,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 4864,
-      "byteOffset": 256184,
+      "byteOffset": 257432,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 2016,
-      "byteOffset": 261048,
+      "byteOffset": 262296,
       "target": 34963
     }
   ],
@@ -589,7 +592,7 @@
   ],
   "buffers": [
     {
-      "byteLength": 263064,
+      "byteLength": 264312,
       "uri": "painted_ivory_panel_leaf.bin"
     }
   ]

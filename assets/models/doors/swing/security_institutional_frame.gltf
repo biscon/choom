@@ -6,6 +6,9 @@
   "scene": 0,
   "scenes": [
     {
+      "extras": {
+        "README": "Seven authored opaque swing doors. Separate canonical glTF leaves and frames. See README.md and tools/door_assets/authoring.py."
+      },
       "name": "Scene",
       "nodes": [
         2
@@ -66,24 +69,24 @@
       "normalTexture": {
         "index": 3
       },
-      "occlusionTexture": {
-        "index": 4
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 5
-        },
-        "metallicRoughnessTexture": {
           "index": 4
         },
+        "metallicRoughnessTexture": {
+          "index": 5
+        },
         "baseColorFactor": [
-          0.72,
-          0.76,
-          0.78,
-          1.0
+          1,
+          1,
+          1,
+          1
         ],
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 5
       },
       "alphaMode": "OPAQUE",
       "doubleSided": false
@@ -91,7 +94,7 @@
   ],
   "meshes": [
     {
-      "name": "Cube.644",
+      "name": "Cube.307",
       "primitives": [
         {
           "attributes": {
@@ -106,7 +109,7 @@
       ]
     },
     {
-      "name": "Cube.656",
+      "name": "Cube.319",
       "primitives": [
         {
           "attributes": {
@@ -165,18 +168,18 @@
     },
     {
       "mimeType": "image/png",
-      "name": "steel_normal_opengl",
-      "uri": "textures/steel_normal_opengl.png"
+      "name": "nickel_used_normal_opengl.png",
+      "uri": "textures/nickel_used_normal_opengl.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_orm",
-      "uri": "textures/steel_orm.png"
+      "name": "nickel_used_basecolor.png",
+      "uri": "textures/nickel_used_basecolor.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_basecolor.png",
-      "uri": "textures/steel_basecolor.png"
+      "name": "nickel_used_orm.png",
+      "uri": "textures/nickel_used_orm.png"
     }
   ],
   "accessors": [

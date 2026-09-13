@@ -6,6 +6,9 @@
   "scene": 0,
   "scenes": [
     {
+      "extras": {
+        "README": "Seven authored opaque swing doors. Separate canonical glTF leaves and frames. See README.md and tools/door_assets/authoring.py."
+      },
       "name": "Scene",
       "nodes": [
         3
@@ -44,15 +47,12 @@
       "normalTexture": {
         "index": 0
       },
-      "occlusionTexture": {
-        "index": 1
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 2
+          "index": 1
         },
         "metallicRoughnessTexture": {
-          "index": 1
+          "index": 2
         },
         "baseColorFactor": [
           0.018,
@@ -62,6 +62,9 @@
         ],
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 2
       },
       "alphaMode": "OPAQUE",
       "doubleSided": false
@@ -98,24 +101,24 @@
       "normalTexture": {
         "index": 6
       },
-      "occlusionTexture": {
-        "index": 7
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 8
-        },
-        "metallicRoughnessTexture": {
           "index": 7
         },
+        "metallicRoughnessTexture": {
+          "index": 8
+        },
         "baseColorFactor": [
-          0.72,
-          0.76,
-          0.78,
-          1.0
+          1,
+          1,
+          1,
+          1
         ],
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 8
       },
       "alphaMode": "OPAQUE",
       "doubleSided": false
@@ -123,7 +126,7 @@
   ],
   "meshes": [
     {
-      "name": "Cube.620",
+      "name": "Cube.282",
       "primitives": [
         {
           "attributes": {
@@ -138,7 +141,7 @@
       ]
     },
     {
-      "name": "Cube.618",
+      "name": "Cube.280",
       "primitives": [
         {
           "attributes": {
@@ -153,7 +156,7 @@
       ]
     },
     {
-      "name": "Cube.619",
+      "name": "Cube.281",
       "primitives": [
         {
           "attributes": {
@@ -187,11 +190,11 @@
     },
     {
       "sampler": 0,
-      "source": 2
+      "source": 1
     },
     {
       "sampler": 0,
-      "source": 1
+      "source": 2
     },
     {
       "sampler": 0,
@@ -214,28 +217,28 @@
     },
     {
       "mimeType": "image/png",
-      "name": "enamel_orm",
-      "uri": "textures/enamel_orm.png"
-    },
-    {
-      "mimeType": "image/png",
       "name": "enamel_basecolor.png",
       "uri": "textures/enamel_basecolor.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_normal_opengl",
-      "uri": "textures/steel_normal_opengl.png"
+      "name": "enamel_orm",
+      "uri": "textures/enamel_orm.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_orm",
-      "uri": "textures/steel_orm.png"
+      "name": "nickel_used_normal_opengl.png",
+      "uri": "textures/nickel_used_normal_opengl.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_basecolor.png",
-      "uri": "textures/steel_basecolor.png"
+      "name": "nickel_used_basecolor.png",
+      "uri": "textures/nickel_used_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "nickel_used_orm.png",
+      "uri": "textures/nickel_used_orm.png"
     }
   ],
   "accessors": [
@@ -251,7 +254,7 @@
       "min": [
         0.040049970149993896,
         0.16339999437332153,
-        -0.04784999415278435
+        -0.047849997878074646
       ],
       "type": "VEC3"
     },
@@ -282,7 +285,7 @@
     {
       "bufferView": 5,
       "componentType": 5126,
-      "count": 96,
+      "count": 120,
       "max": [
         0.8999999761581421,
         2.049999952316284,
@@ -298,59 +301,59 @@
     {
       "bufferView": 6,
       "componentType": 5126,
-      "count": 96,
+      "count": 120,
       "type": "VEC3"
     },
     {
       "bufferView": 7,
       "componentType": 5126,
-      "count": 96,
+      "count": 120,
       "type": "VEC2"
     },
     {
       "bufferView": 8,
       "componentType": 5126,
-      "count": 96,
+      "count": 120,
       "type": "VEC4"
     },
     {
       "bufferView": 9,
       "componentType": 5123,
-      "count": 324,
+      "count": 372,
       "type": "SCALAR"
     },
     {
       "bufferView": 10,
       "componentType": 5126,
-      "count": 4756,
+      "count": 4720,
       "max": [
-        0.9000000357627869,
+        0.8999999761581421,
         1.9075000286102295,
         0.09759530425071716
       ],
       "min": [
         0,
         0.14499998092651367,
-        -0.09759530425071716
+        -0.09759529680013657
       ],
       "type": "VEC3"
     },
     {
       "bufferView": 11,
       "componentType": 5126,
-      "count": 4756,
+      "count": 4720,
       "type": "VEC3"
     },
     {
       "bufferView": 12,
       "componentType": 5126,
-      "count": 4756,
+      "count": 4720,
       "type": "VEC2"
     },
     {
       "bufferView": 13,
       "componentType": 5126,
-      "count": 4756,
+      "count": 4720,
       "type": "VEC4"
     },
     {
@@ -393,62 +396,62 @@
     },
     {
       "buffer": 0,
-      "byteLength": 1152,
+      "byteLength": 1440,
       "byteOffset": 43656,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 1152,
-      "byteOffset": 44808,
+      "byteLength": 1440,
+      "byteOffset": 45096,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 768,
-      "byteOffset": 45960,
+      "byteLength": 960,
+      "byteOffset": 46536,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 1536,
-      "byteOffset": 46728,
+      "byteLength": 1920,
+      "byteOffset": 47496,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 648,
-      "byteOffset": 48264,
+      "byteLength": 744,
+      "byteOffset": 49416,
       "target": 34963
     },
     {
       "buffer": 0,
-      "byteLength": 57072,
-      "byteOffset": 48912,
+      "byteLength": 56640,
+      "byteOffset": 50160,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 57072,
-      "byteOffset": 105984,
+      "byteLength": 56640,
+      "byteOffset": 106800,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 38048,
-      "byteOffset": 163056,
+      "byteLength": 37760,
+      "byteOffset": 163440,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 76096,
-      "byteOffset": 201104,
+      "byteLength": 75520,
+      "byteOffset": 201200,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 32736,
-      "byteOffset": 277200,
+      "byteOffset": 276720,
       "target": 34963
     }
   ],
@@ -460,7 +463,7 @@
   ],
   "buffers": [
     {
-      "byteLength": 309936,
+      "byteLength": 309456,
       "uri": "security_institutional_leaf.bin"
     }
   ]

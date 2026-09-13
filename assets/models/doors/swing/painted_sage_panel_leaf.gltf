@@ -6,6 +6,9 @@
   "scene": 0,
   "scenes": [
     {
+      "extras": {
+        "README": "Seven authored opaque swing doors. Separate canonical glTF leaves and frames. See README.md and tools/door_assets/authoring.py."
+      },
       "name": "Scene",
       "nodes": [
         4
@@ -49,15 +52,12 @@
       "normalTexture": {
         "index": 0
       },
-      "occlusionTexture": {
-        "index": 1
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 2
+          "index": 1
         },
         "metallicRoughnessTexture": {
-          "index": 1
+          "index": 2
         },
         "baseColorFactor": [
           0.018,
@@ -68,6 +68,9 @@
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
       },
+      "occlusionTexture": {
+        "index": 2
+      },
       "alphaMode": "OPAQUE",
       "doubleSided": false
     },
@@ -76,24 +79,24 @@
       "normalTexture": {
         "index": 3
       },
-      "occlusionTexture": {
-        "index": 4
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 5
-        },
-        "metallicRoughnessTexture": {
           "index": 4
         },
+        "metallicRoughnessTexture": {
+          "index": 5
+        },
         "baseColorFactor": [
-          0.92,
-          0.91,
-          0.87,
-          1.0
+          1,
+          1,
+          1,
+          1
         ],
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 5
       },
       "alphaMode": "OPAQUE",
       "doubleSided": false
@@ -130,24 +133,24 @@
       "normalTexture": {
         "index": 9
       },
-      "occlusionTexture": {
-        "index": 10
-      },
       "pbrMetallicRoughness": {
         "baseColorTexture": {
-          "index": 11
-        },
-        "metallicRoughnessTexture": {
           "index": 10
         },
+        "metallicRoughnessTexture": {
+          "index": 11
+        },
         "baseColorFactor": [
-          0.72,
-          0.76,
-          0.78,
-          1.0
+          1,
+          1,
+          1,
+          1
         ],
         "metallicFactor": 1.0,
         "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 11
       },
       "alphaMode": "OPAQUE",
       "doubleSided": false
@@ -155,7 +158,7 @@
   ],
   "meshes": [
     {
-      "name": "Cube.473",
+      "name": "Cube.092",
       "primitives": [
         {
           "attributes": {
@@ -170,7 +173,7 @@
       ]
     },
     {
-      "name": "Cylinder.345",
+      "name": "Cylinder.054",
       "primitives": [
         {
           "attributes": {
@@ -185,7 +188,7 @@
       ]
     },
     {
-      "name": "Cube.466",
+      "name": "Cube.084",
       "primitives": [
         {
           "attributes": {
@@ -200,7 +203,7 @@
       ]
     },
     {
-      "name": "Cylinder.348",
+      "name": "Cylinder.057",
       "primitives": [
         {
           "attributes": {
@@ -246,11 +249,11 @@
     },
     {
       "sampler": 0,
-      "source": 2
+      "source": 1
     },
     {
       "sampler": 0,
-      "source": 1
+      "source": 2
     },
     {
       "sampler": 0,
@@ -273,28 +276,28 @@
     },
     {
       "mimeType": "image/png",
-      "name": "enamel_orm",
-      "uri": "textures/enamel_orm.png"
-    },
-    {
-      "mimeType": "image/png",
       "name": "enamel_basecolor.png",
       "uri": "textures/enamel_basecolor.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_normal_opengl",
-      "uri": "textures/steel_normal_opengl.png"
+      "name": "enamel_orm",
+      "uri": "textures/enamel_orm.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_orm",
-      "uri": "textures/steel_orm.png"
+      "name": "nickel_used_normal_opengl.png",
+      "uri": "textures/nickel_used_normal_opengl.png"
     },
     {
       "mimeType": "image/png",
-      "name": "steel_basecolor.png",
-      "uri": "textures/steel_basecolor.png"
+      "name": "nickel_used_basecolor.png",
+      "uri": "textures/nickel_used_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "nickel_used_orm.png",
+      "uri": "textures/nickel_used_orm.png"
     }
   ],
   "accessors": [
@@ -381,7 +384,7 @@
     {
       "bufferView": 10,
       "componentType": 5126,
-      "count": 1408,
+      "count": 1432,
       "max": [
         0.8999999761581421,
         2.0500001907348633,
@@ -397,25 +400,25 @@
     {
       "bufferView": 11,
       "componentType": 5126,
-      "count": 1408,
+      "count": 1432,
       "type": "VEC3"
     },
     {
       "bufferView": 12,
       "componentType": 5126,
-      "count": 1408,
+      "count": 1432,
       "type": "VEC2"
     },
     {
       "bufferView": 13,
       "componentType": 5126,
-      "count": 1408,
+      "count": 1432,
       "type": "VEC4"
     },
     {
       "bufferView": 14,
       "componentType": 5123,
-      "count": 4380,
+      "count": 4428,
       "type": "SCALAR"
     },
     {
@@ -423,7 +426,7 @@
       "componentType": 5126,
       "count": 304,
       "max": [
-        0.9000000357627869,
+        0.8999999761581421,
         1.100000023841858,
         0.03200000151991844
       ],
@@ -522,62 +525,62 @@
     },
     {
       "buffer": 0,
-      "byteLength": 16896,
+      "byteLength": 17184,
       "byteOffset": 189384,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 16896,
-      "byteOffset": 206280,
+      "byteLength": 17184,
+      "byteOffset": 206568,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 11264,
-      "byteOffset": 223176,
+      "byteLength": 11456,
+      "byteOffset": 223752,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 22528,
-      "byteOffset": 234440,
+      "byteLength": 22912,
+      "byteOffset": 235208,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 8760,
-      "byteOffset": 256968,
+      "byteLength": 8856,
+      "byteOffset": 258120,
       "target": 34963
     },
     {
       "buffer": 0,
       "byteLength": 3648,
-      "byteOffset": 265728,
+      "byteOffset": 266976,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 3648,
-      "byteOffset": 269376,
+      "byteOffset": 270624,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 2432,
-      "byteOffset": 273024,
+      "byteOffset": 274272,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 4864,
-      "byteOffset": 275456,
+      "byteOffset": 276704,
       "target": 34962
     },
     {
       "buffer": 0,
       "byteLength": 2016,
-      "byteOffset": 280320,
+      "byteOffset": 281568,
       "target": 34963
     }
   ],
@@ -589,7 +592,7 @@
   ],
   "buffers": [
     {
-      "byteLength": 282336,
+      "byteLength": 283584,
       "uri": "painted_sage_panel_leaf.bin"
     }
   ]

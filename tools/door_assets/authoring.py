@@ -32,8 +32,9 @@ FINISHES = {
     'charcoal': ('enamel', (.063, .073, .078, 1)),
     'reinforced': ('enamel', (.15, .19, .17, 1)),
     'gray': ('enamel', (.34, .37, .35, 1)),
-    'steel': ('steel', (.72, .76, .78, 1)),
-    'nickel': ('steel', (.92, .91, .87, 1)),
+    # Same calibrated silver finish as the bathroom kit, without a dark tint.
+    'steel': ('nickel_used', (1, 1, 1, 1)),
+    'nickel': ('nickel_used', (1, 1, 1, 1)),
     'brass': ('brass', (1, 1, 1, 1)),
     'dark': ('enamel', (.018, .020, .018, 1)),
 }
@@ -87,8 +88,14 @@ def material(name):
     split = nodes.new('ShaderNodeSeparateColor')
     links.new(properties.outputs['Color'], split.inputs[0])
     links.new(split.outputs['Green'], bsdf.inputs['Roughness'])
-    links.new(split.outputs['Blue'], bsdf.inputs['Metallic'])
+    metallic_factor = 209 / 255 if name == 'brass' else 1.0
+    metallic = nodes.new('ShaderNodeMath')
+    metallic.operation = 'MULTIPLY'
+    metallic.inputs[1].default_value = metallic_factor
+    links.new(split.outputs['Blue'], metallic.inputs[0])
+    links.new(metallic.outputs[0], bsdf.inputs['Metallic'])
     mat['door_tint'] = list(tint)
+    mat['door_metallic_factor'] = metallic_factor
     return mat
 
 
@@ -239,9 +246,33 @@ def flush_leaf(spec):
                 for z in [.10,.50,1.04,1.57,1.95]: cylinder('Security fastener',(x,y+sign*.005,z),.007,.005,'steel',vertices=6)
             for z in [.060,.75,1.97]: box('Welded reinforcement',(WIDTH/2,y,z),(WIDTH-.055,.010,.065),mat,.002,True)
         elif kind=='institutional':
-            box('Large lock reinforcement plate',(.765,y,1.09),(.19,.004,.34),'steel',.003)
+            plate_y = y + sign*.001
+            box('Large lock reinforcement plate',(.765,plate_y,1.09),(.19,.005,.34),'steel',.003)
             for x in [.69,.84]:
-                for z in [.945,1.235]: screw('Lock plate screw',x,y+sign*.003,z,'steel',sign,.0035)
+                for z in [.945,1.235]: screw('Lock plate screw',x,plate_y+sign*.003,z,'steel',sign,.0035)
+
+
+def cut_mortise_recess(spec):
+    """A real recess keeps the plate, latch and leaf at distinct surface depths."""
+    bodies = []
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'MESH':
+            lo, hi = bounds([obj])
+            if lo[0] < WIDTH-.004 < hi[0] and lo[2] < 1.025 < hi[2]:
+                bodies.append(obj)
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(WIDTH, 0, 1.025))
+    cutter = bpy.context.object
+    cutter.dimensions = (.008, spec['thickness']*.7+.0006, .1506)
+    active(cutter)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    for obj in bodies:
+        active(obj)
+        modifier = obj.modifiers.new('Recess behind mortise plate', 'BOOLEAN')
+        modifier.operation = 'DIFFERENCE'
+        modifier.solver = 'EXACT'
+        modifier.object = cutter
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.data.objects.remove(cutter, do_unlink=True)
 
 
 def hardware(spec):
@@ -266,8 +297,8 @@ def hardware(spec):
             cylinder('Deadlock cylinder',(.795,y+sign*.006,dead_z),.012,.007,metal)
             if sign<0: box('Deadlock key recess',(.795,y+sign*.01,dead_z),(.002,.001,.013),'dark',.0004)
             else: box('Deadlock thumbturn',(.795,y+sign*.016,dead_z),(.040,.012,.011),metal,.004)
-    box('Mortise faceplate',(WIDTH-.001,0,1.025),(.002,t*.7,.15),'steel',.001)
-    box('Latch tongue',(WIDTH-.0015,0,1.043),(.003,.013,.021),'steel',.001)
+    box('Mortise faceplate',(WIDTH-.002,0,1.025),(.002,t*.7,.15),'steel',.001)
+    box('Latch tongue',(WIDTH-.001,0,1.043),(.002,.013,.021),'steel',.0006)
     heavy=kind in ('reinforced','institutional')
     radius=.013 if heavy else .009
     depth=.11 if heavy else .075
@@ -291,13 +322,13 @@ def frame(spec):
     for sign in [-1,1]:
         casing=.083 if heavy else .080
         for x in [-.004-casing/2,WIDTH+.004+casing/2]:
-            box('Frame casing',(x,sign*(depth/2+.007),(HEIGHT+.018)/2),(casing,.020,HEIGHT+.018),mat,.003)
+            box('Frame casing',(x,sign*(depth/2+.007),(HEIGHT+.019)/2),(casing,.020,HEIGHT+.017),mat,.003)
             if kind in ('wood','ivory','sage'):
-                box('Casing bead',(x-sign*.018,sign*(depth/2+.019),(HEIGHT+.018)/2),(.011,.010,HEIGHT+.018),mat,.002)
+                box('Casing bead',(x-sign*.018,sign*(depth/2+.019),(HEIGHT+.020)/2),(.011,.010,HEIGHT+.016),mat,.002)
         box('Head casing',(WIDTH/2,sign*(depth/2+.007),HEIGHT+.058),(WIDTH+.008+2*casing,.020,.080),mat,.003,True)
     # Recessed stops behind the closed leaf; the existing system determines swing.
     rear=spec['thickness']/2+.010
-    for x in [-.006,WIDTH+.006]: box('Rebated stop',(x,rear,HEIGHT/2),(.006,.012,HEIGHT),mat,.001)
+    for x in [-.004,WIDTH+.004]: box('Rebated stop',(x,rear,HEIGHT/2),(.008,.012,HEIGHT-.008),mat,.001)
     box('Head stop',(WIDTH/2,rear,HEIGHT+BOTTOM+.006),(WIDTH,.012,.010),mat,.001,True)
     box('Strike plate',(WIDTH+.003,0,1.025+BOTTOM),(.002,spec['thickness']*.8,.16),'steel',.001)
 
@@ -341,7 +372,7 @@ def export(root,path):
         source=bpy.data.materials[mat['name']]
         pbr=mat['pbrMetallicRoughness']
         pbr['baseColorFactor']=list(source['door_tint'])
-        pbr['metallicFactor']=1.0
+        pbr['metallicFactor']=source['door_metallic_factor']
         pbr['roughnessFactor']=1.0
         mat['occlusionTexture'] = dict(pbr['metallicRoughnessTexture'])
         mat['alphaMode']='OPAQUE'
@@ -356,6 +387,8 @@ def build_asset(asset_id):
     reset()
     if spec['kind'] in ('wood','ivory','sage'): panel_leaf(spec)
     else: flush_leaf(spec)
+    bpy.context.view_layer.update()
+    cut_mortise_recess(spec)
     hardware(spec)
     leaf=consolidate(list(bpy.context.scene.objects),'DoorLeaf_'+asset_id)
     leaf['catalog_id']=asset_id;leaf['part']='leaf'
@@ -386,7 +419,7 @@ def build_asset(asset_id):
 
 def bake_material_maps(family=None):
     TEX.mkdir(parents=True,exist_ok=True)
-    for kind in ([family] if family else ['walnut','enamel','steel','brass']):
+    for kind in ([family] if family else ['walnut','enamel','brass']):
         reset()
         scene=bpy.context.scene;scene.render.engine='CYCLES';scene.cycles.samples=1;scene.cycles.device='CPU'
         bpy.ops.mesh.primitive_plane_add(size=2)

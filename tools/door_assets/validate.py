@@ -8,6 +8,11 @@ from pathlib import Path
 from urllib.parse import unquote
 import numpy as np
 
+if __package__:
+    from .coplanar import overlapping_faces
+else:
+    from coplanar import overlapping_faces
+
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'assets/models/doors/swing'
 NEW_IDS = {
@@ -112,11 +117,16 @@ def validate():
     for asset in catalog['assets']:
         authored=asset['id'] in NEW_IDS
         record={}
+        part_triangles = {}
         for part in ['leaf','frame']:
             doc,tris=read_model(ROOT/asset[part+'ModelPath'],authored)
+            part_triangles[part] = tris.astype(np.float64)
             points=tris.reshape(-1,3);lo=points.min(axis=0);hi=points.max(axis=0)
             record[part]={'triangles':len(tris),'materials':len(doc['materials']),'boundsMin':lo.tolist(),'boundsMax':hi.tolist()}
             if authored:
+                overlaps = overlapping_faces(tris)
+                require(not overlaps, f"{asset['id']} {part}: {len(overlaps)} coplanar face overlaps")
+                record[part]['coplanarOverlaps'] = 0
                 tol=.00003
                 if part=='leaf':
                     require(abs(lo[0])<tol and abs(hi[0]-asset['nominalWidth'])<tol and abs(lo[1])<tol and abs(hi[1]-asset['nominalHeight'])<tol,f"{asset['id']}: leaf canonical bounds")
@@ -126,6 +136,25 @@ def validate():
                     require(abs(hi[0]-lo[0]-asset['frameOuterWidth'])<tol and abs(hi[1]-lo[1]-asset['frameOuterHeight'])<tol,f"{asset['id']}: frame metadata")
         total=sum(record[p]['triangles'] for p in ['leaf','frame'])
         if authored: require(total<=12000 if asset['id'].startswith('security_') else total<=8000,f"{asset['id']}: triangle budget {total}")
+        if authored:
+            assembly = part_triangles['frame'].copy()
+            assembly[:,:,0] += asset['leafHingeToFrameCenter']
+            poses = []
+            for end_hinge in (False, True):
+                for angle in (0, -55, 55, -90, 90):
+                    radians = np.deg2rad(angle + (180 if end_hinge else 0))
+                    cosine, sine = np.cos(radians), np.sin(radians)
+                    leaf = part_triangles['leaf'].copy()
+                    x, z = leaf[:,:,0].copy(), leaf[:,:,2].copy()
+                    leaf[:,:,0] = cosine*x + sine*z
+                    leaf[:,:,2] = -sine*x + cosine*z
+                    leaf[:,:,1] += asset['leafBottomOffset']
+                    if end_hinge:
+                        leaf[:,:,0] += 2*asset['leafHingeToFrameCenter']
+                    overlaps = overlapping_faces(np.concatenate((leaf, assembly)))
+                    require(not overlaps, f"{asset['id']}: coplanar assembly faces at hinge={end_hinge}, angle={angle}")
+                    poses.append({'endHinge': end_hinge, 'angleDegrees': angle, 'coplanarOverlaps': 0})
+            record['assemblyPoses'] = poses
         record['totalTriangles']=total
         report[asset['id']]=record
     return report
