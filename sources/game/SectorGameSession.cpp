@@ -22,6 +22,13 @@ namespace game {
 
 namespace {
 
+bool ShouldShowInteractionText(const SectorCutsceneRuntime& cutscene)
+{
+    return cutscene.controlsEnabled
+            && !cutscene.presentation.active
+            && !cutscene.caption.active;
+}
+
 Vector3 GameplayForward(const SectorEditorPreviewControllerState& controller)
 {
     const SectorViewPose pose = SectorFpsControllerPose(
@@ -485,7 +492,7 @@ void SectorGameSession::RenderInventoryUI(
             SetInventoryOpen(false);
         }
     }
-    if (itemMessage[0] != '\0') {
+    if (ShouldShowInteractionText(cutscene) && itemMessage[0] != '\0') {
         DrawSectorUseMessage(
                 config.overlayBounds,
                 assets.GetFont(usePromptFont),
@@ -2616,20 +2623,22 @@ void SectorGameSession::RenderHud(
                 showAmmo,
                 oxygenHudAlpha > 0.0f ? &playerOxygen : nullptr,
                 oxygenHudAlpha);
-        if (itemMessage[0] != '\0') {
-            DrawSectorUseMessage(
-                    playableViewport,
-                    assets.GetFont(usePromptFont),
-                    itemMessage.data(),
-                    itemMessageElapsedSeconds);
-        } else if (!inventoryUi.open && !dialogue.active && !keypad.active
-                && heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
-            DrawSectorUsePrompt(
-                    playableViewport,
-                    assets.GetFont(usePromptFont),
-                    !engine::IsNull(controller.propDrag.entity) ? "E: Release - W/S: Push/Pull" : usePromptTitle.data(),
-                    !engine::IsNull(controller.propDrag.entity) ? "" : useTarget.draggable ? "Drag" : useTarget.kind == SectorUseTargetKind::Npc ? ""
-                            : useTarget.kind == SectorUseTargetKind::Item ? "Take" : useTarget.action);
+        if (ShouldShowInteractionText(cutscene)) {
+            if (itemMessage[0] != '\0') {
+                DrawSectorUseMessage(
+                        playableViewport,
+                        assets.GetFont(usePromptFont),
+                        itemMessage.data(),
+                        itemMessageElapsedSeconds);
+            } else if (!inventoryUi.open && !dialogue.active && !keypad.active
+                    && heldObjectUse.phase == ItemHeldUsePhase::Inactive) {
+                DrawSectorUsePrompt(
+                        playableViewport,
+                        assets.GetFont(usePromptFont),
+                        !engine::IsNull(controller.propDrag.entity) ? "E: Release - W/S: Push/Pull" : usePromptTitle.data(),
+                        !engine::IsNull(controller.propDrag.entity) ? "" : useTarget.draggable ? "Drag" : useTarget.kind == SectorUseTargetKind::Npc ? ""
+                                : useTarget.kind == SectorUseTargetKind::Item ? "Take" : useTarget.action);
+            }
         }
     }
     if (IsActive() && keypad.active) {

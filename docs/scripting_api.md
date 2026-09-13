@@ -1122,6 +1122,14 @@ startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 directly in the non-yielding debug console to preview captions; direct console
 calls to the blocking forms are rejected before changing caption state.
 
+Interaction prompts, dragging instructions, and brief feedback messages (including
+inventory feedback) are hidden while any caption is active, including its reveal,
+hold, and fade. This applies to both blocking and async forms at every text
+position. They also stay hidden during cutscenes or while controls are disabled.
+Visibility returns when these conditions clear, subject to the usual UI rules;
+feedback timers continue normally while hidden. This only changes text visibility,
+not interaction input or targeting.
+
 The NPC form requires a placed NPC instance ID (the same IDs used by `moveNpc`). The
 NPC editor's Voice setting selects `male` or `female`; older definitions default
 to male. The optional mood is `neutral` (default), `happy`, `angry`, `afraid`,

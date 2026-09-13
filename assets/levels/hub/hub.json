@@ -7239,6 +7239,7 @@
         "useTitle": "Read Post-It",
         "useDistance": 2.0,
         "onUseScript": "usePasswordNote",
+        "singleUse": true,
         "modelPath": "assets/models/room_clutter/Sticky_Note_Yellow.gltf",
         "rotationXDegrees": 90.0,
         "rotationZDegrees": 90.0,
@@ -7251,6 +7252,21 @@
         44.87992858886719
       ],
       "yawDegrees": 6.40330199530581e-07
+    },
+    {
+      "id": 459,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_459",
+        "modelPath": "assets/models/bathroom/Ventilation_Grille_410.gltf",
+        "heightOffsetWorld": 2.349998950958252
+      },
+      "position": [
+        -52.56004333496094,
+        0.0,
+        151.91998291015625
+      ],
+      "yawDegrees": -179.99998474121094
     }
   ],
   "staticLights": [
@@ -13258,7 +13274,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -13374,7 +13391,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "59e5dcb761cb3d7b",
+    "sourceHash": "d4708d2e2fa29b05",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -13382,19 +13399,19 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.2421875,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 874
+      "sampleCount": 12582912,
+      "rgbChannelsAboveOne": 1445
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "59e5dcb761cb3d7b",
+      "sourceHash": "d4708d2e2fa29b05",
       "count": 3969,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -13407,27 +13424,32 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9489465951919556,
-          1.8618656396865845
+          2.19494366645813,
+          1.9482474327087402,
+          1.8612030744552612
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23814,
-        "rgbChannelsAboveOne": 37
+        "rgbChannelsAboveOne": 36
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "59e5dcb761cb3d7b",
+      "sourceHash": "d4708d2e2fa29b05",
       "modelCount": 132,
-      "objectCount": 373,
+      "objectCount": 374,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
       {
         "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/hub/hub.lightmap.2.bin",
         "width": 2048,
         "height": 2048
       }
