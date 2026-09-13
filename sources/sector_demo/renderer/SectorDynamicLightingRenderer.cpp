@@ -1853,6 +1853,14 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                     continue;
                 }
                 if (!caster.animated) {
+                    // The preceding caster may have enabled skeletal animation.
+                    if (activeUseSkinningLoc >= 0) {
+                        SetShaderValue(
+                                activeMaterial.shader,
+                                activeUseSkinningLoc,
+                                &noSkinning,
+                                SHADER_UNIFORM_INT);
+                    }
                     ++shadowRenderStats.objectCastersDrawn;
                     for (int meshIndex = 0;
                             meshIndex < asset->model.meshCount;

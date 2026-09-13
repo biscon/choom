@@ -275,8 +275,34 @@ bool SectorEditorLevelMarkerEditingService::FinishMove()
         context_.statusText = "Level Marker move unchanged";
         return true;
     }
-    return MutateSelected("Moved Level Marker", [drag](SectorAuthoringLevelMarker& marker) {
+    if (!IsSectorEditorAuthoringDerivationCurrent(context_.derivation)) {
+        context_.statusText = "Level Marker movement requires current authoring derivation";
+        return false;
+    }
+    const SectorAuthoringDerivationResult& derivation =
+            context_.derivation.authoringDerivation;
+    int sourceSectorId = -1;
+    int destinationSectorId = -1;
+    if (!ResolveSectorAuthoringPointToDerivedSector(
+                derivation, {drag.originalX, drag.originalZ}, &sourceSectorId)
+            || !ResolveSectorAuthoringPointToDerivedSector(
+                    derivation, {drag.previewX, drag.previewZ}, &destinationSectorId)) {
+        context_.statusText =
+                "Level Marker movement requires source and destination strictly inside non-void sectors";
+        return false;
+    }
+    const SectorTopologySector* source = FindSectorTopologySector(
+            derivation.topology, sourceSectorId);
+    const SectorTopologySector* destination = FindSectorTopologySector(
+            derivation.topology, destinationSectorId);
+    if (source == nullptr || destination == nullptr) {
+        context_.statusText = "Level Marker movement failed: derived sector is unavailable";
+        return false;
+    }
+    const float floorDelta = destination->floorZ - source->floorZ;
+    return MutateSelected("Moved Level Marker", [drag, floorDelta](SectorAuthoringLevelMarker& marker) {
         marker.x = drag.previewX;
+        marker.y += floorDelta;
         marker.z = drag.previewZ;
         return true;
     });

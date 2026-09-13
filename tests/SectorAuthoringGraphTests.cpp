@@ -12522,6 +12522,60 @@ game::SectorEditorRuntimeObjectEditingService MakeRuntimeObjectEditingServiceFor
                     itemRegistry}};
 }
 
+void TestItemDragPreservesFloorOffset()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    game::FindSectorTopologySector(map, 200)->floorZ = -27.0f;
+    game::FindSectorTopologySector(map, 201)->floorZ = 16.0f;
+    game::SectorPlacedRuntimeObject item;
+    item.id = 1;
+    item.kind = "item";
+    item.position = {24.0f, -27.0f, 24.0f};
+    item.item.heightOffsetWorld = 0.9f;
+    item.item.scale = 1.5f;
+    item.yawRadians = 0.7f;
+    map.runtimeObjects.push_back(item);
+
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RuntimeObjectEditingState editingState;
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    game::SectorEditorDocumentState documentState;
+    uint64_t revision = 7;
+    game::SectorEditorTopologyRenderCache cache;
+    std::string status;
+    auto editing = MakeRuntimeObjectEditingServiceForTest(
+            map, runtimeObjects, editingState, uiState, selectionState,
+            documentState, revision, cache, status, true);
+    for (Vector3 destination : {Vector3{96.0f, 16.0f, 32.0f}, item.position}) {
+        FillRuntimeObjectTestSectorCache(cache, map);
+        documentState.lifecycle.topologyDocumentDirty = false;
+        const uint64_t beforeRevision = revision;
+        Check(editing.BeginDrag(item.id), "item cross-sector drag begins");
+        editing.UpdateDrag({destination.x, destination.z});
+        Check(Near(map.runtimeObjects[0].position, destination)
+                      && Near(map.runtimeObjects[0].item.heightOffsetWorld, 0.9f)
+                      && Near(map.runtimeObjects[0].item.scale, 1.5f)
+                      && Near(map.runtimeObjects[0].yawRadians, 0.7f),
+              "item drag follows higher and lower floors without changing its offset or appearance");
+        Check(editing.FinishDrag() && !cache.valid
+                      && documentState.lifecycle.topologyDocumentDirty
+                      && revision == beforeRevision + 1,
+              "item drag commit invalidates the cache and marks the document edited");
+    }
+    FillRuntimeObjectTestSectorCache(cache, map);
+    documentState.lifecycle.topologyDocumentDirty = false;
+    const uint64_t beforeCancel = revision;
+    Check(editing.BeginDrag(item.id), "cancelled item drag begins");
+    editing.UpdateDrag({96.0f, 32.0f});
+    editing.CancelDrag("Cancelled item move");
+    Check(Near(map.runtimeObjects[0].position, item.position)
+                  && Near(map.runtimeObjects[0].item.heightOffsetWorld, 0.9f)
+                  && cache.valid && revision == beforeCancel
+                  && !documentState.lifecycle.topologyDocumentDirty,
+          "cancelled item drag restores its original position and leaves document state unchanged");
+}
+
 void TestItemPlacementEditingCacheAndPicking()
 {
     game::SectorTopologyMap map = MakeSingleSectorSquareMap();
@@ -15494,6 +15548,96 @@ void TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache()
           "Level Marker placement rejects points outside derived sectors");
 }
 
+void TestLevelMarkerDragPreservesFloorOffset()
+{
+    game::SectorEditorDocumentState document;
+    auto& graph = document.authoring.authoringGraph;
+    graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {320, 0}, {320, 160}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 1}, {2, 5}});
+    AddFaceAnchor(graph, 1, 80, 80, "Low floor");
+    AddFaceAnchor(graph, 2, 240, 80, "High floor");
+    graph.faceAnchors[0].floorZ = -27.0f;
+    graph.faceAnchors[1].floorZ = 8.0f;
+    game::SectorEditorState editorState;
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  editorState, game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+                  document.map.topologyMap, graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(document.derivation)),
+          "marker floor-offset fixture derives two sectors");
+    game::SelectionState selection;
+    game::LevelMarkerEditingState editingState;
+    std::string status;
+    game::SectorEditorLevelMarkerEditingService editing{
+            game::SectorEditorLevelMarkerEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+                    document.map.topologyMap, graph,
+                    game::MakeSectorEditorDerivationDocumentAccess(document.derivation),
+                    editorState.topologyRenderRevision, editorState.topologyRenderCache,
+                    selection, editingState, status}};
+    Check(editing.Place({5.0f, 5.0f}), "floor-relative marker is placed");
+    if (graph.levelMarkers.empty()) return;
+    const int markerId = graph.levelMarkers[0].id;
+    for (float offset : {0.0f, 3.25f}) {
+        Check(editing.SetSelectedPosition({5.0f, -27.0f + offset, 5.0f})
+                      || Near(graph.levelMarkers[0].y, -27.0f + offset),
+              "marker starts at the requested floor offset");
+        for (int pass = 0; pass < 4; ++pass) {
+            const bool moveUp = pass % 2 == 0;
+            const float x = moveUp ? 15.0f : 5.0f;
+            const float y = (moveUp ? 8.0f : -27.0f) + offset;
+            document.lifecycle.topologyDocumentDirty = false;
+            editorState.topologyRenderCache.valid = true;
+            const Vector3 before = document.map.topologyMap.levelMarkers[0].position;
+            Check(editing.BeginMove(markerId), "marker cross-sector drag begins");
+            editing.UpdateMove({x, 5.0f});
+            Check(Near(document.map.topologyMap.levelMarkers[0].position, before)
+                          && !document.lifecycle.topologyDocumentDirty,
+                  "marker drag preview leaves compiled position and document untouched");
+            Check(editing.FinishMove() && Near(graph.levelMarkers[0].y, y)
+                          && Near(document.map.topologyMap.levelMarkers[0].position,
+                                  Vector3{x, y, 5.0f})
+                          && document.lifecycle.topologyDocumentDirty
+                          && !editorState.topologyRenderCache.valid,
+                  "marker preserves floor offset in both directions without drift and refreshes topology/cache");
+        }
+    }
+
+    document.lifecycle.topologyDocumentDirty = false;
+    document.lifecycle.hasUnsavedChanges = false;
+    editorState.topologyRenderCache.valid = true;
+    const uint64_t revision = editorState.topologyRenderRevision;
+    const auto original = graph.levelMarkers[0];
+    const Vector3 compiled = document.map.topologyMap.levelMarkers[0].position;
+    const auto unchanged = [&]() {
+        return graph.levelMarkers[0].x == original.x
+                && graph.levelMarkers[0].z == original.z
+                && Near(graph.levelMarkers[0].y, original.y)
+                && Near(document.map.topologyMap.levelMarkers[0].position, compiled)
+                && !document.lifecycle.topologyDocumentDirty
+                && !document.lifecycle.hasUnsavedChanges
+                && editorState.topologyRenderCache.valid
+                && editorState.topologyRenderRevision == revision;
+    };
+    Check(editing.BeginMove(markerId), "cancelled marker drag begins");
+    editing.UpdateMove({15.0f, 5.0f});
+    editing.CancelMove("Cancelled marker move");
+    Check(unchanged(), "cancelled marker drag preserves graph, topology, and document/cache state");
+    Check(editing.BeginMove(markerId) && editing.FinishMove() && unchanged(),
+          "unchanged marker drag preserves document/cache state");
+    for (Vector2 destination : {Vector2{30.0f, 5.0f}, Vector2{10.0f, 5.0f}}) {
+        Check(editing.BeginMove(markerId), "invalid marker destination drag begins");
+        editing.UpdateMove(destination);
+        Check(!editing.FinishMove() && unchanged() && !status.empty(),
+              "outside and boundary destinations reject without document/cache mutations");
+    }
+    Check(editing.BeginMove(markerId), "stale derivation marker drag begins");
+    editing.UpdateMove({15.0f, 5.0f});
+    document.derivation.authoringDerivedTopologyStale = true;
+    Check(!editing.FinishMove() && unchanged(),
+          "stale marker derivation rejects movement without document/cache mutations");
+}
+
 void TestTriggerEditingServiceCommitsAuthoringAndDragOnce()
 {
     game::SectorEditorDocumentState documentState;
@@ -15816,6 +15960,7 @@ int main()
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
     TestReflectionProbeSelectManipulationCommitsSnappedMove();
     TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache();
+    TestLevelMarkerDragPreservesFloorOffset();
     TestTriggerEditingServiceCommitsAuthoringAndDragOnce();
     TestEmptyGraph();
     TestStablePositiveIdAllocation();
@@ -16066,6 +16211,7 @@ int main()
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
     TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag();
     TestItemPlacementEditingCacheAndPicking();
+    TestItemDragPreservesFloorOffset();
     TestNpcEditingPlacementSelectionPickingAndFloorRelativeDrag();
     TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
     TestDoorConfigClipboardPreservesAnchorAndInstanceId();

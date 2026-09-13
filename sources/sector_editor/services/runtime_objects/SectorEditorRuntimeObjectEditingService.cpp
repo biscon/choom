@@ -1205,6 +1205,7 @@ void SectorEditorRuntimeObjectEditingService::UpdateDrag(Vector2 snappedMapPoint
     }
     if ((object->kind == "static_model"
                 || object->kind == "dynamic_model"
+                || object->kind == "item"
                 || object->kind == "npc")
             && context_.topologyRenderCache.valid) {
         const int sectorId = FindCachedSectorAt(snappedMapPoint);

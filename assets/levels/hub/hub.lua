@@ -54,7 +54,7 @@ local function elinConversation()
             local anim = startPlayNpcAnimation("elin", "No")
             say("elin", "No I haven't found anything, have you looked around the office?.")
             assert(await(anim))
-            setFlag("elin_asked_pre_entrance_door", true)
+            setFlag("elin_asked_storage_door", true)
         end,
         goodbye = function()
             if returning then
@@ -73,7 +73,7 @@ local function elinConversation()
             identity = flag("elin_asked_identity"),
             place = flag("elin_asked_place") or not flag("elin_asked_identity"),
             people = flag("elin_asked_people")  or not flag("elin_asked_identity"),
-            locked_door = flag("elin_asked_pre_entrance_door") or not flag("tried_pre_entrance_door") or not flag("elin_asked_identity") or hasInventoryItemInstance("pre_entrance_door_key"),
+            locked_door = flag("elin_asked_storage_door") or not flag("tried_storage_door") or not flag("elin_asked_identity") or hasInventoryItemInstance("storage_door_key"),
             goodbye = not flag("elin_asked_identity")
         })
     end, function()
@@ -272,22 +272,22 @@ function toggleCeilingVent()
     ceilingVentOn = true
 end
 
-function open_pre_entrance_door()
-    if not flag("pre_entrance_door_unlocked") then
+function open_storage_door()
+    if not flag("storage_door_unlocked") then
         playMapSound("door_locked", 0.8)
         text("It's locked", CENTER)
-        setFlag("tried_pre_entrance_door", true)
+        setFlag("tried_storage_door", true)
         return false
     end
     return true
 end
 
-function usePreEntranceDoorKey(targetInstanceId)
+function useStorageDoorKey(targetInstanceId)
     -- log("used key on: " .. targetInstanceId)
-    if targetInstanceId == "pre_entrance_door" then
+    if targetInstanceId == "storage_door" then
         playMapSound("door_unlock", 0.8)
-        setFlag("pre_entrance_door_unlocked", true)
-        setFlag("tried_pre_entrance_door", false)
+        setFlag("storage_door_unlocked", true)
+        setFlag("tried_storage_door", false)
         delay(2300)
         say("That did it.")
         return true
