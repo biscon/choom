@@ -14,14 +14,18 @@
     },
     "walk": {
       "animation": "Walking",
-      "movementSpeed": 1.5
+      "movementSpeed": 1.5,
+      "footstepPhases": [
+        0.3050000071525574,
+        0.8140000104904175
+      ]
     },
     "run": {
       "animation": "Running",
       "movementSpeed": 3.0,
       "footstepPhases": [
-        0.11999999731779099,
-        0.6000000238418579
+        0.32600000500679016,
+        0.8600000143051147
       ]
     },
     "attack": {},
