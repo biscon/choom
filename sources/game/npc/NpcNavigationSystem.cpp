@@ -14,6 +14,7 @@
 #include <raymath.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -1536,6 +1537,55 @@ bool CancelNpcMoveForEntity(
             SectorNavigationQueryStatus::Cancelled,
             "movement cancelled");
     return true;
+}
+
+void TeleportNpcToValidatedPosition(
+        engine::World& world, SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime, engine::Entity entity,
+        Vector3 position, float yawRadians, int sectorId)
+{
+    NpcNavigationRecord* record = FindRecord(runtime, entity);
+    assert(record != nullptr);
+    CancelNpcMoveForEntity(world, navigation, runtime, entity);
+    ReleasePath(navigation, *record, &world);
+    CancelNpcBodyTurn(runtime, entity, 0, "NPC look interrupted by teleport");
+    record->arrivalTurn = {};
+    record->matchArrivalOrientation = false;
+    record->arrivalReached = false;
+    record->authority = NpcMoveAuthority::None;
+    record->movementSpeedOverride = 0.0f;
+    record->desiredVelocity = {};
+    record->preferredVelocity = {};
+    record->actualVelocity = {};
+    record->physicalPosition = position;
+    record->visualPosition = position;
+    record->requestedDestinationXZ = {position.x, position.z};
+    record->projectedDestination = position;
+    record->footstepDistanceWorld = 0.0f;
+    record->footstepMovementActive = false;
+    record->footstepEvent = false;
+    ClearNpcFootstepAnimationPhase(*record);
+    record->replanCooldownSeconds = 0.0f;
+    record->driftCheckSeconds = 0.0f;
+    record->replanCount = 0;
+    record->steeringRecoveryActive = false;
+    record->crowdNeighborCount = 0;
+    record->crowdNearestNeighborDistance = 0.0f;
+    record->playerAvoidanceActive = false;
+    navigation.SynchronizeCrowdAgent(record->agentHandle, position, {}, 0.0f, false);
+    record->crowdAttached = false;
+    world.Get<NpcRuntimeInstance>(entity).action = NpcAction::Idle;
+    if (world.Has<NpcCombatState>(entity)) world.Get<NpcCombatState>(entity).knockbackVelocity = {};
+    auto& transform = world.Get<SectorObjectTransform>(entity);
+    transform.position = position;
+    transform.yawRadians = yawRadians;
+    world.Get<SectorObject>(entity).currentSectorId = sectorId;
+    if (world.Has<SectorObjectVisualOffset>(entity))
+        world.Get<SectorObjectVisualOffset>(entity).position = {};
+    for (NpcCollisionCylinder& cylinder : runtime.collisionCylinders) {
+        if (cylinder.stableId == record->placedObjectId) cylinder.feetPosition = position;
+    }
+    SetDiagnostic(*record, "teleported to marker");
 }
 
 static NpcMoveStatus MakeNpcMoveStatus(const NpcNavigationRecord* record)

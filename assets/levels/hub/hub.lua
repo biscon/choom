@@ -193,6 +193,19 @@ function entrance_trigger()
         lookAtProp = "entrance_keypad",
     })
     say("Looks like it will require a key card and probably a code as well.")
+    assert(teleportNpc("elin", "intro_marker_6"))
+    startSay("elin", "What have you found?")
+    --delay(500)
+    local elinArrival = assert(startMoveNpc("elin", "intro_marker_7", "walk", 1.5, true))
+    startLookAtNpc("elin", 2000, 0.7)
+    delay(2000)
+    startLookAtNpc("elin", 5000, 0.7)
+    assert(await(elinArrival))
+    lookAtNpc("elin", 350, 0.7)
+    startPlayNpcAnimation("elin", "Excited_2")
+    say("elin", "Wow! that is a big door! How do we open it?")
+    say("It requires a key card and a pincode.")
+
     assert(endCutscene())
 end
 

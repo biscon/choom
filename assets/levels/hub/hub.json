@@ -44080,6 +44080,22 @@
         "y": -27.0,
         "z": 1552,
         "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 25,
+        "id": "intro_marker_6",
+        "x": -1072,
+        "y": 0.0,
+        "z": 1536,
+        "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 26,
+        "id": "intro_marker_7",
+        "x": -2128,
+        "y": -24.0,
+        "z": 1536,
+        "orientationDegrees": -88.0
       }
     ],
     "nextPathId": 2,

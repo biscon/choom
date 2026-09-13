@@ -613,6 +613,16 @@ void CollectSectorDynamicModelColliders(
             });
 }
 
+bool SectorStaticModelColliderOverlapsActor(
+        Vector3 feetPosition, float radius, float height,
+        const SectorStaticModelCollider& collider)
+{
+    return IsValidCollider(collider)
+            && feetPosition.y < collider.top - StaticModelCollisionEpsilon
+            && feetPosition.y + height > collider.bottom + StaticModelCollisionEpsilon
+            && CircleOverlapsCollider({feetPosition.x, feetPosition.z}, radius, collider);
+}
+
 bool SectorStaticModelCollidersAllowPlayerHeight(
         Vector2 positionXZ,
         float feetY,

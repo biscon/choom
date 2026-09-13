@@ -207,6 +207,7 @@ private:
     void ShowOutOfAmmo();
     void RefreshMouseLookCapture();
     void OnDialogueChanged(bool active);
+    void OnPlayerTeleported(engine::EngineContext& context);
     bool SetCutsceneControlsEnabled(
             engine::EngineContext& context,
             bool enabled,

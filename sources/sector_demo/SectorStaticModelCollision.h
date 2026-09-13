@@ -47,6 +47,11 @@ bool BuildSectorStaticModelCollider(
 float SweepSectorPlayerAgainstModel(Vector2 start, Vector2 delta, float radius,
         float bottom, float top, const SectorStaticModelCollider& collider);
 
+// Full-volume overlap for placement, including obstacles intersecting the feet.
+bool SectorStaticModelColliderOverlapsActor(
+        Vector3 feetPosition, float radius, float height,
+        const SectorStaticModelCollider& collider);
+
 bool UpdateSectorStaticModelColliderSystem(
         engine::World& world,
         engine::AssetManager& assets);

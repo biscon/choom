@@ -162,6 +162,11 @@ public:
             int* resolvedSectorId = nullptr,
             int ignoredStructuralPrimitiveId = -1,
             int ignoredSupportingStructuralPrimitiveId = -1) const;
+    // Actor placement also rejects complete containment inside structural solids.
+    // It does not sweep a route, step up, or adjust the supplied position.
+    bool AllowsActorPlacement(
+            Vector3 feetPosition, float radius, float height,
+            int* resolvedSectorId = nullptr) const;
 
 private:
     float SweepFlatFootprint(Vector2 center, Vector2 axisX, Vector2 axisZ,

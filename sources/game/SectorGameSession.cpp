@@ -1240,6 +1240,9 @@ bool SectorGameSession::StartNew(
     scriptHost.controls.holsterWeapon = [](void* userData) {
         static_cast<SectorGameSession*>(userData)->fpsPlayer.HolsterForTraversal();
     };
+    scriptHost.controls.playerTeleported = [](void* userData, engine::EngineContext& context) {
+        static_cast<SectorGameSession*>(userData)->OnPlayerTeleported(context);
+    };
     pendingLoadingSave = loadingSave;
     saveGameBlocked = false;
     saveGameBlockedReason.clear();
@@ -1411,6 +1414,48 @@ void SectorGameSession::SetGodMode(bool enabled)
         playerKnockbackVelocity = {};
         playerStunRemainingSeconds = 0.0f;
     }
+}
+
+void SectorGameSession::OnPlayerTeleported(engine::EngineContext& context)
+{
+    EndSectorPropDrag(context, controller.propDrag);
+    ResetSectorLadderTraversal(controller.ladderTraversal);
+    ResetSectorDuctTraversal(controller.ductTraversal);
+    controller.visualStepOffsetY = 0.0f;
+    ClearSectorFpsHeadBob(controller.headBobState);
+    ClearSectorFpsLandingDip(controller.landingDipState);
+    ClearSectorFpsFootstepCadence(controller.footstepCadenceState);
+    controller.frameEvents = {};
+    useTarget = {};
+    ResetSectorUseHighlight(useHighlightState);
+    usePromptTitle = {};
+    playerKnockbackVelocity = {};
+    ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
+    ClearPlayerHitCamera(hitCamera);
+    const auto config = EffectiveSectorFpsControllerConfig(
+            controller.fpsControllerState, controller.fpsControllerConfig);
+    controller.liquidMovement = {};
+    const auto contact = SampleSectorLiquidContact(topologyMap,
+            controller.fpsControllerState.currentSectorId,
+            controller.fpsControllerState.feetPosition, config);
+    UpdateSectorLiquidMovementState(controller.liquidMovement, contact, false);
+    controller.liquidMovement.cameraSubmerged = contact.eyeSubmerged;
+    collision.previewCollisionSectorId = controller.fpsControllerState.currentSectorId;
+    collision.previewMoveResult = {};
+    collision.previewMoveResult.positionXZ = {
+            controller.fpsControllerState.feetPosition.x,
+            controller.fpsControllerState.feetPosition.z};
+    collision.previewMoveResult.currentSectorId = collision.previewCollisionSectorId;
+    collision.previewVerticalResult = {};
+    const auto vertical = BuildSectorEditorGameplayVerticalContext(
+            collision, controller, scriptHost.runtimeObjects->physicalModelColliders);
+    collision.previewVerticalResult.hasSector = vertical.hasSector;
+    collision.previewVerticalResult.floorZ = vertical.floorZ;
+    collision.previewVerticalResult.ceilingZ = vertical.ceilingZ;
+    collision.previewCollisionNoclipFallback = false;
+    controller.freeflyController.pose = SectorFpsControllerPose(
+            controller.fpsControllerState, controller.fpsControllerConfig);
+    // ApplyPlayerPose publishes this pose through the normal frame/load path.
 }
 
 void SectorGameSession::SetSaveGameBlocked(bool blocked, std::string reason)
@@ -2787,6 +2832,9 @@ bool SectorGameSession::RebuildFromMap(
     };
     scriptHost.controls.holsterWeapon = [](void* userData) {
         static_cast<SectorGameSession*>(userData)->fpsPlayer.HolsterForTraversal();
+    };
+    scriptHost.controls.playerTeleported = [](void* userData, engine::EngineContext& context) {
+        static_cast<SectorGameSession*>(userData)->OnPlayerTeleported(context);
     };
     useTarget = {};
     ResetSectorUseHighlight(useHighlightState);

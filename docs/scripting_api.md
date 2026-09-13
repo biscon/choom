@@ -56,6 +56,8 @@ ranges, return values, behavior, and failure details.
   `moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed [, matchOrientation]]])`,
   `startMoveNpc(instanceId, x, z [, gait [, movementSpeed]])`,
   `startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed [, matchOrientation]]])`.
+- **[Marker teleporting](#marker-teleporting):** `teleportNpc(instanceId, levelMarkerId)`,
+  `teleportPlayer(levelMarkerId)`.
 - **[NPC body looks](#npc-body-looks):**
   `npcLookAtPlayer(npcId, durationMs)`,
   `npcLookAtNpc(npcId, targetNpcId, durationMs)`,
@@ -726,6 +728,63 @@ Missing NPCs, unavailable models, unknown clips, invalid speeds/durations, and
 unusable animation data return a failure and reason. One-shots require at least
 two skeletal keyframes and a usable return animation. Animation overrides are
 transient and are not saved; map unload cancels pending operations.
+
+## Marker teleporting
+
+```text
+teleportNpc(instanceId, levelMarkerId) -> true | false, reason
+teleportPlayer(levelMarkerId) -> true | false, reason
+```
+
+These commands instantly place the actor's feet at the marker's full X/Y/Z,
+converted from authored coordinates to runtime world units. Both actors face
+the marker's arrow immediately; the player also looks level (zero pitch).
+Marker IDs are exact and case-sensitive and refer to the current level.
+
+Teleporting returns immediately, without yielding or creating an operation.
+It works in managed scripts, `init()`, and the console. It requires no path to
+the destination and does not walk, turn smoothly, snap to the floor, or fade
+the screen. The player's normal gravity resumes afterward. NPCs retain their
+existing floor-resolution behavior during locomotion; teleporting does not add
+continuous NPC gravity. Place markers at the intended feet height.
+
+```lua
+-- Reposition Elin while the player is looking away.
+assert(teleportNpc("elin", "elin_close"))
+
+-- Inside a managed cutscene task:
+assert(startCutscene())
+assert(fadeOut(500))
+assert(teleportPlayer("after_cutscene"))
+assert(fadeIn(500))
+assert(endCutscene())
+```
+
+A successful teleport cancels that actor's active scripted movement and body/
+camera look, including arrival turns, with a reason containing `teleport`.
+An `await` or blocking call waiting for the replaced action returns `false`
+and that reason. Routes and door holds are released, and old steering, footsteps,
+and position/camera smoothing cannot carry through the jump. Player teleporting
+also releases prop dragging and ladder/duct traversal and refreshes liquid state.
+Ordinary crouch state is preserved. Fades, captions, control locks, cutscene and
+staged-conversation ownership, health, and inventory remain unchanged.
+
+NPC scripted animation loops and one-shots keep their playback progress and
+operation handles. Ordinary walking/running returns to idle. Teleports follow
+the existing NPC AI/combat restrictions and the per-instance `Script move stops
+patrol for session` setting: a patrol otherwise resumes after script ownership
+ends. NPCs held by automatic conversation positioning cannot be teleported.
+Player teleporting is also rejected during a repositioned conversation; use
+`startConversation(id, { reposition = false })` for staged conversations.
+Teleporting does not acquire a persistent movement or facing lock; subsequent
+commands, player input, and normal autonomous behavior can move/turn the actor.
+
+Invalid or missing actor/marker IDs, dead actors, non-finite marker transforms,
+unavailable required runtime state, and blocked destinations return `false,
+reason`. Destination clearance includes topology/structural geometry, doors,
+solid model colliders, and other actors. The destination is never adjusted to
+find space. Validation happens before any changes: a rejected teleport leaves
+position, orientation, existing actions, animation, and patrol state untouched.
 
 ## NPC movement
 

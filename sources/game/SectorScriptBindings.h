@@ -108,6 +108,8 @@ struct SectorScriptControlApi {
     void (*dialogueChanged)(void*, bool) = nullptr;
     void (*keypadChanged)(void*, bool) = nullptr;
     void (*holsterWeapon)(void*) = nullptr;
+    // Runs immediately after a validated player teleport commits its pose.
+    void (*playerTeleported)(void*, engine::EngineContext&) = nullptr;
 };
 
 struct SectorScriptHost {

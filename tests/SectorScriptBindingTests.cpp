@@ -26,6 +26,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -291,6 +292,401 @@ struct NpcScriptFixture {
         game::UpdateSectorScriptCutsceneControlOwnership(context, host);
     }
 };
+
+void PrepareTeleportFixture(NpcScriptFixture& fixture)
+{
+    fixture.map.levelMarkers[0].position = {64, 8, 64}; // feet at (8, 1, 8)
+    fixture.map.levelMarkers[1].position = {96, 0, 64}; // feet at (12, 0, 8)
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+}
+
+void TeleportConsole(NpcScriptFixture& fixture, const char* source)
+{
+    const auto result = engine::ScriptSystemExecuteConsole(fixture.runtime, source);
+    if (!result.success) std::fprintf(stderr, "Teleport test Lua: %s\n%s\n", result.error.c_str(), source);
+    assert(result.success);
+}
+
+void MarkerTeleportsApplyExactPositionsAndFacingImmediately()
+{
+    NpcScriptFixture fixture;
+    PrepareTeleportFixture(fixture);
+    auto& transform = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc);
+    const auto requests = fixture.navigation.Counters().successfulQueries;
+    for (float yaw : {0.0f, PI / 2, PI, -PI / 2, 0.83f, 7.4f}) {
+        fixture.map.levelMarkers[0].yawRadians = yaw;
+        fixture.map.levelMarkers[1].yawRadians = yaw;
+        fixture.playerState.pitchRadians = 0.4f;
+        fixture.playerState.verticalVelocity = -12;
+        fixture.playerState.mouseLook.angularVelocity = {1, 2};
+        fixture.context.world.Get<game::SectorObjectVisualOffset>(fixture.npc).position = {0, 2, 0};
+        TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target')); assert(teleportPlayer('walk_target'))");
+        assert(Vector3Distance(transform.position, {8, 1, 8}) == 0);
+        assert(Vector3Distance(fixture.playerState.feetPosition, {12, 0, 8}) == 0);
+        assert(fixture.context.world.Get<game::SectorObject>(fixture.npc).currentSectorId == 10);
+        assert(fixture.playerState.currentSectorId == 10 && fixture.playerState.grounded);
+        assert(fixture.playerState.pitchRadians == 0 && fixture.playerState.verticalVelocity == 0);
+        assert(Vector2Length(fixture.playerState.mouseLook.angularVelocity) == 0);
+        assert(std::fabs(std::cos(fixture.playerState.yawRadians) - std::sin(yaw)) < 0.00001f);
+        assert(std::fabs(std::sin(fixture.playerState.yawRadians) - std::cos(yaw)) < 0.00001f);
+        assert(transform.yawRadians == yaw);
+        assert(Vector3Length(fixture.context.world.Get<game::SectorObjectVisualOffset>(fixture.npc).position) == 0);
+        assert(Vector3Distance(fixture.npcNavigation.records.front().physicalPosition, transform.position) == 0);
+        assert(Vector3Distance(fixture.npcNavigation.records.front().visualPosition, transform.position) == 0);
+    }
+    assert(fixture.navigation.Counters().successfulQueries == requests);
+    fixture.map.levelMarkers[1].position.y = 8;
+    TeleportConsole(fixture, "assert(teleportPlayer('walk_target'))");
+    assert(fixture.playerState.feetPosition.y == 1 && !fixture.playerState.grounded);
+    // A connected navmesh is never required, even when navigation is rebuilding.
+    fixture.navigation.RequestRebuild();
+    TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target')); assert(teleportPlayer('walk_target'))");
+}
+
+void TeleportFailuresLeaveActorsAndOperationsUntouched()
+{
+    NpcScriptFixture fixture;
+    PrepareTeleportFixture(fixture);
+    TeleportConsole(fixture, "movement = assert(startMoveNpc('script_guard', 'walk_target')); playerMove = assert(startMovePlayer('walk_target'))");
+    const auto npcPosition = fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc).position;
+    const auto player = fixture.playerState;
+    const auto npcRequest = fixture.npcNavigation.records.front().requestId;
+    const auto path = fixture.npcNavigation.records.front().pathHandle;
+    auto reject = [&]() {
+        TeleportConsole(fixture, R"(
+            local ok, reason = teleportNpc('script_guard', 'run_target')
+            assert(not ok and type(reason) == 'string')
+            ok, reason = teleportPlayer('run_target')
+            assert(not ok and type(reason) == 'string')
+            assert(operationStatus(movement) == 'pending')
+            assert(operationStatus(playerMove) == 'pending')
+        )");
+        assert(Vector3Distance(fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc).position, npcPosition) == 0);
+        assert(Vector3Distance(fixture.playerState.feetPosition, player.feetPosition) == 0);
+        assert(fixture.playerState.yawRadians == player.yawRadians);
+        assert(fixture.npcNavigation.records.front().requestId == npcRequest);
+        assert(fixture.navigation.IsPathRecordValid(path));
+    };
+    for (Vector3 invalid : {Vector3{4000, 0, 64}, Vector3{0, 0, 64},
+            Vector3{64, -8, 64}, Vector3{64, 31, 64},
+            Vector3{std::numeric_limits<float>::infinity(), 0, 64}}) {
+        fixture.map.levelMarkers[0].position = invalid;
+        reject();
+    }
+    fixture.map.levelMarkers[0].position = {64, 8, 64};
+    fixture.map.levelMarkers[0].yawRadians = std::numeric_limits<float>::quiet_NaN();
+    reject();
+    fixture.map.levelMarkers[0].yawRadians = 0;
+    fixture.objects.objectSectorLookupWorldValid = false;
+    reject();
+    fixture.objects.objectSectorLookupWorldValid = true;
+    game::SectorStaticModelCollider collider;
+    collider.placedObjectId = 900;
+    collider.center = {8, 8};
+    collider.halfExtents = {1, 1};
+    collider.bottom = 0;
+    collider.top = 3;
+    collider.resolved = true;
+    fixture.objects.physicalModelColliders.push_back(collider);
+    reject(); // Includes an obstacle extending below the actor's feet.
+    fixture.objects.physicalModelColliders.clear();
+    game::SectorDynamicDoorCollider door;
+    door.placedObjectId = 901;
+    door.center = {8, 8};
+    door.halfExtents = {1, 0.1f};
+    door.bottom = 0;
+    door.top = 3;
+    fixture.objects.dynamicDoorColliders.push_back(door);
+    reject();
+    fixture.objects.dynamicDoorColliders.clear();
+    const auto obstacleNpc = SpawnScriptNpc(fixture.context.world);
+    fixture.context.world.Get<game::NpcRuntimeInstance>(obstacleNpc).instanceId = "other_guard";
+    fixture.context.world.Get<game::SectorObjectTransform>(obstacleNpc).position = {8, 1, 8};
+    reject(); // Live actor transforms count even before navigation caches update.
+    TeleportConsole(fixture, R"(
+        assert(not teleportNpc('missing', 'walk_target'))
+        assert(not teleportNpc('script_guard', 'RUN_TARGET'))
+        assert(not teleportNpc('script_guard', ''))
+        assert(not teleportPlayer('missing'))
+        assert(not teleportPlayer(''))
+        assert(not teleportPlayer(123))
+        assert(not teleportNpc(nil, 'walk_target'))
+        assert(operationStatus(movement) == 'pending')
+        assert(operationStatus(playerMove) == 'pending')
+    )");
+}
+
+void NpcTeleportCancelsTravelAndTurnsAndPreservesAnimation()
+{
+    NpcScriptFixture fixture;
+    PrepareTeleportFixture(fixture);
+    fixture.playerState.feetPosition = {2, 0, 2};
+    TeleportConsole(fixture, "movement = assert(startMoveNpc('script_guard', 'walk_target', nil, nil, true))");
+    auto& record = fixture.npcNavigation.records.front();
+    const auto oldPath = record.pathHandle;
+    const auto door = AddDoor(fixture.context, fixture.objects);
+    game::SectorDoorOpenControl control;
+    control.navigationHolderCount = 1;
+    fixture.context.world.Add(door, control);
+    record.holdsDoor = true;
+    record.doorId = 42;
+    record.footstepEvent = true;
+    record.footstepDistanceWorld = 1;
+    TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target')); assert(operationStatus(movement) == 'cancelled')");
+    assert(!fixture.navigation.IsPathRecordValid(oldPath));
+    assert(fixture.context.world.Get<game::SectorDoorOpenControl>(door).navigationHolderCount == 0);
+    assert(record.authority == game::NpcMoveAuthority::None && !record.matchArrivalOrientation);
+    assert(!record.holdsDoor && !record.footstepEvent && record.footstepDistanceWorld == 0);
+    assert(!record.crowdAttached && Vector2Length(record.actualVelocity) == 0);
+    TeleportConsole(fixture, "turn = assert(startNpcLookAtPlayer('script_guard', 1000)); assert(teleportNpc('script_guard', 'run_target')); assert(operationStatus(turn) == 'cancelled')");
+    assert(!game::HasNpcBodyTurn(fixture.npcNavigation, fixture.npc));
+
+    fixture.context.world.Add(fixture.npc, engine::AnimatedModelAnimator{});
+    auto& animation = fixture.context.world.Get<game::NpcAnimationState>(fixture.npc);
+    auto& animator = fixture.context.world.Get<engine::AnimatedModelAnimator>(fixture.npc);
+    animation.resolved = true;
+    animation.animationIndices[0] = 0;
+    game::SetNpcScriptAnimation(animation, animator, 1, 0.6f, true, 0, 99);
+    animator.frame = 12;
+    TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target'))");
+    assert(animation.scriptLoopIndex == 1 && animation.scriptLoopSpeed == 0.6f);
+    assert(animator.frame == 12);
+    const auto oneShot = game::BeginSectorScriptNpcAnimation(fixture.context, fixture.host,
+            fixture.npc, {2, 1.0f, 1.0f}, engine::ScriptOperationLaunchStyle::Async, {});
+    animator.frame = 8;
+    const auto token = animation.scriptRequestId;
+    TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'walk_target'))");
+    assert(fixture.runtime.operations[oneShot.index].state == engine::ScriptOperationState::Pending);
+    assert(animation.scriptRequestId == token && animator.frame == 8);
+    assert(animation.scriptLoopIndex == 1 && animation.scriptStatus == game::NpcScriptAnimationStatus::Playing);
+    TeleportConsole(fixture, "assert(startMoveNpc('script_guard', 'run_target'))");
+    assert(record.phase == game::NpcMovePhase::FollowingPath);
+}
+
+void PlayerTeleportCancelsMovementAndLookWithoutChangingCutscene()
+{
+    NpcScriptFixture fixture;
+    PrepareTeleportFixture(fixture);
+    TeleportConsole(fixture, "movement = assert(startMovePlayer('walk_target'))");
+    const auto path = fixture.cutscene.playerMove.pathHandle;
+    uint64_t lookToken = 0;
+    std::string error;
+    assert(game::BeginSectorCutsceneLook(fixture.cutscene, fixture.npc,
+            game::SectorCutsceneLookTargetKind::Npc, 0.5f, 1, fixture.playerState, lookToken, error));
+    const auto look = engine::ScriptSystemCreateOperation(fixture.runtime,
+            engine::ScriptOperationLaunchStyle::Async, {}, "test look", lookToken, nullptr);
+    game::BindSectorCutsceneLookOperation(fixture.cutscene, lookToken, look);
+    fixture.cutscene.controlsEnabled = false;
+    fixture.cutscene.fade.opacity = 1;
+    fixture.cutscene.caption.text = "Still speaking";
+    fixture.playerState.crouchTargeted = true;
+    fixture.playerState.crouchAmount = 1;
+    int notifications = 0;
+    fixture.host.controls.userData = &notifications;
+    fixture.host.controls.playerTeleported = [](void* data, engine::EngineContext&) {
+        ++*static_cast<int*>(data);
+    };
+    TeleportConsole(fixture, "assert(teleportPlayer('walk_target')); assert(operationStatus(movement) == 'cancelled')");
+    assert(notifications == 1);
+    assert(!fixture.navigation.IsPathRecordValid(path));
+    assert(!fixture.cutscene.playerMove.active && !fixture.cutscene.look.active);
+    assert(fixture.runtime.operations[look.index].state == engine::ScriptOperationState::Cancelled);
+    assert(!fixture.cutscene.controlsEnabled && fixture.cutscene.fade.opacity == 1);
+    assert(fixture.cutscene.caption.text == "Still speaking");
+    assert(fixture.playerState.crouchTargeted && fixture.playerState.crouchAmount == 1);
+    TeleportConsole(fixture, "assert(not teleportPlayer('outside_target'))");
+    assert(notifications == 1);
+    fixture.cutscene.controlsEnabled = true;
+    TeleportConsole(fixture, "assert(startMovePlayer('run_target'))");
+    assert(fixture.cutscene.playerMove.active);
+}
+
+void TeleportHonorsNpcOwnershipAndPatrolPolicy()
+{
+    for (bool stopPatrol : {false, true}) {
+        NpcScriptFixture fixture;
+        PrepareTeleportFixture(fixture);
+        game::NpcPatrolState patrol;
+        patrol.phase = game::NpcPatrolPhase::Waiting;
+        patrol.waitRemainingSeconds = 5;
+        patrol.scriptMoveStopsPatrol = stopPatrol;
+        fixture.context.world.Add(fixture.npc, patrol);
+        auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+        fixture.context.world.Add(fixture.npc, game::NpcAiState{});
+        auto& ai = fixture.context.world.Get<game::NpcAiState>(fixture.npc);
+        auto reject = [&]() {
+            TeleportConsole(fixture, "assert(not teleportNpc('script_guard', 'run_target'))");
+            assert(!fixture.context.world.Get<game::NpcPatrolState>(fixture.npc).scriptOverrideActive);
+        };
+        ai.awareness = game::NpcAwarenessState::Detected;
+        reject();
+        ai.awareness = game::NpcAwarenessState::Unaware;
+        npc.actionLockedByAi = true;
+        reject();
+        npc.actionLockedByAi = false;
+        npc.conversationHeld = true;
+        reject();
+        npc.conversationHeld = false;
+        fixture.context.world.Get<game::NpcCombatState>(fixture.npc).dead = true;
+        reject();
+        fixture.context.world.Get<game::NpcCombatState>(fixture.npc).dead = false;
+        fixture.host.conversation.active = true;
+        fixture.host.conversation.reposition = true;
+        TeleportConsole(fixture, "assert(not teleportPlayer('walk_target'))");
+        fixture.host.conversation.reposition = false;
+        TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target')); assert(teleportPlayer('walk_target'))");
+        const auto& result = fixture.context.world.Get<game::NpcPatrolState>(fixture.npc);
+        assert(result.scriptOverrideActive && result.stoppedByScript == stopPatrol);
+        assert(result.phase == (stopPatrol ? game::NpcPatrolPhase::StoppedByScript
+                                         : game::NpcPatrolPhase::SuspendedScript));
+        assert(result.waitRemainingSeconds == 5);
+        TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target'))");
+        if (!stopPatrol) assert(result.resumePhase == game::NpcPatrolPhase::Waiting);
+    }
+}
+
+void TeleportsResolveWaitingTasksAndAttachedTurns()
+{
+    NpcScriptFixture fixture;
+    PrepareTeleportFixture(fixture);
+    TeleportConsole(fixture, R"(
+        function npcWaiter()
+            local ok, reason = moveNpc('script_guard', 'walk_target', nil, nil, true)
+            assert(not ok and string.find(reason, 'teleport'))
+            setPersistentBool('npc_replaced', true)
+        end
+        function playerWaiter()
+            local ok, reason = await(playerMove)
+            assert(not ok and string.find(reason, 'teleport'))
+            setPersistentBool('player_replaced', true)
+        end
+    )");
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "npcWaiter").result
+            == engine::ScriptCallResult::Started);
+    TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target'))");
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.01f);
+    assert(fixture.persistent.bools.at("npc_replaced"));
+
+    TeleportConsole(fixture, "playerMove = assert(startMovePlayer('walk_target', nil, nil, {lookAtNpc = 'script_guard'}))");
+    assert(fixture.cutscene.playerMove.arrivalLook.active);
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "playerWaiter").result
+            == engine::ScriptCallResult::Started);
+    TeleportConsole(fixture, "assert(teleportPlayer('walk_target'))");
+    assert(!fixture.cutscene.playerMove.arrivalLook.active);
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.01f);
+    assert(fixture.persistent.bools.at("player_replaced"));
+
+    // An accepted teleport also interrupts the stationary NPC arrival turn.
+    fixture.map.levelMarkers[0].position = {96, 0, 96};
+    TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target')); turnMove = assert(startMoveNpc('script_guard', 'run_target', nil, nil, true))");
+    fixture.Update(0.01f);
+    assert(fixture.npcNavigation.records.front().arrivalReached);
+    TeleportConsole(fixture, "assert(teleportNpc('script_guard', 'run_target')); assert(operationStatus(turnMove) == 'cancelled')");
+    assert(!fixture.npcNavigation.records.front().matchArrivalOrientation);
+}
+
+void TeleportsRespectStructuralClearanceAndStandingSupport()
+{
+    NpcScriptFixture fixture;
+    PrepareTeleportFixture(fixture);
+    auto box = game::DefaultSectorAuthoringStructuralPrimitive(game::SectorStructuralPrimitiveKind::Box);
+    box.id = 99;
+    box.x = 64 * game::SectorCoordSubdivisions;
+    box.z = 64 * game::SectorCoordSubdivisions;
+    box.box.width = 16 * game::SectorCoordSubdivisions;
+    box.box.depth = 16 * game::SectorCoordSubdivisions;
+    box.box.bottom = 0;
+    box.box.top = 16;
+    std::vector<game::SectorStructuralDiagnostic> diagnostics;
+    for (float top : {16.0f, 24.0f}) {
+        box.box.top = top;
+        assert(game::CompileSectorStructuralPrimitives({box}, fixture.map,
+                fixture.map.compiledStructuralPrimitives, diagnostics));
+        assert(fixture.objects.objectSectorLookupWorld.BuildFromTopology(fixture.map));
+        TeleportConsole(fixture, "assert(not teleportNpc('script_guard', 'run_target'), 'box NPC'); assert(not teleportPlayer('run_target'), 'box player')");
+    }
+    box.box.top = 16;
+    assert(game::CompileSectorStructuralPrimitives({box}, fixture.map,
+            fixture.map.compiledStructuralPrimitives, diagnostics));
+    assert(fixture.objects.objectSectorLookupWorld.BuildFromTopology(fixture.map));
+    fixture.map.levelMarkers[0].position.y = 16;
+    TeleportConsole(fixture, "assert(teleportPlayer('run_target'))");
+    assert(fixture.playerState.feetPosition.y == 2 && fixture.playerState.grounded);
+    TeleportConsole(fixture, "assert(teleportPlayer('walk_target'))");
+    fixture.map.levelMarkers[0].position.y = 8;
+    auto sphere = game::DefaultSectorAuthoringStructuralPrimitive(game::SectorStructuralPrimitiveKind::Sphere);
+    sphere.id = 100;
+    sphere.collision = true;
+    sphere.x = box.x;
+    sphere.z = box.z;
+    sphere.sphere.radius = 16 * game::SectorCoordSubdivisions;
+    sphere.sphere.centerHeight = 16;
+    assert(game::CompileSectorStructuralPrimitives({sphere}, fixture.map,
+            fixture.map.compiledStructuralPrimitives, diagnostics));
+    assert(fixture.objects.objectSectorLookupWorld.BuildFromTopology(fixture.map));
+    TeleportConsole(fixture, "assert(not teleportNpc('script_guard', 'run_target'), 'sphere NPC'); assert(not teleportPlayer('run_target'), 'sphere player')");
+    // A model top is valid support; its interior is not a valid destination.
+    fixture.map.compiledStructuralPrimitives.clear();
+    assert(fixture.objects.objectSectorLookupWorld.BuildFromTopology(fixture.map));
+    game::SectorStaticModelCollider platform;
+    platform.placedObjectId = 901;
+    platform.center = {8, 8};
+    platform.halfExtents = {1, 1};
+    platform.bottom = 0;
+    platform.top = 1;
+    platform.resolved = true;
+    fixture.objects.physicalModelColliders.push_back(platform);
+    TeleportConsole(fixture, "assert(teleportPlayer('run_target'))");
+    assert(fixture.playerState.feetPosition.y == 1 && fixture.playerState.grounded);
+    TeleportConsole(fixture, "assert(not teleportNpc('script_guard', 'run_target'))"); // Player occupies it.
+    TeleportConsole(fixture, "assert(teleportPlayer('walk_target')); assert(teleportNpc('script_guard', 'run_target'))");
+}
+
+void TeleportsWorkInInitAndAcrossDisconnectedSectors()
+{
+    NpcScriptFixture fixture;
+    // Add a disconnected sector absent from the fixture's already-built navmesh.
+    const auto original = fixture.map;
+    auto sector = original.sectors.front();
+    sector.id = 20;
+    fixture.map.sectors.push_back(sector);
+    for (auto vertex : original.vertices) {
+        vertex.id += 100;
+        vertex.x += 4096;
+        fixture.map.vertices.push_back(vertex);
+    }
+    for (auto line : original.lineDefs) {
+        line.id += 100;
+        line.startVertexId += 100;
+        line.endVertexId += 100;
+        line.frontSideDefId += 100;
+        fixture.map.lineDefs.push_back(line);
+    }
+    for (auto side : original.sideDefs) {
+        side.id += 100;
+        side.lineDefId += 100;
+        side.sectorId = 20;
+        fixture.map.sideDefs.push_back(side);
+    }
+    assert(fixture.objects.objectSectorLookupWorld.BuildFromTopology(fixture.map));
+    fixture.map.levelMarkers[0].position = {320, 0, 64};
+    fixture.map.levelMarkers[1].position = {352, 0, 64};
+    fixture.files.Write(R"(
+        function init()
+            assert(not startMoveNpc('script_guard', 'run_target'))
+            assert(teleportNpc('script_guard', 'run_target'))
+            assert(teleportPlayer('walk_target'))
+            setPersistentBool('teleported_in_init', true)
+        end
+    )");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    assert(fixture.runtime.initFinished && fixture.persistent.bools.at("teleported_in_init"));
+    assert(fixture.playerState.currentSectorId == 20);
+    assert(fixture.context.world.Get<game::SectorObject>(fixture.npc).currentSectorId == 20);
+    assert(fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc).position.x == 40);
+    assert(fixture.playerState.feetPosition.x == 44);
+}
 
 void NpcAnimationBindingsRejectInvalidRequestsWithoutMutation()
 {
@@ -2902,6 +3298,14 @@ void RunSectorScriptBindingTests()
 {
     extern void RunSectorKeypadTests();
     RunSectorKeypadTests();
+    MarkerTeleportsApplyExactPositionsAndFacingImmediately();
+    TeleportFailuresLeaveActorsAndOperationsUntouched();
+    NpcTeleportCancelsTravelAndTurnsAndPreservesAnimation();
+    PlayerTeleportCancelsMovementAndLookWithoutChangingCutscene();
+    TeleportHonorsNpcOwnershipAndPatrolPolicy();
+    TeleportsResolveWaitingTasksAndAttachedTurns();
+    TeleportsRespectStructuralClearanceAndStandingSupport();
+    TeleportsWorkInInitAndAcrossDisconnectedSectors();
     extern void RunSectorDialogueTests();
     RunSectorDialogueTests();
     NpcMarkerArrivalOrientationTurnsAfterStopping();
