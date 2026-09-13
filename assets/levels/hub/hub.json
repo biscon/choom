@@ -7077,6 +7077,178 @@
         110.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 448,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_448",
+        "modelPath": "assets/models/room_clutter/Calendar_Wall_October.gltf",
+        "heightOffsetWorld": 1.1999999284744263,
+        "scale": 1.5
+      },
+      "position": [
+        -71.92009735107422,
+        0.0,
+        120.00015258789063
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 449,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_449",
+        "modelPath": "assets/models/storage/Workshop_Stool.gltf",
+        "collision": true
+      },
+      "position": [
+        -63.800010681152344,
+        0.0,
+        131.4000244140625
+      ],
+      "yawDegrees": 6.0
+    },
+    {
+      "id": 450,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_450",
+        "modelPath": "assets/models/room_clutter/Poster_Movie_Platform_Nine.gltf",
+        "heightOffsetWorld": 1.0000001192092896,
+        "scale": 1.5
+      },
+      "position": [
+        -62.760009765625,
+        0.0,
+        111.99999237060547
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 451,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_451",
+        "modelPath": "assets/models/room_clutter/Magazines_Stack.gltf",
+        "heightOffsetWorld": 0.6700000762939453
+      },
+      "position": [
+        -35.15998077392578,
+        0.0,
+        134.08009338378906
+      ],
+      "yawDegrees": -32.999996185302734
+    },
+    {
+      "id": 452,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_452",
+        "modelPath": "assets/models/storage/Box_Cardboard_Small.gltf",
+        "heightOffsetWorld": 1.5899994373321533
+      },
+      "position": [
+        -35.35997772216797,
+        0.0,
+        133.8800506591797
+      ],
+      "yawDegrees": -105.24992370605469
+    },
+    {
+      "id": 453,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_453",
+        "modelPath": "assets/models/storage/Box_Cardboard_Medium.gltf",
+        "heightOffsetWorld": 1.1299999952316284
+      },
+      "position": [
+        -34.79998016357422,
+        0.0,
+        135.0
+      ],
+      "yawDegrees": -83.2500228881836
+    },
+    {
+      "id": 454,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_454",
+        "modelPath": "assets/models/storage/Utility_Case_Large.gltf",
+        "collision": true
+      },
+      "position": [
+        -34.199974060058594,
+        0.0,
+        121.60006713867188
+      ],
+      "yawDegrees": -91.99998474121094
+    },
+    {
+      "id": 455,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_455",
+        "modelPath": "assets/models/room_clutter/Poster_Pinup_Woman_Bikini.gltf",
+        "heightOffsetWorld": 1.1399999856948853,
+        "scale": 1.5
+      },
+      "position": [
+        -72.00004577636719,
+        0.0,
+        142.6000213623047
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 456,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_456",
+        "modelPath": "assets/models/storage/Toolbox_Portable.gltf",
+        "heightOffsetWorld": 0.6600000858306885
+      },
+      "position": [
+        -35.439979553222656,
+        0.0,
+        147.43988037109375
+      ],
+      "yawDegrees": -94.24996185302734
+    },
+    {
+      "id": 457,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_457",
+        "modelPath": "assets/models/room_clutter/Book_1984_Readable.gltf",
+        "scale": 1.25
+      },
+      "position": [
+        -92.79999542236328,
+        0.0,
+        75.20000457763672
+      ],
+      "yawDegrees": 161.00006103515625
+    },
+    {
+      "id": 458,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_458",
+        "useTitle": "Post it",
+        "modelPath": "assets/models/room_clutter/Sticky_Note_Yellow.gltf",
+        "rotationXDegrees": 90.0,
+        "rotationZDegrees": 90.0,
+        "heightOffsetWorld": 1.579999566078186,
+        "shadowMode": "none"
+      },
+      "position": [
+        -38.43998718261719,
+        0.0,
+        44.87992858886719
+      ],
+      "yawDegrees": 6.40330199530581e-07
     }
   ],
   "staticLights": [
@@ -13200,7 +13372,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "7e463649e4f5db2e",
+    "sourceHash": "59e5dcb761cb3d7b",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -13220,7 +13392,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "7e463649e4f5db2e",
+      "sourceHash": "59e5dcb761cb3d7b",
       "count": 3969,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -13246,9 +13418,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "7e463649e4f5db2e",
-      "modelCount": 126,
-      "objectCount": 363,
+      "sourceHash": "59e5dcb761cb3d7b",
+      "modelCount": 132,
+      "objectCount": 373,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [

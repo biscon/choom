@@ -14,6 +14,7 @@
     },
     "walk": {
       "animation": "Walking",
+      "animationSpeed": 0.8999999761581421,
       "movementSpeed": 1.5,
       "footstepPhases": [
         0.3050000071525574,
