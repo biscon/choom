@@ -2,7 +2,7 @@
   "version": 1,
   "firstLevel": "hub",
   "consoleEnabled": true,
-  "dialogueVoicesEnabled": false,
+  "dialogueVoicesEnabled": true,
   "footsteps": {
     "defaultSet": "Tile_Mono",
     "volume": 0.6499999761581421,

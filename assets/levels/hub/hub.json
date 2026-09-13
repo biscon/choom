@@ -37049,7 +37049,7 @@
         "x": -845,
         "y": 1310,
         "floorZ": 0.5,
-        "ceilingZ": 21.5,
+        "ceilingZ": 20.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -37486,7 +37486,7 @@
         "x": -977,
         "y": 1470,
         "floorZ": 0.5,
-        "ceilingZ": 21.5,
+        "ceilingZ": 20.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -38880,7 +38880,7 @@
         "x": -2929,
         "y": 446,
         "floorZ": -14.5,
-        "ceilingZ": 6.199999809265137,
+        "ceilingZ": 4.949999809265137,
         "floorUv": {
           "scale": [
             1.0,
@@ -39108,7 +39108,7 @@
         "x": -2449,
         "y": -702,
         "floorZ": -14.5,
-        "ceilingZ": 6.199999809265137,
+        "ceilingZ": 4.949999809265137,
         "floorUv": {
           "scale": [
             1.0,
@@ -39135,7 +39135,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -39334,7 +39334,7 @@
         "x": -2033,
         "y": -702,
         "floorZ": -14.5,
-        "ceilingZ": 6.199999809265137,
+        "ceilingZ": 4.949999809265137,
         "floorUv": {
           "scale": [
             1.0,
@@ -39361,7 +39361,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.014999999664723873,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -39434,7 +39434,7 @@
           "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.029999999329447746,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -39706,7 +39706,7 @@
         "x": -2301,
         "y": -1938,
         "floorZ": -14.5,
-        "ceilingZ": 6.199999809265137,
+        "ceilingZ": 4.949999809265137,
         "floorUv": {
           "scale": [
             1.0,
@@ -41168,7 +41168,7 @@
         "x": -881,
         "y": -4222,
         "floorZ": -9.25,
-        "ceilingZ": 11.75,
+        "ceilingZ": 10.5,
         "floorUv": {
           "scale": [
             1.0,
@@ -41314,7 +41314,7 @@
         "x": -1649,
         "y": -2622,
         "floorZ": -15.75,
-        "ceilingZ": 5.5,
+        "ceilingZ": 4.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -41341,7 +41341,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.02500000037252903,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -41387,7 +41387,7 @@
         "x": -189,
         "y": -2706,
         "floorZ": -9.5,
-        "ceilingZ": 11.5,
+        "ceilingZ": 10.25,
         "floorUv": {
           "scale": [
             1.0,
@@ -42041,7 +42041,7 @@
         "x": -1277,
         "y": -4754,
         "floorZ": -15.75,
-        "ceilingZ": 5.25,
+        "ceilingZ": 4.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -42333,7 +42333,7 @@
         "x": -3537,
         "y": -3070,
         "floorZ": -15.75,
-        "ceilingZ": 5.0,
+        "ceilingZ": 4.0,
         "floorUv": {
           "scale": [
             1.0,
