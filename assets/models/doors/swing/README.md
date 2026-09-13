@@ -10,13 +10,13 @@ as the existing doors. Reload the editor/application to pick up catalog changes.
 
 | Catalog ID | Finish and construction | Leaf thickness | Assembly triangles |
 |---|---|---:|---:|
-| `wood_walnut_panel` | Dark walnut, two raised panels, brass lever and lock | 45 mm | 7,920 |
-| `painted_ivory_panel` | Ivory enamel, two recessed panels, nickel hardware | 45 mm | 6,944 |
-| `painted_sage_panel` | Muted green enamel, three recessed panels, nickel hardware | 45 mm | 7,308 |
-| `kitchen_service` | Ivory flush leaf, stainless kick/push plates | 45 mm | 7,684 |
-| `industrial_charcoal` | Charcoal painted steel, folded seams and scuff plate | 50 mm | 5,788 |
-| `security_reinforced` | Heavy green-gray steel, reinforcement straps and deadlock | 90 mm | 8,612 |
-| `security_institutional` | Plain thick gray steel, large lock plate and deadlock | 75 mm | 7,476 |
+| `wood_walnut_panel` | Dark walnut, two raised panels, brass lever and lock | 45 mm | 7,602 |
+| `painted_ivory_panel` | Ivory enamel, two recessed panels, nickel hardware | 45 mm | 6,626 |
+| `painted_sage_panel` | Muted green enamel, three recessed panels, nickel hardware | 45 mm | 6,990 |
+| `kitchen_service` | Ivory flush leaf, stainless kick/push plates | 45 mm | 7,366 |
+| `industrial_charcoal` | Charcoal painted steel, folded seams and scuff plate | 50 mm | 5,470 |
+| `security_reinforced` | Heavy green-gray steel, reinforcement straps and deadlock | 90 mm | 8,294 |
+| `security_institutional` | Plain thick gray steel, large lock plate and deadlock | 75 mm | 7,158 |
 
 Each leaf is 0.90 m wide and 2.05 m high before the existing uniform fitting scale.
 Frame assemblies are 1.068 m wide (1.074 m for security doors), 2.148 m high.
@@ -42,10 +42,11 @@ Frames and leaves are separate, with transforms baked and one identity root per
 export. No rigs, animations, cameras or lights are exported. Every material is
 opaque and single-sided; each leaf has closed solid coverage on both faces.
 
-The seven assemblies total 51,732 triangles. Leaf meshes are consolidated by
+The seven assemblies total 49,506 triangles. Leaf meshes are consolidated by
 material (three or four materials per leaf); frames use two materials. Geometry
 is limited to visible forms: panel profiles, edge bevels, handles, escutcheons,
-lock cylinders, deadlocks, hinge barrels, screws, straps and protection plates.
+lock cylinders, deadlocks, concealed edge hinge seats, screws, reinforcement
+straps and protection plates.
 
 ## Materials
 
@@ -75,6 +76,14 @@ Mortise plates sit in actual cut recesses in every leaf. The plate, latch and
 leaf edge have distinct surface depths. Frame stops and bottom trim caps also
 avoid same-facing coplanar surfaces; nominal dimensions and pivots are preserved.
 
+Hinges are concealed edge cartridges mortised into the narrow leaf edge and
+jambs. Neither broad door face carries hinge straps, screws or projecting
+barrels. Small recessed fittings are visible only when looking into the hinge
+edge of an open door. Both jambs have receiver seats so either engine hinge end
+works with the same frame. These are decorative fittings on the existing rigid
+leaf/frame parts; no linkage, new animation, or changed pivot is required.
+`previews/painted_ivory_panel_hinge_detail.png` shows the open edge.
+
 ## Rebuild and validation
 
 From the repository root, using Blender 5.2 (the authoring version):
@@ -100,6 +109,8 @@ for opaque coverage. The seven new leaves and frames are also checked for
 positive-area, same-facing coplanar triangle overlaps, including 70 assembled
 poses (both hinges at 0, ±55 and ±90 degrees). Shared edges and opposing culled
 internal faces are excluded. Six small regression tests exercise that detector.
+A separate export check confines hinge-side metal to the interior of the leaf
+thickness, rejecting fittings mounted on either broad face.
 Review images are rendered from reimported exported glTF,
 not just from the authoring scene. Review output goes to
 `build/swing_door_asset_work/new_doors/`.

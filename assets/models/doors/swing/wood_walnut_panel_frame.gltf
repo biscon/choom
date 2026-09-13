@@ -94,7 +94,7 @@
   ],
   "meshes": [
     {
-      "name": "Cube.046",
+      "name": "Cube.565",
       "primitives": [
         {
           "attributes": {
@@ -109,7 +109,7 @@
       ]
     },
     {
-      "name": "Cube.030",
+      "name": "Cube.563",
       "primitives": [
         {
           "attributes": {
@@ -186,15 +186,15 @@
     {
       "bufferView": 0,
       "componentType": 5126,
-      "count": 48,
+      "count": 1584,
       "max": [
-        0.45399996638298035,
-        1.1130000352859497,
+        0.4570000171661377,
+        1.9070000648498535,
         0.017999999225139618
       ],
       "min": [
-        0.4519999921321869,
-        0.953000009059906,
+        -0.4570000171661377,
+        0.15900000929832458,
         -0.017999999225139618
       ],
       "type": "VEC3"
@@ -202,31 +202,31 @@
     {
       "bufferView": 1,
       "componentType": 5126,
-      "count": 48,
+      "count": 1584,
       "type": "VEC3"
     },
     {
       "bufferView": 2,
       "componentType": 5126,
-      "count": 48,
+      "count": 1584,
       "type": "VEC2"
     },
     {
       "bufferView": 3,
       "componentType": 5126,
-      "count": 48,
+      "count": 1584,
       "type": "VEC4"
     },
     {
       "bufferView": 4,
       "componentType": 5123,
-      "count": 132,
+      "count": 4164,
       "type": "SCALAR"
     },
     {
       "bufferView": 5,
       "componentType": 5126,
-      "count": 1392,
+      "count": 1540,
       "max": [
         0.5339999198913574,
         2.1480000019073486,
@@ -242,87 +242,87 @@
     {
       "bufferView": 6,
       "componentType": 5126,
-      "count": 1392,
+      "count": 1540,
       "type": "VEC3"
     },
     {
       "bufferView": 7,
       "componentType": 5126,
-      "count": 1392,
+      "count": 1540,
       "type": "VEC2"
     },
     {
       "bufferView": 8,
       "componentType": 5126,
-      "count": 1392,
+      "count": 1540,
       "type": "VEC4"
     },
     {
       "bufferView": 9,
       "componentType": 5123,
-      "count": 4608,
+      "count": 4908,
       "type": "SCALAR"
     }
   ],
   "bufferViews": [
     {
       "buffer": 0,
-      "byteLength": 576,
+      "byteLength": 19008,
       "byteOffset": 0,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 576,
-      "byteOffset": 576,
+      "byteLength": 19008,
+      "byteOffset": 19008,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 384,
-      "byteOffset": 1152,
+      "byteLength": 12672,
+      "byteOffset": 38016,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 768,
-      "byteOffset": 1536,
+      "byteLength": 25344,
+      "byteOffset": 50688,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 264,
-      "byteOffset": 2304,
+      "byteLength": 8328,
+      "byteOffset": 76032,
       "target": 34963
     },
     {
       "buffer": 0,
-      "byteLength": 16704,
-      "byteOffset": 2568,
+      "byteLength": 18480,
+      "byteOffset": 84360,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 16704,
-      "byteOffset": 19272,
+      "byteLength": 18480,
+      "byteOffset": 102840,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 11136,
-      "byteOffset": 35976,
+      "byteLength": 12320,
+      "byteOffset": 121320,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 22272,
-      "byteOffset": 47112,
+      "byteLength": 24640,
+      "byteOffset": 133640,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 9216,
-      "byteOffset": 69384,
+      "byteLength": 9816,
+      "byteOffset": 158280,
       "target": 34963
     }
   ],
@@ -334,7 +334,7 @@
   ],
   "buffers": [
     {
-      "byteLength": 78600,
+      "byteLength": 168096,
       "uri": "wood_walnut_panel_frame.bin"
     }
   ]

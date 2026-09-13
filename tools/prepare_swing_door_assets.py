@@ -32,6 +32,7 @@ def main():
             authoring.render_sheet(view)
         for asset_id in ([args.asset] if args.asset else authoring.SPECS):
             authoring.render_detail(asset_id)
+        authoring.render_hinge_detail(args.asset or 'painted_ivory_panel')
 
 
 if __name__ == '__main__':

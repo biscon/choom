@@ -1,7 +1,7 @@
 {
   "industrial_charcoal": {
     "leaf": {
-      "triangles": 4640,
+      "triangles": 2878,
       "materials": 3,
       "boundsMin": [
         0.0,
@@ -13,11 +13,12 @@
         2.049999952316284,
         0.08509530127048492
       ],
-      "coplanarOverlaps": 0
+      "coplanarOverlaps": 0,
+      "hingeHardwareWithinEdge": true
     },
     "coverageRaysPerFace": 3237,
     "frame": {
-      "triangles": 1148,
+      "triangles": 2592,
       "materials": 2,
       "boundsMin": [
         -0.534000039100647,
@@ -83,11 +84,11 @@
         "coplanarOverlaps": 0
       }
     ],
-    "totalTriangles": 5788
+    "totalTriangles": 5470
   },
   "kitchen_service": {
     "leaf": {
-      "triangles": 6536,
+      "triangles": 4774,
       "materials": 3,
       "boundsMin": [
         0.0,
@@ -99,11 +100,12 @@
         2.049999952316284,
         0.08259530365467072
       ],
-      "coplanarOverlaps": 0
+      "coplanarOverlaps": 0,
+      "hingeHardwareWithinEdge": true
     },
     "coverageRaysPerFace": 3237,
     "frame": {
-      "triangles": 1148,
+      "triangles": 2592,
       "materials": 2,
       "boundsMin": [
         -0.534000039100647,
@@ -169,11 +171,11 @@
         "coplanarOverlaps": 0
       }
     ],
-    "totalTriangles": 7684
+    "totalTriangles": 7366
   },
   "painted_ivory_panel": {
     "leaf": {
-      "triangles": 5364,
+      "triangles": 3602,
       "materials": 4,
       "boundsMin": [
         0.0,
@@ -185,11 +187,12 @@
         2.0500001907348633,
         0.08259530365467072
       ],
-      "coplanarOverlaps": 0
+      "coplanarOverlaps": 0,
+      "hingeHardwareWithinEdge": true
     },
     "coverageRaysPerFace": 3237,
     "frame": {
-      "triangles": 1580,
+      "triangles": 3024,
       "materials": 2,
       "boundsMin": [
         -0.534000039100647,
@@ -255,11 +258,11 @@
         "coplanarOverlaps": 0
       }
     ],
-    "totalTriangles": 6944
+    "totalTriangles": 6626
   },
   "painted_sage_panel": {
     "leaf": {
-      "triangles": 5728,
+      "triangles": 3966,
       "materials": 4,
       "boundsMin": [
         0.0,
@@ -271,11 +274,12 @@
         2.0500001907348633,
         0.08259530365467072
       ],
-      "coplanarOverlaps": 0
+      "coplanarOverlaps": 0,
+      "hingeHardwareWithinEdge": true
     },
     "coverageRaysPerFace": 3237,
     "frame": {
-      "triangles": 1580,
+      "triangles": 3024,
       "materials": 2,
       "boundsMin": [
         -0.534000039100647,
@@ -341,11 +345,11 @@
         "coplanarOverlaps": 0
       }
     ],
-    "totalTriangles": 7308
+    "totalTriangles": 6990
   },
   "security_institutional": {
     "leaf": {
-      "triangles": 6328,
+      "triangles": 4566,
       "materials": 3,
       "boundsMin": [
         0.0,
@@ -357,11 +361,12 @@
         2.049999952316284,
         0.09759530425071716
       ],
-      "coplanarOverlaps": 0
+      "coplanarOverlaps": 0,
+      "hingeHardwareWithinEdge": true
     },
     "coverageRaysPerFace": 3237,
     "frame": {
-      "triangles": 1148,
+      "triangles": 2592,
       "materials": 2,
       "boundsMin": [
         -0.5370000004768372,
@@ -427,11 +432,11 @@
         "coplanarOverlaps": 0
       }
     ],
-    "totalTriangles": 7476
+    "totalTriangles": 7158
   },
   "security_reinforced": {
     "leaf": {
-      "triangles": 7464,
+      "triangles": 5702,
       "materials": 3,
       "boundsMin": [
         0.0,
@@ -443,11 +448,12 @@
         2.049999952316284,
         0.10509530454874039
       ],
-      "coplanarOverlaps": 0
+      "coplanarOverlaps": 0,
+      "hingeHardwareWithinEdge": true
     },
     "coverageRaysPerFace": 3237,
     "frame": {
-      "triangles": 1148,
+      "triangles": 2592,
       "materials": 2,
       "boundsMin": [
         -0.5370000004768372,
@@ -513,11 +519,11 @@
         "coplanarOverlaps": 0
       }
     ],
-    "totalTriangles": 8612
+    "totalTriangles": 8294
   },
   "wood_walnut_panel": {
     "leaf": {
-      "triangles": 6340,
+      "triangles": 4578,
       "materials": 4,
       "boundsMin": [
         0.0,
@@ -529,11 +535,12 @@
         2.0500001907348633,
         0.08259530365467072
       ],
-      "coplanarOverlaps": 0
+      "coplanarOverlaps": 0,
+      "hingeHardwareWithinEdge": true
     },
     "coverageRaysPerFace": 3237,
     "frame": {
-      "triangles": 1580,
+      "triangles": 3024,
       "materials": 2,
       "boundsMin": [
         -0.534000039100647,
@@ -599,7 +606,7 @@
         "coplanarOverlaps": 0
       }
     ],
-    "totalTriangles": 7920
+    "totalTriangles": 7602
   },
   "wooden_interior_001": {
     "leaf": {

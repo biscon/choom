@@ -94,7 +94,7 @@
   ],
   "meshes": [
     {
-      "name": "Cube.187",
+      "name": "Cube.792",
       "primitives": [
         {
           "attributes": {
@@ -109,7 +109,7 @@
       ]
     },
     {
-      "name": "Cube.199",
+      "name": "Cube.794",
       "primitives": [
         {
           "attributes": {
@@ -186,7 +186,7 @@
     {
       "bufferView": 0,
       "componentType": 5126,
-      "count": 1008,
+      "count": 1156,
       "max": [
         0.5339999198913574,
         2.1480000019073486,
@@ -202,39 +202,39 @@
     {
       "bufferView": 1,
       "componentType": 5126,
-      "count": 1008,
+      "count": 1156,
       "type": "VEC3"
     },
     {
       "bufferView": 2,
       "componentType": 5126,
-      "count": 1008,
+      "count": 1156,
       "type": "VEC2"
     },
     {
       "bufferView": 3,
       "componentType": 5126,
-      "count": 1008,
+      "count": 1156,
       "type": "VEC4"
     },
     {
       "bufferView": 4,
       "componentType": 5123,
-      "count": 3312,
+      "count": 3612,
       "type": "SCALAR"
     },
     {
       "bufferView": 5,
       "componentType": 5126,
-      "count": 48,
+      "count": 1584,
       "max": [
-        0.45399996638298035,
-        1.1130000352859497,
+        0.4570000171661377,
+        1.9070000648498535,
         0.019999999552965164
       ],
       "min": [
-        0.4519999921321869,
-        0.953000009059906,
+        -0.4570000171661377,
+        0.15900000929832458,
         -0.019999999552965164
       ],
       "type": "VEC3"
@@ -242,87 +242,87 @@
     {
       "bufferView": 6,
       "componentType": 5126,
-      "count": 48,
+      "count": 1584,
       "type": "VEC3"
     },
     {
       "bufferView": 7,
       "componentType": 5126,
-      "count": 48,
+      "count": 1584,
       "type": "VEC2"
     },
     {
       "bufferView": 8,
       "componentType": 5126,
-      "count": 48,
+      "count": 1584,
       "type": "VEC4"
     },
     {
       "bufferView": 9,
       "componentType": 5123,
-      "count": 132,
+      "count": 4164,
       "type": "SCALAR"
     }
   ],
   "bufferViews": [
     {
       "buffer": 0,
-      "byteLength": 12096,
+      "byteLength": 13872,
       "byteOffset": 0,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 12096,
-      "byteOffset": 12096,
+      "byteLength": 13872,
+      "byteOffset": 13872,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 8064,
-      "byteOffset": 24192,
+      "byteLength": 9248,
+      "byteOffset": 27744,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 16128,
-      "byteOffset": 32256,
+      "byteLength": 18496,
+      "byteOffset": 36992,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 6624,
-      "byteOffset": 48384,
+      "byteLength": 7224,
+      "byteOffset": 55488,
       "target": 34963
     },
     {
       "buffer": 0,
-      "byteLength": 576,
-      "byteOffset": 55008,
+      "byteLength": 19008,
+      "byteOffset": 62712,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 576,
-      "byteOffset": 55584,
+      "byteLength": 19008,
+      "byteOffset": 81720,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 384,
-      "byteOffset": 56160,
+      "byteLength": 12672,
+      "byteOffset": 100728,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 768,
-      "byteOffset": 56544,
+      "byteLength": 25344,
+      "byteOffset": 113400,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteLength": 264,
-      "byteOffset": 57312,
+      "byteLength": 8328,
+      "byteOffset": 138744,
       "target": 34963
     }
   ],
@@ -334,7 +334,7 @@
   ],
   "buffers": [
     {
-      "byteLength": 57576,
+      "byteLength": 147072,
       "uri": "industrial_charcoal_frame.bin"
     }
   ]

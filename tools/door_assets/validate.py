@@ -27,7 +27,7 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def read_model(path, authored):
+def read_model(path, authored, hinge_thickness=None):
     doc = json.loads(path.read_text())
     buffers = []
     for buf in doc['buffers']:
@@ -74,6 +74,10 @@ def read_model(path, authored):
             require(prim.get('mode',4) == 4, f'{path}: nontriangle primitive')
             triangles.append(positions[indices.reshape(-1,3)])
             mat = doc['materials'][prim['material']]
+            if hinge_thickness is not None and mat['name'] in ('Door_steel', 'Door_nickel', 'Door_brass'):
+                hinge_points = positions[positions[:,0] < .020]
+                require(not len(hinge_points) or np.max(abs(hinge_points[:,2])) < hinge_thickness*.30,
+                        f'{path}: hinge hardware projects onto a broad door face')
             require(mat.get('alphaMode','OPAQUE') == 'OPAQUE', f'{path}: transparent material')
             if authored:
                 require(not mat.get('doubleSided',False), f'{path}: double-sided shortcut')
@@ -119,7 +123,8 @@ def validate():
         record={}
         part_triangles = {}
         for part in ['leaf','frame']:
-            doc,tris=read_model(ROOT/asset[part+'ModelPath'],authored)
+            doc,tris=read_model(ROOT/asset[part+'ModelPath'],authored,
+                               asset['nominalThickness'] if authored and part=='leaf' else None)
             part_triangles[part] = tris.astype(np.float64)
             points=tris.reshape(-1,3);lo=points.min(axis=0);hi=points.max(axis=0)
             record[part]={'triangles':len(tris),'materials':len(doc['materials']),'boundsMin':lo.tolist(),'boundsMax':hi.tolist()}
@@ -129,6 +134,7 @@ def validate():
                 record[part]['coplanarOverlaps'] = 0
                 tol=.00003
                 if part=='leaf':
+                    record[part]['hingeHardwareWithinEdge'] = True
                     require(abs(lo[0])<tol and abs(hi[0]-asset['nominalWidth'])<tol and abs(lo[1])<tol and abs(hi[1]-asset['nominalHeight'])<tol,f"{asset['id']}: leaf canonical bounds")
                     record['coverageRaysPerFace']=coverage(tris,asset['nominalWidth'],asset['nominalHeight'])
                 else:

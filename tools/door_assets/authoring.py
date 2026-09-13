@@ -275,6 +275,47 @@ def cut_mortise_recess(spec):
     bpy.data.objects.remove(cutter, do_unlink=True)
 
 
+def concealed_hinge_seats(objects, edge_x, spec, inward=1, bottom=0, jamb=False):
+    """Recessed edge cartridges; no fittings project onto either door face.
+
+    The engine animates a rigid leaf, so no decorative linkage bridges the
+    moving leaf and stationary jamb. Seats on both jambs allow either hinge end.
+    """
+    height = .11 if spec['kind'] in ('reinforced', 'institutional') else .09
+    # Taller receiver pockets keep their end faces clear of the rotating seat.
+    if jamb:
+        height += .008
+    width = spec['thickness']*.55
+    bpy.context.view_layer.update()
+    for z in (.20, 1.02, 1.85):
+        z += bottom
+        bodies = []
+        for obj in objects:
+            lo, hi = bounds([obj])
+            if lo[0] < edge_x+inward*.004 < hi[0] and lo[2] < z < hi[2]:
+                bodies.append(obj)
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(edge_x+inward*.002, 0, z))
+        cutter = bpy.context.object
+        cutter.dimensions = (.006, width+.001, height+.001)
+        active(cutter)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        for obj in bodies:
+            active(obj)
+            modifier = obj.modifiers.new('Concealed hinge mortise', 'BOOLEAN')
+            modifier.operation = 'DIFFERENCE'
+            modifier.solver = 'EXACT'
+            modifier.object = cutter
+            bpy.ops.object.modifier_apply(modifier=modifier.name)
+        bpy.data.objects.remove(cutter, do_unlink=True)
+        box('Concealed hinge edge seat', (edge_x+inward*.0025, 0, z),
+            (.003, width, height), 'steel', .0007)
+        box('Inset hinge cartridge', (edge_x+inward*.00065, 0, z),
+            (.0005, width*.45, height*.48), 'steel', .0002)
+        for dz in (-height*.36, height*.36):
+            cylinder('Edge-only hinge fixing', (edge_x+inward*.0008, 0, z+dz),
+                .0024, .001, 'steel', 'X', vertices=6)
+
+
 def hardware(spec):
     t,metal,kind=spec['thickness'],spec['hardware'],spec['kind']
     x,z=.795,1.045
@@ -299,16 +340,6 @@ def hardware(spec):
             else: box('Deadlock thumbturn',(.795,y+sign*.016,dead_z),(.040,.012,.011),metal,.004)
     box('Mortise faceplate',(WIDTH-.002,0,1.025),(.002,t*.7,.15),'steel',.001)
     box('Latch tongue',(WIDTH-.001,0,1.043),(.002,.013,.021),'steel',.0006)
-    heavy=kind in ('reinforced','institutional')
-    radius=.013 if heavy else .009
-    depth=.11 if heavy else .075
-    for z in [.20,1.02,1.85]:
-        hy=-(t/2+radius*.55)
-        box('Hinge leaf strap',(.029,hy+.004,z),(.050,.003,depth),metal,.001)
-        for dz in [-depth*.33,depth*.33]: screw('Hinge fixing',.042,hy-.001,z+dz,metal,-1)
-        for offset in ([-.034,0,.034] if heavy else [-.025,0,.025]):
-            cylinder('Hinge knuckle',(radius,hy,z+offset),radius,depth/3-.002,metal,'Z')
-        cylinder('Hinge pin cap',(radius,hy,z+depth/2+.001),radius*.85,.003,metal,'Z')
 
 
 def frame(spec):
@@ -317,7 +348,9 @@ def frame(spec):
     depth=.19 if heavy else .14
     jamb=.065 if heavy else .060
     for x in [-.003-jamb/2,WIDTH+.003+jamb/2]:
-        box('Frame jamb',(x,0,(HEIGHT+BOTTOM+.005)/2),(jamb,depth,HEIGHT+BOTTOM+.005),mat,.002)
+        obj = box('Frame jamb',(x,0,(HEIGHT+BOTTOM+.005)/2),(jamb,depth,HEIGHT+BOTTOM+.005),mat,.002)
+        concealed_hinge_seats([obj], -.003 if x < 0 else WIDTH+.003, spec,
+                              inward=-1 if x < 0 else 1, bottom=BOTTOM, jamb=True)
     box('Frame head',(WIDTH/2,0,HEIGHT+BOTTOM+.005+jamb/2),(WIDTH+.006+2*jamb,depth,jamb),mat,.002,True)
     for sign in [-1,1]:
         casing=.083 if heavy else .080
@@ -389,6 +422,7 @@ def build_asset(asset_id):
     else: flush_leaf(spec)
     bpy.context.view_layer.update()
     cut_mortise_recess(spec)
+    concealed_hinge_seats(list(bpy.context.scene.objects), 0, spec)
     hardware(spec)
     leaf=consolidate(list(bpy.context.scene.objects),'DoorLeaf_'+asset_id)
     leaf['catalog_id']=asset_id;leaf['part']='leaf'
@@ -544,6 +578,21 @@ def render_detail(asset_id, rear=False):
     scene.camera.data.ortho_scale=.85
     scene.render.resolution_x=1000;scene.render.resolution_y=1000
     scene.render.filepath=str(REVIEW/(asset_id+('_rear_detail' if rear else '_detail')+'.png'))
+    bpy.ops.render.render(write_still=True)
+    return scene.render.filepath
+
+
+def render_hinge_detail(asset_id='painted_ivory_panel'):
+    reset()
+    import_assembly(asset_id, angle=-55)
+    scene = studio()
+    scene.camera.location = (.65, 2, 1.4)
+    look_at(scene.camera, (.003, 0, 1.028))
+    scene.camera.data.type = 'ORTHO'
+    scene.camera.data.ortho_scale = .40
+    scene.render.resolution_x = 1000
+    scene.render.resolution_y = 1000
+    scene.render.filepath = str(REVIEW/(asset_id+'_hinge_detail.png'))
     bpy.ops.render.render(write_still=True)
     return scene.render.filepath
 
