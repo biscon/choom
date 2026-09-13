@@ -18,7 +18,11 @@
     },
     "run": {
       "animation": "Running",
-      "movementSpeed": 3.0
+      "movementSpeed": 3.0,
+      "footstepPhases": [
+        0.11999999731779099,
+        0.6000000238418579
+      ]
     },
     "attack": {},
     "hurt": {},

@@ -22,8 +22,11 @@ ranges, return values, behavior, and failure details.
 - **[Persistent values](#persistent-values):** `setPersistentBool(key, value)`,
   `getPersistentBool(key [, default])`, `setPersistentInt(key, value)`,
   `getPersistentInt(key [, default])`, `setPersistentString(key, value)`,
-  `getPersistentString(key [, default])`; also `flag`/`setFlag`,
-  `getInt`/`setInt`, and `getString`/`setString`.
+  `getPersistentString(key [, default])`; aliases: `flag(key [, default])`,
+  `setFlag(key, value)`, `getInt(key [, default])`, `setInt(key, value)`,
+  `getString(key [, default])`, `setString(key, value)`.
+- **[Conversations](#npc-use-and-conversations):**
+  `startConversation(npcId [, { reposition = true }])`, `endConversation()`.
 - **[Dialogue choices](#dialogue-choices):** `dialogue(setId [, hiddenIds [, textOverrides]])`,
   `appendIf(list, condition, value)`, `hiddenOptions(map)`,
   `runConversation(setId, handlers [, hiddenIds [, textOverrides]])`,
@@ -33,6 +36,8 @@ ranges, return values, behavior, and failure details.
 - **[Doors](#doors):** `moveDoor(doorId, targetFraction, durationMs)`,
   `startMoveDoor(doorId, targetFraction, durationMs)`, `openDoor(doorId)`,
   `closeDoor(doorId)`, `toggleDoor(doorId)`.
+- **[Inventory queries](#inventory-queries):**
+  `hasInventoryItemInstance(instanceId)`, `hasInventoryItemDefinition(definitionId)`.
 - **[Prop animation](#dynamic-props-and-animation):**
   `playPropAnimation(propId [, animationName [, mode]])`,
   `pausePropAnimation(propId)`, `resumePropAnimation(propId)`,
@@ -63,8 +68,10 @@ ranges, return values, behavior, and failure details.
   `npcLookAtNpc(npcId, targetNpcId, durationMs)`,
   `npcLookAtProp(npcId, propId, durationMs)`,
   `npcLookAtMarker(npcId, markerId, durationMs)`,
-  and their `startNpcLookAtPlayer`, `startNpcLookAtNpc`,
-  `startNpcLookAtProp`, `startNpcLookAtMarker` forms.
+  `startNpcLookAtPlayer(npcId, durationMs)`,
+  `startNpcLookAtNpc(npcId, targetNpcId, durationMs)`,
+  `startNpcLookAtProp(npcId, propId, durationMs)`,
+  `startNpcLookAtMarker(npcId, markerId, durationMs)`.
 - **[Player controls and movement](#cutscenes-and-player-camera):**
   `startCutscene()`, `endCutscene()`, `enableControls(enabled)`,
   `movePlayer(x, z [, gait [, movementSpeed [, options]]])`,
@@ -87,9 +94,19 @@ ranges, return values, behavior, and failure details.
 - **[Triggers](#triggers):** `enableTrigger(triggerId)`,
   `disableTrigger(triggerId)`.
 
-Engine-called authored trigger functions, door permission callbacks, item
-`onTakeScript`, and dynamic-prop `onUseScript` functions take no arguments. A
-carried Object's `onUseScript` function receives `targetInstanceId`.
+Authored callback fields name user-defined global functions; they are not
+built-in commands:
+
+- **[Triggers](#script-files-and-lifecycle):** `script` calls a function with no arguments.
+- **[Door permissions](#doors):** `canOpenScript` and `canCloseScript` call functions
+  with no arguments; return boolean `true` to permit the requested action.
+- **[World item pickup](#world-item-pickup-callbacks):** `onTakeScript` calls a
+  function with no arguments; return boolean `true` to permit pickup.
+- **[Carried Object use](#carried-object-use-callbacks):** `onUseScript` passes
+  `targetInstanceId`; return boolean `true` to consume one carried Object entry.
+- **[Dynamic-prop use](#dynamic-props-and-animation):** `onUseScript` calls a
+  function with no arguments.
+- **[NPC use](#npc-use-and-conversations):** `onUseScript` passes the NPC's `instanceId`.
 
 ## Script files and lifecycle
 

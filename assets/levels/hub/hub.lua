@@ -196,7 +196,7 @@ function entrance_trigger()
     assert(teleportNpc("elin", "intro_marker_6"))
     startSay("elin", "What have you found?")
     --delay(500)
-    local elinArrival = assert(startMoveNpc("elin", "intro_marker_7", "walk", 1.5, true))
+    local elinArrival = assert(startMoveNpc("elin", "intro_marker_7", "walk", nil, true))
     startLookAtNpc("elin", 2000, 0.7)
     delay(2000)
     startLookAtNpc("elin", 5000, 0.7)
@@ -205,7 +205,14 @@ function entrance_trigger()
     startPlayNpcAnimation("elin", "Excited_2")
     say("elin", "Wow! that is a big door! How do we open it?")
     say("It requires a key card and a pincode.")
-
+    if hasInventoryItemInstance("blue_key_card") then
+        say("I found a key card in the storage room.")
+    end
+    say("elin", "Are we opening it then? you should probably be careful. I don't like the noises coming from in there.")
+    say("elin", "I'll hang out back in the office.")
+    startMoveNpc("elin", "intro_marker_3", "walk", nil, true)
+    startLookAtNpc("elin", 2000, 0.55)
+    delay(2000)
     assert(endCutscene())
 end
 
