@@ -332,3 +332,8 @@ function useBlueKeyCard(targetInstanceId)
     end
     return false
 end
+
+function usePasswordNote()
+    say("Password: im2good")
+    say("Apparently not at coming up with passwords.")
+end

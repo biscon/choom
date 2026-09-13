@@ -41,7 +41,7 @@ struct SectorUseTarget {
     int ladderPrimitiveId = -1;
     SectorLadderEndpoint ladderEndpoint = SectorLadderEndpoint::Bottom;
     bool draggable = false;
-    std::string_view action = "Use";
+    std::string_view action = {};
 };
 
 struct SectorUseHighlight {
@@ -129,7 +129,7 @@ void DrawSectorUsePrompt(
         Rectangle viewport,
         const engine::FontAsset* font,
         std::string_view title,
-        std::string_view action = "Use");
+        std::string_view action = {});
 
 void DrawSectorUseMessage(
         Rectangle viewport,

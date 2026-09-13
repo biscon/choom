@@ -7235,8 +7235,10 @@
       "id": 458,
       "kind": "dynamic_model",
       "dynamicModel": {
-        "instanceId": "prop_458",
-        "useTitle": "Post it",
+        "instanceId": "password_note",
+        "useTitle": "Read Post-It",
+        "useDistance": 2.0,
+        "onUseScript": "usePasswordNote",
         "modelPath": "assets/models/room_clutter/Sticky_Note_Yellow.gltf",
         "rotationXDegrees": 90.0,
         "rotationZDegrees": 90.0,

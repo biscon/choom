@@ -494,7 +494,8 @@ This callback is separate from a dynamic prop's own no-argument
 ## Dynamic props and animation
 
 A dynamic prop becomes usable when its `onUseScript` inspector field names a
-global Lua function. `useTitle` supplies the text in `Use <title>`, and
+global Lua function. `useTitle` supplies the complete prompt text (for example,
+`Read book`), with no automatic `Use` prefix, and
 `useDistance` controls its reach. The E-key resolver chooses the eligible prop
 or manual door closest to the center of the player's view. A `singleUse` prop
 is consumed after its callback starts successfully. Callback return values are
