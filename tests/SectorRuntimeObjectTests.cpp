@@ -3239,7 +3239,7 @@ void TestUnknownModelSwingDoorUsesAnimatedProceduralFallback()
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
 
-    Check(state.swingDoorCatalogLoaded && state.swingDoorCatalog.assets.size() == 16,
+    Check(state.swingDoorCatalogLoaded && state.swingDoorCatalog.assets.size() == 7,
           "runtime map refresh retains the generated CPU swing door catalog");
     Check(state.doorFallbackCount == 1 && state.doorFallbackDiagnostics.size() == 1,
           "unknown model style records one stable fallback diagnostic");
@@ -3288,7 +3288,7 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
     game::SectorTopologyMap map = MakeDoorPortalMap();
     game::SectorPlacedDoor door = MakeDoorOnPortal();
     door.visual = game::SectorDoorVisualType::Model;
-    door.modelAssetId = "wooden_interior_001";
+    door.modelAssetId = "wood_walnut_panel";
     door.modelFit = game::SectorDoorModelFit::FitInside;
     door.modelScale = 1.0f;
     door.motion = game::SectorDoorMotionType::Swing;
@@ -3299,7 +3299,7 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
     game::SectorSwingDoorCatalogAsset catalogAsset;
     Check(game::FindSectorSwingDoorCatalogAsset(
                   state.swingDoorCatalog, door.modelAssetId, catalogAsset),
-          "known runtime model style resolves from retained catalog");
+          "known runtime model style resolves from authored catalog");
     const game::SectorResolvedDoorAnchor resolved =
             game::ResolveSectorDoorAnchor(map, door);
     const game::SectorSwingDoorFitResult expectedFit =
@@ -3389,7 +3389,7 @@ void TestRetainedCatalogFailureDoesNotBlockOtherDoors()
     map.runtimeObjects.push_back(MakePlacedDoor(39, slideDoor));
     game::SectorPlacedDoor modelDoor = MakeDoorOnPortal();
     modelDoor.visual = game::SectorDoorVisualType::Model;
-    modelDoor.modelAssetId = "wooden_interior_001";
+    modelDoor.modelAssetId = "wood_walnut_panel";
     modelDoor.motion = game::SectorDoorMotionType::Swing;
     map.runtimeObjects.push_back(MakePlacedDoor(40, modelDoor));
     game::SectorPlacedRuntimeObject unrelatedObject;
@@ -3431,7 +3431,7 @@ void TestNullSwingDoorLeafRequestKeepsRuntimeFallback()
     game::SectorTopologyMap map = MakeDoorPortalMap();
     game::SectorPlacedDoor door = MakeDoorOnPortal();
     door.visual = game::SectorDoorVisualType::Model;
-    door.modelAssetId = "wooden_interior_001";
+    door.modelAssetId = "wood_walnut_panel";
     door.motion = game::SectorDoorMotionType::Swing;
     door.initialOpenFraction = 0.5f;
     map.runtimeObjects.push_back(MakePlacedDoor(42, door));
@@ -3502,7 +3502,7 @@ void TestMixedDoorRuntimeRefreshRecoveryAndScopeLifecycle()
 
     game::SectorPlacedDoor modelDoor = MakeDoorOnPortal();
     modelDoor.visual = game::SectorDoorVisualType::Model;
-    modelDoor.modelAssetId = "wooden_interior_001";
+    modelDoor.modelAssetId = "wood_walnut_panel";
     modelDoor.motion = game::SectorDoorMotionType::Swing;
     modelDoor.initialOpenFraction = 0.4f;
     map.runtimeObjects.push_back(MakePlacedDoor(53, modelDoor));
@@ -3603,7 +3603,7 @@ void TestMixedDoorRuntimeRefreshRecoveryAndScopeLifecycle()
                              FindPlacedObjectEntity(state, 53)).fallbackReason
                           == game::SectorDoorModelFallbackReason::MissingCatalogAsset,
           "edited invalid style produces one stable procedural fallback diagnostic");
-    map.runtimeObjects.back().door.modelAssetId = "wooden_interior_001";
+    map.runtimeObjects.back().door.modelAssetId = "wood_walnut_panel";
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
     Check(state.doorFallbackCount == 0
                   && state.doorFallbackDiagnostics.empty()

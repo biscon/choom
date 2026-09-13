@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build/verify the authored doors; retained wooden exports are read-only inputs.
+"""Build/verify the seven authored door styles.
 
 blender --background --python tools/prepare_swing_door_assets.py -- --mode all
 python3 tools/door_assets/validate.py

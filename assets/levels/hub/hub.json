@@ -358,7 +358,7 @@
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wood_walnut_panel",
+        "modelAssetId": "industrial_charcoal",
         "motion": "swing",
         "angularSpeedDegrees": 110.0,
         "openDistance": 2.75,
@@ -6806,6 +6806,21 @@
         103.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 425,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_425",
+        "modelPath": "assets/models/bathroom/Waste_Bin_Pedal.gltf",
+        "collision": true
+      },
+      "position": [
+        -34.599998474121094,
+        0.0,
+        53.59991455078125
+      ],
+      "yawDegrees": -84.99999237060547
     }
   ],
   "staticLights": [
@@ -12642,8 +12657,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -12759,7 +12773,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "7d74fa5a07415800",
+    "sourceHash": "acc1712b5f19f015",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -12767,19 +12781,19 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.666015625,
-        1.666015625
+        2.216796875,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 12582912,
-      "rgbChannelsAboveOne": 1445
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 874
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "7d74fa5a07415800",
+      "sourceHash": "acc1712b5f19f015",
       "count": 3917,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -12792,32 +12806,27 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.192941665649414,
+          1.9489465951919556,
+          1.8618656396865845
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23502,
-        "rgbChannelsAboveOne": 36
+        "rgbChannelsAboveOne": 37
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "7d74fa5a07415800",
+      "sourceHash": "acc1712b5f19f015",
       "modelCount": 116,
-      "objectCount": 348,
+      "objectCount": 349,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
       {
         "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      },
-      {
-        "path": "assets/levels/hub/hub.lightmap.2.bin",
         "width": 2048,
         "height": 2048
       }
@@ -36994,7 +37003,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.03999999910593033,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -37076,7 +37085,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.03999999910593033,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [

@@ -1,8 +1,8 @@
 """Repeatable Blender construction of seven opaque door assemblies.
 
 Blender: X across, Z up, -Y front. glTF: X across, Y up, +Z front.
-Leaves pivot at bottom hinge; frames pivot at bottom center. Downloaded wooden
-exports are retained inputs, never regenerated. See the asset README.
+Leaves pivot at bottom hinge; frames pivot at bottom center. The catalog contains
+only these seven authored styles. See the asset README.
 """
 import json
 import math

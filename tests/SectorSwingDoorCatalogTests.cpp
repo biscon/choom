@@ -68,14 +68,14 @@ void TestGeneratedCatalogLoadsAndLooksUpByStableId()
                   catalog,
                   error),
           "generated swing door catalog loads");
-    Check(error.empty() && catalog.formatVersion == 1 && catalog.assets.size() == 16,
+    Check(error.empty() && catalog.formatVersion == 1 && catalog.assets.size() == 7,
           "generated swing door catalog has expected version and style count");
 
     game::SectorSwingDoorCatalogAsset asset;
     Check(game::FindSectorSwingDoorCatalogAsset(
-                  catalog, "wooden_interior_001", asset),
+                  catalog, "wood_walnut_panel", asset),
           "stable catalog ID lookup resolves generated style");
-    Check(asset.id == "wooden_interior_001"
+    Check(asset.id == "wood_walnut_panel"
                   && asset.hasFrame
                   && asset.nominalWidth > 0.0f
                   && asset.nominalHeight > 0.0f
@@ -90,7 +90,8 @@ void TestGeneratedCatalogLoadsAndLooksUpByStableId()
 
     for (const auto& entry : catalog.assets) {
         Check(entry.id.find("industrial_metal_") != 0
-                      && entry.id.find("worn_wooden_") != 0,
+                      && entry.id.find("worn_wooden_") != 0
+                      && entry.id.find("wooden_interior_") != 0,
               "removed downloaded collections are absent from the catalog");
     }
     for (const char* id : {"wood_walnut_panel", "painted_ivory_panel",
@@ -297,7 +298,7 @@ void TestGeneratedScreenshotStylesFitCompleteHubAperture()
           "generated catalog loads for hub aperture regression");
     constexpr float hubWidth = 1.625f;
     constexpr float hubHeight = 2.75f;
-    for (const char* id : {"wooden_interior_001", "wood_walnut_panel",
+    for (const char* id : {"wood_walnut_panel",
                           "painted_ivory_panel", "painted_sage_panel",
                           "kitchen_service", "industrial_charcoal",
                           "security_reinforced", "security_institutional"}) {

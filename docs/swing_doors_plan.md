@@ -1,5 +1,9 @@
 # Swing Doors And Model Door Assets Plan
 
+> Asset update: the downloaded door collections described in this historical
+> implementation plan have all been retired. The current catalog contains only
+> the seven authored styles documented in [the asset README](../assets/models/doors/swing/README.md).
+
 ## How To Use This Living Plan
 
 This document is the execution plan and compacted investigation record for

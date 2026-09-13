@@ -1,8 +1,7 @@
 # Swing door assets
 
-Seven authored door styles are available alongside the nine retained wooden
-styles. The old downloaded metal and worn collections have been removed. Existing
-hub placements still reference their original wooden assets.
+The catalog contains seven authored door styles. All downloaded PSX door
+collections and their assets have been removed. The hub uses the authored styles.
 
 Select the new styles in the existing model-swing door picker. Their frames and
 leaves use the same fit, hinge, swing direction, lock, sound, and motion settings
@@ -96,7 +95,7 @@ python3 -m unittest discover -s tools/door_assets -p 'test_*.py'
 
 The first command rebakes normal/ORM maps and rebuilds the seven authored models
 from `tools/door_assets/authoring.py`. It uses the checked-in ImageGen and bathroom nickel images and
-preserves the nine original wooden exports. It never needs the removed download
+rebuilds only the seven authored styles. It never needs the removed download
 packs or an API key. `--mode prepare --asset ID` rebuilds one style, `--mode verify`
 checks exports, and `--mode render` produces review images. Blender MCP can call
 individual functions from the same module to perform these steps incrementally.
@@ -125,4 +124,4 @@ test was performed.
 Engine door behavior, collision algorithms, sector lookup, physics, topology
 mutation/cache invalidation, and lightmap source-hash policy are unchanged.
 Asset dimensions feed the existing fitting and collision-proxy behavior. See
-`ATTRIBUTION.md` for retained wooden-collection attribution and new-asset provenance.
+`ATTRIBUTION.md` for asset provenance.

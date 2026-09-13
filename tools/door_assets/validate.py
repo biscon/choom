@@ -113,9 +113,10 @@ def coverage(tris, width, height):
 def validate():
     catalog=json.loads((OUT/'catalog.json').read_text())
     ids=[a['id'] for a in catalog['assets']]
-    retained={f'wooden_interior_{i:03}' for i in range(1,10)}
-    require(catalog['formatVersion']==1 and len(ids)==len(set(ids))==16,'Catalog version/count/duplicate IDs')
-    require(set(ids)==retained|NEW_IDS,'Catalog ID set')
+    require(catalog['formatVersion']==1 and len(ids)==len(set(ids))==len(NEW_IDS),'Catalog version/count/duplicate IDs')
+    require(set(ids)==NEW_IDS,'Catalog ID set')
+    require(not list(OUT.glob('wooden_interior_*')) and not list(OUT.glob('*doors_wood*.png')),
+            'Retired wooden assets remain')
     require(not list(OUT.glob('industrial_metal_*')) and not list(OUT.glob('worn_wooden_*')) and not (OUT/'doors_metal_base_color.png').exists(),'Retired assets remain')
     report={}
     for asset in catalog['assets']:
