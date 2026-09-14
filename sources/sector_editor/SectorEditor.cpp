@@ -434,6 +434,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     itemEditorSessionState = SectorEditorItemEditorSessionState{};
     playerSettingsState = SectorEditorPlayerSettingsState{};
     materialRegistryEditorState = SectorEditorMaterialRegistryEditorState{};
+    materialRegistryEditorSessionState = SectorEditorMaterialRegistryEditorSessionState{};
     soundEditorState = SectorEditorSoundEditorState{};
     patrolEditorState = SectorEditorPatrolEditorState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
@@ -8710,6 +8711,7 @@ SectorEditorMaterialRegistryEditorService SectorEditor::BuildMaterialRegistryEdi
 {
     return SectorEditorMaterialRegistryEditorService{
             materialRegistryEditorState,
+            materialRegistryEditorSessionState,
             materialRegistry,
             AuthoringGraph(),
             TopologyMap(),

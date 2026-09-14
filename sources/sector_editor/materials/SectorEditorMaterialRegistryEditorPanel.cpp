@@ -4,6 +4,7 @@
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/services/SectorEditorAssetPickerUi.h"
 #include "sector_demo/SectorTextureTypes.h"
 
 #include <algorithm>
@@ -202,7 +203,23 @@ SectorEditorMaterialRegistryEditorResult DrawSectorEditorMaterialRegistryEditor(
             Rectangle{panel.x + 20.0f, panel.y + 14.0f, panel.width - 40.0f, 40.0f},
             font, "Material Editor");
 
-    const Rectangle listBounds{panel.x + 20.0f, panel.y + 66.0f, 300.0f, 660.0f};
+    const Rectangle browserBounds{panel.x + 20.0f, panel.y + 66.0f, 300.0f, 710.0f};
+    const auto browserLayout = MeasureSectorMaterialBrowser(browserBounds);
+    auto& session = editor.Session();
+    if (DrawSectorEditorAssetPickerFilter(ui, config, input, assets, smallFont,
+                "sector_editor_material_registry_filter_text", browserLayout.filter,
+                session.filterBuffer, sizeof(session.filterBuffer))) {
+        editor.ApplyFilter();
+    }
+    const Rectangle listBounds = browserLayout.list;
+    if (state.scrollSelectionIntoView) {
+        const float viewportHeight = std::max(0.0f, listBounds.height
+                - config.borderThickness * 2.0f - engine::DefaultScrollAreaPaddingPx * 2.0f);
+        state.listScroll.offset.y = SectorMaterialSelectionScrollOffset(
+                state.listScroll.offset.y, state.selectedFilteredIndex,
+                config.listItemHeight, viewportHeight);
+        state.scrollSelectionIntoView = false;
+    }
     const float listWidth = ScrollContentWidth(listBounds.width, config);
     const Vector2 listContentSize{
             listWidth,
@@ -212,36 +229,36 @@ SectorEditorMaterialRegistryEditorResult DrawSectorEditorMaterialRegistryEditor(
             ui, config, input, "sector_editor_material_registry_list_scroll",
             listBounds, listContentSize, state.listScroll);
     if (!state.listLabels.empty()) {
-        int selected = state.selectedIndex;
+        int selected = state.selectedFilteredIndex;
         engine::List(ui, config, input, assets,
                 "sector_editor_material_registry_list",
                 Rectangle{0.0f, 0.0f, listScroll.viewport.width, listContentSize.y},
                 smallFont, state.listLabels.data(), state.listLabels.size(), selected);
-        if (selected != state.selectedIndex) editor.SelectIndex(selected);
+        if (selected != state.selectedFilteredIndex) editor.SelectFilteredIndex(selected);
     }
     engine::EndScrollArea(ui, config, input, listScroll, state.listScroll);
 
     if (engine::Button(ui, config, input, assets,
                 "sector_editor_material_registry_add",
-                Rectangle{listBounds.x, listBounds.y + listBounds.height + 10.0f,
-                        145.0f, RowHeight}, smallFont, "Add")) {
+                browserLayout.add, smallFont, "Add")) {
         editor.AddMaterial();
     }
     if (engine::Button(ui, config, input, assets,
                 "sector_editor_material_registry_delete",
-                Rectangle{listBounds.x + 155.0f, listBounds.y + listBounds.height + 10.0f,
-                        145.0f, RowHeight}, smallFont, "Delete")) {
+                browserLayout.remove, smallFont, "Delete",
+                engine::UITextJustify::Center, editor.SelectedDraft() != nullptr)) {
         editor.RequestDeleteSelected();
     }
 
     const Rectangle formBounds{
-            listBounds.x + listBounds.width + 18.0f,
-            listBounds.y,
-            panel.x + panel.width - 20.0f - (listBounds.x + listBounds.width + 18.0f),
-            listBounds.height + RowHeight + 10.0f};
+            browserBounds.x + browserBounds.width + 18.0f,
+            browserBounds.y,
+            panel.x + panel.width - 20.0f - (browserBounds.x + browserBounds.width + 18.0f),
+            browserBounds.height};
     SectorEditorMaterialRegistryDraft* draft = editor.SelectedDraft();
     if (draft == nullptr) {
-        engine::Text(config, assets, formBounds, font, "No materials are available.",
+        engine::Text(config, assets, formBounds, font,
+                state.drafts.empty() ? "No materials are available." : "No materials match the filter",
                 engine::UITextJustify::Left, config.mutedTextColor, true);
     } else {
         editor.EnsurePreview(assets);

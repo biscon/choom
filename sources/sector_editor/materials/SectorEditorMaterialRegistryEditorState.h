@@ -34,12 +34,21 @@ struct SectorEditorMaterialAlbedoPickerState {
     std::string previewPath;
 };
 
+// Browsing preferences live for the app session and are never serialized.
+struct SectorEditorMaterialRegistryEditorSessionState {
+    std::string selectedMaterialId;
+    char filterBuffer[256] = {};
+};
+
 struct SectorEditorMaterialRegistryEditorState {
     bool open = false;
     std::vector<SectorEditorMaterialRegistryDraft> drafts;
     std::vector<std::string> listLabelStorage;
     std::vector<const char*> listLabels;
-    int selectedIndex = -1;
+    int selectedIndex = -1; // Index into drafts, independent of filtering.
+    int selectedFilteredIndex = -1;
+    std::vector<size_t> filteredDraftIndices;
+    bool scrollSelectionIntoView = false;
     engine::UIScrollState listScroll;
     engine::UIScrollState formScroll;
     char idBuffer[96] = {};

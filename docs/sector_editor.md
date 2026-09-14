@@ -1448,3 +1448,17 @@ not. Macro properties and pixels are runtime shading inputs excluded from the
 lightmap source hash, so tweaking them does not require rebaking. Material-only
 changes do not mutate topology or require 2D topology cache invalidation.
 See `assets/images/macros/README.md` for the six generated masks and starting values.
+
+### Material Editor browsing
+
+The filter above the material list updates as you type and matches material IDs
+case-insensitively. The selected material and filter are remembered in memory
+across Save, Cancel, and Escape, and reset when the app session ends. Browsing
+preferences are never written to the registry or level documents.
+
+A restored selection is scrolled into view. Filtering preserves the current
+selection when it matches, otherwise selects the first match. No matches hides
+the form and disables Delete without discarding drafts. Clear the query to show
+all materials. Add clears the query; renaming also clears it when necessary to
+keep the edited material visible. Cancelling a rename restores the original ID;
+cancelling a new material returns to the last existing material.

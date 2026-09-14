@@ -7,6 +7,41 @@
 
 namespace game {
 
+struct SectorMaterialBrowserLayout {
+    Rectangle filter;
+    Rectangle list;
+    Rectangle add;
+    Rectangle remove;
+};
+
+inline SectorMaterialBrowserLayout MeasureSectorMaterialBrowser(Rectangle bounds)
+{
+    constexpr float filterHeight = 42.0f;
+    constexpr float filterGap = 12.0f;
+    constexpr float buttonHeight = 40.0f;
+    constexpr float buttonGap = 10.0f;
+    const float listY = bounds.y + filterHeight + filterGap;
+    const float buttonY = bounds.y + bounds.height - buttonHeight;
+    const float buttonWidth = std::max(0.0f, (bounds.width - buttonGap) * 0.5f);
+    return {
+        {bounds.x, bounds.y, bounds.width, filterHeight},
+        {bounds.x, listY, bounds.width, std::max(0.0f, buttonY - buttonGap - listY)},
+        {bounds.x, buttonY, buttonWidth, buttonHeight},
+        {bounds.x + buttonWidth + buttonGap, buttonY, buttonWidth, buttonHeight}
+    };
+}
+
+inline float SectorMaterialSelectionScrollOffset(
+        float currentOffset, int row, float rowHeight, float viewportHeight)
+{
+    if (row < 0) return 0.0f;
+    const float top = static_cast<float>(row) * rowHeight;
+    const float bottom = top + rowHeight;
+    if (top < currentOffset) return top;
+    if (bottom > currentOffset + viewportHeight) return std::max(0.0f, bottom - viewportHeight);
+    return currentOffset;
+}
+
 enum class SectorMaterialFormRow : std::size_t {
     Id, Albedo, Filter, Metallic, Roughness, NormalStrength,
     MacroEnabled, MacroMask, MacroClear, MacroRepeat, MacroDarkening, MacroRoughness,

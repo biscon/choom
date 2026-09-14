@@ -41,7 +41,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.75,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/plaster_discoloration.png",
+        "repeatMeters": 6.0,
+        "darkening": 0.20000000298023224,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "biker_chick": {
       "albedoTexturePath": "assets/images/biker_chick.png",
@@ -90,7 +97,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 0.5
+      "normalStrength": 0.5,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/soft_streaks.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.5,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "dirty_office_wall_baseboard_512": {
       "albedoTexturePath": "assets/images/walls/dirty_office_wall_baseboard_512.png",
@@ -111,7 +125,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.800000011920929,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 5.0,
+        "darkening": 0.3499999940395355,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "fortress_stone_512": {
       "albedoTexturePath": "assets/images/hub/fortress_stone_512.png",
@@ -188,7 +209,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.5,
-      "normalStrength": 0.75
+      "normalStrength": 0.75,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/patchy_wear.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.25,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "metal_bars_01": {
       "albedoTexturePath": "assets/images/middle/metal_bars_01.png",
@@ -237,7 +265,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/plaster_discoloration.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.5,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "peeling_painted_wall": {
       "albedoTexturePath": "assets/images/hires/peeling_painted_wall.png",
@@ -265,7 +300,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.800000011920929,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/soft_streaks.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.5,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "step_01_512": {
       "albedoTexturePath": "assets/images/step_01_512.png",
@@ -300,7 +342,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.20000000298023224,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "white_wall_tiles": {
       "albedoTexturePath": "assets/images/walls/white_wall_tiles.png",
@@ -312,7 +361,7 @@
         "enabled": true,
         "maskPath": "assets/images/macros/broad_grime.png",
         "repeatMeters": 6.0,
-        "darkening": 0.25,
+        "darkening": 0.3499999940395355,
         "roughnessChange": 0.20000000298023224
       }
     },
@@ -356,7 +405,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.4000000059604645,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/patchy_wear.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.25,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "worn_steel_512": {
       "albedoTexturePath": "assets/images/worn_steel_512.png",

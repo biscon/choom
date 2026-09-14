@@ -104,6 +104,7 @@ bool ContainsCaseInsensitive(std::string_view text, std::string_view filter)
 
 SectorEditorMaterialRegistryEditorService::SectorEditorMaterialRegistryEditorService(
         SectorEditorMaterialRegistryEditorState& state,
+        SectorEditorMaterialRegistryEditorSessionState& session,
         SectorMaterialRegistry& registry,
         SectorAuthoringGraph& authoringGraph,
         SectorTopologyMap& topologyMap,
@@ -112,7 +113,7 @@ SectorEditorMaterialRegistryEditorService::SectorEditorMaterialRegistryEditorSer
         std::string& statusText,
         std::filesystem::path registryPath,
         std::filesystem::path levelsRoot)
-    : state_(state), registry_(registry), authoringGraph_(authoringGraph),
+    : state_(state), session_(session), registry_(registry), authoringGraph_(authoringGraph),
       topologyMap_(topologyMap), derivation_(derivation), lifecycle_(lifecycle),
       statusText_(statusText), registryPath_(std::move(registryPath)),
       levelsRoot_(std::move(levelsRoot))
@@ -121,12 +122,12 @@ SectorEditorMaterialRegistryEditorService::SectorEditorMaterialRegistryEditorSer
 
 void SectorEditorMaterialRegistryEditorService::Open()
 {
+    if (state_.open) return;
     state_ = SectorEditorMaterialRegistryEditorState{};
     state_.open = true;
     for (const std::string& id : SortedSectorMaterialIds(registry_)) {
         state_.drafts.push_back({registry_.materialsById.at(id), id, false});
     }
-    state_.selectedIndex = state_.drafts.empty() ? -1 : 0;
     RebuildListLabels();
     SyncBuffers();
     statusText_ = "Material Editor opened";
@@ -147,6 +148,7 @@ void SectorEditorMaterialRegistryEditorService::Close(engine::AssetManager* asse
 
 void SectorEditorMaterialRegistryEditorService::Cancel(engine::AssetManager* assets)
 {
+    RememberExistingSelection();
     Close(assets);
     statusText_ = "Material changes cancelled";
 }
@@ -154,6 +156,7 @@ void SectorEditorMaterialRegistryEditorService::Cancel(engine::AssetManager* ass
 void SectorEditorMaterialRegistryEditorService::Shutdown(engine::AssetManager& assets)
 {
     Close(&assets);
+    session_ = SectorEditorMaterialRegistryEditorSessionState{};
 }
 
 SectorEditorMaterialRegistryDraft* SectorEditorMaterialRegistryEditorService::SelectedDraft()
@@ -166,14 +169,53 @@ SectorEditorMaterialRegistryDraft* SectorEditorMaterialRegistryEditorService::Se
 bool SectorEditorMaterialRegistryEditorService::SelectIndex(int index)
 {
     if (index < 0 || index >= static_cast<int>(state_.drafts.size())) return false;
+    const auto found = std::find(state_.filteredDraftIndices.begin(),
+            state_.filteredDraftIndices.end(), static_cast<size_t>(index));
+    if (found == state_.filteredDraftIndices.end()) return false;
     state_.selectedIndex = index;
+    state_.selectedFilteredIndex = static_cast<int>(found - state_.filteredDraftIndices.begin());
     state_.validationMessage.clear();
+    state_.formScroll = {};
+    RememberExistingSelection();
     SyncBuffers();
     return true;
 }
 
+bool SectorEditorMaterialRegistryEditorService::SelectFilteredIndex(int index)
+{
+    if (index < 0 || index >= static_cast<int>(state_.filteredDraftIndices.size())) return false;
+    return SelectIndex(static_cast<int>(state_.filteredDraftIndices[static_cast<size_t>(index)]));
+}
+
+void SectorEditorMaterialRegistryEditorService::ApplyFilter()
+{
+    RememberExistingSelection();
+    state_.listScroll = {};
+    RebuildListLabels();
+}
+
+void SectorEditorMaterialRegistryEditorService::RememberExistingSelection()
+{
+    const auto* draft = SelectedDraft();
+    if (draft != nullptr && !draft->originalId.empty()) {
+        session_.selectedMaterialId = draft->originalId;
+    }
+}
+
+void SectorEditorMaterialRegistryEditorService::KeepSelectedDraftVisible()
+{
+    const auto* draft = SelectedDraft();
+    if (draft != nullptr && !ContainsCaseInsensitive(draft->definition.id, session_.filterBuffer)) {
+        session_.filterBuffer[0] = '\0';
+        state_.listScroll = {};
+    }
+}
+
 void SectorEditorMaterialRegistryEditorService::AddMaterial()
 {
+    RememberExistingSelection();
+    session_.filterBuffer[0] = '\0';
+    state_.formScroll = {};
     SectorEditorMaterialRegistryDraft draft;
     draft.definition.id = UniqueMaterialId(state_.drafts, "material");
     draft.definition.filter = SectorMaterialFilter::Anisotropic8x;
@@ -202,6 +244,7 @@ void SectorEditorMaterialRegistryEditorService::ApplyIdBuffer()
     draft->definition.id = id;
     draft->idWasEdited = true;
     state_.validationMessage.clear();
+    KeepSelectedDraftVisible();
     RebuildListLabels();
 }
 
@@ -221,6 +264,7 @@ bool SectorEditorMaterialRegistryEditorService::ApplyAlbedoPath(
     if (draft->originalId.empty() && !draft->idWasEdited) {
         const std::string generatedId = GeneratedTextureIdBase(draft->definition.path);
         draft->definition.id = UniqueMaterialId(state_.drafts, generatedId.c_str());
+        KeepSelectedDraftVisible();
         RebuildListLabels();
         std::snprintf(
                 state_.idBuffer,
@@ -539,6 +583,16 @@ bool SectorEditorMaterialRegistryEditorService::SaveAndClose(engine::AssetManage
         lifecycle_.hasUnsavedChanges = true;
     }
     registry_ = std::move(edited);
+    if (const auto* selected = SelectedDraft()) {
+        session_.selectedMaterialId = selected->definition.id;
+    } else {
+        // A no-results filter can hide the selection during a saved rename/delete.
+        renameValue(session_.selectedMaterialId);
+        if (registry_.materialsById.count(session_.selectedMaterialId) == 0) {
+            const auto ids = SortedSectorMaterialIds(registry_);
+            session_.selectedMaterialId = ids.empty() ? std::string{} : ids.front();
+        }
+    }
     Close(&assets);
     statusText_ = "Saved global material registry";
     return true;
@@ -591,16 +645,38 @@ void SectorEditorMaterialRegistryEditorService::SyncBuffers()
 
 void SectorEditorMaterialRegistryEditorService::RebuildListLabels()
 {
+    const int previousIndex = state_.selectedIndex;
+    state_.filteredDraftIndices.clear();
     state_.listLabelStorage.clear();
     state_.listLabels.clear();
+    state_.filteredDraftIndices.reserve(state_.drafts.size());
     state_.listLabelStorage.reserve(state_.drafts.size());
-    for (const auto& draft : state_.drafts) {
+    int preferredRow = -1;
+    int rememberedRow = -1;
+    for (size_t i = 0; i < state_.drafts.size(); ++i) {
+        const auto& draft = state_.drafts[i];
+        if (!ContainsCaseInsensitive(draft.definition.id, session_.filterBuffer)) continue;
+        const int row = static_cast<int>(state_.filteredDraftIndices.size());
+        if (static_cast<int>(i) == previousIndex) preferredRow = row;
+        if (draft.originalId == session_.selectedMaterialId) rememberedRow = row;
+        state_.filteredDraftIndices.push_back(i);
         state_.listLabelStorage.push_back(draft.definition.id);
     }
     state_.listLabels.reserve(state_.listLabelStorage.size());
     for (const std::string& label : state_.listLabelStorage) {
         state_.listLabels.push_back(label.c_str());
     }
+    state_.selectedFilteredIndex = preferredRow >= 0 ? preferredRow
+            : rememberedRow >= 0 ? rememberedRow : state_.listLabels.empty() ? -1 : 0;
+    state_.selectedIndex = state_.selectedFilteredIndex < 0 ? -1
+            : static_cast<int>(state_.filteredDraftIndices[static_cast<size_t>(state_.selectedFilteredIndex)]);
+    if (state_.selectedIndex != previousIndex) {
+        state_.formScroll = {};
+        state_.validationMessage.clear();
+        SyncBuffers();
+    }
+    RememberExistingSelection();
+    state_.scrollSelectionIntoView = state_.selectedFilteredIndex >= 0;
 }
 
 } // namespace game

@@ -14225,6 +14225,142 @@ void TestAddMapTextureScanFiltersAutomaticNormalMaps()
     std::filesystem::remove_all(root, error);
 }
 
+void TestMaterialEditorSessionAndLiveFilter()
+{
+    const auto root = TempDirectoryPath("material_editor_session_filter_test");
+    RecreateTempDirectory(root);
+    std::filesystem::create_directories(root / "levels");
+    game::SectorMaterialRegistry registry;
+    for (const char* id : {"alpha_brick", "beta_tile", "gamma_tile"}) {
+        game::SectorMaterialDefinition material;
+        material.id = id;
+        material.path = "assets/images/test.png";
+        registry.materialsById.emplace(id, material);
+    }
+    game::SectorEditorDocumentState document;
+    game::SectorEditorMaterialRegistryEditorState state;
+    game::SectorEditorMaterialRegistryEditorSessionState session;
+    engine::AssetManager assets;
+    std::string status;
+    game::SectorEditorMaterialRegistryEditorService editor{
+            state, session, registry, document.authoring.authoringGraph,
+            document.map.topologyMap,
+            game::MakeSectorEditorDerivationDocumentAccess(document.derivation),
+            game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+            status, root / "materials.json", root / "levels"};
+    const auto selectedId = [&]() {
+        const auto* draft = editor.SelectedDraft();
+        return draft == nullptr ? std::string{} : draft->definition.id;
+    };
+    const auto filter = [&](const char* text) {
+        std::snprintf(session.filterBuffer, sizeof(session.filterBuffer), "%s", text);
+        editor.ApplyFilter();
+    };
+    const auto rename = [&](const char* id) {
+        std::snprintf(state.idBuffer, sizeof(state.idBuffer), "%s", id);
+        editor.ApplyIdBuffer();
+    };
+
+    editor.Open();
+    Check(selectedId() == "alpha_brick", "material editor starts at first sorted material");
+    Check(editor.SelectIndex(2), "material editor selects a later material");
+    filter("TiLe");
+    Check(state.listLabelStorage == std::vector<std::string>{"beta_tile", "gamma_tile"}
+            && selectedId() == "gamma_tile" && state.selectedFilteredIndex == 1,
+            "material filter matches IDs case-insensitively and preserves visible selection");
+    editor.Cancel(nullptr); // Escape uses this same cancellation path.
+    editor.Open();
+    Check(selectedId() == "gamma_tile" && std::string(session.filterBuffer) == "TiLe"
+            && state.scrollSelectionIntoView,
+            "Cancel/Escape reopening restores material, filter, and selection visibility");
+    Check(editor.SelectFilteredIndex(0) && selectedId() == "beta_tile" && state.selectedIndex == 1,
+            "filtered row maps to the correct draft index");
+    Check(!editor.SelectFilteredIndex(-1) && !editor.SelectFilteredIndex(2),
+            "invalid filtered selections are rejected");
+    editor.SelectedDraft()->definition.roughnessFactor = 0.44f;
+    filter("no_matches");
+    Check(selectedId().empty() && state.listLabels.empty() && !editor.RequestDeleteSelected(),
+            "no-results filter clears active selection and prevents deletion");
+    Check(session.selectedMaterialId == "beta_tile", "no-results filter keeps last valid material");
+    filter("");
+    Check(selectedId() == "beta_tile" && state.listLabels.size() == 3
+            && Near(editor.SelectedDraft()->definition.roughnessFactor, 0.44f),
+            "clearing filter restores remembered material and keeps draft edits");
+    editor.Cancel(nullptr);
+    editor.Open();
+    Check(selectedId() == "beta_tile" && Near(editor.SelectedDraft()->definition.roughnessFactor, 0.8f),
+            "remembering a selection does not retain cancelled edits");
+    Check(!std::filesystem::exists(root / "materials.json")
+            && !document.lifecycle.hasUnsavedChanges,
+            "selection and filter browsing do not write files or dirty the document");
+
+    filter("brick");
+    Check(selectedId() == "alpha_brick", "filter selects first match when current material is excluded");
+    rename("renamed_surface");
+    Check(selectedId() == "renamed_surface" && session.filterBuffer[0] == '\0',
+            "renaming outside the filter clears the filter and keeps the active draft");
+    editor.Cancel(nullptr);
+    editor.Open();
+    Check(selectedId() == "alpha_brick", "cancelled rename remembers original material ID");
+    rename("renamed_surface");
+    filter("no_matches");
+    Check(editor.SaveAndClose(assets), "material save succeeds even when the filter has no matches");
+    Check(session.selectedMaterialId == "renamed_surface", "save follows a remembered material rename");
+    editor.Open();
+    Check(selectedId().empty() && std::string(session.filterBuffer) == "no_matches",
+            "reopen preserves a no-results query without fabricating a selection");
+    filter("");
+    Check(selectedId() == "renamed_surface", "clearing query finds the remembered saved rename");
+    filter("tile");
+    editor.AddMaterial();
+    Check(session.filterBuffer[0] == '\0' && selectedId() == "material",
+            "Add clears filter and selects the new draft");
+    editor.Cancel(nullptr);
+    editor.Open();
+    Check(selectedId() == "beta_tile", "discarded new draft falls back to last existing material");
+    editor.AddMaterial();
+    editor.SelectedDraft()->definition.path = "assets/images/new.png";
+    Check(editor.SaveAndClose(assets), "new material can be saved");
+    editor.Open();
+    Check(selectedId() == "material", "saved new material is remembered on reopen");
+
+    filter("tile");
+    Check(editor.SelectFilteredIndex(1) && selectedId() == "gamma_tile"
+            && editor.RequestDeleteSelected(), "filtered deletion targets gamma rather than underlying row one");
+    editor.ConfirmDeleteSelected();
+    Check(selectedId() == "beta_tile" && state.listLabelStorage == std::vector<std::string>{"beta_tile"},
+            "deleting a filtered material rebuilds mapping and selects a remaining match");
+    Check(editor.SaveAndClose(assets) && registry.materialsById.count("gamma_tile") == 0
+            && registry.materialsById.count("beta_tile") == 1, "filtered deletion saves the correct material");
+    editor.Open();
+    Check(selectedId() == "beta_tile" && std::string(session.filterBuffer) == "tile",
+            "Save reopening retains selected material and query");
+    Check(editor.RequestDeleteSelected(), "last matching material can be deleted");
+    editor.ConfirmDeleteSelected();
+    Check(selectedId().empty() && editor.SaveAndClose(assets), "saving deletion of last match handles no active selection");
+    editor.Open();
+    filter("");
+    Check(!selectedId().empty() && registry.materialsById.count(selectedId()) == 1,
+            "removed remembered material falls back to an existing ID");
+    editor.Cancel(nullptr);
+    session.selectedMaterialId = "externally_removed";
+    editor.Open();
+    Check(selectedId() == "material", "unknown remembered ID falls back to first sorted match");
+    const auto saved = Json::parse(ReadTextFile(root / "materials.json"));
+    Check(saved.size() == 2 && saved.contains("formatVersion") && saved.contains("materials"),
+            "saved registry contains no browsing-state fields");
+    filter("surface");
+    editor.Shutdown(assets);
+    Check(session.selectedMaterialId.empty() && session.filterBuffer[0] == '\0' && !state.open,
+            "shutdown clears all material browsing session state");
+    editor.Open();
+    Check(selectedId() == "material" && state.listLabels.size() == 2,
+            "fresh session starts with the full list");
+    editor.Cancel(nullptr);
+    std::error_code cleanupError;
+    std::filesystem::remove_all(root, cleanupError);
+}
+
 void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
 {
     const std::filesystem::path root =
@@ -14254,9 +14390,11 @@ void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
                     game::SectorMaterialFilter::Anisotropic8x});
     game::SectorEditorDocumentState document;
     game::SectorEditorMaterialRegistryEditorState state;
+    game::SectorEditorMaterialRegistryEditorSessionState session;
     std::string status;
     game::SectorEditorMaterialRegistryEditorService editor{
             state,
+            session,
             registry,
             document.authoring.authoringGraph,
             document.map.topologyMap,
@@ -16224,6 +16362,7 @@ int main()
     TestStaticModelPickerRecursionFilteringRefreshAndSelection();
     TestPickerSessionBrowsingMemory();
     TestAddMapTextureScanFiltersAutomaticNormalMaps();
+    TestMaterialEditorSessionAndLiveFilter();
     TestMaterialAlbedoPickerFilteringSelectionAndCommit();
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();

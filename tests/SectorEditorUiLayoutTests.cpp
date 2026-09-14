@@ -43,6 +43,30 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.y + a.height > b.y;
 }
 
+void TestMaterialBrowserFilterLayout()
+{
+    for (float width : {280.0f, 300.0f, 420.0f}) {
+        const Rectangle bounds{20.0f, 66.0f, width, 710.0f};
+        const auto layout = game::MeasureSectorMaterialBrowser(bounds);
+        Check(!Overlaps(layout.filter, layout.list) && !Overlaps(layout.list, layout.add)
+                && !Overlaps(layout.list, layout.remove) && !Overlaps(layout.add, layout.remove),
+                "material filter, list, and action buttons remain separate");
+        Check(layout.add.y + layout.add.height <= bounds.y + bounds.height
+                && layout.remove.x + layout.remove.width <= bounds.x + bounds.width,
+                "material browser actions fit at narrow pane widths");
+        for (float rowHeight : {32.0f, 48.0f}) {
+            const float viewport = layout.list.height - 20.0f;
+            const float offset = game::SectorMaterialSelectionScrollOffset(0.0f, 100, rowHeight, viewport);
+            Check(offset <= 100.0f * rowHeight && offset + viewport >= 101.0f * rowHeight,
+                    "restoring a distant material scrolls its entire row into view");
+            Check(Near(game::SectorMaterialSelectionScrollOffset(offset, 0, rowHeight, viewport), 0.0f),
+                    "restoring an earlier material scrolls upward");
+            Check(Near(game::SectorMaterialSelectionScrollOffset(20.0f, 2, rowHeight, viewport), 20.0f),
+                    "already visible selection leaves scroll unchanged");
+        }
+    }
+}
+
 void TestMaterialFormMacroLayout()
 {
     using Row = game::SectorMaterialFormRow;
@@ -1038,6 +1062,7 @@ void TestBaseboardLayout()
 
 int main()
 {
+    TestMaterialBrowserFilterLayout();
     TestMaterialFormMacroLayout();
     TestWrappedDiagnosticHeight();
     TestBaseboardLayout();
