@@ -305,7 +305,7 @@
         "enabled": true,
         "maskPath": "assets/images/macros/soft_streaks.png",
         "repeatMeters": 8.0,
-        "darkening": 0.5,
+        "darkening": 0.3499999940395355,
         "roughnessChange": 0.11999999731779099
       }
     },

@@ -7266,6 +7266,36 @@
         151.91998291015625
       ],
       "yawDegrees": -179.99998474121094
+    },
+    {
+      "id": 460,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_460",
+        "modelPath": "assets/models/plumbing/Pipe_100_2000_Green.gltf",
+        "heightOffsetWorld": 2.949998378753662
+      },
+      "position": [
+        -71.96000671386719,
+        0.0,
+        150.39987182617188
+      ],
+      "yawDegrees": 1.0000042915344238
+    },
+    {
+      "id": 461,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_461",
+        "modelPath": "assets/models/plumbing/Pipe_100_1000_Green.gltf",
+        "heightOffsetWorld": 2.949998378753662
+      },
+      "position": [
+        -56.320045471191406,
+        0.0,
+        150.07994079589844
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
