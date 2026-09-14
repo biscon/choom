@@ -211,8 +211,8 @@ function entrance_trigger()
     else
         say("I have neither.")
     end
-    say("elin", "You should probably be careful. I don't like the noises coming from in there.")
-    say("elin", "I'll hang out back in the office.")
+    say("elin", "You should be careful. I don't like the noises coming from in there.")
+    say("elin", "I'll hang out in the office.")
     startMoveNpc("elin", "intro_marker_3", "walk", nil, true)
     startLookAtNpc("elin", 2000, 0.55)
     delay(2000)
