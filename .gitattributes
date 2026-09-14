@@ -7,6 +7,7 @@
 *.raw binary
 *.obj binary
 *.gltf binary
+assets/models/doors/swing/*.bin binary
 
 # Preserve the exact upstream Recast Navigation v1.6.0 source bytes. The
 # upstream files contain intentional historical trailing whitespace.

@@ -200,11 +200,13 @@ vec3 ApplyDirectionalLightmap(
 void main()
 {
     vec3 geometricNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
+    // Evaluate derivatives before divergent light selection or fragment discard.
+    vec3 trianglePlane = cross(dFdx(fragWorldPosition), dFdy(fragWorldPosition));
+    vec3 trianglePlaneNormal = NormalizeShadowReceiverPlane(
+            trianglePlane, geometricNormal);
     vec3 receiverPlaneNormal = geometricNormal;
     if (hasPointShadows != 0) {
-        receiverPlaneNormal = SafeNormalize(
-                cross(dFdx(fragWorldPosition), dFdy(fragWorldPosition)),
-                geometricNormal);
+        receiverPlaneNormal = SafeNormalize(trianglePlane, geometricNormal);
         if (dot(receiverPlaneNormal, geometricNormal) < 0.0) {
             receiverPlaneNormal = -receiverPlaneNormal;
         }
@@ -319,7 +321,8 @@ void main()
             int shadowSlot = dynamicLightShadowSlots[i];
             if (shadowSlot >= 0 && shadowStrength[shadowSlot] > 0.0) {
                 float visibility = DynamicLightShadowVisibility(
-                        i, shadowSlot, fragWorldPosition, receiverPlaneNormal, lightDirection);
+                        i, shadowSlot, fragWorldPosition, receiverPlaneNormal,
+                        trianglePlaneNormal, lightDirection);
                 coneAtten *= mix(1.0, visibility,
                         clamp(shadowStrength[shadowSlot], 0.0, 1.0));
             }

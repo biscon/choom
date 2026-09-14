@@ -22,17 +22,23 @@ ranges, return values, behavior, and failure details.
 - **[Persistent values](#persistent-values):** `setPersistentBool(key, value)`,
   `getPersistentBool(key [, default])`, `setPersistentInt(key, value)`,
   `getPersistentInt(key [, default])`, `setPersistentString(key, value)`,
-  `getPersistentString(key [, default])`; also `flag`/`setFlag`,
-  `getInt`/`setInt`, and `getString`/`setString`.
+  `getPersistentString(key [, default])`; aliases: `flag(key [, default])`,
+  `setFlag(key, value)`, `getInt(key [, default])`, `setInt(key, value)`,
+  `getString(key [, default])`, `setString(key, value)`.
+- **[Conversations](#npc-use-and-conversations):**
+  `startConversation(npcId [, { reposition = true }])`, `endConversation()`.
 - **[Dialogue choices](#dialogue-choices):** `dialogue(setId [, hiddenIds [, textOverrides]])`,
   `appendIf(list, condition, value)`, `hiddenOptions(map)`,
   `runConversation(setId, handlers [, hiddenIds [, textOverrides]])`,
   `runConversationDynamic(setId, handlers [, hiddenOptionsFn [, textOverridesFn]])`.
 - **[Keypads](#keypads):** `promptPinCode(options)`.
+- **[Notes](#notes):** `showNote(body)`, `showNote(title, body)`.
 - **[Logging](#logging):** `log(...)`, `print(...)`.
 - **[Doors](#doors):** `moveDoor(doorId, targetFraction, durationMs)`,
   `startMoveDoor(doorId, targetFraction, durationMs)`, `openDoor(doorId)`,
   `closeDoor(doorId)`, `toggleDoor(doorId)`.
+- **[Inventory queries](#inventory-queries):**
+  `hasInventoryItemInstance(instanceId)`, `hasInventoryItemDefinition(definitionId)`.
 - **[Prop animation](#dynamic-props-and-animation):**
   `playPropAnimation(propId [, animationName [, mode]])`,
   `pausePropAnimation(propId)`, `resumePropAnimation(propId)`,
@@ -56,13 +62,17 @@ ranges, return values, behavior, and failure details.
   `moveNpc(instanceId, levelMarkerId [, gait [, movementSpeed [, matchOrientation]]])`,
   `startMoveNpc(instanceId, x, z [, gait [, movementSpeed]])`,
   `startMoveNpc(instanceId, levelMarkerId [, gait [, movementSpeed [, matchOrientation]]])`.
+- **[Marker teleporting](#marker-teleporting):** `teleportNpc(instanceId, levelMarkerId)`,
+  `teleportPlayer(levelMarkerId)`.
 - **[NPC body looks](#npc-body-looks):**
   `npcLookAtPlayer(npcId, durationMs)`,
   `npcLookAtNpc(npcId, targetNpcId, durationMs)`,
   `npcLookAtProp(npcId, propId, durationMs)`,
   `npcLookAtMarker(npcId, markerId, durationMs)`,
-  and their `startNpcLookAtPlayer`, `startNpcLookAtNpc`,
-  `startNpcLookAtProp`, `startNpcLookAtMarker` forms.
+  `startNpcLookAtPlayer(npcId, durationMs)`,
+  `startNpcLookAtNpc(npcId, targetNpcId, durationMs)`,
+  `startNpcLookAtProp(npcId, propId, durationMs)`,
+  `startNpcLookAtMarker(npcId, markerId, durationMs)`.
 - **[Player controls and movement](#cutscenes-and-player-camera):**
   `startCutscene()`, `endCutscene()`, `enableControls(enabled)`,
   `movePlayer(x, z [, gait [, movementSpeed [, options]]])`,
@@ -85,9 +95,19 @@ ranges, return values, behavior, and failure details.
 - **[Triggers](#triggers):** `enableTrigger(triggerId)`,
   `disableTrigger(triggerId)`.
 
-Engine-called authored trigger functions, door permission callbacks, item
-`onTakeScript`, and dynamic-prop `onUseScript` functions take no arguments. A
-carried Object's `onUseScript` function receives `targetInstanceId`.
+Authored callback fields name user-defined global functions; they are not
+built-in commands:
+
+- **[Triggers](#script-files-and-lifecycle):** `script` calls a function with no arguments.
+- **[Door permissions](#doors):** `canOpenScript` and `canCloseScript` call functions
+  with no arguments; return boolean `true` to permit the requested action.
+- **[World item pickup](#world-item-pickup-callbacks):** `onTakeScript` calls a
+  function with no arguments; return boolean `true` to permit pickup.
+- **[Carried Object use](#carried-object-use-callbacks):** `onUseScript` passes
+  `targetInstanceId`; return boolean `true` to consume one carried Object entry.
+- **[Dynamic-prop use](#dynamic-props-and-animation):** `onUseScript` calls a
+  function with no arguments.
+- **[NPC use](#npc-use-and-conversations):** `onUseScript` passes the NPC's `instanceId`.
 
 ## Script files and lifecycle
 
@@ -475,7 +495,8 @@ This callback is separate from a dynamic prop's own no-argument
 ## Dynamic props and animation
 
 A dynamic prop becomes usable when its `onUseScript` inspector field names a
-global Lua function. `useTitle` supplies the text in `Use <title>`, and
+global Lua function. `useTitle` supplies the complete prompt text (for example,
+`Read book`), with no automatic `Use` prefix, and
 `useDistance` controls its reach. The E-key resolver chooses the eligible prop
 or manual door closest to the center of the player's view. A `singleUse` prop
 is consumed after its callback starts successfully. Callback return values are
@@ -596,7 +617,7 @@ successful return.
 Mouse buttons and keyboard/numpad digits operate the keypad. Backspace deletes;
 Enter/the lower-right button submits. Partial codes cannot submit. Escape
 returns `nil, "cancelled"`, preserving puzzle state. A keypad cannot overlap
-another keypad, dialogue, captions, conversations, or inventory targeting.
+another keypad, note, dialogue, captions, conversations, or inventory targeting.
 Unavailable assets or conflicting presentation return `nil, reason`.
 Calling outside a managed task raises an error before opening UI.
 
@@ -613,6 +634,55 @@ non-overlapping `rect` and one unique `action`: `"0"`–`"9"`, `"backspace"`,
 or `"submit"`. Images and sounds resolve relative to `assets/keypads/`.
 The indicator image is a full-frame transparent layer aligned with the panel.
 See `tools/keypad/prepare_keypad.py` for the supplied asset's preparation recipe.
+
+## Notes
+
+### `showNote(body) -> true | nil, reason`
+### `showNote(title, body) -> true | nil, reason`
+
+Displays a centered cream paper sheet over the dimmed 3D view. The optional
+title appears above the body in a larger font; an empty title uses the titleless
+layout. Both arguments must be strings, without embedded NUL bytes. Empty body
+strings are allowed. Incorrect arguments or calls outside a managed, yieldable
+task raise Lua errors before opening UI.
+
+```lua
+function readReminder()
+    showNote("Reminder", "Meet at midnight.\nBring the key.")
+    setFlag("reminder_read", true) -- Runs after the note has faded out.
+end
+
+showNote([[First paragraph.
+
+Second paragraph, with an actual blank line above it.]])
+```
+
+Quoted Lua strings interpret `\n` as a line break (`\n\n` separates paragraphs).
+Long-bracket `[[...]]` strings preserve actual line breaks; they do not interpret
+backslash escapes. Text wraps to the paper width, preserving blank paragraphs;
+long words wrap at UTF-8 character boundaries. Long notes scroll inside the
+paper, including the title. Use the mouse wheel, Up/Down, Page Up/Page Down, or
+Home/End. Text is plain text, without markup.
+
+A fresh **E** or **Escape** press closes the note. The opening interaction press
+and key repeats do not dismiss it. The paper, text, shadow, and backdrop fade
+in over **350 ms** and out over **350 ms**. Dismissing during fade-in starts
+fade-out from the current opacity. Both keys count as normal dismissal and
+return `true` only when fade-out finishes.
+
+The calling Lua task waits for the entire presentation; gameplay input is
+captured while the world continues updating, as with `promptPinCode`. Pause and
+console capture suspend note input and animation. Notes cannot overlap notes,
+keypads, dialogue, captions, conversations, or inventory targeting. Unavailable
+runtime or conflicting presentation returns `nil, reason` without opening UI.
+Death or other interruption closes immediately and returns `nil, reason` if the
+task survives. Task termination, map teardown, and return to the editor release
+ownership immediately. Saving is unavailable throughout reading and both fades;
+pending notes and scroll positions are not saved.
+
+Paper and font assets load with the level through `AssetManager`. The supplied
+background is `assets/ui/notes/paper.png`; missing or pending paper falls back
+to a cream panel. See the adjacent `README.md` for the image-generation prompt.
 
 ## Dynamic lights
 
@@ -726,6 +796,63 @@ Missing NPCs, unavailable models, unknown clips, invalid speeds/durations, and
 unusable animation data return a failure and reason. One-shots require at least
 two skeletal keyframes and a usable return animation. Animation overrides are
 transient and are not saved; map unload cancels pending operations.
+
+## Marker teleporting
+
+```text
+teleportNpc(instanceId, levelMarkerId) -> true | false, reason
+teleportPlayer(levelMarkerId) -> true | false, reason
+```
+
+These commands instantly place the actor's feet at the marker's full X/Y/Z,
+converted from authored coordinates to runtime world units. Both actors face
+the marker's arrow immediately; the player also looks level (zero pitch).
+Marker IDs are exact and case-sensitive and refer to the current level.
+
+Teleporting returns immediately, without yielding or creating an operation.
+It works in managed scripts, `init()`, and the console. It requires no path to
+the destination and does not walk, turn smoothly, snap to the floor, or fade
+the screen. The player's normal gravity resumes afterward. NPCs retain their
+existing floor-resolution behavior during locomotion; teleporting does not add
+continuous NPC gravity. Place markers at the intended feet height.
+
+```lua
+-- Reposition Elin while the player is looking away.
+assert(teleportNpc("elin", "elin_close"))
+
+-- Inside a managed cutscene task:
+assert(startCutscene())
+assert(fadeOut(500))
+assert(teleportPlayer("after_cutscene"))
+assert(fadeIn(500))
+assert(endCutscene())
+```
+
+A successful teleport cancels that actor's active scripted movement and body/
+camera look, including arrival turns, with a reason containing `teleport`.
+An `await` or blocking call waiting for the replaced action returns `false`
+and that reason. Routes and door holds are released, and old steering, footsteps,
+and position/camera smoothing cannot carry through the jump. Player teleporting
+also releases prop dragging and ladder/duct traversal and refreshes liquid state.
+Ordinary crouch state is preserved. Fades, captions, control locks, cutscene and
+staged-conversation ownership, health, and inventory remain unchanged.
+
+NPC scripted animation loops and one-shots keep their playback progress and
+operation handles. Ordinary walking/running returns to idle. Teleports follow
+the existing NPC AI/combat restrictions and the per-instance `Script move stops
+patrol for session` setting: a patrol otherwise resumes after script ownership
+ends. NPCs held by automatic conversation positioning cannot be teleported.
+Player teleporting is also rejected during a repositioned conversation; use
+`startConversation(id, { reposition = false })` for staged conversations.
+Teleporting does not acquire a persistent movement or facing lock; subsequent
+commands, player input, and normal autonomous behavior can move/turn the actor.
+
+Invalid or missing actor/marker IDs, dead actors, non-finite marker transforms,
+unavailable required runtime state, and blocked destinations return `false,
+reason`. Destination clearance includes topology/structural geometry, doors,
+solid model colliders, and other actors. The destination is never adjusted to
+find space. Validation happens before any changes: a rejected teleport leaves
+position, orientation, existing actions, animation, and patrol state untouched.
 
 ## NPC movement
 
@@ -1044,6 +1171,14 @@ startText(message, TOP|CENTER|BOTTOM [, holdMs]) -> operation | nil, reason
 `operationStatus`, and `cancelOperation`. The async forms can be entered
 directly in the non-yielding debug console to preview captions; direct console
 calls to the blocking forms are rejected before changing caption state.
+
+Interaction prompts, dragging instructions, and brief feedback messages (including
+inventory feedback) are hidden while any caption is active, including its reveal,
+hold, and fade. This applies to both blocking and async forms at every text
+position. They also stay hidden during cutscenes or while controls are disabled.
+Visibility returns when these conditions clear, subject to the usual UI rules;
+feedback timers continue normally while hidden. This only changes text visibility,
+not interaction input or targeting.
 
 The NPC form requires a placed NPC instance ID (the same IDs used by `moveNpc`). The
 NPC editor's Voice setting selects `male` or `female`; older definitions default

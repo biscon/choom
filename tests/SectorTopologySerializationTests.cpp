@@ -2047,7 +2047,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
     mixedDoorMap.runtimeObjects.push_back(mixedRight);
     SectorPlacedRuntimeObject mixedSwing = MakeDoorRuntimeObject(43);
     mixedSwing.door.visual = game::SectorDoorVisualType::Model;
-    mixedSwing.door.modelAssetId = "wooden_interior_001";
+    mixedSwing.door.modelAssetId = "wood_walnut_panel";
     mixedSwing.door.motion = game::SectorDoorMotionType::Swing;
     mixedSwing.door.initialOpenFraction = 0.4f;
     mixedDoorMap.runtimeObjects.push_back(mixedSwing);
@@ -2058,7 +2058,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && mixedDoorSaved["runtimeObjects"][2]["door"]["motion"] == "slide_right"
                   && mixedDoorSaved["runtimeObjects"][3]["door"]["visual"] == "model"
                   && mixedDoorSaved["runtimeObjects"][3]["door"]["modelAssetId"]
-                             == "wooden_interior_001"
+                             == "wood_walnut_panel"
                   && mixedDoorSaved["runtimeObjects"][3]["door"]["motion"] == "swing",
           "mixed map preserves procedural defaults and explicit slide/model-swing values");
     SectorTopologyMap mixedDoorLoaded;

@@ -1924,7 +1924,7 @@ void TestSourceHashChanges()
     swingDoor.visual = game::SectorDoorVisualType::Model;
     Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
           "hash ignores door visual type");
-    swingDoor.modelAssetId = "wooden_interior_001";
+    swingDoor.modelAssetId = "wood_walnut_panel";
     Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
           "hash ignores swing door catalog ID");
     swingDoor.modelFit = game::SectorDoorModelFit::Manual;

@@ -2,7 +2,7 @@
   "version": 1,
   "firstLevel": "hub",
   "consoleEnabled": true,
-  "dialogueVoicesEnabled": false,
+  "dialogueVoicesEnabled": true,
   "footsteps": {
     "defaultSet": "Tile_Mono",
     "volume": 0.6499999761581421,
@@ -52,7 +52,7 @@
   "playerFlashlight": {
     "intensity": 2.0,
     "reachWorld": 22.0,
-    "coneRadiusWorld": 8.0,
+    "coneRadiusWorld": 9.0,
     "tint": {
       "r": 255,
       "g": 244,
@@ -65,7 +65,7 @@
     "castsShadows": true,
     "shadowStrength": 0.8999999761581421,
     "shadowSoftness": 2.0,
-    "shadowContactOffsetWorld": 0.05000000074505806,
+    "shadowContactOffsetWorld": 0.004999999888241291,
     "heightAboveEyeWorld": 0.11999999731779099,
     "lateralOffsetWorld": 0.10000000149011612,
     "aimConvergenceDistanceWorld": 10.0,

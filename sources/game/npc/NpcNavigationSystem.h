@@ -181,6 +181,13 @@ bool CancelNpcMoveForEntity(
         engine::Entity entity,
         uint64_t expectedRequestId = 0);
 
+// The caller validates the destination and control ownership before committing.
+// Does not change scripted skeletal animation or allocate navigation resources.
+void TeleportNpcToValidatedPosition(
+        engine::World& world, SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime, engine::Entity entity,
+        Vector3 position, float yawRadians, int sectorId);
+
 NpcMoveStatus GetNpcMoveStatus(
         const NpcNavigationRuntime& runtime,
         std::string_view instanceId);

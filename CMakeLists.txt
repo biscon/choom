@@ -164,6 +164,16 @@ endif()
 execute_process(
         COMMAND ${CMAKE_COMMAND}
                 "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
+                "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-gltf-channel-interpolation.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibGltfChannelInterpolationPatch.cmake"
+        RESULT_VARIABLE RAYLIB_GLTF_CHANNEL_INTERPOLATION_PATCH_RESULT
+)
+if(NOT RAYLIB_GLTF_CHANNEL_INTERPOLATION_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to apply the raylib glTF per-channel interpolation patch")
+endif()
+execute_process(
+        COMMAND ${CMAKE_COMMAND}
+                "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
                 "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-sound-looping.patch"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibSoundLoopingPatch.cmake"
         RESULT_VARIABLE RAYLIB_SOUND_LOOP_PATCH_RESULT
@@ -764,6 +774,7 @@ if(BUILD_TESTING)
             tests/SectorPropDraggingTests.cpp
             tests/SectorScriptBindingTests.cpp
             sources/game/items/ItemInventory.cpp
+            tests/SectorNoteTests.cpp
             tests/SectorKeypadTests.cpp
             tests/SectorDialogueTests.cpp
             tests/DialogueCameraIdleTests.cpp
@@ -804,6 +815,7 @@ if(BUILD_TESTING)
             sources/game/SectorScriptBindings.cpp
             sources/game/cutscene/SectorCutsceneRuntime.cpp
             sources/game/cutscene/SectorCutsceneSpeech.cpp
+            sources/game/note/SectorNote.cpp
             sources/game/keypad/SectorKeypad.cpp
             sources/game/dialogue/SectorDialogue.cpp
             sources/game/dialogue/DialogueCameraIdle.cpp

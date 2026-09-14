@@ -1,0 +1,341 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "extras": {
+        "README": "Seven authored opaque swing doors. Separate canonical glTF leaves and frames. See README.md and tools/door_assets/authoring.py."
+      },
+      "name": "Scene",
+      "nodes": [
+        2
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "DoorFrame_kitchen_service_Door_ivory"
+    },
+    {
+      "mesh": 1,
+      "name": "DoorFrame_kitchen_service_Door_steel"
+    },
+    {
+      "children": [
+        0,
+        1
+      ],
+      "extras": {
+        "catalog_id": "kitchen_service",
+        "part": "frame"
+      },
+      "name": "DoorFrame_kitchen_service"
+    }
+  ],
+  "materials": [
+    {
+      "name": "Door_ivory",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        },
+        "baseColorFactor": [
+          0.88,
+          0.83,
+          0.71,
+          1.0
+        ],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 2
+      },
+      "alphaMode": "OPAQUE",
+      "doubleSided": false
+    },
+    {
+      "name": "Door_steel",
+      "normalTexture": {
+        "index": 3
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 4
+        },
+        "metallicRoughnessTexture": {
+          "index": 5
+        },
+        "baseColorFactor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0
+      },
+      "occlusionTexture": {
+        "index": 5
+      },
+      "alphaMode": "OPAQUE",
+      "doubleSided": false
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.740",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    },
+    {
+      "name": "Cube.742",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 3
+    },
+    {
+      "sampler": 0,
+      "source": 4
+    },
+    {
+      "sampler": 0,
+      "source": 5
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "enamel_normal_opengl",
+      "uri": "textures/enamel_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "enamel_basecolor.png",
+      "uri": "textures/enamel_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "enamel_orm",
+      "uri": "textures/enamel_orm.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "nickel_used_normal_opengl.png",
+      "uri": "textures/nickel_used_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "nickel_used_basecolor.png",
+      "uri": "textures/nickel_used_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "nickel_used_orm.png",
+      "uri": "textures/nickel_used_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 1156,
+      "max": [
+        0.5339999198913574,
+        2.1480000019073486,
+        0.08699999749660492
+      ],
+      "min": [
+        -0.534000039100647,
+        0,
+        -0.08699999749660492
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 1156,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 1156,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 1156,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 3612,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 1584,
+      "max": [
+        0.4570000171661377,
+        1.9070000648498535,
+        0.017999999225139618
+      ],
+      "min": [
+        -0.4570000171661377,
+        0.15900000929832458,
+        -0.017999999225139618
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 1584,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 1584,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 1584,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 4164,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 13872,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 13872,
+      "byteOffset": 13872,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 9248,
+      "byteOffset": 27744,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 18496,
+      "byteOffset": 36992,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 7224,
+      "byteOffset": 55488,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 19008,
+      "byteOffset": 62712,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 19008,
+      "byteOffset": 81720,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 12672,
+      "byteOffset": 100728,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 25344,
+      "byteOffset": 113400,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 8328,
+      "byteOffset": 138744,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 147072,
+      "uri": "kitchen_service_frame.bin"
+    }
+  ]
+}

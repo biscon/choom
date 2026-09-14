@@ -3239,7 +3239,7 @@ void TestUnknownModelSwingDoorUsesAnimatedProceduralFallback()
     game::RefreshSectorRuntimeObjectMapData(state, map);
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
 
-    Check(state.swingDoorCatalogLoaded && state.swingDoorCatalog.assets.size() == 20,
+    Check(state.swingDoorCatalogLoaded && state.swingDoorCatalog.assets.size() == 7,
           "runtime map refresh retains the generated CPU swing door catalog");
     Check(state.doorFallbackCount == 1 && state.doorFallbackDiagnostics.size() == 1,
           "unknown model style records one stable fallback diagnostic");
@@ -3288,7 +3288,7 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
     game::SectorTopologyMap map = MakeDoorPortalMap();
     game::SectorPlacedDoor door = MakeDoorOnPortal();
     door.visual = game::SectorDoorVisualType::Model;
-    door.modelAssetId = "wooden_interior_001";
+    door.modelAssetId = "wood_walnut_panel";
     door.modelFit = game::SectorDoorModelFit::FitInside;
     door.modelScale = 1.0f;
     door.motion = game::SectorDoorMotionType::Swing;
@@ -3299,7 +3299,7 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
     game::SectorSwingDoorCatalogAsset catalogAsset;
     Check(game::FindSectorSwingDoorCatalogAsset(
                   state.swingDoorCatalog, door.modelAssetId, catalogAsset),
-          "known runtime model style resolves from retained catalog");
+          "known runtime model style resolves from authored catalog");
     const game::SectorResolvedDoorAnchor resolved =
             game::ResolveSectorDoorAnchor(map, door);
     const game::SectorSwingDoorFitResult expectedFit =
@@ -3389,7 +3389,7 @@ void TestRetainedCatalogFailureDoesNotBlockOtherDoors()
     map.runtimeObjects.push_back(MakePlacedDoor(39, slideDoor));
     game::SectorPlacedDoor modelDoor = MakeDoorOnPortal();
     modelDoor.visual = game::SectorDoorVisualType::Model;
-    modelDoor.modelAssetId = "wooden_interior_001";
+    modelDoor.modelAssetId = "wood_walnut_panel";
     modelDoor.motion = game::SectorDoorMotionType::Swing;
     map.runtimeObjects.push_back(MakePlacedDoor(40, modelDoor));
     game::SectorPlacedRuntimeObject unrelatedObject;
@@ -3431,7 +3431,7 @@ void TestNullSwingDoorLeafRequestKeepsRuntimeFallback()
     game::SectorTopologyMap map = MakeDoorPortalMap();
     game::SectorPlacedDoor door = MakeDoorOnPortal();
     door.visual = game::SectorDoorVisualType::Model;
-    door.modelAssetId = "wooden_interior_001";
+    door.modelAssetId = "wood_walnut_panel";
     door.motion = game::SectorDoorMotionType::Swing;
     door.initialOpenFraction = 0.5f;
     map.runtimeObjects.push_back(MakePlacedDoor(42, door));
@@ -3502,7 +3502,7 @@ void TestMixedDoorRuntimeRefreshRecoveryAndScopeLifecycle()
 
     game::SectorPlacedDoor modelDoor = MakeDoorOnPortal();
     modelDoor.visual = game::SectorDoorVisualType::Model;
-    modelDoor.modelAssetId = "wooden_interior_001";
+    modelDoor.modelAssetId = "wood_walnut_panel";
     modelDoor.motion = game::SectorDoorMotionType::Swing;
     modelDoor.initialOpenFraction = 0.4f;
     map.runtimeObjects.push_back(MakePlacedDoor(53, modelDoor));
@@ -3603,7 +3603,7 @@ void TestMixedDoorRuntimeRefreshRecoveryAndScopeLifecycle()
                              FindPlacedObjectEntity(state, 53)).fallbackReason
                           == game::SectorDoorModelFallbackReason::MissingCatalogAsset,
           "edited invalid style produces one stable procedural fallback diagnostic");
-    map.runtimeObjects.back().door.modelAssetId = "wooden_interior_001";
+    map.runtimeObjects.back().door.modelAssetId = "wood_walnut_panel";
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
     Check(state.doorFallbackCount == 0
                   && state.doorFallbackDiagnostics.empty()
@@ -10512,6 +10512,121 @@ void TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint()
     std::filesystem::remove_all(root, filesystemError);
 }
 
+void TestRaylibGltfAnimationLoaderUsesPerChannelInterpolation()
+{
+    const std::filesystem::path root =
+            std::filesystem::temp_directory_path()
+            / "engine_raylib_gltf_channel_interpolation_test";
+    std::error_code filesystemError;
+    std::filesystem::remove_all(root, filesystemError);
+    std::filesystem::create_directories(root, filesystemError);
+    Check(!filesystemError,
+          "mixed-interpolation glTF test creates its temporary directory");
+    if (filesystemError) return;
+
+    // A smoothly rotating parent with stepped scale reproduces Elin's thigh
+    // tracks. Its child exposes the resulting error at the end of the limb.
+    const std::array<float, 28> buffer{
+            0.0f, 1.0f,
+            0.0f, 0.0f, 0.0f,
+            0.0f, 2.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, std::sqrt(0.5f), std::sqrt(0.5f),
+            0.0f, 0.5f, 1.0f,
+            1.0f, 1.0f, 1.0f,
+            2.0f, 2.0f, 2.0f,
+            3.0f, 3.0f, 3.0f};
+    {
+        std::ofstream binary(root / "channels.bin", std::ios::binary);
+        binary.write(reinterpret_cast<const char*>(buffer.data()),
+                     static_cast<std::streamsize>(sizeof(buffer)));
+    }
+    Json fixture = Json::parse(R"({
+  "asset": {"version": "2.0"},
+  "scene": 0,
+  "scenes": [{"nodes": [0]}],
+  "nodes": [
+    {"name": "Armature", "children": [1]},
+    {"name": "Parent", "children": [2]},
+    {"name": "Child", "translation": [1, 0, 0]}
+  ],
+  "skins": [{"joints": [1, 2]}],
+  "animations": [{
+    "name": "ScaleLast",
+    "samplers": [
+      {"input": 0, "output": 1, "interpolation": "LINEAR"},
+      {"input": 0, "output": 2, "interpolation": "LINEAR"},
+      {"input": 3, "output": 4, "interpolation": "STEP"}
+    ],
+    "channels": [
+      {"sampler": 0, "target": {"node": 1, "path": "translation"}},
+      {"sampler": 1, "target": {"node": 1, "path": "rotation"}},
+      {"sampler": 2, "target": {"node": 1, "path": "scale"}}
+    ]
+  }],
+  "buffers": [{"uri": "channels.bin", "byteLength": 112}],
+  "bufferViews": [
+    {"buffer": 0, "byteOffset": 0, "byteLength": 8},
+    {"buffer": 0, "byteOffset": 8, "byteLength": 24},
+    {"buffer": 0, "byteOffset": 32, "byteLength": 32},
+    {"buffer": 0, "byteOffset": 64, "byteLength": 12},
+    {"buffer": 0, "byteOffset": 76, "byteLength": 36}
+  ],
+  "accessors": [
+    {"bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0], "max": [1]},
+    {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC3"},
+    {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC4"},
+    {"bufferView": 3, "componentType": 5126, "count": 3, "type": "SCALAR", "min": [0], "max": [1]},
+    {"bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC3"}
+  ]
+})");
+    Json reordered = fixture["animations"][0];
+    reordered["name"] = "TranslationLast";
+    auto& channels = reordered["channels"];
+    std::reverse(channels.begin(), channels.end());
+    fixture["animations"].push_back(std::move(reordered));
+    const std::string gltfPath = (root / "channels.gltf").string();
+    {
+        std::ofstream gltf(gltfPath, std::ios::binary);
+        gltf << fixture.dump();
+    }
+
+    int animationCount = 0;
+    ModelAnimation* animations = LoadModelAnimations(
+            gltfPath.c_str(), &animationCount);
+    Check(animations != nullptr && animationCount == 2,
+          "raylib loads both mixed-interpolation channel orders");
+    if (animations != nullptr && animationCount == 2) {
+        for (int animationIndex = 0; animationIndex < animationCount;
+                ++animationIndex) {
+            const ModelAnimation& animation = animations[animationIndex];
+            Check(animation.keyframeCount == 61 && animation.boneCount == 2,
+                  "mixed-interpolation clips retain their frame count and skeleton");
+            if (animation.keyframeCount != 61 || animation.boneCount != 2) continue;
+            for (const int frame : {15, 30, 45}) {
+                const float time = static_cast<float>(frame) / 60.0f;
+                const float angle = time * PI * 0.5f;
+                const float scale = frame < 30 ? 1.0f : 2.0f;
+                const Transform& parent = animation.keyframePoses[frame][0];
+                const Transform& child = animation.keyframePoses[frame][1];
+                Check(Near(parent.translation, Vector3{0.0f, 2.0f * time, 0.0f}),
+                      "LINEAR translation stays smooth regardless of channel order");
+                Check(Near(Vector3RotateByQuaternion(Vector3{1.0f, 0.0f, 0.0f}, parent.rotation),
+                           Vector3{std::cos(angle), std::sin(angle), 0.0f}),
+                      "LINEAR rotation stays smooth beside a STEP scale track");
+                Check(Near(parent.scale, Vector3{scale, scale, scale}),
+                      "STEP scale holds and switches at its key independently of smooth tracks");
+                Check(Near(child.translation,
+                           Vector3{scale * std::cos(angle),
+                                   2.0f * time + scale * std::sin(angle), 0.0f}),
+                      "child position follows the independently sampled parent tracks");
+            }
+        }
+    }
+    if (animations != nullptr) UnloadModelAnimations(animations, animationCount);
+    std::filesystem::remove_all(root, filesystemError);
+}
+
 void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
 {
     std::array<
@@ -13424,6 +13539,7 @@ int main()
     TestNpcBodyPartDamageUsesSkinWeightsAndSpecificOverrides();
     TestNpcBoneImpactUsesDominantWeightsAndSpringPose();
     TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
+    TestRaylibGltfAnimationLoaderUsesPerChannelInterpolation();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();
     TestDynamicModelShadowCasterCollectionAndRevision();

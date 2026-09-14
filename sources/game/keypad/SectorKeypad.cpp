@@ -1,5 +1,6 @@
 #include "game/keypad/SectorKeypad.h"
 #include "game/SectorScriptBindings.h"
+#include "game/note/SectorNote.h"
 #include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/dialogue/SectorDialogue.h"
 #include "engine/EngineContext.h"
@@ -105,7 +106,7 @@ int Begin(lua_State* state)
     const int digits = static_cast<int>(lua_tointeger(state, -1));
     if (!host.keypad) return Failure(state, "keypad runtime is unavailable");
     auto& runtime = *host.keypad;
-    if (runtime.active || host.inventoryInteractionActive || host.conversation.active
+    if (runtime.active || (host.note && host.note->active) || host.inventoryInteractionActive || host.conversation.active
             || (host.dialogue && host.dialogue->active)
             || (host.cutscene && host.cutscene->caption.active))
         return Failure(state, "another interaction is active");

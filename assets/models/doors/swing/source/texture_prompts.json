@@ -1,0 +1,24 @@
+{
+  "tool": "built-in imagegen",
+  "note": "Walnut, enamel and brass generated base-color images retained at native 1254 x 1254 resolution; Blender bakes their 1024 x 1024 normal and ORM maps. Original steel prompt retained for provenance; its maps are superseded by the corrected bathroom nickel set. No old door textures were upscaled.",
+  "prompts": {
+    "walnut": "Use case: photorealistic-natural. Asset type: physically based game material base-color texture, 2048x2048 square. A seamless straight-on scan of fine dark warm walnut timber, furniture quality, vertical long grain, subtle natural pores and fine worn varnish variation. Medium brown walnut with restrained warm amber undertones, not orange. Grain scale suitable for a 0.9 metre wide door, fine detailed fibers. Perfectly even diffuse illumination, albedo only, edge-to-edge material, no perspective, no highlights, no cast shadows, no ambient occlusion, no borders, no panels, no seams between planks, no handles, no text. Restrained maintained-but-used interior wood matching realistic institutional cafeteria furnishings.",
+    "enamel": "Use case: photorealistic-natural. Asset type: physically based game material base-color texture, 2048x2048 square. Seamless flat orthographic scan of warm off-white painted enamel on interior joinery. Subtle fine brush grain running vertically, extremely restrained tiny scuffs and slight unevenness from years of cleaning, mostly intact maintained paint, realistic fine surface texture. Neutral nearly-white color so the engine can tint ivory, sage, charcoal or institutional gray. Uniform flat diffuse albedo only, no lighting gradients, no specular highlights, no shadows, no ambient occlusion, no edges, no door shape, no panels, no hardware, no letters. Avoid heavy grime, flaking paint, crackle and large scratches.",
+    "steel": "Use case: photorealistic-natural. Asset type: seamless physically based game material base-color texture, 1024x1024 square. Flat orthographic scan of satin brushed stainless steel used for commercial kitchen door protection plates and nickel hardware. Fine dense vertical brushing, very restrained handling scuffs, uniform cool neutral silver mid-light gray. Albedo color only under perfectly even diffuse light, no reflections, no gradients, no highlights, no shadows, no bevels, no objects, no seams, no text. Edge to edge tileable material. Realistic maintained cafeteria kitchen equipment surface.",
+    "brass": "Use case: photorealistic-natural. Asset type: seamless physically based game material base-color texture, 1024x1024 square. Flat orthographic albedo scan of satin aged brass for traditional door handles and lock escutcheons. Muted warm ochre brass, fine brushing, restrained microscopic scratches and faint brown patina variation, mostly clean well-maintained metal, no green corrosion. Uniform diffuse lighting with no reflections, highlights, shadows, gradients or occlusion. Edge to edge tileable material, no objects, hardware silhouettes, seams, labels or text."
+  },
+  "reused_material": {
+    "source": "assets/models/bathroom/textures/nickel_used_*",
+    "destination": "assets/models/doors/swing/textures/nickel_used_*",
+    "maps": [
+      "basecolor",
+      "normal_opengl",
+      "orm"
+    ],
+    "resolution": [
+      512,
+      512
+    ],
+    "modification": "None; byte-for-byte copies. White base-color factor, metallic supplied by bathroom ORM."
+  }
+}

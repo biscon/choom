@@ -358,7 +358,7 @@
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_001",
+        "modelAssetId": "industrial_charcoal",
         "motion": "swing",
         "angularSpeedDegrees": 110.0,
         "openDistance": 2.75,
@@ -379,7 +379,7 @@
       "door": {
         "instanceId": "pre_entrance_door",
         "anchor": {
-          "lineDefId": 119,
+          "lineDefId": 118,
           "frontSectorId": 29,
           "backSectorId": 31,
           "frontSideDefId": 575,
@@ -394,13 +394,12 @@
           ]
         },
         "itemDropTarget": true,
-        "canOpenScript": "open_pre_entrance_door",
         "width": 1.25,
         "height": 2.75,
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_009",
+        "modelAssetId": "industrial_charcoal",
         "motion": "swing",
         "angularSpeedDegrees": 120.0,
         "openDistance": 2.75,
@@ -432,27 +431,12 @@
       "yawDegrees": 0.0
     },
     {
-      "id": 32,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_32",
-        "modelPath": "assets/models/barrel.glb",
-        "collision": true
-      },
-      "position": [
-        -52.0,
-        0.0,
-        106.0
-      ],
-      "yawDegrees": 0.0
-    },
-    {
       "id": 33,
       "kind": "door",
       "door": {
         "instanceId": "entrance_door",
         "anchor": {
-          "lineDefId": 127,
+          "lineDefId": 126,
           "frontSectorId": 33,
           "backSectorId": 26,
           "frontSideDefId": 261,
@@ -694,16 +678,16 @@
       "kind": "static_model",
       "staticModel": {
         "instanceId": "prop_44",
-        "modelPath": "assets/models/furniture/welding_and_assembly_table_lowpoly.glb",
+        "modelPath": "assets/models/storage/Workbench_1800.gltf",
         "scale": 1.149999976158142,
         "collision": true
       },
       "position": [
-        -188.0,
+        -187.9199981689453,
         -15.0,
-        53.0
+        55.080047607421875
       ],
-      "yawDegrees": 90.0
+      "yawDegrees": -90.00003814697266
     },
     {
       "id": 45,
@@ -737,37 +721,6 @@
       "yawDegrees": 65.0
     },
     {
-      "id": 47,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_47",
-        "modelPath": "assets/models/environment/tall_wooden_box_lowpoly.glb",
-        "collision": true
-      },
-      "position": [
-        -313.0,
-        -27.0,
-        8.0
-      ],
-      "yawDegrees": 0.0
-    },
-    {
-      "id": 48,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_48",
-        "modelPath": "assets/models/environment/palletes.glb",
-        "scale": 2.5,
-        "collision": true
-      },
-      "position": [
-        -431.0,
-        -27.0,
-        90.0
-      ],
-      "yawDegrees": -65.0
-    },
-    {
       "id": 49,
       "kind": "static_model",
       "staticModel": {
@@ -781,66 +734,6 @@
         37.0
       ],
       "yawDegrees": 0.0
-    },
-    {
-      "id": 50,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_50",
-        "modelPath": "assets/models/storage_shelves.glb",
-        "collision": true
-      },
-      "position": [
-        -444.0,
-        -27.0,
-        144.0
-      ],
-      "yawDegrees": 90.0
-    },
-    {
-      "id": 51,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_51",
-        "modelPath": "assets/models/environment/wooden_box.glb",
-        "collision": true
-      },
-      "position": [
-        -443.0,
-        -27.0,
-        70.0
-      ],
-      "yawDegrees": -3.0
-    },
-    {
-      "id": 52,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_52",
-        "modelPath": "assets/models/environment/tall_wooden_box_lowpoly.glb",
-        "collision": true
-      },
-      "position": [
-        -443.0,
-        -27.0,
-        56.0
-      ],
-      "yawDegrees": 4.0
-    },
-    {
-      "id": 53,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_53",
-        "modelPath": "assets/models/environment/wooden_box.glb",
-        "collision": true
-      },
-      "position": [
-        -432.0,
-        -27.0,
-        185.0
-      ],
-      "yawDegrees": -94.99999237060547
     },
     {
       "id": 54,
@@ -1485,7 +1378,7 @@
       "door": {
         "instanceId": "door_92",
         "anchor": {
-          "lineDefId": 234,
+          "lineDefId": 233,
           "frontSectorId": 50,
           "backSectorId": 43,
           "frontSideDefId": 229,
@@ -1504,7 +1397,7 @@
         "normalOffset": -0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_003",
+        "modelAssetId": "industrial_charcoal",
         "motion": "swing",
         "angularSpeedDegrees": 100.0,
         "openDistance": 2.8125,
@@ -2167,7 +2060,7 @@
       "door": {
         "instanceId": "door_132",
         "anchor": {
-          "lineDefId": 269,
+          "lineDefId": 268,
           "frontSectorId": 52,
           "backSectorId": 56,
           "frontSideDefId": 420,
@@ -2186,7 +2079,7 @@
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_009",
+        "modelAssetId": "wood_walnut_panel",
         "modelFit": "fit_width",
         "motion": "swing",
         "swingSide": "back",
@@ -2407,7 +2300,7 @@
       "door": {
         "instanceId": "door_146",
         "anchor": {
-          "lineDefId": 255,
+          "lineDefId": 254,
           "frontSectorId": 52,
           "backSectorId": 53,
           "frontSideDefId": 414,
@@ -2426,7 +2319,7 @@
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_009",
+        "modelAssetId": "wood_walnut_panel",
         "modelFit": "fit_width",
         "motion": "swing",
         "swingSide": "back",
@@ -2796,7 +2689,7 @@
       "kind": "window",
       "window": {
         "anchor": {
-          "lineDefId": 324,
+          "lineDefId": 323,
           "frontSectorId": 63,
           "backSectorId": 66,
           "frontSideDefId": 440,
@@ -3069,7 +2962,7 @@
       "door": {
         "instanceId": "door_200",
         "anchor": {
-          "lineDefId": 296,
+          "lineDefId": 295,
           "frontSectorId": 52,
           "backSectorId": 61,
           "frontSideDefId": 417,
@@ -3088,7 +2981,7 @@
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_009",
+        "modelAssetId": "wood_walnut_panel",
         "modelFit": "fit_width",
         "motion": "swing",
         "swingSide": "back",
@@ -3161,11 +3054,11 @@
       "kind": "window",
       "window": {
         "anchor": {
-          "lineDefId": 435,
+          "lineDefId": 434,
           "frontSectorId": 85,
           "backSectorId": 92,
           "frontSideDefId": 493,
-          "backSideDefId": 639,
+          "backSideDefId": 649,
           "endpointA": [
             -768,
             -2688
@@ -3201,7 +3094,7 @@
       "door": {
         "instanceId": "door_205",
         "anchor": {
-          "lineDefId": 407,
+          "lineDefId": 406,
           "frontSectorId": 63,
           "backSectorId": 83,
           "frontSideDefId": 445,
@@ -3220,7 +3113,7 @@
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_009",
+        "modelAssetId": "wood_walnut_panel",
         "modelFit": "fit_width",
         "motion": "swing",
         "swingSide": "back",
@@ -3243,7 +3136,7 @@
       "door": {
         "instanceId": "door_206",
         "anchor": {
-          "lineDefId": 397,
+          "lineDefId": 396,
           "frontSectorId": 70,
           "backSectorId": 81,
           "frontSideDefId": 539,
@@ -3262,7 +3155,7 @@
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_009",
+        "modelAssetId": "painted_ivory_panel",
         "modelFit": "fit_width",
         "motion": "swing",
         "swingSide": "back",
@@ -3284,7 +3177,7 @@
       "kind": "duct_access",
       "ductAccess": {
         "anchor": {
-          "lineDefId": 291,
+          "lineDefId": 290,
           "frontSectorId": 60,
           "backSectorId": 55,
           "frontSideDefId": 116,
@@ -3900,7 +3793,7 @@
       "door": {
         "instanceId": "door_249",
         "anchor": {
-          "lineDefId": 445,
+          "lineDefId": 444,
           "frontSectorId": 94,
           "backSectorId": 96,
           "frontSideDefId": 534,
@@ -3919,7 +3812,7 @@
         "normalOffset": -0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_003",
+        "modelAssetId": "kitchen_service",
         "modelFit": "fit_width",
         "motion": "swing",
         "swingSide": "back",
@@ -4497,7 +4390,7 @@
       "door": {
         "instanceId": "door_286",
         "anchor": {
-          "lineDefId": 464,
+          "lineDefId": 463,
           "frontSectorId": 67,
           "backSectorId": 98,
           "frontSideDefId": 298,
@@ -4516,7 +4409,7 @@
         "normalOffset": 0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_009",
+        "modelAssetId": "painted_ivory_panel",
         "modelFit": "fit_width",
         "motion": "swing",
         "swingSide": "back",
@@ -5848,10 +5741,10 @@
       "door": {
         "instanceId": "door_369",
         "anchor": {
-          "lineDefId": 413,
+          "lineDefId": 412,
           "frontSectorId": 84,
           "backSectorId": 82,
-          "frontSideDefId": 684,
+          "frontSideDefId": 694,
           "backSideDefId": 619,
           "endpointA": [
             -208,
@@ -5867,7 +5760,7 @@
         "normalOffset": -0.125,
         "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
-        "modelAssetId": "wooden_interior_009",
+        "modelAssetId": "painted_ivory_panel",
         "modelFit": "fit_width",
         "motion": "swing",
         "hinge": "end",
@@ -6510,7 +6403,7 @@
       "kind": "duct_access",
       "ductAccess": {
         "anchor": {
-          "lineDefId": 471,
+          "lineDefId": 470,
           "frontSectorId": 60,
           "backSectorId": 99,
           "frontSideDefId": 110,
@@ -6545,7 +6438,7 @@
       "kind": "duct_access",
       "ductAccess": {
         "anchor": {
-          "lineDefId": 478,
+          "lineDefId": 477,
           "frontSectorId": 96,
           "backSectorId": 102,
           "frontSideDefId": 593,
@@ -6580,7 +6473,7 @@
       "kind": "duct_access",
       "ductAccess": {
         "anchor": {
-          "lineDefId": 481,
+          "lineDefId": 480,
           "frontSectorId": 102,
           "backSectorId": 99,
           "frontSideDefId": 155,
@@ -6733,8 +6626,8 @@
       "kind": "item",
       "item": {
         "definitionId": "new_item_8",
-        "instanceId": "pre_entrance_door_key",
-        "onUseScript": "usePreEntranceDoorKey",
+        "instanceId": "storage_door_key",
+        "onUseScript": "useStorageDoorKey",
         "scale": 2.0,
         "shadowMode": "dynamic"
       },
@@ -6797,15 +6690,582 @@
         "definitionId": "blue_key_card",
         "instanceId": "blue_key_card",
         "onUseScript": "useBlueKeyCard",
+        "heightOffsetWorld": 0.9000000953674316,
         "scale": 1.5,
         "shadowMode": "dynamic"
       },
       "position": [
-        -148.0,
-        -27.0,
-        103.0
+        -67.36003875732422,
+        0.0,
+        133.99996948242188
+      ],
+      "yawDegrees": 99.9999771118164
+    },
+    {
+      "id": 425,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_425",
+        "modelPath": "assets/models/bathroom/Waste_Bin_Pedal.gltf",
+        "collision": true
+      },
+      "position": [
+        -34.599998474121094,
+        0.0,
+        53.59991455078125
+      ],
+      "yawDegrees": -84.99999237060547
+    },
+    {
+      "id": 426,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_426",
+        "modelPath": "assets/models/storage/Workshop_Stool.gltf"
+      },
+      "position": [
+        -193.31996154785156,
+        -15.0,
+        52.71992492675781
+      ],
+      "yawDegrees": 3.499999761581421
+    },
+    {
+      "id": 427,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_427",
+        "modelPath": "assets/models/storage/Workbench_1800.gltf",
+        "collision": true
+      },
+      "position": [
+        -68.5199966430664,
+        0.0,
+        131.20018005371094
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 428,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_428",
+        "modelPath": "assets/models/storage/Shelving_Wide_1600.gltf",
+        "collision": true
+      },
+      "position": [
+        -34.959999084472656,
+        0.0,
+        145.1197509765625
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 429,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_429",
+        "modelPath": "assets/models/storage/Shelving_Wide_1600.gltf",
+        "collision": true
+      },
+      "position": [
+        -35.0,
+        0.0,
+        132.07994079589844
+      ],
+      "yawDegrees": -89.99999237060547
+    },
+    {
+      "id": 430,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_430",
+        "modelPath": "assets/models/storage/Drum_Steel_Small_60L.gltf"
+      },
+      "position": [
+        -34.0,
+        0.0,
+        115.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 431,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_431",
+        "modelPath": "assets/models/storage/Pallet_Square_1000.gltf",
+        "collision": true
+      },
+      "position": [
+        -67.20001983642578,
+        0.0,
+        147.39996337890625
+      ],
+      "yawDegrees": -0.5
+    },
+    {
+      "id": 432,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_432",
+        "modelPath": "assets/models/storage/Drum_Steel_Red_200L.gltf",
+        "heightOffsetWorld": 0.14999999105930328,
+        "collision": true
+      },
+      "position": [
+        -68.40003967285156,
+        0.0,
+        148.7599334716797
+      ],
+      "yawDegrees": -79.99998474121094
+    },
+    {
+      "id": 433,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_433",
+        "modelPath": "assets/models/storage/Pallet_Square_1000.gltf",
+        "collision": true
+      },
+      "position": [
+        -58.920021057128906,
+        0.0,
+        147.5600128173828
+      ],
+      "yawDegrees": -0.5
+    },
+    {
+      "id": 434,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_434",
+        "modelPath": "assets/models/storage/Drum_Steel_Open_200L.gltf",
+        "heightOffsetWorld": 0.14999999105930328,
+        "collision": true
+      },
+      "position": [
+        -63.440025329589844,
+        0.0,
+        148.9998779296875
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 435,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_435",
+        "modelPath": "assets/models/storage/Crate_Wood_600.gltf",
+        "collision": true
+      },
+      "position": [
+        -52.0,
+        0.0,
+        148.1998291015625
+      ],
+      "yawDegrees": -4.0
+    },
+    {
+      "id": 436,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_436",
+        "modelPath": "assets/models/storage/Box_Cardboard_Medium.gltf",
+        "heightOffsetWorld": 0.15000000596046448,
+        "collision": true
+      },
+      "position": [
+        -57.800010681152344,
+        0.0,
+        149.79986572265625
+      ],
+      "yawDegrees": -4.999999046325684
+    },
+    {
+      "id": 437,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_437",
+        "modelPath": "assets/models/kitchen/Utility_Bin.gltf",
+        "collision": true
+      },
+      "position": [
+        -69.23999786376953,
+        0.0,
+        114.87995910644531
+      ],
+      "yawDegrees": 67.9999771118164
+    },
+    {
+      "id": 438,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_438",
+        "modelPath": "assets/models/storage/Bench_Vise.gltf",
+        "heightOffsetWorld": 0.8800001740455627
+      },
+      "position": [
+        -66.96002197265625,
+        0.0,
+        137.15994262695313
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 439,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_439",
+        "modelPath": "assets/models/storage/Toolboard_900x600.gltf",
+        "heightOffsetWorld": 1.1999999284744263
+      },
+      "position": [
+        -71.80004119873047,
+        0.0,
+        130.80001831054688
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 440,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_440",
+        "modelPath": "assets/models/storage/Toolbox_Portable.gltf",
+        "heightOffsetWorld": 0.8900002241134644
+      },
+      "position": [
+        -70.20002746582031,
+        0.0,
+        127.07994079589844
+      ],
+      "yawDegrees": 79.99998474121094
+    },
+    {
+      "id": 441,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_441",
+        "modelPath": "assets/models/bathroom/Fluorescent_Fixture_1240.gltf",
+        "heightOffsetWorld": 3.1099987030029297,
+        "castsShadow": false
+      },
+      "position": [
+        -52.0,
+        0.0,
+        132.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 442,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_442",
+        "modelPath": "assets/models/storage/Box_Cardboard_Small.gltf",
+        "heightOffsetWorld": 0.6700001358985901
+      },
+      "position": [
+        -35.5999755859375,
+        0.0,
+        128.3201141357422
+      ],
+      "yawDegrees": -10.0
+    },
+    {
+      "id": 443,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_443",
+        "modelPath": "assets/models/storage/Box_Cardboard_Medium.gltf",
+        "heightOffsetWorld": 0.19999992847442627
+      },
+      "position": [
+        -35.199989318847656,
+        0.0,
+        141.5999755859375
+      ],
+      "yawDegrees": -87.99999237060547
+    },
+    {
+      "id": 444,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_444",
+        "modelPath": "assets/models/storage/Utility_Case_Small.gltf",
+        "heightOffsetWorld": 0.19999997317790985
+      },
+      "position": [
+        -35.03997802734375,
+        0.0,
+        135.60003662109375
+      ],
+      "yawDegrees": -93.99996185302734
+    },
+    {
+      "id": 445,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_445",
+        "modelPath": "assets/models/storage/Box_Cardboard_Open.gltf",
+        "heightOffsetWorld": 0.47000008821487427
+      },
+      "position": [
+        -52.20001983642578,
+        0.0,
+        148.59982299804688
+      ],
+      "yawDegrees": 167.0000457763672
+    },
+    {
+      "id": 446,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_446",
+        "modelPath": "assets/models/desk_lamp_low_poly.glb",
+        "heightOffsetWorld": 0.89000004529953,
+        "scale": 1.5
+      },
+      "position": [
+        -70.00003814697266,
+        0.0,
+        136.79995727539063
+      ],
+      "yawDegrees": 141.99990844726563
+    },
+    {
+      "id": 447,
+      "kind": "door",
+      "door": {
+        "instanceId": "storage_door",
+        "anchor": {
+          "lineDefId": 487,
+          "frontSectorId": 1,
+          "backSectorId": 103,
+          "frontSideDefId": 724,
+          "backSideDefId": 635,
+          "endpointA": [
+            -704,
+            1760
+          ],
+          "endpointB": [
+            -864,
+            1760
+          ]
+        },
+        "itemDropTarget": true,
+        "canOpenScript": "open_storage_door",
+        "width": 1.25,
+        "height": 2.75,
+        "normalOffset": 0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "industrial_charcoal",
+        "motion": "swing",
+        "swingSide": "back",
+        "openAngleDegrees": 100.0,
+        "angularSpeedDegrees": 120.0,
+        "openDistance": 2.75,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_02"
+      },
+      "position": [
+        -49.0,
+        0.5,
+        110.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 448,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_448",
+        "modelPath": "assets/models/room_clutter/Calendar_Wall_October.gltf",
+        "heightOffsetWorld": 1.1999999284744263,
+        "scale": 1.5
+      },
+      "position": [
+        -71.92009735107422,
+        0.0,
+        120.00015258789063
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 449,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_449",
+        "modelPath": "assets/models/storage/Workshop_Stool.gltf",
+        "collision": true
+      },
+      "position": [
+        -63.800010681152344,
+        0.0,
+        131.4000244140625
+      ],
+      "yawDegrees": 6.0
+    },
+    {
+      "id": 450,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_450",
+        "modelPath": "assets/models/room_clutter/Poster_Movie_Platform_Nine.gltf",
+        "heightOffsetWorld": 1.0000001192092896,
+        "scale": 1.5
+      },
+      "position": [
+        -62.760009765625,
+        0.0,
+        111.99999237060547
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 451,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_451",
+        "modelPath": "assets/models/room_clutter/Magazines_Stack.gltf",
+        "heightOffsetWorld": 0.6700000762939453
+      },
+      "position": [
+        -35.15998077392578,
+        0.0,
+        134.08009338378906
+      ],
+      "yawDegrees": -32.999996185302734
+    },
+    {
+      "id": 452,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_452",
+        "modelPath": "assets/models/storage/Box_Cardboard_Small.gltf",
+        "heightOffsetWorld": 1.5899994373321533
+      },
+      "position": [
+        -35.35997772216797,
+        0.0,
+        133.8800506591797
+      ],
+      "yawDegrees": -105.24992370605469
+    },
+    {
+      "id": 453,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_453",
+        "modelPath": "assets/models/storage/Box_Cardboard_Medium.gltf",
+        "heightOffsetWorld": 1.1299999952316284
+      },
+      "position": [
+        -34.79998016357422,
+        0.0,
+        135.0
+      ],
+      "yawDegrees": -83.2500228881836
+    },
+    {
+      "id": 454,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_454",
+        "modelPath": "assets/models/storage/Utility_Case_Large.gltf",
+        "collision": true
+      },
+      "position": [
+        -34.199974060058594,
+        0.0,
+        121.60006713867188
+      ],
+      "yawDegrees": -91.99998474121094
+    },
+    {
+      "id": 455,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_455",
+        "modelPath": "assets/models/room_clutter/Poster_Pinup_Woman_Bikini.gltf",
+        "heightOffsetWorld": 1.1399999856948853,
+        "scale": 1.5
+      },
+      "position": [
+        -72.00004577636719,
+        0.0,
+        142.6000213623047
+      ],
+      "yawDegrees": 89.99999237060547
+    },
+    {
+      "id": 456,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_456",
+        "modelPath": "assets/models/storage/Toolbox_Portable.gltf",
+        "heightOffsetWorld": 0.6600000858306885
+      },
+      "position": [
+        -35.439979553222656,
+        0.0,
+        147.43988037109375
+      ],
+      "yawDegrees": -94.24996185302734
+    },
+    {
+      "id": 457,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_457",
+        "modelPath": "assets/models/room_clutter/Book_1984_Readable.gltf",
+        "scale": 1.25
+      },
+      "position": [
+        -92.79999542236328,
+        0.0,
+        75.20000457763672
+      ],
+      "yawDegrees": 161.00006103515625
+    },
+    {
+      "id": 458,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "password_note",
+        "useTitle": "Read Post-It",
+        "useDistance": 2.0,
+        "onUseScript": "usePasswordNote",
+        "modelPath": "assets/models/room_clutter/Sticky_Note_Yellow.gltf",
+        "rotationXDegrees": 90.0,
+        "rotationZDegrees": 90.0,
+        "heightOffsetWorld": 1.579999566078186,
+        "shadowMode": "none"
+      },
+      "position": [
+        -38.43998718261719,
+        0.0,
+        44.87992858886719
+      ],
+      "yawDegrees": 6.40330199530581e-07
+    },
+    {
+      "id": 459,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_459",
+        "modelPath": "assets/models/bathroom/Ventilation_Grille_410.gltf",
+        "heightOffsetWorld": 2.349998950958252
+      },
+      "position": [
+        -52.56004333496094,
+        0.0,
+        151.91998291015625
+      ],
+      "yawDegrees": -179.99998474121094
     }
   ],
   "staticLights": [
@@ -8950,6 +9410,45 @@
               "r": 229,
               "g": 181,
               "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 70,
+      "position": [
+        -68.92571258544922,
+        11.499606132507324,
+        135.51858520507813
+      ],
+      "radius": 2.0,
+      "sourceRadius": 0.5,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 240,
+        "a": 255
+      },
+      "castsShadow": false,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.10000000149011612,
+            "centerOffsetWorld": [
+              -0.009418010711669922,
+              -0.005169510841369629,
+              0.023344993591308594
+            ],
+            "brightness": 0.10000000149011612,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 245,
+              "b": 240,
               "a": 255
             }
           }
@@ -11334,6 +11833,30 @@
           "opacity": 0.15000000596046448
         }
       }
+    },
+    {
+      "id": 34,
+      "position": [
+        -52.0,
+        14.399999618530273,
+        132.0
+      ],
+      "target": [
+        -52.0,
+        26.0,
+        132.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 24.0,
+      "intensity": 0.3499999940395355,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0
     }
   ],
   "dynamicPointLights": [
@@ -12433,6 +12956,51 @@
           }
         }
       }
+    },
+    {
+      "id": 31,
+      "instanceId": "light_spot_31",
+      "position": [
+        -69.16149139404297,
+        11.866538047790527,
+        135.7770538330078
+      ],
+      "target": [
+        -59.56743621826172,
+        -16.22134017944336,
+        122.21294403076172
+      ],
+      "range": 10.0,
+      "intensity": 2.5,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.028594970703125,
+              0.08492958545684814,
+              0.031158447265625
+            ],
+            "lengthScale": 0.75,
+            "widthScale": 1.0,
+            "brightness": 0.02500000037252903,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        }
+      }
     }
   ],
   "dynamicRectLights": [
@@ -12633,6 +13201,69 @@
           "maximumSizeWorld": 0.012000000104308128
         }
       }
+    },
+    {
+      "id": 5,
+      "position": [
+        -52.0,
+        24.5,
+        132.0
+      ],
+      "target": [
+        -52.0,
+        8.0,
+        132.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 48.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "instanceId": "light_rect_5",
+      "castsShadow": true,
+      "shadowSoftness": 2.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.005313873291015625,
+              0.1369161605834961,
+              0.0035800933837890625
+            ],
+            "lengthScale": 0.25,
+            "widthScale": 1.0,
+            "brightness": 0.02500000037252903,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.15000000596046448,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.009999999776482582,
+          "opacity": 0.15000000596046448,
+          "scatteringTint": {
+            "r": 255,
+            "g": 250,
+            "b": 241,
+            "a": 255
+          }
+        }
+      }
     }
   ],
   "lightmapSettings": {
@@ -12759,7 +13390,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "7d74fa5a07415800",
+    "sourceHash": "d4708d2e2fa29b05",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -12779,8 +13410,8 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "7d74fa5a07415800",
-      "count": 3917,
+      "sourceHash": "d4708d2e2fa29b05",
+      "count": 3969,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -12793,21 +13424,21 @@
         ],
         "rgbMax": [
           2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          1.9482474327087402,
+          1.8612030744552612
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 23502,
+        "sampleCount": 23814,
         "rgbChannelsAboveOne": 36
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "7d74fa5a07415800",
-      "modelCount": 116,
-      "objectCount": 348,
+      "sourceHash": "d4708d2e2fa29b05",
+      "modelCount": 132,
+      "objectCount": 374,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
@@ -14792,6 +15423,46 @@
         "id": 407,
         "x": -3776,
         "y": -3328
+      },
+      {
+        "id": 408,
+        "x": -864,
+        "y": 1760
+      },
+      {
+        "id": 409,
+        "x": -864,
+        "y": 1792
+      },
+      {
+        "id": 410,
+        "x": -704,
+        "y": 1792
+      },
+      {
+        "id": 411,
+        "x": -704,
+        "y": 1760
+      },
+      {
+        "id": 412,
+        "x": -1152,
+        "y": 1792
+      },
+      {
+        "id": 413,
+        "x": -1152,
+        "y": 2432
+      },
+      {
+        "id": 414,
+        "x": -512,
+        "y": 2432
+      },
+      {
+        "id": 415,
+        "x": -512,
+        "y": 1792
       }
     ],
     "lines": [
@@ -15350,11 +16021,6 @@
         "id": 187,
         "startVertexId": 101,
         "endVertexId": 95
-      },
-      {
-        "id": 188,
-        "startVertexId": 58,
-        "endVertexId": 102
       },
       {
         "id": 191,
@@ -17215,6 +17881,61 @@
         "id": 678,
         "startVertexId": 406,
         "endVertexId": 407
+      },
+      {
+        "id": 680,
+        "startVertexId": 408,
+        "endVertexId": 102
+      },
+      {
+        "id": 681,
+        "startVertexId": 408,
+        "endVertexId": 409
+      },
+      {
+        "id": 682,
+        "startVertexId": 409,
+        "endVertexId": 410
+      },
+      {
+        "id": 683,
+        "startVertexId": 58,
+        "endVertexId": 411
+      },
+      {
+        "id": 684,
+        "startVertexId": 411,
+        "endVertexId": 408
+      },
+      {
+        "id": 685,
+        "startVertexId": 410,
+        "endVertexId": 411
+      },
+      {
+        "id": 686,
+        "startVertexId": 409,
+        "endVertexId": 412
+      },
+      {
+        "id": 687,
+        "startVertexId": 412,
+        "endVertexId": 413
+      },
+      {
+        "id": 688,
+        "startVertexId": 413,
+        "endVertexId": 414
+      },
+      {
+        "id": 689,
+        "startVertexId": 414,
+        "endVertexId": 415
+      },
+      {
+        "id": 690,
+        "startVertexId": 415,
+        "endVertexId": 410
       }
     ],
     "lineSides": [
@@ -21329,47 +22050,6 @@
       },
       {
         "lineId": 187,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -1.6875
-            ]
-          },
-          "materialId": "fortress_stone_mossy_512"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
-        "lineId": 188,
         "side": "front",
         "wall": {
           "uv": {
@@ -35189,6 +35869,256 @@
           "enabled": true,
           "materialId": "baseboard_metal"
         }
+      },
+      {
+        "lineId": 680,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          },
+          "materialId": "fortress_stone_mossy_512"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 681,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 682,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_white_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        }
+      },
+      {
+        "lineId": 683,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          },
+          "materialId": "fortress_stone_mossy_512"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 684,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          },
+          "materialId": "fortress_stone_mossy_512"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          },
+          "materialId": "fortress_stone_mossy_512"
+        }
+      },
+      {
+        "lineId": 685,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
       }
     ],
     "faceAnchors": [
@@ -36994,7 +37924,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.03999999910593033,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -37049,7 +37979,7 @@
         "x": -845,
         "y": 1310,
         "floorZ": 0.5,
-        "ceilingZ": 21.5,
+        "ceilingZ": 20.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -37076,7 +38006,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.03999999910593033,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -37486,7 +38416,7 @@
         "x": -977,
         "y": 1470,
         "floorZ": 0.5,
-        "ceilingZ": 21.5,
+        "ceilingZ": 20.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -38349,7 +39279,7 @@
             ]
           }
         },
-        "floorMaterialId": "asphalt_06",
+        "floorMaterialId": "large_industrial_tiles_512",
         "ceilingMaterialId": "concrete_floor1"
       },
       {
@@ -38880,7 +39810,7 @@
         "x": -2929,
         "y": 446,
         "floorZ": -14.5,
-        "ceilingZ": 6.199999809265137,
+        "ceilingZ": 4.949999809265137,
         "floorUv": {
           "scale": [
             1.0,
@@ -39108,7 +40038,7 @@
         "x": -2449,
         "y": -702,
         "floorZ": -14.5,
-        "ceilingZ": 6.199999809265137,
+        "ceilingZ": 4.949999809265137,
         "floorUv": {
           "scale": [
             1.0,
@@ -39135,7 +40065,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -39334,7 +40264,7 @@
         "x": -2033,
         "y": -702,
         "floorZ": -14.5,
-        "ceilingZ": 6.199999809265137,
+        "ceilingZ": 4.949999809265137,
         "floorUv": {
           "scale": [
             1.0,
@@ -39361,7 +40291,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.014999999664723873,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -39434,7 +40364,7 @@
           "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.029999999329447746,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -39706,7 +40636,7 @@
         "x": -2301,
         "y": -1938,
         "floorZ": -14.5,
-        "ceilingZ": 6.199999809265137,
+        "ceilingZ": 4.949999809265137,
         "floorUv": {
           "scale": [
             1.0,
@@ -41168,7 +42098,7 @@
         "x": -881,
         "y": -4222,
         "floorZ": -9.25,
-        "ceilingZ": 11.75,
+        "ceilingZ": 10.5,
         "floorUv": {
           "scale": [
             1.0,
@@ -41314,7 +42244,7 @@
         "x": -1649,
         "y": -2622,
         "floorZ": -15.75,
-        "ceilingZ": 5.5,
+        "ceilingZ": 4.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -41341,7 +42271,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.02500000037252903,
+        "ambientIntensity": 0.05000000074505806,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -41387,7 +42317,7 @@
         "x": -189,
         "y": -2706,
         "floorZ": -9.5,
-        "ceilingZ": 11.5,
+        "ceilingZ": 10.25,
         "floorUv": {
           "scale": [
             1.0,
@@ -42041,7 +42971,7 @@
         "x": -1277,
         "y": -4754,
         "floorZ": -15.75,
-        "ceilingZ": 5.25,
+        "ceilingZ": 4.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -42333,7 +43263,7 @@
         "x": -3537,
         "y": -3070,
         "floorZ": -15.75,
-        "ceilingZ": 5.0,
+        "ceilingZ": 4.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -42693,6 +43623,153 @@
         "floorMaterialId": "worn_gray_metal_step_512",
         "ceilingMaterialId": "worn_steel_512",
         "crawlspace": true
+      },
+      {
+        "id": 103,
+        "name": "Sector 102",
+        "x": -845,
+        "y": 1774,
+        "floorZ": 0.5,
+        "ceilingZ": 20.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "seamless_worn_concrete"
+      },
+      {
+        "id": 104,
+        "name": "Sector 103",
+        "x": -897,
+        "y": 2050,
+        "floorZ": 0.0,
+        "ceilingZ": 26.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.05000000074505806,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "large_industrial_tiles_512",
+        "ceilingMaterialId": "seamless_worn_concrete"
       }
     ],
     "fogVolumes": [
@@ -43081,6 +44158,17 @@
           0.48750001192092896,
           8.0
         ]
+      },
+      {
+        "id": 22,
+        "x": -832,
+        "z": 2112,
+        "yWorld": 1.625,
+        "halfExtentsWorld": [
+          2.5,
+          1.625,
+          2.5
+        ]
       }
     ],
     "levelMarkers": [
@@ -43187,6 +44275,22 @@
         "y": -27.0,
         "z": 1552,
         "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 25,
+        "id": "intro_marker_6",
+        "x": -1072,
+        "y": 0.0,
+        "z": 1536,
+        "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 26,
+        "id": "intro_marker_7",
+        "x": -2128,
+        "y": -24.0,
+        "z": 1536,
+        "orientationDegrees": -88.0
       }
     ],
     "nextPathId": 2,

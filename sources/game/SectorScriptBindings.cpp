@@ -8,6 +8,7 @@
 #include "game/cutscene/SectorCutsceneRuntime.h"
 #include "game/dialogue/SectorDialogue.h"
 #include "game/keypad/SectorKeypad.h"
+#include "game/note/SectorNote.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcPatrolSystem.h"
@@ -848,6 +849,233 @@ int StartPlayerMove(lua_State* state, bool async)
 int LuaMovePlayer(lua_State* state) { return StartPlayerMove(state, false); }
 int LuaStartMovePlayer(lua_State* state) { return StartPlayerMove(state, true); }
 
+bool ResolveTeleportMarker(lua_State* state, int argument,
+        const SectorScriptHost& host, Vector3& position, float& yaw, std::string& error)
+{
+    if (lua_type(state, argument) != LUA_TSTRING) {
+        error = "level marker ID must be a string";
+        return false;
+    }
+    size_t length = 0;
+    const char* rawId = lua_tolstring(state, argument, &length);
+    const std::string id{rawId, length};
+    if (id.empty() || host.map == nullptr) {
+        error = id.empty() ? "level marker ID must not be empty"
+                           : "level marker runtime is unavailable";
+        return false;
+    }
+    const auto* marker = FindSectorCompiledLevelMarker(*host.map, id);
+    if (marker == nullptr) {
+        error = "level marker not found: " + id;
+        return false;
+    }
+    position = SectorAuthoringToWorldPosition(marker->position);
+    yaw = marker->yawRadians;
+    if (!std::isfinite(position.x) || !std::isfinite(position.y)
+            || !std::isfinite(position.z) || !std::isfinite(yaw)) {
+        error = "level marker position and orientation must be finite";
+        return false;
+    }
+    return true;
+}
+
+bool TeleportCylindersOverlap(Vector3 a, float radius, float height,
+        Vector3 b, float otherRadius, float otherHeight)
+{
+    constexpr float epsilon = 0.001f;
+    if (a.y + height <= b.y + epsilon || a.y >= b.y + otherHeight - epsilon)
+        return false;
+    const float dx = a.x - b.x;
+    const float dz = a.z - b.z;
+    const float distance = radius + otherRadius;
+    return dx * dx + dz * dz < distance * distance;
+}
+
+bool ValidateTeleportDestination(engine::World& world, const SectorScriptHost& host,
+        engine::Entity actor, Vector3 position, float radius, float height,
+        int& sectorId, std::string& error)
+{
+    const auto& objects = *host.runtimeObjects;
+    if (!objects.objectSectorLookupWorldValid) {
+        error = "teleport collision runtime is unavailable";
+        return false;
+    }
+    bool clear = objects.objectSectorLookupWorld.AllowsActorPlacement(
+            position, radius, height, &sectorId);
+    for (const auto& collider : objects.physicalModelColliders) {
+        if (!engine::IsNull(actor) && collider.entity == actor) continue;
+        if (SectorStaticModelColliderOverlapsActor(position, radius, height, collider))
+            clear = false;
+    }
+    if (engine::IsNull(actor)) {
+        for (const auto& collider : objects.ductAccessGateColliders) {
+            if (SectorStaticModelColliderOverlapsActor(position, radius, height, collider))
+                clear = false;
+        }
+    }
+    for (const auto& door : objects.dynamicDoorColliders) {
+        SectorStaticModelCollider collider;
+        collider.placedObjectId = door.placedObjectId;
+        collider.center = door.center;
+        collider.axisX = door.tangent;
+        collider.axisZ = door.normal;
+        collider.halfExtents = door.halfExtents;
+        collider.bottom = door.bottom;
+        collider.top = door.top;
+        collider.resolved = true;
+        if (SectorStaticModelColliderOverlapsActor(position, radius, height, collider))
+            clear = false;
+    }
+    // Read live transforms: multiple teleports may run before the next cache update.
+    world.ForEach<NpcRuntimeInstance, SectorObjectTransform>(
+            [&](engine::Entity entity, NpcRuntimeInstance&, SectorObjectTransform& transform) {
+                if (entity == actor) return;
+                if (host.navigation == nullptr) {
+                    clear = false; // Actor dimensions are unavailable; do not skip clearance.
+                    return;
+                }
+                const auto& settings = host.navigation->Settings();
+                if (TeleportCylindersOverlap(position, radius, height, transform.position,
+                        settings.agentRadius, settings.agentHeight)) clear = false;
+            });
+    if (!engine::IsNull(actor) && host.playerState != nullptr && host.playerConfig != nullptr) {
+        const auto config = EffectiveSectorFpsControllerConfig(*host.playerState, *host.playerConfig);
+        if (TeleportCylindersOverlap(position, radius, height, host.playerState->feetPosition,
+                config.playerRadius, config.playerHeight)) clear = false;
+    }
+    if (!clear) error = "teleport destination is outside the level or blocked";
+    return clear;
+}
+
+int LuaTeleportNpc(lua_State* state)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    auto fail = [&](const std::string& error) { return PushNpcMoveStartError(state, false, error); };
+    if (host.scripts->phase != engine::ScriptRuntimePhase::Loading
+            && host.scripts->phase != engine::ScriptRuntimePhase::Active)
+        return fail("script runtime is shutting down");
+    if (lua_type(state, 1) != LUA_TSTRING) return fail("NPC instance ID must be a string");
+    size_t length = 0;
+    const char* rawId = lua_tolstring(state, 1, &length);
+    const std::string id{rawId, length};
+    if (!IsValidNpcInstanceId(id)) return fail("invalid NPC instance ID");
+    if (host.navigation == nullptr || host.npcNavigation == nullptr)
+        return fail("NPC navigation runtime is unavailable");
+    const auto entity = FindNpcEntity(context.world, id);
+    auto& world = context.world;
+    if (engine::IsNull(entity) || !world.Has<SectorObjectTransform>(entity)
+            || !world.Has<SectorObject>(entity)
+            || !GetNpcMoveStatusForEntity(*host.npcNavigation, entity).found)
+        return fail("NPC instance was not found");
+    const auto& npc = world.Get<NpcRuntimeInstance>(entity);
+    if ((world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))
+            || (world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead))
+        return fail("NPC is dead");
+    if (npc.conversationHeld) return fail("NPC is held by a conversation");
+    if (npc.actionLockedByAi
+            || (world.Has<NpcAiState>(entity)
+                    && world.Get<NpcAiState>(entity).awareness != NpcAwarenessState::Unaware))
+        return fail("player detected; AI took control");
+    const auto movement = GetNpcMoveStatusForEntity(*host.npcNavigation, entity);
+    if (movement.phase == NpcMovePhase::FollowingPath
+            && movement.authority != NpcMoveAuthority::Script
+            && movement.authority != NpcMoveAuthority::Patrol)
+        return fail("NPC movement is controlled by AI or another system");
+    Vector3 position{};
+    float yaw = 0.0f;
+    int sectorId = 0;
+    std::string error;
+    const auto& settings = host.navigation->Settings();
+    if (!ResolveTeleportMarker(state, 2, host, position, yaw, error)
+            || !ValidateTeleportDestination(world, host, entity, position,
+                    settings.agentRadius, settings.agentHeight, sectorId, error)) return fail(error);
+
+    // No fallible work remains. Cancellation callbacks cannot resume Lua here.
+    for (auto& move : host.npcMoves) {
+        if (move.active && move.instanceId == id) {
+            engine::ScriptSystemCancelOperation(context, *host.scripts, move.operation,
+                    "NPC movement interrupted by teleport");
+            move.active = false;
+        }
+    }
+    for (auto& look : host.npcLooks) {
+        if (look.active && look.entity == entity) {
+            engine::ScriptSystemCancelOperation(context, *host.scripts, look.operation,
+                    "NPC look interrupted by teleport");
+            look.active = false;
+        }
+    }
+    // A replaced script move already captured the patrol's resume phase.
+    if (!world.Has<NpcPatrolState>(entity)
+            || !world.Get<NpcPatrolState>(entity).scriptOverrideActive)
+        NotifyNpcPatrolScriptMoveStarted(world, *host.npcNavigation, id);
+    TeleportNpcToValidatedPosition(world, *host.navigation, *host.npcNavigation,
+            entity, position, yaw, sectorId);
+    RefreshSectorMovedPropLighting(world, *host.runtimeObjects, *host.map, entity);
+    lua_pushboolean(state, true);
+    return 1;
+}
+
+int LuaTeleportPlayer(lua_State* state)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    auto fail = [&](const std::string& error) { return PushNpcMoveStartError(state, false, error); };
+    if (host.scripts->phase != engine::ScriptRuntimePhase::Loading
+            && host.scripts->phase != engine::ScriptRuntimePhase::Active)
+        return fail("script runtime is shutting down");
+    if (host.playerState == nullptr || host.playerConfig == nullptr || host.cutscene == nullptr)
+        return fail("player controller runtime is unavailable");
+    if (host.playerHealth != nullptr && IsDepleted(*host.playerHealth)) return fail("player is dead");
+    if (host.conversation.active && host.conversation.reposition)
+        return fail("player is held by a conversation");
+    Vector3 position{};
+    float yaw = 0.0f;
+    int sectorId = 0;
+    std::string error;
+    auto& player = *host.playerState;
+    const auto config = EffectiveSectorFpsControllerConfig(player, *host.playerConfig);
+    if (!ResolveTeleportMarker(state, 1, host, position, yaw, error)
+            || !ValidateTeleportDestination(context.world, host, engine::NullEntity(), position,
+                    config.playerRadius, config.playerHeight, sectorId, error)) return fail(error);
+    // Capture support without running physics, snapping, or changing marker height.
+    SectorCollisionHeights heights;
+    const bool hasSupport = host.runtimeObjects->objectSectorLookupWorld.ResolveActorVerticalContext(
+            sectorId, {{position.x, position.z}, position.y, config.playerRadius,
+                    config.playerHeight, config.stepHeight, false}, &heights);
+    SectorFpsControllerState candidate = player;
+    candidate.feetPosition = position;
+    candidate.currentSectorId = sectorId;
+    candidate.grounded = false;
+    const auto support = BuildSectorStaticModelVerticalContext(
+            {hasSupport, heights.floorZ, heights.ceilingZ, heights.continuousFloor},
+            candidate, config, host.runtimeObjects->physicalModelColliders);
+    auto& cutscene = *host.cutscene;
+    if (cutscene.playerMove.active) {
+        engine::ScriptSystemCancelOperation(context, *host.scripts, cutscene.playerMove.operation,
+                "player movement interrupted by teleport");
+        CancelSectorCutscenePlayerMove(cutscene, host.navigation, cutscene.playerMove.token);
+    }
+    if (cutscene.look.active) {
+        engine::ScriptSystemCancelOperation(context, *host.scripts, cutscene.look.operation,
+                "player look interrupted by teleport");
+        CancelSectorCutsceneLook(cutscene, cutscene.look.token);
+    }
+    player.feetPosition = position;
+    // Markers face (sin(yaw), cos(yaw)); the FPS camera uses (cos(yaw), sin(yaw)).
+    player.yawRadians = 1.5707963267948966f - yaw;
+    player.pitchRadians = 0.0f;
+    player.currentSectorId = sectorId;
+    player.verticalVelocity = 0.0f;
+    player.grounded = support.hasSector && std::fabs(position.y - support.floorZ) <= 0.001f;
+    ResetSectorFpsMouseLook(player);
+    if (host.controls.playerTeleported != nullptr)
+        host.controls.playerTeleported(host.controls.userData, context);
+    lua_pushboolean(state, true);
+    return 1;
+}
+
 void CancelScriptNpcLook(engine::EngineContext&, void* hostContext, uint64_t token)
 {
     auto* host = static_cast<SectorScriptHost*>(hostContext);
@@ -1101,6 +1329,7 @@ int LuaDialogueOperation(lua_State* state)
     }
     if (host.conversation.active && !(host.conversation.owner == owner))
         return PushCutsceneStartError(state, false, "conversation belongs to another task");
+    if (host.note && host.note->active) return PushCutsceneStartError(state, false, "a note is already active");
     if (host.keypad && host.keypad->active) return PushCutsceneStartError(state, false, "a keypad is already active");
     if (!host.dialogue) return PushCutsceneStartError(state, false, "dialogue runtime is unavailable");
     if (host.cutscene && host.cutscene->caption.active)
@@ -1171,6 +1400,8 @@ int StartCaption(
     }
     if (host.conversation.active && !(host.conversation.owner == ownerTask))
         return PushCutsceneStartError(state, async, "conversation belongs to another task");
+    if (host.note && host.note->active)
+        return PushCutsceneStartError(state, async, "a note is already active");
     if (host.keypad && host.keypad->active)
         return PushCutsceneStartError(state, async, "a keypad is already active");
     if (host.dialogue && host.dialogue->active)
@@ -1440,7 +1671,7 @@ int LuaStartConversation(lua_State* state)
     if (!engine::IsValid(owner) || !host.cutscene || !host.playerState || !host.playerConfig
             || !host.controls.setControlsEnabled)
         return PushCutsceneStartError(state, false, "conversation requires a managed task and player runtime");
-    if ((host.keypad && host.keypad->active) || host.conversation.active || (host.dialogue && host.dialogue->active)
+    if ((host.note && host.note->active) || (host.keypad && host.keypad->active) || host.conversation.active || (host.dialogue && host.dialogue->active)
             || host.cutscene->caption.active || host.cutscene->playerMove.active || host.cutscene->look.active)
         return PushCutsceneStartError(state, false, "conversation or scripted presentation is already active");
     if (!host.cutscene->controlsEnabled && engine::IsValid(host.cutscene->controlsOwnerTask)
@@ -2617,6 +2848,7 @@ void InitializeSectorScriptHost(
     host.cutscene = cutscene;
     host.dialogue = nullptr;
     host.keypad = nullptr;
+    host.note = nullptr;
     host.inventoryInteractionActive = false;
     host.dialogueVoices = nullptr;
     host.playerState = playerState;
@@ -2659,6 +2891,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.cutscene = nullptr;
     host.dialogue = nullptr;
     host.keypad = nullptr;
+    host.note = nullptr;
     host.inventoryInteractionActive = false;
     host.dialogueVoices = nullptr;
     host.playerState = nullptr;
@@ -2681,6 +2914,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
 void RegisterSectorScriptBindings(lua_State* state)
 {
     RegisterSectorKeypadBindings(state);
+    RegisterSectorNoteBindings(state);
     // Capture the native operation function as a Lua upvalue; only the public
     // choice-ID contract is installed as a global.
     constexpr const char* dialogueWrapper = R"lua(
@@ -2726,6 +2960,7 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "startNpcLookAtMarker", LuaStartNpcLookAtMarker);
     Register(state, "moveNpc", LuaMoveNpc);
     Register(state, "startMoveNpc", LuaStartMoveNpc);
+    Register(state, "teleportNpc", LuaTeleportNpc);
     Register(state, "enableControls", LuaEnableControls);
     Register(state, "startConversation", LuaStartConversation);
     Register(state, "endConversation", LuaEndConversation);
@@ -2733,6 +2968,7 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "endCutscene", LuaEndCutscene);
     Register(state, "movePlayer", LuaMovePlayer);
     Register(state, "startMovePlayer", LuaStartMovePlayer);
+    Register(state, "teleportPlayer", LuaTeleportPlayer);
     Register(state, "lookAtNpc", LuaLookAtNpc);
     Register(state, "startLookAtNpc", LuaStartLookAtNpc);
     Register(state, "lookAtProp", LuaLookAtProp);

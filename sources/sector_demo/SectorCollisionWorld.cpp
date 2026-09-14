@@ -1923,6 +1923,39 @@ bool SectorCollisionWorld::AllowsPrismPlacement(
     return true;
 }
 
+bool SectorCollisionWorld::AllowsActorPlacement(
+        Vector3 feetPosition, float radius, float height, int* resolvedSectorId) const
+{
+    const Vector2 center{feetPosition.x, feetPosition.z};
+    const float bottom = feetPosition.y;
+    const float top = bottom + height;
+    if (!AllowsPrismPlacement(center, radius, bottom, top, 0, resolvedSectorId))
+        return false;
+    // Surface intersections alone miss an actor wholly enclosed by a solid.
+    // Use the same solid volumes as ordinary actor collision.
+    for (const auto& primitive : structuralPrimitives) {
+        if (primitive.conservativeTilted) {
+            if (bottom < primitive.maximumY - CollisionPointEpsilon
+                    && top > primitive.minimumY + CollisionPointEpsilon
+                    && CircleOverlapsConvexPolygon(center, radius, primitive.projectedHull))
+                return false;
+            continue;
+        }
+        const auto shape = BuildStructuralCollisionShape(primitive);
+        if (shape.kind == SectorStructuralPrimitiveKind::Sphere) {
+            const float sliceRadius = SphereHorizontalRadiusForVerticalInterval(shape, bottom, top);
+            const float combined = radius + sliceRadius - CollisionPointEpsilon;
+            if (sliceRadius > CollisionPointEpsilon
+                    && DistanceSquared(center, shape.center) < combined * combined) return false;
+        } else if (bottom < StructuralSupportHeight(center, shape) - CollisionPointEpsilon
+                && top > shape.bottom + CollisionPointEpsilon
+                && CirclePenetratesStructuralFootprint(center, radius, shape)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool SectorCollisionWorld::SectorContainsPoint(
         const SectorCollisionSector& sector,
         Vector2 xz) const
