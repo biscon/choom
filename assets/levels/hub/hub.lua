@@ -31,13 +31,15 @@ local function elinConversation()
             setFlag("elin_asked_identity", true)
         end,
         place = function()
-            say("Do you know what this place is?")
-            startPlayNpcAnimation("elin", "Talking")
-            say("elin", "No. I found this office looking room and decided to stop, catch a breath and reevaluate my options.")
-            startPlayNpcAnimation("elin", "Talking_2")
-            say("elin", "Sure beats walking the dark tunnels, seems like somebody have been living here there is even a bed and all.")
-
+            if not flag("elin_shown_place_questions") then
+                say("Do you know what this place is?")
+                startPlayNpcAnimation("elin", "Talking")
+                say("elin", "No. I found this office looking room and decided to stop, catch a breath and reevaluate my options.")
+                startPlayNpcAnimation("elin", "Talking_2")
+                say("elin", "Sure beats walking the dark tunnels, seems like somebody have been living here there is even a bed and all.")
+            end
             elinPlaceQuestions()
+            setFlag("elin_shown_place_questions", true)
             setFlag("elin_asked_place", flag("elin_asked_arrival"))
         end,
         people = function()
@@ -55,6 +57,7 @@ local function elinConversation()
             say("elin", "No I haven't found anything, have you looked around the office?.")
             assert(await(anim))
             setFlag("elin_asked_storage_door", true)
+            return "exit"
         end,
         goodbye = function()
             if returning then
@@ -89,6 +92,7 @@ function useElin(instanceId)
         log("Could not start Elin conversation: " .. (reason or "unknown reason"))
         return
     end
+    setNpcAnimation("elin", "Idle")
     elinConversation()
     assert(endConversation())
 end
@@ -133,6 +137,7 @@ end
 
 function init()
     log("hub script initialized")
+    stopSoundEmitter("storage_radio_emitter")
     refreshEntranceAccess()
     setPropAnimationProgress("ceiling_switch_01", 0.0, "switch|switchAction")
     setPropAnimationProgress("ceiling_vent_01", 0.0, "Ventilator")
@@ -163,7 +168,7 @@ function intro_trigger_1()
     })
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "I've been walking these dark tunnels forever. You're are the first person I met so far. Follow me.")
+    say("elin", "I've been walking these dark tunnels forever. You're are the first person I met so far. Lets talk in here.")
     local elinArrival = assert(startMoveNpc("elin", "intro_marker_3", "walk", 1.5, true))
     delay(1500)
     movePlayer("intro_marker_4", "walk", 1.25, {
@@ -211,11 +216,52 @@ function entrance_trigger()
     else
         say("I have neither.")
     end
+    startPlayNpcAnimation("elin", "Talking_2")
     say("elin", "You should be careful. I don't like the noises coming from in there.")
+    startPlayNpcAnimation("elin", "No")
     say("elin", "I'll hang out in the office.")
+    setFlag("elin_in_storage_room", false)
     startMoveNpc("elin", "intro_marker_3", "walk", nil, true)
     startLookAtNpc("elin", 2000, 0.55)
     delay(2000)
+    assert(endCutscene())
+end
+
+function storage_trigger()
+    assert(startCutscene())
+    local movement = assert(startMovePlayer("intro_marker_8", "walk", 0.5, {
+        lookAtProp = "tool_board",
+    }))
+    local elinArrival = assert(startMoveNpc("elin", "intro_marker_9", "run", nil, true))
+    assert(await(elinArrival))
+    local lookWait = startLookAtNpc("elin", 1000, 0.7)
+    local elinSay = startSay("elin", "This looks cozy.")
+    setFlag("elin_in_storage_room", true)
+    assert(await(lookWait))
+    assert(await(elinSay))
+    elinArrival = assert(startMoveNpc("elin", "intro_marker_10", "walk", nil, true))
+    lookAtNpc("elin", 3000, 0.7)
+    assert(await(elinArrival))
+    startPlayNpcAnimation("elin", "Reaching Out")
+    lookAtNpc("elin", 250, 0.7)
+    say("elin", "Hmm he seemed to like the buff ones..")
+    startPlayNpcAnimation("elin", "Talking_2")
+    say("elin", "This reminds me of my uncle, minus all the beer cans and the smell of old tobacco smoke.")
+    startNpcLookAtPlayer("elin", 1000)
+    say("Too bad, I could use a beer right about now, even a warm one.")
+    startSay("elin", "Me too.")
+
+    elinArrival = assert(startMoveNpc("elin", "intro_marker_11", "walk", nil, true))
+    lookAtNpc("elin", 3000, 0.7)
+    assert(await(elinArrival))
+    startPlayNpcAnimation("elin", "Reaching Out")
+    lookAtNpc("elin", 250, 0.7)
+    say("elin", "Seems like we have us a equal oppertunity amorist.")
+    startNpcLookAtPlayer("elin", 2000)
+    say("It would seem so. Two sixpacks so far and none of them of the drinkable varierity.")
+    startPlayNpcAnimation("elin", "Talking")
+    say("elin", "Aww.")
+
     assert(endCutscene())
 end
 
@@ -336,4 +382,29 @@ end
 
 function usePasswordNote()
     showNote("Login:", "user: user\npassword: im2good")
+end
+
+local storageRadioOn = false
+
+function useStorageRadio()
+    enableControls(false)
+    playMapSound("light_switch_on_01", 0.8)
+    if storageRadioOn then
+        storageRadioOn = false
+        stopSoundEmitter("storage_radio_emitter")
+        if flag("elin_in_storage_room") then
+            setNpcAnimation("elin", "Idle")
+            startPlayNpcAnimation("elin", "Rejected")
+            lookAtNpc("elin", 750, 0.7)
+        end
+    else
+        storageRadioOn = true
+        playSoundEmitter("storage_radio_emitter")
+        if flag("elin_in_storage_room") then
+            setNpcAnimation("elin", "Dancing", 1.175)
+            delay(500)
+            lookAtNpc("elin", 750, 0.7)
+        end
+    end
+    enableControls(true)
 end

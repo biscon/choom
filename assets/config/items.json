@@ -90,6 +90,15 @@
       "weightKg": 1.0,
       "maxStackSize": 1,
       "weaponId": "pistol"
+    },
+    {
+      "id": "screw_driver",
+      "title": "Screwdriver",
+      "description": "Use it to screw things ;)",
+      "modelPath": "assets/models/storage/Hand_Tool_Screwdriver.gltf",
+      "type": "object",
+      "weightKg": 0.30000001192092896,
+      "maxStackSize": 1
     }
   ]
 }

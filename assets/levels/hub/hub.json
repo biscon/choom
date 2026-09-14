@@ -6916,7 +6916,7 @@
       "id": 439,
       "kind": "static_model",
       "staticModel": {
-        "instanceId": "prop_439",
+        "instanceId": "tool_board",
         "modelPath": "assets/models/storage/Toolboard_900x600.gltf",
         "heightOffsetWorld": 1.1999999284744263
       },
@@ -6936,11 +6936,11 @@
         "heightOffsetWorld": 0.8900002241134644
       },
       "position": [
-        -70.20002746582031,
+        -70.16000366210938,
         0.0,
-        127.07994079589844
+        131.44000244140625
       ],
-      "yawDegrees": 79.99998474121094
+      "yawDegrees": 90.99999237060547
     },
     {
       "id": 441,
@@ -7541,6 +7541,75 @@
         151.9199981689453
       ],
       "yawDegrees": 180.0
+    },
+    {
+      "id": 478,
+      "kind": "item",
+      "item": {
+        "definitionId": "screw_driver",
+        "instanceId": "screw_driver",
+        "takeDistance": 2.0,
+        "rotationZDegrees": -90.0,
+        "heightOffsetWorld": 1.5499999523162842,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -71.44000244140625,
+        0.0,
+        129.36000061035156
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 479,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_479",
+        "modelPath": "assets/models/dynamic/old_fan.glb",
+        "heightOffsetWorld": 0.8899999856948853,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -70.55999755859375,
+        0.0,
+        125.04000091552734
+      ],
+      "yawDegrees": 55.0
+    },
+    {
+      "id": 480,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_480",
+        "modelPath": "assets/models/room_clutter/Magazine_Automotive.gltf",
+        "heightOffsetWorld": 0.8999999761581421
+      },
+      "position": [
+        -68.31999969482422,
+        0.0,
+        127.27999877929688
+      ],
+      "yawDegrees": 100.0
+    },
+    {
+      "id": 481,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_481",
+        "useTitle": "Radio",
+        "useDistance": 2.0,
+        "onUseScript": "useStorageRadio",
+        "modelPath": "assets/models/radio_game_ready_free.glb",
+        "heightOffsetWorld": 1.1299999952316284,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -35.84000015258789,
+        0.0,
+        129.75999450683594
+      ],
+      "yawDegrees": -90.0
     }
   ],
   "staticLights": [
@@ -13548,7 +13617,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -13644,6 +13714,14 @@
         "path": "music/old-radio-music.mp3",
         "type": "music"
       },
+      "radio_latin_1": {
+        "path": "music/radio_latin_1.mp3",
+        "type": "music"
+      },
+      "radio_latin_2": {
+        "path": "music/radio_latin_2.mp3",
+        "type": "music"
+      },
       "roomtone_02": {
         "path": "ambience/room-tone-1.mp3",
         "type": "music"
@@ -13664,7 +13742,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "44c6766c68a2ab38",
+    "sourceHash": "2b76e8116ec74636",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -13672,19 +13750,19 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.6025390625,
-        1.6025390625
+        2.2421875,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 874
+      "sampleCount": 12582912,
+      "rgbChannelsAboveOne": 1445
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "44c6766c68a2ab38",
+      "sourceHash": "2b76e8116ec74636",
       "count": 3969,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -13697,27 +13775,32 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9489465951919556,
-          1.8618656396865845
+          2.19494366645813,
+          1.9482474327087402,
+          1.8612030744552612
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23814,
-        "rgbChannelsAboveOne": 37
+        "rgbChannelsAboveOne": 36
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "44c6766c68a2ab38",
-      "modelCount": 142,
-      "objectCount": 392,
+      "sourceHash": "2b76e8116ec74636",
+      "modelCount": 143,
+      "objectCount": 393,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
       {
         "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/hub/hub.lightmap.2.bin",
         "width": 2048,
         "height": 2048
       }
@@ -28894,7 +28977,28 @@
               -1.125
             ]
           },
-          "materialId": "worn_white_wall"
+          "materialId": "worn_white_wall",
+          "decal": {
+            "materialId": "tile_decal_floor_chipped_fractures",
+            "uv": {
+              "scale": [
+                1.5,
+                1.5
+              ],
+              "offset": [
+                -0.20000000298023224,
+                -2.0999999046325684
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -28982,7 +29086,28 @@
               -1.125
             ]
           },
-          "materialId": "worn_white_wall"
+          "materialId": "worn_white_wall",
+          "decal": {
+            "materialId": "tile_decal_wall_crazed_glaze",
+            "uv": {
+              "scale": [
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "offset": [
+                -0.8999999761581421,
+                0.0
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -29160,7 +29285,28 @@
               -1.125
             ]
           },
-          "materialId": "worn_white_wall"
+          "materialId": "worn_white_wall",
+          "decal": {
+            "materialId": "tile_decal_floor_chipped_fractures",
+            "uv": {
+              "scale": [
+                2.0,
+                2.0
+              ],
+              "offset": [
+                -1.7999999523162842,
+                -1.7000000476837158
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -34906,7 +35052,28 @@
               -1.125
             ]
           },
-          "materialId": "worn_white_wall"
+          "materialId": "worn_white_wall",
+          "decal": {
+            "materialId": "tile_decal_wall_crazed_glaze",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                0.0,
+                0.0
+              ]
+            },
+            "opacity": 0.8999999761581421,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -35607,7 +35774,28 @@
               -1.125
             ]
           },
-          "materialId": "white_wall_tiles"
+          "materialId": "white_wall_tiles",
+          "decal": {
+            "materialId": "tile_decal_wall_crazed_glaze",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                0.0,
+                0.0
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -35652,7 +35840,28 @@
               -1.125
             ]
           },
-          "materialId": "white_wall_tiles"
+          "materialId": "white_wall_tiles",
+          "decal": {
+            "materialId": "tile_decal_wall_mineral_streaks",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.20000000298023224,
+                0.0
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -35834,7 +36043,28 @@
               -1.125
             ]
           },
-          "materialId": "white_wall_tiles"
+          "materialId": "white_wall_tiles",
+          "decal": {
+            "materialId": "tile_decal_wall_crazed_glaze",
+            "uv": {
+              "scale": [
+                0.6000000238418579,
+                0.800000011920929
+              ],
+              "offset": [
+                0.0,
+                -0.10000000149011612
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -35879,7 +36109,28 @@
               -1.125
             ]
           },
-          "materialId": "white_wall_tiles"
+          "materialId": "white_wall_tiles",
+          "decal": {
+            "materialId": "tile_decal_wall_crazed_glaze",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                0.20000000298023224,
+                -0.30000001192092896
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -36108,7 +36359,28 @@
               -1.125
             ]
           },
-          "materialId": "white_wall_tiles"
+          "materialId": "white_wall_tiles",
+          "decal": {
+            "materialId": "tile_decal_wall_mineral_streaks",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                0.0,
+                0.0
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -36390,6 +36662,51 @@
         }
       },
       {
+        "lineId": 686,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
         "lineId": 687,
         "side": "back",
         "wall": {
@@ -36428,6 +36745,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -36490,6 +36811,10 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       },
       {
@@ -36552,6 +36877,55 @@
               0.0
             ]
           }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 690,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       }
     ],
@@ -41577,7 +41951,28 @@
           }
         },
         "floorMaterialId": "interior_tiles",
-        "ceilingMaterialId": "white_stucco"
+        "ceilingMaterialId": "white_stucco",
+        "floorDecal": {
+          "materialId": "tile_decal_floor_chipped_fractures",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -5.0,
+              -5.0
+            ]
+          },
+          "opacity": 1.0,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "bloomIntensity": 1.0
+        }
       },
       {
         "id": 68,
@@ -43835,7 +44230,28 @@
           }
         },
         "floorMaterialId": "floor_tiles",
-        "ceilingMaterialId": "worn_white_ceiling_512"
+        "ceilingMaterialId": "worn_white_ceiling_512",
+        "floorDecal": {
+          "materialId": "tile_decal_floor_scuff_wear",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -2.0,
+              0.20000000298023224
+            ]
+          },
+          "opacity": 0.8500000238418579,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "bloomIntensity": 1.0
+        }
       },
       {
         "id": 100,
@@ -44204,6 +44620,10 @@
         },
         "floorMaterialId": "large_industrial_tiles_512",
         "ceilingMaterialId": "seamless_worn_concrete",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "roomtone_02"
+        },
         "ceilingDecal": {
           "materialId": "concrete_decal_old_repair",
           "uv": {
@@ -44746,6 +45166,38 @@
         "y": -24.0,
         "z": 1536,
         "orientationDegrees": -88.0
+      },
+      {
+        "editorId": 27,
+        "id": "intro_marker_8",
+        "x": -944,
+        "y": 0.0,
+        "z": 2096,
+        "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 28,
+        "id": "intro_marker_9",
+        "x": -784,
+        "y": 0.0,
+        "z": 1824,
+        "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 29,
+        "id": "intro_marker_10",
+        "x": -1008,
+        "y": 0.0,
+        "z": 2272,
+        "orientationDegrees": -90.0
+      },
+      {
+        "editorId": 30,
+        "id": "intro_marker_11",
+        "x": -688,
+        "y": 0.0,
+        "z": 2288,
+        "orientationDegrees": 0.0
       }
     ],
     "nextPathId": 2,
@@ -44823,6 +45275,16 @@
         "soundId": "old_radio_music",
         "volume": 0.75,
         "loop": true
+      },
+      {
+        "editorId": 2,
+        "id": "storage_radio_emitter",
+        "x": -576,
+        "y": 14.0,
+        "z": 2064,
+        "soundId": "radio_latin_1",
+        "volume": 0.5,
+        "loop": true
       }
     ],
     "triggers": [
@@ -44873,6 +45335,30 @@
           }
         ],
         "script": "entrance_trigger"
+      },
+      {
+        "editorId": 3,
+        "id": "storage_trigger",
+        "shape": "rectangle",
+        "points": [
+          {
+            "x": -880,
+            "z": 1808
+          },
+          {
+            "x": -688,
+            "z": 1808
+          },
+          {
+            "x": -688,
+            "z": 1792
+          },
+          {
+            "x": -880,
+            "z": 1792
+          }
+        ],
+        "script": "storage_trigger"
       }
     ],
     "structuralPrimitives": [
