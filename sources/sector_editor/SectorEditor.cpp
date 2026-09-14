@@ -5251,6 +5251,8 @@ void SectorEditor::DrawPreviewOverlay(
 {
     const SectorEditorConstDerivationDocumentAccess derivation =
             MakeLiveConstDerivationAccess(documentState.derivation);
+    SectorEditorRuntimeObjectEditingService runtimeObjectEditing =
+            BuildRuntimeObjectEditingService();
     SectorEditorPreviewOverlayContext overlayContext{
             ui,
             config,
@@ -5282,8 +5284,10 @@ void SectorEditor::DrawPreviewOverlay(
             materialEditingUiState,
             lightEditingState,
             statusText,
-            sceneRuntime.Renderer()};
+            sceneRuntime.Renderer(),
+            runtimeObjectEditing};
     const SectorEditorPreviewOverlayResult result = DrawSectorEditorPreviewOverlay(overlayContext);
+    FinishPreviewObjectAdjustmentResult(result.objectAdjustment);
 
     if (result.requestCancelLightPilot) {
         CancelLightPilotWithPreviewRestore("Light pilot cancelled");
@@ -7568,12 +7572,16 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     CloseSectorEditorTexturePicker(state.texturePicker);
     auto materialBrowsing = std::move(state.texturePicker.browsing);
     auto modelBrowsing = std::move(runtimeObjectEditingState.staticModelPicker.browsing);
+    const auto adjustmentPreset = runtimeObjectEditingState.previewAdjustment.preset;
+    const bool adjustmentGridSnap = runtimeObjectEditingState.previewAdjustment.gridSnap;
     state = SectorEditorState{};
     state.texturePicker.browsing = std::move(materialBrowsing);
     manipulationState = ManipulationState{};
     uiState = SectorEditorUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingState.staticModelPicker.browsing = std::move(modelBrowsing);
+    runtimeObjectEditingState.previewAdjustment.preset = adjustmentPreset;
+    runtimeObjectEditingState.previewAdjustment.gridSnap = adjustmentGridSnap;
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     textureCatalogState = TextureCatalogState{};
@@ -7740,8 +7748,12 @@ bool SectorEditor::LoadLevel(
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
     auto modelBrowsing = std::move(runtimeObjectEditingState.staticModelPicker.browsing);
+    const auto adjustmentPreset = runtimeObjectEditingState.previewAdjustment.preset;
+    const bool adjustmentGridSnap = runtimeObjectEditingState.previewAdjustment.gridSnap;
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingState.staticModelPicker.browsing = std::move(modelBrowsing);
+    runtimeObjectEditingState.previewAdjustment.preset = adjustmentPreset;
+    runtimeObjectEditingState.previewAdjustment.gridSnap = adjustmentGridSnap;
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     surfaceHeightAdjustmentState = PreviewSurfaceHeightAdjustmentState{};
     lightEditingState = LightEditingState{};

@@ -1,4 +1,5 @@
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/runtime_objects/SectorEditorPreviewObjectGrid.h"
 
 #include "engine/EngineContext.h"
 #include "game/npc/NpcRuntime.h"
@@ -977,6 +978,7 @@ bool SectorEditorRuntimeObjectEditingService::BeginPreviewAdjustment()
     }
 
     const PreviewObjectNudgePreset preset = adjustment.preset;
+    const bool gridSnap = adjustment.gridSnap;
     adjustment = PreviewObjectAdjustmentState{};
     adjustment.active = true;
     adjustment.objectId = object->id;
@@ -986,6 +988,7 @@ bool SectorEditorRuntimeObjectEditingService::BeginPreviewAdjustment()
     adjustment.originalHeightOffsetWorld =
             SectorEditorPreviewObjectHeightOffsetWorld(*object);
     adjustment.preset = preset;
+    adjustment.gridSnap = gridSnap;
     context_.statusText = TextFormat(
             "Adjusting %s %d",
             SectorEditorPreviewObjectKindName(*object),
@@ -999,6 +1002,29 @@ SectorEditorRuntimeObjectEditingService::PreviewNudge(
         float deltaZWorld,
         float deltaHeightWorld,
         float deltaYawDegrees)
+{
+    return AdjustPreviewTransform(
+            deltaXWorld, deltaZWorld, deltaHeightWorld, deltaYawDegrees, false);
+}
+
+bool SectorEditorRuntimeObjectEditingService::CanSnapPreviewAdjustmentToGrid() const
+{
+    const auto& adjustment = context_.editingState.previewAdjustment;
+    const auto* object = FindSectorPlacedRuntimeObject(context_.map, adjustment.objectId);
+    return adjustment.active && object != nullptr && object->kind == adjustment.objectKind
+            && !(object->kind == "dynamic_model" && object->dynamicModel.drag.pathEditorId > 0);
+}
+
+SectorEditorPreviewObjectAdjustmentResult
+SectorEditorRuntimeObjectEditingService::SnapPreviewAdjustmentToGrid()
+{
+    return AdjustPreviewTransform(0.0f, 0.0f, 0.0f, 0.0f, true);
+}
+
+SectorEditorPreviewObjectAdjustmentResult
+SectorEditorRuntimeObjectEditingService::AdjustPreviewTransform(
+        float deltaXWorld, float deltaZWorld, float deltaHeightWorld,
+        float deltaYawDegrees, bool snapNow)
 {
     SectorEditorPreviewObjectAdjustmentResult result;
     PreviewObjectAdjustmentState& adjustment =
@@ -1018,16 +1044,49 @@ SectorEditorRuntimeObjectEditingService::PreviewNudge(
     const float previousHeight = *heightOffset;
 
     if (object->kind == "dynamic_model" && object->dynamicModel.drag.pathEditorId > 0
-            && (deltaXWorld != 0.0f || deltaZWorld != 0.0f)) {
+            && (snapNow || deltaXWorld != 0.0f || deltaZWorld != 0.0f)) {
         context_.statusText = "Move the assigned path to reposition this prop"; return result;
     }
-    object->position.x += SectorWorldToAuthoringDistance(deltaXWorld);
-    object->position.z += SectorWorldToAuthoringDistance(deltaZWorld);
-    *heightOffset += deltaHeightWorld;
-    object->yawRadians = WrapPreviewObjectYaw(
-            object->yawRadians + deltaYawDegrees * DEG2RAD);
+    const bool useGrid = adjustment.gridSnap || snapNow;
+    const float previousWorldHeight =
+            SectorAuthoringToWorldDistance(previousPosition.y) + previousHeight;
+    float worldHeight = previousWorldHeight;
+    if (useGrid) {
+        // Presets are exact centimetre multiples, independent of their float API.
+        const double spacing = std::round(
+                SectorEditorPreviewObjectTranslationStepWorld(adjustment.preset) * 100.0) / 100.0;
+        const auto snap = [snapNow](float value, double step, float delta) {
+            return SnapSectorEditorPreviewGridCoordinate(
+                    value, step, snapNow ? 0 : (delta > 0.0f ? 1 : -1));
+        };
+        if (snapNow || deltaXWorld != 0.0f) {
+            object->position.x = SectorWorldToAuthoringDistance(snap(
+                    SectorAuthoringToWorldDistance(previousPosition.x), spacing, deltaXWorld));
+        }
+        if (snapNow || deltaZWorld != 0.0f) {
+            object->position.z = SectorWorldToAuthoringDistance(snap(
+                    SectorAuthoringToWorldDistance(previousPosition.z), spacing, deltaZWorld));
+        }
+        if (snapNow || deltaHeightWorld != 0.0f) {
+            worldHeight = snap(previousWorldHeight, spacing, deltaHeightWorld);
+        }
+        if (snapNow || deltaYawDegrees != 0.0f) {
+            object->yawRadians = WrapPreviewObjectYaw(snap(
+                    previousYaw * RAD2DEG,
+                    SectorEditorPreviewObjectYawStepDegrees(adjustment.preset),
+                    deltaYawDegrees) * DEG2RAD);
+        }
+    } else {
+        object->position.x += SectorWorldToAuthoringDistance(deltaXWorld);
+        object->position.z += SectorWorldToAuthoringDistance(deltaZWorld);
+        *heightOffset += deltaHeightWorld;
+        if (deltaYawDegrees != 0.0f) {
+            object->yawRadians = WrapPreviewObjectYaw(
+                    previousYaw + deltaYawDegrees * DEG2RAD);
+        }
+    }
 
-    if ((deltaXWorld != 0.0f || deltaZWorld != 0.0f)
+    if ((object->position.x != previousPosition.x || object->position.z != previousPosition.z)
             && context_.topologyRenderCache.valid) {
         const int sectorId = FindCachedSectorAt(
                 Vector2{object->position.x, object->position.z});
@@ -1035,6 +1094,16 @@ SectorEditorRuntimeObjectEditingService::PreviewNudge(
                     FindSectorTopologySector(context_.map, sectorId)) {
             object->position.y = sector->floorZ;
         }
+    }
+
+    if (useGrid && (worldHeight != previousWorldHeight
+            || object->position.y != previousPosition.y)) {
+        *heightOffset = worldHeight - SectorAuthoringToWorldDistance(object->position.y);
+    }
+    if (object->position.x == previousPosition.x && object->position.y == previousPosition.y
+            && object->position.z == previousPosition.z && object->yawRadians == previousYaw
+            && *heightOffset == previousHeight) {
+        return result;
     }
 
     if (!SynchronizeSectorPlacedRuntimeObjectTransform(
@@ -1083,6 +1152,7 @@ SectorEditorRuntimeObjectEditingService::ApplyPreviewAdjustment()
     const PreviewObjectNudgePreset preset = adjustment.preset;
     adjustment = PreviewObjectAdjustmentState{};
     adjustment.preset = preset;
+    adjustment.gridSnap = finished.gridSnap;
     SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
             context_.map, finished.objectId);
     if (object == nullptr || object->kind != finished.objectKind) {
@@ -1120,6 +1190,7 @@ SectorEditorRuntimeObjectEditingService::CancelPreviewAdjustment(
     const PreviewObjectNudgePreset preset = adjustment.preset;
     adjustment = PreviewObjectAdjustmentState{};
     adjustment.preset = preset;
+    adjustment.gridSnap = cancelled.gridSnap;
     SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
             context_.map, cancelled.objectId);
     if (object != nullptr && object->kind == cancelled.objectKind) {
@@ -1150,6 +1221,11 @@ void SectorEditorRuntimeObjectEditingService::SetPreviewAdjustmentPreset(
         PreviewObjectNudgePreset preset)
 {
     context_.editingState.previewAdjustment.preset = preset;
+}
+
+void SectorEditorRuntimeObjectEditingService::SetPreviewAdjustmentGridSnap(bool enabled)
+{
+    context_.editingState.previewAdjustment.gridSnap = enabled;
 }
 
 bool SectorEditorRuntimeObjectEditingService::BeginDrag(int objectId)

@@ -43,6 +43,69 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.y + a.height > b.y;
 }
 
+void TestPreviewObjectAdjustmentLayout()
+{
+    using Row = game::SectorEditorPreviewObjectAdjustmentRow;
+    engine::AssetManager assets;
+    engine::UIConfig config;
+    config.paddingX = 6.0f;
+    config.paddingY = 4.0f;
+    for (float width : {280.0f, 360.0f}) {
+        for (float fontSize : {16.0f, 24.0f}) {
+            config.fontSize = fontSize;
+            const float controlHeight = fontSize + config.paddingY * 2.0f;
+            for (bool pathBound : {false, true}) {
+                for (bool stacked : {false, true}) {
+                    std::array<float, game::SectorEditorPreviewObjectAdjustmentRowCount> heights;
+                    heights.fill(controlHeight);
+                    heights[static_cast<size_t>(Row::PositionX)] = engine::MeasureWrappedTextHeight(
+                            config, assets, width - 28.0f, engine::NullFontHandle(),
+                            "World X: -12345678901234567890.000 m");
+                    heights[static_cast<size_t>(Row::Help)] = engine::MeasureWrappedTextHeight(
+                            config, assets, width - 28.0f, engine::NullFontHandle(),
+                            "Arrows: world X/Z   PgUp/PgDn: world Y   Q/E: yaw\n"
+                            "Enter: apply   Esc: cancel   F11: unlock cursor");
+                    heights[static_cast<size_t>(Row::PathWarning)] = pathBound
+                            ? engine::MeasureWrappedTextHeight(config, assets, width - 28.0f,
+                                    engine::NullFontHandle(), "Snap now / X/Z disabled: move the assigned path. "
+                                    "Height and yaw remain adjustable.") : 0.0f;
+                    for (Row row : {Row::Presets, Row::SnapControls, Row::Actions}) {
+                        const int count = row == Row::Presets ? 3 : 2;
+                        heights[static_cast<size_t>(row)] = stacked
+                                ? count * controlHeight + (count - 1) * 6.0f : controlHeight;
+                    }
+                    const auto layout = game::BuildSectorEditorPreviewObjectAdjustmentLayout(
+                            Rectangle{1500, 18, width, 0}, heights);
+                    float previousBottom = layout.panel.y;
+                    for (size_t i = 0; i < heights.size(); ++i) {
+                        if (heights[i] == 0.0f) continue;
+                        const auto row = layout.rows[i];
+                        Check(row.y >= previousBottom && row.x >= layout.panel.x
+                                      && row.x + row.width <= layout.panel.x + layout.panel.width,
+                              "measured adjustment rows fit panel and do not overlap at narrow widths");
+                        previousBottom = row.y + row.height;
+                    }
+                    Check(previousBottom + 12.0f <= layout.panel.y + layout.panel.height,
+                          "adjustment panel includes final actions and bottom padding");
+                    for (Row row : {Row::Presets, Row::SnapControls, Row::Actions}) {
+                        const int count = row == Row::Presets ? 3 : 2;
+                        const auto bounds = layout.rows[static_cast<size_t>(row)];
+                        Rectangle previous{};
+                        for (int i = 0; i < count; ++i) {
+                            const auto button = game::SectorEditorPreviewAdjustmentButtonRect(bounds, i, count, stacked);
+                            Check(button.height >= controlHeight && !Overlaps(previous, button)
+                                          && button.x + button.width <= bounds.x + bounds.width + 0.001f
+                                          && button.y + button.height <= bounds.y + bounds.height + 0.001f,
+                                  "adjustment button draw and hit rectangles fit horizontal or stacked rows");
+                            previous = button;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 void TestMaterialBrowserFilterLayout()
 {
     for (float width : {280.0f, 300.0f, 420.0f}) {
@@ -1062,6 +1125,7 @@ void TestBaseboardLayout()
 
 int main()
 {
+    TestPreviewObjectAdjustmentLayout();
     TestMaterialBrowserFilterLayout();
     TestMaterialFormMacroLayout();
     TestWrappedDiagnosticHeight();

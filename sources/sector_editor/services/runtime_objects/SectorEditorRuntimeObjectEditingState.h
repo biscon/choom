@@ -27,6 +27,7 @@ struct PreviewObjectAdjustmentState {
     float originalYawRadians = 0.0f;
     float originalHeightOffsetWorld = 0.0f;
     PreviewObjectNudgePreset preset = PreviewObjectNudgePreset::Normal;
+    bool gridSnap = true;
 };
 
 enum class ModelPickerTarget {

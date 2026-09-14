@@ -740,6 +740,34 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
   behavior are still deferred.
 - In visible-cursor mode: click generated surfaces to select/edit them.
 
+Select a static prop, dynamic prop, or item and use `Ctrl+A` / `Adjust selected`
+to adjust it in 3D. `Grid snap` defaults on. Fine, Normal, and Coarse select
+world-origin grids of 0.01, 0.05, and 0.25 metres, with yaw grids of 0.25, 1,
+and 5 degrees measured from zero. Arrow keys move world X/Z to the next grid
+point in the pressed direction; Page Up/Down do the same for world Y, and Q/E
+for yaw. An off-grid coordinate first moves to the next grid point, so the
+first movement may be shorter than the selected interval.
+
+`Snap now` rounds all three world coordinates and yaw to the nearest grid
+points (halfway ties away from zero), even when `Grid snap` is off. Merely
+opening adjustment, switching presets, or toggling snapping does not move the
+object. With snapping on, horizontal moves preserve world height across floor
+elevation changes; the floor-relative offset is compensated automatically.
+With snapping off, the controls retain relative movement increments and follow
+the floor when moving horizontally. Both world Y and the floor-relative offset
+are displayed, and positions show millimetre precision.
+
+Enter / `Apply` commits the previewed adjustment; Escape / `Cancel` restores
+the exact original transform. Unlock the cursor with F11 to click the panel.
+The preset and toggle are remembered across adjustments in the editor session,
+but are not saved with the level. Path-bound dynamic props disable `Snap now`
+and horizontal nudges; adjust their assigned path instead. Height and yaw
+remain adjustable.
+
+This grid aligns model origins. It does not align endpoints or guarantee a
+joint for arbitrary model lengths, scales, or rotations. The 2D placement grid,
+structure controls, and floor/ceiling adjustment grids are independent.
+
 The left tools pane `Settings` button opens editor-session preview settings.
 The same settings are available from the 3D preview overlay `Controls` tab while
 its UI is visible. The modal edits walk speed, run speed,

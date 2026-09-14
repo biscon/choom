@@ -29,6 +29,7 @@
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/runtime_objects/SectorEditorPreviewObjectGrid.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
@@ -13151,13 +13152,200 @@ void TestStaticPropConfigClipboardPreservesPlacementAndIdentity()
 
 }
 
+void TestPreviewObjectGridMath()
+{
+    using game::SnapSectorEditorPreviewGridCoordinate;
+    for (double spacing : {0.01, 0.05, 0.25, 1.0, 5.0}) {
+        const float step = static_cast<float>(spacing);
+        for (float sign : {-1.0f, 1.0f}) {
+            const float point = sign * 17.0f * step;
+            const float offGrid = point + step * 0.3f;
+            Check(Near(SnapSectorEditorPreviewGridCoordinate(offGrid, spacing, 1), point + step)
+                          && Near(SnapSectorEditorPreviewGridCoordinate(offGrid, spacing, -1), point),
+                  "off-grid coordinates move to the next grid point in either direction");
+            Check(Near(SnapSectorEditorPreviewGridCoordinate(sign * step * 0.5f, spacing, 0), sign * step),
+                  "nearest-grid halfway ties round away from zero");
+            const float adjacentFloat = std::nextafter(point, point + step);
+            Check(Near(SnapSectorEditorPreviewGridCoordinate(adjacentFloat, spacing, -1), point - step),
+                  "float storage noise at a grid point does not trap reverse movement");
+            float value = point;
+            for (int i = 0; i < 1000; ++i) {
+                value = SnapSectorEditorPreviewGridCoordinate(value, spacing, 1);
+            }
+            Check(Near(value, static_cast<float>((sign * 17.0 + 1000.0) * spacing)),
+                  "repeated forward grid nudges do not stick or skip cells");
+            for (int i = 0; i < 1000; ++i) {
+                value = SnapSectorEditorPreviewGridCoordinate(value, spacing, -1);
+            }
+            Check(Near(value, point), "forward and backward grid nudges do not accumulate drift");
+        }
+    }
+    Check(Near(SnapSectorEditorPreviewGridCoordinate(-8.995f, 0.01, 1), -8.99f)
+                  && Near(SnapSectorEditorPreviewGridCoordinate(-8.995f, 0.01, -1), -9.0f),
+          "reported half-centimetre pipe offset joins the shared centimetre grid");
+    Check(Near(SnapSectorEditorPreviewGridCoordinate(0.01f, 0.25, -1), 0.0f)
+                  && Near(SnapSectorEditorPreviewGridCoordinate(0.01f, 0.25, 1), 0.25f),
+          "switching to a coarser grid uses the next point rather than preserving a fine offset");
+}
+
+void TestPreviewObjectGridTransactions()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    map.sectors[0].floorZ = 0.04f; // A floor that is not on the centimetre grid.
+    map.sectors[1].floorZ = 8.04f;
+    game::SectorPlacedRuntimeObject original;
+    original.id = 640;
+    original.kind = "static_model";
+    original.position = {63.96f, 0.04f, 16.02f}; // X = 7.995 world metres.
+    original.staticModel.instanceId = "grid_prop";
+    original.staticModel.modelPath = "tests/fixtures/grid_prop_missing.gltf";
+    original.staticModel.heightOffsetWorld = 2.949f; // World Y = 2.954.
+    original.staticModel.collision = true;
+    original.yawRadians = 0.3f * DEG2RAD;
+    map.runtimeObjects.push_back(original);
+    engine::EngineContext engineContext;
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::SpawnPlacedRuntimeObjects(engineContext.world, engineContext.assets, runtimeObjects, map);
+    if (runtimeObjects.placedObjectEntities.empty()) {
+        Check(false, "grid fixture spawns its runtime entity");
+        return;
+    }
+    const auto entity = runtimeObjects.placedObjectEntities.front().entity;
+    game::RuntimeObjectEditingState state;
+    game::RuntimeObjectEditingUiState ui;
+    game::SelectionState selection;
+    selection.selectedRuntimeObjectId = original.id;
+    game::SectorEditorDocumentState document;
+    uint64_t revision = 120;
+    game::SectorEditorTopologyRenderCache cache;
+    FillRuntimeObjectTestSectorCache(cache, map);
+    std::string status;
+    game::SectorEditorRuntimeObjectEditingService editing{
+            game::SectorEditorRuntimeObjectEditingServiceContext{
+                    map, runtimeObjects, state, ui, selection, nullptr,
+                    game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+                    revision, cache, status, &engineContext, true}};
+    auto& object = map.runtimeObjects.front();
+    const auto worldHeight = [&]() {
+        return game::SectorAuthoringToWorldDistance(object.position.y)
+                + object.staticModel.heightOffsetWorld;
+    };
+    const auto sameOriginal = [&]() {
+        return object.position.x == original.position.x
+                && object.position.y == original.position.y
+                && object.position.z == original.position.z
+                && object.yawRadians == original.yawRadians
+                && object.staticModel.heightOffsetWorld == original.staticModel.heightOffsetWorld;
+    };
+    const auto originalHash = game::ComputeSectorLightmapSourceHash(map);
+    Check(state.previewAdjustment.gridSnap && editing.BeginPreviewAdjustment(),
+          "grid snapping defaults on and an off-grid prop can begin adjustment");
+    editing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Fine);
+    editing.SetPreviewAdjustmentGridSnap(false);
+    editing.SetPreviewAdjustmentGridSnap(true);
+    Check(sameOriginal() && !state.previewAdjustment.changed
+                  && game::ComputeSectorLightmapSourceHash(map) == originalHash,
+          "starting adjustment and changing preferences neither moves the prop nor changes bake hash");
+    Check(!editing.PreviewNudge(0, 0, 0, 0).changed,
+          "zero-direction input is a clean no-op");
+    editing.PreviewNudge(0.01f, 0, 0, 0);
+    const auto crossing = editing.PreviewNudge(0.01f, 0, 0, 0);
+    Check(crossing.changed && Near(object.position.x, 64.08f)
+                  && Near(object.position.y, 8.04f) && Near(worldHeight(), 2.954f)
+                  && object.position.z == original.position.z && object.yawRadians == original.yawRadians,
+          "snapped horizontal movement crosses raised floor preserving world height and untouched axes");
+    editing.PreviewNudge(0, 0, 0.01f, 0);
+    Check(Near(worldHeight(), 2.96f) && Near(object.staticModel.heightOffsetWorld, 1.955f),
+          "vertical grid is anchored in world space instead of floor-relative space");
+    Check(!document.lifecycle.topologyDocumentDirty && revision == 120 && cache.valid
+                  && runtimeObjects.placedObjectEntities.front().entity == entity,
+          "snapping stages in the existing entity without dirtying the document or its 2D cache");
+    const auto cancel = editing.CancelPreviewAdjustment("cancel snapped crossing");
+    Check(cancel.restoreBakedStatus && sameOriginal()
+                  && game::ComputeSectorLightmapSourceHash(map) == originalHash,
+          "Cancel exactly restores the original off-grid transform and bake hash");
+
+    editing.BeginPreviewAdjustment();
+    editing.SetPreviewAdjustmentGridSnap(false);
+    editing.PreviewNudge(0.05f, 0, 0, 0);
+    Check(Near(object.position.x, original.position.x + 0.4f)
+                  && Near(worldHeight(), 3.954f)
+                  && object.staticModel.heightOffsetWorld == original.staticModel.heightOffsetWorld,
+          "snap-off mode retains relative steps and floor-following horizontal movement");
+    editing.CancelPreviewAdjustment("cancel relative crossing");
+    Check(!state.previewAdjustment.gridSnap && editing.BeginPreviewAdjustment()
+                  && !state.previewAdjustment.gridSnap,
+          "snap preference persists through Cancel and a new adjustment");
+    const auto snap = editing.SnapPreviewAdjustmentToGrid();
+    Check(snap.changed && snap.bakedStatusRefreshNeeded
+                  && Near(game::SectorAuthoringToWorldDistance(object.position.x), 8.0f)
+                  && Near(game::SectorAuthoringToWorldDistance(object.position.z), 2.0f)
+                  && Near(worldHeight(), 2.95f) && Near(object.yawRadians * RAD2DEG, 0.25f),
+          "Snap now aligns all world coordinates and yaw even when continuous snapping is off");
+    Check(!editing.SnapPreviewAdjustmentToGrid().changed,
+          "repeating Snap now is an exact no-op");
+    const auto apply = editing.ApplyPreviewAdjustment();
+    Check(apply.changed && apply.commitBakedStatus && apply.staticNavigationRebuildNeeded
+                  && revision == 121 && !cache.valid && document.lifecycle.topologyDocumentDirty
+                  && !state.previewAdjustment.gridSnap
+                  && game::ComputeSectorLightmapSourceHash(map) != originalHash,
+          "Apply commits once with cache, bake, and navigation invalidation while retaining preferences");
+    Check(runtimeObjects.placedObjectEntities.front().entity == entity,
+          "Snap now preserves runtime entity identity");
+    editing.BeginPreviewAdjustment();
+    Check(!editing.SnapPreviewAdjustmentToGrid().changed,
+          "an aligned prop starts a new snapping transaction without changes");
+    const auto unchangedApply = editing.ApplyPreviewAdjustment();
+    Check(!unchangedApply.changed && !unchangedApply.bakedStatusRefreshNeeded
+                  && !unchangedApply.commitBakedStatus && !unchangedApply.staticNavigationRebuildNeeded
+                  && revision == 121,
+          "applying an unchanged snap does not trigger cache, lighting, or navigation work");
+
+    // Reuse a clean generated fixture for missing-entity rollback and yaw boundaries.
+    object = original;
+    FillRuntimeObjectTestSectorCache(cache, map);
+    editing.SetPreviewAdjustmentGridSnap(true);
+    editing.BeginPreviewAdjustment();
+    const auto savedEntry = runtimeObjects.placedObjectEntities.front();
+    runtimeObjects.placedObjectEntities.clear();
+    const auto failed = editing.SnapPreviewAdjustmentToGrid();
+    Check(!failed.changed && !failed.bakedStatusRefreshNeeded && sameOriginal()
+                  && !state.previewAdjustment.changed,
+          "failed synchronization restores every candidate transform field");
+    runtimeObjects.placedObjectEntities.push_back(savedEntry);
+    editing.CancelPreviewAdjustment("cancel failed snap");
+    object.yawRadians = 180.0f * DEG2RAD;
+    editing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Coarse);
+    editing.BeginPreviewAdjustment();
+    editing.PreviewNudge(0, 0, 0, 5);
+    Check(Near(object.yawRadians * RAD2DEG, -175.0f), "snapped yaw wraps forward across 180 degrees");
+    editing.PreviewNudge(0, 0, 0, -5);
+    Check(Near(object.yawRadians * RAD2DEG, 180.0f), "snapped yaw reverses across its wrap boundary");
+    editing.CancelPreviewAdjustment("cancel yaw");
+
+    // Both independent off-grid origins must land on exactly the same stored coordinate.
+    object.position.x = game::SectorWorldToAuthoringDistance(-8.995f);
+    editing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Fine);
+    editing.BeginPreviewAdjustment();
+    editing.PreviewNudge(0.01f, 0, 0, 0);
+    const float firstAlignedX = object.position.x;
+    editing.CancelPreviewAdjustment("first origin");
+    object.position.x = game::SectorWorldToAuthoringDistance(-8.999f);
+    editing.BeginPreviewAdjustment();
+    editing.PreviewNudge(0.01f, 0, 0, 0);
+    Check(object.position.x == firstAlignedX && object.position.y == original.position.y,
+          "independently off-grid props align identically; outside sectors retain their base height");
+    editing.CancelPreviewAdjustment("second origin");
+    game::ClearSectorRuntimeObjects(engineContext.world, engineContext.assets, runtimeObjects);
+}
+
 void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
 {
     game::SectorTopologyMap map = MakeAdjacentSectorMap();
     game::SectorPlacedRuntimeObject object;
     object.id = 640;
     object.kind = "static_model";
-    object.position = Vector3{16.0f, 0.0f, 16.0f};
+    object.position = Vector3{16.0f, map.sectors.front().floorZ, 16.0f};
     object.staticModel.instanceId = "adjusted_prop";
     object.staticModel.collision = true;
     map.runtimeObjects.push_back(object);
@@ -13280,12 +13468,12 @@ void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
     game::SectorPlacedRuntimeObject dynamic;
     dynamic.id = 641;
     dynamic.kind = "dynamic_model";
-    dynamic.position = Vector3{24.0f, 0.0f, 24.0f};
+    dynamic.position = Vector3{24.0f, movableMap.sectors.front().floorZ, 24.0f};
     dynamic.dynamicModel.instanceId = "adjusted_dynamic";
     game::SectorPlacedRuntimeObject item;
     item.id = 642;
     item.kind = "item";
-    item.position = Vector3{32.0f, 0.0f, 32.0f};
+    item.position = Vector3{32.0f, movableMap.sectors.front().floorZ, 32.0f};
     item.item.definitionId = "adjusted_item";
     item.item.instanceId = "adjusted_item_instance";
     movableMap.runtimeObjects = {dynamic, item};
@@ -13333,6 +13521,7 @@ void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
                     &itemRegistry}};
     Check(movableEditing.BeginPreviewAdjustment(),
           "dynamic prop begins a preview adjustment");
+    movableEditing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Coarse);
     const auto dynamicPreview = movableEditing.PreviewNudge(
             0.0f, -0.25f, 0.25f, -5.0f);
     Check(dynamicPreview.changed && !dynamicPreview.bakedStatusRefreshNeeded,
@@ -13352,9 +13541,22 @@ void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
                   && movableCache.valid,
           "Cancel restores a dynamic prop without dirtying or invalidating the document");
 
+    movableMap.runtimeObjects[0].dynamicModel.drag.pathEditorId = 99;
+    Check(movableEditing.BeginPreviewAdjustment() && !movableEditing.CanSnapPreviewAdjustmentToGrid(),
+          "path-bound dynamic props cannot use Snap now");
+    Check(!movableEditing.SnapPreviewAdjustmentToGrid().changed
+                  && !movableEditing.PreviewNudge(0.25f, 0, 0, 0).changed
+                  && Near(movableMap.runtimeObjects[0].position, dynamic.position),
+          "path-bound props reject Snap now and horizontal nudges without partial changes");
+    Check(movableEditing.PreviewNudge(0, 0, 0.25f, 5.0f).changed
+                  && Near(movableMap.runtimeObjects[0].dynamicModel.heightOffsetWorld, 0.25f),
+          "path-bound props still allow snapped height and yaw");
+    movableEditing.CancelPreviewAdjustment("cancel path-bound adjustment");
+
     movableSelection.selectedRuntimeObjectId = item.id;
     Check(movableEditing.BeginPreviewAdjustment(),
           "item begins a preview adjustment");
+    movableEditing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Fine);
     const auto itemPreview = movableEditing.PreviewNudge(
             -0.01f, 0.01f, 0.01f, 0.25f);
     const auto itemApply = movableEditing.ApplyPreviewAdjustment();
@@ -16373,6 +16575,8 @@ int main()
     TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
     TestDoorConfigClipboardPreservesAnchorAndInstanceId();
     TestStaticPropConfigClipboardPreservesPlacementAndIdentity();
+    TestPreviewObjectGridMath();
+    TestPreviewObjectGridTransactions();
     TestPreviewObjectAdjustmentStagesAndCommitsInPlace();
     TestPreviewSurfaceHeightAdjustmentStagesCancelsAndCommits();
     TestStructuralPrimitiveEditorPlacementAndAdjustment();

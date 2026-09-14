@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -2550,120 +2551,122 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     PreviewObjectAdjustmentState& adjustment =
             context.runtimeObjectEditingState.previewAdjustment;
     if (adjustment.active) {
-        const Rectangle adjustmentPanel =
-                BuildSectorEditorPreviewAdjustmentPanelRect();
-        DrawRectangleRec(adjustmentPanel, Color{12, 15, 20, 225});
-        DrawRectangleLinesEx(
-                adjustmentPanel,
-                config.borderThickness,
-                Color{84, 204, 255, 255});
+        using Row = SectorEditorPreviewObjectAdjustmentRow;
+        engine::UIConfig adjustmentConfig = smallConfig;
+        adjustmentConfig.paddingX = 6.0f;
+        adjustmentConfig.paddingY = 4.0f;
+        const float controlHeight = std::max(rowH,
+                adjustmentConfig.fontSize + adjustmentConfig.paddingY * 2.0f);
         const SectorPlacedRuntimeObject* object = FindSectorPlacedRuntimeObject(
                 topologyMap, adjustment.objectId);
-        const float textX = adjustmentPanel.x + 14.0f;
-        float adjustmentY = adjustmentPanel.y + 12.0f;
-        const float adjustmentWidth = adjustmentPanel.width - 28.0f;
-        engine::Text(
-                smallConfig,
-                assets,
-                Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
-                smallFont,
-                object != nullptr
-                        ? TextFormat("Adjust %s %d",
-                                SectorEditorPreviewObjectKindName(*object),
-                                object->id)
-                        : "Adjustment target missing",
-                engine::UITextJustify::Left,
-                Color{84, 204, 255, 255});
-        adjustmentY += rowH + 4.0f;
+        const bool pathBound = object != nullptr && object->kind == "dynamic_model"
+                && object->dynamicModel.drag.pathEditorId > 0;
+        std::array<std::array<char, 192>, SectorEditorPreviewObjectAdjustmentRowCount> labels{};
+        const auto label = [&](Row row) { return labels[static_cast<size_t>(row)].data(); };
         if (object != nullptr) {
-            engine::Text(
-                    smallConfig,
-                    assets,
-                    Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
-                    smallFont,
-                    TextFormat("X %.2f m   Z %.2f m   Height %+.2f m",
-                            SectorAuthoringToWorldDistance(object->position.x),
-                            SectorAuthoringToWorldDistance(object->position.z),
-                            SectorEditorPreviewObjectHeightOffsetWorld(*object)),
-                    engine::UITextJustify::Left);
-            adjustmentY += rowH + 2.0f;
-            engine::Text(
-                    smallConfig,
-                    assets,
-                    Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
-                    smallFont,
-                    TextFormat("Yaw %.2f deg", object->yawRadians * RAD2DEG),
-                    engine::UITextJustify::Left);
-            adjustmentY += rowH + 8.0f;
+            std::snprintf(label(Row::Title), 192, "Adjust %s %d",
+                    SectorEditorPreviewObjectKindName(*object), object->id);
+            std::snprintf(label(Row::PositionX), 192, "World X: %.3f m",
+                    SectorAuthoringToWorldDistance(object->position.x));
+            std::snprintf(label(Row::PositionZ), 192, "World Z: %.3f m",
+                    SectorAuthoringToWorldDistance(object->position.z));
+            const float offset = SectorEditorPreviewObjectHeightOffsetWorld(*object);
+            std::snprintf(label(Row::WorldHeight), 192, "World Y: %.3f m",
+                    SectorAuthoringToWorldDistance(object->position.y) + offset);
+            std::snprintf(label(Row::HeightOffset), 192, "Floor offset: %+.3f m", offset);
+            std::snprintf(label(Row::Yaw), 192, "Yaw: %.2f deg", object->yawRadians * RAD2DEG);
+        } else {
+            std::snprintf(label(Row::Title), 192, "Adjustment target missing");
+        }
+        std::snprintf(label(Row::GridInfo), 192, "%s %.2f m / %.2f deg",
+                adjustment.gridSnap ? "Grid" : "Step",
+                SectorEditorPreviewObjectTranslationStepWorld(adjustment.preset),
+                SectorEditorPreviewObjectYawStepDegrees(adjustment.preset));
+        std::snprintf(label(Row::Help), 192,
+                "Arrows: world X/Z   PgUp/PgDn: %s   Q/E: yaw\n"
+                "Enter: apply   Esc: cancel   F11: unlock cursor",
+                adjustment.gridSnap ? "world Y" : "height");
+        if (pathBound) {
+            std::snprintf(label(Row::PathWarning), 192,
+                    "Snap now / X/Z disabled: move the assigned path. Height and yaw remain adjustable.");
         }
 
-        constexpr float presetGap = 6.0f;
-        const float presetWidth =
-                (adjustmentWidth - presetGap * 2.0f) / 3.0f;
-        const auto presetButton = [&](const char* id, const char* label,
-                                      PreviewObjectNudgePreset preset,
-                                      int index) {
-            const Rectangle bounds{
-                    textX + static_cast<float>(index)
-                                    * (presetWidth + presetGap),
-                    adjustmentY,
-                    presetWidth,
-                    rowH};
-            const bool selected = adjustment.preset == preset;
-            if (engine::Button(
-                        ui, smallConfig, input, assets, id, bounds, smallFont,
-                        selected ? TextFormat("%s *", label) : label,
-                        engine::UITextJustify::Center,
-                        adjustmentMouseInteractive)) {
-                adjustment.preset = preset;
+        const Rectangle base = BuildSectorEditorPreviewAdjustmentPanelRect();
+        std::array<float, SectorEditorPreviewObjectAdjustmentRowCount> heights{};
+        for (size_t index = 0; index < labels.size(); ++index) {
+            if (labels[index][0] != '\0') {
+                heights[index] = std::max(controlHeight, engine::MeasureWrappedTextHeight(
+                        adjustmentConfig, assets, base.width - 28.0f, smallFont, labels[index].data()));
             }
+        }
+        const auto textWidth = [&](const char* text) {
+            if (const auto* fontAsset = assets.GetFont(smallFont)) {
+                return MeasureTextEx(fontAsset->font, text,
+                        adjustmentConfig.fontSize, adjustmentConfig.textSpacing).x;
+            }
+            return static_cast<float>(MeasureText(text, static_cast<int>(adjustmentConfig.fontSize)));
         };
-        presetButton("sector_editor_object_nudge_fine", "Fine",
-                PreviewObjectNudgePreset::Fine, 0);
-        presetButton("sector_editor_object_nudge_normal", "Normal",
-                PreviewObjectNudgePreset::Normal, 1);
-        presetButton("sector_editor_object_nudge_coarse", "Coarse",
-                PreviewObjectNudgePreset::Coarse, 2);
-        adjustmentY += rowH + 7.0f;
-        engine::Text(
-                smallConfig,
-                assets,
-                Rectangle{textX, adjustmentY, adjustmentWidth, rowH},
-                smallFont,
-                TextFormat("Step %.2f m / %.2f deg",
-                        SectorEditorPreviewObjectTranslationStepWorld(
-                                adjustment.preset),
-                        SectorEditorPreviewObjectYawStepDegrees(
-                                adjustment.preset)),
-                engine::UITextJustify::Left,
-                smallConfig.mutedTextColor);
-        adjustmentY += rowH + 2.0f;
-        engine::Text(
-                smallConfig,
-                assets,
-                Rectangle{textX, adjustmentY, adjustmentWidth, rowH * 2.0f},
-                smallFont,
-                "Arrows: world X/Z   PgUp/PgDn: height   Q/E: yaw\nEnter: apply   Esc: cancel   F11: unlock cursor",
-                engine::UITextJustify::Left,
-                smallConfig.mutedTextColor,
-                true);
-        adjustmentY += rowH * 2.0f + 7.0f;
-        const float actionWidth = (adjustmentWidth - presetGap) * 0.5f;
-        if (engine::Button(
-                    ui, smallConfig, input, assets,
-                    "sector_editor_object_nudge_apply",
-                    Rectangle{textX, adjustmentY, actionWidth, rowH},
-                    smallFont, "Apply", engine::UITextJustify::Center,
-                    adjustmentMouseInteractive)) {
+        std::array<bool, SectorEditorPreviewObjectAdjustmentRowCount> stacked{};
+        const auto measureButtons = [&](Row row, int count, float requiredWidth) {
+            const size_t index = static_cast<size_t>(row);
+            stacked[index] = requiredWidth > (base.width - 28.0f - 6.0f * (count - 1)) / count;
+            heights[index] = stacked[index] ? count * controlHeight + 6.0f * (count - 1) : controlHeight;
+        };
+        measureButtons(Row::Presets, 3,
+                std::max({textWidth("Fine *"), textWidth("Normal *"), textWidth("Coarse *")})
+                        + adjustmentConfig.paddingX * 2.0f);
+        measureButtons(Row::SnapControls, 2,
+                std::max(textWidth("Snap now") + adjustmentConfig.paddingX * 2.0f,
+                        textWidth("Grid snap") + adjustmentConfig.fontSize + adjustmentConfig.paddingX * 5.0f));
+        measureButtons(Row::Actions, 2,
+                std::max(textWidth("Apply"), textWidth("Cancel")) + adjustmentConfig.paddingX * 2.0f);
+        const auto layout = BuildSectorEditorPreviewObjectAdjustmentLayout(base, heights);
+        DrawRectangleRec(layout.panel, Color{12, 15, 20, 225});
+        DrawRectangleLinesEx(layout.panel, config.borderThickness, Color{84, 204, 255, 255});
+        for (size_t index = 0; index < labels.size(); ++index) {
+            if (labels[index][0] == '\0') continue;
+            engine::Text(adjustmentConfig, assets, layout.rows[index], smallFont,
+                    labels[index].data(), engine::UITextJustify::Left,
+                    index == static_cast<size_t>(Row::Title)
+                            ? Color{84, 204, 255, 255} : smallConfig.mutedTextColor, true);
+        }
+        const auto buttonRect = [&](Row row, int index, int count) {
+            return SectorEditorPreviewAdjustmentButtonRect(
+                    layout.rows[static_cast<size_t>(row)], index, count, stacked[static_cast<size_t>(row)]);
+        };
+        const char* presetLabels[] = {"Fine", "Normal", "Coarse"};
+        const char* presetIds[] = {"sector_editor_object_nudge_fine",
+                "sector_editor_object_nudge_normal", "sector_editor_object_nudge_coarse"};
+        for (int index = 0; index < 3; ++index) {
+            const auto preset = static_cast<PreviewObjectNudgePreset>(index);
+            if (engine::Button(ui, adjustmentConfig, input, assets, presetIds[index],
+                        buttonRect(Row::Presets, index, 3), smallFont,
+                        adjustment.preset == preset ? TextFormat("%s *", presetLabels[index])
+                                                    : presetLabels[index],
+                        engine::UITextJustify::Center, adjustmentMouseInteractive)) {
+                context.runtimeObjectEditing.SetPreviewAdjustmentPreset(preset);
+            }
+        }
+        bool gridSnap = adjustment.gridSnap;
+        if (engine::Checkbox(ui, adjustmentConfig, input, assets, "sector_editor_object_grid_snap",
+                    buttonRect(Row::SnapControls, 0, 2), smallFont, "Grid snap", gridSnap,
+                    engine::UITextJustify::Left, adjustmentMouseInteractive)) {
+            context.runtimeObjectEditing.SetPreviewAdjustmentGridSnap(gridSnap);
+        }
+        if (engine::Button(ui, adjustmentConfig, input, assets, "sector_editor_object_snap_now",
+                    buttonRect(Row::SnapControls, 1, 2), smallFont, "Snap now",
+                    engine::UITextJustify::Center, adjustmentMouseInteractive
+                            && context.runtimeObjectEditing.CanSnapPreviewAdjustmentToGrid())) {
+            result.objectAdjustment = context.runtimeObjectEditing.SnapPreviewAdjustmentToGrid();
+        }
+        if (engine::Button(ui, adjustmentConfig, input, assets, "sector_editor_object_nudge_apply",
+                    buttonRect(Row::Actions, 0, 2), smallFont, "Apply",
+                    engine::UITextJustify::Center, adjustmentMouseInteractive)) {
             result.requestApplyAdjustment = true;
         }
-        if (engine::Button(
-                    ui, smallConfig, input, assets,
-                    "sector_editor_object_nudge_cancel",
-                    Rectangle{textX + actionWidth + presetGap, adjustmentY,
-                            actionWidth, rowH},
-                    smallFont, "Cancel", engine::UITextJustify::Center,
-                    adjustmentMouseInteractive)) {
+        if (engine::Button(ui, adjustmentConfig, input, assets, "sector_editor_object_nudge_cancel",
+                    buttonRect(Row::Actions, 1, 2), smallFont, "Cancel",
+                    engine::UITextJustify::Center, adjustmentMouseInteractive)) {
             result.requestCancelAdjustment = true;
         }
     } else if (context.structuralPrimitiveEditingState.previewAdjustment.active) {

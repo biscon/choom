@@ -109,12 +109,17 @@ public:
     bool SetSelectedDoorRuntimeTargetOpen(bool open);
 
     bool BeginPreviewAdjustment();
+    // Grid mode uses each nonzero delta's direction and the selected preset;
+    // with grid snapping disabled these are relative world/degrees increments.
     SectorEditorPreviewObjectAdjustmentResult PreviewNudge(
             float deltaXWorld,
             float deltaZWorld,
             float deltaHeightWorld,
             float deltaYawDegrees);
     SectorEditorPreviewObjectAdjustmentResult ApplyPreviewAdjustment();
+    SectorEditorPreviewObjectAdjustmentResult SnapPreviewAdjustmentToGrid();
+    bool CanSnapPreviewAdjustmentToGrid() const;
+    void SetPreviewAdjustmentGridSnap(bool enabled);
     SectorEditorPreviewObjectAdjustmentResult CancelPreviewAdjustment(
             const char* message);
     void SetPreviewAdjustmentPreset(PreviewObjectNudgePreset preset);
@@ -129,6 +134,9 @@ public:
     void MarkEdited(const char* status);
 
 private:
+    SectorEditorPreviewObjectAdjustmentResult AdjustPreviewTransform(
+            float deltaXWorld, float deltaZWorld, float deltaHeightWorld,
+            float deltaYawDegrees, bool snapNow);
     void ResetInspectorUi();
     void UpdateCachedDraw(const SectorPlacedRuntimeObject& object);
     void ClearSelection();
