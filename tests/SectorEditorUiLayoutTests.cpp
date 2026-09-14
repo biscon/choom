@@ -1,3 +1,4 @@
+#include "sector_editor/materials/SectorEditorMaterialFormLayout.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorMainMenu.h"
 #include "engine/ui/UI.h"
@@ -40,6 +41,31 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.x + a.width > b.x
             && a.y < b.y + b.height
             && a.y + a.height > b.y;
+}
+
+void TestMaterialFormMacroLayout()
+{
+    using Row = game::SectorMaterialFormRow;
+    for (float width : {280.0f, 600.0f, 900.0f}) {
+        for (float labelHeight : {24.0f, 36.0f}) {
+            for (bool expanded : {false, true}) {
+                const auto layout = game::MeasureSectorMaterialForm(width, 230.0f, labelHeight,
+                        expanded, 240.0f, 120.0f, 180.0f);
+                float bottom = 0.0f;
+                for (const auto& row : layout.rows) {
+                    if (row.height == 0.0f) continue;
+                    Check(row.y >= bottom && row.width <= width, "material form rows fit without overlap");
+                    bottom = row.y + row.height;
+                }
+                Check(layout.contentHeight >= bottom + 12.0f, "material form scroll extent includes preview and padding");
+                Check((layout.fieldOffsetY > 0.0f) == (width < 402.0f), "narrow material forms stack labels above fields");
+                const auto& macro = layout.rows[static_cast<std::size_t>(Row::MacroRepeat)];
+                Check((macro.height > 0.0f) == expanded, "macro rows occupy space only when expanded");
+                const auto& preview = layout.rows[static_cast<std::size_t>(Row::PreviewImage)];
+                Check(preview.y + preview.height <= layout.contentHeight, "final material preview is reachable");
+            }
+        }
+    }
 }
 
 void TestWrappedDiagnosticHeight()
@@ -1012,6 +1038,7 @@ void TestBaseboardLayout()
 
 int main()
 {
+    TestMaterialFormMacroLayout();
     TestWrappedDiagnosticHeight();
     TestBaseboardLayout();
     TestMainMenuShortcutMatching();

@@ -534,6 +534,19 @@ void SectorMeshRenderer::EnsureSurfaceMaterialResources(
                 texture.id, texture.metallicFactor);
         roughnessFactorById.insert_or_assign(
                 texture.id, texture.roughnessFactor);
+        macroResourcesById.erase(texture.id);
+        if (texture.macro.enabled && !texture.macro.maskPath.empty()
+                && (texture.macro.darkening != 0.0f || texture.macro.roughnessChange != 0.0f)) {
+            const std::string macroPath = ResolveSectorAssetPath(texture.macro.maskPath);
+            MacroResource resource;
+            resource.texture = assets.RequestTexture(assetScope,
+                    (macroPath + "|macro-linear").c_str(), macroPath.c_str(),
+                    engine::TextureColorUsage::LinearData,
+                    engine::TextureLoad_TrilinearFilter);
+            resource.parameters = {texture.macro.repeatMeters,
+                    texture.macro.darkening, texture.macro.roughnessChange};
+            macroResourcesById.insert_or_assign(texture.id, resource);
+        }
 
         if (normalMappedMaterialIds.find(materialId)
                 == normalMappedMaterialIds.end()) {
@@ -1121,6 +1134,12 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
 
+    macroTextureLoc = GetShaderLocation(material.shader, "macroTexture");
+    hasMacroLoc = GetShaderLocation(material.shader, "hasMacro");
+    macroParametersLoc = GetShaderLocation(material.shader, "macroParameters");
+    // Unit 11 is outside the used material maps and below reflection units 12..15.
+    const int macroTextureUnit = 11;
+    SetShaderValue(material.shader, macroTextureLoc, &macroTextureUnit, SHADER_UNIFORM_INT);
     reflectionLocations = LoadSectorReflectionShaderLocations(material.shader);
     const std::size_t reflectionLightCapacity = map.dynamicPointLights.size()
             + map.dynamicSpotLights.size() + map.dynamicRectLights.size();
@@ -1269,6 +1288,8 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     normalStrengthById.clear();
     metallicFactorById.clear();
     roughnessFactorById.clear();
+    macroResourcesById.clear();
+    macroTextureLoc = hasMacroLoc = macroParametersLoc = -1;
     lightmapTextures.clear();
     directionalLightmapTextures.clear();
     sectorCount = 0;
@@ -1731,7 +1752,22 @@ void SectorMeshRenderer::DrawScene(
         if (decalTintLoc >= 0) {
             SetShaderValue(material.shader, decalTintLoc, &decalTint, SHADER_UNIFORM_VEC3);
         }
+        const auto macroIt = macroResourcesById.find(batch.materialId);
+        const Texture2D* macroTexture = macroIt == macroResourcesById.end()
+                ? nullptr : assets.GetTexture(macroIt->second.texture);
+        const int hasMacro = macroTexture != nullptr ? 1 : 0;
+        const Vector3 macroParameters = hasMacro != 0
+                ? macroIt->second.parameters : Vector3{8.0f, 0.0f, 0.0f};
+        SetShaderValue(material.shader, hasMacroLoc, &hasMacro, SHADER_UNIFORM_INT);
+        SetShaderValue(material.shader, macroParametersLoc, &macroParameters, SHADER_UNIFORM_VEC3);
+        rlActiveTextureSlot(11);
+        if (macroTexture != nullptr) rlEnableTexture(macroTexture->id);
+        else rlDisableTexture();
+        rlActiveTextureSlot(0);
         DrawMesh(batch.mesh, material, MatrixIdentity());
+        rlActiveTextureSlot(11);
+        rlDisableTexture();
+        rlActiveTextureSlot(0);
     }
     if (!capture) {
         worldProfiler.End();

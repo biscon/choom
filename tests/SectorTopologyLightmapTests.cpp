@@ -2984,6 +2984,24 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
     hashMap.resolvedMaterialsById["floor"].normalStrength = 0.25f;
     Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
           "runtime-only material PBR scalars do not change the source hash");
+    const auto hashMacroPath = root / "hash_macro.png";
+    auto& macro = hashMap.resolvedMaterialsById["floor"].macro;
+    macro.enabled = true;
+    macro.maskPath = hashMacroPath.string();
+    macro.repeatMeters = 13.0f;
+    macro.darkening = 0.3f;
+    macro.roughnessChange = -0.4f;
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "macro settings and missing mask do not affect baked lighting hash");
+    WriteSolidRgbTexture(hashMacroPath, WHITE);
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "adding macro mask does not affect baked lighting hash");
+    WriteSolidRgbTexture(hashMacroPath, BLACK);
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "changing macro mask pixels does not affect baked lighting hash");
+    std::filesystem::remove(hashMacroPath);
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "removing macro mask does not affect baked lighting hash");
     WriteSolidRgbTexture(hashNormalPath, Color{128, 128, 255, 255});
     const std::string presentNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);

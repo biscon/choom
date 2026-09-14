@@ -234,6 +234,29 @@ bool SectorEditorMaterialRegistryEditorService::ApplyAlbedoPath(
     return true;
 }
 
+void SectorEditorMaterialRegistryEditorService::OpenMacroPicker()
+{
+    OpenMacroPickerFromRoot(std::filesystem::path(ASSETS_PATH));
+}
+
+void SectorEditorMaterialRegistryEditorService::OpenMacroPickerFromRoot(
+        const std::filesystem::path& assetsRoot)
+{
+    auto& picker = state_.albedoPicker;
+    picker = SectorEditorMaterialAlbedoPickerState{};
+    picker.macroMask = true;
+    picker.paths = ScanAssetImagePngs(assetsRoot, picker.scanMessage, true);
+    picker.open = true;
+    const auto* draft = SelectedDraft();
+    RebuildAlbedoPickerList(draft == nullptr ? std::string{} : draft->definition.macro.maskPath);
+}
+
+void SectorEditorMaterialRegistryEditorService::ClearMacroMask()
+{
+    auto* draft = SelectedDraft();
+    if (draft != nullptr) draft->definition.macro.maskPath.clear();
+}
+
 void SectorEditorMaterialRegistryEditorService::OpenAlbedoPicker()
 {
     SectorEditorMaterialAlbedoPickerState& picker = state_.albedoPicker;
@@ -304,10 +327,15 @@ bool SectorEditorMaterialRegistryEditorService::ConfirmAlbedoPicker(
 {
     const std::string path = SelectedAlbedoPickerPath();
     if (path.empty()) {
-        state_.albedoPicker.selectionMessage = "Select an albedo PNG";
+        state_.albedoPicker.selectionMessage = state_.albedoPicker.macroMask
+                ? "Select a macro mask PNG" : "Select an albedo PNG";
         return false;
     }
-    if (!ApplyAlbedoPath(path)) return false;
+    if (state_.albedoPicker.macroMask) {
+        auto* draft = SelectedDraft();
+        if (draft == nullptr) return false;
+        draft->definition.macro.maskPath = path;
+    } else if (!ApplyAlbedoPath(path)) return false;
     CancelAlbedoPicker(&assets);
     return true;
 }
@@ -350,7 +378,8 @@ void SectorEditorMaterialRegistryEditorService::EnsureAlbedoPickerPreview(
             (path + "|material-albedo-picker").c_str(),
             ResolveEditorAssetPath(path).c_str(),
             engine::TextureColorUsage::DisplaySrgb,
-            SectorMaterialTextureLoadFlags(filter));
+            picker.macroMask ? engine::TextureLoad_TrilinearFilter
+                             : SectorMaterialTextureLoadFlags(filter));
 }
 
 void SectorEditorMaterialRegistryEditorService::RebuildAlbedoPickerList(
@@ -553,6 +582,9 @@ void SectorEditorMaterialRegistryEditorService::SyncBuffers()
     state_.metallicInput = engine::UIFloatInputState{};
     state_.roughnessInput = engine::UIFloatInputState{};
     state_.normalStrengthInput = engine::UIFloatInputState{};
+    state_.macroRepeatInput = engine::UIFloatInputState{};
+    state_.macroDarkeningInput = engine::UIFloatInputState{};
+    state_.macroRoughnessInput = engine::UIFloatInputState{};
     state_.previewPath.clear();
     state_.previewTexture = engine::NullTextureHandle();
 }

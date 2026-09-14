@@ -111,6 +111,20 @@ bool ValidateSectorMaterialDefinition(
         error = "Material albedo must be a normalized PNG path under assets/images";
         return false;
     }
+    const auto& macro = material.macro;
+    if (!macro.maskPath.empty() && !IsNormalizedAssetImagePath(macro.maskPath)) {
+        error = "Macro mask must be a normalized PNG path under assets/images";
+        return false;
+    }
+    if (!std::isfinite(macro.repeatMeters) || macro.repeatMeters < 0.1f
+            || macro.repeatMeters > 1024.0f
+            || !std::isfinite(macro.darkening) || macro.darkening < 0.0f
+            || macro.darkening > 1.0f
+            || !std::isfinite(macro.roughnessChange) || macro.roughnessChange < -1.0f
+            || macro.roughnessChange > 1.0f) {
+        error = "Macro repeat must be 0.1-1024 metres, darkening 0-1, roughness change -1 to 1";
+        return false;
+    }
     if (!std::isfinite(material.metallicFactor)
             || material.metallicFactor < 0.0f
             || material.metallicFactor > 1.0f
@@ -181,6 +195,22 @@ bool ParseSectorMaterialRegistryJson(
             material.metallicFactor = ReadFactor(value, "metallicFactor", 0.0f);
             material.roughnessFactor = ReadFactor(value, "roughnessFactor", 0.8f);
             material.normalStrength = ReadFactor(value, "normalStrength", 1.0f);
+            if (value.contains("macro")) {
+                const Json& macro = value.at("macro");
+                if (!macro.is_object()) throw std::runtime_error("macro must be an object");
+                material.macro.enabled = macro.value("enabled", false);
+                material.macro.maskPath = macro.value("maskPath", std::string{});
+                const auto readNumber = [&](const char* key, float fallback) {
+                    if (!macro.contains(key)) return fallback;
+                    if (!macro.at(key).is_number()) {
+                        throw std::runtime_error(std::string("macro.") + key + " must be a number");
+                    }
+                    return macro.at(key).get<float>();
+                };
+                material.macro.repeatMeters = readNumber("repeatMeters", 8.0f);
+                material.macro.darkening = readNumber("darkening", 0.08f);
+                material.macro.roughnessChange = readNumber("roughnessChange", 0.12f);
+            }
             std::string validation;
             if (!ValidateSectorMaterialDefinition(material, validation)) {
                 throw std::runtime_error("Material '" + entry.key() + "': " + validation);
@@ -225,6 +255,17 @@ bool SerializeSectorMaterialRegistryJson(
                     {"metallicFactor", material.metallicFactor},
                     {"roughnessFactor", material.roughnessFactor},
                     {"normalStrength", material.normalStrength}};
+            const auto& macro = material.macro;
+            const SectorMaterialMacroSettings defaults;
+            if (macro.enabled || !macro.maskPath.empty()
+                    || macro.repeatMeters != defaults.repeatMeters
+                    || macro.darkening != defaults.darkening
+                    || macro.roughnessChange != defaults.roughnessChange) {
+                root["materials"][id]["macro"] = Json{
+                        {"enabled", macro.enabled}, {"maskPath", macro.maskPath},
+                        {"repeatMeters", macro.repeatMeters}, {"darkening", macro.darkening},
+                        {"roughnessChange", macro.roughnessChange}};
+            }
         }
         outJson = root.dump(2) + "\n";
         error.clear();

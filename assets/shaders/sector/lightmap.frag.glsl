@@ -1,5 +1,6 @@
 #version 330
 #include "reflection_sampling.glsl"
+#include "macro_variation.glsl"
 in vec2 fragTexCoord;
 in vec2 fragTexCoord2;
 in vec2 fragDecalUv;
@@ -213,6 +214,8 @@ void main()
     }
     vec4 baseColor = texture(texture0, fragTexCoord);
     vec3 surfaceRgb = baseColor.rgb;
+    float macroMask = SectorMacroMask(fragWorldPosition, geometricNormal);
+    surfaceRgb *= 1.0 - macroMask * macroParameters.y;
     vec3 emissiveDecalRgb = vec3(0.0);
     float emissiveDecalAlpha = 0.0;
     if (hasDecal != 0) {
@@ -228,7 +231,7 @@ void main()
             emissiveDecalRgb = decalRgb;
             emissiveDecalAlpha = decalAlpha;
         } else {
-            surfaceRgb = mix(baseColor.rgb, decalRgb, decalAlpha);
+            surfaceRgb = mix(surfaceRgb, decalRgb, decalAlpha);
         }
     }
     vec4 bakedSample = (useLightmap > 0.5 && hasLightmap != 0)
@@ -257,6 +260,7 @@ void main()
         roughness = clamp(orm.g, 0.045, 1.0);
         metallic = clamp(orm.b, 0.0, 1.0);
     }
+    roughness = clamp(roughness + macroMask * macroParameters.z, 0.045, 1.0);
     float specularRoughness = FilterSpecularRoughness(
             roughness, worldNormal, specularAaEnabled != 0);
     // Keep normal derivatives defined across alpha-tested edges.

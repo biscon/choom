@@ -33,6 +33,9 @@ public:
     bool SelectIndex(int index);
     void AddMaterial();
     void ApplyIdBuffer();
+    void OpenMacroPicker();
+    void OpenMacroPickerFromRoot(const std::filesystem::path& assetsRoot);
+    void ClearMacroMask();
     void OpenAlbedoPicker();
     void OpenAlbedoPickerFromRoot(const std::filesystem::path& assetsRoot);
     void ApplyAlbedoPickerFilter();

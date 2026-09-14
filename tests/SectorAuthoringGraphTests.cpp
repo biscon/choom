@@ -14242,6 +14242,8 @@ void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
     WriteTextFile(root / "images" / "walls" / "brick_orm.png", "");
     WriteTextFile(root / "images" / "walls" / "brick_roughness.png", "");
     WriteTextFile(root / "images" / "walls" / "notes.txt", "");
+    std::filesystem::create_directories(root / "images" / "macros", error);
+    WriteTextFile(root / "images" / "macros" / "wear.png", "");
 
     game::SectorMaterialRegistry registry;
     registry.materialsById.emplace(
@@ -14264,6 +14266,22 @@ void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
             root / "materials" / "materials.json",
             root / "levels"};
     editor.Open();
+    editor.OpenMacroPickerFromRoot(root);
+    Check(state.albedoPicker.macroMask && state.albedoPicker.paths.size() == 1
+            && editor.SelectedAlbedoPickerPath() == "assets/images/macros/wear.png",
+            "macro picker lists only the macro library");
+    engine::AssetManager macroAssets;
+    Check(editor.ConfirmAlbedoPicker(macroAssets)
+            && editor.SelectedDraft()->definition.macro.maskPath == "assets/images/macros/wear.png"
+            && editor.SelectedDraft()->definition.path == "assets/images/walls/brick.png",
+            "macro picker changes mask without changing albedo");
+    editor.ClearMacroMask();
+    Check(editor.SelectedDraft()->definition.macro.maskPath.empty(), "macro mask can be cleared");
+    editor.OpenMacroPickerFromRoot(root);
+    Check(editor.ConfirmAlbedoPicker(macroAssets), "macro mask can be selected again");
+    editor.Cancel(nullptr);
+    editor.Open();
+    Check(editor.SelectedDraft()->definition.macro.maskPath.empty(), "cancel discards macro draft edits");
     editor.OpenAlbedoPickerFromRoot(root);
 
     const std::vector<std::string> expectedPaths{

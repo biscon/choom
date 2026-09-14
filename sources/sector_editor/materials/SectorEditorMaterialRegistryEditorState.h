@@ -18,6 +18,7 @@ struct SectorEditorMaterialRegistryDraft {
 
 struct SectorEditorMaterialAlbedoPickerState {
     bool open = false;
+    bool macroMask = false;
     std::vector<std::string> paths;
     std::vector<size_t> filteredPathIndices;
     std::vector<std::string> listLabelStorage;
@@ -45,6 +46,9 @@ struct SectorEditorMaterialRegistryEditorState {
     engine::UIFloatInputState metallicInput;
     engine::UIFloatInputState roughnessInput;
     engine::UIFloatInputState normalStrengthInput;
+    engine::UIFloatInputState macroRepeatInput;
+    engine::UIFloatInputState macroDarkeningInput;
+    engine::UIFloatInputState macroRoughnessInput;
     bool deleteConfirmationOpen = false;
     std::string deleteConfirmationId;
     std::string validationMessage;

@@ -7147,6 +7147,9 @@ void SectorEditor::DrawMaterialRegistryEditor(
         catalog.RefreshTextureHandles(assets);
         RefreshResolvedMaterials();
         state.lightmapSourceHashRevision = 0;
+        if (engineContext != nullptr && sceneRuntime.Renderer().IsRendererReady()) {
+            RefreshPreviewSurfaceMaterials(*engineContext);
+        }
     }
 }
 

@@ -1,27 +1,6 @@
 {
   "formatVersion": 1,
   "materials": {
-    "baseboard_wood": {
-      "albedoTexturePath": "assets/images/baseboards/baseboard_wood.png",
-      "filter": "anisotropic8x",
-      "metallicFactor": 0.0,
-      "roughnessFactor": 1.0,
-      "normalStrength": 0.35
-    },
-    "baseboard_metal": {
-      "albedoTexturePath": "assets/images/baseboards/baseboard_metal.png",
-      "filter": "anisotropic8x",
-      "metallicFactor": 1.0,
-      "roughnessFactor": 1.0,
-      "normalStrength": 0.15
-    },
-    "baseboard_painted_white": {
-      "albedoTexturePath": "assets/images/baseboards/baseboard_painted_white.png",
-      "filter": "anisotropic8x",
-      "metallicFactor": 0.0,
-      "roughnessFactor": 1.0,
-      "normalStrength": 0.2
-    },
     "asphalt_06": {
       "albedoTexturePath": "assets/images/hires/asphalt_06.png",
       "filter": "anisotropic8x",
@@ -35,6 +14,27 @@
       "metallicFactor": 0.0,
       "roughnessFactor": 0.800000011920929,
       "normalStrength": 1.0
+    },
+    "baseboard_metal": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_metal.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 1.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.15000000596046448
+    },
+    "baseboard_painted_white": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_painted_white.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.20000000298023224
+    },
+    "baseboard_wood": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_wood.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.3499999940395355
     },
     "beige_wall_001": {
       "albedoTexturePath": "assets/images/hires/beige_wall_001.png",
@@ -166,8 +166,15 @@
       "albedoTexturePath": "assets/images/hires/interior_tiles.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.44999998807907104,
-      "normalStrength": 1.0
+      "roughnessFactor": 0.25,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.15000000596046448,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "iron_band_512": {
       "albedoTexturePath": "assets/images/hub/iron_band_512.png",
@@ -216,7 +223,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.25,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/uneven_polish.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.10000000149011612,
+        "roughnessChange": 0.15000000596046448
+      }
     },
     "painted_plaster_wall": {
       "albedoTexturePath": "assets/images/hires/painted_plaster_wall.png",
@@ -292,8 +306,15 @@
       "albedoTexturePath": "assets/images/walls/white_wall_tiles.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.800000011920929,
-      "normalStrength": 1.0
+      "roughnessFactor": 0.30000001192092896,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 6.0,
+        "darkening": 0.25,
+        "roughnessChange": 0.20000000298023224
+      }
     },
     "wood_beam_512x128": {
       "albedoTexturePath": "assets/images/hub/wood_beam_512x128.png",
@@ -356,7 +377,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.800000011920929,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/plaster_discoloration.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.3499999940395355,
+        "roughnessChange": 0.11999999731779099
+      }
     }
   }
 }

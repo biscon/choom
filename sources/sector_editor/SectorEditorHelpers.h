@@ -61,7 +61,7 @@ bool HasPngExtension(const std::filesystem::path& path);
 std::vector<std::string> ScanAssetImagePngs(std::string& message);
 std::vector<std::string> ScanAssetImagePngs(
         const std::filesystem::path& assetsRoot,
-        std::string& message);
+        std::string& message, bool macroMasks = false);
 std::vector<std::string> ScanAssetAudioFiles(std::string& message);
 std::vector<std::string> ScanAssetAudioFiles(
         const std::filesystem::path& assetsRoot,

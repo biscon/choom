@@ -1423,3 +1423,28 @@ deferred.
   isolated deletion and degree-2 dissolve.
 - No automatic duplicate linedef or sidedef merge.
 - No arbitrary line cutting or automatic overlap splitting.
+
+### Material macro variation
+
+The global Material Editor has an optional **Enable macro variation** section for
+static sector architecture. Choose a mask from `assets/images/macros/`, set the
+repeat size in metres, darkening strength, and signed roughness change, then Save.
+Positive roughness makes masked patches duller; negative values make them more
+polished. Black mask pixels are neutral and white pixels apply the full effect.
+The picker shows a thumbnail. Clear removes the mask; Cancel discards draft edits.
+
+Macro settings default to disabled and are stored in an optional `macro` object
+in the global material registry, not in level documents. The object contains
+`enabled`, `maskPath`, `repeatMeters`, `darkening`, and `roughnessChange`.
+Default values are false, an empty path, 8, 0.08, and 0.12 respectively.
+The renderer samples red as linear data with trilinear filtering and world-space
+triplanar mapping, independently of base UVs. Existing decals remain above the
+modified base color. Missing/pending masks are neutral. Saving refreshes an active
+3D preview and its reflections through the existing material refresh path.
+
+Walls, floors, ceilings, baseboards, and static structural surfaces support it;
+moving doors, removable covers, model props, sky, liquids, and decal materials do
+not. Macro properties and pixels are runtime shading inputs excluded from the
+lightmap source hash, so tweaking them does not require rebaking. Material-only
+changes do not mutate topology or require 2D topology cache invalidation.
+See `assets/images/macros/README.md` for the six generated masks and starting values.

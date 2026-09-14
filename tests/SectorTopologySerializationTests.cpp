@@ -5540,6 +5540,74 @@ void TestFileApi()
     std::filesystem::remove(path, removeError);
 }
 
+void TestMaterialMacroSettings()
+{
+    game::SectorMaterialRegistry registry;
+    game::SectorMaterialDefinition material;
+    material.id = "macro_test";
+    material.path = "assets/images/test.png";
+    registry.materialsById.emplace(material.id, material);
+    std::string text, error;
+    Check(game::SerializeSectorMaterialRegistryJson(registry, text, error), "serialize legacy macro defaults");
+    Check(!Json::parse(text)["materials"][material.id].contains("macro"), "default macro settings are omitted");
+    game::SectorMaterialRegistry parsed;
+    Check(game::ParseSectorMaterialRegistryJson(text, parsed, error)
+            && !parsed.materialsById.at(material.id).macro.enabled,
+            "old material files keep macro variation disabled");
+    auto& macro = registry.materialsById.at(material.id).macro;
+    macro.enabled = true;
+    macro.maskPath = "assets/images/macros/test.png";
+    macro.repeatMeters = 12.5f;
+    macro.darkening = 0.2f;
+    macro.roughnessChange = -0.3f;
+    Check(game::SerializeSectorMaterialRegistryJson(registry, text, error)
+            && game::ParseSectorMaterialRegistryJson(text, parsed, error), "macro settings round trip");
+    const auto& actual = parsed.materialsById.at(material.id).macro;
+    Check(actual.enabled && actual.maskPath == macro.maskPath
+            && Near(actual.repeatMeters, 12.5f) && Near(actual.darkening, 0.2f)
+            && Near(actual.roughnessChange, -0.3f), "macro round trip preserves every field and signed roughness");
+    auto json = Json::parse(text);
+    for (const char* field : {"repeatMeters", "darkening", "roughnessChange"}) {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"][field] = "invalid";
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject nonnumeric macro values");
+    }
+    for (float value : {0.0f, -1.0f, 1025.0f}) {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"]["repeatMeters"] = value;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject invalid macro repeat sizes");
+    }
+    for (const char* field : {"darkening", "roughnessChange"}) {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"][field] = 1.1f;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject excessive macro strengths");
+        invalid["materials"][material.id]["macro"][field] = -1.1f;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject macro strengths below range");
+    }
+    {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"]["darkening"] = -0.1f;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "darkening cannot brighten surfaces");
+        auto nonfinite = registry.materialsById.at(material.id);
+        nonfinite.macro.repeatMeters = std::numeric_limits<float>::infinity();
+        Check(!game::ValidateSectorMaterialDefinition(nonfinite, error), "reject infinite macro size");
+        nonfinite = registry.materialsById.at(material.id);
+        nonfinite.macro.roughnessChange = std::numeric_limits<float>::quiet_NaN();
+        Check(!game::ValidateSectorMaterialDefinition(nonfinite, error), "reject NaN macro roughness");
+    }
+    for (const char* path : {"../mask.png", "assets/images/../mask.png", "assets/images/mask.jpg"}) {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"]["maskPath"] = path;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject unsafe or non-PNG macro paths");
+    }
+    macro.enabled = false;
+    Check(game::SerializeSectorMaterialRegistryJson(registry, text, error)
+            && game::ParseSectorMaterialRegistryJson(text, parsed, error)
+            && !parsed.materialsById.at(material.id).macro.enabled
+            && parsed.materialsById.at(material.id).macro.maskPath == macro.maskPath,
+            "disabled materials retain configured macro settings");
+}
+
 void TestGlobalMaterialRegistryAndReferenceRefactor()
 {
     const std::string registryText = R"json({
@@ -6015,6 +6083,7 @@ int main()
     TestStructuralPrimitiveOrientationRoundTrip();
     TestProceduralLadderRoundTrip();
     TestFileApi();
+    TestMaterialMacroSettings();
     TestGlobalMaterialRegistryAndReferenceRefactor();
 
     if (failures != 0) {
