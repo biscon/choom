@@ -92,11 +92,59 @@ float PointShadowSampleVisibility(
     return receiverDepth - effectiveBias <= blockerDepth ? 1.0 : 0.0;
 }
 
+vec3 NormalizeShadowReceiverPlane(vec3 planeNormal, vec3 fallback)
+{
+    // Position derivatives shrink with pixel footprint. Scale before using the
+    // usual normalization threshold so valid small triangles keep their plane.
+    vec3 magnitude = abs(planeNormal);
+    float scale = max(magnitude.x, max(magnitude.y, magnitude.z));
+    return SafeNormalize(planeNormal / max(scale, 1e-30), fallback);
+}
+
+float FlashlightShadowSampleVisibility(
+        ivec2 atlasTile,
+        ivec2 tileResolution,
+        vec2 sourceUv,
+        vec2 projection,
+        vec3 lightSpacePlaneNormal,
+        float planeDistance,
+        float farPlane,
+        float contactOffsetWorld,
+        float fallbackCompareDepth)
+{
+    ivec2 localTexel = clamp(
+            ivec2(floor(sourceUv * vec2(tileResolution))),
+            ivec2(0), tileResolution - ivec2(1));
+    vec2 texelCenterUv = (vec2(localTexel) + vec2(0.5))
+            / vec2(tileResolution);
+    float blockerDepth = texelFetch(
+            shadowMap0, atlasTile * tileResolution + localTexel, 0).r;
+
+    // Compare against the receiver plane at the fetched texel's center, not
+    // the fragment's depth. Neighboring samples have different depths on a
+    // sloped surface, even when they all see the same unoccluded triangle.
+    vec3 texelRay = vec3((texelCenterUv * 2.0 - 1.0) / projection.x, 1.0);
+    float planeDirection = dot(lightSpacePlaneNormal, texelRay);
+    float compareDepth = fallbackCompareDepth;
+    if (abs(planeDirection) > 0.000001) {
+        float forwardDepth = planeDistance / planeDirection;
+        if (forwardDepth > 0.05 && forwardDepth <= farPlane) {
+            // Bias only the comparison along this light ray. Moving the UV
+            // along a surface normal makes shadows jump at shared edges.
+            float biasedForwardDepth = max(
+                    forwardDepth - contactOffsetWorld / length(texelRay), 0.05);
+            compareDepth = projection.y * (1.0 - 0.05 / biasedForwardDepth);
+        }
+    }
+    return compareDepth - 0.000001 <= blockerDepth ? 1.0 : 0.0;
+}
+
 float DynamicLightShadowVisibility(
         int lightIndex,
         int shadowSlot,
         vec3 worldPosition,
         vec3 worldNormal,
+        vec3 trianglePlaneNormal,
         vec3 surfaceToLightDirection)
 {
     if (shadowSlot < 0 || shadowSlot >= MAX_DYNAMIC_SHADOW_CASTERS) {
@@ -118,18 +166,6 @@ float DynamicLightShadowVisibility(
             shadowBias[shadowSlot]
                     * (1.0 + (1.0 - normalLightDot) * 2.0),
             0.02);
-    if (flashlightProjection) {
-        // Constant projected-depth bias grows into large world-space gaps with
-        // distance. Move the receiver a small, slope-aware world distance
-        // toward the light instead so contact remains stable across the beam.
-        float contactOffset = shadowBias[shadowSlot]
-                * (1.0 + (1.0 - normalLightDot));
-        vec3 offsetNormal = signedNormalLightDot >= 0.0
-                ? receiverPlaneNormal
-                : -receiverPlaneNormal;
-        fromLight += offsetNormal * contactOffset;
-        effectiveBias = 0.000001;
-    }
     float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
     int atlasTiles = max(shadowAtlasTilesPerRow, 1);
     ivec2 tileResolution = textureSize(shadowMap0, 0) / atlasTiles;
@@ -226,6 +262,38 @@ float DynamicLightShadowVisibility(
 
     ivec2 atlasTile = ivec2(
             shadowSlot % atlasTiles, shadowSlot / atlasTiles);
+    if (flashlightProjection) {
+        vec3 lightSpacePlaneNormal = vec3(
+                dot(trianglePlaneNormal, right),
+                dot(trianglePlaneNormal, up),
+                dot(trianglePlaneNormal, forward));
+        float planeDistance = dot(trianglePlaneNormal, fromLight);
+        float farPlane = max(dynamicLightRadii[lightIndex], 0.0501);
+        float contactOffsetWorld = max(shadowBias[shadowSlot], 0.0);
+        float biasedForwardDepth = max(
+                spotForwardDepth * (1.0 - contactOffsetWorld / length(fromLight)),
+                0.05);
+        float fallbackCompareDepth = projection.y
+                * (1.0 - 0.05 / biasedForwardDepth);
+        if (softness <= 0.0) {
+            return FlashlightShadowSampleVisibility(
+                    atlasTile, tileResolution, shadowCoord.xy, projection,
+                    lightSpacePlaneNormal, planeDistance, farPlane,
+                    contactOffsetWorld, fallbackCompareDepth);
+        }
+
+        vec2 radius = max(0.25, softness) / vec2(tileResolution);
+        float visible = 0.0;
+        for (int i = 0; i < 12; ++i) {
+            visible += FlashlightShadowSampleVisibility(
+                    atlasTile, tileResolution,
+                    shadowCoord.xy + kPoissonDisk[i] * radius, projection,
+                    lightSpacePlaneNormal, planeDistance, farPlane,
+                    contactOffsetWorld, fallbackCompareDepth);
+        }
+        return visible / 12.0;
+    }
+
     float atlasScale = 1.0 / float(atlasTiles);
     if (softness <= 0.0) {
         float blockerDepth = SampleSpotShadowMap(

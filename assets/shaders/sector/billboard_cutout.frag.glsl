@@ -72,11 +72,13 @@ const vec2 kPoissonDisk[12] = vec2[12](
 
 void main()
 {
+    // A billboard's receiver plane comes from its geometry, before alpha discard.
+    vec3 trianglePlane = cross(dFdx(fragWorldPosition), dFdy(fragWorldPosition));
+    vec3 trianglePlaneNormal = NormalizeShadowReceiverPlane(
+            trianglePlane, vec3(0.0, 1.0, 0.0));
     vec3 receiverPlaneNormal = vec3(0.0, 1.0, 0.0);
     if (hasPointShadows != 0) {
-        receiverPlaneNormal = SafeNormalize(
-                cross(dFdx(fragWorldPosition), dFdy(fragWorldPosition)),
-                vec3(0.0, 1.0, 0.0));
+        receiverPlaneNormal = SafeNormalize(trianglePlane, vec3(0.0, 1.0, 0.0));
     }
     vec4 sampled = texture(texture0, fragTexCoord);
     if (sampled.a < alphaCutoff) {
@@ -130,7 +132,8 @@ void main()
             int shadowSlot = dynamicLightShadowSlots[i];
             if (shadowSlot >= 0 && shadowStrength[shadowSlot] > 0.0) {
                 float visibility = DynamicLightShadowVisibility(
-                        i, shadowSlot, fragWorldPosition, receiverPlaneNormal, lightDirection);
+                        i, shadowSlot, fragWorldPosition, receiverPlaneNormal,
+                        trianglePlaneNormal, lightDirection);
                 coneAtten *= mix(1.0, visibility, clamp(shadowStrength[shadowSlot], 0.0, 1.0));
             }
             dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * coneAtten;
