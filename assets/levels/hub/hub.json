@@ -7525,6 +7525,22 @@
         141.67999267578125
       ],
       "yawDegrees": -90.0
+    },
+    {
+      "id": 477,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_477",
+        "modelPath": "assets/models/room_clutter/Poster_Pinup_Man_Swimshorts.gltf",
+        "heightOffsetWorld": 1.100000023841858,
+        "scale": 1.5
+      },
+      "position": [
+        -43.439998626708984,
+        0.0,
+        151.9199981689453
+      ],
+      "yawDegrees": 180.0
     }
   ],
   "staticLights": [
@@ -13648,7 +13664,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "44f8df103a24d00d",
+    "sourceHash": "44c6766c68a2ab38",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -13668,7 +13684,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "44f8df103a24d00d",
+      "sourceHash": "44c6766c68a2ab38",
       "count": 3969,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -13694,9 +13710,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "44f8df103a24d00d",
-      "modelCount": 141,
-      "objectCount": 391,
+      "sourceHash": "44c6766c68a2ab38",
+      "modelCount": 142,
+      "objectCount": 392,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
@@ -36372,6 +36388,171 @@
             ]
           }
         }
+      },
+      {
+        "lineId": 687,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 688,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete",
+          "decal": {
+            "materialId": "concrete_decal_old_repair",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.800000011920929,
+                -0.20000000298023224
+              ]
+            },
+            "opacity": 0.8500000238418579,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 689,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "seamless_worn_concrete",
+          "decal": {
+            "materialId": "concrete_decal_branching_cracks",
+            "uv": {
+              "scale": [
+                1.25,
+                1.25
+              ],
+              "offset": [
+                -0.10000000149011612,
+                0.0
+              ]
+            },
+            "opacity": 0.8999999761581421,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
       }
     ],
     "faceAnchors": [
@@ -44022,7 +44203,28 @@
           }
         },
         "floorMaterialId": "large_industrial_tiles_512",
-        "ceilingMaterialId": "seamless_worn_concrete"
+        "ceilingMaterialId": "seamless_worn_concrete",
+        "ceilingDecal": {
+          "materialId": "concrete_decal_old_repair",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.30000001192092896
+            ]
+          },
+          "opacity": 1.0,
+          "emissive": false,
+          "tint": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "bloomIntensity": 1.0
+        }
       }
     ],
     "fogVolumes": [

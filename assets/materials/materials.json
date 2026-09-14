@@ -64,6 +64,34 @@
       "roughnessFactor": 0.8500000238418579,
       "normalStrength": 0.75
     },
+    "concrete_decal_branching_cracks": {
+      "albedoTexturePath": "assets/images/decals/concrete/concrete_decal_branching_cracks.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.85,
+      "normalStrength": 1.0
+    },
+    "concrete_decal_damp_damage": {
+      "albedoTexturePath": "assets/images/decals/concrete/concrete_decal_damp_damage.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.85,
+      "normalStrength": 1.0
+    },
+    "concrete_decal_old_repair": {
+      "albedoTexturePath": "assets/images/decals/concrete/concrete_decal_old_repair.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.85,
+      "normalStrength": 1.0
+    },
+    "concrete_decal_spalled_patch": {
+      "albedoTexturePath": "assets/images/decals/concrete/concrete_decal_spalled_patch.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.85,
+      "normalStrength": 1.0
+    },
     "concrete_floor1": {
       "albedoTexturePath": "assets/images/floors/concrete_floor1.png",
       "filter": "anisotropic8x",
