@@ -1418,12 +1418,30 @@ void TestFlashlightProfileCoverage()
                             != std::string::npos
                     && profile.find("cookieVariation") != std::string::npos,
           "shared flashlight profile owns one outer feather and keeps the cookie as variation only");
-    Check(shadows.find("bool flashlightProjection") != std::string::npos
-                    && shadows.find("fromLight += offsetNormal * contactOffset")
+    // Guard receiver/sampler routing here; source checks cannot validate the
+    // projection math or the rendered result.
+    const auto suppliesTrianglePlane = [](const std::string& source) {
+        return source.find("vec3 trianglePlaneNormal = NormalizeShadowReceiverPlane(")
                             != std::string::npos
-                    && shadows.find("effectiveBias = 0.000001")
+                && source.find("trianglePlaneNormal, lightDirection)")
+                            != std::string::npos;
+    };
+    Check(suppliesTrianglePlane(sector)
+                    && suppliesTrianglePlane(models)
+                    && suppliesTrianglePlane(doors)
+                    && suppliesTrianglePlane(billboards),
+          "all flashlight shadow receivers supply their geometric triangle plane to shadow sampling");
+    const size_t flashlightStart = shadows.find("if (flashlightProjection) {");
+    const size_t flashlightEnd = shadows.find("return visible / 12.0;", flashlightStart);
+    const std::string flashlightSampling = flashlightStart != std::string::npos
+                    && flashlightEnd != std::string::npos
+            ? shadows.substr(flashlightStart, flashlightEnd - flashlightStart)
+            : std::string{};
+    Check(flashlightSampling.find("return FlashlightShadowSampleVisibility(")
+                            != std::string::npos
+                    && flashlightSampling.find("visible += FlashlightShadowSampleVisibility(")
                             != std::string::npos,
-          "flashlight shadow receivers use a world-space contact offset instead of constant projected-depth bias");
+          "hard and soft flashlight shadows both use the receiver-plane sampler");
 }
 
 } // namespace
