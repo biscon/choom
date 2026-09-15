@@ -39,6 +39,8 @@ ranges, return values, behavior, and failure details.
   `closeDoor(doorId)`, `toggleDoor(doorId)`.
 - **[Inventory queries](#inventory-queries):**
   `hasInventoryItemInstance(instanceId)`, `hasInventoryItemDefinition(definitionId)`.
+- **[Object enabled state](#object-enabled-state):** `setPropEnabled(propId, enabled)`,
+  `setItemEnabled(instanceId, enabled)`, `setNpcEnabled(npcId, enabled)`.
 - **[Prop animation](#dynamic-props-and-animation):**
   `playPropAnimation(propId [, animationName [, mode]])`,
   `pausePropAnimation(propId)`, `resumePropAnimation(propId)`,
@@ -84,6 +86,8 @@ ranges, return values, behavior, and failure details.
   `startLookAtNpc(instanceId, durationMs [, targetHeight])`,
   `lookAtProp(instanceId, durationMs [, targetHeight])`,
   `startLookAtProp(instanceId, durationMs [, targetHeight])`.
+- **[Screen shake](#screen-shake):** `screenShake(strength, durationMs [, type])`,
+  `startScreenShake(strength, durationMs [, type])`; `SHAKE_RUMBLE`, `SHAKE_IMPACT`.
 - **[Captions](#captions):** `say(npcId, message [, mood [, holdMs]])`,
   `startSay(npcId, message [, mood [, holdMs]])`,
   `say(message [, options])`, `startSay(message [, options])` for the player,
@@ -492,6 +496,72 @@ end
 This callback is separate from a dynamic prop's own no-argument
 `onUseScript`, which continues to run from the centered E-key Use interaction.
 
+## Fog volume enabled state
+
+```lua
+local ok, reason = setFogVolumeEnabled("engine_room_fog", false)
+setFogVolumeEnabled("engine_room_fog", true)
+```
+
+Use the fog inspector's **Instance ID**, which is unique among fog volumes in the
+level. New volumes receive an editable ID such as `fog_volume_12`; older levels
+receive stable generated IDs when loaded. IDs contain 1–63 letters, digits,
+underscores, or dashes and are persisted in the level file.
+
+The **Enabled** checkbox sets the starting state and defaults to true. Disabled
+volumes remain available to Lua. The command requires a Boolean and returns
+`true` on success, or `false, reason` if the volume is missing or its authored
+position could not resolve to a runtime sector. Repeating the current state succeeds.
+
+Disabling removes the fog's visual effect; enabling uses its existing animation
+timing. Runtime enabled state persists in save games and when revisiting levels.
+Older saves without fog state use the level's authored defaults. Normal script
+initialization runs after restoration, so an unconditional toggle in `init()`
+can override the restored state.
+
+## Object enabled state
+
+### `setPropEnabled(propId, enabled) -> true | false, reason`
+### `setItemEnabled(instanceId, enabled) -> true | false, reason`
+### `setNpcEnabled(npcId, enabled) -> true | false, reason`
+
+Set the enabled state of a placed dynamic prop, world item, or NPC using its
+**Instance ID**. The second argument must be a Lua Boolean. Prop commands target
+dynamic props; static props and NPCs are not accepted by `setPropEnabled`.
+Missing targets return `false, reason`. Setting the current state again succeeds.
+
+```lua
+function openSecurityWing()
+    setPropEnabled("temporary_barricade", false)
+    setItemEnabled("security_key", true)
+    setNpcEnabled("security_guard", true)
+end
+```
+
+The **Enabled** checkbox in these objects' inspectors controls their initial
+state. New placements and older levels without the field default to enabled.
+Disabled objects remain visible and selectable in 2D and free-camera authoring;
+gameplay preview and game sessions honor the flag.
+
+During gameplay, disabled objects are not rendered, cast no runtime shadows,
+do not collide, and cannot be picked up, used, dragged, hit, or targeted with a
+carried item. Their animation and world presentation pause. Disabled NPCs also
+pause AI, movement, combat, patrol and corpse timers, and stop their sounds.
+Re-enabling resumes ordinary state without resetting position, health, item
+quantity, animation playback settings, or single-use consumption. Collision
+resumes only if it was configured for that object.
+
+Disabling an NPC cancels its active scripted movement, body-look, animation,
+and speech operations with an `NPC disabled` reason. Its conversation ends and
+releases player controls. New movement, look, teleport, speech, and animation
+operations reject disabled NPCs; state setters such as `setNpcHealth` remain
+available. Re-enabling does not restart cancelled operations.
+
+Enabled state is saved per level and restored on save/load and level revisits.
+The commands do not recreate collected items or despawned NPCs and do not change
+inventory entries. An item whose pickup has already committed cannot be toggled,
+even while its pickup animation is still visible.
+
 ## Dynamic props and animation
 
 A dynamic prop becomes usable when its `onUseScript` inspector field names a
@@ -807,6 +877,8 @@ teleportPlayer(levelMarkerId) -> true | false, reason
 These commands instantly place the actor's feet at the marker's full X/Y/Z,
 converted from authored coordinates to runtime world units. Both actors face
 the marker's arrow immediately; the player also looks level (zero pitch).
+Marker orientation matches the 2D map: **0° south, 90° east, 180° north,
+270° west**. Player level-entry spawning uses the same facing as teleporting.
 Marker IDs are exact and case-sensitive and refer to the current level.
 
 Teleporting returns immediately, without yielding or creating an operation.
@@ -1154,6 +1226,61 @@ The camera uses a quintic smoother-step curve rather than rotating linearly.
 bounds: `0` is the bottom and `1` is the top. Targets are followed live while
 they move. `lookAtProp` accepts static 3D and dynamic props from their shared
 instance-ID namespace. Only one scripted look may be active.
+
+### Screen shake
+
+```text
+screenShake(strength, durationMs [, type]) -> true | false, reason
+startScreenShake(strength, durationMs [, type]) -> operation | nil, reason
+```
+
+Shakes the world view using smooth, time-based noise on camera pitch, yaw, and
+a smaller roll. Camera position stays fixed; UI, captions, letterboxing, and the
+crosshair do not shake. Movement, collision, sector lookup, and physics are
+unchanged. Shots follow the shaken view and remain aligned with the crosshair.
+Existing recoil and other camera effects continue to combine with the shake.
+
+`strength` is a finite number in **0–1**. At 1, a single shake has maximum
+pitch/yaw/roll amplitudes of 2°/2°/0.75°. `durationMs` is finite, non-negative
+milliseconds, including attack and release. Zero duration completes without
+shaking; zero strength still waits for the requested duration.
+
+The engine injects two type constants:
+
+- `SHAKE_RUMBLE` (default, also when type is `nil`): sustained 8 Hz noise with
+  smooth attack and release. Attack lasts up to 100 ms (10% of duration), and
+  release up to 350 ms (25% of duration).
+- `SHAKE_IMPACT`: 14 Hz noise with an attack of up to 10 ms (10% of duration),
+  followed by quadratic decay to zero. Suitable for blasts and short impacts.
+
+Overlapping shakes run independently and add together, capped at 4°/4°/1.5°
+pitch/yaw/roll for shake alone. Up to 16 shakes can run simultaneously; excess
+requests fail without replacing existing shakes. Invalid ranges or unknown type
+values return a failure and reason; non-number argument types raise Lua errors.
+
+`screenShake` waits in a managed Lua task. `startScreenShake` returns immediately
+and also works in the console. Its operation supports `await`, `operationStatus`,
+and `cancelOperation`; cancelling removes only that shake. Async shakes may
+outlive their launching task, and stopping a task cancels its blocking shake.
+No cutscene or control lock is required. Pause freezes shake timing; console or
+dialogue input capture alone does not. Death cancels shakes. Map changes,
+save restoration, and session teardown clear them; they are not saved.
+
+```lua
+screenShake(0.5, 2500, SHAKE_RUMBLE)
+
+local collapse = assert(startScreenShake(0.4, 3000))
+say("The tunnel is coming down!")
+local blast = assert(startScreenShake(0.8, 450, SHAKE_IMPACT))
+await(blast)
+await(collapse)
+```
+
+The reusable C++ backend is `engine::ScreenShakeState` with
+`StartScreenShake`, `UpdateScreenShake`, `IsScreenShakeActive`,
+`CancelScreenShake`, and `ResetScreenShake`. C++ durations use **seconds**.
+It has no Lua or cutscene dependency and uses fixed-capacity storage, so future
+explosion/weapon systems can use the same session-owned state.
 
 ### Captions
 
@@ -1511,6 +1638,7 @@ demonstrates Elin's topics, animations, and remembered questions.
 Requests a map change. Map IDs may contain letters, digits, `_`, and `-`.
 `spawnId`, when provided, must be non-empty and identifies the destination
 level marker. The first accepted request wins.
+The player faces the destination marker's arrow, just as with `teleportPlayer`.
 
 ```lua
 local ok, reason = changeMap("refinery", "west_entry")

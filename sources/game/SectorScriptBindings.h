@@ -3,6 +3,7 @@
 #include "engine/ecs/Entity.h"
 #include "game/dialogue/SectorConversation.h"
 #include "engine/scripting/ScriptData.h"
+#include "engine/render/ScreenShake.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -25,6 +26,8 @@ class SectorNavigationWorld;
 struct Health;
 struct PlayerInventoryState;
 struct NpcNavigationRuntime;
+struct NpcAudioRuntime;
+struct SectorPropDragSession;
 struct SectorCutsceneRuntime;
 struct SectorDialogueRuntime;
 struct SectorKeypadRuntime;
@@ -115,10 +118,18 @@ struct SectorScriptControlApi {
 };
 
 struct SectorScriptHost {
+    engine::ScreenShakeState* screenShake = nullptr;
+    struct ShakeOperation {
+        engine::ScreenShakeHandle shake;
+        engine::ScriptOperationHandle operation;
+    };
+    std::array<ShakeOperation, engine::kScreenShakeCapacity> shakeOperations{};
     const engine::DialogueVoiceLibrary* dialogueVoices = nullptr;
     SectorRuntimeObjectState* runtimeObjects = nullptr;
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;
+    NpcAudioRuntime* npcAudio = nullptr;
+    SectorPropDragSession* propDrag = nullptr;
     SectorCutsceneRuntime* cutscene = nullptr;
     SectorDialogueRuntime* dialogue = nullptr;
     SectorKeypadRuntime* keypad = nullptr;
@@ -178,6 +189,9 @@ void UpdateSectorScriptConversationOwnership(engine::EngineContext& context, Sec
 void UpdateSectorScriptOperations(
         engine::EngineContext& context,
         SectorScriptHost& host);
+
+void CancelSectorScriptScreenShakes(engine::EngineContext& context,
+        SectorScriptHost& host, const char* reason);
 
 void UpdateSectorScriptCutsceneControlOwnership(
         engine::EngineContext& context,

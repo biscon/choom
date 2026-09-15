@@ -210,6 +210,11 @@ GameSaveLevelState CaptureGameSaveLevelState(
     CaptureLights(map.dynamicPointLights, result.dynamicLights);
     CaptureLights(map.dynamicSpotLights, result.dynamicLights);
     CaptureLights(map.dynamicRectLights, result.dynamicLights);
+    for (const auto& volume : map.compiledLocalFogVolumes) {
+        if (!volume.instanceId.empty()) {
+            result.fogVolumes.push_back({volume.instanceId, volume.enabled});
+        }
+    }
     for (const SectorScriptTriggerState& trigger : scriptHost.triggers) {
         if (trigger.triggerIndex >= map.triggers.size()) continue;
         result.triggers.push_back(GameSaveTriggerState{
@@ -223,6 +228,14 @@ GameSaveLevelState CaptureGameSaveLevelState(
 
     for (const SectorPlacedRuntimeObjectEntity& tracked :
             runtimeObjects.placedObjectEntities) {
+        if (world.IsAlive(tracked.entity) && world.Has<SectorItem>(tracked.entity)
+                && world.Has<SectorObject>(tracked.entity)) {
+            const auto& item = world.Get<SectorItem>(tracked.entity);
+            if (!IsItemPickupVacuuming(item.presentation))
+                result.items.push_back({item.placedObjectId, item.instanceId,
+                        item.origin == SectorItemOrigin::SessionDrop,
+                        world.Get<SectorObject>(tracked.entity).enabled});
+        }
         const SectorPlacedRuntimeObject* authored =
                 FindSectorPlacedRuntimeObject(map, tracked.placedObjectId);
         if (authored == nullptr) continue;
@@ -268,6 +281,7 @@ GameSaveLevelState CaptureGameSaveLevelState(
             GameSaveNpcState npc;
             npc.placedObjectId = authored->id;
             npc.instanceId = runtime.instanceId;
+            npc.enabled = !world.Has<SectorObject>(entity) || world.Get<SectorObject>(entity).enabled;
             npc.position = transform.position;
             npc.yawRadians = transform.yawRadians;
             npc.health = world.Get<Health>(entity);
@@ -322,6 +336,7 @@ GameSaveLevelState CaptureGameSaveLevelState(
             GameSavePropState saved;
             saved.placedObjectId = prop.placedObjectId;
             saved.instanceId = prop.instanceId;
+            saved.enabled = !world.Has<SectorObject>(entity) || world.Get<SectorObject>(entity).enabled;
             saved.emissiveScale = prop.emissiveScale;
             if (world.Has<engine::AnimatedModelInstance>(entity))
                 saved.emissiveColors = CaptureSectorPropEmissionColors(prop.emissiveColors, assets.GetModelAsset(world.Get<engine::AnimatedModelInstance>(entity).model));
@@ -358,6 +373,11 @@ void ApplyGameSaveLevelMapState(
     ApplyLights(map.dynamicPointLights, state);
     ApplyLights(map.dynamicSpotLights, state);
     ApplyLights(map.dynamicRectLights, state);
+    for (auto& volume : map.compiledLocalFogVolumes) {
+        const auto saved = std::find_if(state.fogVolumes.begin(), state.fogVolumes.end(),
+                [&volume](const auto& value) { return value.instanceId == volume.instanceId; });
+        if (saved != state.fogVolumes.end()) volume.enabled = saved->enabled;
+    }
 }
 
 void ApplyGameSaveLevelRuntimeState(
@@ -416,6 +436,7 @@ void ApplyGameSaveLevelRuntimeState(
             prop.emissiveScale = saved.emissiveScale;
             if (world.Has<engine::AnimatedModelInstance>(entity))
                 RestoreSectorPropEmissionColors(prop.emissiveColors, assets.GetModelAsset(world.Get<engine::AnimatedModelInstance>(entity).model), saved.emissiveColors);
+            SetSectorRuntimeObjectEnabled(world, runtimeObjects, entity, saved.enabled);
             prop.opacity = saved.opacity;
             prop.useConsumed = saved.useConsumed;
             if (saved.dragPathEditorId > 0) {
@@ -450,6 +471,7 @@ void ApplyGameSaveLevelRuntimeState(
                     world, runtimeObjects, entity) || removedNpc;
             continue;
         }
+        SetSectorRuntimeObjectEnabled(world, runtimeObjects, entity, saved.enabled);
         if (world.Has<SectorObjectTransform>(entity)) {
             SectorObjectTransform& transform = world.Get<SectorObjectTransform>(entity);
             transform.position = saved.position;
@@ -544,6 +566,15 @@ void ApplyGameSaveLevelRuntimeState(
             }
         }
     }
+    for (const auto& saved : state.items) {
+        const auto entity = FindRuntimeEntity(runtimeObjects, saved.placedObjectId);
+        if (!world.IsAlive(entity) || !world.Has<SectorItem>(entity)) continue;
+        const auto& item = world.Get<SectorItem>(entity);
+        if (item.instanceId != saved.instanceId
+                || (item.origin == SectorItemOrigin::SessionDrop) != saved.sessionDrop) continue;
+        SetSectorRuntimeObjectEnabled(world, runtimeObjects, entity, saved.enabled);
+    }
+    SuspendDisabledNpcNavigation(world, scene.Navigation(), scene.NpcNavigation());
     if (removedNpc) world.FlushDestroyedEntities();
     for (const GameSaveBillboardState& saved : state.billboards) {
         const engine::Entity entity = FindRuntimeEntity(runtimeObjects, saved.placedObjectId);

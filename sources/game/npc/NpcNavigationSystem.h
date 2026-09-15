@@ -111,6 +111,10 @@ void ShutdownNpcNavigationRuntime(
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& runtime);
 
+// Detach disabled NPCs from crowd/collision while retaining navigation and patrol progress.
+void SuspendDisabledNpcNavigation(engine::World& world,
+        SectorNavigationWorld& navigation, NpcNavigationRuntime& runtime);
+
 bool DeactivateNpcNavigation(
         engine::World& world,
         SectorNavigationWorld& navigation,

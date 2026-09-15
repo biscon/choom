@@ -2479,6 +2479,51 @@ void TestItemDropTargetSerialization()
     }
 }
 
+void TestObjectEnabledSerialization()
+{
+    auto map = MakeSquare();
+    for (const auto* kind : {"dynamic_model", "item", "npc"}) {
+        SectorPlacedRuntimeObject object;
+        object.id = 80 + static_cast<int>(map.runtimeObjects.size());
+        object.kind = kind;
+        object.dynamicModel.instanceId = "barrier";
+        object.item.instanceId = "key";
+        object.item.definitionId = "key";
+        object.npc.instanceId = "guard";
+        object.npc.definitionId = "guard";
+        Check(object.dynamicModel.enabled && object.item.enabled && object.npc.enabled,
+                "new objects default to enabled");
+        map.runtimeObjects.push_back(object);
+    }
+    const auto defaults = Json::parse(SaveText(map));
+    const char* fields[] = {"dynamicModel", "item", "npc"};
+    for (int i = 0; i < 3; ++i)
+        Check(!defaults["runtimeObjects"][i][fields[i]].contains("enabled"),
+                "enabled default is omitted from level JSON");
+    map.runtimeObjects[0].dynamicModel.enabled = false;
+    map.runtimeObjects[1].item.enabled = false;
+    map.runtimeObjects[2].npc.enabled = false;
+    const auto disabled = Json::parse(SaveText(map));
+    for (int i = 0; i < 3; ++i)
+        Check(disabled["runtimeObjects"][i][fields[i]]["enabled"] == false,
+                "disabled state is written to each placement payload");
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(disabled.dump(), loaded, error), "disabled object level loads");
+    if (loaded.runtimeObjects.size() == 3)
+        Check(!loaded.runtimeObjects[0].dynamicModel.enabled
+                        && !loaded.runtimeObjects[1].item.enabled && !loaded.runtimeObjects[2].npc.enabled,
+                "disabled placement states round trip");
+    Check(LoadText(defaults.dump(), loaded, error), "older object payloads load");
+    if (loaded.runtimeObjects.size() == 3)
+        Check(loaded.runtimeObjects[0].dynamicModel.enabled
+                        && loaded.runtimeObjects[1].item.enabled && loaded.runtimeObjects[2].npc.enabled,
+                "missing enabled fields default true");
+    auto invalid = disabled;
+    invalid["runtimeObjects"][0]["dynamicModel"]["enabled"] = "false";
+    Check(!LoadText(invalid.dump(), loaded, error), "non-boolean enabled field is rejected");
+}
+
 void TestDynamicModelRoundTripAndDefaultOmission()
 {
     SectorTopologyMap map = MakeSquare();
@@ -5540,6 +5585,74 @@ void TestFileApi()
     std::filesystem::remove(path, removeError);
 }
 
+void TestMaterialMacroSettings()
+{
+    game::SectorMaterialRegistry registry;
+    game::SectorMaterialDefinition material;
+    material.id = "macro_test";
+    material.path = "assets/images/test.png";
+    registry.materialsById.emplace(material.id, material);
+    std::string text, error;
+    Check(game::SerializeSectorMaterialRegistryJson(registry, text, error), "serialize legacy macro defaults");
+    Check(!Json::parse(text)["materials"][material.id].contains("macro"), "default macro settings are omitted");
+    game::SectorMaterialRegistry parsed;
+    Check(game::ParseSectorMaterialRegistryJson(text, parsed, error)
+            && !parsed.materialsById.at(material.id).macro.enabled,
+            "old material files keep macro variation disabled");
+    auto& macro = registry.materialsById.at(material.id).macro;
+    macro.enabled = true;
+    macro.maskPath = "assets/images/macros/test.png";
+    macro.repeatMeters = 12.5f;
+    macro.darkening = 0.2f;
+    macro.roughnessChange = -0.3f;
+    Check(game::SerializeSectorMaterialRegistryJson(registry, text, error)
+            && game::ParseSectorMaterialRegistryJson(text, parsed, error), "macro settings round trip");
+    const auto& actual = parsed.materialsById.at(material.id).macro;
+    Check(actual.enabled && actual.maskPath == macro.maskPath
+            && Near(actual.repeatMeters, 12.5f) && Near(actual.darkening, 0.2f)
+            && Near(actual.roughnessChange, -0.3f), "macro round trip preserves every field and signed roughness");
+    auto json = Json::parse(text);
+    for (const char* field : {"repeatMeters", "darkening", "roughnessChange"}) {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"][field] = "invalid";
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject nonnumeric macro values");
+    }
+    for (float value : {0.0f, -1.0f, 1025.0f}) {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"]["repeatMeters"] = value;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject invalid macro repeat sizes");
+    }
+    for (const char* field : {"darkening", "roughnessChange"}) {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"][field] = 1.1f;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject excessive macro strengths");
+        invalid["materials"][material.id]["macro"][field] = -1.1f;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject macro strengths below range");
+    }
+    {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"]["darkening"] = -0.1f;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "darkening cannot brighten surfaces");
+        auto nonfinite = registry.materialsById.at(material.id);
+        nonfinite.macro.repeatMeters = std::numeric_limits<float>::infinity();
+        Check(!game::ValidateSectorMaterialDefinition(nonfinite, error), "reject infinite macro size");
+        nonfinite = registry.materialsById.at(material.id);
+        nonfinite.macro.roughnessChange = std::numeric_limits<float>::quiet_NaN();
+        Check(!game::ValidateSectorMaterialDefinition(nonfinite, error), "reject NaN macro roughness");
+    }
+    for (const char* path : {"../mask.png", "assets/images/../mask.png", "assets/images/mask.jpg"}) {
+        auto invalid = json;
+        invalid["materials"][material.id]["macro"]["maskPath"] = path;
+        Check(!game::ParseSectorMaterialRegistryJson(invalid.dump(), parsed, error), "reject unsafe or non-PNG macro paths");
+    }
+    macro.enabled = false;
+    Check(game::SerializeSectorMaterialRegistryJson(registry, text, error)
+            && game::ParseSectorMaterialRegistryJson(text, parsed, error)
+            && !parsed.materialsById.at(material.id).macro.enabled
+            && parsed.materialsById.at(material.id).macro.maskPath == macro.maskPath,
+            "disabled materials retain configured macro settings");
+}
+
 void TestGlobalMaterialRegistryAndReferenceRefactor()
 {
     const std::string registryText = R"json({
@@ -5970,6 +6083,7 @@ int main()
     TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
     TestDuctAccessRoundTripAndLightmapExclusion();
+    TestObjectEnabledSerialization();
     TestDynamicModelRoundTripAndDefaultOmission();
     TestItemDropTargetSerialization();
     TestItemRoundTripDefaultsValidationAndLightmapExclusion();
@@ -6015,6 +6129,7 @@ int main()
     TestStructuralPrimitiveOrientationRoundTrip();
     TestProceduralLadderRoundTrip();
     TestFileApi();
+    TestMaterialMacroSettings();
     TestGlobalMaterialRegistryAndReferenceRefactor();
 
     if (failures != 0) {

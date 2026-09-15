@@ -1,3 +1,5 @@
+#include "game/GameSettingsLayout.h"
+#include "sector_editor/materials/SectorEditorMaterialFormLayout.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorMainMenu.h"
 #include "engine/ui/UI.h"
@@ -15,6 +17,7 @@
 
 #include <cmath>
 #include <array>
+#include <cstdio>
 #include <iostream>
 
 namespace {
@@ -40,6 +43,164 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.x + a.width > b.x
             && a.y < b.y + b.height
             && a.y + a.height > b.y;
+}
+
+void TestGameSettingsLayout()
+{
+    using Row = game::GameSettingsRow;
+    for (float width : {248.0f, 400.0f, 664.0f}) {
+        for (float fontSize : {18.0f, 24.0f, 32.0f}) {
+            std::array<float, game::GameSettingsLabels.size()> heights;
+            heights.fill(fontSize + 8.0f);
+            heights[static_cast<std::size_t>(Row::GammaHelp)] = fontSize * 3.0f;
+            heights[static_cast<std::size_t>(Row::VsyncHelp)] = fontSize * 4.0f;
+            heights[static_cast<std::size_t>(Row::Performance)] = fontSize * 2.0f;
+            for (float statusHeight : {0.0f, 160.0f, 600.0f}) {
+                const auto layout = game::MeasureGameSettingsLayout(width, 20.0f,
+                        fontSize * 13.0f, 48.0f, heights, statusHeight);
+                float previousBottom = 0.0f;
+                for (std::size_t i = 0; i < layout.rows.size(); ++i) {
+                    const Rectangle row = layout.rows[i];
+                    Check(row.y >= previousBottom, "settings rows never overlap preceding content");
+                    Check(row.x >= 0 && row.x + row.width <= width,
+                            "settings labels stay within the reserved content width");
+                    previousBottom = row.y + row.height;
+                    if (game::GameSettingsRowHasValue(static_cast<Row>(i))) {
+                        const Rectangle field = layout.fields[i];
+                        Check(!Overlaps(row, field), "settings labels and controls never overlap");
+                        Check(field.width > 0 && field.x + field.width <= width,
+                                "settings fields remain usable on narrow panels");
+                        previousBottom = std::max(previousBottom, field.y + field.height);
+                    }
+                }
+                const Rectangle apply = layout.buttons.back();
+                Check(layout.buttons.front().y >= previousBottom,
+                        "settings buttons follow all controls and help text");
+                Check(layout.buttons.front().y >= layout.status.y + statusHeight,
+                        "settings errors appear before the action buttons");
+                Check(layout.contentHeight >= apply.y + apply.height + 24.0f,
+                        "settings scroll extent includes the final button and bottom padding");
+                for (float viewportHeight : {300.0f, 672.0f, 1032.0f}) {
+                    const float maxScroll = std::max(0.0f, layout.contentHeight - viewportHeight);
+                    Check(apply.y - maxScroll >= 0.0f
+                                    && apply.y + apply.height - maxScroll <= viewportHeight,
+                            "Apply is fully visible at maximum scroll");
+                }
+            }
+        }
+    }
+}
+
+void TestPreviewObjectAdjustmentLayout()
+{
+    using Row = game::SectorEditorPreviewObjectAdjustmentRow;
+    engine::AssetManager assets;
+    engine::UIConfig config;
+    config.paddingX = 6.0f;
+    config.paddingY = 4.0f;
+    for (float width : {280.0f, 360.0f}) {
+        for (float fontSize : {16.0f, 24.0f}) {
+            config.fontSize = fontSize;
+            const float controlHeight = fontSize + config.paddingY * 2.0f;
+            for (bool pathBound : {false, true}) {
+                for (bool stacked : {false, true}) {
+                    std::array<float, game::SectorEditorPreviewObjectAdjustmentRowCount> heights;
+                    heights.fill(controlHeight);
+                    heights[static_cast<size_t>(Row::PositionX)] = engine::MeasureWrappedTextHeight(
+                            config, assets, width - 28.0f, engine::NullFontHandle(),
+                            "World X: -12345678901234567890.000 m");
+                    heights[static_cast<size_t>(Row::Help)] = engine::MeasureWrappedTextHeight(
+                            config, assets, width - 28.0f, engine::NullFontHandle(),
+                            "Arrows: world X/Z   PgUp/PgDn: world Y   Q/E: yaw\n"
+                            "Enter: apply   Esc: cancel   F11: unlock cursor");
+                    heights[static_cast<size_t>(Row::PathWarning)] = pathBound
+                            ? engine::MeasureWrappedTextHeight(config, assets, width - 28.0f,
+                                    engine::NullFontHandle(), "Snap now / X/Z disabled: move the assigned path. "
+                                    "Height and yaw remain adjustable.") : 0.0f;
+                    for (Row row : {Row::Presets, Row::SnapControls, Row::Actions}) {
+                        const int count = row == Row::Presets ? 3 : 2;
+                        heights[static_cast<size_t>(row)] = stacked
+                                ? count * controlHeight + (count - 1) * 6.0f : controlHeight;
+                    }
+                    const auto layout = game::BuildSectorEditorPreviewObjectAdjustmentLayout(
+                            Rectangle{1500, 18, width, 0}, heights);
+                    float previousBottom = layout.panel.y;
+                    for (size_t i = 0; i < heights.size(); ++i) {
+                        if (heights[i] == 0.0f) continue;
+                        const auto row = layout.rows[i];
+                        Check(row.y >= previousBottom && row.x >= layout.panel.x
+                                      && row.x + row.width <= layout.panel.x + layout.panel.width,
+                              "measured adjustment rows fit panel and do not overlap at narrow widths");
+                        previousBottom = row.y + row.height;
+                    }
+                    Check(previousBottom + 12.0f <= layout.panel.y + layout.panel.height,
+                          "adjustment panel includes final actions and bottom padding");
+                    for (Row row : {Row::Presets, Row::SnapControls, Row::Actions}) {
+                        const int count = row == Row::Presets ? 3 : 2;
+                        const auto bounds = layout.rows[static_cast<size_t>(row)];
+                        Rectangle previous{};
+                        for (int i = 0; i < count; ++i) {
+                            const auto button = game::SectorEditorPreviewAdjustmentButtonRect(bounds, i, count, stacked);
+                            Check(button.height >= controlHeight && !Overlaps(previous, button)
+                                          && button.x + button.width <= bounds.x + bounds.width + 0.001f
+                                          && button.y + button.height <= bounds.y + bounds.height + 0.001f,
+                                  "adjustment button draw and hit rectangles fit horizontal or stacked rows");
+                            previous = button;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void TestMaterialBrowserFilterLayout()
+{
+    for (float width : {280.0f, 300.0f, 420.0f}) {
+        const Rectangle bounds{20.0f, 66.0f, width, 710.0f};
+        const auto layout = game::MeasureSectorMaterialBrowser(bounds);
+        Check(!Overlaps(layout.filter, layout.list) && !Overlaps(layout.list, layout.add)
+                && !Overlaps(layout.list, layout.remove) && !Overlaps(layout.add, layout.remove),
+                "material filter, list, and action buttons remain separate");
+        Check(layout.add.y + layout.add.height <= bounds.y + bounds.height
+                && layout.remove.x + layout.remove.width <= bounds.x + bounds.width,
+                "material browser actions fit at narrow pane widths");
+        for (float rowHeight : {32.0f, 48.0f}) {
+            const float viewport = layout.list.height - 20.0f;
+            const float offset = game::SectorMaterialSelectionScrollOffset(0.0f, 100, rowHeight, viewport);
+            Check(offset <= 100.0f * rowHeight && offset + viewport >= 101.0f * rowHeight,
+                    "restoring a distant material scrolls its entire row into view");
+            Check(Near(game::SectorMaterialSelectionScrollOffset(offset, 0, rowHeight, viewport), 0.0f),
+                    "restoring an earlier material scrolls upward");
+            Check(Near(game::SectorMaterialSelectionScrollOffset(20.0f, 2, rowHeight, viewport), 20.0f),
+                    "already visible selection leaves scroll unchanged");
+        }
+    }
+}
+
+void TestMaterialFormMacroLayout()
+{
+    using Row = game::SectorMaterialFormRow;
+    for (float width : {280.0f, 600.0f, 900.0f}) {
+        for (float labelHeight : {24.0f, 36.0f}) {
+            for (bool expanded : {false, true}) {
+                const auto layout = game::MeasureSectorMaterialForm(width, 230.0f, labelHeight,
+                        expanded, 240.0f, 120.0f, 180.0f);
+                float bottom = 0.0f;
+                for (const auto& row : layout.rows) {
+                    if (row.height == 0.0f) continue;
+                    Check(row.y >= bottom && row.width <= width, "material form rows fit without overlap");
+                    bottom = row.y + row.height;
+                }
+                Check(layout.contentHeight >= bottom + 12.0f, "material form scroll extent includes preview and padding");
+                Check((layout.fieldOffsetY > 0.0f) == (width < 402.0f), "narrow material forms stack labels above fields");
+                const auto& macro = layout.rows[static_cast<std::size_t>(Row::MacroRepeat)];
+                Check((macro.height > 0.0f) == expanded, "macro rows occupy space only when expanded");
+                const auto& preview = layout.rows[static_cast<std::size_t>(Row::PreviewImage)];
+                Check(preview.y + preview.height <= layout.contentHeight, "final material preview is reachable");
+            }
+        }
+    }
 }
 
 void TestWrappedDiagnosticHeight()
@@ -157,24 +318,110 @@ void TestModelFilenameExtraction()
           "empty model path produces an empty filename");
 }
 
-void TestAudioAssetPickerScrollSession()
+void TestAudioAssetPickerSession()
 {
     game::SectorEditorAudioAssetPickerSessionState session;
     game::SectorEditorAudioAssetPickerState firstPicker;
-    firstPicker.scroll.offset = Vector2{0.0f, 144.0f};
-    game::RememberSectorEditorAudioAssetPickerScroll(firstPicker, session);
+    firstPicker.open = true;
+    firstPicker.paths = {"sfx/door.wav", "sfx/window.wav"};
+    firstPicker.selectedPathIndex = 1;
+    firstPicker.browsing.scroll.offset = Vector2{0.0f, 144.0f};
+    std::snprintf(firstPicker.browsing.filterBuffer,
+            sizeof(firstPicker.browsing.filterBuffer), "%s", "sfx/");
+    game::RememberSectorEditorAudioAssetPickerSession(firstPicker, session);
 
     game::SectorEditorAudioAssetPickerState reopenedPicker;
-    game::RestoreSectorEditorAudioAssetPickerScroll(reopenedPicker, session);
-    Check(Near(reopenedPicker.scroll.offset.y, 144.0f),
-          "audio picker restores its prior in-memory scroll offset");
+    game::RestoreSectorEditorAudioAssetPickerSession(reopenedPicker, session);
+    Check(Near(reopenedPicker.browsing.scroll.offset.y, 144.0f)
+                    && std::string(reopenedPicker.browsing.filterBuffer) == "sfx/"
+                    && reopenedPicker.browsing.selectedPath == "sfx/window.wav",
+          "audio picker restores filter, selection, and scroll from memory");
+    reopenedPicker.open = true;
+    reopenedPicker.allPaths = firstPicker.paths;
+    game::RebuildSectorEditorAudioAssetPickerOptions(reopenedPicker, "sfx/door.wav");
+    Check(reopenedPicker.selectedPathIndex == 1,
+          "reopening prefers the remembered file over the caller's current file");
 
-    reopenedPicker.scroll.offset.y = 48.0f;
-    game::RememberSectorEditorAudioAssetPickerScroll(reopenedPicker, session);
+    reopenedPicker.browsing.scroll.offset.y = 48.0f;
+    game::RememberSectorEditorAudioAssetPickerSession(reopenedPicker, session);
     game::SectorEditorAudioAssetPickerState otherPicker;
-    game::RestoreSectorEditorAudioAssetPickerScroll(otherPicker, session);
-    Check(Near(otherPicker.scroll.offset.y, 48.0f),
-          "map and NPC audio pickers share the latest scroll offset");
+    game::RememberSectorEditorAudioAssetPickerSession(otherPicker, session);
+    game::RestoreSectorEditorAudioAssetPickerSession(otherPicker, session);
+    Check(Near(otherPicker.browsing.scroll.offset.y, 48.0f)
+                    && otherPicker.browsing.selectedPath == "sfx/window.wav"
+                    && std::string(otherPicker.browsing.filterBuffer) == "sfx/",
+          "other audio pickers share browsing state; inactive close cannot overwrite it");
+
+    std::snprintf(reopenedPicker.browsing.filterBuffer,
+            sizeof(reopenedPicker.browsing.filterBuffer), "%s", "no matches");
+    game::RebuildSectorEditorAudioAssetPickerOptions(reopenedPicker);
+    game::RememberSectorEditorAudioAssetPickerSession(reopenedPicker, session);
+    game::RestoreSectorEditorAudioAssetPickerSession(otherPicker, session);
+    otherPicker.allPaths = firstPicker.paths;
+    game::RebuildSectorEditorAudioAssetPickerOptions(otherPicker);
+    Check(otherPicker.paths.empty() && otherPicker.selectedPathIndex == -1
+                    && otherPicker.browsing.selectedPath == "sfx/window.wav"
+                    && std::string(otherPicker.browsing.filterBuffer) == "no matches",
+          "closing and reopening empty results retains the filter and remembered path");
+    otherPicker.browsing.filterBuffer[0] = '\0';
+    game::RebuildSectorEditorAudioAssetPickerOptions(otherPicker);
+    Check(otherPicker.selectedPathIndex == 1,
+          "clearing an empty filter result restores the remembered selection");
+    Check(game::SectorEditorAudioAssetPickerSessionState{}.selectedPath.empty(),
+          "a fresh app session starts without a remembered audio file");
+}
+
+void TestAudioAssetPickerFiltering()
+{
+    game::SectorEditorAudioAssetPickerState state;
+    state.allPaths = {"ambience/wind.ogg", "sfx/DOOR.WAV", "sfx/window.wav"};
+    game::RebuildSectorEditorAudioAssetPickerOptions(state, "sfx/DOOR.WAV");
+    Check(state.paths == state.allPaths && state.selectedPathIndex == 1,
+          "empty audio filter preserves scan order and selects the current file initially");
+
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer),
+            "%s", "SfX/");
+    Check(!game::RebuildSectorEditorAudioAssetPickerOptions(state)
+                    && state.paths.size() == 2 && state.selectedPathIndex == 0,
+          "folder filtering is case insensitive and a changed index alone does not stop preview");
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer),
+            "%s", "window.WaV");
+    Check(game::RebuildSectorEditorAudioAssetPickerOptions(state)
+                    && state.paths.size() == 1 && state.selectedPathIndex == 0
+                    && state.paths[0] == "sfx/window.wav",
+          "filename and extension filtering reports a changed file even at the same row index");
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer),
+            "%s", ".OGG");
+    Check(game::RebuildSectorEditorAudioAssetPickerOptions(state)
+                    && state.paths.size() == 1 && state.paths[0] == "ambience/wind.ogg",
+          "extension filtering falls back to the first match when selection is hidden");
+    state.browsing.filterBuffer[0] = '\0';
+    game::RebuildSectorEditorAudioAssetPickerOptions(state);
+    Check(state.paths == state.allPaths && state.selectedPathIndex == 0,
+          "clearing the audio filter restores the full list");
+    for (size_t i = 0; i < state.paths.size(); ++i) {
+        Check(state.optionLabels[i] == state.paths[i].c_str(),
+              "audio option labels refer to the rebuilt visible paths");
+    }
+
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer),
+            "%s", "missing");
+    Check(game::RebuildSectorEditorAudioAssetPickerOptions(state)
+                    && state.selectedPathIndex == -1 && state.optionLabels.empty()
+                    && state.filterMessage == "No audio files match the filter",
+          "zero matches clear selection and signal that preview must stop");
+    state.allPaths.clear();
+    state.scanMessage = "assets/audio was not found";
+    game::RebuildSectorEditorAudioAssetPickerOptions(state);
+    Check(state.filterMessage.empty() && state.scanMessage == "assets/audio was not found",
+          "scan errors remain distinct from a filter with zero matches");
+
+    state.browsing.selectedPath = "deleted.wav";
+    state.browsing.filterBuffer[0] = '\0';
+    state.allPaths = {"sfx/door.wav", "sfx/window.wav"};
+    game::RebuildSectorEditorAudioAssetPickerOptions(state, "sfx/window.wav");
+    Check(state.selectedPathIndex == 1,
+          "a removed remembered file falls back to the caller's current path");
 }
 
 void TestTextureRowWithoutClear()
@@ -285,15 +532,25 @@ void TestFogVolumeInspectorLayoutIncludesConditionalRows()
     Check(Near(
                   game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
                           volume, rowH, gap),
-                  38.0f + 21.0f * (rowH + gap) + fogStyleRowHeight),
+                  38.0f + 21.0f * (rowH + gap) + 2.0f * fogStyleRowHeight),
           "ellipsoid fog inspector includes style and path controls");
 
     volume.shape = game::SectorLocalFogShape::Box;
     Check(Near(
                   game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
                           volume, rowH, gap),
-                  38.0f + 22.0f * (rowH + gap) + fogStyleRowHeight),
-          "box fog inspector includes style, yaw, and reaches the delete row");
+                  38.0f + 22.0f * (rowH + gap) + 2.0f * fogStyleRowHeight),
+          "box fog inspector includes instance ID, style, yaw, and reaches the delete row");
+    Check(Near(game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                       volume, rowH, gap, 96.0f),
+                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                       volume, rowH, gap) + 96.0f + gap),
+          "wrapped fog ID validation errors contribute their full height");
+    const auto idLayout = game::BuildSectorEditorInspectorStackedOptionRowLayout(
+            0.0f, 220.0f, rowH, gap);
+    Check(idLayout.fieldRect.y >= idLayout.labelRect.y + idLayout.labelRect.height
+                  && idLayout.fieldRect.x + idLayout.fieldRect.width <= 220.0f,
+          "fog instance ID uses full width below its label in narrow panes");
 
     const game::SectorEditorInspectorNumericRowLayout rgbLayout =
             game::BuildSectorEditorInspectorRightRgb8RowLayout(
@@ -1012,13 +1269,18 @@ void TestBaseboardLayout()
 
 int main()
 {
+    TestGameSettingsLayout();
+    TestPreviewObjectAdjustmentLayout();
+    TestMaterialBrowserFilterLayout();
+    TestMaterialFormMacroLayout();
     TestWrappedDiagnosticHeight();
     TestBaseboardLayout();
     TestMainMenuShortcutMatching();
     TestKeyboardPanModifierPolicy();
     TestLightmapBakeSetupModalStateLifecycle();
     TestModelFilenameExtraction();
-    TestAudioAssetPickerScrollSession();
+    TestAudioAssetPickerSession();
+    TestAudioAssetPickerFiltering();
     TestTextureRowWithoutClear();
     TestTextureRowWithClear();
     TestCompactNumericRow();

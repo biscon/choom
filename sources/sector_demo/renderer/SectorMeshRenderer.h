@@ -385,6 +385,14 @@ private:
     std::unordered_map<std::string, float> normalStrengthById;
     std::unordered_map<std::string, float> metallicFactorById;
     std::unordered_map<std::string, float> roughnessFactorById;
+    struct MacroResource {
+        engine::TextureHandle texture = engine::NullTextureHandle();
+        Vector3 parameters = {8.0f, 0.0f, 0.0f};
+    };
+    std::unordered_map<std::string, MacroResource> macroResourcesById;
+    int macroTextureLoc = -1;
+    int hasMacroLoc = -1;
+    int macroParametersLoc = -1;
     std::vector<engine::TextureHandle> lightmapTextures;
     std::vector<engine::TextureHandle> directionalLightmapTextures;
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();

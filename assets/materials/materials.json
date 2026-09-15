@@ -1,27 +1,6 @@
 {
   "formatVersion": 1,
   "materials": {
-    "baseboard_wood": {
-      "albedoTexturePath": "assets/images/baseboards/baseboard_wood.png",
-      "filter": "anisotropic8x",
-      "metallicFactor": 0.0,
-      "roughnessFactor": 1.0,
-      "normalStrength": 0.35
-    },
-    "baseboard_metal": {
-      "albedoTexturePath": "assets/images/baseboards/baseboard_metal.png",
-      "filter": "anisotropic8x",
-      "metallicFactor": 1.0,
-      "roughnessFactor": 1.0,
-      "normalStrength": 0.15
-    },
-    "baseboard_painted_white": {
-      "albedoTexturePath": "assets/images/baseboards/baseboard_painted_white.png",
-      "filter": "anisotropic8x",
-      "metallicFactor": 0.0,
-      "roughnessFactor": 1.0,
-      "normalStrength": 0.2
-    },
     "asphalt_06": {
       "albedoTexturePath": "assets/images/hires/asphalt_06.png",
       "filter": "anisotropic8x",
@@ -36,12 +15,40 @@
       "roughnessFactor": 0.800000011920929,
       "normalStrength": 1.0
     },
+    "baseboard_metal": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_metal.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 1.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.15000000596046448
+    },
+    "baseboard_painted_white": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_painted_white.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.20000000298023224
+    },
+    "baseboard_wood": {
+      "albedoTexturePath": "assets/images/baseboards/baseboard_wood.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 1.0,
+      "normalStrength": 0.3499999940395355
+    },
     "beige_wall_001": {
       "albedoTexturePath": "assets/images/hires/beige_wall_001.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.75,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/plaster_discoloration.png",
+        "repeatMeters": 6.0,
+        "darkening": 0.20000000298023224,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "biker_chick": {
       "albedoTexturePath": "assets/images/biker_chick.png",
@@ -56,6 +63,34 @@
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
       "normalStrength": 0.75
+    },
+    "concrete_decal_branching_cracks": {
+      "albedoTexturePath": "assets/images/decals/concrete/concrete_decal_branching_cracks.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "concrete_decal_damp_damage": {
+      "albedoTexturePath": "assets/images/decals/concrete/concrete_decal_damp_damage.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "concrete_decal_old_repair": {
+      "albedoTexturePath": "assets/images/decals/concrete/concrete_decal_old_repair.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "concrete_decal_spalled_patch": {
+      "albedoTexturePath": "assets/images/decals/concrete/concrete_decal_spalled_patch.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
     },
     "concrete_floor1": {
       "albedoTexturePath": "assets/images/floors/concrete_floor1.png",
@@ -90,7 +125,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 0.5
+      "normalStrength": 0.5,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/soft_streaks.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.5,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "dirty_office_wall_baseboard_512": {
       "albedoTexturePath": "assets/images/walls/dirty_office_wall_baseboard_512.png",
@@ -111,7 +153,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.800000011920929,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 5.0,
+        "darkening": 0.44999998807907104,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "fortress_stone_512": {
       "albedoTexturePath": "assets/images/hub/fortress_stone_512.png",
@@ -166,8 +215,15 @@
       "albedoTexturePath": "assets/images/hires/interior_tiles.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.44999998807907104,
-      "normalStrength": 1.0
+      "roughnessFactor": 0.25,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.15000000596046448,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "iron_band_512": {
       "albedoTexturePath": "assets/images/hub/iron_band_512.png",
@@ -181,7 +237,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.5,
-      "normalStrength": 0.75
+      "normalStrength": 0.75,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/patchy_wear.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.25,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "metal_bars_01": {
       "albedoTexturePath": "assets/images/middle/metal_bars_01.png",
@@ -216,14 +279,28 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.25,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/uneven_polish.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.10000000149011612,
+        "roughnessChange": 0.15000000596046448
+      }
     },
     "painted_plaster_wall": {
       "albedoTexturePath": "assets/images/hires/painted_plaster_wall.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/plaster_discoloration.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.5,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "peeling_painted_wall": {
       "albedoTexturePath": "assets/images/hires/peeling_painted_wall.png",
@@ -251,7 +328,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.800000011920929,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/soft_streaks.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.3499999940395355,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "step_01_512": {
       "albedoTexturePath": "assets/images/step_01_512.png",
@@ -262,6 +346,34 @@
     },
     "stone_curb_512x128": {
       "albedoTexturePath": "assets/images/hub/stone_curb_512x128.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "tile_decal_floor_chipped_fractures": {
+      "albedoTexturePath": "assets/images/decals/tiles/tile_decal_floor_chipped_fractures.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "tile_decal_floor_scuff_wear": {
+      "albedoTexturePath": "assets/images/decals/tiles/tile_decal_floor_scuff_wear.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "tile_decal_wall_crazed_glaze": {
+      "albedoTexturePath": "assets/images/decals/tiles/tile_decal_wall_crazed_glaze.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "tile_decal_wall_mineral_streaks": {
+      "albedoTexturePath": "assets/images/decals/tiles/tile_decal_wall_mineral_streaks.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
@@ -286,14 +398,28 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/clustered_discoloration.png",
+        "repeatMeters": 7.0,
+        "darkening": 0.15000000596046448,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "white_wall_tiles": {
       "albedoTexturePath": "assets/images/walls/white_wall_tiles.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.800000011920929,
-      "normalStrength": 1.0
+      "roughnessFactor": 0.30000001192092896,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 6.0,
+        "darkening": 0.3499999940395355,
+        "roughnessChange": 0.20000000298023224
+      }
     },
     "wood_beam_512x128": {
       "albedoTexturePath": "assets/images/hub/wood_beam_512x128.png",
@@ -335,7 +461,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.4000000059604645,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/patchy_wear.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.25,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "worn_steel_512": {
       "albedoTexturePath": "assets/images/worn_steel_512.png",
@@ -349,14 +482,28 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/sparse_damp_blooms.png",
+        "repeatMeters": 6.0,
+        "darkening": 0.20000000298023224,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "worn_white_wall": {
       "albedoTexturePath": "assets/images/walls/worn_white_wall.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.800000011920929,
-      "normalStrength": 1.0
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/plaster_discoloration.png",
+        "repeatMeters": 4.0,
+        "darkening": 0.3499999940395355,
+        "roughnessChange": 0.11999999731779099
+      }
     }
   }
 }

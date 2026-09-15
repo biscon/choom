@@ -487,6 +487,35 @@ std::string ReadSource(const char* path)
             std::istreambuf_iterator<char>());
 }
 
+void TestSectorMacroVariationPolicy()
+{
+    const std::string source = test::ReadShaderPrograms({game::GameShader::Lightmap});
+    const std::string renderer = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const auto macro = source.find("float macroMask = SectorMacroMask(fragWorldPosition, geometricNormal)");
+    const auto darken = source.find("surfaceRgb *= 1.0 - macroMask * macroParameters.y");
+    const auto decal = source.find("surfaceRgb = mix(surfaceRgb, decalRgb, decalAlpha)");
+    const auto properties = source.find("vec3 orm = texture(materialPropertiesTexture, fragTexCoord).rgb");
+    const auto roughness = source.find("roughness = clamp(roughness + macroMask * macroParameters.z, 0.045, 1.0)");
+    const auto filtering = source.find("float specularRoughness = FilterSpecularRoughness");
+    Check(macro < darken && darken < decal && properties < roughness && roughness < filtering,
+          "macro color precedes decals and macro roughness follows ORM before specular filtering");
+    Check(source.find("if (hasMacro == 0) return 0.0") != std::string::npos
+            && source.find("texture(macroTexture, p.zy).r") != std::string::npos
+            && source.find("texture(macroTexture, p.xz).r") != std::string::npos
+            && source.find("texture(macroTexture, p.xy).r") != std::string::npos,
+          "macro mapping has a neutral disabled path and three world-space projections");
+    Check(renderer.find("const int macroTextureUnit = 11") != std::string::npos
+            && renderer.find("rlActiveTextureSlot(11)") != std::string::npos
+            && renderer.find("macroTexture != nullptr ? 1 : 0") != std::string::npos,
+          "macro sampler uses reserved unit 11 and enables only ready textures");
+    Check(source.find("baseColor.a < alphaCutoff") != std::string::npos
+            && source.find("emissiveRadiance * emissiveDecalAlpha") != std::string::npos,
+          "macro variation preserves base alpha testing and separate decal emission");
+    Check(test::ReadShaderPrograms({game::GameShader::DoorOpaque, game::GameShader::StaticModel}).find("macroTexture")
+                    == std::string::npos,
+          "moving doors and model props do not acquire architecture macro projection");
+}
+
 void TestSectorRuntimeNormalMappingPolicy()
 {
     const std::string source = test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite});
@@ -1023,7 +1052,7 @@ void TestHdrEffectShaderAndPassPolicies()
                     && test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite}).find(
                                "emissiveRadiance * emissiveDecalAlpha")!=std::string::npos
                     && test::ReadShaderPrograms({game::GameShader::Lightmap, game::GameShader::DepthPrepass, game::GameShader::HdrComposite}).find(
-                               "surfaceRgb = mix(baseColor.rgb, decalRgb, decalAlpha)")
+                               "surfaceRgb = mix(surfaceRgb, decalRgb, decalAlpha)")
                             !=std::string::npos,
           "decal-only bloom redraw is retired in favor of visible emissive radiance");
     const std::size_t atmosphere=mainGraph.find("Apply3DWorldAtmosphere");
@@ -1389,12 +1418,30 @@ void TestFlashlightProfileCoverage()
                             != std::string::npos
                     && profile.find("cookieVariation") != std::string::npos,
           "shared flashlight profile owns one outer feather and keeps the cookie as variation only");
-    Check(shadows.find("bool flashlightProjection") != std::string::npos
-                    && shadows.find("fromLight += offsetNormal * contactOffset")
+    // Guard receiver/sampler routing here; source checks cannot validate the
+    // projection math or the rendered result.
+    const auto suppliesTrianglePlane = [](const std::string& source) {
+        return source.find("vec3 trianglePlaneNormal = NormalizeShadowReceiverPlane(")
                             != std::string::npos
-                    && shadows.find("effectiveBias = 0.000001")
+                && source.find("trianglePlaneNormal, lightDirection)")
+                            != std::string::npos;
+    };
+    Check(suppliesTrianglePlane(sector)
+                    && suppliesTrianglePlane(models)
+                    && suppliesTrianglePlane(doors)
+                    && suppliesTrianglePlane(billboards),
+          "all flashlight shadow receivers supply their geometric triangle plane to shadow sampling");
+    const size_t flashlightStart = shadows.find("if (flashlightProjection) {");
+    const size_t flashlightEnd = shadows.find("return visible / 12.0;", flashlightStart);
+    const std::string flashlightSampling = flashlightStart != std::string::npos
+                    && flashlightEnd != std::string::npos
+            ? shadows.substr(flashlightStart, flashlightEnd - flashlightStart)
+            : std::string{};
+    Check(flashlightSampling.find("return FlashlightShadowSampleVisibility(")
+                            != std::string::npos
+                    && flashlightSampling.find("visible += FlashlightShadowSampleVisibility(")
                             != std::string::npos,
-          "flashlight shadow receivers use a world-space contact offset instead of constant projected-depth bias");
+          "hard and soft flashlight shadows both use the receiver-plane sampler");
 }
 
 } // namespace
@@ -1409,6 +1456,7 @@ int main()
     TestEnvironmentEligibility();
     TestReflectionBindingsInitializeAfterSuccessfulLoad();
     TestRemovedShaderPathsStayRemoved();
+    TestSectorMacroVariationPolicy();
     TestSectorRuntimeNormalMappingPolicy();
     TestBakedHdrConsumersStayUnclamped();
     TestDistanceFogUsesDarknessGatedScattering();

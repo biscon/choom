@@ -3,6 +3,7 @@
 #include "engine/input/InputEvents.h"
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/services/SectorEditorAssetPickerUi.h"
 
 #include <algorithm>
 
@@ -46,45 +47,44 @@ void SectorEditorAudioAssetPickerService::Open(
     state.open = true;
     state.title = title;
     state.previewType = previewType;
-    RestoreSectorEditorAudioAssetPickerScroll(state, session_);
-    state.paths = ScanAssetAudioFiles(state.scanMessage);
-    state.optionLabels.reserve(state.paths.size());
-    for (const std::string& path : state.paths) {
-        state.optionLabels.push_back(path.c_str());
-    }
+    RestoreSectorEditorAudioAssetPickerSession(state, session_);
+    state.allPaths = ScanAssetAudioFiles(state.scanMessage);
     state.scanned = true;
-    const auto selected = std::lower_bound(
-            state.paths.begin(), state.paths.end(), currentPath);
-    state.selectedPathIndex = selected != state.paths.end()
-                    && *selected == currentPath
-            ? static_cast<int>(std::distance(state.paths.begin(), selected))
-            : (state.paths.empty() ? -1 : 0);
+    RebuildSectorEditorAudioAssetPickerOptions(state, currentPath);
+    RememberSectorEditorAudioAssetPickerSession(state, session_);
 }
 
 void SectorEditorAudioAssetPickerService::Close(
         SectorEditorAudioAssetPickerState& state)
 {
-    if (state.open || state.scanned) {
-        RememberSectorEditorAudioAssetPickerScroll(state, session_);
-    }
+    RememberSectorEditorAudioAssetPickerSession(state, session_);
     StopPreview(state.preview);
     state = SectorEditorAudioAssetPickerState{};
+}
+
+void SectorEditorAudioAssetPickerService::ApplyFilter(
+        SectorEditorAudioAssetPickerState& state)
+{
+    state.browsing.scroll = engine::UIScrollState{};
+    if (RebuildSectorEditorAudioAssetPickerOptions(state)) {
+        StopPreview(state.preview);
+        state.previewMessage.clear();
+    }
+    RememberSectorEditorAudioAssetPickerSession(state, session_);
 }
 
 bool SectorEditorAudioAssetPickerService::SelectIndex(
         SectorEditorAudioAssetPickerState& state,
         int index)
 {
-    if (index < 0 || index >= static_cast<int>(state.paths.size())) {
-        state.selectedPathIndex = -1;
-        return false;
-    }
+    if (index < 0 || index >= static_cast<int>(state.paths.size())) index = -1;
     if (state.selectedPathIndex != index) {
         StopPreview(state.preview);
         state.previewMessage.clear();
         state.selectedPathIndex = index;
     }
-    return true;
+    RememberSectorEditorAudioAssetPickerSession(state, session_);
+    return index >= 0;
 }
 
 bool SectorEditorAudioAssetPickerService::HasSelection(
@@ -212,7 +212,7 @@ bool SectorEditorAudioAssetPickerService::DrawList(
                     config.listItemHeight
                             * static_cast<float>(state.optionLabels.size()))};
     engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
-            ui, config, input, id, bounds, contentSize, state.scroll);
+            ui, config, input, id, bounds, contentSize, state.browsing.scroll);
     const int oldSelection = state.selectedPathIndex;
     if (!state.optionLabels.empty()) {
         engine::List(
@@ -224,8 +224,8 @@ bool SectorEditorAudioAssetPickerService::DrawList(
                 state.optionLabels.size(),
                 state.selectedPathIndex);
     }
-    engine::EndScrollArea(ui, config, input, scroll, state.scroll);
-    RememberSectorEditorAudioAssetPickerScroll(state, session_);
+    engine::EndScrollArea(ui, config, input, scroll, state.browsing.scroll);
+    RememberSectorEditorAudioAssetPickerSession(state, session_);
     if (oldSelection != state.selectedPathIndex) {
         StopPreview(state.preview);
         state.previewMessage.clear();
@@ -278,12 +278,29 @@ SectorEditorAudioAssetPickerService::DrawModal(
             font,
             state.title.empty() ? "Pick Sound" : state.title.c_str());
 
+    const Rectangle filterBounds{
+            modal.x + 22.0f, modal.y + 68.0f, 510.0f, 42.0f};
+    if (DrawSectorEditorAssetPickerFilter(
+                ui, config, input, context_.assets, font,
+                "sector_editor_audio_asset_picker_filter", filterBounds,
+                state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer))) {
+        ApplyFilter(state);
+    }
+    const float buttonY = modal.y + modal.height - 64.0f;
+    const Rectangle messageBounds{
+            modal.x + 22.0f, buttonY - 62.0f, modal.width - 44.0f, 50.0f};
+    const float listY = filterBounds.y + filterBounds.height + 12.0f;
     const Rectangle listBounds{
-            modal.x + 22.0f, modal.y + 68.0f, 510.0f, 480.0f};
+            filterBounds.x, listY, filterBounds.width, messageBounds.y - 8.0f - listY};
     DrawList(
             ui, config, input, font,
             "sector_editor_audio_asset_picker_scroll",
             listBounds, state);
+    if (!state.filterMessage.empty()) {
+        engine::Text(config, context_.assets, listBounds, font,
+                state.filterMessage.c_str(), engine::UITextJustify::Left,
+                config.mutedTextColor, true);
+    }
     const float rightX = modal.x + 558.0f;
     const std::string selectedPath = SelectedPath(state);
     engine::Text(
@@ -312,14 +329,13 @@ SectorEditorAudioAssetPickerService::DrawModal(
     if (!state.scanMessage.empty()) {
         engine::Text(
                 config, context_.assets,
-                Rectangle{modal.x + 22.0f, modal.y + 556.0f, 510.0f, 44.0f},
+                messageBounds,
                 font, state.scanMessage.c_str(),
                 engine::UITextJustify::Left,
-                state.paths.empty() ? config.invalidColor : config.mutedTextColor,
+                state.allPaths.empty() ? config.invalidColor : config.mutedTextColor,
                 true);
     }
 
-    const float buttonY = modal.y + modal.height - 64.0f;
     if (engine::Button(
                 ui, config, input, context_.assets,
                 "sector_editor_audio_asset_picker_select",

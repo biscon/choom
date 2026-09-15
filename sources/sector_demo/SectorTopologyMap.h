@@ -136,6 +136,7 @@ struct SectorCompiledLocalFogVolume {
     float noiseAmount = 0.75f;
     float flowDirectionDegrees = 0.0f;
     float flowSpeedWorld = 0.20f;
+    std::string instanceId;
 };
 
 // Derived runtime representation of an authoring-owned level marker.
@@ -235,6 +236,7 @@ struct SectorPlacedDynamicModel {
     float animationSpeed = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
     bool itemDropTarget = false;
+    bool enabled = true;
 };
 
 struct SectorPlacedItem {
@@ -254,6 +256,7 @@ struct SectorPlacedItem {
     bool sessionDrop = false;
     // Runtime-only; persisted in campaign saves, never authored level JSON.
     std::vector<ItemSourceQuantity> sourceQuantities;
+    bool enabled = true;
 };
 
 struct SectorPlacedNpc {
@@ -268,6 +271,7 @@ struct SectorPlacedNpc {
     float scale = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
     bool itemDropTarget = false;
+    bool enabled = true;
 };
 
 enum class SectorDoorMotionType {

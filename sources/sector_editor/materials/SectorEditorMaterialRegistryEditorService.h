@@ -15,6 +15,7 @@ class SectorEditorMaterialRegistryEditorService {
 public:
     SectorEditorMaterialRegistryEditorService(
             SectorEditorMaterialRegistryEditorState& state,
+            SectorEditorMaterialRegistryEditorSessionState& session,
             SectorMaterialRegistry& registry,
             SectorAuthoringGraph& authoringGraph,
             SectorTopologyMap& topologyMap,
@@ -31,8 +32,13 @@ public:
 
     SectorEditorMaterialRegistryDraft* SelectedDraft();
     bool SelectIndex(int index);
+    bool SelectFilteredIndex(int index);
+    void ApplyFilter();
     void AddMaterial();
     void ApplyIdBuffer();
+    void OpenMacroPicker();
+    void OpenMacroPickerFromRoot(const std::filesystem::path& assetsRoot);
+    void ClearMacroMask();
     void OpenAlbedoPicker();
     void OpenAlbedoPickerFromRoot(const std::filesystem::path& assetsRoot);
     void ApplyAlbedoPickerFilter();
@@ -48,17 +54,21 @@ public:
     void EnsurePreview(engine::AssetManager& assets);
 
     SectorEditorMaterialRegistryEditorState& State() { return state_; }
+    SectorEditorMaterialRegistryEditorSessionState& Session() { return session_; }
 
 private:
     void Close(engine::AssetManager* assets);
     void SyncBuffers();
     void RebuildListLabels();
+    void RememberExistingSelection();
+    void KeepSelectedDraftVisible();
     void RebuildAlbedoPickerList(const std::string& preferredPath = {});
     bool ApplyAlbedoPath(const std::string& path);
     bool ValidateDrafts(std::string& error) const;
     bool CurrentDocumentReferences(std::string_view id) const;
 
     SectorEditorMaterialRegistryEditorState& state_;
+    SectorEditorMaterialRegistryEditorSessionState& session_;
     SectorMaterialRegistry& registry_;
     SectorAuthoringGraph& authoringGraph_;
     SectorTopologyMap& topologyMap_;

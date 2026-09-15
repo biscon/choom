@@ -13,6 +13,7 @@
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingState.h"
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorSurfaceHeightEditingService.h"
 #include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingState.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -55,6 +56,7 @@ struct SectorEditorPreviewOverlayContext {
     LightEditingState& lightState;
     std::string& statusText;
     SectorMeshRenderer& preview;
+    SectorEditorRuntimeObjectEditingService& runtimeObjectEditing;
 };
 
 struct SectorEditorPreviewOverlayResult {
@@ -74,6 +76,7 @@ struct SectorEditorPreviewOverlayResult {
     bool requestPauseReflections = false;
     bool requestApplyAdjustment = false;
     bool requestCancelAdjustment = false;
+    SectorEditorPreviewObjectAdjustmentResult objectAdjustment;
     const char* topologyDocumentEditStatus = nullptr;
 };
 

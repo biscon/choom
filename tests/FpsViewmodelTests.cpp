@@ -754,6 +754,32 @@ void WeaponSlotSchemaAndKeys()
     assert(game::FpsWeaponSlotFromKey(KEY_KP_1) == 0);
 }
 
+void GammaSettingsValidation()
+{
+    game::FpsApplicationSettings settings;
+    std::string error;
+    assert(game::ParseFpsApplicationSettings(R"({"version":1})", settings, &error));
+    assert(Near(settings.graphics.gamma, 1.0f));
+    for (const char* value : {"0.5", "1.0", "1.35", "2.0"}) {
+        const std::string json = std::string(R"({"version":1,"graphics":{"gamma":)") + value + "}}";
+        assert(game::ParseFpsApplicationSettings(json, settings, &error));
+        assert(Near(settings.graphics.gamma, std::stof(value)));
+    }
+    for (const char* value : {"0", "-1", "0.49", "2.01", "null", "true", "\"bright\""}) {
+        const std::string json = std::string(R"({"version":1,"graphics":{"gamma":)") + value + "}}";
+        const float previous = settings.graphics.gamma;
+        assert(!game::ParseFpsApplicationSettings(json, settings, &error));
+        assert(error.find("graphics.gamma") != std::string::npos);
+        assert(Near(settings.graphics.gamma, previous));
+    }
+    settings.graphics.gamma = std::numeric_limits<float>::quiet_NaN();
+    assert(Near(game::NormalizeFpsGraphicsSettings(settings.graphics).gamma, 1.0f));
+    settings.graphics.gamma = 10.0f;
+    assert(Near(game::NormalizeFpsGraphicsSettings(settings.graphics).gamma, 2.0f));
+    settings.graphics.gamma = -10.0f;
+    assert(Near(game::NormalizeFpsGraphicsSettings(settings.graphics).gamma, 0.5f));
+}
+
 void PlayerCameraSettingsValidation()
 {
     game::FpsApplicationSettings settings;
@@ -1104,6 +1130,7 @@ void SettingsResolutionAndPersistence()
     settings.playerHealth.lowHealthCamera.rollAmplitudeDegrees = 1.8f;
     settings.playerHealth.lowHealthCamera.frequencyHz = 0.7f;
     settings.playerHealth.lowHealthCamera.responseSeconds = 0.5f;
+    settings.graphics.gamma = 1.35f;
     settings.playerCamera.mouseSensitivity = 2.75f;
     settings.playerCamera.smoothingStrength = 0.6f;
     settings.playerCamera.deadZonePixels = 1.25f;
@@ -1122,6 +1149,7 @@ void SettingsResolutionAndPersistence()
     assert(!loaded.dialogueVoicesEnabled);
     assert(Near(loaded.hdrBloom.threshold,2.0f)
             && Near(loaded.hdrBloom.radius,2.0f));
+    assert(Near(loaded.graphics.gamma, 1.35f));
     assert(Near(loaded.graphics.renderScale, 1.25f));
     assert(!loaded.graphics.fxaa);
     assert(loaded.graphics.shadowQuality == game::FpsShadowQuality::Medium);
@@ -2896,6 +2924,7 @@ int main()
     RegistryValidation(); WeaponSlotSchemaAndKeys();
     SettingsResolutionAndPersistence();
     PlayerCameraSettingsValidation();
+    GammaSettingsValidation();
     PreviewSettingsOverrideDeltaCoverage();
     CameraMath(); HolsterTransitionStateAndMath(); RequestedHolsterState();
     RestoreHolsterBeforeLoadingUpdates();

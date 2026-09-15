@@ -343,13 +343,15 @@ const Matrix* AnimatedModelMeshBoneMatrices(
     return instance.boneMatrices.data();
 }
 
-void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
+void AnimatedModelSystem(World& world, AssetManager& assets, float dt,
+        bool (*shouldUpdate)(const World&, Entity))
 {
     world.ForEach<AnimatedModelInstance, AnimatedModelAnimator>(
-            [&assets, dt](
-                    Entity,
+            [&world, &assets, dt, shouldUpdate](
+                    Entity entity,
                     AnimatedModelInstance& instance,
                     AnimatedModelAnimator& animator) {
+                if (shouldUpdate && !shouldUpdate(world, entity)) return;
                 if (!instance.poseReady || instance.poseFailed) {
                     return;
                 }

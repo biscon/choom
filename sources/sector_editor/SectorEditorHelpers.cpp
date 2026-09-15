@@ -280,7 +280,7 @@ std::vector<std::string> ScanAssetImagePngs(std::string& message)
 
 std::vector<std::string> ScanAssetImagePngs(
         const std::filesystem::path& assetsRoot,
-        std::string& message)
+        std::string& message, bool macroMasks)
 {
     std::vector<std::string> paths;
     message.clear();
@@ -311,6 +311,9 @@ std::vector<std::string> ScanAssetImagePngs(
             ec.clear();
             continue;
         }
+        const auto imageRelative = entry.path().lexically_relative(imagesRoot);
+        const bool isMacro = !imageRelative.empty() && *imageRelative.begin() == "macros";
+        if (isMacro != macroMasks) continue;
         if (IsSectorMaterialCompanionMapPath(entry.path().filename().string())) {
             continue;
         }

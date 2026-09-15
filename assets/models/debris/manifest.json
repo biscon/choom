@@ -1,0 +1,373 @@
+{
+  "kit": "Debris kit",
+  "units": "metres",
+  "gltf_up": "+Y",
+  "gltf_front": "+Z",
+  "assets": [
+    {
+      "type": "scatter",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Chip_08cm",
+      "file": "exports/gltf/Chip_08cm.gltf",
+      "triangles": 40,
+      "bounds_min_blender": [
+        -0.04171408340334892,
+        -0.03244674205780029,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.04171408340334892,
+        0.03244674205780029,
+        0.04897883161902428
+      ],
+      "dimensions_blender_xyz": [
+        0.08343,
+        0.06489,
+        0.04898
+      ],
+      "dimensions_gltf_xyz": [
+        0.08343,
+        0.04898,
+        0.06489
+      ]
+    },
+    {
+      "type": "scatter",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Chip_14cm",
+      "file": "exports/gltf/Chip_14cm.gltf",
+      "triangles": 40,
+      "bounds_min_blender": [
+        -0.07295083999633789,
+        -0.04527793824672699,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.07295083999633789,
+        0.04527793824672699,
+        0.0834260880947113
+      ],
+      "dimensions_blender_xyz": [
+        0.1459,
+        0.09056,
+        0.08343
+      ],
+      "dimensions_gltf_xyz": [
+        0.1459,
+        0.08343,
+        0.09056
+      ]
+    },
+    {
+      "type": "scatter",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Fragment_25cm",
+      "file": "exports/gltf/Fragment_25cm.gltf",
+      "triangles": 40,
+      "bounds_min_blender": [
+        -0.1330537497997284,
+        -0.09791705012321472,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.1330537497997284,
+        0.09791705012321472,
+        0.11434546113014221
+      ],
+      "dimensions_blender_xyz": [
+        0.26611,
+        0.19583,
+        0.11435
+      ],
+      "dimensions_gltf_xyz": [
+        0.26611,
+        0.11435,
+        0.19583
+      ]
+    },
+    {
+      "type": "scatter",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Fragment_40cm",
+      "file": "exports/gltf/Fragment_40cm.gltf",
+      "triangles": 38,
+      "bounds_min_blender": [
+        -0.19230759143829346,
+        -0.15922047197818756,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.19230759143829346,
+        0.15922047197818756,
+        0.18570154905319214
+      ],
+      "dimensions_blender_xyz": [
+        0.38462,
+        0.31844,
+        0.1857
+      ],
+      "dimensions_gltf_xyz": [
+        0.38462,
+        0.1857,
+        0.31844
+      ]
+    },
+    {
+      "type": "scatter",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Chunk_60cm",
+      "file": "exports/gltf/Chunk_60cm.gltf",
+      "triangles": 36,
+      "bounds_min_blender": [
+        -0.3205782175064087,
+        -0.20961907505989075,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.3205782175064087,
+        0.20961907505989075,
+        0.37065446376800537
+      ],
+      "dimensions_blender_xyz": [
+        0.64116,
+        0.41924,
+        0.37065
+      ],
+      "dimensions_gltf_xyz": [
+        0.64116,
+        0.37065,
+        0.41924
+      ]
+    },
+    {
+      "type": "scatter",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Beam_End_Rebar",
+      "file": "exports/gltf/Beam_End_Rebar.gltf",
+      "triangles": 262,
+      "bounds_min_blender": [
+        -0.5955499410629272,
+        -0.20685094594955444,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.5955499410629272,
+        0.20685094594955444,
+        0.33080238103866577
+      ],
+      "dimensions_blender_xyz": [
+        1.1911,
+        0.4137,
+        0.3308
+      ],
+      "dimensions_gltf_xyz": [
+        1.1911,
+        0.3308,
+        0.4137
+      ]
+    },
+    {
+      "type": "scatter",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Slab_Flat_50cm",
+      "file": "exports/gltf/Slab_Flat_50cm.gltf",
+      "triangles": 82,
+      "bounds_min_blender": [
+        -0.23187336325645447,
+        -0.17890751361846924,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.23187336325645447,
+        0.17890751361846924,
+        0.09000000357627869
+      ],
+      "dimensions_blender_xyz": [
+        0.46375,
+        0.35782,
+        0.09
+      ],
+      "dimensions_gltf_xyz": [
+        0.46375,
+        0.09,
+        0.35782
+      ]
+    },
+    {
+      "type": "scatter_cluster",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Scatter_Cluster_Small",
+      "file": "exports/gltf/Scatter_Cluster_Small.gltf",
+      "triangles": 472,
+      "bounds_min_blender": [
+        -0.31224873661994934,
+        -0.26064929366111755,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.31224873661994934,
+        0.26064929366111755,
+        0.11936607956886292
+      ],
+      "dimensions_blender_xyz": [
+        0.6245,
+        0.5213,
+        0.11937
+      ],
+      "dimensions_gltf_xyz": [
+        0.6245,
+        0.11937,
+        0.5213
+      ]
+    },
+    {
+      "type": "scatter_cluster",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Scatter_Cluster_Large",
+      "file": "exports/gltf/Scatter_Cluster_Large.gltf",
+      "triangles": 872,
+      "bounds_min_blender": [
+        -0.3900921046733856,
+        -0.3189188838005066,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.3900921046733856,
+        0.3189188838005066,
+        0.13573358952999115
+      ],
+      "dimensions_blender_xyz": [
+        0.78018,
+        0.63784,
+        0.13573
+      ],
+      "dimensions_gltf_xyz": [
+        0.78018,
+        0.13573,
+        0.63784
+      ]
+    },
+    {
+      "type": "collapse",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Collapse_A_Diagonal_Slabs",
+      "file": "exports/gltf/Collapse_A_Diagonal_Slabs.gltf",
+      "triangles": 8728,
+      "bounds_min_blender": [
+        -1.7999999523162842,
+        -0.8500000238418579,
+        0.0
+      ],
+      "bounds_max_blender": [
+        1.7999999523162842,
+        0.8500000238418579,
+        3.5
+      ],
+      "dimensions_blender_xyz": [
+        3.6,
+        1.7,
+        3.5
+      ],
+      "dimensions_gltf_xyz": [
+        3.6,
+        3.5,
+        1.7
+      ]
+    },
+    {
+      "type": "collapse",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Collapse_B_Broken_Beams",
+      "file": "exports/gltf/Collapse_B_Broken_Beams.gltf",
+      "triangles": 8700,
+      "bounds_min_blender": [
+        -2.0,
+        -0.949999988079071,
+        0.0
+      ],
+      "bounds_max_blender": [
+        2.0,
+        0.949999988079071,
+        3.7637338638305664
+      ],
+      "dimensions_blender_xyz": [
+        4.0,
+        1.9,
+        3.76373
+      ],
+      "dimensions_gltf_xyz": [
+        4.0,
+        3.76373,
+        1.9
+      ]
+    },
+    {
+      "type": "collapse",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Collapse_C_Upright_Slab",
+      "file": "exports/gltf/Collapse_C_Upright_Slab.gltf",
+      "triangles": 8622,
+      "bounds_min_blender": [
+        -1.7000000476837158,
+        -0.824999988079071,
+        0.0
+      ],
+      "bounds_max_blender": [
+        1.7000000476837158,
+        0.824999988079071,
+        3.5999999046325684
+      ],
+      "dimensions_blender_xyz": [
+        3.4,
+        1.65,
+        3.6
+      ],
+      "dimensions_gltf_xyz": [
+        3.4,
+        3.6,
+        1.65
+      ]
+    },
+    {
+      "type": "scatter",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "name": "Slab_Rebar",
+      "file": "exports/gltf/Slab_Rebar.gltf",
+      "triangles": 260,
+      "bounds_min_blender": [
+        -0.6872948408126831,
+        -0.26654356718063354,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.6872948408126831,
+        0.26654356718063354,
+        0.22242555022239685
+      ],
+      "dimensions_blender_xyz": [
+        1.37459,
+        0.53309,
+        0.22243
+      ],
+      "dimensions_gltf_xyz": [
+        1.37459,
+        0.22243,
+        0.53309
+      ]
+    }
+  ],
+  "total_triangles": 28192
+}

@@ -272,6 +272,37 @@ void TestToneMapping()
           "exposure, tone mapping, low-health effects, and sRGB transfer are ordered correctly");
 }
 
+void TestDisplayGamma()
+{
+    const Vector3 sample{0.01f, 0.25f, 0.75f};
+    const Vector3 neutral = engine::ApplyDisplayGamma(sample, 1.0f);
+    Check(Near(neutral.x, sample.x) && Near(neutral.y, sample.y)
+                  && Near(neutral.z, sample.z), "neutral gamma preserves display RGB");
+    const Vector3 bright = engine::ApplyDisplayGamma(sample, 2.0f);
+    const Vector3 dark = engine::ApplyDisplayGamma(sample, 0.5f);
+    Check(Near(bright.x, 0.1f) && Near(bright.y, 0.5f)
+                  && bright.z > sample.z, "higher gamma lifts shadows and midtones");
+    Check(dark.x < sample.x && Near(dark.y, 0.0625f)
+                  && dark.z < sample.z, "lower gamma darkens midtones");
+    for (float gamma : {0.5f, 1.0f, 2.0f}) {
+        const Vector3 endpoints = engine::ApplyDisplayGamma({0.0f, 1.0f, 0.0f}, gamma);
+        Check(endpoints.x == 0.0f && endpoints.y == 1.0f,
+                "gamma preserves black and white");
+    }
+    Check(Near(engine::NormalizeDisplayGamma(INFINITY), 1.0f)
+                  && Near(engine::NormalizeDisplayGamma(NAN), 1.0f),
+            "non-finite gamma falls back to neutral");
+    const std::string shader = test::ReadShaderStage(game::GameShader::ScenePresentation);
+    const size_t transfer = shader.find("vec3 displayRgb = LinearSceneToDisplaySrgb(mapped)");
+    const size_t adjustment = shader.find("displayRgb = pow(");
+    const size_t output = shader.find("finalColor = vec4(", adjustment);
+    Check(transfer != std::string::npos && adjustment != std::string::npos
+                  && output != std::string::npos && transfer < adjustment && adjustment < output,
+            "user gamma follows sRGB encoding in the final scene shader");
+    Check(shader.find("clamp(scene.a, 0.0, 1.0)", output) != std::string::npos,
+            "presentation alpha is not gamma transformed");
+}
+
 void TestBloomDiagnosticViewPolicy()
 {
     Check(!game::IsSectorBloomDiagnosticView(
@@ -480,6 +511,7 @@ int main()
     TestTransferFunctions();
     TestTextureSemantics();
     TestToneMapping();
+    TestDisplayGamma();
     TestBloomDiagnosticViewPolicy();
     TestRenderTargetMetadata();
     TestPipelineDiagnosticFormatting();

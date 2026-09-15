@@ -1,0 +1,306 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "DEBRIS KIT",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Slab_Flat_50cm_Export"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Debris_Concrete_Formed.011",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        },
+        "baseColorFactor": [
+          0.63,
+          0.61,
+          0.58,
+          1
+        ]
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Debris_Concrete_Fracture.016",
+      "normalTexture": {
+        "index": 3
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 4
+        },
+        "metallicRoughnessTexture": {
+          "index": 5
+        },
+        "baseColorFactor": [
+          0.63,
+          0.61,
+          0.58,
+          1
+        ]
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Flat_Slab.004",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 3
+    },
+    {
+      "sampler": 0,
+      "source": 4
+    },
+    {
+      "sampler": 0,
+      "source": 5
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_normal_opengl",
+      "uri": "textures/Concrete_Formed_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_basecolor",
+      "uri": "textures/Concrete_Formed_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_orm",
+      "uri": "textures/Concrete_Formed_orm.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_normal_opengl",
+      "uri": "textures/Concrete_Fracture_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_basecolor",
+      "uri": "textures/Concrete_Fracture_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_orm",
+      "uri": "textures/Concrete_Fracture_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 19,
+      "max": [
+        0.19778962433338165,
+        0.09000000357627869,
+        0.1546514332294464
+      ],
+      "min": [
+        -0.18854086101055145,
+        0,
+        -0.14899420738220215
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 19,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 19,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 19,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 45,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 177,
+      "max": [
+        0.23187336325645447,
+        0.09000000357627869,
+        0.17890751361846924
+      ],
+      "min": [
+        -0.23187336325645447,
+        0,
+        -0.17890751361846924
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 177,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 177,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 177,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 201,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 228,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 228,
+      "byteOffset": 228,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 152,
+      "byteOffset": 456,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 304,
+      "byteOffset": 608,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 90,
+      "byteOffset": 912,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2124,
+      "byteOffset": 1004,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2124,
+      "byteOffset": 3128,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1416,
+      "byteOffset": 5252,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2832,
+      "byteOffset": 6668,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 402,
+      "byteOffset": 9500,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 9904,
+      "uri": "Slab_Flat_50cm.bin"
+    }
+  ]
+}

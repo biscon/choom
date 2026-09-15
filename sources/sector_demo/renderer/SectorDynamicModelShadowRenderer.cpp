@@ -70,7 +70,7 @@ void DrawContactShadowForModel(
         SectorDynamicModelShadowMode shadowMode,
         float scale)
 {
-    if (!object.visible
+    if ((!object.visible || !IsSectorObjectEnabled(object))
             || shadowMode != SectorDynamicModelShadowMode::Contact
             || !ShouldDrawRuntimeSectorForVisibility(
                     object.currentSectorId,

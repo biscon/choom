@@ -31,13 +31,15 @@ local function elinConversation()
             setFlag("elin_asked_identity", true)
         end,
         place = function()
-            say("Do you know what this place is?")
-            startPlayNpcAnimation("elin", "Talking")
-            say("elin", "No. I found this office looking room and decided to stop, catch a breath and reevaluate my options.")
-            startPlayNpcAnimation("elin", "Talking_2")
-            say("elin", "Sure beats walking the dark tunnels, seems like somebody have been living here there is even a bed and all.")
-
+            if not flag("elin_shown_place_questions") then
+                say("Do you know what this place is?")
+                startPlayNpcAnimation("elin", "Talking")
+                say("elin", "No. I found this office looking room and decided to stop, catch a breath and reevaluate my options.")
+                startPlayNpcAnimation("elin", "Talking_2")
+                say("elin", "Sure beats walking the dark tunnels, seems like somebody have been living here there is even a bed and all.")
+            end
             elinPlaceQuestions()
+            setFlag("elin_shown_place_questions", true)
             setFlag("elin_asked_place", flag("elin_asked_arrival"))
         end,
         people = function()
@@ -55,6 +57,7 @@ local function elinConversation()
             say("elin", "No I haven't found anything, have you looked around the office?.")
             assert(await(anim))
             setFlag("elin_asked_storage_door", true)
+            return "exit"
         end,
         goodbye = function()
             if returning then
@@ -89,6 +92,7 @@ function useElin(instanceId)
         log("Could not start Elin conversation: " .. (reason or "unknown reason"))
         return
     end
+    setNpcAnimation("elin", "Idle")
     elinConversation()
     assert(endConversation())
 end
@@ -131,12 +135,62 @@ function useEntranceKeypad()
     end
 end
 
+function setTunnelCollapsed(collapsed)
+    setFogVolumeEnabled("tunnel_fog", collapsed)
+    setPropEnabled("tunnel_debris_1", collapsed)
+    setPropEnabled("tunnel_debris_2", collapsed)
+    setPropEnabled("tunnel_debris_3", collapsed)
+    setPropEnabled("tunnel_debris_4", collapsed)
+    setPropEnabled("tunnel_debris_5", collapsed)
+    setPropEnabled("tunnel_debris_6", collapsed)
+    setPropEnabled("tunnel_debris_7", collapsed)
+    setPropEnabled("tunnel_debris_8", collapsed)
+end
+
+function tunnelCollapseCutscene()
+    setTunnelCollapsed(false)
+    teleportPlayer("default")
+    assert(startCutscene())
+    delay(1000)
+    movePlayer("collapse_marker_1", "walk", 1.25)
+    playMapSound("tunnel_collapse", 1.0)
+    local shake = startScreenShake(0.9, 5000, SHAKE_RUMBLE)
+    delay(1000)
+    text("Fuck!", BOTTOM, 750)
+    --say("Fuck!")
+    startMovePlayer("collapse_marker_2", "run", 4.5)
+    delay(750)
+    fadeOut(2000)
+    delay(5500)
+    setPlayerHealth(25)
+    setTunnelCollapsed(true)
+    teleportPlayer("collapse_marker_2")
+    fadeIn(4000)
+    delay(500)
+    startText("My head...", BOTTOM, 1000)
+    movePlayer("collapse_marker_3", "walk", 1.0, {
+        lookAtProp = "tunnel_debris_1",
+        turnDurationMs = 2500,
+        targetHeight = 0.2,
+    })
+    startLookAtProp("tunnel_debris_1", 2000, 0.65)
+    delay(500)
+    text("Guess I won't be leaving that way..", BOTTOM, 1750)
+    delay(250)
+    lookAtProp("prop_498", 1500)
+    assert(endCutscene())
+end
+
 function init()
-    log("hub script initialized")
+    stopSoundEmitter("storage_radio_emitter")
     refreshEntranceAccess()
     setPropAnimationProgress("ceiling_switch_01", 0.0, "switch|switchAction")
     setPropAnimationProgress("ceiling_vent_01", 0.0, "Ventilator")
     playPropAnimation("ceiling_vent_01", "Ventilator", "loop")
+    if not flag("tunnel_collapsed") then
+        setFlag("tunnel_collapsed", true)
+        startScript("tunnelCollapseCutscene")
+    end
 end
 
 function shutdown()
@@ -163,7 +217,7 @@ function intro_trigger_1()
     })
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "I've been walking these dark tunnels forever. You're are the first person I met so far. Follow me.")
+    say("elin", "I've been walking these dark tunnels forever.. wait.. you're hurt! follow me!")
     local elinArrival = assert(startMoveNpc("elin", "intro_marker_3", "walk", 1.5, true))
     delay(1500)
     movePlayer("intro_marker_4", "walk", 1.25, {
@@ -211,11 +265,52 @@ function entrance_trigger()
     else
         say("I have neither.")
     end
+    startPlayNpcAnimation("elin", "Talking_2")
     say("elin", "You should be careful. I don't like the noises coming from in there.")
+    startPlayNpcAnimation("elin", "No")
     say("elin", "I'll hang out in the office.")
+    setFlag("elin_in_storage_room", false)
     startMoveNpc("elin", "intro_marker_3", "walk", nil, true)
     startLookAtNpc("elin", 2000, 0.55)
     delay(2000)
+    assert(endCutscene())
+end
+
+function storage_trigger()
+    assert(startCutscene())
+    local movement = assert(startMovePlayer("intro_marker_8", "walk", 0.5, {
+        lookAtProp = "tool_board",
+    }))
+    local elinArrival = assert(startMoveNpc("elin", "intro_marker_9", "run", nil, true))
+    assert(await(elinArrival))
+    local lookWait = startLookAtNpc("elin", 1000, 0.7)
+    local elinSay = startSay("elin", "This looks cozy.")
+    setFlag("elin_in_storage_room", true)
+    assert(await(lookWait))
+    assert(await(elinSay))
+    elinArrival = assert(startMoveNpc("elin", "intro_marker_10", "walk", nil, true))
+    lookAtNpc("elin", 3000, 0.7)
+    assert(await(elinArrival))
+    startPlayNpcAnimation("elin", "Reaching Out")
+    lookAtNpc("elin", 250, 0.7)
+    say("elin", "Hmm he seemed to like the buff ones..")
+    startPlayNpcAnimation("elin", "Talking_2")
+    say("elin", "This reminds me of my uncle, minus all the beer cans and the smell of old tobacco smoke.")
+    startNpcLookAtPlayer("elin", 1000)
+    say("Too bad, I could use a beer right about now, even a warm one.")
+    startSay("elin", "Me too.")
+
+    elinArrival = assert(startMoveNpc("elin", "intro_marker_11", "walk", nil, true))
+    lookAtNpc("elin", 3000, 0.7)
+    assert(await(elinArrival))
+    startPlayNpcAnimation("elin", "Reaching Out")
+    lookAtNpc("elin", 250, 0.7)
+    say("elin", "Seems like we have us a equal oppertunity amorist.")
+    startNpcLookAtPlayer("elin", 2000)
+    say("It would seem so. Two sixpacks so far and none of them of the drinkable varierity.")
+    startPlayNpcAnimation("elin", "Talking")
+    say("elin", "Aww.")
+
     assert(endCutscene())
 end
 
@@ -336,4 +431,29 @@ end
 
 function usePasswordNote()
     showNote("Login:", "user: user\npassword: im2good")
+end
+
+local storageRadioOn = false
+
+function useStorageRadio()
+    enableControls(false)
+    playMapSound("light_switch_on_01", 0.8)
+    if storageRadioOn then
+        storageRadioOn = false
+        stopSoundEmitter("storage_radio_emitter")
+        if flag("elin_in_storage_room") then
+            setNpcAnimation("elin", "Idle")
+            startPlayNpcAnimation("elin", "Rejected")
+            lookAtNpc("elin", 750, 0.7)
+        end
+    else
+        storageRadioOn = true
+        playSoundEmitter("storage_radio_emitter")
+        if flag("elin_in_storage_room") then
+            setNpcAnimation("elin", "Dancing", 1.175)
+            delay(500)
+            lookAtNpc("elin", 750, 0.7)
+        end
+    end
+    enableControls(true)
 end

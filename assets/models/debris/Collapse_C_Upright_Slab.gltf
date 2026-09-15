@@ -1,0 +1,428 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "DEBRIS KIT",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Collapse_C_Upright_Slab_Export"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Debris_Concrete_Formed.011",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        },
+        "baseColorFactor": [
+          0.63,
+          0.61,
+          0.58,
+          1
+        ]
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Debris_Concrete_Fracture.016",
+      "normalTexture": {
+        "index": 3
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 4
+        },
+        "metallicRoughnessTexture": {
+          "index": 5
+        },
+        "baseColorFactor": [
+          0.63,
+          0.61,
+          0.58,
+          1
+        ]
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Debris_Rebar_Rust.008",
+      "normalTexture": {
+        "index": 6
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 7
+        },
+        "metallicRoughnessTexture": {
+          "index": 8
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Dense_fractured_core.012",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        },
+        {
+          "attributes": {
+            "POSITION": 10,
+            "NORMAL": 11,
+            "TEXCOORD_0": 12,
+            "TANGENT": 13
+          },
+          "indices": 14,
+          "material": 2
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 3
+    },
+    {
+      "sampler": 0,
+      "source": 4
+    },
+    {
+      "sampler": 0,
+      "source": 5
+    },
+    {
+      "sampler": 0,
+      "source": 6
+    },
+    {
+      "sampler": 0,
+      "source": 7
+    },
+    {
+      "sampler": 0,
+      "source": 8
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_normal_opengl",
+      "uri": "textures/Concrete_Formed_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_basecolor",
+      "uri": "textures/Concrete_Formed_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_orm",
+      "uri": "textures/Concrete_Formed_orm.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_normal_opengl",
+      "uri": "textures/Concrete_Fracture_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_basecolor",
+      "uri": "textures/Concrete_Fracture_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_orm",
+      "uri": "textures/Concrete_Fracture_orm.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Rebar_Rust_normal_opengl",
+      "uri": "textures/Rebar_Rust_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Rebar_Rust_basecolor",
+      "uri": "textures/Rebar_Rust_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Rebar_Rust_orm",
+      "uri": "textures/Rebar_Rust_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 642,
+      "max": [
+        1.601892352104187,
+        3.5218794345855713,
+        0.824999988079071
+      ],
+      "min": [
+        -1.558036208152771,
+        0.06822115182876587,
+        -0.824999988079071
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 642,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 642,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 642,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 1404,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 20199,
+      "max": [
+        1.6320000886917114,
+        3.5466787815093994,
+        0.824999988079071
+      ],
+      "min": [
+        -1.7000000476837158,
+        0,
+        -0.824999988079071
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 20199,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 20199,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 20199,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 20862,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5126,
+      "count": 1199,
+      "max": [
+        1.7000000476837158,
+        3.5999999046325684,
+        0.6286668181419373
+      ],
+      "min": [
+        -1.358429193496704,
+        0,
+        -0.7554055452346802
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5126,
+      "count": 1199,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 12,
+      "componentType": 5126,
+      "count": 1199,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 13,
+      "componentType": 5126,
+      "count": 1199,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 14,
+      "componentType": 5123,
+      "count": 3600,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 7704,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 7704,
+      "byteOffset": 7704,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 5136,
+      "byteOffset": 15408,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 10272,
+      "byteOffset": 20544,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2808,
+      "byteOffset": 30816,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 242388,
+      "byteOffset": 33624,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 242388,
+      "byteOffset": 276012,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 161592,
+      "byteOffset": 518400,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 323184,
+      "byteOffset": 679992,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 41724,
+      "byteOffset": 1003176,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 14388,
+      "byteOffset": 1044900,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 14388,
+      "byteOffset": 1059288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 9592,
+      "byteOffset": 1073676,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 19184,
+      "byteOffset": 1083268,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 7200,
+      "byteOffset": 1102452,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1109652,
+      "uri": "Collapse_C_Upright_Slab.bin"
+    }
+  ]
+}

@@ -268,6 +268,12 @@ SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
     };
 }
 
+float SectorFpsYawFromMarkerOrientation(float orientationRadians)
+{
+    // Markers face (sin(yaw), cos(yaw)); the FPS camera uses (cos(yaw), sin(yaw)).
+    return 1.5707963267948966f - orientationRadians;
+}
+
 bool SectorFpsTransitionStartsVisualStepSmoothing(SectorFpsVerticalTransition transition)
 {
     return transition == SectorFpsVerticalTransition::SteppedUp

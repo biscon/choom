@@ -1,4 +1,6 @@
 #include "game/SectorScriptBindings.h"
+#include "game/npc/NpcAudioSystem.h"
+#include "sector_demo/SectorPropDragging.h"
 #include "game/items/ItemInventory.h"
 
 #include "engine/EngineContext.h"
@@ -972,6 +974,7 @@ int LuaTeleportNpc(lua_State* state)
     if ((world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))
             || (world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead))
         return fail("NPC is dead");
+    if (!IsSectorObjectEnabled(context.world, entity)) return fail("NPC disabled");
     if (npc.conversationHeld) return fail("NPC is held by a conversation");
     if (npc.actionLockedByAi
             || (world.Has<NpcAiState>(entity)
@@ -1063,8 +1066,7 @@ int LuaTeleportPlayer(lua_State* state)
         CancelSectorCutsceneLook(cutscene, cutscene.look.token);
     }
     player.feetPosition = position;
-    // Markers face (sin(yaw), cos(yaw)); the FPS camera uses (cos(yaw), sin(yaw)).
-    player.yawRadians = 1.5707963267948966f - yaw;
+    player.yawRadians = SectorFpsYawFromMarkerOrientation(yaw);
     player.pitchRadians = 0.0f;
     player.currentSectorId = sectorId;
     player.verticalVelocity = 0.0f;
@@ -1111,6 +1113,8 @@ int StartNpcLook(lua_State* state, ScriptNpcLookTarget kind, bool async)
     size_t length = 0;
     const char* id = lua_tolstring(state, 1, &length);
     const engine::Entity actor = FindNpcEntity(context.world, std::string_view{id, length});
+    if (context.world.IsAlive(actor) && !IsSectorObjectEnabled(context.world, actor))
+        return PushNpcMoveStartError(state, async, "NPC disabled");
     NpcBodyTurnState turn;
     const int durationArgument = kind == ScriptNpcLookTarget::Player ? 2 : 3;
     if (lua_type(state, durationArgument) != LUA_TNUMBER) {
@@ -1450,6 +1454,8 @@ int StartCaption(
         speech.speaker = FindNpcEntity(context.world, std::string_view{id, idLength});
         if (!context.world.IsAlive(speech.speaker))
             return PushCutsceneStartError(state, async, "say NPC instance was not found");
+        if (!IsSectorObjectEnabled(context.world, speech.speaker))
+            return PushCutsceneStartError(state, async, "NPC disabled");
         if (!lua_isnoneornil(state, 3)) {
             luaL_checktype(state, 3, LUA_TSTRING);
             size_t moodLength = 0;
@@ -1552,6 +1558,83 @@ int LuaStartText(lua_State* state)
 {
     return StartCaption(state, SectorCutsceneCaptionKind::Text, true);
 }
+
+void CancelScriptScreenShake(engine::EngineContext&, void* hostContext, uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host == nullptr) return;
+    if (host->screenShake != nullptr) engine::CancelScreenShake(*host->screenShake, {token});
+    for (auto& entry : host->shakeOperations) {
+        if (entry.shake.token == token) entry = {};
+    }
+}
+
+int StartScriptScreenShake(lua_State* state, bool async)
+{
+    const int originalTop = lua_gettop(state);
+    auto& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    // Reject blocking console calls before touching the effect or operation pool.
+    const auto task = async ? engine::ScriptSystemTryCurrentTaskFromLua(state)
+                            : engine::ScriptSystemCurrentTaskFromLua(state);
+    auto& host = HostFromLua(state);
+    luaL_checktype(state, 1, LUA_TNUMBER);
+    luaL_checktype(state, 2, LUA_TNUMBER);
+    const double strength = lua_tonumber(state, 1);
+    const double durationMs = lua_tonumber(state, 2);
+    if (!std::isfinite(strength) || strength < 0.0 || strength > 1.0)
+        return PushCutsceneStartError(state, async, "shake strength must be finite and between 0 and 1");
+    if (!std::isfinite(durationMs) || durationMs < 0.0)
+        return PushCutsceneStartError(state, async, "shake duration must be finite and non-negative");
+    auto type = engine::ScreenShakeType::Rumble;
+    if (!lua_isnoneornil(state, 3)) {
+        luaL_checktype(state, 3, LUA_TNUMBER);
+        const double value = lua_tonumber(state, 3);
+        if (value != static_cast<int>(engine::ScreenShakeType::Rumble)
+                && value != static_cast<int>(engine::ScreenShakeType::Impact))
+            return PushCutsceneStartError(state, async, "shake type must be SHAKE_RUMBLE or SHAKE_IMPACT");
+        type = static_cast<engine::ScreenShakeType>(static_cast<int>(value));
+    }
+    if (host.screenShake == nullptr)
+        return PushCutsceneStartError(state, async, "screen shake runtime is unavailable");
+    const double durationSeconds = durationMs / 1000.0;
+    if (!async && durationSeconds == 0.0) {
+        lua_pushboolean(state, true);
+        return 1;
+    }
+    SectorScriptHost::ShakeOperation* entry = nullptr;
+    for (auto& candidate : host.shakeOperations) {
+        if (!engine::IsValid(candidate.operation)) { entry = &candidate; break; }
+    }
+    if (entry == nullptr && durationSeconds > 0.0) {
+        TraceLog(LOG_WARNING, "Screen shake operation capacity exceeded");
+        return PushCutsceneStartError(state, async, "screen shake operation capacity exceeded");
+    }
+    const char* error = nullptr;
+    const auto shake = engine::StartScreenShake(*host.screenShake,
+            static_cast<float>(strength), durationSeconds, type, &error);
+    if (shake.token == 0) return PushCutsceneStartError(state, async, error);
+    const auto operation = engine::ScriptSystemCreateOperation(scripts,
+            async ? engine::ScriptOperationLaunchStyle::Async
+                  : engine::ScriptOperationLaunchStyle::Blocking,
+            task, "screenShake", shake.token, CancelScriptScreenShake);
+    if (!engine::IsValid(operation)) {
+        engine::CancelScreenShake(*host.screenShake, shake);
+        return PushCutsceneStartError(state, async, "could not allocate screen shake operation");
+    }
+    if (engine::IsScreenShakeActive(*host.screenShake, shake)) {
+        *entry = {shake, operation};
+    } else {
+        engine::ScriptSystemCompleteOperation(scripts, operation);
+    }
+    if (async) {
+        engine::ScriptSystemPushOperationUserdata(state, operation);
+        return 1;
+    }
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
+int LuaScreenShake(lua_State* state) { return StartScriptScreenShake(state, false); }
+int LuaStartScreenShake(lua_State* state) { return StartScriptScreenShake(state, true); }
 
 int StartFade(lua_State* state, float targetOpacity)
 {
@@ -2015,6 +2098,7 @@ int PushBindingError(lua_State* state, const std::string& error)
 const char* NpcAnimationControlError(
         engine::World& world, SectorScriptHost& host, engine::Entity entity)
 {
+    if (!IsSectorObjectEnabled(world, entity)) return "NPC disabled";
     const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(entity);
     if (npc.actionLockedByAi
             || (world.Has<NpcAiState>(entity)
@@ -2408,6 +2492,111 @@ bool MutateDynamicLight(
         if (light.instanceId == id) { callback(light); return true; }
     }
     return false;
+}
+
+int LuaSetObjectEnabled(lua_State* state, const char* kind)
+{
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    auto& host = HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    const std::string_view id{rawId, length};
+    const bool enabled = lua_toboolean(state, 2) != 0;
+    engine::Entity entity = engine::NullEntity();
+    if (std::string_view{kind} == "npc") entity = FindNpcEntity(context.world, id);
+    else if (std::string_view{kind} == "prop") {
+        context.world.ForEach<SectorDynamicModel>([&](engine::Entity candidate, SectorDynamicModel& prop) {
+            if (prop.instanceId == id && !context.world.Has<NpcRuntimeInstance>(candidate)) entity = candidate;
+        });
+    } else {
+        context.world.ForEach<SectorItem>([&](engine::Entity candidate, SectorItem& item) {
+            if (item.instanceId == id) entity = candidate;
+        });
+    }
+    if (id.empty() || id.find('\0') != std::string_view::npos
+            || !context.world.IsAlive(entity) || !context.world.Has<SectorObject>(entity)
+            || !host.runtimeObjects)
+        return PushBindingError(state, std::string{kind} + " was not found");
+    if (context.world.Has<SectorItem>(entity)
+            && IsItemPickupVacuuming(context.world.Get<SectorItem>(entity).presentation))
+        return PushBindingError(state, "item pickup has already committed");
+    auto& object = context.world.Get<SectorObject>(entity);
+    if (object.enabled == enabled) { lua_pushboolean(state, 1); return 1; }
+    SetSectorRuntimeObjectEnabled(context.world, *host.runtimeObjects, entity, enabled);
+    if (!enabled) {
+        if (host.propDrag && host.propDrag->entity == entity)
+            EndSectorPropDrag(context, *host.propDrag, false);
+        if (context.world.Has<NpcRuntimeInstance>(entity)) {
+            if (host.conversation.active && host.conversation.npc == entity) {
+                if (host.scripts) engine::ScriptSystemRequestStopTask(*host.scripts, host.conversation.owner);
+                EndSectorScriptConversation(context, host);
+            }
+            if (host.scripts) {
+                for (auto& move : host.npcMoves) {
+                    if (move.active && move.instanceId == id) {
+                        engine::ScriptSystemCancelOperation(context, *host.scripts, move.operation, "NPC disabled");
+                        move.active = false;
+                    }
+                }
+                for (auto& look : host.npcLooks) {
+                    if (look.active && look.entity == entity) {
+                        engine::ScriptSystemCancelOperation(context, *host.scripts, look.operation, "NPC disabled");
+                        look.active = false;
+                    }
+                }
+                for (auto& animation : host.npcAnimations) {
+                    if (animation.active && animation.entity == entity) {
+                        engine::ScriptSystemCancelOperation(context, *host.scripts, animation.operation, "NPC disabled");
+                        animation.active = false;
+                    }
+                }
+                if (host.cutscene && host.cutscene->caption.active
+                        && host.cutscene->caption.speaker == entity)
+                    engine::ScriptSystemCancelOperation(context, *host.scripts,
+                            host.cutscene->caption.operation, "NPC disabled");
+            }
+            if (context.world.Has<NpcAnimationState>(entity)
+                    && context.world.Has<engine::AnimatedModelAnimator>(entity))
+                CancelNpcScriptAnimation(context.world.Get<NpcAnimationState>(entity),
+                        context.world.Get<engine::AnimatedModelAnimator>(entity));
+            StopNpcObjectAudio(context.world, context.assets, context.audio, host.npcAudio, entity);
+        }
+    }
+    if (host.navigation) {
+        host.navigation->UpdateDynamicObstacles(host.runtimeObjects->dynamicModelColliders, 0.0f);
+        if (host.npcNavigation) {
+            SuspendDisabledNpcNavigation(context.world, *host.navigation, *host.npcNavigation);
+            PrepareNpcDoorTraversalAndHoldsSystem(context.world, *host.navigation,
+                    *host.npcNavigation, host.runtimeObjects->dynamicDoorColliders, 0.0f);
+            CollectNpcDoorObstacles(context.world, *host.npcNavigation,
+                    host.runtimeObjects->doorObstacles);
+        }
+    }
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaSetPropEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "prop"); }
+int LuaSetItemEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "item"); }
+int LuaSetNpcEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "npc"); }
+
+int LuaSetFogVolumeEnabled(lua_State* state)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    const std::string_view instanceId{rawId, length};
+    if (host.map != nullptr && !instanceId.empty()) {
+        for (auto& volume : host.map->compiledLocalFogVolumes) {
+            if (volume.instanceId != instanceId) continue;
+            volume.enabled = lua_toboolean(state, 2) != 0;
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+    }
+    return PushBindingError(state, "fog volume was not found");
 }
 
 int LuaSetDynamicLightEnabled(lua_State* state)
@@ -2842,6 +3031,8 @@ void InitializeSectorScriptHost(
         const SectorFpsControllerConfig* playerConfig,
         SectorScriptControlApi controls)
 {
+    host.screenShake = nullptr;
+    host.shakeOperations = {};
     host.runtimeObjects = &runtimeObjects;
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
@@ -2871,6 +3062,8 @@ void InitializeSectorScriptHost(
     host.npcMoveDiagnostics = {};
     host.doorPermission = {};
     host.dynamicLightsDirty = false;
+    host.npcAudio = nullptr;
+    host.propDrag = nullptr;
     host.triggers.clear();
     host.triggers.reserve(map.triggers.size());
     std::vector<size_t> triggerIndices(map.triggers.size());
@@ -2885,6 +3078,9 @@ void InitializeSectorScriptHost(
 
 void ResetSectorScriptHost(SectorScriptHost& host)
 {
+    if (host.screenShake != nullptr) engine::ResetScreenShake(*host.screenShake);
+    host.screenShake = nullptr;
+    host.shakeOperations = {};
     host.runtimeObjects = nullptr;
     host.navigation = nullptr;
     host.npcNavigation = nullptr;
@@ -2909,6 +3105,8 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.triggers.clear();
     host.doorPermission = {};
     host.dynamicLightsDirty = false;
+    host.npcAudio = nullptr;
+    host.propDrag = nullptr;
 }
 
 void RegisterSectorScriptBindings(lua_State* state)
@@ -2944,6 +3142,10 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "hasInventoryItemInstance", LuaHasInventoryItemInstance);
     Register(state, "hasInventoryItemDefinition", LuaHasInventoryItemDefinition);
     Register(state, "setNpcHealth", LuaSetNpcHealth);
+    Register(state, "setPropEnabled", LuaSetPropEnabled);
+    Register(state, "setItemEnabled", LuaSetItemEnabled);
+    Register(state, "setNpcEnabled", LuaSetNpcEnabled);
+    Register(state, "setFogVolumeEnabled", LuaSetFogVolumeEnabled);
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
     Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);
@@ -2977,6 +3179,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "startSay", LuaStartSay);
     Register(state, "text", LuaText);
     Register(state, "startText", LuaStartText);
+    Register(state, "screenShake", LuaScreenShake);
+    Register(state, "startScreenShake", LuaStartScreenShake);
     Register(state, "fadeOut", LuaFadeOut);
     Register(state, "fadeIn", LuaFadeIn);
     Register(state, "changeMap", LuaChangeMap);
@@ -2991,6 +3195,10 @@ void RegisterSectorScriptBindings(lua_State* state)
     lua_setglobal(state, "CENTER");
     lua_pushinteger(state, static_cast<lua_Integer>(SectorCutsceneTextPosition::Bottom));
     lua_setglobal(state, "BOTTOM");
+    lua_pushinteger(state, static_cast<int>(engine::ScreenShakeType::Rumble));
+    lua_setglobal(state, "SHAKE_RUMBLE");
+    lua_pushinteger(state, static_cast<int>(engine::ScreenShakeType::Impact));
+    lua_setglobal(state, "SHAKE_IMPACT");
 }
 
 bool ReturnedTrue(const std::vector<engine::ScriptValue>& values)
@@ -3080,10 +3288,29 @@ void UpdateSectorScriptDoorPermission(
     host.doorPermission = {};
 }
 
+void CancelSectorScriptScreenShakes(engine::EngineContext& context,
+        SectorScriptHost& host, const char* reason)
+{
+    for (auto& entry : host.shakeOperations) {
+        if (host.scripts != nullptr && engine::IsValid(entry.operation))
+            engine::ScriptSystemCancelOperation(context, *host.scripts, entry.operation, reason);
+        entry = {};
+    }
+    if (host.screenShake != nullptr) engine::ResetScreenShake(*host.screenShake);
+}
+
 void UpdateSectorScriptOperations(
         engine::EngineContext& context,
         SectorScriptHost& host)
 {
+    if (host.scripts != nullptr && host.screenShake != nullptr) {
+        for (auto& entry : host.shakeOperations) {
+            if (!engine::IsValid(entry.operation)
+                    || engine::IsScreenShakeActive(*host.screenShake, entry.shake)) continue;
+            engine::ScriptSystemCompleteOperation(*host.scripts, entry.operation);
+            entry = {};
+        }
+    }
     if (host.scripts == nullptr || host.runtimeObjects == nullptr) return;
     for (SectorScriptDoorMove& move : host.doorMoves) {
         if (!move.active || !engine::IsValid(move.operation)) continue;

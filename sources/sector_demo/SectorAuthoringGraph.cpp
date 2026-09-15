@@ -1778,6 +1778,9 @@ void CompileAuthoringFogVolumes(
                 + volume.bottomOffsetWorld;
         SectorCompiledLocalFogVolume compiled;
         compiled.sourceAuthoringFogVolumeId = volume.id;
+        compiled.instanceId = volume.instanceId.empty()
+                ? AllocateSectorAuthoringFogVolumeInstanceId(graph, volume.id)
+                : volume.instanceId;
         compiled.topologySectorId = sector->id;
         compiled.enabled = volume.enabled;
         compiled.shape = volume.shape;
@@ -1907,6 +1910,37 @@ int AllocateSectorAuthoringLineId(const SectorAuthoringGraph& graph)
 int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph)
 {
     return AllocateNextId(graph.faceAnchors);
+}
+
+std::string AllocateSectorAuthoringFogVolumeInstanceId(const SectorAuthoringGraph& graph, int id)
+{
+    const std::string base = "fog_volume_" + std::to_string(id);
+    const auto available = [&graph](const std::string& candidate) {
+        return std::none_of(graph.fogVolumes.begin(), graph.fogVolumes.end(),
+                [&candidate](const auto& volume) { return volume.instanceId == candidate; });
+    };
+    if (available(base)) return base;
+    for (int suffix = 2; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = base + "_" + std::to_string(suffix);
+        if (candidate.size() > 63) break;
+        if (available(candidate)) return candidate;
+    }
+    return {};
+}
+
+void AssignMissingSectorAuthoringFogVolumeInstanceIds(SectorAuthoringGraph& graph)
+{
+    std::vector<SectorAuthoringFogVolume*> missing;
+    missing.reserve(graph.fogVolumes.size());
+    for (auto& volume : graph.fogVolumes) {
+        if (volume.instanceId.empty()) missing.push_back(&volume);
+    }
+    std::sort(missing.begin(), missing.end(), [](const auto* left, const auto* right) {
+        return left->id < right->id;
+    });
+    for (auto* volume : missing) {
+        volume->instanceId = AllocateSectorAuthoringFogVolumeInstanceId(graph, volume->id);
+    }
 }
 
 int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph)
@@ -2649,11 +2683,20 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
     }
 
     std::set<int> fogVolumeIds;
+    std::set<std::string> fogInstanceIds;
     for (const SectorAuthoringFogVolume& volume : graph.fogVolumes) {
         if (!IsValidSectorAuthoringId(volume.id)) {
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Invalid authoring fog volume ID");
         } else if (!fogVolumeIds.insert(volume.id).second) {
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Duplicate authoring fog volume ID");
+        }
+        // Missing IDs are assigned on import/save; programmatic graphs may omit them.
+        if (!volume.instanceId.empty()) {
+            if (!IsValidSectorScriptInstanceId(volume.instanceId)) {
+                AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Invalid fog volume instance ID");
+            } else if (!fogInstanceIds.insert(volume.instanceId).second) {
+                AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Duplicate fog volume instance ID");
+            }
         }
         const float values[] = {
                 volume.yawDegrees,

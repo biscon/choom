@@ -34,6 +34,7 @@ public:
             int fogVolumeId,
             const char* status,
             const std::function<bool(SectorAuthoringFogVolume&)>& mutate);
+    bool SetInstanceId(int fogVolumeId, const std::string& instanceId, std::string& outError);
     bool SetPosition(int fogVolumeId, SectorTopologyCoordPoint point, const char* status);
     bool DeleteSelected();
 

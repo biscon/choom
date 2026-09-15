@@ -22,6 +22,14 @@ enum class SectorMaterialPropertyMapKind {
     Orm = 2
 };
 
+struct SectorMaterialMacroSettings {
+    bool enabled = false;
+    std::string maskPath;
+    float repeatMeters = 8.0f;
+    float darkening = 0.08f;
+    float roughnessChange = 0.12f;
+};
+
 struct SectorMaterialDefinition {
     std::string id;
     std::string path;
@@ -29,6 +37,7 @@ struct SectorMaterialDefinition {
     float metallicFactor = 0.0f;
     float roughnessFactor = 0.8f;
     float normalStrength = 1.0f;
+    SectorMaterialMacroSettings macro;
 };
 
 struct SectorTextureBinding {

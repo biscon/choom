@@ -29,6 +29,7 @@
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/runtime_objects/SectorEditorPreviewObjectGrid.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
@@ -13151,13 +13152,200 @@ void TestStaticPropConfigClipboardPreservesPlacementAndIdentity()
 
 }
 
+void TestPreviewObjectGridMath()
+{
+    using game::SnapSectorEditorPreviewGridCoordinate;
+    for (double spacing : {0.01, 0.05, 0.25, 1.0, 5.0}) {
+        const float step = static_cast<float>(spacing);
+        for (float sign : {-1.0f, 1.0f}) {
+            const float point = sign * 17.0f * step;
+            const float offGrid = point + step * 0.3f;
+            Check(Near(SnapSectorEditorPreviewGridCoordinate(offGrid, spacing, 1), point + step)
+                          && Near(SnapSectorEditorPreviewGridCoordinate(offGrid, spacing, -1), point),
+                  "off-grid coordinates move to the next grid point in either direction");
+            Check(Near(SnapSectorEditorPreviewGridCoordinate(sign * step * 0.5f, spacing, 0), sign * step),
+                  "nearest-grid halfway ties round away from zero");
+            const float adjacentFloat = std::nextafter(point, point + step);
+            Check(Near(SnapSectorEditorPreviewGridCoordinate(adjacentFloat, spacing, -1), point - step),
+                  "float storage noise at a grid point does not trap reverse movement");
+            float value = point;
+            for (int i = 0; i < 1000; ++i) {
+                value = SnapSectorEditorPreviewGridCoordinate(value, spacing, 1);
+            }
+            Check(Near(value, static_cast<float>((sign * 17.0 + 1000.0) * spacing)),
+                  "repeated forward grid nudges do not stick or skip cells");
+            for (int i = 0; i < 1000; ++i) {
+                value = SnapSectorEditorPreviewGridCoordinate(value, spacing, -1);
+            }
+            Check(Near(value, point), "forward and backward grid nudges do not accumulate drift");
+        }
+    }
+    Check(Near(SnapSectorEditorPreviewGridCoordinate(-8.995f, 0.01, 1), -8.99f)
+                  && Near(SnapSectorEditorPreviewGridCoordinate(-8.995f, 0.01, -1), -9.0f),
+          "reported half-centimetre pipe offset joins the shared centimetre grid");
+    Check(Near(SnapSectorEditorPreviewGridCoordinate(0.01f, 0.25, -1), 0.0f)
+                  && Near(SnapSectorEditorPreviewGridCoordinate(0.01f, 0.25, 1), 0.25f),
+          "switching to a coarser grid uses the next point rather than preserving a fine offset");
+}
+
+void TestPreviewObjectGridTransactions()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    map.sectors[0].floorZ = 0.04f; // A floor that is not on the centimetre grid.
+    map.sectors[1].floorZ = 8.04f;
+    game::SectorPlacedRuntimeObject original;
+    original.id = 640;
+    original.kind = "static_model";
+    original.position = {63.96f, 0.04f, 16.02f}; // X = 7.995 world metres.
+    original.staticModel.instanceId = "grid_prop";
+    original.staticModel.modelPath = "tests/fixtures/grid_prop_missing.gltf";
+    original.staticModel.heightOffsetWorld = 2.949f; // World Y = 2.954.
+    original.staticModel.collision = true;
+    original.yawRadians = 0.3f * DEG2RAD;
+    map.runtimeObjects.push_back(original);
+    engine::EngineContext engineContext;
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::SpawnPlacedRuntimeObjects(engineContext.world, engineContext.assets, runtimeObjects, map);
+    if (runtimeObjects.placedObjectEntities.empty()) {
+        Check(false, "grid fixture spawns its runtime entity");
+        return;
+    }
+    const auto entity = runtimeObjects.placedObjectEntities.front().entity;
+    game::RuntimeObjectEditingState state;
+    game::RuntimeObjectEditingUiState ui;
+    game::SelectionState selection;
+    selection.selectedRuntimeObjectId = original.id;
+    game::SectorEditorDocumentState document;
+    uint64_t revision = 120;
+    game::SectorEditorTopologyRenderCache cache;
+    FillRuntimeObjectTestSectorCache(cache, map);
+    std::string status;
+    game::SectorEditorRuntimeObjectEditingService editing{
+            game::SectorEditorRuntimeObjectEditingServiceContext{
+                    map, runtimeObjects, state, ui, selection, nullptr,
+                    game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+                    revision, cache, status, &engineContext, true}};
+    auto& object = map.runtimeObjects.front();
+    const auto worldHeight = [&]() {
+        return game::SectorAuthoringToWorldDistance(object.position.y)
+                + object.staticModel.heightOffsetWorld;
+    };
+    const auto sameOriginal = [&]() {
+        return object.position.x == original.position.x
+                && object.position.y == original.position.y
+                && object.position.z == original.position.z
+                && object.yawRadians == original.yawRadians
+                && object.staticModel.heightOffsetWorld == original.staticModel.heightOffsetWorld;
+    };
+    const auto originalHash = game::ComputeSectorLightmapSourceHash(map);
+    Check(state.previewAdjustment.gridSnap && editing.BeginPreviewAdjustment(),
+          "grid snapping defaults on and an off-grid prop can begin adjustment");
+    editing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Fine);
+    editing.SetPreviewAdjustmentGridSnap(false);
+    editing.SetPreviewAdjustmentGridSnap(true);
+    Check(sameOriginal() && !state.previewAdjustment.changed
+                  && game::ComputeSectorLightmapSourceHash(map) == originalHash,
+          "starting adjustment and changing preferences neither moves the prop nor changes bake hash");
+    Check(!editing.PreviewNudge(0, 0, 0, 0).changed,
+          "zero-direction input is a clean no-op");
+    editing.PreviewNudge(0.01f, 0, 0, 0);
+    const auto crossing = editing.PreviewNudge(0.01f, 0, 0, 0);
+    Check(crossing.changed && Near(object.position.x, 64.08f)
+                  && Near(object.position.y, 8.04f) && Near(worldHeight(), 2.954f)
+                  && object.position.z == original.position.z && object.yawRadians == original.yawRadians,
+          "snapped horizontal movement crosses raised floor preserving world height and untouched axes");
+    editing.PreviewNudge(0, 0, 0.01f, 0);
+    Check(Near(worldHeight(), 2.96f) && Near(object.staticModel.heightOffsetWorld, 1.955f),
+          "vertical grid is anchored in world space instead of floor-relative space");
+    Check(!document.lifecycle.topologyDocumentDirty && revision == 120 && cache.valid
+                  && runtimeObjects.placedObjectEntities.front().entity == entity,
+          "snapping stages in the existing entity without dirtying the document or its 2D cache");
+    const auto cancel = editing.CancelPreviewAdjustment("cancel snapped crossing");
+    Check(cancel.restoreBakedStatus && sameOriginal()
+                  && game::ComputeSectorLightmapSourceHash(map) == originalHash,
+          "Cancel exactly restores the original off-grid transform and bake hash");
+
+    editing.BeginPreviewAdjustment();
+    editing.SetPreviewAdjustmentGridSnap(false);
+    editing.PreviewNudge(0.05f, 0, 0, 0);
+    Check(Near(object.position.x, original.position.x + 0.4f)
+                  && Near(worldHeight(), 3.954f)
+                  && object.staticModel.heightOffsetWorld == original.staticModel.heightOffsetWorld,
+          "snap-off mode retains relative steps and floor-following horizontal movement");
+    editing.CancelPreviewAdjustment("cancel relative crossing");
+    Check(!state.previewAdjustment.gridSnap && editing.BeginPreviewAdjustment()
+                  && !state.previewAdjustment.gridSnap,
+          "snap preference persists through Cancel and a new adjustment");
+    const auto snap = editing.SnapPreviewAdjustmentToGrid();
+    Check(snap.changed && snap.bakedStatusRefreshNeeded
+                  && Near(game::SectorAuthoringToWorldDistance(object.position.x), 8.0f)
+                  && Near(game::SectorAuthoringToWorldDistance(object.position.z), 2.0f)
+                  && Near(worldHeight(), 2.95f) && Near(object.yawRadians * RAD2DEG, 0.25f),
+          "Snap now aligns all world coordinates and yaw even when continuous snapping is off");
+    Check(!editing.SnapPreviewAdjustmentToGrid().changed,
+          "repeating Snap now is an exact no-op");
+    const auto apply = editing.ApplyPreviewAdjustment();
+    Check(apply.changed && apply.commitBakedStatus && apply.staticNavigationRebuildNeeded
+                  && revision == 121 && !cache.valid && document.lifecycle.topologyDocumentDirty
+                  && !state.previewAdjustment.gridSnap
+                  && game::ComputeSectorLightmapSourceHash(map) != originalHash,
+          "Apply commits once with cache, bake, and navigation invalidation while retaining preferences");
+    Check(runtimeObjects.placedObjectEntities.front().entity == entity,
+          "Snap now preserves runtime entity identity");
+    editing.BeginPreviewAdjustment();
+    Check(!editing.SnapPreviewAdjustmentToGrid().changed,
+          "an aligned prop starts a new snapping transaction without changes");
+    const auto unchangedApply = editing.ApplyPreviewAdjustment();
+    Check(!unchangedApply.changed && !unchangedApply.bakedStatusRefreshNeeded
+                  && !unchangedApply.commitBakedStatus && !unchangedApply.staticNavigationRebuildNeeded
+                  && revision == 121,
+          "applying an unchanged snap does not trigger cache, lighting, or navigation work");
+
+    // Reuse a clean generated fixture for missing-entity rollback and yaw boundaries.
+    object = original;
+    FillRuntimeObjectTestSectorCache(cache, map);
+    editing.SetPreviewAdjustmentGridSnap(true);
+    editing.BeginPreviewAdjustment();
+    const auto savedEntry = runtimeObjects.placedObjectEntities.front();
+    runtimeObjects.placedObjectEntities.clear();
+    const auto failed = editing.SnapPreviewAdjustmentToGrid();
+    Check(!failed.changed && !failed.bakedStatusRefreshNeeded && sameOriginal()
+                  && !state.previewAdjustment.changed,
+          "failed synchronization restores every candidate transform field");
+    runtimeObjects.placedObjectEntities.push_back(savedEntry);
+    editing.CancelPreviewAdjustment("cancel failed snap");
+    object.yawRadians = 180.0f * DEG2RAD;
+    editing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Coarse);
+    editing.BeginPreviewAdjustment();
+    editing.PreviewNudge(0, 0, 0, 5);
+    Check(Near(object.yawRadians * RAD2DEG, -175.0f), "snapped yaw wraps forward across 180 degrees");
+    editing.PreviewNudge(0, 0, 0, -5);
+    Check(Near(object.yawRadians * RAD2DEG, 180.0f), "snapped yaw reverses across its wrap boundary");
+    editing.CancelPreviewAdjustment("cancel yaw");
+
+    // Both independent off-grid origins must land on exactly the same stored coordinate.
+    object.position.x = game::SectorWorldToAuthoringDistance(-8.995f);
+    editing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Fine);
+    editing.BeginPreviewAdjustment();
+    editing.PreviewNudge(0.01f, 0, 0, 0);
+    const float firstAlignedX = object.position.x;
+    editing.CancelPreviewAdjustment("first origin");
+    object.position.x = game::SectorWorldToAuthoringDistance(-8.999f);
+    editing.BeginPreviewAdjustment();
+    editing.PreviewNudge(0.01f, 0, 0, 0);
+    Check(object.position.x == firstAlignedX && object.position.y == original.position.y,
+          "independently off-grid props align identically; outside sectors retain their base height");
+    editing.CancelPreviewAdjustment("second origin");
+    game::ClearSectorRuntimeObjects(engineContext.world, engineContext.assets, runtimeObjects);
+}
+
 void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
 {
     game::SectorTopologyMap map = MakeAdjacentSectorMap();
     game::SectorPlacedRuntimeObject object;
     object.id = 640;
     object.kind = "static_model";
-    object.position = Vector3{16.0f, 0.0f, 16.0f};
+    object.position = Vector3{16.0f, map.sectors.front().floorZ, 16.0f};
     object.staticModel.instanceId = "adjusted_prop";
     object.staticModel.collision = true;
     map.runtimeObjects.push_back(object);
@@ -13280,12 +13468,12 @@ void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
     game::SectorPlacedRuntimeObject dynamic;
     dynamic.id = 641;
     dynamic.kind = "dynamic_model";
-    dynamic.position = Vector3{24.0f, 0.0f, 24.0f};
+    dynamic.position = Vector3{24.0f, movableMap.sectors.front().floorZ, 24.0f};
     dynamic.dynamicModel.instanceId = "adjusted_dynamic";
     game::SectorPlacedRuntimeObject item;
     item.id = 642;
     item.kind = "item";
-    item.position = Vector3{32.0f, 0.0f, 32.0f};
+    item.position = Vector3{32.0f, movableMap.sectors.front().floorZ, 32.0f};
     item.item.definitionId = "adjusted_item";
     item.item.instanceId = "adjusted_item_instance";
     movableMap.runtimeObjects = {dynamic, item};
@@ -13333,6 +13521,7 @@ void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
                     &itemRegistry}};
     Check(movableEditing.BeginPreviewAdjustment(),
           "dynamic prop begins a preview adjustment");
+    movableEditing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Coarse);
     const auto dynamicPreview = movableEditing.PreviewNudge(
             0.0f, -0.25f, 0.25f, -5.0f);
     Check(dynamicPreview.changed && !dynamicPreview.bakedStatusRefreshNeeded,
@@ -13352,9 +13541,22 @@ void TestPreviewObjectAdjustmentStagesAndCommitsInPlace()
                   && movableCache.valid,
           "Cancel restores a dynamic prop without dirtying or invalidating the document");
 
+    movableMap.runtimeObjects[0].dynamicModel.drag.pathEditorId = 99;
+    Check(movableEditing.BeginPreviewAdjustment() && !movableEditing.CanSnapPreviewAdjustmentToGrid(),
+          "path-bound dynamic props cannot use Snap now");
+    Check(!movableEditing.SnapPreviewAdjustmentToGrid().changed
+                  && !movableEditing.PreviewNudge(0.25f, 0, 0, 0).changed
+                  && Near(movableMap.runtimeObjects[0].position, dynamic.position),
+          "path-bound props reject Snap now and horizontal nudges without partial changes");
+    Check(movableEditing.PreviewNudge(0, 0, 0.25f, 5.0f).changed
+                  && Near(movableMap.runtimeObjects[0].dynamicModel.heightOffsetWorld, 0.25f),
+          "path-bound props still allow snapped height and yaw");
+    movableEditing.CancelPreviewAdjustment("cancel path-bound adjustment");
+
     movableSelection.selectedRuntimeObjectId = item.id;
     Check(movableEditing.BeginPreviewAdjustment(),
           "item begins a preview adjustment");
+    movableEditing.SetPreviewAdjustmentPreset(game::PreviewObjectNudgePreset::Fine);
     const auto itemPreview = movableEditing.PreviewNudge(
             -0.01f, 0.01f, 0.01f, 0.25f);
     const auto itemApply = movableEditing.ApplyPreviewAdjustment();
@@ -14225,6 +14427,142 @@ void TestAddMapTextureScanFiltersAutomaticNormalMaps()
     std::filesystem::remove_all(root, error);
 }
 
+void TestMaterialEditorSessionAndLiveFilter()
+{
+    const auto root = TempDirectoryPath("material_editor_session_filter_test");
+    RecreateTempDirectory(root);
+    std::filesystem::create_directories(root / "levels");
+    game::SectorMaterialRegistry registry;
+    for (const char* id : {"alpha_brick", "beta_tile", "gamma_tile"}) {
+        game::SectorMaterialDefinition material;
+        material.id = id;
+        material.path = "assets/images/test.png";
+        registry.materialsById.emplace(id, material);
+    }
+    game::SectorEditorDocumentState document;
+    game::SectorEditorMaterialRegistryEditorState state;
+    game::SectorEditorMaterialRegistryEditorSessionState session;
+    engine::AssetManager assets;
+    std::string status;
+    game::SectorEditorMaterialRegistryEditorService editor{
+            state, session, registry, document.authoring.authoringGraph,
+            document.map.topologyMap,
+            game::MakeSectorEditorDerivationDocumentAccess(document.derivation),
+            game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+            status, root / "materials.json", root / "levels"};
+    const auto selectedId = [&]() {
+        const auto* draft = editor.SelectedDraft();
+        return draft == nullptr ? std::string{} : draft->definition.id;
+    };
+    const auto filter = [&](const char* text) {
+        std::snprintf(session.filterBuffer, sizeof(session.filterBuffer), "%s", text);
+        editor.ApplyFilter();
+    };
+    const auto rename = [&](const char* id) {
+        std::snprintf(state.idBuffer, sizeof(state.idBuffer), "%s", id);
+        editor.ApplyIdBuffer();
+    };
+
+    editor.Open();
+    Check(selectedId() == "alpha_brick", "material editor starts at first sorted material");
+    Check(editor.SelectIndex(2), "material editor selects a later material");
+    filter("TiLe");
+    Check(state.listLabelStorage == std::vector<std::string>{"beta_tile", "gamma_tile"}
+            && selectedId() == "gamma_tile" && state.selectedFilteredIndex == 1,
+            "material filter matches IDs case-insensitively and preserves visible selection");
+    editor.Cancel(nullptr); // Escape uses this same cancellation path.
+    editor.Open();
+    Check(selectedId() == "gamma_tile" && std::string(session.filterBuffer) == "TiLe"
+            && state.scrollSelectionIntoView,
+            "Cancel/Escape reopening restores material, filter, and selection visibility");
+    Check(editor.SelectFilteredIndex(0) && selectedId() == "beta_tile" && state.selectedIndex == 1,
+            "filtered row maps to the correct draft index");
+    Check(!editor.SelectFilteredIndex(-1) && !editor.SelectFilteredIndex(2),
+            "invalid filtered selections are rejected");
+    editor.SelectedDraft()->definition.roughnessFactor = 0.44f;
+    filter("no_matches");
+    Check(selectedId().empty() && state.listLabels.empty() && !editor.RequestDeleteSelected(),
+            "no-results filter clears active selection and prevents deletion");
+    Check(session.selectedMaterialId == "beta_tile", "no-results filter keeps last valid material");
+    filter("");
+    Check(selectedId() == "beta_tile" && state.listLabels.size() == 3
+            && Near(editor.SelectedDraft()->definition.roughnessFactor, 0.44f),
+            "clearing filter restores remembered material and keeps draft edits");
+    editor.Cancel(nullptr);
+    editor.Open();
+    Check(selectedId() == "beta_tile" && Near(editor.SelectedDraft()->definition.roughnessFactor, 0.8f),
+            "remembering a selection does not retain cancelled edits");
+    Check(!std::filesystem::exists(root / "materials.json")
+            && !document.lifecycle.hasUnsavedChanges,
+            "selection and filter browsing do not write files or dirty the document");
+
+    filter("brick");
+    Check(selectedId() == "alpha_brick", "filter selects first match when current material is excluded");
+    rename("renamed_surface");
+    Check(selectedId() == "renamed_surface" && session.filterBuffer[0] == '\0',
+            "renaming outside the filter clears the filter and keeps the active draft");
+    editor.Cancel(nullptr);
+    editor.Open();
+    Check(selectedId() == "alpha_brick", "cancelled rename remembers original material ID");
+    rename("renamed_surface");
+    filter("no_matches");
+    Check(editor.SaveAndClose(assets), "material save succeeds even when the filter has no matches");
+    Check(session.selectedMaterialId == "renamed_surface", "save follows a remembered material rename");
+    editor.Open();
+    Check(selectedId().empty() && std::string(session.filterBuffer) == "no_matches",
+            "reopen preserves a no-results query without fabricating a selection");
+    filter("");
+    Check(selectedId() == "renamed_surface", "clearing query finds the remembered saved rename");
+    filter("tile");
+    editor.AddMaterial();
+    Check(session.filterBuffer[0] == '\0' && selectedId() == "material",
+            "Add clears filter and selects the new draft");
+    editor.Cancel(nullptr);
+    editor.Open();
+    Check(selectedId() == "beta_tile", "discarded new draft falls back to last existing material");
+    editor.AddMaterial();
+    editor.SelectedDraft()->definition.path = "assets/images/new.png";
+    Check(editor.SaveAndClose(assets), "new material can be saved");
+    editor.Open();
+    Check(selectedId() == "material", "saved new material is remembered on reopen");
+
+    filter("tile");
+    Check(editor.SelectFilteredIndex(1) && selectedId() == "gamma_tile"
+            && editor.RequestDeleteSelected(), "filtered deletion targets gamma rather than underlying row one");
+    editor.ConfirmDeleteSelected();
+    Check(selectedId() == "beta_tile" && state.listLabelStorage == std::vector<std::string>{"beta_tile"},
+            "deleting a filtered material rebuilds mapping and selects a remaining match");
+    Check(editor.SaveAndClose(assets) && registry.materialsById.count("gamma_tile") == 0
+            && registry.materialsById.count("beta_tile") == 1, "filtered deletion saves the correct material");
+    editor.Open();
+    Check(selectedId() == "beta_tile" && std::string(session.filterBuffer) == "tile",
+            "Save reopening retains selected material and query");
+    Check(editor.RequestDeleteSelected(), "last matching material can be deleted");
+    editor.ConfirmDeleteSelected();
+    Check(selectedId().empty() && editor.SaveAndClose(assets), "saving deletion of last match handles no active selection");
+    editor.Open();
+    filter("");
+    Check(!selectedId().empty() && registry.materialsById.count(selectedId()) == 1,
+            "removed remembered material falls back to an existing ID");
+    editor.Cancel(nullptr);
+    session.selectedMaterialId = "externally_removed";
+    editor.Open();
+    Check(selectedId() == "material", "unknown remembered ID falls back to first sorted match");
+    const auto saved = Json::parse(ReadTextFile(root / "materials.json"));
+    Check(saved.size() == 2 && saved.contains("formatVersion") && saved.contains("materials"),
+            "saved registry contains no browsing-state fields");
+    filter("surface");
+    editor.Shutdown(assets);
+    Check(session.selectedMaterialId.empty() && session.filterBuffer[0] == '\0' && !state.open,
+            "shutdown clears all material browsing session state");
+    editor.Open();
+    Check(selectedId() == "material" && state.listLabels.size() == 2,
+            "fresh session starts with the full list");
+    editor.Cancel(nullptr);
+    std::error_code cleanupError;
+    std::filesystem::remove_all(root, cleanupError);
+}
+
 void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
 {
     const std::filesystem::path root =
@@ -14242,6 +14580,8 @@ void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
     WriteTextFile(root / "images" / "walls" / "brick_orm.png", "");
     WriteTextFile(root / "images" / "walls" / "brick_roughness.png", "");
     WriteTextFile(root / "images" / "walls" / "notes.txt", "");
+    std::filesystem::create_directories(root / "images" / "macros", error);
+    WriteTextFile(root / "images" / "macros" / "wear.png", "");
 
     game::SectorMaterialRegistry registry;
     registry.materialsById.emplace(
@@ -14252,9 +14592,11 @@ void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
                     game::SectorMaterialFilter::Anisotropic8x});
     game::SectorEditorDocumentState document;
     game::SectorEditorMaterialRegistryEditorState state;
+    game::SectorEditorMaterialRegistryEditorSessionState session;
     std::string status;
     game::SectorEditorMaterialRegistryEditorService editor{
             state,
+            session,
             registry,
             document.authoring.authoringGraph,
             document.map.topologyMap,
@@ -14264,6 +14606,22 @@ void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
             root / "materials" / "materials.json",
             root / "levels"};
     editor.Open();
+    editor.OpenMacroPickerFromRoot(root);
+    Check(state.albedoPicker.macroMask && state.albedoPicker.paths.size() == 1
+            && editor.SelectedAlbedoPickerPath() == "assets/images/macros/wear.png",
+            "macro picker lists only the macro library");
+    engine::AssetManager macroAssets;
+    Check(editor.ConfirmAlbedoPicker(macroAssets)
+            && editor.SelectedDraft()->definition.macro.maskPath == "assets/images/macros/wear.png"
+            && editor.SelectedDraft()->definition.path == "assets/images/walls/brick.png",
+            "macro picker changes mask without changing albedo");
+    editor.ClearMacroMask();
+    Check(editor.SelectedDraft()->definition.macro.maskPath.empty(), "macro mask can be cleared");
+    editor.OpenMacroPickerFromRoot(root);
+    Check(editor.ConfirmAlbedoPicker(macroAssets), "macro mask can be selected again");
+    editor.Cancel(nullptr);
+    editor.Open();
+    Check(editor.SelectedDraft()->definition.macro.maskPath.empty(), "cancel discards macro draft edits");
     editor.OpenAlbedoPickerFromRoot(root);
 
     const std::vector<std::string> expectedPaths{
@@ -15025,6 +15383,32 @@ void TestLevelMarkerModulesStayIndependentOfSectorEditor()
 
 } // namespace
 
+void TestFogVolumeInstanceIdsAreStableAndUnique()
+{
+    game::SectorAuthoringGraph graph;
+    game::SectorAuthoringFogVolume named;
+    named.id = 3;
+    named.instanceId = "fog_volume_1";
+    game::SectorAuthoringFogVolume first;
+    first.id = 1;
+    game::SectorAuthoringFogVolume second;
+    second.id = 2;
+    graph.fogVolumes = {second, named, first};
+    game::AssignMissingSectorAuthoringFogVolumeInstanceIds(graph);
+    Check(graph.fogVolumes[0].instanceId == "fog_volume_2"
+                  && graph.fogVolumes[1].instanceId == "fog_volume_1"
+                  && graph.fogVolumes[2].instanceId == "fog_volume_1_2",
+          "fog migration preserves names and resolves generated-name collisions");
+    std::reverse(graph.fogVolumes.begin(), graph.fogVolumes.end());
+    game::AssignMissingSectorAuthoringFogVolumeInstanceIds(graph);
+    Check(graph.fogVolumes[0].instanceId == "fog_volume_1_2"
+                  && graph.fogVolumes[2].instanceId == "fog_volume_2",
+          "fog IDs stay stable after reorder and repeated migration");
+    graph.fogVolumes[0].instanceId = "fog_volume_2";
+    Check(!game::DeriveSectorTopologyMapFromAuthoringGraph(graph).success,
+          "duplicate fog instance IDs reject derivation");
+}
+
 void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
 {
     game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
@@ -15058,6 +15442,8 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
           "resolved authoring fog volume compiles for renderer");
     if (!result.topology.compiledLocalFogVolumes.empty()) {
         const game::SectorCompiledLocalFogVolume& compiled = result.topology.compiledLocalFogVolumes[0];
+        Check(compiled.instanceId == "fog_volume_1" && compiled.enabled,
+              "programmatic fog receives a deterministic runtime ID and defaults enabled");
         Check(compiled.sourceAuthoringFogVolumeId == 1 && Near(compiled.centerWorld.y, 0.345f),
               "compiled fog volume uses source ID and floor-relative height");
         Check(compiled.shape == game::SectorLocalFogShape::Box
@@ -15070,6 +15456,14 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
                       && Near(compiled.flowSpeedWorld, 0.20f),
               "compiled fog volume preserves readable coherent-noise defaults");
     }
+
+    graph.fogVolumes[0].instanceId = "engine_room_fog";
+    graph.fogVolumes[0].enabled = false;
+    result = game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(result.success && result.topology.compiledLocalFogVolumes.size() == 1
+                  && result.topology.compiledLocalFogVolumes[0].instanceId == "engine_room_fog"
+                  && !result.topology.compiledLocalFogVolumes[0].enabled,
+          "disabled authored fog compiles with its script ID for later enabling");
 
     graph.fogVolumes[0].x = 400;
     graph.fogVolumes[0].y = 400;
@@ -15092,6 +15486,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     game::SectorAuthoringFogVolume volume;
     volume.id = 7;
+    volume.instanceId = "engine_room_fog";
+    volume.enabled = false;
     volume.x = 48;
     volume.y = 64;
     volume.color = Color{12, 34, 56, 255};
@@ -15113,6 +15509,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
                   && !saved.contains("localFogVolumes"),
           "fog volumes serialize only inside authoring graph");
     const Json& savedFog = saved["authoringGraph"]["fogVolumes"][0];
+    Check(savedFog.value("instanceId", "") == "engine_room_fog" && !savedFog.at("enabled").get<bool>(),
+          "fog script ID and disabled starting state serialize");
     Check(!savedFog.contains("noiseAmount")
                   && !savedFog.contains("noiseScaleWorld")
                   && !savedFog.contains("flowSpeedWorld"),
@@ -15144,6 +15542,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
           "authoring fog volume document loads");
     Check(loaded.graph.fogVolumes.size() == 1
                   && loaded.graph.fogVolumes[0].id == 7
+                  && loaded.graph.fogVolumes[0].instanceId == "engine_room_fog"
+                  && !loaded.graph.fogVolumes[0].enabled
                   && loaded.graph.fogVolumes[0].shape == game::SectorLocalFogShape::Box
                   && loaded.graph.fogVolumes[0].analyticStyle
                           == game::SectorAnalyticFogStyle::Room
@@ -15155,6 +15555,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
           "authoring fog volume properties round-trip");
 
     Json legacy = saved;
+    legacy["authoringGraph"]["fogVolumes"][0].erase("instanceId");
+    legacy["authoringGraph"]["fogVolumes"][0].erase("enabled");
     legacy["authoringGraph"]["fogVolumes"][0].erase("shape");
     legacy["authoringGraph"]["fogVolumes"][0].erase("analyticStyle");
     legacy["authoringGraph"]["fogVolumes"][0].erase("yawDegrees");
@@ -15167,6 +15569,31 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
                           == game::SectorAnalyticFogStyle::Cloudy
                   && Near(legacyLoaded.graph.fogVolumes[0].yawDegrees, 0.0f),
           "older fog volumes default to a cloudy unrotated ellipsoid");
+    Check(legacyLoaded.graph.fogVolumes[0].instanceId == "fog_volume_7"
+                  && legacyLoaded.graph.fogVolumes[0].enabled,
+          "legacy fog gets a stable name and defaults enabled");
+    Check(game::SaveSectorAuthoringDocumentToJsonString(legacyLoaded, json, &error),
+          "migrated fog saves");
+    game::SectorAuthoringDocument migrated;
+    Check(game::LoadSectorAuthoringDocumentFromJsonString(json, migrated, &error)
+                  && migrated.graph.fogVolumes[0].instanceId == "fog_volume_7"
+                  && migrated.derivation.topology.compiledLocalFogVolumes[0].instanceId == "fog_volume_7",
+          "migrated fog ID survives save, reload, and derivation");
+    Check(!Json::parse(json)["authoringGraph"]["fogVolumes"][0].contains("enabled"),
+          "enabled default stays omitted on level save");
+    Json badId = saved;
+    badId["authoringGraph"]["fogVolumes"][0]["instanceId"] = "invalid name";
+    Check(!game::LoadSectorAuthoringDocumentFromJsonString(badId.dump(), migrated, &error),
+          "invalid fog script ID rejects load");
+    badId = saved;
+    badId["authoringGraph"]["fogVolumes"].push_back(badId["authoringGraph"]["fogVolumes"][0]);
+    badId["authoringGraph"]["fogVolumes"][1]["id"] = 8;
+    Check(!game::LoadSectorAuthoringDocumentFromJsonString(badId.dump(), migrated, &error),
+          "duplicate fog script IDs reject load");
+    auto invalidDocument = document;
+    invalidDocument.graph.fogVolumes[0].instanceId = "invalid name";
+    Check(!game::SaveSectorAuthoringDocumentToJsonString(invalidDocument, json, &error),
+          "invalid fog script ID rejects save");
 
     Json legacyBoxStyle = saved;
     legacyBoxStyle["authoringGraph"]["fogVolumes"][0].erase("analyticStyle");
@@ -15243,6 +15670,27 @@ void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
           "fog volume placement marks dirty and invalidates 2D cache");
 
     const int id = documentState.authoring.authoringGraph.fogVolumes[0].id;
+    Check(documentState.authoring.authoringGraph.fogVolumes[0].instanceId == "fog_volume_1"
+                  && documentState.authoring.authoringGraph.fogVolumes[0].enabled,
+          "newly placed fog has a generated script ID and is enabled");
+    std::string idError;
+    Check(editing.SetInstanceId(id, "entry_fog", idError) && idError.empty()
+                  && documentState.map.topologyMap.compiledLocalFogVolumes[0].instanceId == "entry_fog"
+                  && !editorState.topologyRenderCache.valid,
+          "fog script ID editing updates authoring, derivation, and invalidates cache");
+    documentState.lifecycle.topologyDocumentDirty = false;
+    editorState.topologyRenderCache.valid = true;
+    Check(!editing.SetInstanceId(id, "bad id", idError) && !idError.empty()
+                  && documentState.authoring.authoringGraph.fogVolumes[0].instanceId == "entry_fog"
+                  && !documentState.lifecycle.topologyDocumentDirty && editorState.topologyRenderCache.valid,
+          "invalid fog ID edit leaves document and cache untouched");
+    game::SectorAuthoringFogVolume other;
+    other.id = 2;
+    other.instanceId = "reserved_fog";
+    documentState.authoring.authoringGraph.fogVolumes.push_back(other);
+    Check(!editing.SetInstanceId(id, "reserved_fog", idError) && !idError.empty(),
+          "fog ID editing rejects duplicate names");
+    documentState.authoring.authoringGraph.fogVolumes.pop_back();
     documentState.lifecycle.topologyDocumentDirty = false;
     documentState.lifecycle.hasUnsavedChanges = false;
     editorState.topologyRenderCache.valid = true;
@@ -15954,6 +16402,7 @@ int main()
     TestAuthoredPaths();
     TestLevelMarkerAuthoringSelectionCacheAndPicking();
     TestLevelMarkerModulesStayIndependentOfSectorEditor();
+    TestFogVolumeInstanceIdsAreStableAndUnique();
     TestAuthoringFogVolumeDerivationAndUnresolvedWarning();
     TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio();
     TestAuthoringFogVolumeSerializationRoundTrip();
@@ -16206,6 +16655,7 @@ int main()
     TestStaticModelPickerRecursionFilteringRefreshAndSelection();
     TestPickerSessionBrowsingMemory();
     TestAddMapTextureScanFiltersAutomaticNormalMaps();
+    TestMaterialEditorSessionAndLiveFilter();
     TestMaterialAlbedoPickerFilteringSelectionAndCommit();
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
@@ -16216,6 +16666,8 @@ int main()
     TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
     TestDoorConfigClipboardPreservesAnchorAndInstanceId();
     TestStaticPropConfigClipboardPreservesPlacementAndIdentity();
+    TestPreviewObjectGridMath();
+    TestPreviewObjectGridTransactions();
     TestPreviewObjectAdjustmentStagesAndCommitsInPlace();
     TestPreviewSurfaceHeightAdjustmentStagesCancelsAndCommits();
     TestStructuralPrimitiveEditorPlacementAndAdjustment();

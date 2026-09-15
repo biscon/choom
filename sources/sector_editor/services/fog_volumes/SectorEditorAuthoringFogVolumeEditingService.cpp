@@ -87,6 +87,11 @@ bool SectorEditorAuthoringFogVolumeEditingService::Place(
     }
     SectorAuthoringFogVolume volume;
     volume.id = id;
+    volume.instanceId = AllocateSectorAuthoringFogVolumeInstanceId(context_.authoringGraph, id);
+    if (volume.instanceId.empty()) {
+        context_.statusText = "Fog volume placement failed: no instance ID is available";
+        return false;
+    }
     volume.x = point.x;
     volume.y = point.y;
     context_.authoringGraph.fogVolumes.push_back(volume);
@@ -108,6 +113,28 @@ bool SectorEditorAuthoringFogVolumeEditingService::MutateById(
     }
     *volume = NormalizeSectorAuthoringFogVolume(*volume);
     return CommitGraphMutation(status, "Fog volume edit saved; derivation failed");
+}
+
+bool SectorEditorAuthoringFogVolumeEditingService::SetInstanceId(
+        int fogVolumeId, const std::string& instanceId, std::string& outError)
+{
+    outError.clear();
+    if (!IsValidSectorScriptInstanceId(instanceId)) {
+        outError = "Instance ID must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    for (const auto& volume : context_.authoringGraph.fogVolumes) {
+        if (volume.id != fogVolumeId && volume.instanceId == instanceId) {
+            outError = "Instance ID must be unique among fog volumes in this map";
+            return false;
+        }
+    }
+    return MutateById(fogVolumeId, "Updated fog volume instance ID",
+            [&instanceId](SectorAuthoringFogVolume& volume) {
+                if (volume.instanceId == instanceId) return false;
+                volume.instanceId = instanceId;
+                return true;
+            });
 }
 
 bool SectorEditorAuthoringFogVolumeEditingService::SetPosition(

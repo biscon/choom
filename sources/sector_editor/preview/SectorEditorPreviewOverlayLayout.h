@@ -10,6 +10,51 @@
 
 namespace game {
 
+enum class SectorEditorPreviewObjectAdjustmentRow {
+    Title, PositionX, PositionZ, WorldHeight, HeightOffset, Yaw,
+    Presets, SnapControls, GridInfo, Help, PathWarning, Actions, Count
+};
+
+constexpr size_t SectorEditorPreviewObjectAdjustmentRowCount =
+        static_cast<size_t>(SectorEditorPreviewObjectAdjustmentRow::Count);
+
+struct SectorEditorPreviewObjectAdjustmentLayout {
+    Rectangle panel = {};
+    std::array<Rectangle, SectorEditorPreviewObjectAdjustmentRowCount> rows = {};
+};
+
+inline SectorEditorPreviewObjectAdjustmentLayout BuildSectorEditorPreviewObjectAdjustmentLayout(
+        Rectangle panel,
+        const std::array<float, SectorEditorPreviewObjectAdjustmentRowCount>& rowHeights)
+{
+    SectorEditorPreviewObjectAdjustmentLayout layout;
+    layout.panel = panel;
+    float y = panel.y + 12.0f;
+    for (size_t index = 0; index < rowHeights.size(); ++index) {
+        if (rowHeights[index] <= 0.0f) continue;
+        layout.rows[index] = Rectangle{panel.x + 14.0f, y,
+                panel.width - 28.0f, rowHeights[index]};
+        y += rowHeights[index] + 6.0f;
+    }
+    layout.panel.height = y - 6.0f + 12.0f - panel.y;
+    return layout;
+}
+
+inline Rectangle SectorEditorPreviewAdjustmentButtonRect(
+        Rectangle row, int index, int count, bool stacked = false)
+{
+    if (stacked) {
+        const float height = (row.height - 6.0f * static_cast<float>(count - 1))
+                / static_cast<float>(count);
+        return Rectangle{row.x, row.y + static_cast<float>(index) * (height + 6.0f),
+                row.width, height};
+    }
+    const float width = (row.width - 6.0f * static_cast<float>(count - 1))
+            / static_cast<float>(count);
+    return Rectangle{row.x + static_cast<float>(index) * (width + 6.0f),
+            row.y, width, row.height};
+}
+
 struct SectorEditorPreviewDebugTabDefinition {
     PreviewDebugOverlayTab tab;
     const char* id;

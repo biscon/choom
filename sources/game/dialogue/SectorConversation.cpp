@@ -27,7 +27,7 @@ float Turn(float start, float target, float blend)
 
 bool IsConversationNpcAvailable(const engine::World& world, engine::Entity entity)
 {
-    return world.IsAlive(entity) && world.Has<NpcRuntimeInstance>(entity)
+    return IsSectorObjectEnabled(world, entity) && world.Has<NpcRuntimeInstance>(entity)
             && world.Has<SectorObjectTransform>(entity)
             && !world.Get<NpcRuntimeInstance>(entity).hostile
             && (!world.Has<Health>(entity) || !IsDepleted(world.Get<Health>(entity)))

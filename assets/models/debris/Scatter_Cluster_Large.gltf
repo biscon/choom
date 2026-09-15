@@ -1,0 +1,306 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "DEBRIS KIT",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Scatter_Cluster_Large_Export"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Debris_Concrete_Formed.011",
+      "normalTexture": {
+        "index": 0
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        },
+        "baseColorFactor": [
+          0.63,
+          0.61,
+          0.58,
+          1
+        ]
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Debris_Concrete_Fracture.016",
+      "normalTexture": {
+        "index": 3
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 4
+        },
+        "metallicRoughnessTexture": {
+          "index": 5
+        },
+        "baseColorFactor": [
+          0.63,
+          0.61,
+          0.58,
+          1
+        ]
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "cluster_piece.100",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 3
+    },
+    {
+      "sampler": 0,
+      "source": 4
+    },
+    {
+      "sampler": 0,
+      "source": 5
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_normal_opengl",
+      "uri": "textures/Concrete_Formed_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_basecolor",
+      "uri": "textures/Concrete_Formed_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Formed_orm",
+      "uri": "textures/Concrete_Formed_orm.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_normal_opengl",
+      "uri": "textures/Concrete_Fracture_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_basecolor",
+      "uri": "textures/Concrete_Fracture_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Concrete_Fracture_orm",
+      "uri": "textures/Concrete_Fracture_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 130,
+      "max": [
+        0.3810376226902008,
+        0.13573358952999115,
+        0.3089475631713867
+      ],
+      "min": [
+        -0.23136892914772034,
+        0,
+        -0.31095200777053833
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 130,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 130,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 130,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 300,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 2180,
+      "max": [
+        0.3900921046733856,
+        0.13573358952999115,
+        0.3189188838005066
+      ],
+      "min": [
+        -0.3900921046733856,
+        0,
+        -0.3189188838005066
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 2180,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 2180,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 2180,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 2316,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 1560,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1560,
+      "byteOffset": 1560,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1040,
+      "byteOffset": 3120,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2080,
+      "byteOffset": 4160,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 600,
+      "byteOffset": 6240,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 26160,
+      "byteOffset": 6840,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 26160,
+      "byteOffset": 33000,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 17440,
+      "byteOffset": 59160,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 34880,
+      "byteOffset": 76600,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4632,
+      "byteOffset": 111480,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 116112,
+      "uri": "Scatter_Cluster_Large.bin"
+    }
+  ]
+}

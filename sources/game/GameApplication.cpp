@@ -361,7 +361,7 @@ void GameApplication::RenderInteractiveUI(
             }
         } else if (graphicsSettingsOpen) {
             const GameGraphicsSettingsAction action = DrawGameGraphicsSettings(
-                    menuUi, config, input, assets, font, smallFont,
+                    menuUi, graphicsSettingsScroll, config, input, assets, font, smallFont,
                     graphicsSettingsDraft, menuStatus.c_str());
             if (action != GameGraphicsSettingsAction::None) {
                 pendingSettingsAction = action;
@@ -938,6 +938,7 @@ void GameApplication::HandleMenuAction(
         }
         case MainMenuAction::Settings:
             graphicsSettingsDraft = applicationSettings;
+            graphicsSettingsScroll = {};
             pendingGraphicsSettings.reset();
             graphicsSettingsOpen = true;
             menuStatus.clear();
@@ -1142,6 +1143,13 @@ void GameApplication::ProcessPendingGameSave(
     menuStatus = "Saved to slot " + std::to_string(request.slot) + ".";
 }
 
+float GameApplication::PresentationGamma() const
+{
+    return engine::NormalizeDisplayGamma(graphicsSettingsOpen
+            ? graphicsSettingsDraft.graphics.gamma
+            : applicationSettings.graphics.gamma);
+}
+
 const FpsApplicationSettings* GameApplication::PendingGraphicsSettings() const
 {
     return pendingGraphicsSettings.has_value()
@@ -1162,6 +1170,7 @@ bool GameApplication::CommitPendingGraphicsSettings(std::string& error)
             pendingGraphicsSettings->playerCamera).mouseSensitivity;
     if (!SaveFpsApplicationSettings(ApplicationSettingsPath, candidate, &error)) {
         menuStatus = error;
+        graphicsSettingsDraft.graphics.gamma = applicationSettings.graphics.gamma;
         pendingGraphicsSettings.reset();
         return false;
     }
@@ -1176,6 +1185,7 @@ bool GameApplication::CommitPendingGraphicsSettings(std::string& error)
 
 void GameApplication::RejectPendingGraphicsSettings(const std::string& error)
 {
+    graphicsSettingsDraft.graphics.gamma = applicationSettings.graphics.gamma;
     pendingGraphicsSettings.reset();
     menuStatus = error;
 }

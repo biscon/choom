@@ -644,6 +644,7 @@ private:
     SectorEditorItemEditorSessionState itemEditorSessionState;
     SectorEditorPlayerSettingsState playerSettingsState;
     SectorEditorMaterialRegistryEditorState materialRegistryEditorState;
+    SectorEditorMaterialRegistryEditorSessionState materialRegistryEditorSessionState;
     SectorEditorSoundEditorState soundEditorState;
     SectorEditorPatrolEditorState patrolEditorState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;

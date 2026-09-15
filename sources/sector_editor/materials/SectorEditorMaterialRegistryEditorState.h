@@ -18,6 +18,7 @@ struct SectorEditorMaterialRegistryDraft {
 
 struct SectorEditorMaterialAlbedoPickerState {
     bool open = false;
+    bool macroMask = false;
     std::vector<std::string> paths;
     std::vector<size_t> filteredPathIndices;
     std::vector<std::string> listLabelStorage;
@@ -33,18 +34,30 @@ struct SectorEditorMaterialAlbedoPickerState {
     std::string previewPath;
 };
 
+// Browsing preferences live for the app session and are never serialized.
+struct SectorEditorMaterialRegistryEditorSessionState {
+    std::string selectedMaterialId;
+    char filterBuffer[256] = {};
+};
+
 struct SectorEditorMaterialRegistryEditorState {
     bool open = false;
     std::vector<SectorEditorMaterialRegistryDraft> drafts;
     std::vector<std::string> listLabelStorage;
     std::vector<const char*> listLabels;
-    int selectedIndex = -1;
+    int selectedIndex = -1; // Index into drafts, independent of filtering.
+    int selectedFilteredIndex = -1;
+    std::vector<size_t> filteredDraftIndices;
+    bool scrollSelectionIntoView = false;
     engine::UIScrollState listScroll;
     engine::UIScrollState formScroll;
     char idBuffer[96] = {};
     engine::UIFloatInputState metallicInput;
     engine::UIFloatInputState roughnessInput;
     engine::UIFloatInputState normalStrengthInput;
+    engine::UIFloatInputState macroRepeatInput;
+    engine::UIFloatInputState macroDarkeningInput;
+    engine::UIFloatInputState macroRoughnessInput;
     bool deleteConfirmationOpen = false;
     std::string deleteConfirmationId;
     std::string validationMessage;

@@ -73,6 +73,32 @@ void TestPoseConversions()
             "fps state to camera pose adds eye height");
 }
 
+void TestMarkerOrientationMatchesCameraForward()
+{
+    struct FacingCase {
+        float degrees;
+        Vector3 forward;
+    };
+    const FacingCase cases[] = {
+            {0.0f, {0.0f, 0.0f, 1.0f}},
+            {90.0f, {1.0f, 0.0f, 0.0f}},
+            {180.0f, {0.0f, 0.0f, -1.0f}},
+            {270.0f, {-1.0f, 0.0f, 0.0f}},
+            {-90.0f, {-1.0f, 0.0f, 0.0f}},
+            {450.0f, {1.0f, 0.0f, 0.0f}},
+            {30.0f, {0.5f, 0.0f, 0.8660254f}},
+    };
+    for (const FacingCase& facing : cases) {
+        game::SectorFpsControllerState player;
+        player.yawRadians = game::SectorFpsYawFromMarkerOrientation(
+                facing.degrees * DEG2RAD);
+        const game::SectorViewPose pose = game::SectorFpsControllerPose(
+                player, game::SectorFpsControllerConfig{});
+        Check(Near(game::SectorViewForward(pose), facing.forward),
+                "marker orientation produces the authored compass direction in the FPS camera");
+    }
+}
+
 void TestVisualStepSmoothingCapturesSteppedUpContinuity()
 {
     game::SectorFpsControllerState state;
@@ -1834,8 +1860,11 @@ void TestPlayerOxygenDrainRecoveryAndDrowning()
 
 int main()
 {
+    extern void RunScreenShakeTests();
+    RunScreenShakeTests();
     TestEyePositionUsesFeetAndEyeHeight();
     TestPoseConversions();
+    TestMarkerOrientationMatchesCameraForward();
     TestVisualStepSmoothingCapturesSteppedUpContinuity();
     TestVisualStepSmoothingCapturesSnappedDownContinuity();
     TestVisualStepSmoothingDecayAndClearTransitions();

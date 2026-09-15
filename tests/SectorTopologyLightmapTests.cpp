@@ -2060,6 +2060,20 @@ void TestSourceHashChanges()
     changedFog.fogSettings.heightFalloff = 2.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedFog) == hash,
           "hash ignores visual-only fog settings");
+    game::SectorTopologyMap changedObjectEnabled = base;
+    for (const char* kind : {"dynamic_model", "item", "npc"}) {
+        game::SectorPlacedRuntimeObject object;
+        object.id = 80 + static_cast<int>(changedObjectEnabled.runtimeObjects.size());
+        object.kind = kind;
+        changedObjectEnabled.runtimeObjects.push_back(object);
+    }
+    const auto enabledObjectHash = game::ComputeSectorLightmapSourceHash(changedObjectEnabled);
+    changedObjectEnabled.runtimeObjects[changedObjectEnabled.runtimeObjects.size() - 3].dynamicModel.enabled = false;
+    changedObjectEnabled.runtimeObjects[changedObjectEnabled.runtimeObjects.size() - 2].item.enabled = false;
+    changedObjectEnabled.runtimeObjects.back().npc.enabled = false;
+    Check(game::ComputeSectorLightmapSourceHash(changedObjectEnabled) == enabledObjectHash,
+          "runtime object enabled state does not affect lightmap source hash");
+
     game::SectorTopologyMap changedLocalFog = base;
     game::SectorCompiledLocalFogVolume localFog;
     localFog.sourceAuthoringFogVolumeId = 1;
@@ -2071,6 +2085,10 @@ void TestSourceHashChanges()
     changedLocalFog.compiledLocalFogVolumes.push_back(localFog);
     Check(game::ComputeSectorLightmapSourceHash(changedLocalFog) == hash,
           "hash ignores visual-only compiled local fog volumes");
+    changedLocalFog.compiledLocalFogVolumes[0].instanceId = "room_fog";
+    changedLocalFog.compiledLocalFogVolumes[0].enabled = false;
+    Check(game::ComputeSectorLightmapSourceHash(changedLocalFog) == hash,
+          "fog script identity and enabled state do not invalidate baked lightmaps");
 
     game::SectorTopologyMap changedProbeSettings = base;
     changedProbeSettings.lightmapSettings.objectProbeSpacingWorld = 3.0f;
@@ -2984,6 +3002,24 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
     hashMap.resolvedMaterialsById["floor"].normalStrength = 0.25f;
     Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
           "runtime-only material PBR scalars do not change the source hash");
+    const auto hashMacroPath = root / "hash_macro.png";
+    auto& macro = hashMap.resolvedMaterialsById["floor"].macro;
+    macro.enabled = true;
+    macro.maskPath = hashMacroPath.string();
+    macro.repeatMeters = 13.0f;
+    macro.darkening = 0.3f;
+    macro.roughnessChange = -0.4f;
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "macro settings and missing mask do not affect baked lighting hash");
+    WriteSolidRgbTexture(hashMacroPath, WHITE);
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "adding macro mask does not affect baked lighting hash");
+    WriteSolidRgbTexture(hashMacroPath, BLACK);
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "changing macro mask pixels does not affect baked lighting hash");
+    std::filesystem::remove(hashMacroPath);
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "removing macro mask does not affect baked lighting hash");
     WriteSolidRgbTexture(hashNormalPath, Color{128, 128, 255, 255});
     const std::string presentNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);

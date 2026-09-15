@@ -611,10 +611,10 @@ bool SectorGameSession::DropInventoryEntry(
         }
         context.world.ForEach<SectorObjectTransform, SectorItem>(
                 [&context, &sweptCandidate, &blocked](
-                        engine::Entity,
+                        engine::Entity entity,
                         SectorObjectTransform& transform,
                         SectorItem& item) {
-                    if (blocked) return;
+                    if (blocked || !IsSectorObjectEnabled(context.world, entity)) return;
                     if (IsItemPickupVacuuming(item.presentation)) return;
                     blocked = ItemDropBoundsOverlap(
                             sweptCandidate.worldBounds,
@@ -762,11 +762,12 @@ void SectorGameSession::UpdateItemPresentations(
             SectorObjectTransform,
             SectorObjectVisualOffset,
             SectorItem>(
-            [this, dt, &playerConfig](
+            [this, dt, &playerConfig, &context](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObjectVisualOffset& visualOffset,
                     SectorItem& item) {
+                if (!IsSectorObjectEnabled(context.world, entity)) return;
                 const ItemPresentationFrame frame = AdvanceItemPresentation(
                         item.presentation,
                         transform.position,
@@ -814,7 +815,7 @@ bool SectorGameSession::CommitItemTake(
 {
     if (itemRegistry == nullptr || itemCampaign == nullptr
             || applicationSettings == nullptr
-            || !context.world.IsAlive(entity)
+            || !IsSectorObjectEnabled(context.world, entity)
             || !context.world.Has<SectorItem>(entity)
             || !context.world.Has<SectorObjectTransform>(entity)
             || !context.world.Has<SectorObjectVisualOffset>(entity)) {
@@ -937,7 +938,7 @@ bool SectorGameSession::RequestItemTake(
 {
     if (pendingItemTake.active || itemRegistry == nullptr
             || itemCampaign == nullptr || applicationSettings == nullptr
-            || !context.world.IsAlive(entity)
+            || !IsSectorObjectEnabled(context.world, entity)
             || !context.world.Has<SectorItem>(entity)) {
         return false;
     }
@@ -1071,6 +1072,7 @@ bool SectorGameSession::StartNew(
     ClearPlayerLowHealthCamera(lowHealthCamera);
     ClearDialogueCameraIdle(dialogueCameraIdle);
     ClearPlayerHitCamera(hitCamera);
+    engine::ResetScreenShake(screenShake);
     breathingAudio = PlayerBreathingAudioRuntime{};
     heartbeatAudio = PlayerHeartbeatAudioRuntime{};
     liquidAudio = PlayerLiquidAudioPlaybackState{};
@@ -1233,6 +1235,9 @@ bool SectorGameSession::StartNew(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.npcAudio = &scene.NpcAudio();
+    scriptHost.propDrag = &controller.propDrag;
+    scriptHost.screenShake = &screenShake;
     scriptHost.playerInventory = itemCampaign != nullptr ? &itemCampaign->inventory : nullptr;
     scriptHost.dialogueVoices = &dialogueVoices;
     LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
@@ -1762,6 +1767,7 @@ void SectorGameSession::Update(
     if (IsDepleted(playerHealth)) {
         EndSectorPropDrag(context,controller.propDrag);
         gameOver = true;
+        CancelSectorScriptScreenShakes(context, scriptHost, "player died");
         CancelSectorNote(scriptHost, "player died");
         CancelSectorKeypad(scriptHost, "player died");
         UpdateSectorScriptConversationOwnership(context, scriptHost);
@@ -1800,6 +1806,7 @@ void SectorGameSession::Update(
         UpdateItemHealingEffects(*itemCampaign, playerHealth, dt);
     }
     scriptHost.inventoryInteractionActive = inventoryUi.open || heldObjectUse.phase != ItemHeldUsePhase::Inactive;
+    engine::UpdateScreenShake(screenShake, dt);
     UpdateSectorScriptOperations(context, scriptHost);
     UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, dt,
             applicationSettings == nullptr || applicationSettings->dialogueVoicesEnabled);
@@ -2210,7 +2217,7 @@ void SectorGameSession::Update(
                         }
                     }
                 } else if (useTarget.kind == SectorUseTargetKind::Npc
-                        && context.world.IsAlive(useTarget.entity)
+                        && IsSectorObjectEnabled(context.world, useTarget.entity)
                         && context.world.Has<NpcRuntimeInstance>(useTarget.entity)) {
                     const auto& npc = context.world.Get<NpcRuntimeInstance>(useTarget.entity);
                     const std::string instanceId = npc.instanceId;
@@ -2227,7 +2234,7 @@ void SectorGameSession::Update(
                                         ? "function is missing" : outcome.error.c_str());
                     }
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
-                        && context.world.IsAlive(useTarget.entity)
+                        && IsSectorObjectEnabled(context.world, useTarget.entity)
                         && context.world.Has<SectorDynamicModel>(useTarget.entity)) {
                     if (context.world.Has<SectorPropDrag>(useTarget.entity)) {
                         if (!controller.liquidMovement.swimming && !IsSectorDuctTraversalActive(controller.ductTraversal)
@@ -2849,6 +2856,9 @@ bool SectorGameSession::RebuildFromMap(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.npcAudio = &scene.NpcAudio();
+    scriptHost.propDrag = &controller.propDrag;
+    scriptHost.screenShake = &screenShake;
     scriptHost.playerInventory = itemCampaign != nullptr ? &itemCampaign->inventory : nullptr;
     scriptHost.dialogueVoices = &dialogueVoices;
     LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
@@ -3056,7 +3066,8 @@ bool SectorGameSession::BuildCollisionAndPlayer(
             controller.fpsControllerState = SectorFpsControllerState{};
             controller.fpsControllerState.feetPosition =
                     SectorAuthoringToWorldPosition(entryMarker->position);
-            controller.fpsControllerState.yawRadians = entryMarker->yawRadians;
+            controller.fpsControllerState.yawRadians =
+                    SectorFpsYawFromMarkerOrientation(entryMarker->yawRadians);
             controller.fpsControllerState.pitchRadians = 0.0f;
         } else {
             controller.fpsControllerState = SectorFpsControllerStateFromCameraPose(
@@ -3130,6 +3141,7 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
     cameraRotation.x += hitCamera.rotationDegrees.x;
     cameraRotation.y += hitCamera.rotationDegrees.y;
     cameraRotation.z += hitCamera.rotationDegrees.z;
+    cameraRotation = Vector3Add(cameraRotation, screenShake.rotationDegrees);
     scene.Renderer().ApplyRendererPose(ApplySectorFpsViewRotationOffset(
             presentationPose,
             cameraRotation),

@@ -6,6 +6,7 @@
 #include "engine/ecs/World.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "game/npc/NpcRuntime.h"
+#include "sector_demo/SectorRuntimeObjects.h"
 
 #include <raymath.h>
 
@@ -433,12 +434,13 @@ void UpdateNpcBoneImpactSystem(
 {
     world.ForEach<NpcRuntimeInstance, NpcBoneImpactState,
             engine::AnimatedModelInstance, engine::AnimatedModelAnimator>(
-            [&assets, deltaSeconds](
-                    engine::Entity,
+            [&world, &assets, deltaSeconds](
+                    engine::Entity entity,
                     NpcRuntimeInstance& npc,
                     NpcBoneImpactState& state,
                     engine::AnimatedModelInstance& instance,
                     engine::AnimatedModelAnimator& animator) {
+                if (!IsSectorObjectEnabled(world, entity)) return;
                 const engine::ModelAsset* asset =
                         assets.GetModelAsset(instance.model);
                 if (asset == nullptr || !instance.poseReady

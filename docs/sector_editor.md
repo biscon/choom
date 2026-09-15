@@ -740,6 +740,34 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
   behavior are still deferred.
 - In visible-cursor mode: click generated surfaces to select/edit them.
 
+Select a static prop, dynamic prop, or item and use `Ctrl+A` / `Adjust selected`
+to adjust it in 3D. `Grid snap` defaults on. Fine, Normal, and Coarse select
+world-origin grids of 0.01, 0.05, and 0.25 metres, with yaw grids of 0.25, 1,
+and 5 degrees measured from zero. Arrow keys move world X/Z to the next grid
+point in the pressed direction; Page Up/Down do the same for world Y, and Q/E
+for yaw. An off-grid coordinate first moves to the next grid point, so the
+first movement may be shorter than the selected interval.
+
+`Snap now` rounds all three world coordinates and yaw to the nearest grid
+points (halfway ties away from zero), even when `Grid snap` is off. Merely
+opening adjustment, switching presets, or toggling snapping does not move the
+object. With snapping on, horizontal moves preserve world height across floor
+elevation changes; the floor-relative offset is compensated automatically.
+With snapping off, the controls retain relative movement increments and follow
+the floor when moving horizontally. Both world Y and the floor-relative offset
+are displayed, and positions show millimetre precision.
+
+Enter / `Apply` commits the previewed adjustment; Escape / `Cancel` restores
+the exact original transform. Unlock the cursor with F11 to click the panel.
+The preset and toggle are remembered across adjustments in the editor session,
+but are not saved with the level. Path-bound dynamic props disable `Snap now`
+and horizontal nudges; adjust their assigned path instead. Height and yaw
+remain adjustable.
+
+This grid aligns model origins. It does not align endpoints or guarantee a
+joint for arbitrary model lengths, scales, or rotations. The 2D placement grid,
+structure controls, and floor/ceiling adjustment grids are independent.
+
 The left tools pane `Settings` button opens editor-session preview settings.
 The same settings are available from the 3D preview overlay `Controls` tab while
 its UI is visible. The modal edits walk speed, run speed,
@@ -1423,3 +1451,42 @@ deferred.
   isolated deletion and degree-2 dissolve.
 - No automatic duplicate linedef or sidedef merge.
 - No arbitrary line cutting or automatic overlap splitting.
+
+### Material macro variation
+
+The global Material Editor has an optional **Enable macro variation** section for
+static sector architecture. Choose a mask from `assets/images/macros/`, set the
+repeat size in metres, darkening strength, and signed roughness change, then Save.
+Positive roughness makes masked patches duller; negative values make them more
+polished. Black mask pixels are neutral and white pixels apply the full effect.
+The picker shows a thumbnail. Clear removes the mask; Cancel discards draft edits.
+
+Macro settings default to disabled and are stored in an optional `macro` object
+in the global material registry, not in level documents. The object contains
+`enabled`, `maskPath`, `repeatMeters`, `darkening`, and `roughnessChange`.
+Default values are false, an empty path, 8, 0.08, and 0.12 respectively.
+The renderer samples red as linear data with trilinear filtering and world-space
+triplanar mapping, independently of base UVs. Existing decals remain above the
+modified base color. Missing/pending masks are neutral. Saving refreshes an active
+3D preview and its reflections through the existing material refresh path.
+
+Walls, floors, ceilings, baseboards, and static structural surfaces support it;
+moving doors, removable covers, model props, sky, liquids, and decal materials do
+not. Macro properties and pixels are runtime shading inputs excluded from the
+lightmap source hash, so tweaking them does not require rebaking. Material-only
+changes do not mutate topology or require 2D topology cache invalidation.
+See `assets/images/macros/README.md` for the six generated masks and starting values.
+
+### Material Editor browsing
+
+The filter above the material list updates as you type and matches material IDs
+case-insensitively. The selected material and filter are remembered in memory
+across Save, Cancel, and Escape, and reset when the app session ends. Browsing
+preferences are never written to the registry or level documents.
+
+A restored selection is scrolled into view. Filtering preserves the current
+selection when it matches, otherwise selects the first match. No matches hides
+the form and disables Delete without discarding drafts. Clear the query to show
+all materials. Add clears the query; renaming also clears it when necessary to
+keep the edited material visible. Cancelling a rename restores the original ID;
+cancelling a new material returns to the last existing material.

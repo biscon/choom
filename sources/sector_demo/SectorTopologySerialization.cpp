@@ -1328,6 +1328,7 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
     }
 
     SectorPlacedDynamicModel model;
+    model.enabled = ReadOptionalBool(value, "enabled", context, true);
     model.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     model.modelPath = ReadOptionalString(value, "modelPath", context, model.modelPath);
     model.instanceId = ReadOptionalString(value, "instanceId", context, model.instanceId);
@@ -1380,6 +1381,7 @@ SectorPlacedNpc ReadPlacedNpc(const Json& value, const std::string& context)
         Fail(context + " must be an object");
     }
     SectorPlacedNpc npc;
+    npc.enabled = ReadOptionalBool(value, "enabled", context, true);
     npc.itemDropTarget = ReadOptionalBool(value, "itemDropTarget", context, false);
     npc.definitionId = ReadString(value, "definitionId", context);
     npc.onUseScript = ReadOptionalString(value, "onUseScript", context, npc.onUseScript);
@@ -1418,6 +1420,7 @@ SectorPlacedItem ReadPlacedItem(const Json& value, const std::string& context)
 {
     if (!value.is_object()) Fail(context + " must be an object");
     SectorPlacedItem item;
+    item.enabled = ReadOptionalBool(value, "enabled", context, true);
     item.definitionId = ReadString(value, "definitionId", context);
     item.instanceId = ReadString(value, "instanceId", context);
     if (value.contains("quantity")) {
@@ -2636,6 +2639,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             const float rotationXDegrees = RadiansToDegrees(model.rotationXRadians);
             const float rotationZDegrees = RadiansToDegrees(model.rotationZRadians);
             Json dynamicModel = Json::object();
+            if (!model.enabled) dynamicModel["enabled"] = false;
             if (!IsValidSectorDynamicModelInstanceId(model.instanceId)) {
                 Fail(context + ".dynamicModel.instanceId is invalid");
             }
@@ -2699,6 +2703,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             Json placed{
                     {"definitionId", item.definitionId},
                     {"instanceId", item.instanceId}};
+            if (!item.enabled) placed["enabled"] = false;
             if (item.quantity != 1) placed["quantity"] = item.quantity;
             if (item.takeDistance != 1.5f) placed["takeDistance"] = item.takeDistance;
             if (!item.onTakeScript.empty()) placed["onTakeScript"] = item.onTakeScript;
@@ -2743,6 +2748,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
                 Fail(context + ".npc use settings are invalid");
             }
             Json npc{{"definitionId", object.npc.definitionId}};
+            if (!object.npc.enabled) npc["enabled"] = false;
             if (object.npc.itemDropTarget) npc["itemDropTarget"] = true;
             if (!object.npc.onUseScript.empty()) npc["onUseScript"] = object.npc.onUseScript;
             if (object.npc.useDistance != 2.5f) npc["useDistance"] = object.npc.useDistance;
@@ -4689,6 +4695,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
             }
             SectorAuthoringFogVolume volume;
             volume.id = ReadInt(fogJson, "id", context);
+            volume.instanceId = ReadOptionalString(fogJson, "instanceId", context, "");
             volume.x = ReadCoord(fogJson, "x", context);
             volume.y = ReadCoord(fogJson, "y", context);
             volume.enabled = ReadOptionalBool(fogJson, "enabled", context, volume.enabled);
@@ -5073,13 +5080,15 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    AssignMissingSectorAuthoringFogVolumeInstanceIds(graph);
     const std::vector<SectorAuthoringValidationIssue> issues =
             ValidateSectorAuthoringGraphReferences(graph);
     const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return (issue.objectKind == SectorAuthoringObjectKind::LevelMarker
                         || issue.objectKind == SectorAuthoringObjectKind::Patrol
                         || issue.objectKind == SectorAuthoringObjectKind::SoundEmitter
-                        || issue.objectKind == SectorAuthoringObjectKind::Trigger)
+                        || issue.objectKind == SectorAuthoringObjectKind::Trigger
+                        || issue.objectKind == SectorAuthoringObjectKind::FogVolume)
                 && issue.severity == SectorAuthoringValidationSeverity::Error;
     });
     if (markerError != issues.end()) {
@@ -5365,6 +5374,7 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
     if (!graph.fogVolumes.empty()) {
         graphJson["fogVolumes"] = Json::array();
         const SectorAuthoringFogVolume defaults;
+        std::set<std::string> instanceIds;
         for (const SectorAuthoringFogVolume* source : SortedById(graph.fogVolumes)) {
             const std::string context = "authoring fog volume " + std::to_string(source->id);
             RequireFinite(source->bottomOffsetWorld, context + ".bottomOffsetWorld");
@@ -5381,8 +5391,16 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             RequireFinite(source->noiseAmount, context + ".noiseAmount");
             RequireFinite(source->flowDirectionDegrees, context + ".flowDirectionDegrees");
             RequireFinite(source->flowSpeedWorld, context + ".flowSpeedWorld");
-            const SectorAuthoringFogVolume volume = NormalizeSectorAuthoringFogVolume(*source);
-            Json fogJson{{"id", volume.id}, {"x", volume.x}, {"y", volume.y}};
+            SectorAuthoringFogVolume volume = NormalizeSectorAuthoringFogVolume(*source);
+            if (volume.instanceId.empty()) {
+                volume.instanceId = AllocateSectorAuthoringFogVolumeInstanceId(graph, volume.id);
+            }
+            if (!IsValidSectorScriptInstanceId(volume.instanceId)
+                    || !instanceIds.insert(volume.instanceId).second) {
+                Fail(context + ": invalid or duplicate fog volume instance ID");
+            }
+            Json fogJson{{"id", volume.id}, {"x", volume.x}, {"y", volume.y},
+                    {"instanceId", volume.instanceId}};
             if (volume.enabled != defaults.enabled) fogJson["enabled"] = volume.enabled;
             if (volume.shape != defaults.shape) fogJson["shape"] = "box";
             if (volume.analyticStyle != defaults.analyticStyle) fogJson["analyticStyle"] = "room";

@@ -71,6 +71,99 @@ void Check(bool condition, const char* description)
     }
 }
 
+void TestObjectEnabledParticipation()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    game::SectorRuntimeObjectState objects;
+    objects.staticModelColliders.reserve(2);
+    objects.dynamicModelColliders.reserve(2);
+    objects.physicalModelColliders.reserve(2);
+    const auto prop = world.CreateEntity();
+    world.Add(prop, game::SectorObject{});
+    world.Add(prop, game::SectorObjectTransform{{2, 0, 0}});
+    game::SectorDynamicModel model;
+    model.placedObjectId = 12;
+    model.instanceId = "barrier";
+    model.onUseScript = "useBarrier";
+    model.useDistance = 3;
+    model.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    world.Add(prop, model);
+    engine::AnimatedModelInstance instance;
+    instance.poseReady = true;
+    instance.model = {1, 1};
+    world.Add(prop, instance);
+    game::SectorStaticModelCollider collider;
+    collider.placedObjectId = 12;
+    collider.entity = prop;
+    collider.center = {2, 0};
+    collider.halfExtents = {0.5f, 0.5f};
+    collider.top = 2;
+    collider.resolved = true;
+    world.Add(prop, collider);
+    game::RefreshSectorRuntimeObjectColliders(world, objects);
+    Check(objects.staticModelColliders.size() == 1 && objects.dynamicModelColliders.size() == 1
+                    && objects.physicalModelColliders.size() == 1,
+            "enabled prop participates in all collision collections");
+    game::SectorDynamicModelShadowCasterCollection shadows;
+    game::ReserveSectorDynamicModelShadowCasters(shadows, 2);
+    game::UpdateSectorDynamicModelShadowCasters(shadows, &world);
+    Check(shadows.casters.size() == 1, "enabled dynamic prop casts runtime shadows");
+    Check(game::FindSectorUseTarget(world, nullptr, {}, {1, 0, 0}, nullptr, true).entity == prop,
+            "enabled dynamic prop can be used");
+    game::SetSectorRuntimeObjectEnabled(world, objects, prop, false);
+    Check(world.IsAlive(prop) && world.Get<game::SectorStaticModelCollider>(prop).resolved,
+            "disabling keeps entity identity and configured collider");
+    Check(objects.staticModelColliders.empty() && objects.dynamicModelColliders.empty()
+                    && objects.physicalModelColliders.empty(),
+            "disabling removes cached collision immediately");
+    Check(game::FindSectorUseTarget(world, nullptr, {}, {1, 0, 0}, nullptr, true).kind
+                    == game::SectorUseTargetKind::None,
+            "disabled prop cannot be used");
+    game::UpdateSectorDynamicModelShadowCasters(shadows, &world);
+    Check(shadows.casters.empty(), "disabled prop casts no runtime shadow");
+    game::SetSectorRuntimeObjectAuthoringPreview(world, objects, true);
+    Check(game::IsSectorObjectEnabled(world, prop) && !world.Get<game::SectorObject>(prop).enabled,
+            "authoring preview shows disabled objects without changing saved state");
+    game::SetSectorRuntimeObjectAuthoringPreview(world, objects, false);
+    Check(!game::IsSectorObjectEnabled(world, prop), "gameplay preview restores disabled participation");
+    game::SetSectorRuntimeObjectEnabled(world, objects, prop, true);
+    Check(objects.physicalModelColliders.size() == 1, "re-enabling restores configured collision");
+    game::SetSectorRuntimeObjectEnabled(world, objects, prop, false);
+    const auto item = world.CreateEntity();
+    world.Add(item, game::SectorObject{});
+    world.Add(item, game::SectorObjectTransform{{2, 0, 0}});
+    game::SectorItem itemData;
+    itemData.title = "Key";
+    itemData.takeDistance = 3;
+    world.Add(item, itemData);
+    Check(game::FindSectorUseTarget(world, nullptr, {}, {1, 0, 0}, nullptr, true).entity == item,
+            "enabled item can be targeted");
+    game::SetSectorRuntimeObjectEnabled(world, objects, item, false);
+    Check(game::FindSectorUseTarget(world, nullptr, {}, {1, 0, 0}, nullptr, true).kind
+                    == game::SectorUseTargetKind::None,
+            "disabled item cannot be picked up");
+    game::NpcCombatState combat;
+    combat.dead = true;
+    combat.deathAnimationComplete = true;
+    combat.despawnOnDeath = true;
+    combat.corpseDespawnDelaySeconds = 10;
+    combat.staggerRemainingSeconds = 2;
+    world.Add(prop, combat);
+    game::NpcCombatRuntime combatRuntime;
+    game::InitializeNpcCombatRuntime(combatRuntime, 2);
+    game::SectorCollisionWorld collision;
+    game::UpdateNpcCombatSystem(world, collision, {}, {}, nullptr, combatRuntime, 1);
+    Check(world.Get<game::NpcCombatState>(prop).corpseElapsedSeconds == 0
+                    && world.Get<game::NpcCombatState>(prop).staggerRemainingSeconds == 2,
+            "disabled NPC combat and corpse timers stay paused");
+    game::SetSectorRuntimeObjectEnabled(world, objects, prop, true);
+    game::UpdateNpcCombatSystem(world, collision, {}, {}, nullptr, combatRuntime, 0.5f);
+    Check(world.Get<game::NpcCombatState>(prop).corpseElapsedSeconds == 0.5f
+                    && world.Get<game::NpcCombatState>(prop).staggerRemainingSeconds == 1.5f,
+            "re-enabled NPC combat and corpse timers resume");
+}
+
 void TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps()
 {
     engine::World world;
@@ -734,6 +827,7 @@ void TestItemRuntimeSpawnAndFocusedRemoval()
     dropped.id = 72;
     dropped.item.instanceId = "item_72";
     dropped.item.sessionDrop = true;
+    dropped.item.enabled = false;
     dropped.item.sourceQuantities = {{"original_ammo", 3}, {"other_ammo", 5}};
     engine::Entity droppedEntity = engine::NullEntity();
     Check(game::SpawnSectorItemRuntimeObject(
@@ -751,6 +845,8 @@ void TestItemRuntimeSpawnAndFocusedRemoval()
                   && state.placedObjectEntities.size() == 1
                   && state.placedObjectEntities.front().placedObjectId == 72,
           "incremental drop spawn updates only item ECS tracking");
+    Check(!world.Get<game::SectorObject>(droppedEntity).enabled,
+            "disabled item still spawns with its initial flag");
     Check(world.Get<game::SectorItem>(droppedEntity).origin
                   == game::SectorItemOrigin::SessionDrop,
           "incremental drop spawn preserves session provenance");
@@ -7239,6 +7335,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     object.dynamicModel.animationSpeed = 1.5f;
     object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
     object.dynamicModel.itemDropTarget = true;
+    object.dynamicModel.enabled = false;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -7246,6 +7343,8 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     Check(state.placedObjectEntities.size() == 1,
           "unassigned dynamic prop still spawns one runtime entity");
     const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(!world.Get<game::SectorObject>(entity).enabled,
+            "disabled dynamic prop still spawns with its initial flag");
     Check(world.Get<game::SectorObject>(entity).itemDropTarget,
           "dynamicModel spawn preserves authored inventory-target opt-in");
     Check(world.Has<game::SectorDynamicModel>(entity)
@@ -11501,6 +11600,101 @@ void TestSectorBillboardDirectionalClipSelectionWraparound()
             "billboard direction selection wraps near negative pi for front-facing camera");
 }
 
+void TestGameSaveRestoresFogVolumeState()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState objects;
+    game::SectorScriptHost host;
+    game::SectorTopologyMap map;
+    game::SectorCompiledLocalFogVolume first;
+    first.instanceId = "entry_fog";
+    first.enabled = false;
+    game::SectorCompiledLocalFogVolume second;
+    second.instanceId = "room_fog";
+    map.compiledLocalFogVolumes = {first, second};
+    const auto saved = game::CaptureGameSaveLevelState(world, assets, map, objects, host, "room");
+    Check(saved.fogVolumes.size() == 2 && !saved.fogVolumes[0].enabled
+                    && saved.fogVolumes[1].enabled,
+            "fog capture includes both enabled and disabled volumes");
+    std::vector<game::GameSaveLevelState> levels;
+    game::UpsertGameSaveLevelState(levels, saved);
+    // Reload/revisit with reordered volumes and opposite authored defaults.
+    map.compiledLocalFogVolumes = {second, first};
+    map.compiledLocalFogVolumes[0].enabled = false;
+    map.compiledLocalFogVolumes[1].enabled = true;
+    const auto* visited = game::FindGameSaveLevelState(levels, "room");
+    Check(visited != nullptr, "visited level retains fog state");
+    if (visited != nullptr) game::ApplyGameSaveLevelMapState(map, *visited);
+    Check(map.compiledLocalFogVolumes[0].enabled && !map.compiledLocalFogVolumes[1].enabled,
+            "fog restore matches stable instance IDs instead of array positions");
+    game::GameSaveLevelState oldSave;
+    game::ApplyGameSaveLevelMapState(map, oldSave);
+    Check(map.compiledLocalFogVolumes[0].enabled && !map.compiledLocalFogVolumes[1].enabled,
+            "old saves leave current authored fog defaults intact");
+    map.compiledLocalFogVolumes[1].instanceId = "new_fog";
+    map.compiledLocalFogVolumes[1].enabled = true;
+    game::ApplyGameSaveLevelMapState(map, saved);
+    Check(map.compiledLocalFogVolumes[1].enabled,
+            "missing saved fog IDs do not affect new fog volumes");
+}
+
+void TestGameSaveRestoresPropAndItemEnabledState()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 3);
+    engine::AssetManager assets;
+    game::SectorSceneRuntime scene;
+    auto& objects = scene.RuntimeObjects();
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    std::array<engine::Entity, 3> entities;
+    for (int i = 0; i < 3; ++i) {
+        const auto entity = world.CreateEntity();
+        entities[i] = entity;
+        world.Add(entity, game::SectorObject{-1, true, false, false});
+        world.Add(entity, game::SectorObjectTransform{});
+        game::SectorPlacedRuntimeObject placed;
+        placed.id = i + 1;
+        placed.kind = i == 0 ? "dynamic_model" : "item";
+        if (i == 0) {
+            game::SectorDynamicModel prop;
+            prop.placedObjectId = placed.id;
+            prop.instanceId = "barrier";
+            prop.useConsumed = true;
+            placed.dynamicModel.instanceId = prop.instanceId;
+            world.Add(entity, prop);
+        } else {
+            game::SectorItem item;
+            item.placedObjectId = placed.id;
+            item.instanceId = i == 1 ? "key" : "drop_3";
+            item.origin = i == 1 ? game::SectorItemOrigin::Authored : game::SectorItemOrigin::SessionDrop;
+            item.quantity = 4;
+            placed.item.instanceId = item.instanceId;
+            world.Add(entity, item);
+        }
+        // Session drops can be restored even without an authored map entry.
+        if (i != 2) map.runtimeObjects.push_back(placed);
+        objects.placedObjectEntities.push_back({placed.id, entity});
+    }
+    const auto saved = game::CaptureGameSaveLevelState(world, assets, map, objects, host, "test");
+    Check(saved.props.size() == 1 && !saved.props[0].enabled
+                    && saved.items.size() == 2 && !saved.items[0].enabled && !saved.items[1].enabled,
+            "save capture includes disabled props and authored/session items");
+    for (const auto entity : entities) game::SetSectorRuntimeObjectEnabled(world, objects, entity, true);
+    game::ApplyGameSaveLevelRuntimeState(world, assets, scene, map, host, saved);
+    for (const auto entity : entities)
+        Check(world.IsAlive(entity) && !world.Get<game::SectorObject>(entity).enabled,
+                "save restore preserves disabled objects and their identity");
+    Check(world.Get<game::SectorDynamicModel>(entities[0]).useConsumed
+                    && world.Get<game::SectorItem>(entities[1]).quantity == 4,
+            "enabled save restoration preserves consumption and quantity");
+    world.DestroyLater(entities[1]);
+    world.FlushDestroyedEntities();
+    game::ApplyGameSaveLevelRuntimeState(world, assets, scene, map, host, saved);
+    Check(!world.IsAlive(entities[1]), "saved enabled records do not resurrect collected items");
+}
+
 void TestGameSaveRestoresNpcSectorAndLighting()
 {
     game::SectorTopologyMap map = MakeDoorPortalMap();
@@ -11582,6 +11776,7 @@ void TestGameSaveRestoresNpcSectorAndLighting()
             game::GameSaveNpcState saved;
             saved.placedObjectId = 42;
             saved.instanceId = test.mismatchedId ? "different_npc" : "saved_npc";
+            saved.enabled = false;
             saved.position = test.position;
             saved.yawRadians = 1.25f;
             saved.dead = test.dead;
@@ -11612,6 +11807,7 @@ void TestGameSaveRestoresNpcSectorAndLighting()
                         "NPC save restore ignores a mismatched stable instance ID");
                 continue;
             }
+            Check(!object.enabled, "NPC save restores disabled state without removing the entity");
             Check(Near(transform.position, test.position) && Near(transform.yawRadians, saved.yawRadians),
                     "NPC save restore preserves saved position, height and yaw");
             Check(world.Get<game::NpcCombatState>(entity).dead == test.dead
@@ -12845,6 +13041,14 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
     const std::vector<game::SectorDynamicDoorCollider> doors;
     std::vector<game::SectorStaticModelCollider> props;
 
+    world.Get<game::SectorObject>(npc).enabled = false;
+    game::ResolvePlayerWeaponShot(world, nullptr, navigation, npcNavigation, nullptr,
+            doors, props, {0, 0.8f, -5}, {0, 0, 1}, 20, impact, shot, event, &npcAudio);
+    Check(shot.hitKind != game::FpsShotHitKind::Npc
+                    && world.Get<game::Health>(npc).current == 100,
+            "disabled NPC cannot be hit or damaged by player weapons");
+    world.Get<game::SectorObject>(npc).enabled = true;
+
     Check(game::ResolvePlayerWeaponShot(
                   world, nullptr, navigation, npcNavigation, nullptr, doors, props,
                   Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
@@ -13384,6 +13588,7 @@ int main()
     RunSectorScriptBindingTests();
     TestNpcPatrolWaypointFacing();
     TestNpcPatrolPlaybackModes();
+    TestObjectEnabledParticipation();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
     TestNpcUseFacingAndNearbyHealthPacks();
     TestNpcUseRetainsOcclusion();
@@ -13564,6 +13769,8 @@ int main()
     TestSectorBillboardDirectionalClipSelection();
     TestSectorBillboardDirectionalClipSelectionWraparound();
     TestSectorRuntimeObjectCurrentSectorSystem();
+    TestGameSaveRestoresFogVolumeState();
+    TestGameSaveRestoresPropAndItemEnabledState();
     TestGameSaveRestoresNpcSectorAndLighting();
     TestSectorRuntimeObjectBakedLightingSystem();
     TestSectorRuntimeObjectBakedLightingFallback();

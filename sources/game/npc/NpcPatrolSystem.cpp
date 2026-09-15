@@ -177,7 +177,7 @@ void UpdateNpcPatrolSystem(
                 participantIndex < groupEnd; ++participantIndex) {
             const NpcPatrolParticipant& participant =
                     runtime.participants[participantIndex];
-            if (!world.IsAlive(participant.entity)
+            if (!IsSectorObjectEnabled(world, participant.entity)
                     || !world.Has<NpcPatrolState>(participant.entity)
                     || !world.Has<NpcRuntimeInstance>(participant.entity)
                     || !world.Has<SectorObjectTransform>(participant.entity)) continue;

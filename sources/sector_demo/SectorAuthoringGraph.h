@@ -96,6 +96,7 @@ struct SectorAuthoringFogVolume {
     float noiseAmount = 0.75f;
     float flowDirectionDegrees = 0.0f;
     float flowSpeedWorld = 0.20f;
+    std::string instanceId;
 };
 
 struct SectorAuthoringReflectionProbe {
@@ -420,6 +421,8 @@ int AllocateSectorAuthoringVertexId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLineId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph);
+std::string AllocateSectorAuthoringFogVolumeInstanceId(const SectorAuthoringGraph& graph, int id);
+void AssignMissingSectorAuthoringFogVolumeInstanceIds(SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringReflectionProbeId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringPatrolId(const SectorAuthoringGraph& graph);

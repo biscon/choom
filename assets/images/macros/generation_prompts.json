@@ -1,0 +1,64 @@
+[
+  {
+    "file": "soft_mottling.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Very broad softly overlapping cloud-like mottling; gentle irregular transitions and large quiet areas. Seamlessly tileable on all four edges. Flat grayscale data: black means unaffected, white means full wear. Broad low-frequency variation only, naturally irregular distribution, no fine grain. No lighting, no shadows, no highlights, no perspective, no bevels, no photographed surface, no tile or grout patterns, no cracks, no objects, no borders, no labels, no text, no watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "plaster_discoloration.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Uneven plaster discoloration mask, broad organic patches at two large scales, soft edges, quiet areas. Seamlessly tileable on all four edges. Flat grayscale data: black means unaffected, white means full wear. Broad low-frequency variation only, naturally irregular distribution, no fine grain. No lighting, no shadows, no highlights, no perspective, no bevels, no photographed surface, no tile or grout patterns, no cracks, no objects, no borders, no labels, no text, no watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "broad_grime.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Sparse broad grime islands, mostly black and dark gray unaffected areas with isolated irregular softly feathered gray to pale-gray patches. Seamlessly tileable on all four edges. Flat grayscale data: black means unaffected, white means full wear. Broad low-frequency variation only, naturally irregular distribution, no fine grain. No lighting, no shadows, no highlights, no perspective, no bevels, no photographed surface, no tile or grout patterns, no cracks, no objects, no borders, no labels, no text, no watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "patchy_wear.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Irregular patchy wear mask, medium-to-large asymmetrical patches with softly eroded edges and generous quiet areas. Seamlessly tileable on all four edges. Flat grayscale data: black means unaffected, white means full wear. Broad low-frequency variation only, naturally irregular distribution, no fine grain. No lighting, no shadows, no highlights, no perspective, no bevels, no photographed surface, no tile or grout patterns, no cracks, no objects, no borders, no labels, no text, no watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "uneven_polish.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Uneven polish mask, smooth broad flowing patches, subtle elongated organic shapes, no obvious direction or individual scratches. Seamlessly tileable on all four edges. Flat grayscale data: black means unaffected, white means full wear. Broad low-frequency variation only, naturally irregular distribution, no fine grain. No lighting, no shadows, no highlights, no perspective, no bevels, no photographed surface, no tile or grout patterns, no cracks, no objects, no borders, no labels, no text, no watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "soft_streaks.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Soft directional weathering mask, broad vertically elongated irregular streaks of differing widths, quiet gaps; continuous seamless wrap vertically and horizontally. Seamlessly tileable on all four edges. Flat grayscale data: black means unaffected, white means full wear. Broad low-frequency variation only, naturally irregular distribution, no fine grain. No lighting, no shadows, no highlights, no perspective, no bevels, no photographed surface, no tile or grout patterns, no cracks, no objects, no borders, no labels, no text, no watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "sparse_damp_blooms.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Sparse isolated damp blooms, a handful of asymmetrical softly spreading rounded stains of varied sizes, long gradual feathered edges, large connected quiet dark areas between them. Pale gray stain interiors fading into charcoal; no sharp islands. Seamlessly tileable on all four edges: features crossing any edge continue on the opposite edge, no framing or edge fade. Flat neutral grayscale data: black means unaffected, white means full configured effect. Broad low-frequency variation only, naturally irregular distribution. Smooth flat mask values, no fine grain or microtexture. No lighting, shadows, highlights, perspective, bevels, photographed surface, tiles, grout, cracks, objects, borders, labels, text or watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "mineral_tide_marks.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Broad mineral tide marks: irregular overlapping incomplete stain contours, wide soft bands tracing only portions of asymmetric pooled shapes. Flat feathered grayscale contours with quiet dark interiors and gaps; no complete concentric rings, no topographic fine lines, no relief. Seamlessly tileable on all four edges: features crossing any edge continue on the opposite edge, no framing or edge fade. Flat neutral grayscale data: black means unaffected, white means full configured effect. Broad low-frequency variation only, naturally irregular distribution. Smooth flat mask values, no fine grain or microtexture. No lighting, shadows, highlights, perspective, bevels, photographed surface, tiles, grout, cracks, objects, borders, labels, text or watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "broad_wipe_arcs.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Broad incomplete sweeping wipe arcs, wide softly blurred curved swaths from uneven cleaning and polishing, different orientations and radii, interrupted overlapping arcs, generous dark quiet gaps. No centered spiral, no circles, no narrow scratches, no bristle texture. Seamlessly tileable on all four edges: features crossing any edge continue on the opposite edge, no framing or edge fade. Flat neutral grayscale data: black means unaffected, white means full configured effect. Broad low-frequency variation only, naturally irregular distribution. Smooth flat mask values, no fine grain or microtexture. No lighting, shadows, highlights, perspective, bevels, photographed surface, tiles, grout, cracks, objects, borders, labels, text or watermark. Fill the entire square with the mask.",
+    "refinement_prompt": "Use case: precise-object-edit. Asset type: grayscale macro variation data mask. Edit the supplied wipe-arcs mask: preserve its broad incomplete curved swaths, their placement and large dark gaps, but remove ALL bristle texture, fine scratches, streaky microtexture and grain. The final values should be completely smooth and softly feathered, as though each broad swath is a blurred grayscale gradient, not painted or scratched. Preserve the flat neutral grayscale palette and seamless tiling across both pairs of opposite edges, with no border or edge fade. Opaque square PNG, no lighting, relief, text, objects, or added features.",
+    "seam_refinement_prompt": "Use case: precise-object-edit. Fix only the tile wrapping of this smooth grayscale macro mask. The left and right edges currently have a visible mismatch where broad gray swaths cross the boundary. Make each opposite edge pair match in both grayscale value and continuation of the curved swaths, including their width and direction, so a 3 by 3 repeat has no straight seam. Preserve the smooth broad incomplete wipe arcs and dark gaps, keep all fine grain and bristle texture absent. Do not add a dark border, edge fade, mirrored seam or central symbol. Maintain flat neutral grayscale data, opaque square PNG, no lighting, shadows, relief or text."
+  },
+  {
+    "file": "horizontal_weathering.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Broken gently wandering horizontal weathering bands, broad uneven widths, soft edges and irregular lengths, several staggered dark quiet gaps. Predominantly horizontal with subtle gentle waviness, not straight stripes. Continuous wrap at every edge. Seamlessly tileable on all four edges: features crossing any edge continue on the opposite edge, no framing or edge fade. Flat neutral grayscale data: black means unaffected, white means full configured effect. Broad low-frequency variation only, naturally irregular distribution. Smooth flat mask values, no fine grain or microtexture. No lighting, shadows, highlights, perspective, bevels, photographed surface, tiles, grout, cracks, objects, borders, labels, text or watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "clustered_discoloration.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Uneven clusters of medium-sized soft discoloration spots, clusters with varying density separated by broad dark quiet regions, irregular spots merging locally. Spots broad enough to read as macro patches, varied sizes, blurred feathered edges, no fine speckles, no dots or polka-dot pattern. Seamlessly tileable on all four edges: features crossing any edge continue on the opposite edge, no framing or edge fade. Flat neutral grayscale data: black means unaffected, white means full configured effect. Broad low-frequency variation only, naturally irregular distribution. Smooth flat mask values, no fine grain or microtexture. No lighting, shadows, highlights, perspective, bevels, photographed surface, tiles, grout, cracks, objects, borders, labels, text or watermark. Fill the entire square with the mask."
+  },
+  {
+    "file": "branching_stains.png",
+    "tool": "built-in imagegen",
+    "prompt": "Use case: stylized-concept. Asset type: production grayscale macro variation mask for a game material shader, not a rendered material. Generate one square 1024 by 1024 opaque PNG texture. Broad branching diffuse stains: a sparse organic network of wide meandering smudged branches and soft swollen junctions, with large irregular dark quiet gaps. Branches have substantial width and very diffuse edges like spreading discoloration, not cracks, veins, lightning, roots or thin lines. Seamlessly tileable on all four edges: features crossing any edge continue on the opposite edge, no framing or edge fade. Flat neutral grayscale data: black means unaffected, white means full configured effect. Broad low-frequency variation only, naturally irregular distribution. Smooth flat mask values, no fine grain or microtexture. No lighting, shadows, highlights, perspective, bevels, photographed surface, tiles, grout, cracks, objects, borders, labels, text or watermark. Fill the entire square with the mask."
+  }
+]
