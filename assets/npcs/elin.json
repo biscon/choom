@@ -3,6 +3,7 @@
   "id": "elin",
   "name": "Elin",
   "voice": "female",
+  "speechColor": [255, 128, 191],
   "modelPath": "assets/models/characters/Elin.glb",
   "headLook": {
     "enabled": true,

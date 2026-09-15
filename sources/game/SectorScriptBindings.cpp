@@ -1613,7 +1613,13 @@ int StartCaption(
         }
         if (originalTop > 4)
             return PushCutsceneStartError(state, async, "say expects npcId, message, optional mood and holdMs");
-        speech.history = &context.world.Get<NpcRuntimeInstance>(speech.speaker).dialogueHistory;
+        const auto& npc = context.world.Get<NpcRuntimeInstance>(speech.speaker);
+        speech.history = &npc.dialogueHistory;
+        speech.speakerName = npc.displayName.empty() ? npc.instanceId : npc.displayName;
+        speech.color = Color{
+                static_cast<unsigned char>(npc.speechColor[0]),
+                static_cast<unsigned char>(npc.speechColor[1]),
+                static_cast<unsigned char>(npc.speechColor[2]), 255};
         speech.seed = 2166136261u ^ static_cast<uint32_t>(host.cutscene->nextToken);
         for (size_t i = 0; i < idLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(id[i])) * 16777619u;
         for (size_t i = 0; i < textLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(rawText[i])) * 16777619u;

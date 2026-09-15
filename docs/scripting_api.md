@@ -1419,11 +1419,21 @@ to male. The optional mood is `neutral` (default), `happy`, `angry`, `afraid`,
 `panicked`, `pained`, or `relieved`. Pass `nil` for mood to specify only `holdMs`.
 Unknown NPC IDs or moods fail before replacing the current caption.
 
+NPC speech uses the NPC editor's **Speech color** (RGB channels from 0–255),
+which defaults to white for new and existing definitions. Elin is configured pink.
+Both `say(npcId, ...)` and `startSay(npcId, ...)` prefix the message with the NPC's
+Name and `: `, for example `Elin: Where did you put those cuffs?`. An empty Name
+falls back to the placed instance ID. The entire line uses the speech color;
+the name appears immediately while the message types out. The prefix does not
+change voice playback, message reveal timing, or hold duration.
+
 `say(message)` speaks as the player using the **male** voice, with independent
 session-only clip history and local, non-positional playback. Its optional second
 argument is a table with `mood` and `holdMs`; omitted fields use the same defaults
 as NPC speech. A second string selects the existing NPC signature. `startSay`
 accepts both forms and retains the same shared-caption operation behavior.
+Player speech stays white with no name prefix. Silent `text` captions retain
+their existing appearance.
 Use `text` for silent captions.
 
 ```lua

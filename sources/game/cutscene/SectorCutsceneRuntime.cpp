@@ -518,6 +518,7 @@ void InitializeSectorCutsceneRuntime(SectorCutsceneRuntime& runtime)
 {
     runtime = SectorCutsceneRuntime{};
     runtime.caption.text.reserve(kSectorCutsceneMaximumCaptionBytes);
+    runtime.caption.displayText.reserve(kSectorCutsceneMaximumDisplayCaptionBytes);
     engine::ReserveDialogueTimeline(runtime.caption.speechTimeline);
 }
 
@@ -531,6 +532,7 @@ void ResetSectorCutsceneRuntime(
             kSectorCutsceneMaximumCaptionBytes);
     runtime = SectorCutsceneRuntime{};
     runtime.caption.text.reserve(captionCapacity);
+    runtime.caption.displayText.reserve(kSectorCutsceneMaximumDisplayCaptionBytes);
     engine::ReserveDialogueTimeline(runtime.caption.speechTimeline);
 }
 
@@ -997,8 +999,18 @@ bool BeginSectorCutsceneCaption(
                 : "caption text exceeds 2048 codepoints";
         return false;
     }
+    const bool spoken = kind == SectorCutsceneCaptionKind::Say;
+    const std::string_view speakerName = spoken && speech && !speech->playerSpeaker
+            ? speech->speakerName : std::string_view{};
+    bool validNameUtf8 = false;
+    CountCodepoints(speakerName, validNameUtf8);
+    if (speakerName.size() > kMaximumNpcNameBytes || !validNameUtf8
+            || speakerName.find_first_of("\r\n") != std::string_view::npos) {
+        error = "caption speaker name must be single-line UTF-8 of at most 255 bytes";
+        return false;
+    }
     SectorCutsceneCaptionState& caption = runtime.caption;
-    if (kind == SectorCutsceneCaptionKind::Say) {
+    if (spoken) {
         const engine::DialogueSettings defaults;
         if (!engine::BuildDialogueTimeline(text,
                 speech ? speech->mood : engine::DialogueMood::Neutral,
@@ -1026,6 +1038,16 @@ bool BeginSectorCutsceneCaption(
     caption.mood = speech ? speech->mood : engine::DialogueMood::Neutral;
     caption.position = position;
     caption.text.assign(text.data(), text.size());
+    caption.displayText.clear();
+    if (!speakerName.empty()) {
+        caption.displayText.append(speakerName.data(), speakerName.size());
+        caption.displayText.append(": ");
+    }
+    caption.speakerPrefixBytes = caption.displayText.size();
+    caption.displayText.append(text.data(), text.size());
+    caption.color = spoken
+            ? (speech && !speech->playerSpeaker ? speech->color : WHITE)
+            : Color{245, 245, 240, 255};
     caption.codepointCount = codepoints;
     caption.visibleByteCount = kind == SectorCutsceneCaptionKind::Text
             ? text.size() : 0;
@@ -1309,24 +1331,25 @@ void DrawSectorCutsceneCaption(
     const float maximumWidth = viewport.width * 0.80f;
     std::array<WrappedLine, MaximumWrappedLines> lines{};
     const size_t lineCount = BuildWrappedLines(
-            caption.text, font, maximumWidth, lines);
+            caption.displayText, font, maximumWidth, lines);
     if (lineCount == 0) return;
     const float blockHeight = static_cast<float>(lineCount) * lineAdvance - 8.0f;
     const float y = BuildSectorCutscenePresentationLayout(
             runtime.presentation, viewport, caption.position, blockHeight).captionY;
     const unsigned char alpha = static_cast<unsigned char>(std::lround(
             std::clamp(caption.opacity, 0.0f, 1.0f) * 255.0f));
-    std::array<char, kSectorCutsceneMaximumCaptionBytes + 1> lineBuffer{};
+    const size_t visibleBytes = caption.speakerPrefixBytes + caption.visibleByteCount;
+    std::array<char, kSectorCutsceneMaximumDisplayCaptionBytes + 1> lineBuffer{};
     for (size_t index = 0; index < lineCount; ++index) {
         size_t start = lines[index].start;
-        size_t end = std::min(lines[index].end, caption.visibleByteCount);
-        while (start < end && (caption.text[start] == ' '
-                || caption.text[start] == '\t')) ++start;
-        while (end > start && (caption.text[end - 1] == ' '
-                || caption.text[end - 1] == '\t')) --end;
+        size_t end = std::min(lines[index].end, visibleBytes);
+        while (start < end && (caption.displayText[start] == ' '
+                || caption.displayText[start] == '\t')) ++start;
+        while (end > start && (caption.displayText[end - 1] == ' '
+                || caption.displayText[end - 1] == '\t')) --end;
         if (end > start) {
             const size_t length = std::min(end - start, lineBuffer.size() - 1);
-            std::memcpy(lineBuffer.data(), caption.text.data() + start, length);
+            std::memcpy(lineBuffer.data(), caption.displayText.data() + start, length);
             lineBuffer[length] = '\0';
             const Vector2 measured = MeasureTextEx(
                     font, lineBuffer.data(), fontSize, 1.0f);
@@ -1337,7 +1360,7 @@ void DrawSectorCutsceneCaption(
                     Vector2{position.x + 2.0f, position.y + 2.0f},
                     fontSize, 1.0f, Color{0, 0, 0, alpha});
             DrawTextEx(font, lineBuffer.data(), position,
-                    fontSize, 1.0f, Color{245, 245, 240, alpha});
+                    fontSize, 1.0f, Color{caption.color.r, caption.color.g, caption.color.b, alpha});
         }
     }
 }

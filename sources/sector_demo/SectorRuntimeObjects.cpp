@@ -1650,6 +1650,7 @@ void SpawnPlacedRuntimeObjects(
                     definition->voice});
             auto& npcInstance = world.Get<NpcRuntimeInstance>(entity);
             npcInstance.displayName = definition->name;
+            npcInstance.speechColor = definition->speechColor;
             npcInstance.onUseScript = placedObject.npc.onUseScript;
             npcInstance.useDistance = placedObject.npc.useDistance;
             if (placedObject.npc.patrolEditorId > 0

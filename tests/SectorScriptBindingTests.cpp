@@ -2503,10 +2503,19 @@ void AutomaticVoicedSpeechReturnsAfterShortHoldAndFade()
     for (bool player : {false, true}) {
         for (const std::string& text : {std::string{"Wait."}, std::string{"Wait..."}, std::string(200, 'a') + "."}) {
             NpcScriptFixture fixture;
+            auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+            npc.displayName = "Elin";
+            npc.speechColor = {255, 128, 191};
             fixture.files.Write("function init() assert(say(" + std::string(player ? "" : "'script_guard', ")
                     + "'" + text + "')); setFlag('speech_done', true) end");
             assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
             auto& caption = fixture.cutscene.caption;
+            assert(caption.text == text);
+            assert(caption.displayText == (player ? text : "Elin: " + text));
+            assert(caption.speakerPrefixBytes == (player ? 0 : 6));
+            assert(caption.visibleByteCount == 0);
+            assert(caption.color.r == 255 && caption.color.g == (player ? 255 : 128)
+                    && caption.color.b == (player ? 255 : 191));
             assert(!caption.explicitHold && caption.holdSeconds == 0.35);
             assert(caption.revealSeconds == caption.speechTimeline.reveals.back().seconds);
             const auto update = [&](float dt) {
@@ -2542,6 +2551,9 @@ void SkippedVoicedSpeechHoldsBeforeCompletingScript()
         for (bool async : {false, true}) {
             for (int phase = 0; phase < 3; ++phase) {
                 NpcScriptFixture fixture;
+                auto& speaker = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+                speaker.displayName = u8"Élin";
+                speaker.speechColor = {255, 128, 191};
                 const std::string text = u8"Wait, élan! Another person...";
                 const std::string arguments = (player ? "" : "'script_guard', ")
                         + std::string("'") + text + "'"
@@ -2554,6 +2566,10 @@ void SkippedVoicedSpeechHoldsBeforeCompletingScript()
                         fixture.host, fixture.files));
                 auto& caption = fixture.cutscene.caption;
                 auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+                const std::string prefix = player ? "" : u8"Élin: ";
+                assert(caption.displayText == prefix + text);
+                assert(caption.speakerPrefixBytes == prefix.size());
+                assert(caption.color.g == (player ? 255 : 128));
                 const auto update = [&](float dt, bool voices = true) {
                     game::UpdateSectorCutsceneSpeech(fixture.cutscene, fixture.context.world,
                             fixture.context.assets, fixture.context.audio, dt, voices);
@@ -2765,6 +2781,91 @@ void DisabledDialogueVoicesKeepTextAndCanBeReenabled()
     update(0.8f, false);
     assert(!cutscene.caption.active);
     game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
+}
+
+void SpeechPresentationResetsWithoutChangingMessageTiming()
+{
+    NpcScriptFixture fixture;
+    auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+    npc.displayName = u8"Élin";
+    npc.speechColor = {255, 128, 191};
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto run = [&](const char* command) {
+        assert(engine::ScriptSystemExecuteConsole(fixture.runtime, command).success);
+    };
+    auto& caption = fixture.cutscene.caption;
+    const std::string message = u8"Wait, élan!";
+    run(u8"assert(startSay('script_guard', 'Wait, élan!'))");
+    assert(caption.text == message && caption.displayText == u8"Élin: Wait, élan!");
+    assert(caption.visibleByteCount == 0 && caption.speakerPrefixBytes == std::string(u8"Élin: ").size());
+    assert(caption.color.r == 255 && caption.color.g == 128 && caption.color.b == 191);
+
+    const auto token = caption.token;
+    run("assert(startSay('missing', 'Invalid') == nil)");
+    run("assert(startSay('script_guard', 'Invalid', 'bad_mood') == nil)");
+    run("assert(startSay('script_guard', '', nil, 100) == nil)");
+    assert(caption.token == token && caption.displayText == u8"Élin: Wait, élan!");
+    assert(caption.color.g == 128);
+
+    npc.displayName.clear();
+    npc.speechColor = {0, 128, 255};
+    run("assert(startSay('script_guard', 'Hello.'))");
+    assert(caption.displayText == "script_guard: Hello.");
+    assert(caption.color.r == 0 && caption.color.g == 128 && caption.color.b == 255);
+    run("assert(startSay('Player line.', {mood='afraid', holdMs=200}))");
+    assert(caption.displayText == "Player line." && caption.speakerPrefixBytes == 0);
+    assert(caption.color.r == 255 && caption.color.g == 255 && caption.color.b == 255);
+    assert(caption.playerSpeaker && caption.holdSeconds == 0.2);
+    run("assert(startSay('script_guard', 'Hello.'))");
+    run("assert(startText('Silent card.', CENTER))");
+    assert(caption.displayText == "Silent card." && caption.speakerPrefixBytes == 0);
+    assert(caption.color.r == 245 && caption.color.g == 245 && caption.color.b == 240);
+
+    game::SectorCutsceneRuntime plain;
+    game::SectorCutsceneRuntime named;
+    game::InitializeSectorCutsceneRuntime(plain);
+    game::InitializeSectorCutsceneRuntime(named);
+    game::SectorCutsceneSpeechOptions speech;
+    engine::DialogueVoice voice;
+    voice.banks[0].push_back({engine::SoundHandle{7, 1}, 0.3f, 0});
+    speech.voice = &voice;
+    uint64_t resultToken = 0;
+    std::string error;
+    assert(game::BeginSectorCutsceneCaption(plain, game::SectorCutsceneCaptionKind::Say,
+            game::SectorCutsceneTextPosition::Bottom, message, nullptr, resultToken, error, &speech));
+    speech.speakerName = u8"Élin";
+    speech.color = Color{255, 128, 191, 255};
+    assert(game::BeginSectorCutsceneCaption(named, game::SectorCutsceneCaptionKind::Say,
+            game::SectorCutsceneTextPosition::Bottom, message, nullptr, resultToken, error, &speech));
+    assert(named.caption.codepointCount == plain.caption.codepointCount);
+    assert(named.caption.revealSeconds == plain.caption.revealSeconds);
+    assert(named.caption.holdSeconds == plain.caption.holdSeconds);
+    assert(named.caption.speechTimeline.cues.size() == plain.caption.speechTimeline.cues.size());
+    for (size_t i = 0; i < named.caption.speechTimeline.cues.size(); ++i) {
+        const auto& left = named.caption.speechTimeline.cues[i];
+        const auto& right = plain.caption.speechTimeline.cues[i];
+        assert(left.beginByte == right.beginByte && left.endByte == right.endByte);
+        assert(left.source == right.source);
+    }
+    for (const bool voiceTiming : {false, true, false}) {
+        game::SetSectorCutsceneCaptionVoiceTiming(plain, voiceTiming);
+        game::SetSectorCutsceneCaptionVoiceTiming(named, voiceTiming);
+        game::UpdateSectorCutsceneTimelines(plain, fixture.runtime, 0.07f);
+        game::UpdateSectorCutsceneTimelines(named, fixture.runtime, 0.07f);
+        assert(named.caption.visibleByteCount == plain.caption.visibleByteCount);
+        assert(named.caption.revealSeconds == plain.caption.revealSeconds);
+    }
+    std::string maximumMessage;
+    for (size_t i = 0; i < game::kSectorCutsceneMaximumCaptionCodepoints; ++i) {
+        maximumMessage += u8"\U0001F600";
+    }
+    assert(maximumMessage.size() == game::kSectorCutsceneMaximumCaptionBytes);
+    const std::string maximumName(game::kMaximumNpcNameBytes, 'N');
+    speech.speakerName = maximumName;
+    assert(game::BeginSectorCutsceneCaption(named, game::SectorCutsceneCaptionKind::Say,
+            game::SectorCutsceneTextPosition::Bottom, maximumMessage, nullptr, resultToken, error, &speech));
+    assert(named.caption.displayText == maximumName + ": " + maximumMessage);
 }
 
 void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
@@ -3699,6 +3800,7 @@ void RunSectorScriptBindingTests()
     CutsceneBindingsControlFadeAndCaptionTimelines(false);
     CutsceneBindingsControlFadeAndCaptionTimelines(true);
     AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();
+    SpeechPresentationResetsWithoutChangingMessageTiming();
     SpeechCompletionGatesCaptionHold();
     AutomaticVoicedSpeechReturnsAfterShortHoldAndFade();
     SkippedVoicedSpeechHoldsBeforeCompletingScript();

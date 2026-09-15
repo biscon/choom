@@ -49,9 +49,11 @@ struct SectorEditorNpcEditorState {
     std::vector<std::string> listLabelStorage;
     std::vector<const char*> listLabels;
     int selectedIndex = -1;
+    float formContentHeight = 0.0f;
 
     char idBuffer[64] = {};
     char nameBuffer[256] = {};
+    std::array<engine::UIIntInputState, 3> speechColorInputs;
     engine::UIIntInputState baseHealthInput;
     engine::UIIntInputState corpseDespawnDelayMillisecondsInput;
     engine::UIIntInputState corpseFadeDurationMillisecondsInput;

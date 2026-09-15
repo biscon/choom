@@ -33,6 +33,8 @@ struct SectorTopologyMap;
 struct SectorFpsControllerState;
 
 inline constexpr size_t kSectorCutsceneMaximumCaptionBytes = 8192;
+inline constexpr size_t kSectorCutsceneMaximumDisplayCaptionBytes =
+        kSectorCutsceneMaximumCaptionBytes + kMaximumNpcNameBytes + 2;
 inline constexpr size_t kSectorCutsceneMaximumCaptionCodepoints = 2048;
 
 enum class SectorCutsceneLookTargetKind : uint8_t {
@@ -111,6 +113,10 @@ struct SectorCutsceneCaptionState {
     SectorCutsceneCaptionKind kind = SectorCutsceneCaptionKind::Say;
     SectorCutsceneTextPosition position = SectorCutsceneTextPosition::Bottom;
     std::string text;
+    // Presentation only: speech timing and reveal offsets refer to text above.
+    std::string displayText;
+    size_t speakerPrefixBytes = 0;
+    Color color = WHITE;
     size_t codepointCount = 0;
     size_t visibleByteCount = 0;
     double revealSeconds = 0.0;
@@ -133,6 +139,8 @@ struct SectorCutsceneCaptionState {
 
 // Borrowed load-time data used only while constructing a caption.
 struct SectorCutsceneSpeechOptions {
+    std::string_view speakerName;
+    Color color = WHITE;
     engine::Entity speaker = engine::NullEntity();
     bool playerSpeaker = false;
     engine::DialogueMood mood = engine::DialogueMood::Neutral;

@@ -277,8 +277,14 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
         const float voiceRowExtent = RowHeight + RowGap;
+        static constexpr std::array<const char*, 3> speechColorLabels{"Red", "Green", "Blue"};
+        static constexpr std::array<const char*, 3> speechColorIds{
+                "sector_editor_npc_speech_red", "sector_editor_npc_speech_green",
+                "sector_editor_npc_speech_blue"};
+        const float speechColorExtent = (1.0f + speechColorLabels.size()) * (RowHeight + RowGap);
         const float contentHeight = 21.0f * (RowHeight + RowGap)
                 + voiceRowExtent
+                + speechColorExtent
                 + 3.0f * (RowHeight + RowGap) + 4.0f
                 + (selected->definition.boneImpact.enabled
                                 ? 6.0f * (RowHeight + RowGap)
@@ -298,7 +304,8 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                 ui, config, input,
                 "sector_editor_npc_form_scroll",
                 layout.formBounds,
-                Vector2{contentW, contentHeight},
+                Vector2{contentW, state.formContentHeight > 0.0f
+                                ? state.formContentHeight : contentHeight},
                 editor.Session().formScroll);
         float y = 0.0f;
         const float fieldX = LabelWidth + 16.0f;
@@ -345,6 +352,29 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
             editor.SetSelectedVoice(voiceIndex == 1 ? "female" : "male");
         }
         y += voiceRowExtent;
+
+        const float speechColorY = y;
+        drawLabel("Speech color");
+        y += RowHeight + RowGap;
+        auto speechColor = selected->definition.speechColor;
+        const float colorFieldWidth = std::min(240.0f, fieldW);
+        for (size_t channel = 0; channel < speechColorLabels.size(); ++channel) {
+            drawLabel(speechColorLabels[channel]);
+            const auto result = engine::IntInput(
+                    ui, config, input, assets, speechColorIds[channel],
+                    Rectangle{fieldX, y, colorFieldWidth, RowHeight}, font,
+                    speechColor[channel], state.speechColorInputs[channel], 0, 255, 1);
+            if (result.changed) editor.SetSelectedSpeechColor(speechColor);
+            y += RowHeight + RowGap;
+        }
+        DrawColorSwatch(config,
+                Rectangle{formScroll.viewport.x + fieldX - editor.Session().formScroll.offset.x,
+                        formScroll.viewport.y + speechColorY - editor.Session().formScroll.offset.y,
+                        colorFieldWidth, RowHeight},
+                Color{static_cast<unsigned char>(speechColor[0]),
+                        static_cast<unsigned char>(speechColor[1]),
+                        static_cast<unsigned char>(speechColor[2]), 255},
+                config.borderThickness);
 
         bool hostile = selected->definition.hostile;
         if (engine::Checkbox(
@@ -1670,6 +1700,10 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                 y += RowHeight + RowGap;
             }
         }
+        // Measure all rows, including expanded sections, for the next frame's
+        // input bounds and this frame's scrollbar. Keep the last control clear.
+        state.formContentHeight = y + 24.0f;
+        formScroll.contentSize.y = state.formContentHeight;
         engine::EndScrollArea(
                 ui, config, input, formScroll, editor.Session().formScroll);
     }

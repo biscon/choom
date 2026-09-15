@@ -68,6 +68,7 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
     if (left.id != right.id
             || left.name != right.name
             || left.voice != right.voice
+            || left.speechColor != right.speechColor
             || left.hostile != right.hostile
             || left.aiType != right.aiType
             || left.canOpenDoors != right.canOpenDoors
@@ -418,6 +419,14 @@ void SectorEditorNpcEditorService::SetSelectedVoice(const std::string& voice)
 {
     if (voice != "male" && voice != "female") return;
     if (auto* draft = SelectedDraft()) draft->definition.voice = voice;
+}
+
+void SectorEditorNpcEditorService::SetSelectedSpeechColor(const std::array<int, 3>& color)
+{
+    for (const int channel : color) {
+        if (channel < 0 || channel > 255) return;
+    }
+    if (auto* draft = SelectedDraft()) draft->definition.speechColor = color;
 }
 
 void SectorEditorNpcEditorService::SetSelectedAiType(const std::string& aiType)
@@ -964,6 +973,7 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
     state_.attackCameraMaxPitchInput = {};
     state_.attackCameraMaxRollInput = {};
     state_.baseHealthInput = {};
+    state_.speechColorInputs = {};
     state_.corpseDespawnDelayMillisecondsInput = {};
     state_.corpseFadeDurationMillisecondsInput = {};
     state_.animationSpeedInputs = {};

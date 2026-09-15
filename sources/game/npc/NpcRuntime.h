@@ -32,6 +32,7 @@ struct NpcRuntimeInstance {
     bool dialogueSpeaking = false;
     engine::DialogueSelectionHistory dialogueHistory;
     std::string displayName;
+    std::array<int, 3> speechColor = kDefaultNpcSpeechColor;
     std::string onUseScript;
     float useDistance = 2.5f;
     bool conversationHeld = false;

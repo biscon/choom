@@ -7437,6 +7437,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     definition.id = "runtime_test_npc";
     definition.name = "Runtime Test";
     definition.voice = "female";
+    definition.speechColor = {255, 128, 191};
     definition.hostile = true;
     definition.canOpenDoors = false;
     definition.baseHealth = 160;
@@ -7480,6 +7481,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
           "NPC runtime reuses animated dynamic-model rendering components");
     const game::NpcRuntimeInstance& npc =
             world.Get<game::NpcRuntimeInstance>(entity);
+    Check(npc.displayName == definition.name && npc.speechColor == definition.speechColor,
+          "NPC spawn copies the display name and authored speech color");
     const game::NpcAnimationState& npcAnimation =
             world.Get<game::NpcAnimationState>(entity);
     const game::Health& health = world.Get<game::Health>(entity);

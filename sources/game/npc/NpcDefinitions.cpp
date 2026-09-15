@@ -284,6 +284,12 @@ bool ValidateNpcDefinition(
         const NpcDefinition& definition,
         std::string& outError)
 {
+    for (const int channel : definition.speechColor) {
+        if (channel < 0 || channel > 255) {
+            outError = "NPC speech color channels must be between 0 and 255";
+            return false;
+        }
+    }
     if (definition.voice != "male" && definition.voice != "female") {
         outError = "NPC voice must be male or female";
         return false;
@@ -292,7 +298,7 @@ bool ValidateNpcDefinition(
         outError = "NPC id must contain 1-63 letters, digits, underscores, or dashes";
         return false;
     }
-    if (definition.name.size() > 255
+    if (definition.name.size() > kMaximumNpcNameBytes
             || definition.name.find('\n') != std::string::npos
             || definition.name.find('\r') != std::string::npos) {
         outError = "NPC name must contain at most 255 characters on one line";
@@ -590,7 +596,7 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "voice", "hostile", "aiType", "perception", "headLook", "bodyPartDamage", "boneImpact", "canOpenDoors",
+                {"formatVersion", "id", "name", "voice", "speechColor", "hostile", "aiType", "perception", "headLook", "bodyPartDamage", "boneImpact", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
                  "animationBlendSeconds", "playerDetectedSound",
@@ -607,6 +613,18 @@ bool ParseNpcDefinitionJson(
         parsed.id = RequireString(root, "id", "NPC definition");
         parsed.name = OptionalString(root, "name", {}, "NPC definition");
         parsed.voice = OptionalString(root, "voice", "male", "NPC definition");
+        if (const auto color = root.find("speechColor"); color != root.end()) {
+            if (!color->is_array() || color->size() != parsed.speechColor.size()) {
+                Fail("NPC definition.speechColor must contain three RGB integers");
+            }
+            for (size_t i = 0; i < parsed.speechColor.size(); ++i) {
+                const auto& channel = (*color)[i];
+                if (!channel.is_number_integer() || channel < 0 || channel > 255) {
+                    Fail("NPC definition.speechColor channels must be integers between 0 and 255");
+                }
+                parsed.speechColor[i] = channel.get<int>();
+            }
+        }
         parsed.hostile = OptionalBool(root, "hostile", false, "NPC definition");
         parsed.aiType = OptionalString(root, "aiType", {}, "NPC definition");
         parsed.canOpenDoors = OptionalBool(
@@ -908,6 +926,9 @@ bool SerializeNpcDefinitionJson(
         root["id"] = definition.id;
         if (!definition.name.empty()) root["name"] = definition.name;
         if (definition.voice != "male") root["voice"] = definition.voice;
+        if (definition.speechColor != kDefaultNpcSpeechColor) {
+            root["speechColor"] = definition.speechColor;
+        }
         if (definition.hostile) root["hostile"] = true;
         if (!definition.aiType.empty()) root["aiType"] = definition.aiType;
         if (!definition.canOpenDoors) root["canOpenDoors"] = false;
