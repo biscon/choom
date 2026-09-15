@@ -716,7 +716,7 @@ GameApplication::ActiveUnderwaterRenderContext() const
     const SectorLiquidMovementState* state = nullptr;
     if (BackgroundScreen() == ApplicationScreen::Game
             && gameSession.IsRunning()) {
-        state = &gameSession.LiquidMovementState();
+        state = &gameSession.ViewLiquidMovementState();
     } else if (BackgroundScreen() == ApplicationScreen::Editor
             && editor.IsPreview3DActive()) {
         state = &editor.PreviewLiquidMovementState();
@@ -752,15 +752,15 @@ GameApplication::ScenePresentationEffects() const
             && gameSession.IsRunning()
             && !IsSectorBloomDiagnosticView(
                     gameScene.Renderer().BloomDebugView())) {
-        liquidState = &gameSession.LiquidMovementState();
+        liquidState = &gameSession.ViewLiquidMovementState();
         const PlayerLowHealthVisualApplicationSettings& settings =
                 applicationSettings.playerHealth.lowHealthVisual;
-        const float strength = PlayerLowHealthVisualStrength(
+        const float strength = gameSession.HasActiveLevelCamera() ? 0.0f : PlayerLowHealthVisualStrength(
                 gameSession.PlayerHealth(), settings);
         const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
                 settings.vignetteColor);
         result.desaturation = settings.maximumDesaturation * strength;
-        result.vignetteOpacity = PlayerLowHealthVignetteOpacity(
+        result.vignetteOpacity = gameSession.HasActiveLevelCamera() ? 0.0f : PlayerLowHealthVignetteOpacity(
                 gameSession.PlayerHealth(), settings);
         result.vignetteColorLinear = {
                 vignetteColor.x,
@@ -799,7 +799,7 @@ float GameApplication::UnderwaterAudioMuffling() const
     const SectorLiquidMovementState* liquidState = nullptr;
     if (BackgroundScreen() == ApplicationScreen::Game
             && gameSession.IsRunning()) {
-        liquidState = &gameSession.LiquidMovementState();
+        liquidState = &gameSession.ViewLiquidMovementState();
     } else if (BackgroundScreen() == ApplicationScreen::Editor
             && editor.IsPreview3DActive()) {
         liquidState = &editor.PreviewLiquidMovementState();

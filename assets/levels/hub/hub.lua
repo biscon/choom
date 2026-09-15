@@ -217,26 +217,38 @@ function intro_trigger_1()
     })
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "I've been walking these dark tunnels forever.. wait.. you're hurt! follow me!")
-    local elinArrival = assert(startMoveNpc("elin", "intro_marker_3", "walk", 1.5, true))
+    say("elin", "Oh no you're hurt, follow me!", "afraid")
+    local elinArrival = assert(startMoveNpc("elin", "recovery_marker_1", "walk", 1.5, true))
     delay(1500)
-    movePlayer("intro_marker_4", "walk", 1.25, {
+    movePlayer("recovery_marker_2", "walk", 1.0, {
         lookAtNpc = "elin",
-        turnDurationMs = 750,
+        turnDurationMs = 1750,
         targetHeight = 0.7,
     })
     assert(await(elinArrival))
-    npcLookAtPlayer("elin", 500)
-    lookAtNpc("elin", 500, 0.7)
+    startNpcLookAtPlayer("elin", 500)
+    startPlayNpcAnimation("elin", "Reaching Out", 4000)
+    startSay("elin", "Lay down on the bed and let me help you.")
+    --lookAtNpc("elin", 500, 0.7)
+    fadeOut(3950)
 
-    startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "My name is Elin by the way, what is yours?. ")
+    --startPlayNpcAnimation("elin", "Talking_2")
+    --say("elin", "My name is Elin by the way, what is yours?. ")
 
-    assert(startConversation("elin", { reposition = false }))
-    elinConversation()
-    assert(endConversation())
+    --assert(startConversation("elin", { reposition = false }))
+    --elinConversation()
+    --assert(endConversation())
+    delay(2000)
+    setPlayerHealth(35)
+    teleportNpc("elin", "recovery_marker_4")
+    setActiveCamera("bed_camera_1")
+    fadeIn(2000)
+
+    elinArrival = assert(startMoveNpc("elin", "recovery_marker_3", "walk", 1.5, true))
+
+    delay(5000)
     assert(endCutscene())
-    startPlayNpcAnimation("elin", "Thankful")
+    --startPlayNpcAnimation("elin", "Thankful")
 end
 
 function entrance_trigger()

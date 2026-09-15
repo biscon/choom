@@ -359,6 +359,17 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     levelMarkerEditingState,
                     statusText});
+    cameraEditingService.emplace(
+            SectorEditorCameraEditingServiceContext{
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    selectionState,
+                    cameraEditingState,
+                    statusText});
     soundEmitterEditingService.emplace(
             SectorEditorSoundEmitterEditingServiceContext{
                     Lifecycle(), TopologyMap(), AuthoringGraph(),
@@ -446,7 +457,9 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     reflectionProbeEditingUiState = ReflectionProbeEditingUiState{};
     pathEditingState = {};
     levelMarkerEditingState = LevelMarkerEditingState{};
+    cameraEditingState = CameraEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    cameraEditingUiState = CameraEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
     soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
@@ -457,6 +470,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     authoringFaceMergeService.reset();
     pathEditingService.reset();
     levelMarkerEditingService.reset();
+    cameraEditingService.reset();
     soundEmitterEditingService.reset();
     triggerEditingService.reset();
     structuralPrimitiveEditingService.reset();
@@ -636,6 +650,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         }
         if (levelMarkerEditingService) {
             levelMarkerEditingService->CancelMove(nullptr);
+        }
+        if (cameraEditingService) {
+            cameraEditingService->CancelMove(nullptr);
         }
         if (soundEmitterEditingService) {
             soundEmitterEditingService->CancelMove(nullptr);
@@ -1389,6 +1406,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
         context.highlightedPathId = object->kind == "dynamic_model" ? object->dynamicModel.drag.pathEditorId : 0;
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
+            : nullptr;
+    context.cameraEditing = cameraEditingService
+            ? &cameraEditingService.value()
             : nullptr;
     context.soundEmitterEditing = soundEmitterEditingService
             ? &soundEmitterEditingService.value()
@@ -2360,6 +2380,12 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
                 SectorEditorPickKind::LevelMarker,
                 selectionState.selectedAuthoring.levelMarkerId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Camera
+            && selectionState.selectedAuthoring.cameraId >= 0) {
+        return SectorEditorPickTarget{
+                SectorEditorPickKind::Camera,
+                selectionState.selectedAuthoring.cameraId};
+    }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::SoundEmitter
             && selectionState.selectedAuthoring.soundEmitterId >= 0) {
         return {SectorEditorPickKind::SoundEmitter,
@@ -2387,6 +2413,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + AuthoringGraph().fogVolumes.size()
             + AuthoringGraph().reflectionProbes.size()
             + AuthoringGraph().levelMarkers.size()
+            + AuthoringGraph().cameras.size()
             + AuthoringGraph().soundEmitters.size()
             + AuthoringGraph().triggers.size()
             + AuthoringGraph().structuralPrimitives.size()
@@ -2438,6 +2465,12 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
     AppendSectorEditorPathPicks(AuthoringGraph(), screenPoint,
             [this](Vector2 point) { return MapToScreen(point); }, candidates);
     AppendCachedLevelMarkerPickCandidates(
+            state.topologyRenderCache,
+            pickContext,
+            screenPoint,
+            ScreenLightPickPixels,
+            candidates);
+    AppendCachedCameraPickCandidates(
             state.topologyRenderCache,
             pickContext,
             screenPoint,
@@ -3051,8 +3084,15 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     return;
                 }
 
+                if (cameraEditingState.pilotActive && !uiState.keyboardCaptured
+                        && (event.key.key == KEY_ENTER || event.key.key == KEY_ESCAPE)) {
+                    FinishCameraPilot(event.key.key == KEY_ENTER);
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (event.key.key == KEY_F3) {
-                    if (lightEditingState.lightPilot.active
+                    if (cameraEditingState.pilotActive || lightEditingState.lightPilot.active
                             || lightEditingState.proxyPlacement.active
                             || PreviewAdjustmentActive()) {
                         statusText = PreviewAdjustmentActive()
@@ -3098,6 +3138,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
 
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     CancelLightProxyPlacement(nullptr);
+                    FinishCameraPilot(false);
                     CancelLightPilotWithPreviewRestore(nullptr);
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -3117,10 +3158,12 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     previewState.controller.freeflyController,
                     input,
                     dt,
-                    precisionMove ? SectorEditorFreeflyPrecisionMoveScale : 1.0f);
-            if (lightEditingState.lightPilot.active
+                    precisionMove ? SectorEditorFreeflyPrecisionMoveScale : 1.0f,
+                    cameraEditingState.pilotActive ? 89.9f * DEG2RAD : 1.45f);
+            if ((cameraEditingState.pilotActive && previewState.controller.freeflyController.mouseLookEnabled)
+                    || (lightEditingState.lightPilot.active
                     && (lightEditingState.lightPilot.kind == LightPilotKind::StaticRect
-                        || lightEditingState.lightPilot.kind == LightPilotKind::DynamicRect)) {
+                        || lightEditingState.lightPilot.kind == LightPilotKind::DynamicRect))) {
                 constexpr float RollSpeedRadians = 90.0f * DEG2RAD;
                 if (input.IsKeyDown(KEY_Q)) {
                     previewState.controller.freeflyController.pose.rollRadians -= RollSpeedRadians * dt;
@@ -3302,7 +3345,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || previewState.overlay.previewUiHidden
             || state.texturePicker.open
             || state.soundPicker.open
-            || lightEditingState.lightPilot.active
+            || cameraEditingState.pilotActive || lightEditingState.lightPilot.active
             || lightEditingState.proxyPlacement.active
             || PreviewAdjustmentActive()) {
         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
@@ -3702,6 +3745,9 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
             : nullptr;
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
+            : nullptr;
+    context.cameraEditing = cameraEditingService
+            ? &cameraEditingService.value()
             : nullptr;
     context.soundEmitterEditing = soundEmitterEditingService
             ? &soundEmitterEditingService.value()
@@ -4277,7 +4323,7 @@ bool SectorEditor::BeginPreviewAdjustment()
         statusText = "Enter 3D mode before adjusting the selection";
         return false;
     }
-    if (lightEditingState.lightPilot.active
+    if (cameraEditingState.pilotActive || lightEditingState.lightPilot.active
             || lightEditingState.proxyPlacement.active) {
         statusText = "Finish light editing before adjusting the selection";
         return false;
@@ -5288,7 +5334,12 @@ void SectorEditor::DrawPreviewOverlay(
             statusText,
             sceneRuntime.Renderer(),
             runtimeObjectEditing};
+    overlayContext.cameraState = &cameraEditingState;
     const SectorEditorPreviewOverlayResult result = DrawSectorEditorPreviewOverlay(overlayContext);
+    if (result.requestStartCameraPilot) StartCameraPilot();
+    if (result.requestApplyCameraPilot) FinishCameraPilot(true);
+    if (result.requestCancelCameraPilot) FinishCameraPilot(false);
+    if (cameraEditingState.pilotActive) sceneRuntime.Renderer().SetVerticalFovDegrees(cameraEditingState.pilotFov);
     FinishPreviewObjectAdjustmentResult(result.objectAdjustment);
 
     if (result.requestCancelLightPilot) {
@@ -5567,6 +5618,10 @@ void SectorEditor::DrawTopologyDocument()
             state.topologyRenderCache,
             drawContext,
             levelMarkerEditingService ? &levelMarkerEditingService->Drag() : nullptr);
+    DrawCachedCameras(
+            state.topologyRenderCache,
+            drawContext,
+            cameraEditingService ? &cameraEditingService->Drag() : nullptr);
     DrawCachedSoundEmitters(
             state.topologyRenderCache,
             drawContext,
@@ -6382,6 +6437,11 @@ void SectorEditor::DrawToolsPanel(
                 && tool != SectorEditorTool::Select) {
             levelMarkerEditingService->CancelMove("Cancelled Level Marker move");
         }
+        if (cameraEditingService
+                && cameraEditingService->Drag().active
+                && tool != SectorEditorTool::Select) {
+            cameraEditingService->CancelMove("Cancelled Camera move");
+        }
         if (soundEmitterEditingService
                 && soundEmitterEditingService->Drag().active
                 && tool != SectorEditorTool::Select) {
@@ -6447,6 +6507,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Fog Volume: click strictly inside a sector";
         } else if (tool == SectorEditorTool::ReflectionProbe) {
             statusText = "Reflection Probe: click inside a sector";
+        } else if (tool == SectorEditorTool::Camera) {
+            statusText = "Camera: click to place a cutscene viewpoint";
         } else if (tool == SectorEditorTool::LevelMarker) {
             statusText = "Level Marker: click strictly inside a sector";
         } else if (tool == SectorEditorTool::SoundEmitter) {
@@ -6649,6 +6711,7 @@ void SectorEditor::DrawSectorsPanel(
             fogVolumeEditingUiState,
             reflectionProbeEditingUiState,
             levelMarkerEditingUiState,
+            cameraEditingUiState,
             soundEmitterEditingUiState,
             triggerEditingUiState,
             structuralPrimitiveEditingUiState,
@@ -6664,6 +6727,7 @@ void SectorEditor::DrawSectorsPanel(
             fogVolumeEditingService.value(),
             reflectionProbeEditingService.value(),
             levelMarkerEditingService.value(),
+            cameraEditingService.value(),
             soundEmitterEditingService.value(),
             triggerEditingService.value(),
             authoringFaceMergeService.value(),
@@ -6761,6 +6825,16 @@ void SectorEditor::DrawSectorsPanel(
                     [this]() {
                         if (levelMarkerEditingService) {
                             levelMarkerEditingService->DeleteSelected();
+                        }
+                    });
+            break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedCameraConfirmation:
+            OpenConfirmation(
+                    "Delete Camera",
+                    "Delete the selected Camera?",
+                    [this]() {
+                        if (cameraEditingService) {
+                            cameraEditingService->DeleteSelected();
                         }
                     });
             break;
@@ -7593,7 +7667,9 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     pathEditingState = {};
     levelMarkerEditingState = LevelMarkerEditingState{};
+    cameraEditingState = CameraEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    cameraEditingUiState = CameraEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
     soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
@@ -7645,6 +7721,9 @@ bool SectorEditor::LoadLevel(
     }
     if (levelMarkerEditingService) {
         levelMarkerEditingService->CancelMove(nullptr);
+    }
+    if (cameraEditingService) {
+        cameraEditingService->CancelMove(nullptr);
     }
     if (soundEmitterEditingService) {
         soundEmitterEditingService->CancelMove(nullptr);
@@ -7744,7 +7823,9 @@ bool SectorEditor::LoadLevel(
     manipulationState = ManipulationState{};
     pathEditingState = {};
     levelMarkerEditingState = LevelMarkerEditingState{};
+    cameraEditingState = CameraEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    cameraEditingUiState = CameraEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
     soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
@@ -7954,6 +8035,9 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     if (levelMarkerEditingService) {
         levelMarkerEditingService->CancelMove(nullptr);
     }
+    if (cameraEditingService) {
+        cameraEditingService->CancelMove(nullptr);
+    }
     if (soundEmitterEditingService) {
         soundEmitterEditingService->CancelMove(nullptr);
     }
@@ -8053,6 +8137,7 @@ void SectorEditor::LeavePreview3D()
     }
     engine::CloseMainMenu(uiState.mainMenu);
     CancelLightProxyPlacement(nullptr);
+    FinishCameraPilot(false);
     CancelLightPilotWithPreviewRestore(nullptr);
     if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
         ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
@@ -8132,8 +8217,68 @@ void SectorEditor::TogglePreviewControlMode()
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(previewState.controller.previewControlMode));
 }
 
+bool SectorEditor::StartCameraPilot()
+{
+    if (state.mode != SectorEditorMode::Preview3D
+            || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly
+            || lightEditingState.lightPilot.active || lightEditingState.proxyPlacement.active
+            || PreviewAdjustmentActive() || cameraEditingState.pilotActive || !cameraEditingService) {
+        statusText = "Camera pilot requires FreeFly mode with no active adjustment";
+        return false;
+    }
+    const auto* camera = cameraEditingService->Selected();
+    if (!camera) { statusText = "Select a Camera in 2D first"; return false; }
+    auto& pilot = cameraEditingState;
+    pilot.pilotActive = true;
+    pilot.pilotCameraId = camera->id;
+    pilot.originalPreviewPose = ActivePreviewPose();
+    pilot.originalMouseLook = previewState.controller.freeflyController.mouseLookEnabled;
+    pilot.originalFov = sceneRuntime.Renderer().RenderCamera().fovy;
+    pilot.pilotFov = camera->verticalFovDegrees;
+    pilot.pilotFovInput = {};
+    const SectorViewPose pose{SectorAuthoringToWorldPosition({SectorCoordToVisibleAuthoring(camera->x),
+            camera->y, SectorCoordToVisibleAuthoring(camera->z)}), camera->yawDegrees * DEG2RAD,
+            camera->pitchDegrees * DEG2RAD, camera->rollDegrees * DEG2RAD};
+    ResetSectorFreeflyController(previewState.controller.freeflyController, pose);
+    EnterSectorFreeflyController(previewState.controller.freeflyController);
+    sceneRuntime.Renderer().SetVerticalFovDegrees(pilot.pilotFov);
+    sceneRuntime.Renderer().ApplyRendererPose(pose);
+    previewState.selection.hoveredSurface3D = {};
+    statusText = "Pilot Camera: WASD, mouse look, Space/Ctrl height, Shift precision, Q/E roll; Enter apply, Escape cancel; F11 unlock";
+    return true;
+}
+
+bool SectorEditor::FinishCameraPilot(bool apply)
+{
+    auto& pilot = cameraEditingState;
+    if (!pilot.pilotActive) return false;
+    if (apply) {
+        const auto pose = previewState.controller.freeflyController.pose;
+        Vector3 position = SectorWorldToAuthoringPosition(pose.position);
+        // Free flight is continuous; authored planar coordinates use the exact 1/16 grid.
+        position.x = std::round(position.x * SectorCoordSubdivisions) / SectorCoordSubdivisions;
+        position.z = std::round(position.z * SectorCoordSubdivisions) / SectorCoordSubdivisions;
+        if (!cameraEditingService || !cameraEditingService->ApplyPilot(pilot.pilotCameraId, position,
+                pose.yawRadians * RAD2DEG, pose.pitchRadians * RAD2DEG,
+                pose.rollRadians * RAD2DEG, pilot.pilotFov)) {
+            statusText = "Camera pilot could not be applied";
+            return false;
+        }
+    }
+    pilot.pilotActive = false;
+    if (state.mode == SectorEditorMode::Preview3D) {
+        ResetSectorFreeflyController(previewState.controller.freeflyController, pilot.originalPreviewPose);
+        SetSectorFreeflyMouseLookEnabled(previewState.controller.freeflyController, pilot.originalMouseLook);
+        sceneRuntime.Renderer().SetVerticalFovDegrees(pilot.originalFov);
+        sceneRuntime.Renderer().ApplyRendererPose(pilot.originalPreviewPose);
+    }
+    statusText = apply ? "Applied Camera pilot" : "Camera pilot cancelled";
+    return true;
+}
+
 bool SectorEditor::StartLightPilot()
 {
+    if (cameraEditingState.pilotActive) { statusText = "Finish camera piloting first"; return false; }
     if (state.mode != SectorEditorMode::Preview3D || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
         statusText = "Light pilot requires 3D FreeFly mode";
         return false;

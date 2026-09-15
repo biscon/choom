@@ -14,6 +14,7 @@
 namespace game {
 
 Vector2 SectorEditorLevelMarkerOrientationDirection(float orientationDegrees);
+Vector2 SectorEditorCameraOrientationDirection(float yawDegrees);
 
 void UpdateCachedSectorEditorRuntimeObjectDraw(
         SectorEditorTopologyRenderCache& cache,
@@ -81,6 +82,12 @@ void AppendCachedLevelMarkerPickCandidates(
         Vector2 screenPoint,
         float tolerancePixels,
         std::vector<SectorEditorPickCandidate>& outCandidates);
+void AppendCachedCameraPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates);
 void AppendCachedSoundEmitterPickCandidates(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
@@ -122,6 +129,10 @@ void DrawCachedLevelMarkers(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
         const LevelMarkerDragState* drag = nullptr);
+void DrawCachedCameras(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const CameraDragState* drag = nullptr);
 void DrawCachedSoundEmitters(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,

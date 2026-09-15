@@ -1009,12 +1009,36 @@ const SectorCompiledLevelMarker* FindSectorCompiledLevelMarker(
     return nullptr;
 }
 
+const SectorCompiledCamera* FindSectorCompiledCamera(
+        const SectorTopologyMap& map,
+        const std::string& id)
+{
+    for (const SectorCompiledCamera& marker : map.cameras) {
+        if (marker.id == id) {
+            return &marker;
+        }
+    }
+    return nullptr;
+}
+
 const SectorCompiledLevelMarker* FindSectorCompiledLevelMarkerByAuthoringId(
         const SectorTopologyMap& map,
         int sourceAuthoringMarkerId)
 {
     for (const SectorCompiledLevelMarker& marker : map.levelMarkers) {
         if (marker.sourceAuthoringMarkerId == sourceAuthoringMarkerId) {
+            return &marker;
+        }
+    }
+    return nullptr;
+}
+
+const SectorCompiledCamera* FindSectorCompiledCameraByAuthoringId(
+        const SectorTopologyMap& map,
+        int sourceAuthoringCameraId)
+{
+    for (const SectorCompiledCamera& marker : map.cameras) {
+        if (marker.sourceAuthoringCameraId == sourceAuthoringCameraId) {
             return &marker;
         }
     }

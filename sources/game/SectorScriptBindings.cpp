@@ -705,7 +705,7 @@ bool ParsePlayerArrivalLook(
         error = "targetHeight must be between 0 and 1";
         return false;
     }
-    if (host.cutscene->look.active) {
+    if (host.cutscene->look.active && host.cutscene->look.cameraIndex < 0) {
         error = "camera already has an active scripted look";
         return false;
     }
@@ -1060,7 +1060,7 @@ int LuaTeleportPlayer(lua_State* state)
                 "player movement interrupted by teleport");
         CancelSectorCutscenePlayerMove(cutscene, host.navigation, cutscene.playerMove.token);
     }
-    if (cutscene.look.active) {
+    if (cutscene.look.active && cutscene.look.cameraIndex < 0) {
         engine::ScriptSystemCancelOperation(context, *host.scripts, cutscene.look.operation,
                 "player look interrupted by teleport");
         CancelSectorCutsceneLook(cutscene, cutscene.look.token);
@@ -1186,6 +1186,152 @@ int LuaStartNpcLookAtProp(lua_State* state) { return StartNpcLook(state, ScriptN
 int LuaNpcLookAtMarker(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Marker, false); }
 int LuaStartNpcLookAtMarker(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Marker, true); }
 
+bool OwnsCameraControls(lua_State* state, const SectorScriptHost& host)
+{
+    const auto task = engine::ScriptSystemTryCurrentTaskFromLua(state);
+    return host.cutscene && !host.cutscene->controlsEnabled && engine::IsValid(task)
+            && task == host.cutscene->controlsOwnerTask;
+}
+
+void CancelScriptCameraMove(engine::EngineContext&, void* context, uint64_t token)
+{
+    auto& host = *static_cast<SectorScriptHost*>(context);
+    if (host.cutscene && host.cutscene->cameraMove.token == token)
+        host.cutscene->cameraMove.active = false;
+}
+
+void CancelCameraViewOperations(engine::EngineContext& context, SectorScriptHost& host,
+        const char* reason)
+{
+    if (!host.cutscene || !host.scripts) return;
+    auto& runtime = *host.cutscene;
+    if (runtime.cameraMove.active && engine::IsValid(runtime.cameraMove.operation))
+        engine::ScriptSystemCancelOperation(context, *host.scripts, runtime.cameraMove.operation, reason);
+    runtime.cameraMove = {};
+    if (runtime.look.active && engine::IsValid(runtime.look.operation))
+        engine::ScriptSystemCancelOperation(context, *host.scripts, runtime.look.operation, reason);
+    runtime.look = {};
+}
+
+int LuaSetActiveCamera(lua_State* state)
+{
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const std::string_view id{rawId, length};
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host))
+        return PushCutsceneStartError(state, false, "camera activation requires the task owning locked controls");
+    int index = -1;
+    if (id != "player") {
+        for (size_t i = 0; i < host.cutscene->cameras.size(); ++i)
+            if (host.cutscene->cameras[i].id == id) { index = static_cast<int>(i); break; }
+        if (index < 0) return PushCutsceneStartError(state, false, "camera ID was not found");
+    }
+    if (index != host.cutscene->activeCameraIndex) {
+        CancelCameraViewOperations(engine::ScriptSystemEngineFromLua(state), host, "camera switched");
+        host.cutscene->activeCameraIndex = index;
+    }
+    lua_pushboolean(state, true);
+    return 1;
+}
+
+int SetCameraTransform(lua_State* state, int kind)
+{
+    const float a = static_cast<float>(luaL_checknumber(state, 1));
+    const float b = kind == 2 ? 0.0f : static_cast<float>(luaL_checknumber(state, 2));
+    const float c = kind == 2 ? 0.0f : static_cast<float>(luaL_checknumber(state, 3));
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host) || !ActiveSectorCutsceneCamera(*host.cutscene))
+        return PushCutsceneStartError(state, false, "camera edit requires an active level camera and its control-owning task");
+    auto& runtime = *host.cutscene;
+    if (!std::isfinite(a) || !std::isfinite(b) || !std::isfinite(c)
+            || (kind == 1 && std::fabs(b) > 89.9f) || (kind == 2 && (a < 1 || a > 179)))
+        return PushCutsceneStartError(state, false, "invalid camera transform or FOV");
+    if ((kind == 0 && runtime.cameraMove.active) || (kind == 1 && runtime.look.active))
+        return PushCutsceneStartError(state, false, "camera channel is controlled by an operation; cancel it first");
+    auto& camera = *ActiveSectorCutsceneCamera(runtime);
+    if (kind == 0) camera.pose.position = {a, b, c};
+    else if (kind == 1) {
+        camera.pose.yawRadians = std::remainder(a, 360.0f) * DEG2RAD;
+        camera.pose.pitchRadians = b * DEG2RAD;
+        camera.pose.rollRadians = std::remainder(c, 360.0f) * DEG2RAD;
+    } else camera.fov = a;
+    lua_pushboolean(state, true);
+    return 1;
+}
+int LuaSetCameraPosition(lua_State* state) { return SetCameraTransform(state, 0); }
+int LuaSetCameraRotation(lua_State* state) { return SetCameraTransform(state, 1); }
+int LuaSetCameraFov(lua_State* state) { return SetCameraTransform(state, 2); }
+
+int StartCameraMove(lua_State* state, bool async)
+{
+    const int originalTop = lua_gettop(state);
+    const Vector3 destination{static_cast<float>(luaL_checknumber(state, 1)),
+            static_cast<float>(luaL_checknumber(state, 2)), static_cast<float>(luaL_checknumber(state, 3))};
+    const double seconds = luaL_checknumber(state, 4) / 1000.0;
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host))
+        return PushCutsceneStartError(state, async, "camera movement requires the task owning locked controls");
+    auto& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    uint64_t token = 0;
+    std::string error;
+    if (!BeginSectorCutsceneCameraMove(*host.cutscene, destination, seconds, token, error))
+        return PushCutsceneStartError(state, async, error);
+    if (seconds == 0 && !async) {
+        ActiveSectorCutsceneCamera(*host.cutscene)->pose.position = destination;
+        host.cutscene->cameraMove = {};
+        lua_pushboolean(state, true);
+        return 1;
+    }
+    const auto operation = engine::ScriptSystemCreateOperation(scripts,
+            async ? engine::ScriptOperationLaunchStyle::Async : engine::ScriptOperationLaunchStyle::Blocking,
+            engine::ScriptSystemTryCurrentTaskFromLua(state), "moveCamera", token, CancelScriptCameraMove);
+    if (!engine::IsValid(operation)) {
+        host.cutscene->cameraMove = {};
+        return PushCutsceneStartError(state, async, "could not allocate camera movement operation");
+    }
+    host.cutscene->cameraMove.operation = operation;
+    if (!async) return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+    engine::ScriptSystemPushOperationUserdata(state, operation);
+    if (seconds == 0) UpdateSectorCutsceneCameraMove(*host.cutscene, scripts, 0);
+    return 1;
+}
+int LuaMoveCamera(lua_State* state) { return StartCameraMove(state, false); }
+int LuaStartMoveCamera(lua_State* state) { return StartCameraMove(state, true); }
+
+int LuaTrackCameraNpc(lua_State* state)
+{
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const double seconds = luaL_optnumber(state, 2, 750.0) / 1000.0;
+    const float height = static_cast<float>(luaL_optnumber(state, 3, 0.5));
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host) || !ActiveSectorCutsceneCamera(*host.cutscene) || !host.playerState)
+        return PushCutsceneStartError(state, false, "tracking requires an active level camera and its control-owning task");
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    const auto entity = FindNpcEntity(context.world, std::string_view{rawId, length});
+    if (engine::IsNull(entity) || !IsSectorObjectEnabled(context.world, entity))
+        return PushCutsceneStartError(state, false, "tracking NPC was not found or is disabled");
+    std::string error;
+    uint64_t token;
+    if (!BeginSectorCutsceneLook(*host.cutscene, entity, SectorCutsceneLookTargetKind::Npc,
+            height, seconds, *host.playerState, token, error))
+        return PushCutsceneStartError(state, false, error);
+    host.cutscene->look.tracking = true;
+    lua_pushboolean(state, true);
+    return 1;
+}
+
+int LuaStopCameraTracking(lua_State* state)
+{
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host) || !ActiveSectorCutsceneCamera(*host.cutscene))
+        return PushCutsceneStartError(state, false, "stopping tracking requires an active level camera and its control-owning task");
+    if (host.cutscene->look.tracking) host.cutscene->look = {};
+    lua_pushboolean(state, true);
+    return 1;
+}
+
 int StartLook(lua_State* state, SectorCutsceneLookTargetKind kind, bool async)
 {
     const int originalTop = lua_gettop(state);
@@ -1203,6 +1349,8 @@ int StartLook(lua_State* state, SectorCutsceneLookTargetKind kind, bool async)
         return PushCutsceneStartError(
                 state, async, "player cutscene look runtime is unavailable");
     }
+    if (host.cutscene->activeCameraIndex >= 0 && !OwnsCameraControls(state, host))
+        return PushCutsceneStartError(state, async, "camera look requires the task owning locked controls");
     size_t idLength = 0;
     const char* rawId = luaL_checklstring(state, 1, &idLength);
     const std::string_view id{rawId, idLength};
@@ -1720,7 +1868,11 @@ bool ApplyCutsceneControlsEnabled(
             host.controls.userData, context, enabled, error)) {
         return false;
     }
-    if (enabled) host.cutscene->presentation.active = false;
+    if (enabled) {
+        CancelCameraViewOperations(context, host, "controls re-enabled");
+        ResetSectorCutsceneCameraOverrides(*host.cutscene);
+        host.cutscene->presentation.active = false;
+    }
     host.cutscene->controlsEnabled = enabled;
     host.cutscene->controlsOwnerTask = enabled
             ? engine::ScriptTaskHandle{} : ownerTask;
@@ -3037,6 +3189,7 @@ void InitializeSectorScriptHost(
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
     host.cutscene = cutscene;
+    if (cutscene) LoadSectorCutsceneCameras(*cutscene, map);
     host.dialogue = nullptr;
     host.keypad = nullptr;
     host.note = nullptr;
@@ -3168,6 +3321,14 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "endConversation", LuaEndConversation);
     Register(state, "startCutscene", LuaStartCutscene);
     Register(state, "endCutscene", LuaEndCutscene);
+    Register(state, "setActiveCamera", LuaSetActiveCamera);
+    Register(state, "setCameraPosition", LuaSetCameraPosition);
+    Register(state, "setCameraRotation", LuaSetCameraRotation);
+    Register(state, "setCameraFov", LuaSetCameraFov);
+    Register(state, "moveCamera", LuaMoveCamera);
+    Register(state, "startMoveCamera", LuaStartMoveCamera);
+    Register(state, "trackCameraNpc", LuaTrackCameraNpc);
+    Register(state, "stopCameraTracking", LuaStopCameraTracking);
     Register(state, "movePlayer", LuaMovePlayer);
     Register(state, "startMovePlayer", LuaStartMovePlayer);
     Register(state, "teleportPlayer", LuaTeleportPlayer);

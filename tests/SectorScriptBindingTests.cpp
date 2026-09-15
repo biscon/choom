@@ -421,6 +421,116 @@ void DisablingNpcCancelsAnimationAndConversation()
     assert(!fixture.host.conversation.active && fixture.cutscene.controlsEnabled);
 }
 
+void CameraBindingsMovementTrackingAndCleanup()
+{
+    NpcScriptFixture fixture;
+    fixture.host.controls.setControlsEnabled =
+            [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+    fixture.map.cameras.push_back({1, "bed", {0, 16, 0}, 0, 0, 0.2f, 60});
+    fixture.map.cameras.push_back({2, "door", {80, 16, 80}, 1, 0, 0, 75});
+    game::LoadSectorCutsceneCameras(fixture.cutscene, fixture.map);
+    const auto playerBefore = fixture.playerState;
+    fixture.files.Write(R"lua(
+function init() end
+function cameraScene()
+    assert(not setActiveCamera("bed"))
+    assert(startCutscene())
+    assert(not setActiveCamera("missing"))
+    assert(setActiveCamera("bed"))
+    assert(setCameraPosition(1, 2, 3))
+    assert(setCameraRotation(30, 20, 10))
+    assert(setCameraFov(55))
+    assert(not setCameraFov(180))
+    assert(not setCameraPosition(0/0, 2, 3))
+    move = assert(startMoveCamera(5, 2, 3, 1000))
+    assert(not startMoveCamera(6, 2, 3, 1000))
+    assert(not setCameraPosition(4, 2, 3))
+    assert(await(move))
+    assert(setActiveCamera("door"))
+    assert(setActiveCamera("bed"))
+    assert(trackCameraNpc("script_guard", 500, 0.7))
+    assert(not startLookAtNpc("script_guard", 100))
+    assert(not setCameraRotation(0, 0, 0))
+    trackingStarted = true
+    delay(1000)
+    assert(stopCameraTracking())
+    assert(setCameraRotation(10, 5, 15))
+    assert(moveCamera(6, 2, 3, 0))
+    assert(setActiveCamera("player"))
+    assert(setActiveCamera("bed"))
+    local cancelled = assert(startMoveCamera(100, 2, 3, 1000))
+    assert(cancelOperation(cancelled))
+    assert(operationStatus(cancelled) == "cancelled")
+    local instant = assert(startMoveCamera(6, 2, 3, 0))
+    assert(await(instant))
+    local outgoingMove = assert(startMoveCamera(100, 2, 3, 1000))
+    local outgoingLook = assert(startLookAtNpc("script_guard", 1000))
+    assert(setActiveCamera("door"))
+    assert(operationStatus(outgoingMove) == "cancelled")
+    assert(operationStatus(outgoingLook) == "cancelled")
+    assert(endCutscene())
+    finished = true
+end
+)lua");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    TeleportConsole(fixture, "assert(startScript('cameraScene'))");
+    fixture.Update(0.001f);
+    auto* camera = game::ActiveSectorCutsceneCamera(fixture.cutscene);
+    assert(camera && camera->fov == 55 && camera->pose.position.x == 1);
+    TeleportConsole(fixture, "assert(not setActiveCamera('door')); assert(not setCameraFov(80))");
+    game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 0.5f);
+    assert(std::fabs(camera->pose.position.x - 3) < 0.0001f);
+    game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 0.5f);
+    assert(camera->pose.position.x == 5 && !fixture.cutscene.cameraMove.active);
+    fixture.Update(0.01f);
+    TeleportConsole(fixture, "assert(trackingStarted)");
+    assert(fixture.cutscene.look.tracking && fixture.cutscene.look.cameraIndex == 0);
+    assert(game::ActiveSectorCutsceneCamera(fixture.cutscene)->pose.position.x == 5);
+    assert(fixture.playerState.feetPosition.x == playerBefore.feetPosition.x
+            && fixture.playerState.yawRadians == playerBefore.yawRadians
+            && fixture.playerState.currentSectorId == playerBefore.currentSectorId);
+    // A missing render asset is a recoverable lost target, not a player-camera mutation.
+    game::UpdateSectorCutsceneLook(fixture.cutscene, fixture.context.world, fixture.context.assets,
+            fixture.playerState, fixture.playerConfig, fixture.runtime, 0.1f);
+    assert(!fixture.cutscene.look.active);
+    for (int i = 0; i < 20; ++i) fixture.Update(0.1f);
+    TeleportConsole(fixture, "assert(finished)");
+    assert(!game::ActiveSectorCutsceneCamera(fixture.cutscene) && fixture.cutscene.controlsEnabled);
+    assert(fixture.cutscene.cameras[0].pose.position.x == 0 && fixture.cutscene.cameras[0].fov == 60);
+}
+
+void CameraTrackingMathAndOwnerRecovery()
+{
+    game::SectorCutsceneLookState look;
+    look.cameraIndex = 0; look.tracking = true; look.durationSeconds = 1;
+    game::SectorViewPose pose{{0, 2, 0}, 0, 0, 0.3f};
+    assert(game::AdvanceSectorCutsceneLookPose(look, pose, {0, 2, 10}, 0.5f));
+    assert(std::fabs(pose.yawRadians - PI / 4) < 0.0001f);
+    assert(game::AdvanceSectorCutsceneLookPose(look, pose, {0, 2, 10}, 0.5f));
+    assert(std::fabs(pose.yawRadians - PI / 2) < 0.0001f);
+    assert(game::AdvanceSectorCutsceneLookPose(look, pose, {-10, 4, 0}, 0.1f));
+    const auto forward = game::SectorViewForward(pose);
+    assert(forward.x < -0.9f && forward.y > 0 && pose.rollRadians == 0.3f);
+    assert(pose.position.x == 0 && pose.position.y == 2);
+    assert(!game::AdvanceSectorCutsceneLookPose(look, pose, pose.position, 0.1f));
+
+    for (const char* ending : {"error('camera task failed')", "return"}) {
+        NpcScriptFixture fixture;
+        fixture.host.controls.setControlsEnabled =
+                [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+        fixture.map.cameras.push_back({1, "test", {0, 16, 0}, 0, 0, 0, 60});
+        game::LoadSectorCutsceneCameras(fixture.cutscene, fixture.map);
+        fixture.files.Write(std::string("function init() assert(startCutscene()); assert(setActiveCamera('test')); ")
+                + "assert(setCameraPosition(20, 20, 20)); assert(startMoveCamera(30,30,30,10000)); delay(10); "
+                + ending + " end");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        assert(game::ActiveSectorCutsceneCamera(fixture.cutscene));
+        for (int i = 0; i < 5; ++i) fixture.Update(0.1f);
+        assert(fixture.cutscene.controlsEnabled && !game::ActiveSectorCutsceneCamera(fixture.cutscene)
+                && !fixture.cutscene.cameraMove.active && fixture.cutscene.cameras[0].pose.position.x == 0);
+    }
+}
+
 void MarkerTeleportsApplyExactPositionsAndFacingImmediately()
 {
     NpcScriptFixture fixture;
@@ -3529,6 +3639,8 @@ end
 
 void RunSectorScriptBindingTests()
 {
+    CameraBindingsMovementTrackingAndCleanup();
+    CameraTrackingMathAndOwnerRecovery();
     ObjectEnabledBindingsAndNpcSuspension();
     DisablingNpcCancelsAnimationAndConversation();
     ScreenShakeBindingsAndLifecycle();

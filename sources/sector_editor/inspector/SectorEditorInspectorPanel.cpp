@@ -11,6 +11,7 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
 #include "sector_editor/inspector/SectorEditorLevelMarkerInspector.h"
+#include "sector_editor/inspector/SectorEditorCameraInspector.h"
 #include "sector_editor/inspector/SectorEditorSoundEmitterInspector.h"
 #include "sector_editor/inspector/SectorEditorTriggerInspector.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
@@ -801,6 +802,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLevelMarker
             ? FindSectorAuthoringLevelMarker(authoringGraph, inspectorTarget.levelMarkerId)
             : nullptr;
+    const SectorAuthoringCamera* selectedCamera =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringCamera
+            ? FindSectorAuthoringCamera(authoringGraph, inspectorTarget.cameraId)
+            : nullptr;
     const SectorAuthoringSoundEmitter* selectedSoundEmitter =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringSoundEmitter
             ? FindSectorAuthoringSoundEmitter(authoringGraph, inspectorTarget.soundEmitterId)
@@ -1000,6 +1005,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         if (selectedLevelMarker != nullptr) {
             return MeasureSectorEditorLevelMarkerInspectorContentHeight(
                     context.levelMarkerUiState,
+                    rowH,
+                    gap);
+        }
+        if (selectedCamera != nullptr) {
+            return MeasureSectorEditorCameraInspectorContentHeight(
+                    context.cameraUiState,
                     rowH,
                     gap);
         }
@@ -3526,6 +3537,28 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             AppendRequest(
                     result,
                     SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLevelMarkerConfirmation);
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+    if (selectedCamera != nullptr) {
+        const bool deleteRequested = DrawSectorEditorCameraInspector(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                contentW,
+                rowH,
+                gap,
+                *selectedCamera,
+                context.cameraUiState,
+                context.cameraEditing);
+        if (deleteRequested) {
+            AppendRequest(
+                    result,
+                    SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedCameraConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

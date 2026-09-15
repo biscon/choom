@@ -4831,6 +4831,31 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    const auto camerasIt = value.find("cameras");
+    if (camerasIt != value.end()) {
+        if (!camerasIt->is_array()) {
+            Fail("root.authoringGraph.cameras must be an array");
+        }
+        for (size_t i = 0; i < camerasIt->size(); ++i) {
+            const Json& markerJson = (*camerasIt)[i];
+            const std::string context = "root.authoringGraph.cameras[" + std::to_string(i) + "]";
+            if (!markerJson.is_object()) {
+                Fail(context + " must be an object");
+            }
+            SectorAuthoringCamera marker;
+            marker.id = ReadInt(markerJson, "editorId", context);
+            marker.referenceId = ReadString(markerJson, "id", context);
+            marker.x = ReadCoord(markerJson, "x", context);
+            marker.y = ReadFloat(markerJson, "y", context);
+            marker.z = ReadCoord(markerJson, "z", context);
+            marker.yawDegrees = markerJson.value("yawDegrees", 0.0f);
+            marker.pitchDegrees = markerJson.value("pitchDegrees", 0.0f);
+            marker.rollDegrees = markerJson.value("rollDegrees", 0.0f);
+            marker.verticalFovDegrees = markerJson.value("verticalFovDegrees", 75.0f);
+            graph.cameras.push_back(std::move(marker));
+        }
+    }
+
     graph.nextPathId = value.value("nextPathId", 1);
     if (value.contains("paths")) {
         if (!value.at("paths").is_array()) Fail("authoringGraph.paths must be an array");
@@ -5084,7 +5109,8 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
     const std::vector<SectorAuthoringValidationIssue> issues =
             ValidateSectorAuthoringGraphReferences(graph);
     const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
-        return (issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+        return (issue.objectKind == SectorAuthoringObjectKind::Camera
+                || issue.objectKind == SectorAuthoringObjectKind::LevelMarker
                         || issue.objectKind == SectorAuthoringObjectKind::Patrol
                         || issue.objectKind == SectorAuthoringObjectKind::SoundEmitter
                         || issue.objectKind == SectorAuthoringObjectKind::Trigger
@@ -5480,6 +5506,34 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
                     {"y", marker->y},
                     {"z", marker->z},
                     {"orientationDegrees", marker->orientationDegrees}});
+        }
+    }
+
+    if (!graph.cameras.empty()) {
+        const std::vector<SectorAuthoringValidationIssue> issues =
+                ValidateSectorAuthoringGraphReferences(graph);
+        const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
+            return issue.objectKind == SectorAuthoringObjectKind::Camera
+                    && issue.severity == SectorAuthoringValidationSeverity::Error;
+        });
+        if (markerError != issues.end()) {
+            Fail("Invalid authoring camera: " + markerError->message);
+        }
+        graphJson["cameras"] = Json::array();
+        for (const SectorAuthoringCamera* marker : SortedById(graph.cameras)) {
+            RequireFinite(marker->y, "authoring camera y");
+            RequireFinite(marker->yawDegrees, "authoring camera yawDegrees");
+            graphJson["cameras"].push_back(Json{
+                    {"editorId", marker->id},
+                    {"id", marker->referenceId},
+                    {"x", marker->x},
+                    {"y", marker->y},
+                    {"z", marker->z},
+                    {"yawDegrees", marker->yawDegrees}});
+            auto& saved = graphJson["cameras"].back();
+            if (marker->pitchDegrees != 0.0f) saved["pitchDegrees"] = marker->pitchDegrees;
+            if (marker->rollDegrees != 0.0f) saved["rollDegrees"] = marker->rollDegrees;
+            if (marker->verticalFovDegrees != 75.0f) saved["verticalFovDegrees"] = marker->verticalFovDegrees;
         }
     }
 

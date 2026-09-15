@@ -516,6 +516,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
+            sources/sector_editor/services/cameras/SectorEditorCameraEditingService.cpp
             sources/sector_editor/services/paths/SectorEditorPathEditingService.cpp
             sources/sector_editor/tools/path/SectorEditorPathTool.cpp
             sources/sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.cpp

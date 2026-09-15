@@ -11,7 +11,6 @@ namespace {
 
 constexpr float MouseSensitivity = 0.0030f;
 constexpr float MoveSpeed = 5.0f;
-constexpr float PitchLimit = 1.45f;
 constexpr int MouseLookWarmupFrames = 2;
 
 } // namespace
@@ -54,7 +53,8 @@ void UpdateSectorFreeflyController(
         SectorFreeflyControllerState& state,
         engine::Input& input,
         float dt,
-        float moveSpeedScale)
+        float moveSpeedScale,
+        float pitchLimitRadians)
 {
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
@@ -73,7 +73,7 @@ void UpdateSectorFreeflyController(
         const Vector2 mouseDelta = input.MouseDelta();
         state.pose.yawRadians += mouseDelta.x * MouseSensitivity;
         state.pose.pitchRadians -= mouseDelta.y * MouseSensitivity;
-        state.pose.pitchRadians = Clamp(state.pose.pitchRadians, -PitchLimit, PitchLimit);
+        state.pose.pitchRadians = Clamp(state.pose.pitchRadians, -pitchLimitRadians, pitchLimitRadians);
     }
 
     if (state.mouseLookEnabled) {

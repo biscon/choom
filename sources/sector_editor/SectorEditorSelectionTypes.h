@@ -52,6 +52,7 @@ enum class SectorAuthoringSelectionKind {
     FogVolume,
     ReflectionProbe,
     LevelMarker,
+    Camera,
     Path,
     SoundEmitter,
     Trigger,
@@ -66,6 +67,7 @@ struct SectorAuthoringSelectionTarget {
     int fogVolumeId = -1;
     int reflectionProbeId = -1;
     int levelMarkerId = -1;
+    int cameraId = -1;
     int pathId = -1;
     int soundEmitterId = -1;
     int triggerId = -1;
@@ -147,6 +149,7 @@ enum class SectorEditorPickKind {
     AuthoringFogVolume,
     AuthoringReflectionProbe,
     LevelMarker,
+    Camera,
     Path,
     SoundEmitter,
     Trigger
@@ -179,6 +182,15 @@ struct RuntimeObjectDragState {
 struct LevelMarkerDragState {
     bool active = false;
     int markerId = -1;
+    SectorCoord originalX = 0;
+    SectorCoord originalZ = 0;
+    SectorCoord previewX = 0;
+    SectorCoord previewZ = 0;
+};
+
+struct CameraDragState {
+    bool active = false;
+    int cameraId = -1;
     SectorCoord originalX = 0;
     SectorCoord originalZ = 0;
     SectorCoord previewX = 0;

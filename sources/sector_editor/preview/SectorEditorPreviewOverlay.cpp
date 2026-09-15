@@ -1949,8 +1949,12 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     actionY,
                     hasSelectedHalo,
                     hasSelectedShaft);
+    const bool cameraPilot = context.cameraState && context.cameraState->pilotActive;
+    const bool cameraSelected = selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Camera;
     float actionReservedWidth = 0.0f;
-    if (mouseInteractive && context.lightState.lightPilot.active) {
+    if (mouseInteractive && (cameraPilot || cameraSelected)) {
+        actionReservedWidth = cameraPilot ? 320.0f : 140.0f;
+    } else if (mouseInteractive && context.lightState.lightPilot.active) {
         actionReservedWidth = 158.0f;
     } else if (mouseInteractive && context.lightState.proxyPlacement.active) {
         actionReservedWidth = 234.0f;
@@ -1977,7 +1981,22 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
 
     float actionsRight = panel.x + panel.width - padding;
     if (mouseInteractive) {
-        if (context.lightState.lightPilot.active) {
+        if (cameraPilot) {
+            if (engine::Button(ui, smallConfig, input, assets, "camera_pilot_cancel",
+                    {actionsRight - 72, actionY, 72, 28}, smallFont, "Cancel")) result.requestCancelCameraPilot = true;
+            actionsRight -= 82;
+            if (engine::Button(ui, smallConfig, input, assets, "camera_pilot_apply",
+                    {actionsRight - 66, actionY, 66, 28}, smallFont, "Apply")) result.requestApplyCameraPilot = true;
+            actionsRight -= 76;
+            const auto fov = DrawLabeledFloatInput(ui, smallConfig, input, assets, smallFont,
+                    "camera_pilot_fov", "FOV", {actionsRight - 145, actionY, 40, 28},
+                    {actionsRight - 100, actionY, 100, 28}, engine::UITextJustify::Right,
+                    context.cameraState->pilotFov, context.cameraState->pilotFovInput, 1, 179, 2);
+            if (fov.changed && fov.finite) context.cameraState->pilotFov = fov.value;
+        } else if (cameraSelected && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly) {
+            if (engine::Button(ui, smallConfig, input, assets, "camera_pilot_start",
+                    {actionsRight - 130, actionY, 130, 28}, smallFont, "Pilot Camera")) result.requestStartCameraPilot = true;
+        } else if (context.lightState.lightPilot.active) {
             if (engine::Button(
                         ui,
                         smallConfig,

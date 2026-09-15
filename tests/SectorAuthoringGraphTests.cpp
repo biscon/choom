@@ -26,6 +26,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/cameras/SectorEditorCameraEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
@@ -15862,6 +15863,78 @@ void TestReflectionProbeSelectManipulationCommitsSnappedMove()
           "reflection probe move rejects destinations outside derived non-void faces");
 }
 
+void TestCameraEditingSelectionAndPilot()
+{
+    game::SectorEditorDocumentState documentState;
+    documentState.authoring.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    documentState.derivation.authoringDerivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(
+                    documentState.authoring.authoringGraph);
+    documentState.map.topologyMap = documentState.derivation.authoringDerivation.topology;
+    documentState.derivation.lastValidAuthoringDerivedTopology = documentState.map.topologyMap;
+    documentState.derivation.authoringDerivationState =
+            game::SectorEditorAuthoringDerivationState::ValidCurrent;
+    documentState.derivation.authoringDerivedTopologyStale = false;
+
+    game::SectorEditorState editorState;
+    editorState.topologyRenderCache.valid = true;
+    game::SelectionState selection;
+    game::CameraEditingState editingState;
+    std::string status;
+    game::SectorEditorCameraEditingService editing{
+            game::SectorEditorCameraEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    documentState.authoring.authoringGraph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    editorState.topologyRenderRevision,
+                    editorState.topologyRenderCache,
+                    selection,
+                    editingState,
+                    status}};
+
+    Check(editing.Place({5, 5}), "camera placement succeeds");
+    auto& graph = documentState.authoring.authoringGraph;
+    const int id = graph.cameras[0].id;
+    Check(graph.cameras[0].referenceId == "camera_1" && Near(graph.cameras[0].y, 12.8f)
+            && documentState.map.topologyMap.cameras.size() == 1, "camera gets identity, eye height and runtime record");
+    Check(documentState.lifecycle.topologyDocumentDirty && !editorState.topologyRenderCache.valid,
+            "camera placement invalidates render cache");
+    Check(editing.SetSelectedPosition({5, 20, 5}), "camera height can be set");
+    const auto revision = editorState.topologyRenderRevision;
+    Check(editing.BeginMove(id), "camera drag starts");
+    editing.UpdateMove({200, 200});
+    editing.CancelMove();
+    Check(graph.cameras[0].x == 80 && editorState.topologyRenderRevision == revision,
+            "cancelled camera drag does not mutate document or cache");
+    Check(editing.BeginMove(id), "camera drag restarts");
+    editing.UpdateMove({200, 200});
+    Check(editing.FinishMove() && graph.cameras[0].x == 3200 && Near(graph.cameras[0].y, 20),
+            "camera drag can leave a sector and preserves absolute height");
+    Check(editing.ApplyPilot(id, {0, 18, 0}, 90, 80, 20, 50), "pilot pose commits atomically");
+    Check(Near(graph.cameras[0].pitchDegrees, 80) && Near(graph.cameras[0].verticalFovDegrees, 50),
+            "pilot stores lens and rotation");
+    const auto pilotRevision = editorState.topologyRenderRevision;
+    Check(!editing.ApplyPilot(id, {0, 18, 0}, 90, 100, 0, 50)
+            && pilotRevision == editorState.topologyRenderRevision, "invalid pilot pose is rejected without mutation");
+    Check(editing.Place({0, 0}), "overlapping camera can be placed on a boundary");
+    auto cache = game::BuildSectorEditorTopologyRenderCache(documentState.map.topologyMap,
+            graph, documentState.derivation.authoringDerivation, editorState.topologyRenderRevision);
+    game::SectorEditorTopologyDrawContext draw;
+    draw.canvasRect = {0, 0, 200, 200}; draw.viewZoom = 1;
+    std::vector<game::SectorEditorPickCandidate> candidates;
+    game::AppendCachedCameraPickCandidates(cache, draw, {100, 100}, 12, candidates);
+    Check(candidates.size() == 2, "both overlapping cameras enter click stack");
+    candidates = game::SortSectorEditorPickCandidates(std::move(candidates));
+    Check(candidates[0].target.kind == game::SectorEditorPickKind::Camera,
+            "camera candidates use normal stack ordering");
+    Check(!editing.RenameSelected("player") && !editing.RenameSelected("camera_1"),
+            "reserved and duplicate camera IDs are rejected");
+    Check(editing.RenameSelected("security_cam") && editing.DeleteSelected(), "camera rename and deletion work");
+}
+
 void TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache()
 {
     game::SectorEditorDocumentState documentState;
@@ -16409,6 +16482,7 @@ int main()
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
     TestReflectionProbeSelectManipulationCommitsSnappedMove();
     TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache();
+    TestCameraEditingSelectionAndPilot();
     TestLevelMarkerDragPreservesFloorOffset();
     TestTriggerEditingServiceCommitsAuthoringAndDragOnce();
     TestEmptyGraph();

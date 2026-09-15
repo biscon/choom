@@ -81,6 +81,9 @@ ranges, return values, behavior, and failure details.
   `movePlayer(levelMarkerId [, gait [, movementSpeed [, options]]])`,
   `startMovePlayer(x, z [, gait [, movementSpeed [, options]]])`,
   `startMovePlayer(levelMarkerId [, gait [, movementSpeed [, options]]])`.
+- **[Level cameras](#level-cameras):** `setActiveCamera`, `setCameraPosition`,
+  `setCameraRotation`, `setCameraFov`, `moveCamera`, `startMoveCamera`,
+  `trackCameraNpc`, `stopCameraTracking`.
 - **[Camera looks](#animated-camera-looks):**
   `lookAtNpc(instanceId, durationMs [, targetHeight])`,
   `startLookAtNpc(instanceId, durationMs [, targetHeight])`,
@@ -1119,7 +1122,8 @@ long wrapped captions move upward when needed to fit. Font size and wrapping
 remain unchanged. Explicit `TOP` and `CENTER` text retain their normal positions.
 
 `endCutscene()` immediately restores controls and HUD while the bars slide out.
-Like `enableControls(true)`, it cancels active scripted player movement and looks.
+Like `enableControls(true)`, it cancels active scripted player movement and looks,
+returns to the player camera, and resets runtime level-camera poses.
 Repeated calls are harmless, and reversing a transition preserves its current
 position. A full transition takes 350 ms; reversal retraces the remaining portion.
 
@@ -1226,6 +1230,108 @@ The camera uses a quintic smoother-step curve rather than rotating linearly.
 bounds: `0` is the bottom and `1` is the top. Targets are followed live while
 they move. `lookAtProp` accepts static 3D and dynamic props from their shared
 instance-ID namespace. Only one scripted look may be active.
+
+### Level cameras
+
+Place a **Camera** in the editor's tools pane and give it a unique Script ID
+(for example `office_bed` or `security_hall`). Cameras participate in the Select
+tool's overlapping click stack and can be dragged in 2D without changing height.
+The inspector edits position, yaw, pitch, roll, and vertical FOV. Select a camera,
+enter 3D FreeFly preview, unlock with F11, and click **Pilot Camera**. Use WASD,
+mouse look, Space/Ctrl for height, Shift for precision, and Q/E for roll.
+Enter/Apply saves; Escape/Cancel restores the previous preview without saving.
+FOV is editable in the unlocked pilot overlay. Piloted X/Z positions round to
+the authoring grid (1/16 map unit).
+
+```text
+setActiveCamera(cameraId) -> true | false, reason
+setCameraPosition(x, y, z) -> true | false, reason
+setCameraRotation(yawDegrees, pitchDegrees, rollDegrees) -> true | false, reason
+setCameraFov(verticalDegrees) -> true | false, reason
+moveCamera(x, y, z, durationMs) -> true | false, reason
+startMoveCamera(x, y, z, durationMs) -> operation | nil, reason
+trackCameraNpc(instanceId [, turnDurationMs [, targetHeight]]) -> true | false, reason
+stopCameraTracking() -> true | false, reason
+```
+
+`setActiveCamera("office_bed")` instantly switches the rendered view.
+`setActiveCamera("player")` returns to the player without ending the cutscene or
+restoring controls. `player` is reserved and cannot be an authored camera ID.
+Camera IDs follow marker syntax: 1–63 letters, digits, underscores, or dashes;
+they are case-sensitive and unique among cameras in the level.
+
+These commands require the managed task that owns locked controls, acquired
+with `startCutscene()` or `enableControls(false)`. The position/rotation/FOV,
+movement, and tracking commands additionally require an active level camera.
+Unknown IDs, competing ownership, and invalid values fail without changing the
+current view. `endCutscene()`, `enableControls(true)`, owner-task completion,
+failure or cancellation, and map unload return to the player. The existing
+conversation rule still requires `endConversation()` before restoring controls.
+
+Runtime camera poses are separate from the saved map. Cuts between cameras
+retain their modified poses within the current control lock. Restoring controls
+resets all cameras to their authored poses. Switching to an already active
+camera is a no-op. Switching views cancels outgoing standalone look/tracking
+and camera-movement operations; scripted player movement and its attached
+arrival look remain tied to the player.
+
+**Units:** camera scripting positions are absolute **world units**, with Y up.
+Editor position fields use **map units**; currently 8 map units equal 1 world
+unit. Rotation uses degrees: yaw 0 faces +X, yaw 90 faces +Z, and positive pitch
+looks up. Pitch is limited to −89.9..89.9 degrees; vertical FOV is 1..179 degrees.
+All numeric arguments must be finite. Durations use non-negative milliseconds.
+`setCameraFov` edits vertical FOV, independently of the player's horizontal-FOV
+setting.
+
+Camera movement follows a straight line with the same quintic smoother-step
+style as scripted looks, without navigation or collision. Zero-duration movement
+applies immediately. `startMoveCamera` supports `await`, `operationStatus`, and
+`cancelOperation`. Cancellation holds the last reached position. One camera move
+and one aiming operation may run together; competing operations fail. Position
+and rotation setters fail while an operation owns that channel. FOV can change
+during movement or aiming.
+
+Existing `lookAtNpc`/`lookAtProp` and their async forms aim the active view when
+started. With the player view active, their previous behavior is unchanged.
+`screenShake` also affects the rendered view. Player collision, physical sector
+lookup, movement, oxygen, and physics remain at the player; remote rendering
+visibility, spatial audio, and underwater presentation use the camera viewpoint.
+Remote cameras omit the player viewmodel, headbob, recoil, and injury effects.
+
+`trackCameraNpc` returns immediately and keeps the camera position and roll
+fixed while aiming at a moving NPC. It eases into the initial aim over
+`turnDurationMs` (default 750), then continually follows the NPC's live visual
+bounds. `targetHeight` defaults to 0.5 and ranges from 0 (bottom) to 1 (top).
+Movement can run concurrently with tracking. `stopCameraTracking()` is idempotent
+and holds the last rotation; call it before starting another look. If the NPC
+is removed, disabled, unavailable for rendering, or coincides with the camera,
+tracking stops, keeps the last pose, and prints a warning.
+
+```lua
+function officeBedScene()
+    assert(startCutscene())
+    assert(fadeOut(250))
+    assert(setActiveCamera("office_bed"))
+    assert(trackCameraNpc("elin", 500, 0.75))
+    assert(fadeIn(250))
+    say("elin", "Stay still. Let me look at that.")
+    assert(fadeOut(250))
+    assert(setActiveCamera("player"))
+    assert(fadeIn(250))
+    assert(endCutscene())
+end
+
+function showClosingGate()
+    assert(startCutscene())
+    assert(setActiveCamera("gate_view"))
+    assert(moveDoor("puzzle_gate", 0.0, 2500))
+    assert(endCutscene())
+end
+```
+
+Camera primitives are editor/viewpoint data: they have no rendered game model,
+collision, or baked-light contribution. Camera edits do not change the lightmap
+source hash or require rebaking.
 
 ### Screen shake
 

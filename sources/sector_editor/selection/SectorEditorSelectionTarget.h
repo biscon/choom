@@ -21,6 +21,7 @@ enum class SectorEditorSelectionTargetKind {
     AuthoringFogVolume,
     AuthoringReflectionProbe,
     AuthoringLevelMarker,
+    AuthoringCamera,
     AuthoringSoundEmitter,
     AuthoringTrigger,
     AuthoringStructuralPrimitive,
@@ -68,6 +69,7 @@ inline bool IsTopologyTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
         case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
+        case SectorEditorSelectionTargetKind::AuthoringCamera:
         case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
         case SectorEditorSelectionTargetKind::AuthoringStructuralPrimitive:
@@ -91,6 +93,7 @@ inline bool IsAuthoringTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
         case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
+        case SectorEditorSelectionTargetKind::AuthoringCamera:
         case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
         case SectorEditorSelectionTargetKind::AuthoringStructuralPrimitive:
@@ -140,6 +143,7 @@ inline bool IsLightTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
         case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
+        case SectorEditorSelectionTargetKind::AuthoringCamera:
         case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
         case SectorEditorSelectionTargetKind::AuthoringStructuralPrimitive:

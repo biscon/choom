@@ -97,6 +97,13 @@ struct CachedAuthoringLevelMarkerDraw {
     float orientationDegrees = 0.0f;
 };
 
+struct CachedAuthoringCameraDraw {
+    int cameraId = -1;
+    std::string referenceId;
+    Vector2 map = {};
+    float yawDegrees = 0.0f;
+};
+
 struct CachedAuthoringSoundEmitterDraw {
     int emitterId = -1;
     std::string referenceId;
@@ -170,6 +177,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologySpotLightDraw> dynamicSpotLights;
     std::vector<CachedRuntimeObjectDraw> runtimeObjects;
     std::vector<CachedAuthoringLevelMarkerDraw> levelMarkers;
+    std::vector<CachedAuthoringCameraDraw> cameras;
     std::vector<CachedAuthoringSoundEmitterDraw> soundEmitters;
     std::vector<CachedAuthoringTriggerDraw> triggers;
     std::vector<CachedStructuralPrimitiveDraw> structuralPrimitives;

@@ -1,4 +1,6 @@
 #include "game/cutscene/SectorCutsceneRuntime.h"
+#include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorTopologyUnits.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/assets/FontAssets.h"
@@ -313,6 +315,7 @@ bool ResolveLookTargetPoint(
         Vector3& point)
 {
     if (!world.IsAlive(look.entity)
+            || (look.tracking && !IsSectorObjectEnabled(world, look.entity))
             || !world.Has<SectorObjectTransform>(look.entity)) return false;
     const SectorObjectTransform& transform =
             world.Get<SectorObjectTransform>(look.entity);
@@ -426,6 +429,90 @@ size_t BuildWrappedLines(
 }
 
 } // namespace
+
+void LoadSectorCutsceneCameras(SectorCutsceneRuntime& runtime, const SectorTopologyMap& map)
+{
+    runtime.cameras.clear();
+    runtime.cameras.reserve(map.cameras.size());
+    runtime.activeCameraIndex = -1;
+    runtime.cameraMove = {};
+    for (const auto& source : map.cameras) {
+        SectorCutsceneCamera camera;
+        camera.id = source.id;
+        camera.authoredPose = {SectorAuthoringToWorldPosition(source.position),
+                source.yawRadians, source.pitchRadians, source.rollRadians};
+        camera.pose = camera.authoredPose;
+        camera.authoredFov = camera.fov = source.verticalFovDegrees;
+        runtime.cameras.push_back(std::move(camera));
+    }
+}
+
+SectorCutsceneCamera* ActiveSectorCutsceneCamera(SectorCutsceneRuntime& runtime)
+{
+    return runtime.activeCameraIndex >= 0
+            && static_cast<size_t>(runtime.activeCameraIndex) < runtime.cameras.size()
+            ? &runtime.cameras[runtime.activeCameraIndex] : nullptr;
+}
+
+const SectorCutsceneCamera* ActiveSectorCutsceneCamera(const SectorCutsceneRuntime& runtime)
+{
+    return runtime.activeCameraIndex >= 0
+            && static_cast<size_t>(runtime.activeCameraIndex) < runtime.cameras.size()
+            ? &runtime.cameras[runtime.activeCameraIndex] : nullptr;
+}
+
+void ResetSectorCutsceneCameraOverrides(SectorCutsceneRuntime& runtime)
+{
+    runtime.activeCameraIndex = -1;
+    runtime.cameraMove = {};
+    if (runtime.look.cameraIndex >= 0) runtime.look = {};
+    for (auto& camera : runtime.cameras) {
+        camera.pose = camera.authoredPose;
+        camera.fov = camera.authoredFov;
+    }
+}
+
+bool BeginSectorCutsceneCameraMove(SectorCutsceneRuntime& runtime, Vector3 destination,
+        double durationSeconds, uint64_t& token, std::string& error)
+{
+    const auto* camera = ActiveSectorCutsceneCamera(runtime);
+    if (!camera || runtime.cameraMove.active) {
+        error = camera ? "camera already has an active move" : "no level camera is active";
+        return false;
+    }
+    if (!std::isfinite(destination.x) || !std::isfinite(destination.y)
+            || !std::isfinite(destination.z) || !std::isfinite(durationSeconds) || durationSeconds < 0) {
+        error = "camera destination and duration must be finite; duration must be non-negative";
+        return false;
+    }
+    runtime.cameraMove = {};
+    auto& move = runtime.cameraMove;
+    move.cameraIndex = runtime.activeCameraIndex;
+    move.start = camera->pose.position;
+    move.destination = destination;
+    move.durationSeconds = durationSeconds;
+    move.token = token = runtime.nextToken++;
+    move.active = true;
+    error.clear();
+    return true;
+}
+
+void UpdateSectorCutsceneCameraMove(SectorCutsceneRuntime& runtime,
+        engine::ScriptRuntime& scripts, float dt)
+{
+    auto& move = runtime.cameraMove;
+    if (!move.active) return;
+    move.elapsedSeconds += SafeDelta(dt);
+    const float progress = move.durationSeconds <= 0 ? 1.0f
+            : static_cast<float>(move.elapsedSeconds / move.durationSeconds);
+    auto& pose = runtime.cameras[move.cameraIndex].pose;
+    pose.position = Vector3Lerp(move.start, move.destination, Smootherstep(progress));
+    if (progress >= 1) {
+        pose.position = move.destination;
+        move.active = false;
+        engine::ScriptSystemCompleteOperation(scripts, move.operation);
+    }
+}
 
 void InitializeSectorCutsceneRuntime(SectorCutsceneRuntime& runtime)
 {
@@ -620,7 +707,7 @@ bool AdvanceSectorCutscenePlayerCamera(
                     *arrivalTarget, dt);
         }
     }
-    if (runtime.look.active || move.arrived) {
+    if ((runtime.look.active && runtime.look.cameraIndex < 0) || move.arrived) {
         move.facingVelocity = 0.0f;
         return true;
     }
@@ -770,7 +857,7 @@ bool BeginSectorCutsceneLook(
         uint64_t& outToken,
         std::string& error)
 {
-    if (runtime.look.active || (runtime.playerMove.active
+    if (runtime.look.active || (runtime.activeCameraIndex < 0 && runtime.playerMove.active
             && runtime.playerMove.arrivalLook.active)) {
         error = "camera already has an active scripted look";
         return false;
@@ -786,8 +873,10 @@ bool BeginSectorCutsceneLook(
     look.entity = entity;
     look.targetKind = kind;
     look.targetHeight = targetHeight;
-    look.startYawRadians = player.yawRadians;
-    look.startPitchRadians = player.pitchRadians;
+    look.cameraIndex = runtime.activeCameraIndex;
+    const auto* camera = ActiveSectorCutsceneCamera(runtime);
+    look.startYawRadians = camera ? camera->pose.yawRadians : player.yawRadians;
+    look.startPitchRadians = camera ? camera->pose.pitchRadians : player.pitchRadians;
     look.durationSeconds = durationSeconds;
     look.active = true;
     runtime.look = look;
@@ -813,6 +902,26 @@ void CancelSectorCutsceneLook(SectorCutsceneRuntime& runtime, uint64_t token)
     }
 }
 
+bool AdvanceSectorCutsceneLookPose(SectorCutsceneLookState& look, SectorViewPose& pose,
+        Vector3 target, float dt)
+{
+    const Vector3 delta = Vector3Subtract(target, pose.position);
+    const float horizontal = std::sqrt(delta.x * delta.x + delta.z * delta.z);
+    if (horizontal <= MovementEpsilon && std::fabs(delta.y) <= MovementEpsilon) return false;
+    look.elapsedSeconds += SafeDelta(dt);
+    const float progress = look.durationSeconds <= 0 ? 1.0f
+            : static_cast<float>(look.elapsedSeconds / look.durationSeconds);
+    const float eased = Smootherstep(progress);
+    const float targetYaw = look.cameraIndex >= 0 && horizontal <= MovementEpsilon ? pose.yawRadians : std::atan2(delta.z, delta.x);
+    const float rawPitch = std::atan2(delta.y, std::max(horizontal, MovementEpsilon));
+    const float targetPitch = look.cameraIndex >= 0
+            ? std::clamp(rawPitch, -89.9f * DEG2RAD, 89.9f * DEG2RAD) : ClampSectorFpsPitch(rawPitch);
+    pose.yawRadians = look.startYawRadians + ShortestAngleDelta(look.startYawRadians, targetYaw) * eased;
+    pose.pitchRadians = look.startPitchRadians + (targetPitch - look.startPitchRadians) * eased;
+    if (look.cameraIndex < 0) pose.pitchRadians = ClampSectorFpsPitch(pose.pitchRadians);
+    return true;
+}
+
 void UpdateSectorCutsceneLook(
         SectorCutsceneRuntime& runtime,
         engine::World& world,
@@ -828,35 +937,30 @@ void UpdateSectorCutsceneLook(
     if (!ResolveLookTargetPoint(world, assets, look, target)) {
         const engine::ScriptOperationHandle operation = look.operation;
         look.active = false;
-        engine::ScriptSystemFailOperation(
-                scripts, operation, "look target was removed or is not ready");
+        if (look.tracking) TraceLog(LOG_WARNING, "Camera tracking stopped: target removed or unavailable");
+        else engine::ScriptSystemFailOperation(scripts, operation, "look target was removed or is not ready");
         return;
     }
-    const Vector3 eye = SectorFpsControllerEyePosition(
-            player, playerConfig);
-    const Vector3 delta = Vector3Subtract(target, eye);
-    const float horizontal = std::sqrt(delta.x * delta.x + delta.z * delta.z);
-    if (horizontal <= MovementEpsilon && std::fabs(delta.y) <= MovementEpsilon) {
-        const engine::ScriptOperationHandle operation = look.operation;
+    auto* camera = look.cameraIndex >= 0 ? &runtime.cameras[look.cameraIndex] : nullptr;
+    const Vector3 eye = camera ? camera->pose.position : SectorFpsControllerEyePosition(player, playerConfig);
+    SectorViewPose pose{eye, camera ? camera->pose.yawRadians : player.yawRadians,
+            camera ? camera->pose.pitchRadians : player.pitchRadians, 0};
+    if (!AdvanceSectorCutsceneLookPose(look, pose, target, dt)) {
         look.active = false;
-        engine::ScriptSystemFailOperation(scripts, operation,
-                "look target coincides with the camera");
+        if (look.tracking) TraceLog(LOG_WARNING, "Camera tracking stopped: target coincides with camera");
+        else engine::ScriptSystemFailOperation(scripts, look.operation, "look target coincides with the camera");
         return;
     }
-    look.elapsedSeconds += SafeDelta(dt);
-    const float progress = look.durationSeconds <= 0.0
-            ? 1.0f
+    if (camera) {
+        camera->pose.yawRadians = pose.yawRadians;
+        camera->pose.pitchRadians = pose.pitchRadians;
+    } else {
+        player.yawRadians = pose.yawRadians;
+        player.pitchRadians = pose.pitchRadians;
+    }
+    const float progress = look.durationSeconds <= 0 ? 1.0f
             : static_cast<float>(look.elapsedSeconds / look.durationSeconds);
-    const float eased = Smootherstep(progress);
-    const float targetYaw = std::atan2(delta.z, delta.x);
-    const float targetPitch = ClampSectorFpsPitch(
-            std::atan2(delta.y, std::max(horizontal, MovementEpsilon)));
-    player.yawRadians = look.startYawRadians
-            + ShortestAngleDelta(look.startYawRadians, targetYaw) * eased;
-    player.pitchRadians = ClampSectorFpsPitch(
-            look.startPitchRadians
-            + (targetPitch - look.startPitchRadians) * eased);
-    if (progress >= 1.0f) {
+    if (progress >= 1.0f && !look.tracking) {
         const engine::ScriptOperationHandle operation = look.operation;
         look.active = false;
         engine::ScriptSystemCompleteOperation(scripts, operation);

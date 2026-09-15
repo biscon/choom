@@ -119,6 +119,10 @@ bool SelectPickTarget(
             SelectSectorEditorAuthoringLevelMarkerTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
                     && context.selectionState.selectedAuthoring.levelMarkerId == target.id;
+        case SectorEditorPickKind::Camera:
+            SelectSectorEditorAuthoringCameraTarget(selectionContext, target.id);
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Camera
+                    && context.selectionState.selectedAuthoring.cameraId == target.id;
         case SectorEditorPickKind::SoundEmitter:
             ClearSectorEditorSelection(selectionContext);
             SelectSectorEditorAuthoringSoundEmitter(
@@ -160,6 +164,8 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
                     context.authoringGraph,
                     context.selectionState,
                     target.id);
+        } else if (target.kind == SectorEditorPickKind::Camera) {
+            SetHoveredSectorEditorAuthoringCamera(context.authoringGraph, context.selectionState, target.id);
         } else if (target.kind == SectorEditorPickKind::StructuralPrimitive) {
             SetHoveredSectorEditorAuthoringStructuralPrimitive(
                     context.authoringGraph,
@@ -333,6 +339,10 @@ bool UpdateSelectTool(SectorEditorToolContext& context)
                                 context.selectionState.selectedAuthoringFaceAnchorIds.size() == 1
                                         ? ""
                                         : "s");
+                    } else if (target.kind == SectorEditorPickKind::Camera && context.cameraEditing) {
+                        const auto* camera = context.cameraEditing->Selected();
+                        context.statusText = TextFormat("Selected camera %s (%d/%d)",
+                                camera ? camera->referenceId.c_str() : "?", cycleIndex + 1, cycleCount);
                     } else {
                         context.statusText = cycleCount > 1 && cycleIndex >= 0
                             ? TextFormat(

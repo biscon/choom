@@ -44051,6 +44051,51 @@
         "y": 0.0,
         "z": 0,
         "orientationDegrees": 180.0
+      },
+      {
+        "editorId": 34,
+        "id": "recovery_marker_1",
+        "x": -1472,
+        "y": 0.0,
+        "z": 1024,
+        "orientationDegrees": 85.0
+      },
+      {
+        "editorId": 35,
+        "id": "recovery_marker_2",
+        "x": -1360,
+        "y": 0.0,
+        "z": 1056,
+        "orientationDegrees": 87.0
+      },
+      {
+        "editorId": 36,
+        "id": "recovery_marker_3",
+        "x": -1408,
+        "y": 0.0,
+        "z": 528,
+        "orientationDegrees": 145.0
+      },
+      {
+        "editorId": 37,
+        "id": "recovery_marker_4",
+        "x": -1600,
+        "y": 0.0,
+        "z": 1056,
+        "orientationDegrees": -45.0
+      }
+    ],
+    "cameras": [
+      {
+        "editorId": 1,
+        "id": "bed_camera_1",
+        "x": -1678,
+        "y": 6.367375373840332,
+        "z": 1226,
+        "yawDegrees": -89.8971176147461,
+        "pitchDegrees": 21.14223289489746,
+        "rollDegrees": 10.0,
+        "verticalFovDegrees": 65.0
       }
     ],
     "nextPathId": 2,

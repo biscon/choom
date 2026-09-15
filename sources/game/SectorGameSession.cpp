@@ -1213,7 +1213,10 @@ bool SectorGameSession::StartNew(
     running = true;
     paused = false;
     consoleInputCaptured = false;
+    cameraLiquidState = {};
+    cameraViewSectorId = 0;
     InitializeSectorCutsceneRuntime(cutscene);
+    cutscene.playerFov = scene.Renderer().RenderCamera().fovy;
     engine::BeginLoadDialogueVoices(context.assets, dialogueVoices, ASSETS_PATH);
     InitializeSectorScriptHost(
             scriptHost,
@@ -1756,8 +1759,8 @@ void SectorGameSession::Update(
             topologyMap,
             dt,
             &playerPosition,
-            controller.fpsControllerState.currentSectorId,
-            controller.liquidMovement.cameraSubmerged,
+            HasActiveLevelCamera() ? cameraViewSectorId : controller.fpsControllerState.currentSectorId,
+            ViewLiquidMovementState().cameraSubmerged,
             applicationSettings != nullptr
                     ? applicationSettings->playerLiquids.audio
                     : PlayerLiquidAudioApplicationSettings{},
@@ -1974,6 +1977,7 @@ void SectorGameSession::Update(
             previousPositionXZ,
             scripts,
             dt);
+    UpdateSectorCutsceneCameraMove(cutscene, scripts, dt);
     UpdateSectorCutsceneLook(
             cutscene,
             context.world,
@@ -2406,7 +2410,7 @@ void SectorGameSession::Update(
             NormalizeSectorFpsControllerConfig(
                     controller.fpsControllerConfig);
     scene.Renderer().UpdateVisibilityDebug(
-            controller.fpsControllerState.currentSectorId,
+            ActiveSectorCutsceneCamera(cutscene) ? 0 : controller.fpsControllerState.currentSectorId,
             ClampRuntimeVisibilitySeedRadiusWorld(
                     visibilityConfig.playerRadius),
             true,
@@ -2533,7 +2537,7 @@ void SectorGameSession::UpdateLoading(
                         applicationSettings->playerFlashlight,scene.Renderer().RenderCamera(),
                         controller.fpsControllerState.currentSectorId,0.0f,flashlightLight);
         scene.Renderer().SetPlayerFlashlight(flashlightVisible ? &flashlightLight : nullptr);
-        scene.Renderer().UpdateVisibilityDebug(controller.fpsControllerState.currentSectorId,
+        scene.Renderer().UpdateVisibilityDebug(ActiveSectorCutsceneCamera(cutscene) ? 0 : controller.fpsControllerState.currentSectorId,
                 ClampRuntimeVisibilitySeedRadiusWorld(controller.fpsControllerConfig.playerRadius),
                 true,&objects.dynamicPortalBlockers,&context.world);
         complete=scene.PrepareInitialReflections(context,topologyMap);
@@ -2610,7 +2614,8 @@ void SectorGameSession::RenderViewmodel(
         engine::AssetManager& assets,
         SectorSceneRuntime& scene)
 {
-    if (!running || IsLoadScreenOpaque() || keypad.active || note.active) {
+    if (!running || IsLoadScreenOpaque() || keypad.active || note.active
+            || ActiveSectorCutsceneCamera(cutscene)) {
         return;
     }
     fpsPlayer.Render(
@@ -3096,6 +3101,25 @@ bool SectorGameSession::BuildCollisionAndPlayer(
 
 void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
 {
+    if (const auto* camera = ActiveSectorCutsceneCamera(cutscene)) {
+        SectorViewPose pose = camera->pose;
+        pose.pitchRadians = std::clamp(pose.pitchRadians + screenShake.rotationDegrees.x * DEG2RAD,
+                -89.9f * DEG2RAD, 89.9f * DEG2RAD);
+        pose.yawRadians += screenShake.rotationDegrees.y * DEG2RAD;
+        pose.rollRadians += screenShake.rotationDegrees.z * DEG2RAD;
+        cameraViewSectorId = collision.sectorCollisionWorldValid
+                ? collision.sectorCollisionWorld.FindSectorContainingPoint({pose.position.x, pose.position.z}) : 0;
+        const auto config = NormalizeSectorFpsControllerConfig(controller.fpsControllerConfig);
+        cameraLiquidState.contact = SampleSectorLiquidContact(topologyMap, cameraViewSectorId,
+                {pose.position.x, pose.position.y - config.eyeHeight, pose.position.z}, config);
+        cameraLiquidState.cameraSubmerged = cameraLiquidState.contact.eyeSubmerged;
+        scene.Renderer().SetVerticalFovDegrees(camera->fov);
+        scene.Renderer().ApplyRendererPose(pose, false);
+        return;
+    }
+    if (applicationSettings) cutscene.playerFov = FpsVerticalFovDegrees(
+            applicationSettings->graphics.horizontalFovDegrees, 16.0f / 9.0f);
+    scene.Renderer().SetVerticalFovDegrees(cutscene.playerFov);
     const SectorViewPose basePose = SectorFpsControllerVisualPose(
             controller.fpsControllerState,
             SectorDuctViewControllerConfig(

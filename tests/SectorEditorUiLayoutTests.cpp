@@ -8,6 +8,7 @@
 #include "sector_editor/preview/SectorEditorLightProxyPlacement.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
+#include "sector_editor/inspector/SectorEditorCameraInspector.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
 #include "sector_editor/items/SectorEditorItemEditorPanel.h"
@@ -790,6 +791,21 @@ void TestMainMenuWorkspaceAndToolsLayouts()
                   game::EditorHeight),
           "bottom status panel remains anchored to the viewport bottom");
 
+    for (float width : {180.0f, 240.0f, 320.0f}) {
+        for (float row : {24.0f, 46.0f}) {
+            game::CameraEditingUiState cameraUi;
+            const float normal = game::MeasureSectorEditorCameraInspectorContentHeight(cameraUi, row, 8);
+            cameraUi.referenceIdError = "ID already exists";
+            const float expanded = game::MeasureSectorEditorCameraInspectorContentHeight(cameraUi, row, 8);
+            Check(Near(expanded - normal, row * 2 + 8), "camera inspector budgets its validation message");
+            const auto field = game::BuildSectorEditorCameraFieldLayout(38, width, row, 8);
+            Check(field.labelRect.y + field.labelRect.height < field.inputRect.y
+                    && field.inputRect.width == width, "camera labels stack above fields at narrow pane sizes");
+            const float deleteY = 38 + (std::size(game::SectorEditorCameraFields) + 1)
+                    * game::SectorEditorCameraFieldHeight(row, 8);
+            Check(normal >= deleteY + row + 8, "camera inspector fully exposes Delete with bottom padding");
+        }
+    }
     const float rowH = 46.0f;
     const float gap = 10.0f;
     const float collapsed = game::MeasureSectorEditorToolsContentHeight(
@@ -803,7 +819,7 @@ void TestMainMenuWorkspaceAndToolsLayouts()
     Check(Near(itemExpanded - collapsed, rowH + gap),
           "tools content height includes the conditional Item definition row");
     Check(Near(collapsed, 26.0f + 5.0f * (rowH + gap)
-                  + 22.0f + 26.0f + 22.0f * (rowH + gap)
+                  + 22.0f + 26.0f + 23.0f * (rowH + gap)
                   + 22.0f + 26.0f + gap + 2.0f * (rowH + gap)
                   + 22.0f + (rowH + gap) + 12.0f),
           "tools content height reaches the final Grid control with padding");

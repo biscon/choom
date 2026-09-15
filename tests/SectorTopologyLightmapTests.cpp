@@ -1608,6 +1608,10 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(npcMap) == hash,
           "hash excludes NPC definition, identity, transform, patrol, scale, and runtime shadow changes");
 
+    game::SectorTopologyMap cameraMap = base;
+    cameraMap.cameras.push_back({1, "bed", {24, 16, 24}, 1, 0.5f, 0.2f, 50});
+    Check(game::ComputeSectorLightmapSourceHash(cameraMap) == hash,
+          "camera identity, position, rotation and FOV do not affect baked lighting");
     game::SectorTopologyMap markerMap = base;
     markerMap.levelMarkers.push_back(game::SectorCompiledLevelMarker{
             1, "default", Vector3{24.0f, 0.0f, 24.0f}, 1.5f});

@@ -149,6 +149,10 @@ public:
     const SectorLiquidMovementState& LiquidMovementState() const {
         return controller.liquidMovement;
     }
+    bool HasActiveLevelCamera() const { return ActiveSectorCutsceneCamera(cutscene) != nullptr; }
+    const SectorLiquidMovementState& ViewLiquidMovementState() const {
+        return HasActiveLevelCamera() ? cameraLiquidState : controller.liquidMovement;
+    }
     void SetGodMode(bool enabled);
     void SetInvisible(bool enabled) { invisible = enabled; }
     void SetAiFrozen(bool frozen) { aiFrozen = frozen; }
@@ -276,6 +280,8 @@ private:
     engine::ScriptRuntime scripts;
     SectorScriptHost scriptHost;
     SectorCutsceneRuntime cutscene;
+    SectorLiquidMovementState cameraLiquidState;
+    int cameraViewSectorId = 0;
     mutable SectorDialogueRuntime dialogue;
     engine::DialogueVoiceLibrary dialogueVoices;
     SectorGameNavigationDebugState navigationDebug;

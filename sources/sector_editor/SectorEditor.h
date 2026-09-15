@@ -49,7 +49,9 @@
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorSurfaceHeightEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/cameras/SectorEditorCameraEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
+#include "sector_editor/services/cameras/SectorEditorCameraEditingState.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
@@ -486,6 +488,8 @@ private:
     SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
+    bool StartCameraPilot();
+    bool FinishCameraPilot(bool apply);
     bool StartLightPilot();
     bool ApplyLightPilotFromPreviewPose();
     void CancelLightPilotWithPreviewRestore(const char* message);
@@ -660,10 +664,13 @@ private:
     SectorEditorPathEditingState pathEditingState;
     std::optional<SectorEditorPathEditingService> pathEditingService;
     LevelMarkerEditingState levelMarkerEditingState;
+    CameraEditingState cameraEditingState;
     LevelMarkerEditingUiState levelMarkerEditingUiState;
+    CameraEditingUiState cameraEditingUiState;
     SectorEditorAuthoringFaceMergeState authoringFaceMergeState;
     std::optional<SectorEditorAuthoringFaceMergeService> authoringFaceMergeService;
     std::optional<SectorEditorLevelMarkerEditingService> levelMarkerEditingService;
+    std::optional<SectorEditorCameraEditingService> cameraEditingService;
     SoundEmitterEditingState soundEmitterEditingState;
     SoundEmitterEditingUiState soundEmitterEditingUiState;
     std::optional<SectorEditorSoundEmitterEditingService> soundEmitterEditingService;
