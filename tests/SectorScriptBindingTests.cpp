@@ -442,7 +442,7 @@ function cameraScene()
     assert(setCameraFov(55))
     assert(not setCameraFov(180))
     assert(not setCameraPosition(0/0, 2, 3))
-    move = assert(startMoveCamera(5, 2, 3, 1000))
+    move = assert(startMoveCamera(4, 0, 0, 1000))
     assert(not startMoveCamera(6, 2, 3, 1000))
     assert(not setCameraPosition(4, 2, 3))
     assert(await(move))
@@ -497,6 +497,163 @@ end
     TeleportConsole(fixture, "assert(finished)");
     assert(!game::ActiveSectorCutsceneCamera(fixture.cutscene) && fixture.cutscene.controlsEnabled);
     assert(fixture.cutscene.cameras[0].pose.position.x == 0 && fixture.cutscene.cameras[0].fov == 60);
+}
+
+void CameraRelativeAndMarkerMovementUsesEasing()
+{
+    for (const bool async : {false, true}) {
+        for (const bool marker : {false, true}) {
+            for (const int duration : {0, 1000}) {
+                NpcScriptFixture fixture;
+                fixture.host.controls.setControlsEnabled =
+                        [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+                fixture.map.sectors[0].floorZ = 16.0f;
+                fixture.map.sectors[0].ceilingZ = 64.0f;
+                assert(fixture.objects.objectSectorLookupWorld.BuildFromTopology(fixture.map));
+                fixture.map.levelMarkers[0].position.y = 60.0f;
+                fixture.map.cameras.push_back({1, "test", {0, 16, 0}, 0, 0, 0, 60});
+                game::LoadSectorCutsceneCameras(fixture.cutscene, fixture.map);
+                const auto playerBefore = fixture.playerState;
+                const auto queriesBefore = fixture.navigation.Counters().successfulQueries;
+                const std::string arguments = marker
+                        ? "'run_target', " + std::to_string(duration) + ", 1.65"
+                        : "4, 1, -2, " + std::to_string(duration);
+                const std::string move = async
+                        ? "op = assert(startMoveCamera(" + arguments + ")); assert(await(op)); "
+                        : "assert(moveCamera(" + arguments + ")); ";
+                fixture.files.Write("function init() end\nfunction cameraScene() assert(startCutscene()); "
+                        "assert(setActiveCamera('test')); assert(setCameraPosition(1, 2, 3)); "
+                        "assert(setCameraRotation(90, 20, 10)); " + move
+                        + (duration == 0 ? move : "")
+                        + "completed = true; delay(10000); end");
+                assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+                TeleportConsole(fixture, "assert(startScript('cameraScene'))");
+                engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.0f);
+                auto* camera = game::ActiveSectorCutsceneCamera(fixture.cutscene);
+                assert(camera);
+                const Vector3 start{1, 2, 3};
+                const Vector3 destination = marker ? Vector3{14, 3.65f, 8} : Vector3{5, 3, 1};
+                const auto rotation = camera->pose;
+                if (duration > 0) {
+                    assert(Vector3Distance(camera->pose.position, start) < 0.0001f);
+                    assert(Vector3Distance(fixture.cutscene.cameraMove.destination, destination) < 0.0001f);
+                    // Resolve the destination once, even if the marker data changes later.
+                    fixture.map.levelMarkers[0].position = {32, 0, 32};
+                    const float easedFractions[] = {0.103515625f, 0.5f, 0.896484375f, 1.0f};
+                    for (const float fraction : easedFractions) {
+                        game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 0.25f);
+                        assert(Vector3Distance(camera->pose.position,
+                                Vector3Lerp(start, destination, fraction)) < 0.0001f);
+                    }
+                    assert(!fixture.cutscene.cameraMove.active);
+                    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.0f);
+                } else {
+                    // Repeated numeric offsets accumulate; marker destinations stay fixed.
+                    const Vector3 expected = marker ? destination : Vector3{9, 4, -1};
+                    assert(Vector3Distance(camera->pose.position, expected) < 0.0001f);
+                    assert(!fixture.cutscene.cameraMove.active);
+                }
+                TeleportConsole(fixture, "assert(completed)");
+                if (async) TeleportConsole(fixture, "assert(operationStatus(op) == 'succeeded')");
+                assert(camera->pose.yawRadians == rotation.yawRadians
+                        && camera->pose.pitchRadians == rotation.pitchRadians
+                        && camera->pose.rollRadians == rotation.rollRadians);
+                assert(Vector3Distance(fixture.playerState.feetPosition, playerBefore.feetPosition) == 0);
+                assert(fixture.playerState.currentSectorId == playerBefore.currentSectorId
+                        && fixture.playerState.verticalVelocity == playerBefore.verticalVelocity);
+                assert(fixture.navigation.Counters().successfulQueries == queriesBefore);
+            }
+        }
+    }
+}
+
+void CameraMoveValidationAndMarkerCancellation()
+{
+    NpcScriptFixture fixture;
+    fixture.host.controls.setControlsEnabled =
+            [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+    fixture.map.cameras.push_back({1, "test", {0, 16, 0}, 0, 0, 0, 60});
+    game::LoadSectorCutsceneCameras(fixture.cutscene, fixture.map);
+    fixture.files.Write(R"lua(
+function init() end
+function cameraScene()
+    assert(startCutscene())
+    assert(not moveCamera(0, 0, 0, 1)) -- Player view has no level camera to move.
+    assert(setActiveCamera('test'))
+    assert(setCameraPosition(1, 2, 3))
+    for _, call in ipairs({moveCamera, startMoveCamera}) do
+        for _, args in ipairs({{}, {1, 2}, {1, 2, 3, 4, 5}, {'run_target', 1000},
+                {'run_target', 1000, 1, 2}, {'missing', 1000, 1}, {'', 1000, 1},
+                {'outside_target', 1000, 1}, {'run_target', -1, 1},
+                {'run_target', math.huge, 1}, {'run_target', 1, 0/0},
+                {'run_target', 1, math.huge}, {'run_target', 1, 1e100},
+                {0/0, 0, 0, 1000}, {0, math.huge, 0, 1000},
+                {0, 0, 1e100, 1000}, {0, 0, 0, -1}, {0, 0, 0, math.huge}}) do
+            local result, reason = call(table.unpack(args))
+            assert(not result and type(reason) == 'string')
+        end
+        assert(not pcall(call, false, 0, 0, 1))
+        assert(not pcall(call, 0, '0', 0, 1))
+        assert(not pcall(call, 'run_target', '1000', 1))
+    end
+    validationDone = true
+    delay(10)
+    assert(not startMoveCamera('run_target', 1000, 1)) -- Lookup is disabled by fixture.
+    unavailableChecked = true
+    delay(10)
+    assert(not startMoveCamera('run_target', 1000, 1)) -- Map is unavailable.
+    mapChecked = true
+    delay(10)
+    assert(setCameraPosition(3e38, 2, 3))
+    assert(not startMoveCamera(3e38, 0, 0, 1000)) -- Finite operands overflow the destination.
+    assert(setCameraPosition(1, 2, 3))
+    assert(trackCameraNpc('script_guard', 500, 0.7))
+    pending = assert(startMoveCamera('run_target', 1000, 1.65))
+    assert(not moveCamera('missing', 1000, 1))
+    assert(not startMoveCamera(1, 0, 0, 1000))
+    assert(operationStatus(pending) == 'pending')
+    pendingStarted = true
+    delay(10)
+    assert(cancelOperation(pending))
+    assert(operationStatus(pending) == 'cancelled')
+    cancelled = true
+    delay(10)
+    assert(moveCamera('walk_target', 0, -0.25))
+    instant = assert(startMoveCamera('walk_target', 0, -0.5))
+    assert(await(instant))
+    negativeOffsetDone = true
+    delay(10000)
+end
+)lua");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    TeleportConsole(fixture, "assert(startScript('cameraScene'))");
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.0f);
+    TeleportConsole(fixture, "assert(validationDone)");
+    auto* camera = game::ActiveSectorCutsceneCamera(fixture.cutscene);
+    assert(camera && Vector3Distance(camera->pose.position, {1, 2, 3}) == 0);
+    assert(!fixture.cutscene.cameraMove.active && fixture.cutscene.nextToken == 1);
+    fixture.objects.objectSectorLookupWorldValid = false;
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(unavailableChecked)");
+    fixture.objects.objectSectorLookupWorldValid = true;
+    fixture.host.map = nullptr;
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(mapChecked)");
+    fixture.host.map = &fixture.map;
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(pendingStarted)");
+    assert(fixture.cutscene.look.active && fixture.cutscene.look.tracking);
+    assert(Vector3Distance(fixture.cutscene.cameraMove.destination, {14, 1.65f, 8}) < 0.0001f);
+    game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 0.25f);
+    const Vector3 cancelledPosition = camera->pose.position;
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(cancelled)");
+    assert(!fixture.cutscene.cameraMove.active && fixture.cutscene.look.tracking);
+    game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 10.0f);
+    assert(Vector3Distance(camera->pose.position, cancelledPosition) == 0);
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(negativeOffsetDone)");
+    assert(Vector3Distance(camera->pose.position, {4, -0.5f, 8}) < 0.0001f);
 }
 
 void CameraTrackingMathAndOwnerRecovery()
@@ -3741,6 +3898,8 @@ end
 void RunSectorScriptBindingTests()
 {
     CameraBindingsMovementTrackingAndCleanup();
+    CameraRelativeAndMarkerMovementUsesEasing();
+    CameraMoveValidationAndMarkerCancellation();
     CameraTrackingMathAndOwnerRecovery();
     ObjectEnabledBindingsAndNpcSuspension();
     DisablingNpcCancelsAnimationAndConversation();

@@ -14188,8 +14188,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -14317,7 +14316,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "3e7db0b920af14bb",
+    "sourceHash": "c96e57fa3a469756",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -14325,19 +14324,19 @@
         0.0
       ],
       "rgbMax": [
-        1.587890625,
-        1.564453125,
-        1.564453125
+        1.6025390625,
+        1.6025390625,
+        1.6025390625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 179
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 626
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "3e7db0b920af14bb",
+      "sourceHash": "c96e57fa3a469756",
       "count": 3946,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -14350,24 +14349,31 @@
           0.04647058993577957
         ],
         "rgbMax": [
-          2.150747299194336,
-          1.9708508253097534,
-          1.8839268684387207
+          2.1541080474853516,
+          1.9739466905593872,
+          1.8868657350540161
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23676,
-        "rgbChannelsAboveOne": 23
+        "rgbChannelsAboveOne": 21
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "3e7db0b920af14bb",
+      "sourceHash": "c96e57fa3a469756",
       "modelCount": 141,
       "objectCount": 399,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1
@@ -44071,9 +44077,9 @@
       {
         "editorId": 36,
         "id": "recovery_marker_3",
-        "x": -1408,
+        "x": -1376,
         "y": 0.0,
-        "z": 528,
+        "z": 560,
         "orientationDegrees": 145.0
       },
       {

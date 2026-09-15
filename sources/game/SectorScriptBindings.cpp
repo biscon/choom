@@ -1263,18 +1263,96 @@ int LuaSetCameraPosition(lua_State* state) { return SetCameraTransform(state, 0)
 int LuaSetCameraRotation(lua_State* state) { return SetCameraTransform(state, 1); }
 int LuaSetCameraFov(lua_State* state) { return SetCameraTransform(state, 2); }
 
+bool ResolveCameraMoveArguments(lua_State* state, const SectorScriptHost& host,
+        Vector3& destination, double& seconds, std::string& error)
+{
+    const bool markerTarget = lua_type(state, 1) == LUA_TSTRING;
+    if (lua_gettop(state) != (markerTarget ? 3 : 4)) {
+        error = "camera movement expects dx, dy, dz, durationMs or markerId, durationMs, floorOffsetY";
+        return false;
+    }
+    const auto* camera = ActiveSectorCutsceneCamera(*host.cutscene);
+    if (camera == nullptr) {
+        error = "no level camera is active";
+        return false;
+    }
+    for (int i = markerTarget ? 2 : 1; i <= lua_gettop(state); ++i) {
+        luaL_checktype(state, i, LUA_TNUMBER);
+    }
+    const double milliseconds = lua_tonumber(state, markerTarget ? 2 : 4);
+    if (!std::isfinite(milliseconds) || milliseconds < 0.0) {
+        error = "camera duration must be finite and non-negative";
+        return false;
+    }
+    seconds = milliseconds / 1000.0;
+    const auto validCoordinate = [](double value) {
+        return std::isfinite(value) && std::fabs(value) <= std::numeric_limits<float>::max();
+    };
+    double x = camera->pose.position.x;
+    double y = camera->pose.position.y;
+    double z = camera->pose.position.z;
+    if (markerTarget) {
+        size_t length = 0;
+        const char* rawId = lua_tolstring(state, 1, &length);
+        const std::string id{rawId, length};
+        const double offset = lua_tonumber(state, 3);
+        if (id.empty() || !validCoordinate(offset)) {
+            error = "camera marker ID must not be empty and floor offset must be a finite world coordinate";
+            return false;
+        }
+        const auto* marker = host.map ? FindSectorCompiledLevelMarker(*host.map, id) : nullptr;
+        if (marker == nullptr) {
+            error = "level marker was not found";
+            return false;
+        }
+        if (!host.runtimeObjects || !host.runtimeObjects->objectSectorLookupWorldValid) {
+            error = "camera marker floor lookup is unavailable";
+            return false;
+        }
+        const Vector3 markerPosition = SectorAuthoringToWorldPosition(marker->position);
+        const auto& world = host.runtimeObjects->objectSectorLookupWorld;
+        const int sectorId = world.FindSectorContainingPoint({markerPosition.x, markerPosition.z});
+        SectorCollisionHeights heights;
+        if (!world.GetSectorFloorCeiling(sectorId, &heights)) {
+            error = "camera marker is outside a sector with a known floor";
+            return false;
+        }
+        x = markerPosition.x;
+        y = static_cast<double>(heights.floorZ) + offset;
+        z = markerPosition.z;
+    } else {
+        const double dx = lua_tonumber(state, 1);
+        const double dy = lua_tonumber(state, 2);
+        const double dz = lua_tonumber(state, 3);
+        if (!validCoordinate(dx) || !validCoordinate(dy) || !validCoordinate(dz)) {
+            error = "camera offsets must be finite world coordinates";
+            return false;
+        }
+        x += dx;
+        y += dy;
+        z += dz;
+    }
+    if (!validCoordinate(x) || !validCoordinate(y) || !validCoordinate(z)) {
+        error = "camera destination exceeds finite world coordinates";
+        return false;
+    }
+    destination = {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
+    return true;
+}
+
 int StartCameraMove(lua_State* state, bool async)
 {
     const int originalTop = lua_gettop(state);
-    const Vector3 destination{static_cast<float>(luaL_checknumber(state, 1)),
-            static_cast<float>(luaL_checknumber(state, 2)), static_cast<float>(luaL_checknumber(state, 3))};
-    const double seconds = luaL_checknumber(state, 4) / 1000.0;
     auto& host = HostFromLua(state);
     if (!OwnsCameraControls(state, host))
         return PushCutsceneStartError(state, async, "camera movement requires the task owning locked controls");
     auto& scripts = engine::ScriptSystemRuntimeFromLua(state);
     uint64_t token = 0;
     std::string error;
+    Vector3 destination{};
+    double seconds = 0.0;
+    if (!ResolveCameraMoveArguments(state, host, destination, seconds, error))
+        return PushCutsceneStartError(state, async, error);
     if (!BeginSectorCutsceneCameraMove(*host.cutscene, destination, seconds, token, error))
         return PushCutsceneStartError(state, async, error);
     if (seconds == 0 && !async) {

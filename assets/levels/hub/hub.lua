@@ -222,7 +222,7 @@ function intro_trigger_1()
     delay(1500)
     movePlayer("recovery_marker_2", "walk", 1.0, {
         lookAtNpc = "elin",
-        turnDurationMs = 1750,
+        turnDurationMs = 2750,
         targetHeight = 0.7,
     })
     assert(await(elinArrival))
@@ -242,17 +242,38 @@ function intro_trigger_1()
     setPlayerHealth(35)
     assert(teleportNpc("elin", "recovery_marker_4"))
     setActiveCamera("bed_camera_1")
-    assert(trackCameraNpc("elin", 2000, 0.75))
     fadeIn(2000)
+    assert(trackCameraNpc("elin", 2000, 0.75))
+    delay(2000)
+    startPlayNpcAnimation("elin", "Talking_2")
     say("elin", "Lay still and relax, I think I saw a medkit over here.")
     moveNpc("elin", "recovery_marker_3", "walk", 1.5, true)
     startSay("elin", "Found it!", "happy")
     startPlayNpcAnimation("elin", "Reaching Out", 1000)
     delay(1500)
     moveNpc("elin", "recovery_marker_4", "walk", 1.5, true)
-    delay(5000)
+    startPlayNpcAnimation("elin", "Reaching Out", 4000)
+    fadeOut(1950)
+    delay(2000)
+    setPlayerHealth(50)
+    say("elin", "There much better, now get a little rest.", "relieved")
+    delay(2000)
+    text("A while later...", CENTER, 2000)
+
+    assert(stopCameraTracking())
+    setCameraRotation(-89.897, 21.142, 0)
+    assert(trackCameraNpc("elin", 0, 0.75))
+
+    fadeIn(4000)
+    startPlayNpcAnimation("elin", "Thankful")
+    say("elin", "Finally awake, you look much better now.", "happy")
+    moveNpc("elin", "intro_marker_3", "walk", 1.5, true)
+
+    moveCamera("intro_marker_4", 5000, 1.65)
+    teleportPlayer("intro_marker_4")
+    stopCameraTracking()
+    setActiveCamera("player")
     assert(endCutscene())
-    --startPlayNpcAnimation("elin", "Thankful")
 end
 
 function entrance_trigger()

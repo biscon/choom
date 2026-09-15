@@ -1248,8 +1248,10 @@ setActiveCamera(cameraId) -> true | false, reason
 setCameraPosition(x, y, z) -> true | false, reason
 setCameraRotation(yawDegrees, pitchDegrees, rollDegrees) -> true | false, reason
 setCameraFov(verticalDegrees) -> true | false, reason
-moveCamera(x, y, z, durationMs) -> true | false, reason
-startMoveCamera(x, y, z, durationMs) -> operation | nil, reason
+moveCamera(dx, dy, dz, durationMs) -> true | false, reason
+moveCamera(markerId, durationMs, floorOffsetY) -> true | false, reason
+startMoveCamera(dx, dy, dz, durationMs) -> operation | nil, reason
+startMoveCamera(markerId, durationMs, floorOffsetY) -> operation | nil, reason
 trackCameraNpc(instanceId [, turnDurationMs [, targetHeight]]) -> true | false, reason
 stopCameraTracking() -> true | false, reason
 ```
@@ -1275,7 +1277,7 @@ camera is a no-op. Switching views cancels outgoing standalone look/tracking
 and camera-movement operations; scripted player movement and its attached
 arrival look remain tied to the player.
 
-**Units:** camera scripting positions are absolute **world units**, with Y up.
+**Units:** camera scripting uses **world units**, with Y up.
 Editor position fields use **map units**; currently 8 map units equal 1 world
 unit. Rotation uses degrees: yaw 0 faces +X, yaw 90 faces +Z, and positive pitch
 looks up. Pitch is limited to −89.9..89.9 degrees; vertical FOV is 1..179 degrees.
@@ -1283,9 +1285,30 @@ All numeric arguments must be finite. Durations use non-negative milliseconds.
 `setCameraFov` edits vertical FOV, independently of the player's horizontal-FOV
 setting.
 
+`moveCamera(dx, dy, dz, durationMs)` adds offsets along the **world axes** to the
+active camera's current position when the call starts. Camera rotation does not
+rotate these offsets; repeated calls accumulate movement. Numeric camera movement
+previously accepted absolute destinations; update existing calls accordingly.
+`setCameraPosition(x, y, z)` still sets an absolute world position.
+
+`moveCamera(markerId, durationMs, floorOffsetY)` moves to the level marker's X/Z
+position and the containing sector's floor height plus `floorOffsetY`. The offset
+is required and uses world units. The marker's authored Y and rotation are
+ignored. Negative offsets are allowed. An unknown marker, marker outside a sector,
+unavailable floor lookup, non-finite values, or coordinate overflow fails without
+changing the camera or its current operation. The destination is resolved once
+when movement starts. `startMoveCamera` supports both forms with the same meanings.
+
+```lua
+moveCamera(2, 0.5, 0, 1000) -- Offset by +2 X and +0.5 Y over one second.
+moveCamera("marker_1", 1000, 1.65) -- Finish 1.65 world units above the sector floor.
+local move = startMoveCamera("marker_2", 2000, 1.65)
+await(move)
+```
+
 Camera movement follows a straight line with the same quintic smoother-step
-style as scripted looks, without navigation or collision. Zero-duration movement
-applies immediately. `startMoveCamera` supports `await`, `operationStatus`, and
+ease-in/ease-out as scripted looks, without navigation or collision. Zero-duration
+movement applies immediately. `startMoveCamera` supports `await`, `operationStatus`, and
 `cancelOperation`. Cancellation holds the last reached position. One camera move
 and one aiming operation may run together; competing operations fail. Position
 and rotation setters fail while an operation owns that channel. FOV can change
