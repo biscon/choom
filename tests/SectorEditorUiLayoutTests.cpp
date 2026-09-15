@@ -17,6 +17,7 @@
 
 #include <cmath>
 #include <array>
+#include <cstdio>
 #include <iostream>
 
 namespace {
@@ -317,24 +318,110 @@ void TestModelFilenameExtraction()
           "empty model path produces an empty filename");
 }
 
-void TestAudioAssetPickerScrollSession()
+void TestAudioAssetPickerSession()
 {
     game::SectorEditorAudioAssetPickerSessionState session;
     game::SectorEditorAudioAssetPickerState firstPicker;
-    firstPicker.scroll.offset = Vector2{0.0f, 144.0f};
-    game::RememberSectorEditorAudioAssetPickerScroll(firstPicker, session);
+    firstPicker.open = true;
+    firstPicker.paths = {"sfx/door.wav", "sfx/window.wav"};
+    firstPicker.selectedPathIndex = 1;
+    firstPicker.browsing.scroll.offset = Vector2{0.0f, 144.0f};
+    std::snprintf(firstPicker.browsing.filterBuffer,
+            sizeof(firstPicker.browsing.filterBuffer), "%s", "sfx/");
+    game::RememberSectorEditorAudioAssetPickerSession(firstPicker, session);
 
     game::SectorEditorAudioAssetPickerState reopenedPicker;
-    game::RestoreSectorEditorAudioAssetPickerScroll(reopenedPicker, session);
-    Check(Near(reopenedPicker.scroll.offset.y, 144.0f),
-          "audio picker restores its prior in-memory scroll offset");
+    game::RestoreSectorEditorAudioAssetPickerSession(reopenedPicker, session);
+    Check(Near(reopenedPicker.browsing.scroll.offset.y, 144.0f)
+                    && std::string(reopenedPicker.browsing.filterBuffer) == "sfx/"
+                    && reopenedPicker.browsing.selectedPath == "sfx/window.wav",
+          "audio picker restores filter, selection, and scroll from memory");
+    reopenedPicker.open = true;
+    reopenedPicker.allPaths = firstPicker.paths;
+    game::RebuildSectorEditorAudioAssetPickerOptions(reopenedPicker, "sfx/door.wav");
+    Check(reopenedPicker.selectedPathIndex == 1,
+          "reopening prefers the remembered file over the caller's current file");
 
-    reopenedPicker.scroll.offset.y = 48.0f;
-    game::RememberSectorEditorAudioAssetPickerScroll(reopenedPicker, session);
+    reopenedPicker.browsing.scroll.offset.y = 48.0f;
+    game::RememberSectorEditorAudioAssetPickerSession(reopenedPicker, session);
     game::SectorEditorAudioAssetPickerState otherPicker;
-    game::RestoreSectorEditorAudioAssetPickerScroll(otherPicker, session);
-    Check(Near(otherPicker.scroll.offset.y, 48.0f),
-          "map and NPC audio pickers share the latest scroll offset");
+    game::RememberSectorEditorAudioAssetPickerSession(otherPicker, session);
+    game::RestoreSectorEditorAudioAssetPickerSession(otherPicker, session);
+    Check(Near(otherPicker.browsing.scroll.offset.y, 48.0f)
+                    && otherPicker.browsing.selectedPath == "sfx/window.wav"
+                    && std::string(otherPicker.browsing.filterBuffer) == "sfx/",
+          "other audio pickers share browsing state; inactive close cannot overwrite it");
+
+    std::snprintf(reopenedPicker.browsing.filterBuffer,
+            sizeof(reopenedPicker.browsing.filterBuffer), "%s", "no matches");
+    game::RebuildSectorEditorAudioAssetPickerOptions(reopenedPicker);
+    game::RememberSectorEditorAudioAssetPickerSession(reopenedPicker, session);
+    game::RestoreSectorEditorAudioAssetPickerSession(otherPicker, session);
+    otherPicker.allPaths = firstPicker.paths;
+    game::RebuildSectorEditorAudioAssetPickerOptions(otherPicker);
+    Check(otherPicker.paths.empty() && otherPicker.selectedPathIndex == -1
+                    && otherPicker.browsing.selectedPath == "sfx/window.wav"
+                    && std::string(otherPicker.browsing.filterBuffer) == "no matches",
+          "closing and reopening empty results retains the filter and remembered path");
+    otherPicker.browsing.filterBuffer[0] = '\0';
+    game::RebuildSectorEditorAudioAssetPickerOptions(otherPicker);
+    Check(otherPicker.selectedPathIndex == 1,
+          "clearing an empty filter result restores the remembered selection");
+    Check(game::SectorEditorAudioAssetPickerSessionState{}.selectedPath.empty(),
+          "a fresh app session starts without a remembered audio file");
+}
+
+void TestAudioAssetPickerFiltering()
+{
+    game::SectorEditorAudioAssetPickerState state;
+    state.allPaths = {"ambience/wind.ogg", "sfx/DOOR.WAV", "sfx/window.wav"};
+    game::RebuildSectorEditorAudioAssetPickerOptions(state, "sfx/DOOR.WAV");
+    Check(state.paths == state.allPaths && state.selectedPathIndex == 1,
+          "empty audio filter preserves scan order and selects the current file initially");
+
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer),
+            "%s", "SfX/");
+    Check(!game::RebuildSectorEditorAudioAssetPickerOptions(state)
+                    && state.paths.size() == 2 && state.selectedPathIndex == 0,
+          "folder filtering is case insensitive and a changed index alone does not stop preview");
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer),
+            "%s", "window.WaV");
+    Check(game::RebuildSectorEditorAudioAssetPickerOptions(state)
+                    && state.paths.size() == 1 && state.selectedPathIndex == 0
+                    && state.paths[0] == "sfx/window.wav",
+          "filename and extension filtering reports a changed file even at the same row index");
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer),
+            "%s", ".OGG");
+    Check(game::RebuildSectorEditorAudioAssetPickerOptions(state)
+                    && state.paths.size() == 1 && state.paths[0] == "ambience/wind.ogg",
+          "extension filtering falls back to the first match when selection is hidden");
+    state.browsing.filterBuffer[0] = '\0';
+    game::RebuildSectorEditorAudioAssetPickerOptions(state);
+    Check(state.paths == state.allPaths && state.selectedPathIndex == 0,
+          "clearing the audio filter restores the full list");
+    for (size_t i = 0; i < state.paths.size(); ++i) {
+        Check(state.optionLabels[i] == state.paths[i].c_str(),
+              "audio option labels refer to the rebuilt visible paths");
+    }
+
+    std::snprintf(state.browsing.filterBuffer, sizeof(state.browsing.filterBuffer),
+            "%s", "missing");
+    Check(game::RebuildSectorEditorAudioAssetPickerOptions(state)
+                    && state.selectedPathIndex == -1 && state.optionLabels.empty()
+                    && state.filterMessage == "No audio files match the filter",
+          "zero matches clear selection and signal that preview must stop");
+    state.allPaths.clear();
+    state.scanMessage = "assets/audio was not found";
+    game::RebuildSectorEditorAudioAssetPickerOptions(state);
+    Check(state.filterMessage.empty() && state.scanMessage == "assets/audio was not found",
+          "scan errors remain distinct from a filter with zero matches");
+
+    state.browsing.selectedPath = "deleted.wav";
+    state.browsing.filterBuffer[0] = '\0';
+    state.allPaths = {"sfx/door.wav", "sfx/window.wav"};
+    game::RebuildSectorEditorAudioAssetPickerOptions(state, "sfx/window.wav");
+    Check(state.selectedPathIndex == 1,
+          "a removed remembered file falls back to the caller's current path");
 }
 
 void TestTextureRowWithoutClear()
@@ -1182,7 +1269,8 @@ int main()
     TestKeyboardPanModifierPolicy();
     TestLightmapBakeSetupModalStateLifecycle();
     TestModelFilenameExtraction();
-    TestAudioAssetPickerScrollSession();
+    TestAudioAssetPickerSession();
+    TestAudioAssetPickerFiltering();
     TestTextureRowWithoutClear();
     TestTextureRowWithClear();
     TestCompactNumericRow();
