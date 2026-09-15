@@ -1553,6 +1553,83 @@ int LuaStartText(lua_State* state)
     return StartCaption(state, SectorCutsceneCaptionKind::Text, true);
 }
 
+void CancelScriptScreenShake(engine::EngineContext&, void* hostContext, uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host == nullptr) return;
+    if (host->screenShake != nullptr) engine::CancelScreenShake(*host->screenShake, {token});
+    for (auto& entry : host->shakeOperations) {
+        if (entry.shake.token == token) entry = {};
+    }
+}
+
+int StartScriptScreenShake(lua_State* state, bool async)
+{
+    const int originalTop = lua_gettop(state);
+    auto& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    // Reject blocking console calls before touching the effect or operation pool.
+    const auto task = async ? engine::ScriptSystemTryCurrentTaskFromLua(state)
+                            : engine::ScriptSystemCurrentTaskFromLua(state);
+    auto& host = HostFromLua(state);
+    luaL_checktype(state, 1, LUA_TNUMBER);
+    luaL_checktype(state, 2, LUA_TNUMBER);
+    const double strength = lua_tonumber(state, 1);
+    const double durationMs = lua_tonumber(state, 2);
+    if (!std::isfinite(strength) || strength < 0.0 || strength > 1.0)
+        return PushCutsceneStartError(state, async, "shake strength must be finite and between 0 and 1");
+    if (!std::isfinite(durationMs) || durationMs < 0.0)
+        return PushCutsceneStartError(state, async, "shake duration must be finite and non-negative");
+    auto type = engine::ScreenShakeType::Rumble;
+    if (!lua_isnoneornil(state, 3)) {
+        luaL_checktype(state, 3, LUA_TNUMBER);
+        const double value = lua_tonumber(state, 3);
+        if (value != static_cast<int>(engine::ScreenShakeType::Rumble)
+                && value != static_cast<int>(engine::ScreenShakeType::Impact))
+            return PushCutsceneStartError(state, async, "shake type must be SHAKE_RUMBLE or SHAKE_IMPACT");
+        type = static_cast<engine::ScreenShakeType>(static_cast<int>(value));
+    }
+    if (host.screenShake == nullptr)
+        return PushCutsceneStartError(state, async, "screen shake runtime is unavailable");
+    const double durationSeconds = durationMs / 1000.0;
+    if (!async && durationSeconds == 0.0) {
+        lua_pushboolean(state, true);
+        return 1;
+    }
+    SectorScriptHost::ShakeOperation* entry = nullptr;
+    for (auto& candidate : host.shakeOperations) {
+        if (!engine::IsValid(candidate.operation)) { entry = &candidate; break; }
+    }
+    if (entry == nullptr && durationSeconds > 0.0) {
+        TraceLog(LOG_WARNING, "Screen shake operation capacity exceeded");
+        return PushCutsceneStartError(state, async, "screen shake operation capacity exceeded");
+    }
+    const char* error = nullptr;
+    const auto shake = engine::StartScreenShake(*host.screenShake,
+            static_cast<float>(strength), durationSeconds, type, &error);
+    if (shake.token == 0) return PushCutsceneStartError(state, async, error);
+    const auto operation = engine::ScriptSystemCreateOperation(scripts,
+            async ? engine::ScriptOperationLaunchStyle::Async
+                  : engine::ScriptOperationLaunchStyle::Blocking,
+            task, "screenShake", shake.token, CancelScriptScreenShake);
+    if (!engine::IsValid(operation)) {
+        engine::CancelScreenShake(*host.screenShake, shake);
+        return PushCutsceneStartError(state, async, "could not allocate screen shake operation");
+    }
+    if (engine::IsScreenShakeActive(*host.screenShake, shake)) {
+        *entry = {shake, operation};
+    } else {
+        engine::ScriptSystemCompleteOperation(scripts, operation);
+    }
+    if (async) {
+        engine::ScriptSystemPushOperationUserdata(state, operation);
+        return 1;
+    }
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
+int LuaScreenShake(lua_State* state) { return StartScriptScreenShake(state, false); }
+int LuaStartScreenShake(lua_State* state) { return StartScriptScreenShake(state, true); }
+
 int StartFade(lua_State* state, float targetOpacity)
 {
     const int originalTop = lua_gettop(state);
@@ -2842,6 +2919,8 @@ void InitializeSectorScriptHost(
         const SectorFpsControllerConfig* playerConfig,
         SectorScriptControlApi controls)
 {
+    host.screenShake = nullptr;
+    host.shakeOperations = {};
     host.runtimeObjects = &runtimeObjects;
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
@@ -2885,6 +2964,9 @@ void InitializeSectorScriptHost(
 
 void ResetSectorScriptHost(SectorScriptHost& host)
 {
+    if (host.screenShake != nullptr) engine::ResetScreenShake(*host.screenShake);
+    host.screenShake = nullptr;
+    host.shakeOperations = {};
     host.runtimeObjects = nullptr;
     host.navigation = nullptr;
     host.npcNavigation = nullptr;
@@ -2977,6 +3059,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "startSay", LuaStartSay);
     Register(state, "text", LuaText);
     Register(state, "startText", LuaStartText);
+    Register(state, "screenShake", LuaScreenShake);
+    Register(state, "startScreenShake", LuaStartScreenShake);
     Register(state, "fadeOut", LuaFadeOut);
     Register(state, "fadeIn", LuaFadeIn);
     Register(state, "changeMap", LuaChangeMap);
@@ -2991,6 +3075,10 @@ void RegisterSectorScriptBindings(lua_State* state)
     lua_setglobal(state, "CENTER");
     lua_pushinteger(state, static_cast<lua_Integer>(SectorCutsceneTextPosition::Bottom));
     lua_setglobal(state, "BOTTOM");
+    lua_pushinteger(state, static_cast<int>(engine::ScreenShakeType::Rumble));
+    lua_setglobal(state, "SHAKE_RUMBLE");
+    lua_pushinteger(state, static_cast<int>(engine::ScreenShakeType::Impact));
+    lua_setglobal(state, "SHAKE_IMPACT");
 }
 
 bool ReturnedTrue(const std::vector<engine::ScriptValue>& values)
@@ -3080,10 +3168,29 @@ void UpdateSectorScriptDoorPermission(
     host.doorPermission = {};
 }
 
+void CancelSectorScriptScreenShakes(engine::EngineContext& context,
+        SectorScriptHost& host, const char* reason)
+{
+    for (auto& entry : host.shakeOperations) {
+        if (host.scripts != nullptr && engine::IsValid(entry.operation))
+            engine::ScriptSystemCancelOperation(context, *host.scripts, entry.operation, reason);
+        entry = {};
+    }
+    if (host.screenShake != nullptr) engine::ResetScreenShake(*host.screenShake);
+}
+
 void UpdateSectorScriptOperations(
         engine::EngineContext& context,
         SectorScriptHost& host)
 {
+    if (host.scripts != nullptr && host.screenShake != nullptr) {
+        for (auto& entry : host.shakeOperations) {
+            if (!engine::IsValid(entry.operation)
+                    || engine::IsScreenShakeActive(*host.screenShake, entry.shake)) continue;
+            engine::ScriptSystemCompleteOperation(*host.scripts, entry.operation);
+            entry = {};
+        }
+    }
     if (host.scripts == nullptr || host.runtimeObjects == nullptr) return;
     for (SectorScriptDoorMove& move : host.doorMoves) {
         if (!move.active || !engine::IsValid(move.operation)) continue;

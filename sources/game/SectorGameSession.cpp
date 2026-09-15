@@ -1071,6 +1071,7 @@ bool SectorGameSession::StartNew(
     ClearPlayerLowHealthCamera(lowHealthCamera);
     ClearDialogueCameraIdle(dialogueCameraIdle);
     ClearPlayerHitCamera(hitCamera);
+    engine::ResetScreenShake(screenShake);
     breathingAudio = PlayerBreathingAudioRuntime{};
     heartbeatAudio = PlayerHeartbeatAudioRuntime{};
     liquidAudio = PlayerLiquidAudioPlaybackState{};
@@ -1233,6 +1234,7 @@ bool SectorGameSession::StartNew(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.screenShake = &screenShake;
     scriptHost.playerInventory = itemCampaign != nullptr ? &itemCampaign->inventory : nullptr;
     scriptHost.dialogueVoices = &dialogueVoices;
     LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
@@ -1762,6 +1764,7 @@ void SectorGameSession::Update(
     if (IsDepleted(playerHealth)) {
         EndSectorPropDrag(context,controller.propDrag);
         gameOver = true;
+        CancelSectorScriptScreenShakes(context, scriptHost, "player died");
         CancelSectorNote(scriptHost, "player died");
         CancelSectorKeypad(scriptHost, "player died");
         UpdateSectorScriptConversationOwnership(context, scriptHost);
@@ -1800,6 +1803,7 @@ void SectorGameSession::Update(
         UpdateItemHealingEffects(*itemCampaign, playerHealth, dt);
     }
     scriptHost.inventoryInteractionActive = inventoryUi.open || heldObjectUse.phase != ItemHeldUsePhase::Inactive;
+    engine::UpdateScreenShake(screenShake, dt);
     UpdateSectorScriptOperations(context, scriptHost);
     UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, dt,
             applicationSettings == nullptr || applicationSettings->dialogueVoicesEnabled);
@@ -2849,6 +2853,7 @@ bool SectorGameSession::RebuildFromMap(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.screenShake = &screenShake;
     scriptHost.playerInventory = itemCampaign != nullptr ? &itemCampaign->inventory : nullptr;
     scriptHost.dialogueVoices = &dialogueVoices;
     LoadSectorDialogue(dialogue, std::filesystem::path{ASSETS_PATH} / "dialogue");
@@ -3130,6 +3135,7 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
     cameraRotation.x += hitCamera.rotationDegrees.x;
     cameraRotation.y += hitCamera.rotationDegrees.y;
     cameraRotation.z += hitCamera.rotationDegrees.z;
+    cameraRotation = Vector3Add(cameraRotation, screenShake.rotationDegrees);
     scene.Renderer().ApplyRendererPose(ApplySectorFpsViewRotationOffset(
             presentationPose,
             cameraRotation),

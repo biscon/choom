@@ -737,6 +737,8 @@ if(BUILD_TESTING)
 
     add_executable(sector_fps_controller_tests
             tests/SectorFpsControllerTests.cpp
+            tests/ScreenShakeTests.cpp
+            sources/engine/render/ScreenShake.cpp
             sources/game/PlayerHitCamera.cpp
             sources/game/PlayerStamina.cpp
             sources/game/PlayerOxygen.cpp
@@ -773,6 +775,7 @@ if(BUILD_TESTING)
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorPropDraggingTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/engine/render/ScreenShake.cpp
             sources/game/items/ItemInventory.cpp
             tests/SectorNoteTests.cpp
             tests/SectorKeypadTests.cpp

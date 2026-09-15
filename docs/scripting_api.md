@@ -84,6 +84,8 @@ ranges, return values, behavior, and failure details.
   `startLookAtNpc(instanceId, durationMs [, targetHeight])`,
   `lookAtProp(instanceId, durationMs [, targetHeight])`,
   `startLookAtProp(instanceId, durationMs [, targetHeight])`.
+- **[Screen shake](#screen-shake):** `screenShake(strength, durationMs [, type])`,
+  `startScreenShake(strength, durationMs [, type])`; `SHAKE_RUMBLE`, `SHAKE_IMPACT`.
 - **[Captions](#captions):** `say(npcId, message [, mood [, holdMs]])`,
   `startSay(npcId, message [, mood [, holdMs]])`,
   `say(message [, options])`, `startSay(message [, options])` for the player,
@@ -1154,6 +1156,61 @@ The camera uses a quintic smoother-step curve rather than rotating linearly.
 bounds: `0` is the bottom and `1` is the top. Targets are followed live while
 they move. `lookAtProp` accepts static 3D and dynamic props from their shared
 instance-ID namespace. Only one scripted look may be active.
+
+### Screen shake
+
+```text
+screenShake(strength, durationMs [, type]) -> true | false, reason
+startScreenShake(strength, durationMs [, type]) -> operation | nil, reason
+```
+
+Shakes the world view using smooth, time-based noise on camera pitch, yaw, and
+a smaller roll. Camera position stays fixed; UI, captions, letterboxing, and the
+crosshair do not shake. Movement, collision, sector lookup, and physics are
+unchanged. Shots follow the shaken view and remain aligned with the crosshair.
+Existing recoil and other camera effects continue to combine with the shake.
+
+`strength` is a finite number in **0–1**. At 1, a single shake has maximum
+pitch/yaw/roll amplitudes of 2°/2°/0.75°. `durationMs` is finite, non-negative
+milliseconds, including attack and release. Zero duration completes without
+shaking; zero strength still waits for the requested duration.
+
+The engine injects two type constants:
+
+- `SHAKE_RUMBLE` (default, also when type is `nil`): sustained 8 Hz noise with
+  smooth attack and release. Attack lasts up to 100 ms (10% of duration), and
+  release up to 350 ms (25% of duration).
+- `SHAKE_IMPACT`: 14 Hz noise with an attack of up to 10 ms (10% of duration),
+  followed by quadratic decay to zero. Suitable for blasts and short impacts.
+
+Overlapping shakes run independently and add together, capped at 4°/4°/1.5°
+pitch/yaw/roll for shake alone. Up to 16 shakes can run simultaneously; excess
+requests fail without replacing existing shakes. Invalid ranges or unknown type
+values return a failure and reason; non-number argument types raise Lua errors.
+
+`screenShake` waits in a managed Lua task. `startScreenShake` returns immediately
+and also works in the console. Its operation supports `await`, `operationStatus`,
+and `cancelOperation`; cancelling removes only that shake. Async shakes may
+outlive their launching task, and stopping a task cancels its blocking shake.
+No cutscene or control lock is required. Pause freezes shake timing; console or
+dialogue input capture alone does not. Death cancels shakes. Map changes,
+save restoration, and session teardown clear them; they are not saved.
+
+```lua
+screenShake(0.5, 2500, SHAKE_RUMBLE)
+
+local collapse = assert(startScreenShake(0.4, 3000))
+say("The tunnel is coming down!")
+local blast = assert(startScreenShake(0.8, 450, SHAKE_IMPACT))
+await(blast)
+await(collapse)
+```
+
+The reusable C++ backend is `engine::ScreenShakeState` with
+`StartScreenShake`, `UpdateScreenShake`, `IsScreenShakeActive`,
+`CancelScreenShake`, and `ResetScreenShake`. C++ durations use **seconds**.
+It has no Lua or cutscene dependency and uses fixed-capacity storage, so future
+explosion/weapon systems can use the same session-owned state.
 
 ### Captions
 

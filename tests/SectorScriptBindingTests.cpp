@@ -3292,10 +3292,109 @@ void NpcFacingCancellationDeathAndRemovalReleaseOwnership()
     }
 }
 
+void ScreenShakeBindingsAndLifecycle()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    engine::ScreenShakeState shake;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    ScriptFiles files;
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    host.screenShake = &shake;
+    files.Write(R"(
+function init()
+    assert(SHAKE_RUMBLE == 1 and SHAKE_IMPACT == 2)
+    assert(screenShake(1, 0))
+    rumble = assert(startScreenShake(0.5, 5000))
+    assert(screenShake(1, 100, SHAKE_IMPACT))
+    setPersistentBool('shook', true)
+end
+function waitForRumble()
+    local ok = await(rumble)
+    setPersistentBool('rumble_cancelled', not ok)
+end
+function blockedShake()
+    screenShake(1, 1000)
+    setPersistentBool('blocked_finished', true)
+end
+function launchAsyncShake()
+    detached = assert(startScreenShake(1, 2000))
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    const auto console = [&](const char* command) {
+        const auto result = engine::ScriptSystemExecuteConsole(runtime, command);
+        if (!result.success) TraceLog(LOG_ERROR, "%s: %s", command, result.error.c_str());
+        assert(result.success);
+    };
+    const auto tick = [&](double dt) {
+        engine::UpdateScreenShake(shake, dt);
+        game::UpdateSectorScriptOperations(context, host);
+        engine::ScriptSystemUpdate(context, runtime, static_cast<float>(dt));
+    };
+    assert(!runtime.initFinished && persistent.bools.count("shook") == 0);
+    tick(0.05);
+    assert(!runtime.initFinished && persistent.bools.count("shook") == 0);
+    tick(0.06);
+    console("assert(getPersistentBool('shook')); assert(operationStatus(rumble) == 'pending')");
+    assert(shake.instances[0].type == engine::ScreenShakeType::Rumble);
+    const auto nextToken = shake.nextToken;
+    console(R"(
+        for _, args in ipairs({{-1, 1}, {1.1, 1}, {0/0, 1}, {math.huge, 1},
+                {1, -1}, {1, math.huge}, {1, 0/0}, {1, 1, 99}, {1, 1, 1.5}}) do
+            local op, reason = startScreenShake(table.unpack(args))
+            assert(op == nil and type(reason) == 'string')
+        end
+        assert(not pcall(startScreenShake, '0.5', 100))
+        assert(not pcall(startScreenShake, 0.5, '100'))
+        assert(not pcall(startScreenShake, 0.5, 100, 'rumble'))
+        assert(not pcall(screenShake, 0.5, 100))
+        assert(operationStatus(rumble) == 'pending')
+    )");
+    assert(shake.nextToken == nextToken);
+    console("instant = assert(startScreenShake(1, 0)); silent = assert(startScreenShake(0, 50))");
+    tick(0.01);
+    console("assert(operationStatus(instant) == 'succeeded'); assert(operationStatus(silent) == 'pending')");
+    tick(0.05);
+    console("assert(operationStatus(silent) == 'succeeded'); startScript('waitForRumble')");
+    tick(0.01);
+    console("assert(cancelOperation(rumble)); assert(operationStatus(rumble) == 'cancelled')");
+    tick(0.01);
+    console("assert(getPersistentBool('rumble_cancelled')); startScript('blockedShake')");
+    tick(0.01);
+    console("stopScript('blockedShake')");
+    tick(0.01);
+    console("assert(not getPersistentBool('blocked_finished')); startScript('launchAsyncShake')");
+    tick(0.01);
+    tick(0.01);
+    console("assert(not isScriptRunning('launchAsyncShake')); assert(operationStatus(detached) == 'pending')");
+    console("assert(cancelOperation(detached)); assert(operationStatus(detached) == 'cancelled')");
+    console("allShakes = {}; for i=1,16 do allShakes[i] = assert(startScreenShake(1, 5000)) end");
+    const auto fullToken = shake.nextToken;
+    console("local op, reason = startScreenShake(1, 5000); assert(op == nil and reason:find('capacity')); for i=1,16 do assert(operationStatus(allShakes[i]) == 'pending') end");
+    assert(shake.nextToken == fullToken);
+    game::CancelSectorScriptScreenShakes(context, host, "player died");
+    console("for i=1,16 do local status, reason = operationStatus(allShakes[i]); assert(status == 'cancelled' and reason == 'player died') end");
+    assert(shake.rotationDegrees.x == 0 && shake.rotationDegrees.y == 0 && shake.rotationDegrees.z == 0);
+    console("unloadShake = assert(startScreenShake(1, 1000))");
+    const auto unloadHandle = shake.instances[0].handle;
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    assert(!engine::IsScreenShakeActive(shake, unloadHandle));
+    game::ResetSectorScriptHost(host);
+    assert(host.screenShake == nullptr);
+    const auto newHandle = engine::StartScreenShake(shake, 1, 1);
+    assert(!engine::CancelScreenShake(shake, unloadHandle));
+    assert(engine::IsScreenShakeActive(shake, newHandle));
+}
+
 } // namespace
 
 void RunSectorScriptBindingTests()
 {
+    ScreenShakeBindingsAndLifecycle();
     extern void RunSectorNoteTests();
     RunSectorNoteTests();
     extern void RunSectorKeypadTests();

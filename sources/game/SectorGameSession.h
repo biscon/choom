@@ -299,6 +299,7 @@ private:
     PlayerLowHealthCameraState lowHealthCamera;
     DialogueCameraIdleState dialogueCameraIdle;
     PlayerHitCameraState hitCamera;
+    engine::ScreenShakeState screenShake;
     PlayerBreathingAudioRuntime breathingAudio;
     PlayerHeartbeatAudioRuntime heartbeatAudio;
     PlayerLiquidAudioPlaybackState liquidAudio;

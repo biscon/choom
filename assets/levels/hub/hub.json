@@ -62,7 +62,7 @@
       "position": [
         4.0,
         0.0,
-        24.0
+        12.0
       ],
       "yawDegrees": 0.0
     },
@@ -7610,59 +7610,26 @@
         129.75999450683594
       ],
       "yawDegrees": -90.0
+    },
+    {
+      "id": 482,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_482",
+        "modelPath": "assets/models/debris/Collapse_A_Diagonal_Slabs.gltf",
+        "collision": true,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        5.0,
+        2.0,
+        -32.79999923706055
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
-    {
-      "id": 5,
-      "position": [
-        4.0,
-        25.0,
-        24.0
-      ],
-      "radius": 32.0,
-      "sourceRadius": 4.0,
-      "intensity": 2.5,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 225,
-        "a": 255
-      },
-      "atmosphere": {
-        "proxy": {
-          "halo": {
-            "enabled": true,
-            "radiusWorld": 2.5,
-            "centerOffsetWorld": [
-              0.0016992688179016113,
-              0.35092830657958984,
-              0.006286144256591797
-            ],
-            "brightness": 0.014999999664723873,
-            "maxExtinction": 0.05000000074505806,
-            "edgeSoftness": 1.0,
-            "scatteringTint": {
-              "r": 255,
-              "g": 245,
-              "b": 235,
-              "a": 255
-            }
-          }
-        },
-        "dust": {
-          "amount": 51,
-          "extentScale": 0.30000001192092896,
-          "maximumSizeWorld": 0.014999999664723873,
-          "scatteringTint": {
-            "r": 200,
-            "g": 200,
-            "b": 200,
-            "a": 255
-          }
-        }
-      }
-    },
     {
       "id": 6,
       "position": [
@@ -12127,6 +12094,54 @@
         "a": 255
       },
       "rollDegrees": 90.0
+    },
+    {
+      "id": 35,
+      "position": [
+        4.0,
+        25.5,
+        12.0
+      ],
+      "target": [
+        4.0,
+        8.0,
+        12.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 48.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 225,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "startFeather": 4.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.0007109940052032471,
+              0.2517969608306885,
+              0.008539319038391113
+            ],
+            "lengthScale": 0.3499999940395355,
+            "widthScale": 0.8999999761581421,
+            "brightness": 0.02500000037252903,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        }
+      }
     }
   ],
   "dynamicPointLights": [
@@ -13544,7 +13559,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -13668,7 +13683,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "e82d5726200b9551",
+    "sourceHash": "f98e07eb213c743c",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -13676,19 +13691,19 @@
         0.0
       ],
       "rgbMax": [
-        1.666015625,
-        1.666015625,
-        1.666015625
+        1.587890625,
+        1.564453125,
+        1.564453125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 12582912,
-      "rgbChannelsAboveOne": 1202
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 244
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "e82d5726200b9551",
+      "sourceHash": "f98e07eb213c743c",
       "count": 3946,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -13701,36 +13716,24 @@
           0.04647058993577957
         ],
         "rgbMax": [
-          2.153351306915283,
-          1.9732475280761719,
-          1.8862031698226929
+          2.150747299194336,
+          1.9708508253097534,
+          1.8839268684387207
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23676,
-        "rgbChannelsAboveOne": 36
+        "rgbChannelsAboveOne": 39
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "e82d5726200b9551",
+      "sourceHash": "f98e07eb213c743c",
       "modelCount": 143,
       "objectCount": 393,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      },
-      {
-        "path": "assets/levels/hub/hub.lightmap.2.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "editorSettings": {
     "gridSize": 1
@@ -42938,7 +42941,7 @@
         "bottomOffsetWorld": -1.5,
         "radiusXWorld": 3.0,
         "radiusZWorld": 2.0,
-        "heightWorld": 3.0,
+        "heightWorld": 2.0,
         "color": {
           "r": 210,
           "g": 210,

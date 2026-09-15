@@ -1834,6 +1834,8 @@ void TestPlayerOxygenDrainRecoveryAndDrowning()
 
 int main()
 {
+    extern void RunScreenShakeTests();
+    RunScreenShakeTests();
     TestEyePositionUsesFeetAndEyeHeight();
     TestPoseConversions();
     TestVisualStepSmoothingCapturesSteppedUpContinuity();
