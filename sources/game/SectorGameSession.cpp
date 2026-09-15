@@ -3066,7 +3066,8 @@ bool SectorGameSession::BuildCollisionAndPlayer(
             controller.fpsControllerState = SectorFpsControllerState{};
             controller.fpsControllerState.feetPosition =
                     SectorAuthoringToWorldPosition(entryMarker->position);
-            controller.fpsControllerState.yawRadians = entryMarker->yawRadians;
+            controller.fpsControllerState.yawRadians =
+                    SectorFpsYawFromMarkerOrientation(entryMarker->yawRadians);
             controller.fpsControllerState.pitchRadians = 0.0f;
         } else {
             controller.fpsControllerState = SectorFpsControllerStateFromCameraPose(

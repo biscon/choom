@@ -135,13 +135,62 @@ function useEntranceKeypad()
     end
 end
 
+function setTunnelCollapsed(collapsed)
+    setFogVolumeEnabled("tunnel_fog", collapsed)
+    setPropEnabled("tunnel_debris_1", collapsed)
+    setPropEnabled("tunnel_debris_2", collapsed)
+    setPropEnabled("tunnel_debris_3", collapsed)
+    setPropEnabled("tunnel_debris_4", collapsed)
+    setPropEnabled("tunnel_debris_5", collapsed)
+    setPropEnabled("tunnel_debris_6", collapsed)
+    setPropEnabled("tunnel_debris_7", collapsed)
+    setPropEnabled("tunnel_debris_8", collapsed)
+end
+
+function tunnelCollapseCutscene()
+    setTunnelCollapsed(false)
+    teleportPlayer("default")
+    assert(startCutscene())
+    delay(1000)
+    movePlayer("collapse_marker_1", "walk", 1.25)
+    playMapSound("tunnel_collapse", 1.0)
+    local shake = startScreenShake(0.9, 5000, SHAKE_RUMBLE)
+    delay(1000)
+    text("Fuck!", BOTTOM, 750)
+    --say("Fuck!")
+    startMovePlayer("collapse_marker_2", "run", 4.5)
+    delay(750)
+    fadeOut(2000)
+    delay(5500)
+    setPlayerHealth(25)
+    setTunnelCollapsed(true)
+    teleportPlayer("collapse_marker_2")
+    fadeIn(4000)
+    delay(500)
+    startText("My head...", BOTTOM, 1000)
+    movePlayer("collapse_marker_3", "walk", 1.0, {
+        lookAtProp = "tunnel_debris_1",
+        turnDurationMs = 2500,
+        targetHeight = 0.2,
+    })
+    startLookAtProp("tunnel_debris_1", 2000, 0.65)
+    delay(500)
+    text("Guess I won't be leaving that way..", BOTTOM, 1750)
+    delay(250)
+    lookAtProp("prop_498", 1500)
+    assert(endCutscene())
+end
+
 function init()
-    log("hub script initialized")
     stopSoundEmitter("storage_radio_emitter")
     refreshEntranceAccess()
     setPropAnimationProgress("ceiling_switch_01", 0.0, "switch|switchAction")
     setPropAnimationProgress("ceiling_vent_01", 0.0, "Ventilator")
     playPropAnimation("ceiling_vent_01", "Ventilator", "loop")
+    if not flag("tunnel_collapsed") then
+        setFlag("tunnel_collapsed", true)
+        startScript("tunnelCollapseCutscene")
+    end
 end
 
 function shutdown()
@@ -168,7 +217,7 @@ function intro_trigger_1()
     })
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "I've been walking these dark tunnels forever. You're are the first person I met so far. Lets talk in here.")
+    say("elin", "I've been walking these dark tunnels forever.. wait.. you're hurt! follow me!")
     local elinArrival = assert(startMoveNpc("elin", "intro_marker_3", "walk", 1.5, true))
     delay(1500)
     movePlayer("intro_marker_4", "walk", 1.25, {

@@ -877,6 +877,8 @@ teleportPlayer(levelMarkerId) -> true | false, reason
 These commands instantly place the actor's feet at the marker's full X/Y/Z,
 converted from authored coordinates to runtime world units. Both actors face
 the marker's arrow immediately; the player also looks level (zero pitch).
+Marker orientation matches the 2D map: **0° south, 90° east, 180° north,
+270° west**. Player level-entry spawning uses the same facing as teleporting.
 Marker IDs are exact and case-sensitive and refer to the current level.
 
 Teleporting returns immediately, without yielding or creating an operation.
@@ -1636,6 +1638,7 @@ demonstrates Elin's topics, animations, and remembered questions.
 Requests a map change. Map IDs may contain letters, digits, `_`, and `-`.
 `spawnId`, when provided, must be non-empty and identifies the destination
 level marker. The first accepted request wins.
+The player faces the destination marker's arrow, just as with `teleportPlayer`.
 
 ```lua
 local ok, reason = changeMap("refinery", "west_entry")

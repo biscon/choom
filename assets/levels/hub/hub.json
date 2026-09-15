@@ -14304,6 +14304,10 @@
       "slidingdoor_03": {
         "path": "doors/SlidingDoor_03.wav",
         "type": "sound"
+      },
+      "tunnel_collapse": {
+        "path": "sfx/tunnel_collapse.ogg",
+        "type": "sound"
       }
     }
   },
@@ -43878,7 +43882,7 @@
         "x": 64,
         "y": 2.0,
         "z": -1216,
-        "orientationDegrees": 90.0
+        "orientationDegrees": 0.0
       },
       {
         "editorId": 9,
@@ -44028,9 +44032,25 @@
         "editorId": 31,
         "id": "collapse_marker_1",
         "x": 64,
-        "y": 0.0,
-        "z": 32,
+        "y": 2.0,
+        "z": -832,
         "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 32,
+        "id": "collapse_marker_2",
+        "x": 64,
+        "y": 0.0,
+        "z": 624,
+        "orientationDegrees": 185.0
+      },
+      {
+        "editorId": 33,
+        "id": "collapse_marker_3",
+        "x": 64,
+        "y": 0.0,
+        "z": 0,
+        "orientationDegrees": 180.0
       }
     ],
     "nextPathId": 2,

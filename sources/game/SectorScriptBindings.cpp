@@ -1066,8 +1066,7 @@ int LuaTeleportPlayer(lua_State* state)
         CancelSectorCutsceneLook(cutscene, cutscene.look.token);
     }
     player.feetPosition = position;
-    // Markers face (sin(yaw), cos(yaw)); the FPS camera uses (cos(yaw), sin(yaw)).
-    player.yawRadians = 1.5707963267948966f - yaw;
+    player.yawRadians = SectorFpsYawFromMarkerOrientation(yaw);
     player.pitchRadians = 0.0f;
     player.currentSectorId = sectorId;
     player.verticalVelocity = 0.0f;

@@ -441,6 +441,8 @@ void MarkerTeleportsApplyExactPositionsAndFacingImmediately()
         assert(fixture.playerState.currentSectorId == 10 && fixture.playerState.grounded);
         assert(fixture.playerState.pitchRadians == 0 && fixture.playerState.verticalVelocity == 0);
         assert(Vector2Length(fixture.playerState.mouseLook.angularVelocity) == 0);
+        assert(std::fabs(fixture.playerState.yawRadians
+                - game::SectorFpsYawFromMarkerOrientation(yaw)) < 0.00001f);
         assert(std::fabs(std::cos(fixture.playerState.yawRadians) - std::sin(yaw)) < 0.00001f);
         assert(std::fabs(std::sin(fixture.playerState.yawRadians) - std::cos(yaw)) < 0.00001f);
         assert(transform.yawRadians == yaw);

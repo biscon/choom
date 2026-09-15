@@ -163,6 +163,8 @@ SectorViewPose SectorFpsControllerVisualPose(
 SectorFpsControllerState SectorFpsControllerStateFromCameraPose(
         const SectorViewPose& pose,
         const SectorFpsControllerConfig& config);
+// Marker orientation is 0 south (+Z), pi/2 east (+X), matching the 2D arrow.
+float SectorFpsYawFromMarkerOrientation(float orientationRadians);
 bool SectorFpsTransitionStartsVisualStepSmoothing(SectorFpsVerticalTransition transition);
 bool SectorFpsTransitionClearsVisualStepSmoothing(SectorFpsVerticalTransition transition);
 float CaptureSectorFpsVisualStepOffset(
