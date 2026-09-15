@@ -850,7 +850,7 @@ void SectorStaticModelRenderer::PrepareVisibleDraws(engine::AssetManager &assets
         [&](engine::Entity entity, SectorObject &object, SectorObjectLighting &, SectorDoor &door,
             SectorDoorResolvedAnchor &anchor, SectorDoorRender &render,
             SectorDoorModelRender &model) {
-            if (!model.modelVisualRequested || !object.visible || !door.enabled || !render.visible)
+            if (!model.modelVisualRequested || (!object.visible || !IsSectorObjectEnabled(object)) || !door.enabled || !render.visible)
                 return;
             const bool inView = SectorBoundsInView(camera, aspect, rlGetCullDistanceNear(),
                                                    rlGetCullDistanceFar(), model.receiverBounds);
@@ -1300,7 +1300,7 @@ void SectorStaticModelRenderer::Draw(
                     ++portalCulled;
                     return;
                 }
-                if (!object.visible) {
+                if ((!object.visible || !IsSectorObjectEnabled(object))) {
                     ++skipped;
                     return;
                 }
@@ -1400,7 +1400,7 @@ void SectorStaticModelRenderer::Draw(
                     ++portalCulled;
                     return;
                 }
-                if (!object.visible) {
+                if ((!object.visible || !IsSectorObjectEnabled(object))) {
                     ++skipped;
                     return;
                 }
@@ -1690,7 +1690,7 @@ void SectorStaticModelRenderer::Draw(
                     ++portalCulled;
                     return;
                 }
-                if (!object.visible || !instance.poseReady || instance.poseFailed) {
+                if ((!object.visible || !IsSectorObjectEnabled(object)) || !instance.poseReady || instance.poseFailed) {
                     ++skipped;
                     return;
                 }
@@ -1799,7 +1799,7 @@ void SectorStaticModelRenderer::Draw(
                 }
                 ++considered;
                 // Visibility and camera bounds were resolved once for both depth and color.
-                if (!object.visible || !door.enabled || !render.visible) {
+                if ((!object.visible || !IsSectorObjectEnabled(object)) || !door.enabled || !render.visible) {
                     ++skipped;
                     return;
                 }

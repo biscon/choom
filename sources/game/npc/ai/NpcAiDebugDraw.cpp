@@ -157,7 +157,7 @@ bool HasAiDebugComponents(
         const NpcNavigationRecord& record)
 {
     return record.occupied
-            && world.IsAlive(record.entity)
+            && IsSectorObjectEnabled(world, record.entity)
             && world.Has<NpcRuntimeInstance>(record.entity)
             && world.Has<NpcAiState>(record.entity)
             && world.Has<SectorObjectTransform>(record.entity)

@@ -261,6 +261,7 @@ void SectorSceneRuntime::Update(
             playerSectorId,
             playerCameraSubmerged,
             liquidAudioSettings);
+    SuspendDisabledNpcNavigation(context.world, navigation, npcNavigation);
     PrepareNpcDoorTraversalAndHoldsSystem(
             context.world,
             navigation,
@@ -370,7 +371,7 @@ void SectorSceneRuntime::Update(
                 npcGameplay != nullptr && npcGameplay->frozen,
                 npcGameplay != nullptr ? &npcGameplay->playerEyePosition : nullptr);
     }
-    engine::AnimatedModelSystem(context.world, context.assets, dt);
+    engine::AnimatedModelSystem(context.world, context.assets, dt, IsSectorObjectEnabled);
     if (runtimeObjects.objectSectorLookupWorldValid) {
         const Vector3* headLookTarget = npcGameplay != nullptr
                         && !npcGameplay->playerInvisible
@@ -974,11 +975,12 @@ void SectorSceneRuntime::PlayPendingNpcFootsteps(
                 context.world.Get<SectorObjectTransform>(record.entity);
         const SectorObject& object =
                 context.world.Get<SectorObject>(record.entity);
-        PlayFootstepForSectorAt(
+        auto& npc = context.world.Get<NpcRuntimeInstance>(record.entity);
+        TrackNpcObjectSound(npc, context.assets, context.audio, PlayFootstepForSectorAt(
                 context,
                 object.currentSectorId,
                 footstepVolume,
-                MakeNpcFootstepPositionalSettings(transform.position));
+                MakeNpcFootstepPositionalSettings(transform.position)));
     }
 }
 
@@ -1160,7 +1162,10 @@ void SectorSceneRuntime::RenderScene(
         bool useBakedAmbientOcclusion,
         SectorUseHighlight useHighlight)
 {
-    if (runtimeObjects.doorSpatialStateChanged) renderer.RefreshRuntimeReflections(false);
+    if (runtimeObjects.objectVisibilityChanged) {
+        renderer.RefreshRuntimeReflections();
+        runtimeObjects.objectVisibilityChanged = false;
+    } else if (runtimeObjects.doorSpatialStateChanged) renderer.RefreshRuntimeReflections(false);
     renderer.UpdateRuntimeReflections(context.assets, &context.world,
             SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes,
                     &map, runtimeObjects.staticLightingRevision});

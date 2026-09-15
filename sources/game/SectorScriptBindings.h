@@ -26,6 +26,8 @@ class SectorNavigationWorld;
 struct Health;
 struct PlayerInventoryState;
 struct NpcNavigationRuntime;
+struct NpcAudioRuntime;
+struct SectorPropDragSession;
 struct SectorCutsceneRuntime;
 struct SectorDialogueRuntime;
 struct SectorKeypadRuntime;
@@ -126,6 +128,8 @@ struct SectorScriptHost {
     SectorRuntimeObjectState* runtimeObjects = nullptr;
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;
+    NpcAudioRuntime* npcAudio = nullptr;
+    SectorPropDragSession* propDrag = nullptr;
     SectorCutsceneRuntime* cutscene = nullptr;
     SectorDialogueRuntime* dialogue = nullptr;
     SectorKeypadRuntime* keypad = nullptr;

@@ -2479,6 +2479,54 @@ void TestItemDropTargetSerialization()
     }
 }
 
+void TestObjectEnabledSerialization()
+{
+    auto map = MakeSquare();
+    for (const auto* kind : {"dynamic_model", "item", "npc"}) {
+        SectorPlacedRuntimeObject object;
+        object.id = 80 + static_cast<int>(map.runtimeObjects.size());
+        object.kind = kind;
+        object.dynamicModel.instanceId = "barrier";
+        object.item.instanceId = "key";
+        object.item.definitionId = "key";
+        object.npc.instanceId = "guard";
+        object.npc.definitionId = "guard";
+        Check(object.dynamicModel.enabled && object.item.enabled && object.npc.enabled,
+                "new objects default to enabled");
+        map.runtimeObjects.push_back(object);
+    }
+    const auto initialHash = game::ComputeSectorLightmapSourceHash(map);
+    const auto defaults = Json::parse(SaveText(map));
+    const char* fields[] = {"dynamicModel", "item", "npc"};
+    for (int i = 0; i < 3; ++i)
+        Check(!defaults["runtimeObjects"][i][fields[i]].contains("enabled"),
+                "enabled default is omitted from level JSON");
+    map.runtimeObjects[0].dynamicModel.enabled = false;
+    map.runtimeObjects[1].item.enabled = false;
+    map.runtimeObjects[2].npc.enabled = false;
+    Check(initialHash == game::ComputeSectorLightmapSourceHash(map),
+            "runtime object enabled state does not affect lightmap source hash");
+    const auto disabled = Json::parse(SaveText(map));
+    for (int i = 0; i < 3; ++i)
+        Check(disabled["runtimeObjects"][i][fields[i]]["enabled"] == false,
+                "disabled state is written to each placement payload");
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(disabled.dump(), loaded, error), "disabled object level loads");
+    if (loaded.runtimeObjects.size() == 3)
+        Check(!loaded.runtimeObjects[0].dynamicModel.enabled
+                        && !loaded.runtimeObjects[1].item.enabled && !loaded.runtimeObjects[2].npc.enabled,
+                "disabled placement states round trip");
+    Check(LoadText(defaults.dump(), loaded, error), "older object payloads load");
+    if (loaded.runtimeObjects.size() == 3)
+        Check(loaded.runtimeObjects[0].dynamicModel.enabled
+                        && loaded.runtimeObjects[1].item.enabled && loaded.runtimeObjects[2].npc.enabled,
+                "missing enabled fields default true");
+    auto invalid = disabled;
+    invalid["runtimeObjects"][0]["dynamicModel"]["enabled"] = "false";
+    Check(!LoadText(invalid.dump(), loaded, error), "non-boolean enabled field is rejected");
+}
+
 void TestDynamicModelRoundTripAndDefaultOmission()
 {
     SectorTopologyMap map = MakeSquare();
@@ -6038,6 +6086,7 @@ int main()
     TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
     TestDuctAccessRoundTripAndLightmapExclusion();
+    TestObjectEnabledSerialization();
     TestDynamicModelRoundTripAndDefaultOmission();
     TestItemDropTargetSerialization();
     TestItemRoundTripDefaultsValidationAndLightmapExclusion();

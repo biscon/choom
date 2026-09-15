@@ -298,8 +298,37 @@ void DragProgressRoundTrips() {
     assert(!game::DeserializeGameSave(parsed.dump(),restored,error));
 }
 
+void ObjectEnabledStatesRoundTripAndDefault()
+{
+    auto save = MakeSave();
+    save.levels[0].props[0].enabled = false;
+    save.levels[0].npcs[0].enabled = false;
+    save.levels[0].items = {{20, "key", false, false}, {100, "drop_100", true, true}};
+    std::string json, error;
+    assert(game::SerializeGameSave(save, json, error));
+    game::GameSaveData restored;
+    assert(game::DeserializeGameSave(json, restored, error));
+    assert(!restored.levels[0].props[0].enabled);
+    assert(!restored.levels[0].npcs[0].enabled);
+    assert(!restored.levels[0].items[0].enabled);
+    assert(restored.levels[0].items[1].enabled && restored.levels[0].items[1].sessionDrop);
+    auto parsed = nlohmann::ordered_json::parse(json);
+    parsed["levels"][0]["props"][0].erase("enabled");
+    parsed["levels"][0]["npcs"][0].erase("enabled");
+    parsed["levels"][0].erase("items");
+    assert(game::DeserializeGameSave(parsed.dump(), restored, error));
+    assert(restored.levels[0].props[0].enabled && restored.levels[0].npcs[0].enabled);
+    assert(restored.levels[0].items.empty());
+    parsed["levels"][0]["npcs"][0]["enabled"] = "false";
+    assert(!game::DeserializeGameSave(parsed.dump(), restored, error));
+    parsed = nlohmann::ordered_json::parse(json);
+    parsed["levels"][0]["items"].push_back(parsed["levels"][0]["items"][0]);
+    assert(!game::DeserializeGameSave(parsed.dump(), restored, error));
+}
+
 int main()
 {
+    ObjectEnabledStatesRoundTripAndDefault();
     DragProgressRoundTrips();
     InventorySourcesRoundTripAndValidate();
     SerializationRoundTripsStableState();

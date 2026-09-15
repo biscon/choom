@@ -35,6 +35,8 @@ struct NpcRuntimeInstance {
     std::string onUseScript;
     float useDistance = 2.5f;
     bool conversationHeld = false;
+    // Track overlapping one-shots so disabling can stop all object-owned audio.
+    std::array<engine::SoundPlaybackHandle, 8> objectSoundPlaybacks{};
 };
 
 enum class NpcAwarenessState : uint8_t {

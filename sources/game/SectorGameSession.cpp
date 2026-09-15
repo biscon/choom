@@ -611,10 +611,10 @@ bool SectorGameSession::DropInventoryEntry(
         }
         context.world.ForEach<SectorObjectTransform, SectorItem>(
                 [&context, &sweptCandidate, &blocked](
-                        engine::Entity,
+                        engine::Entity entity,
                         SectorObjectTransform& transform,
                         SectorItem& item) {
-                    if (blocked) return;
+                    if (blocked || !IsSectorObjectEnabled(context.world, entity)) return;
                     if (IsItemPickupVacuuming(item.presentation)) return;
                     blocked = ItemDropBoundsOverlap(
                             sweptCandidate.worldBounds,
@@ -762,11 +762,12 @@ void SectorGameSession::UpdateItemPresentations(
             SectorObjectTransform,
             SectorObjectVisualOffset,
             SectorItem>(
-            [this, dt, &playerConfig](
+            [this, dt, &playerConfig, &context](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObjectVisualOffset& visualOffset,
                     SectorItem& item) {
+                if (!IsSectorObjectEnabled(context.world, entity)) return;
                 const ItemPresentationFrame frame = AdvanceItemPresentation(
                         item.presentation,
                         transform.position,
@@ -814,7 +815,7 @@ bool SectorGameSession::CommitItemTake(
 {
     if (itemRegistry == nullptr || itemCampaign == nullptr
             || applicationSettings == nullptr
-            || !context.world.IsAlive(entity)
+            || !IsSectorObjectEnabled(context.world, entity)
             || !context.world.Has<SectorItem>(entity)
             || !context.world.Has<SectorObjectTransform>(entity)
             || !context.world.Has<SectorObjectVisualOffset>(entity)) {
@@ -937,7 +938,7 @@ bool SectorGameSession::RequestItemTake(
 {
     if (pendingItemTake.active || itemRegistry == nullptr
             || itemCampaign == nullptr || applicationSettings == nullptr
-            || !context.world.IsAlive(entity)
+            || !IsSectorObjectEnabled(context.world, entity)
             || !context.world.Has<SectorItem>(entity)) {
         return false;
     }
@@ -1234,6 +1235,8 @@ bool SectorGameSession::StartNew(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.npcAudio = &scene.NpcAudio();
+    scriptHost.propDrag = &controller.propDrag;
     scriptHost.screenShake = &screenShake;
     scriptHost.playerInventory = itemCampaign != nullptr ? &itemCampaign->inventory : nullptr;
     scriptHost.dialogueVoices = &dialogueVoices;
@@ -2214,7 +2217,7 @@ void SectorGameSession::Update(
                         }
                     }
                 } else if (useTarget.kind == SectorUseTargetKind::Npc
-                        && context.world.IsAlive(useTarget.entity)
+                        && IsSectorObjectEnabled(context.world, useTarget.entity)
                         && context.world.Has<NpcRuntimeInstance>(useTarget.entity)) {
                     const auto& npc = context.world.Get<NpcRuntimeInstance>(useTarget.entity);
                     const std::string instanceId = npc.instanceId;
@@ -2231,7 +2234,7 @@ void SectorGameSession::Update(
                                         ? "function is missing" : outcome.error.c_str());
                     }
                 } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
-                        && context.world.IsAlive(useTarget.entity)
+                        && IsSectorObjectEnabled(context.world, useTarget.entity)
                         && context.world.Has<SectorDynamicModel>(useTarget.entity)) {
                     if (context.world.Has<SectorPropDrag>(useTarget.entity)) {
                         if (!controller.liquidMovement.swimming && !IsSectorDuctTraversalActive(controller.ductTraversal)
@@ -2853,6 +2856,8 @@ bool SectorGameSession::RebuildFromMap(
                                 ->SetCutsceneControlsEnabled(
                                         engine, enabled, callbackError);
                     }});
+    scriptHost.npcAudio = &scene.NpcAudio();
+    scriptHost.propDrag = &controller.propDrag;
     scriptHost.screenShake = &screenShake;
     scriptHost.playerInventory = itemCampaign != nullptr ? &itemCampaign->inventory : nullptr;
     scriptHost.dialogueVoices = &dialogueVoices;

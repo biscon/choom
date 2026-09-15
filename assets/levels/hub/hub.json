@@ -7615,7 +7615,7 @@
       "id": 482,
       "kind": "dynamic_model",
       "dynamicModel": {
-        "instanceId": "prop_482",
+        "instanceId": "tunnel_debris_1",
         "modelPath": "assets/models/debris/Collapse_A_Diagonal_Slabs.gltf",
         "collision": true,
         "loop": false,
@@ -7627,6 +7627,127 @@
         -32.79999923706055
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 483,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "tunnel_debris_2",
+        "modelPath": "assets/models/debris/Chunk_60cm.gltf",
+        "collision": true,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -4.800000190734863,
+        2.0,
+        -25.200000762939453
+      ],
+      "yawDegrees": 110.0
+    },
+    {
+      "id": 484,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "tunnel_debris_3",
+        "modelPath": "assets/models/debris/Chunk_60cm.gltf",
+        "heightOffsetWorld": -0.15000000596046448,
+        "scale": 2.0,
+        "collision": true,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        2.799999952316284,
+        2.0,
+        -24.799999237060547
+      ],
+      "yawDegrees": 110.0
+    },
+    {
+      "id": 485,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "tunnel_debris_4",
+        "modelPath": "assets/models/debris/Chunk_60cm.gltf",
+        "heightOffsetWorld": -0.15000000596046448,
+        "scale": 1.5,
+        "collision": true,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        13.0,
+        2.0,
+        -25.200000762939453
+      ],
+      "yawDegrees": 10.0
+    },
+    {
+      "id": 486,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "tunnel_debris_5",
+        "modelPath": "assets/models/debris/Scatter_Cluster_Large.gltf",
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        7.599999904632568,
+        2.0,
+        -24.399999618530273
+      ],
+      "yawDegrees": 110.0
+    },
+    {
+      "id": 487,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "tunnel_debris_6",
+        "modelPath": "assets/models/debris/Scatter_Cluster_Large.gltf",
+        "loop": false,
+        "animationSpeed": 1.25,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -2.799999952316284,
+        2.0,
+        -23.600000381469727
+      ],
+      "yawDegrees": 96.0
+    },
+    {
+      "id": 488,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "tunnel_debris_7",
+        "modelPath": "assets/models/debris/Slab_Rebar.gltf",
+        "heightOffsetWorld": -0.0625,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        11.600000381469727,
+        2.0,
+        -20.799999237060547
+      ],
+      "yawDegrees": -145.0
+    },
+    {
+      "id": 489,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "tunnel_debris_8",
+        "modelPath": "assets/models/debris/Scatter_Cluster_Small.gltf",
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        6.0,
+        2.0,
+        -19.600000381469727
+      ],
+      "yawDegrees": 162.99998474121094
     }
   ],
   "staticLights": [
@@ -42913,44 +43034,13 @@
       {
         "id": 4,
         "x": 64,
-        "y": -816,
-        "shape": "box",
-        "analyticStyle": "room",
-        "bottomOffsetWorld": 0.0,
-        "radiusZWorld": 4.0,
-        "heightWorld": 3.0,
-        "color": {
-          "r": 210,
-          "g": 210,
-          "b": 210,
-          "a": 255
-        },
-        "maxOpacity": 0.3499999940395355,
-        "analyticEndDistanceWorld": 12.0,
-        "analyticFalloffExponent": 0.5,
-        "edgeSoftness": 1.0,
-        "noiseScaleWorld": 0.15000000596046448,
-        "noiseAmount": 0.25,
-        "flowDirectionDegrees": 90.0
-      },
-      {
-        "id": 5,
-        "x": 48,
-        "y": -272,
-        "analyticStyle": "room",
-        "bottomOffsetWorld": -1.5,
-        "radiusXWorld": 3.0,
-        "radiusZWorld": 2.0,
-        "heightWorld": 2.0,
-        "color": {
-          "r": 210,
-          "g": 210,
-          "b": 210,
-          "a": 255
-        },
-        "analyticEndDistanceWorld": 6.0,
+        "y": -320,
+        "bottomOffsetWorld": -0.5,
+        "radiusXWorld": 2.5,
+        "heightWorld": 1.25,
+        "maxOpacity": 0.800000011920929,
         "analyticFalloffExponent": 2.0,
-        "edgeSoftness": 0.6499999761581421,
+        "edgeSoftness": 1.0,
         "noiseScaleWorld": 0.15000000596046448,
         "noiseAmount": 0.25,
         "flowDirectionDegrees": 90.0

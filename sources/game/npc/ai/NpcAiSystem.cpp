@@ -8,6 +8,7 @@
 #include "game/Health.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcLineOfSight.h"
 #include "game/npc/ai/NpcAiTypes.h"
 #include "sector_demo/SectorCollisionWorld.h"
@@ -240,6 +241,7 @@ void BuildPlayerPursuitSlots(
 
     for (const NpcNavigationRecord& record : npcNavigation.records) {
         if (!record.occupied || !world.IsAlive(record.entity)
+                || !IsSectorObjectEnabled(world, record.entity)
                 || !world.Has<NpcRuntimeInstance>(record.entity)
                 || !world.Has<NpcAiState>(record.entity)
                 || !world.Has<Health>(record.entity)
@@ -487,7 +489,8 @@ bool StartAttack(
         positional.position = transform.position;
         positional.minimumDistanceWorld = AttackSoundMinimumDistanceWorld;
         positional.maximumDistanceWorld = AttackSoundMaximumDistanceWorld;
-        audio.PlaySoundAt(assets, ai.attackSound, positional);
+        TrackNpcObjectSound(npc, assets, audio,
+                audio.PlaySoundAt(assets, ai.attackSound, positional));
     }
     return true;
 }
@@ -751,6 +754,7 @@ void UpdateNpcAiSystem(
                     SectorObjectTransform& transform,
                     Health& health,
                     NpcCombatState& combat) {
+        if (!IsSectorObjectEnabled(world, entity)) return;
         if (npc.conversationHeld && !combat.dead && !IsDepleted(health)) return;
         engine::AnimatedModelAnimator* animator =
                 world.Has<engine::AnimatedModelAnimator>(entity)
@@ -1105,8 +1109,8 @@ void UpdateNpcAiSystem(
                             AttackSoundMinimumDistanceWorld;
                     positional.maximumDistanceWorld =
                             AttackSoundMaximumDistanceWorld;
-                    audio.PlaySoundAt(
-                            assets, ai.attackImpactSound, positional);
+                    TrackNpcObjectSound(npc, assets, audio, audio.PlaySoundAt(
+                            assets, ai.attackImpactSound, positional));
                 }
                 ApplyNpcAiPlayerAttackEffects(
                         gameplay, ai.attack, actualToPlayer);

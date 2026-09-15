@@ -39,13 +39,13 @@ float MeasureSectorEditorPlacedObjectInspectorContentHeight(
     return MeasureSectorEditorStaticModelInspectorContentHeight(context, *object);
   }
   if (object->kind == "dynamic_model") {
-    return MeasureSectorEditorDynamicModelInspectorContentHeight(context, *object);
+    return context.rowH + context.gap + MeasureSectorEditorDynamicModelInspectorContentHeight(context, *object);
   }
   if (object->kind == "npc") {
-    return MeasureSectorEditorNpcInspectorContentHeight(context, *object);
+    return context.rowH + context.gap + MeasureSectorEditorNpcInspectorContentHeight(context, *object);
   }
   if (object->kind == "item") {
-    return MeasureSectorEditorItemInspectorContentHeight(context, *object);
+    return context.rowH + context.gap + MeasureSectorEditorItemInspectorContentHeight(context, *object);
   }
   return 72.0f;
 }
@@ -93,6 +93,25 @@ void DrawSectorEditorPlacedObjectInspector(
                isBillboard || isStaticModel || isDynamicModel || isNpc || isItem || isDoor || isWindow || isDuctAccess ? config.mutedTextColor
                                      : config.invalidColor);
   y += 34.0f;
+
+  if (isDynamicModel || isItem || isNpc) {
+    bool enabled = isDynamicModel ? selectedObject->dynamicModel.enabled
+            : isItem ? selectedObject->item.enabled : selectedObject->npc.enabled;
+    if (engine::Checkbox(ui, config, context.input, assets,
+            "sector_editor_object_enabled", Rectangle{0.0f, y, contentW, rowH},
+            font, "Enabled", enabled)) {
+      context.editing.MutateSelected("Updated object enabled state",
+              [enabled](SectorPlacedRuntimeObject& target) {
+                bool* value = target.kind == "dynamic_model" ? &target.dynamicModel.enabled
+                        : target.kind == "item" ? &target.item.enabled
+                        : target.kind == "npc" ? &target.npc.enabled : nullptr;
+                if (!value || *value == enabled) return false;
+                *value = enabled;
+                return true;
+              });
+    }
+    y += rowH + context.gap;
+  }
 
   if (isDoor) {
     DrawSectorEditorDoorInspector(context, y);

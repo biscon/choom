@@ -131,6 +131,7 @@ public:
     const SectorRuntimeObjectState& RuntimeObjects() const { return runtimeObjects; }
     SectorNavigationWorld& Navigation() { return navigation; }
     const SectorNavigationWorld& Navigation() const { return navigation; }
+    NpcAudioRuntime& NpcAudio() { return npcAudio; }
     NpcNavigationRuntime& NpcNavigation() { return npcNavigation; }
     const NpcNavigationRuntime& NpcNavigation() const { return npcNavigation; }
     const NpcAiRuntime& NpcAi() const { return npcAi; }

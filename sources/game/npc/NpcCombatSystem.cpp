@@ -576,7 +576,7 @@ static bool TracePlayerWeaponShot(
                     NpcCombatState& combat,
                     SectorObjectTransform& transform,
                     SectorObject& object) {
-                if (combat.dead || IsDepleted(health)) return;
+                if (!IsSectorObjectEnabled(object) || combat.dead || IsDepleted(health)) return;
                 float distance = 0.0f;
                 Vector3 normal{};
                 engine::AnimatedModelRaycastStatus modelStatus =
@@ -956,6 +956,7 @@ bool UpdateNpcCombatSystem(
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorDynamicModel& model) {
+                if (!IsSectorObjectEnabled(object)) return;
                 combat.staggerRemainingSeconds = std::max(
                         0.0f, combat.staggerRemainingSeconds - dt);
                 const float speed = Vector2Length(combat.knockbackVelocity);

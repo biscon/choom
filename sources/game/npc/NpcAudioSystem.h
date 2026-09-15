@@ -17,6 +17,7 @@ class World;
 namespace game {
 
 struct NpcDefinitionCatalog;
+struct NpcRuntimeInstance;
 
 enum class NpcVocalEvent : uint8_t {
     None,
@@ -67,6 +68,11 @@ void ShutdownNpcAudioRuntime(
         engine::AssetManager& assets,
         engine::AudioSystem& audio,
         NpcAudioRuntime& runtime);
+
+void TrackNpcObjectSound(NpcRuntimeInstance& npc, engine::AssetManager& assets,
+        engine::AudioSystem& audio, engine::SoundPlaybackHandle playback);
+void StopNpcObjectAudio(engine::World& world, engine::AssetManager& assets,
+        engine::AudioSystem& audio, NpcAudioRuntime* runtime, engine::Entity entity);
 
 bool QueueNpcVocalEvent(
         NpcAudioRuntime& runtime,

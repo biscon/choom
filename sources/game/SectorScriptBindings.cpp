@@ -1,4 +1,6 @@
 #include "game/SectorScriptBindings.h"
+#include "game/npc/NpcAudioSystem.h"
+#include "sector_demo/SectorPropDragging.h"
 #include "game/items/ItemInventory.h"
 
 #include "engine/EngineContext.h"
@@ -972,6 +974,7 @@ int LuaTeleportNpc(lua_State* state)
     if ((world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity)))
             || (world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead))
         return fail("NPC is dead");
+    if (!IsSectorObjectEnabled(context.world, entity)) return fail("NPC disabled");
     if (npc.conversationHeld) return fail("NPC is held by a conversation");
     if (npc.actionLockedByAi
             || (world.Has<NpcAiState>(entity)
@@ -1111,6 +1114,8 @@ int StartNpcLook(lua_State* state, ScriptNpcLookTarget kind, bool async)
     size_t length = 0;
     const char* id = lua_tolstring(state, 1, &length);
     const engine::Entity actor = FindNpcEntity(context.world, std::string_view{id, length});
+    if (context.world.IsAlive(actor) && !IsSectorObjectEnabled(context.world, actor))
+        return PushNpcMoveStartError(state, async, "NPC disabled");
     NpcBodyTurnState turn;
     const int durationArgument = kind == ScriptNpcLookTarget::Player ? 2 : 3;
     if (lua_type(state, durationArgument) != LUA_TNUMBER) {
@@ -1450,6 +1455,8 @@ int StartCaption(
         speech.speaker = FindNpcEntity(context.world, std::string_view{id, idLength});
         if (!context.world.IsAlive(speech.speaker))
             return PushCutsceneStartError(state, async, "say NPC instance was not found");
+        if (!IsSectorObjectEnabled(context.world, speech.speaker))
+            return PushCutsceneStartError(state, async, "NPC disabled");
         if (!lua_isnoneornil(state, 3)) {
             luaL_checktype(state, 3, LUA_TSTRING);
             size_t moodLength = 0;
@@ -2092,6 +2099,7 @@ int PushBindingError(lua_State* state, const std::string& error)
 const char* NpcAnimationControlError(
         engine::World& world, SectorScriptHost& host, engine::Entity entity)
 {
+    if (!IsSectorObjectEnabled(world, entity)) return "NPC disabled";
     const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(entity);
     if (npc.actionLockedByAi
             || (world.Has<NpcAiState>(entity)
@@ -2486,6 +2494,93 @@ bool MutateDynamicLight(
     }
     return false;
 }
+
+int LuaSetObjectEnabled(lua_State* state, const char* kind)
+{
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    auto& host = HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    const std::string_view id{rawId, length};
+    const bool enabled = lua_toboolean(state, 2) != 0;
+    engine::Entity entity = engine::NullEntity();
+    if (std::string_view{kind} == "npc") entity = FindNpcEntity(context.world, id);
+    else if (std::string_view{kind} == "prop") {
+        context.world.ForEach<SectorDynamicModel>([&](engine::Entity candidate, SectorDynamicModel& prop) {
+            if (prop.instanceId == id && !context.world.Has<NpcRuntimeInstance>(candidate)) entity = candidate;
+        });
+    } else {
+        context.world.ForEach<SectorItem>([&](engine::Entity candidate, SectorItem& item) {
+            if (item.instanceId == id) entity = candidate;
+        });
+    }
+    if (id.empty() || id.find('\0') != std::string_view::npos
+            || !context.world.IsAlive(entity) || !context.world.Has<SectorObject>(entity)
+            || !host.runtimeObjects)
+        return PushBindingError(state, std::string{kind} + " was not found");
+    if (context.world.Has<SectorItem>(entity)
+            && IsItemPickupVacuuming(context.world.Get<SectorItem>(entity).presentation))
+        return PushBindingError(state, "item pickup has already committed");
+    auto& object = context.world.Get<SectorObject>(entity);
+    if (object.enabled == enabled) { lua_pushboolean(state, 1); return 1; }
+    SetSectorRuntimeObjectEnabled(context.world, *host.runtimeObjects, entity, enabled);
+    if (!enabled) {
+        if (host.propDrag && host.propDrag->entity == entity)
+            EndSectorPropDrag(context, *host.propDrag, false);
+        if (context.world.Has<NpcRuntimeInstance>(entity)) {
+            if (host.conversation.active && host.conversation.npc == entity) {
+                if (host.scripts) engine::ScriptSystemRequestStopTask(*host.scripts, host.conversation.owner);
+                EndSectorScriptConversation(context, host);
+            }
+            if (host.scripts) {
+                for (auto& move : host.npcMoves) {
+                    if (move.active && move.instanceId == id) {
+                        engine::ScriptSystemCancelOperation(context, *host.scripts, move.operation, "NPC disabled");
+                        move.active = false;
+                    }
+                }
+                for (auto& look : host.npcLooks) {
+                    if (look.active && look.entity == entity) {
+                        engine::ScriptSystemCancelOperation(context, *host.scripts, look.operation, "NPC disabled");
+                        look.active = false;
+                    }
+                }
+                for (auto& animation : host.npcAnimations) {
+                    if (animation.active && animation.entity == entity) {
+                        engine::ScriptSystemCancelOperation(context, *host.scripts, animation.operation, "NPC disabled");
+                        animation.active = false;
+                    }
+                }
+                if (host.cutscene && host.cutscene->caption.active
+                        && host.cutscene->caption.speaker == entity)
+                    engine::ScriptSystemCancelOperation(context, *host.scripts,
+                            host.cutscene->caption.operation, "NPC disabled");
+            }
+            if (context.world.Has<NpcAnimationState>(entity)
+                    && context.world.Has<engine::AnimatedModelAnimator>(entity))
+                CancelNpcScriptAnimation(context.world.Get<NpcAnimationState>(entity),
+                        context.world.Get<engine::AnimatedModelAnimator>(entity));
+            StopNpcObjectAudio(context.world, context.assets, context.audio, host.npcAudio, entity);
+        }
+    }
+    if (host.navigation) {
+        host.navigation->UpdateDynamicObstacles(host.runtimeObjects->dynamicModelColliders, 0.0f);
+        if (host.npcNavigation) {
+            SuspendDisabledNpcNavigation(context.world, *host.navigation, *host.npcNavigation);
+            PrepareNpcDoorTraversalAndHoldsSystem(context.world, *host.navigation,
+                    *host.npcNavigation, host.runtimeObjects->dynamicDoorColliders, 0.0f);
+            CollectNpcDoorObstacles(context.world, *host.npcNavigation,
+                    host.runtimeObjects->doorObstacles);
+        }
+    }
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaSetPropEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "prop"); }
+int LuaSetItemEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "item"); }
+int LuaSetNpcEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "npc"); }
 
 int LuaSetDynamicLightEnabled(lua_State* state)
 {
@@ -2950,6 +3045,8 @@ void InitializeSectorScriptHost(
     host.npcMoveDiagnostics = {};
     host.doorPermission = {};
     host.dynamicLightsDirty = false;
+    host.npcAudio = nullptr;
+    host.propDrag = nullptr;
     host.triggers.clear();
     host.triggers.reserve(map.triggers.size());
     std::vector<size_t> triggerIndices(map.triggers.size());
@@ -2991,6 +3088,8 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.triggers.clear();
     host.doorPermission = {};
     host.dynamicLightsDirty = false;
+    host.npcAudio = nullptr;
+    host.propDrag = nullptr;
 }
 
 void RegisterSectorScriptBindings(lua_State* state)
@@ -3026,6 +3125,9 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "hasInventoryItemInstance", LuaHasInventoryItemInstance);
     Register(state, "hasInventoryItemDefinition", LuaHasInventoryItemDefinition);
     Register(state, "setNpcHealth", LuaSetNpcHealth);
+    Register(state, "setPropEnabled", LuaSetPropEnabled);
+    Register(state, "setItemEnabled", LuaSetItemEnabled);
+    Register(state, "setNpcEnabled", LuaSetNpcEnabled);
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
     Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);

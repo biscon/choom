@@ -692,6 +692,8 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                     obstacleConfig.playerHeight};
             playerObstaclePtr = &playerObstacle;
         }
+        SetSectorRuntimeObjectAuthoringPreview(context.world, sceneRuntime.RuntimeObjects(),
+                previewState.controller.previewControlMode != SectorPreviewControlMode::Gameplay);
         sceneRuntime.Update(
                 context,
                 TopologyMap(),

@@ -311,7 +311,7 @@ void ResolveNpcAnimations(
         const NpcDefinitionCatalog& definitions,
         engine::Entity entity)
 {
-    if (!world.IsAlive(entity)
+    if (!IsSectorObjectEnabled(world, entity)
             || !world.Has<NpcRuntimeInstance>(entity)
             || !world.Has<NpcAnimationState>(entity)
             || !world.Has<engine::AnimatedModelInstance>(entity)
@@ -1046,6 +1046,34 @@ void ShutdownNpcNavigationRuntime(
     runtime.growthWarned = false;
 }
 
+void SuspendDisabledNpcNavigation(engine::World& world,
+        SectorNavigationWorld& navigation, NpcNavigationRuntime& runtime)
+{
+    for (NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied || !world.IsAlive(record.entity)
+                || IsSectorObjectEnabled(world, record.entity)) continue;
+        if (!IsNull(record.agentHandle)) {
+            navigation.ReleaseAgentRecord(record.agentHandle);
+            record.agentHandle = {};
+        }
+        record.crowdAttached = false;
+        record.preferredVelocity = {};
+        record.desiredVelocity = {};
+        record.actualVelocity = {};
+        record.holdsDoor = false;
+        record.footstepMovementActive = false;
+        record.footstepEvent = false;
+    }
+    runtime.collisionCylinders.clear();
+    for (const auto& record : runtime.records) {
+        if (!record.occupied || !IsSectorObjectEnabled(world, record.entity)
+                || !world.Has<SectorObjectTransform>(record.entity)) continue;
+        runtime.collisionCylinders.push_back({record.placedObjectId,
+                world.Get<SectorObjectTransform>(record.entity).position,
+                navigation.Settings().agentRadius, navigation.Settings().agentHeight});
+    }
+}
+
 bool DeactivateNpcNavigation(
         engine::World& world,
         SectorNavigationWorld& navigation,
@@ -1113,6 +1141,10 @@ bool BeginNpcBodyTurn(engine::World& world, NpcNavigationRuntime& runtime,
             || !world.Has<NpcRuntimeInstance>(entity)
             || !world.Has<SectorObjectTransform>(entity)) {
         error = "NPC instance was not found";
+        return false;
+    }
+    if (!IsSectorObjectEnabled(world, entity)) {
+        error = "NPC disabled";
         return false;
     }
     if (world.Get<NpcRuntimeInstance>(entity).conversationHeld) {
@@ -1222,6 +1254,8 @@ static NpcMoveRequestResult RequestNpcMoveRecord(
             || !world.Has<SectorObject>(record->entity)) {
         return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC instance was not found");
     }
+    if (!IsSectorObjectEnabled(world, record->entity))
+        return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC disabled");
     if (world.Has<NpcRuntimeInstance>(record->entity)
             && world.Get<NpcRuntimeInstance>(record->entity).conversationHeld)
         return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC is held by a conversation");
@@ -1710,7 +1744,7 @@ void UpdateNpcFootstepEventsSystem(
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     for (NpcNavigationRecord& record : runtime.records) {
-        if (!record.occupied || !world.IsAlive(record.entity)
+        if (!record.occupied || !IsSectorObjectEnabled(world, record.entity)
                 || !world.Has<NpcRuntimeInstance>(record.entity)
                 || !world.Has<NpcAnimationState>(record.entity)
                 || !world.Has<engine::AnimatedModelInstance>(record.entity)
@@ -1800,7 +1834,7 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
     const SectorNavigationSettings& settings = navigation.Settings();
     for (NpcNavigationRecord& record : runtime.records) {
         if (!record.occupied || record.arrivalReached || !IsActive(record.phase)
-                || !world.IsAlive(record.entity)
+                || !IsSectorObjectEnabled(world, record.entity)
                 || !world.Has<NpcRuntimeInstance>(record.entity)
                 || !world.Has<SectorObjectTransform>(record.entity)) {
             record.holdsDoor = false;
@@ -1872,7 +1906,7 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
                 for (const NpcNavigationRecord& candidate : runtime.records) {
                     if (!candidate.occupied || !IsActive(candidate.phase)
                             || candidate.doorId != record.doorId
-                            || !world.IsAlive(candidate.entity)
+                            || !IsSectorObjectEnabled(world, candidate.entity)
                             || !world.Has<SectorObjectTransform>(candidate.entity)) {
                         continue;
                     }
@@ -2004,7 +2038,7 @@ void CollectNpcDoorObstacles(
         if (!record.occupied || record.arrivalReached || !IsActive(record.phase)
                 || (record.doorPhase != NpcDoorTraversalPhase::WaitingForClearance
                     && record.doorPhase != NpcDoorTraversalPhase::Crossing)
-                || !world.IsAlive(record.entity)
+                || !IsSectorObjectEnabled(world, record.entity)
                 || !world.Has<SectorObjectTransform>(record.entity)) continue;
         SectorDoorPlayerObstacle obstacle = npcShape;
         obstacle.feetPosition = world.Get<SectorObjectTransform>(record.entity).position;
@@ -2045,7 +2079,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
 
     runtime.collisionCylinders.clear();
     for (const NpcNavigationRecord& record : runtime.records) {
-        if (!record.occupied || !world.IsAlive(record.entity)
+        if (!record.occupied || !IsSectorObjectEnabled(world, record.entity)
                 || !world.Has<SectorObjectTransform>(record.entity)) {
             continue;
         }
@@ -2059,7 +2093,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
     // Submit every agent's preferred velocity before the single Crowd update.
     // Idle agents participate with zero velocity so moving agents avoid them.
     for (NpcNavigationRecord& record : runtime.records) {
-        if (!record.occupied || !world.IsAlive(record.entity)
+        if (!record.occupied || !IsSectorObjectEnabled(world, record.entity)
                 || !world.Has<NpcRuntimeInstance>(record.entity)
                 || !world.Has<SectorObjectTransform>(record.entity)) {
             continue;
@@ -2151,6 +2185,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
             continue;
         }
 
+        if (!IsSectorObjectEnabled(world, record.entity)) continue;
         NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
         SectorObjectTransform& transform = world.Get<SectorObjectTransform>(record.entity);
         SectorObject& object = world.Get<SectorObject>(record.entity);

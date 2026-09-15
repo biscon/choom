@@ -308,6 +308,119 @@ void TeleportConsole(NpcScriptFixture& fixture, const char* source)
     assert(result.success);
 }
 
+void ObjectEnabledBindingsAndNpcSuspension()
+{
+    NpcScriptFixture fixture;
+    auto& world = fixture.context.world;
+    const auto prop = world.CreateEntity();
+    game::SectorDynamicModel model;
+    model.instanceId = "barrier";
+    model.useConsumed = true;
+    model.opacity = 0.6f;
+    world.Add(prop, model);
+    world.Add(prop, game::SectorObject{});
+    world.Add(prop, game::SectorObjectTransform{{8, 0, 8}});
+    const auto item = world.CreateEntity();
+    game::SectorItem itemData;
+    itemData.instanceId = "key";
+    itemData.quantity = 3;
+    world.Add(item, itemData);
+    world.Add(item, game::SectorObject{});
+    const auto staticProp = world.CreateEntity();
+    game::SectorStaticModel staticModel;
+    staticModel.instanceId = "static_prop";
+    world.Add(staticProp, staticModel);
+    world.Add(staticProp, game::SectorObject{});
+    // NPCs carry SectorDynamicModel too; the prop command must exclude them.
+    world.Get<game::SectorDynamicModel>(fixture.npc).instanceId = "npc_model";
+    fixture.files.Write(R"(
+function init()
+    assert(setPropEnabled('barrier', false))
+    assert(setItemEnabled('key', false))
+    assert(setNpcEnabled('script_guard', false))
+end
+)");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    assert(!world.Get<game::SectorObject>(prop).enabled);
+    assert(!world.Get<game::SectorObject>(item).enabled);
+    assert(!world.Get<game::SectorObject>(fixture.npc).enabled);
+    assert(fixture.npcNavigation.collisionCylinders.empty());
+    TeleportConsole(fixture, R"(
+        assert(setNpcEnabled('script_guard', false))
+        assert(not setPropEnabled('npc_model', false))
+        assert(not setPropEnabled('static_prop', false))
+        assert(not setItemEnabled('missing', true))
+        assert(not setNpcEnabled('', true))
+        assert(not pcall(setNpcEnabled, 'script_guard', 0))
+        local op, why = startMoveNpc('script_guard', 6, 8)
+        assert(op == nil and why:find('disabled'))
+        local look, reason = startNpcLookAtPlayer('script_guard', 1000)
+        assert(look == nil and reason:find('disabled'))
+        assert(setNpcEnabled('script_guard', true))
+        assert(setPropEnabled('barrier', true))
+        assert(setItemEnabled('key', true))
+    )");
+    assert(fixture.npcNavigation.collisionCylinders.size() == 1);
+    assert(world.Get<game::SectorDynamicModel>(prop).useConsumed);
+    assert(world.Get<game::SectorDynamicModel>(prop).opacity == 0.6f);
+    assert(world.Get<game::SectorItem>(item).quantity == 3);
+    world.Get<game::SectorItem>(item).presentation.phase = game::ItemPresentationPhase::PickupVacuum;
+    TeleportConsole(fixture, "local ok, reason = setItemEnabled('key', false); assert(not ok and reason:find('committed'))");
+    assert(world.Get<game::SectorObject>(item).enabled);
+
+    TeleportConsole(fixture, "travel = assert(startMoveNpc('script_guard', 6, 8))");
+    fixture.Update(0.05f);
+    TeleportConsole(fixture, R"(
+        assert(setNpcEnabled('script_guard', false))
+        local status, why = operationStatus(travel)
+        assert(status == 'cancelled' and why == 'NPC disabled')
+    )");
+    const auto position = world.Get<game::SectorObjectTransform>(fixture.npc).position;
+    for (int i = 0; i < 10; ++i) fixture.Update(0.1f);
+    assert(Vector3Distance(position, world.Get<game::SectorObjectTransform>(fixture.npc).position) == 0);
+    assert(fixture.npcNavigation.records[0].occupied);
+    assert(fixture.npcNavigation.collisionCylinders.empty());
+    TeleportConsole(fixture, "assert(setNpcEnabled('script_guard', true)); turn = assert(startNpcLookAtPlayer('script_guard', 1000)); assert(setNpcEnabled('script_guard', false)); local status, why = operationStatus(turn); assert(status == 'cancelled' and why == 'NPC disabled')");
+    TeleportConsole(fixture, "assert(setNpcEnabled('script_guard', true))");
+    const auto request = game::RequestNpcMove(world, fixture.navigation,
+            fixture.objects.objectSectorLookupWorld, fixture.npcNavigation, "script_guard", {6, 8},
+            game::NpcMoveGait::Walk, game::NpcMoveAuthority::Patrol);
+    assert(request.accepted);
+    TeleportConsole(fixture, "assert(setNpcEnabled('script_guard', false))");
+    for (int i = 0; i < 10; ++i) fixture.Update(0.1f);
+    assert(Vector3Distance(position, world.Get<game::SectorObjectTransform>(fixture.npc).position) == 0);
+    TeleportConsole(fixture, "assert(setNpcEnabled('script_guard', true))");
+    for (int i = 0; i < 10; ++i) fixture.Update(0.1f);
+    assert(Vector3Distance(position, world.Get<game::SectorObjectTransform>(fixture.npc).position) > 0.1f);
+}
+
+void DisablingNpcCancelsAnimationAndConversation()
+{
+    NpcScriptFixture fixture;
+    auto& world = fixture.context.world;
+    world.Add(fixture.npc, engine::AnimatedModelAnimator{});
+    auto& animation = world.Get<game::NpcAnimationState>(fixture.npc);
+    animation.resolved = true;
+    animation.animationIndices[0] = 0;
+    fixture.host.controls.setControlsEnabled =
+            [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+    fixture.files.Write("function init() end; function talk() assert(startConversation('script_guard', {reposition=false})); delay(10000) end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto operation = game::BeginSectorScriptNpcAnimation(fixture.context,
+            fixture.host, fixture.npc, {2, 1, 1}, engine::ScriptOperationLaunchStyle::Async, {});
+    assert(engine::IsValid(operation));
+    engine::ScriptSystemPushOperationUserdata(fixture.runtime.vm, operation);
+    lua_setglobal(fixture.runtime.vm, "wave");
+    TeleportConsole(fixture, "assert(setNpcEnabled('script_guard', false)); local status, why = operationStatus(wave); assert(status == 'cancelled' and why == 'NPC disabled')");
+    assert(animation.scriptStatus == game::NpcScriptAnimationStatus::Cancelled);
+    TeleportConsole(fixture, "assert(setNpcEnabled('script_guard', true))");
+    assert(engine::ScriptSystemCallForegroundHook(fixture.runtime, "talk").result
+            == engine::ScriptCallResult::Started);
+    assert(fixture.host.conversation.active && !fixture.cutscene.controlsEnabled);
+    TeleportConsole(fixture, "assert(setNpcEnabled('script_guard', false))");
+    assert(!fixture.host.conversation.active && fixture.cutscene.controlsEnabled);
+}
+
 void MarkerTeleportsApplyExactPositionsAndFacingImmediately()
 {
     NpcScriptFixture fixture;
@@ -3394,6 +3507,8 @@ end
 
 void RunSectorScriptBindingTests()
 {
+    ObjectEnabledBindingsAndNpcSuspension();
+    DisablingNpcCancelsAnimationAndConversation();
     ScreenShakeBindingsAndLifecycle();
     extern void RunSectorNoteTests();
     RunSectorNoteTests();

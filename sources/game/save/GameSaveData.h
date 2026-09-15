@@ -66,6 +66,7 @@ struct GameSavePropState {
     std::vector<SectorSavedEmissionColor> emissiveColors;
     int dragPathEditorId = 0;
     float dragDistanceWorld = 0.0f;
+    bool enabled = true;
 };
 
 struct GameSaveNpcState {
@@ -99,6 +100,7 @@ struct GameSaveNpcState {
     Vector2 destinationXZ = {};
     bool stoppedByScript = false;
     bool destinationInitialized = false;
+    bool enabled = true;
 };
 
 struct GameSaveBillboardState {
@@ -126,6 +128,13 @@ struct GameSaveTriggerState {
     float remainingDelayMilliseconds = 0.0f;
 };
 
+struct GameSaveItemState {
+    int placedObjectId = 0;
+    std::string instanceId;
+    bool sessionDrop = false;
+    bool enabled = true;
+};
+
 struct GameSaveLevelState {
     std::string levelId;
     std::vector<GameSaveDoorState> doors;
@@ -135,6 +144,7 @@ struct GameSaveLevelState {
     std::vector<GameSaveBillboardState> billboards;
     std::vector<GameSaveDynamicLightState> dynamicLights;
     std::vector<GameSaveTriggerState> triggers;
+    std::vector<GameSaveItemState> items;
 };
 
 struct GameSavePlayerState {

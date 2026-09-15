@@ -2,6 +2,7 @@
 
 #include "engine/assets/ModelAssets.h"
 #include "engine/components/AnimatedModel.h"
+#include "engine/ecs/Entity.h"
 
 namespace engine {
 
@@ -63,7 +64,8 @@ bool PrepareAnimatedModelInstance(AnimatedModelInstance& instance, const ModelAs
 
 // Normal frame update. This does not allocate and never applies root motion to
 // an entity transform.
-void AnimatedModelSystem(World& world, AssetManager& assets, float dt);
+void AnimatedModelSystem(World& world, AssetManager& assets, float dt,
+        bool (*shouldUpdate)(const World&, Entity) = nullptr);
 
 // Returns a shallow view of the shared asset with instance-owned pose pointers.
 Model BuildAnimatedModelPoseView(

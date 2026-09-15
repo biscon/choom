@@ -826,6 +826,8 @@ bool SpawnItemEntity(
             placedObject.position);
     worldPosition.y += placedObject.item.heightOffsetWorld;
     SectorObject object;
+    object.enabled = placedObject.item.enabled;
+    object.authoringPreview = state.authoringPreview;
     if (state.objectSectorLookupWorldValid) {
         const int foundSectorId =
                 state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
@@ -1611,6 +1613,8 @@ void SpawnPlacedRuntimeObjects(
             Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
                     placedObject.position);
             SectorObject object;
+            object.enabled = placedObject.npc.enabled;
+            object.authoringPreview = state.authoringPreview;
             object.itemDropTarget = placedObject.npc.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId =
@@ -1831,6 +1835,8 @@ void SpawnPlacedRuntimeObjects(
             }
             worldPosition.y += placedObject.dynamicModel.heightOffsetWorld;
             SectorObject object;
+            object.enabled = placedObject.dynamicModel.enabled;
+            object.authoringPreview = state.authoringPreview;
             object.itemDropTarget = placedObject.dynamicModel.itemDropTarget;
             if (state.objectSectorLookupWorldValid) {
                 const int foundSectorId =
@@ -2001,6 +2007,40 @@ void SpawnPlacedRuntimeObjects(
     CollectSectorWindowColliders(world, state.windowColliders);
     RefreshPhysicalModelColliders(state);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
+}
+
+void RefreshSectorRuntimeObjectColliders(engine::World& world,
+        SectorRuntimeObjectState& state)
+{
+    CollectSectorStaticModelColliders(world, state.staticModelColliders);
+    CollectSectorDynamicModelColliders(world, state.dynamicModelColliders);
+    RefreshPhysicalModelColliders(state);
+}
+
+bool SetSectorRuntimeObjectEnabled(engine::World& world,
+        SectorRuntimeObjectState& state, engine::Entity entity, bool enabled)
+{
+    if (!world.IsAlive(entity) || !world.Has<SectorObject>(entity)
+            || (!world.Has<SectorDynamicModel>(entity) && !world.Has<SectorItem>(entity)))
+        return false;
+    auto& object = world.Get<SectorObject>(entity);
+    if (object.enabled == enabled) return true;
+    object.enabled = enabled;
+    state.objectVisibilityChanged = true;
+    RefreshSectorRuntimeObjectColliders(world, state);
+    return true;
+}
+
+void SetSectorRuntimeObjectAuthoringPreview(engine::World& world,
+        SectorRuntimeObjectState& state, bool authoringPreview)
+{
+    if (state.authoringPreview == authoringPreview) return;
+    state.authoringPreview = authoringPreview;
+    state.objectVisibilityChanged = true;
+    world.ForEach<SectorObject>([authoringPreview](engine::Entity, SectorObject& object) {
+        object.authoringPreview = authoringPreview;
+    });
+    RefreshSectorRuntimeObjectColliders(world, state);
 }
 
 void CollectSectorWindowColliders(

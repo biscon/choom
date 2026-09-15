@@ -134,7 +134,7 @@ void UpdateSectorDynamicModelShadowCasters(
                         SectorObject& object,
                         SectorDynamicModel& dynamicModel,
                         engine::AnimatedModelInstance& instance) {
-                    if (!object.visible
+                    if ((!object.visible || !IsSectorObjectEnabled(object))
                             || dynamicModel.shadowMode
                                     != SectorDynamicModelShadowMode::Dynamic
                             || !instance.poseReady
@@ -189,7 +189,7 @@ void UpdateSectorDynamicModelShadowCasters(
                         SectorObjectTransform& transform,
                         SectorObject& object,
                         SectorItem& item) {
-                    if (!object.visible
+                    if ((!object.visible || !IsSectorObjectEnabled(object))
                             || item.shadowMode
                                     != SectorDynamicModelShadowMode::Dynamic
                             || engine::IsNull(item.model)) {

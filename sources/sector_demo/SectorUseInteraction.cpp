@@ -105,7 +105,7 @@ bool HiddenByDraggableProp(engine::World& world, engine::Entity entity, Vector3 
     bool hidden = false;
     world.ForEach<SectorPropDrag, SectorStaticModelCollider>([&](engine::Entity blocker,
             const SectorPropDrag&, const SectorStaticModelCollider& box) {
-        if (blocker == entity || !box.resolved || distance <= UseOcclusionTolerance) return;
+        if (!IsSectorObjectEnabled(world, blocker) || blocker == entity || !box.resolved || distance <= UseOcclusionTolerance) return;
         const Vector2 relative{eye.x-box.center.x,eye.z-box.center.y};
         const Vector2 delta{targetPosition.x-eye.x,targetPosition.z-eye.z};
         const Ray ray{{Vector2DotProduct(relative,box.axisX),eye.y,Vector2DotProduct(relative,box.axisZ)},
@@ -250,7 +250,7 @@ void ConsiderSectorNpcUseTarget(engine::World& world, engine::Entity entity,
     const auto& transform = world.Get<SectorObjectTransform>(entity);
     const auto& model = world.Get<SectorDynamicModel>(entity);
     if (npc.hostile || npc.conversationHeld || npc.onUseScript.empty() ||
-        !std::isfinite(npc.useDistance) || npc.useDistance <= 0.0f || !object.visible ||
+        !std::isfinite(npc.useDistance) || npc.useDistance <= 0.0f || (!object.visible || !IsSectorObjectEnabled(object)) ||
         model.opacity <= 0.0f ||
         (world.Has<Health>(entity) && IsDepleted(world.Get<Health>(entity))) ||
         (world.Has<NpcCombatState>(entity) && world.Get<NpcCombatState>(entity).dead))
@@ -357,7 +357,7 @@ SectorUseTarget FindSectorObjectUseTarget(
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorStaticModel& model) {
-                if (!object.visible) return;
+                if ((!object.visible || !IsSectorObjectEnabled(object))) return;
                 const engine::ModelAsset* asset = assets.GetModelAsset(model.model);
                 if (asset == nullptr || !asset->hasLocalBounds) return;
                 const Matrix authored = BuildSectorStaticModelAuthoredTransform(
@@ -385,7 +385,7 @@ SectorUseTarget FindSectorObjectUseTarget(
                     SectorObject& object,
                     SectorDynamicModel& model,
                     engine::AnimatedModelInstance& instance) {
-                if (!object.visible || model.opacity <= 0.0f
+                if ((!object.visible || !IsSectorObjectEnabled(object)) || model.opacity <= 0.0f
                         || !instance.poseReady || instance.poseFailed) {
                     return;
                 }
@@ -428,7 +428,7 @@ SectorUseTarget FindSectorObjectUseTarget(
                     SectorObjectTransform& transform, SectorObject& object,
                     SectorDoor& door, SectorDoorResolvedAnchor& anchor,
                     SectorDoorRender& render) {
-                if (!object.visible || !door.enabled || !render.visible) return;
+                if ((!object.visible || !IsSectorObjectEnabled(object)) || !door.enabled || !render.visible) return;
                 ConsiderDoorLeafBounds(accumulator, world, &assets, ray,
                         entity, transform, anchor, render,
                         object.itemDropTarget && !door.instanceId.empty());
@@ -450,7 +450,7 @@ std::string_view SectorObjectUseTargetInstanceId(
         engine::World& world,
         const SectorUseTarget& target)
 {
-    if (!world.IsAlive(target.entity) || !world.Has<SectorObject>(target.entity)
+    if (!IsSectorObjectEnabled(world, target.entity) || !world.Has<SectorObject>(target.entity)
             || !world.Get<SectorObject>(target.entity).itemDropTarget) return {};
     if (target.kind == SectorUseTargetKind::Door
             && world.Has<SectorDoor>(target.entity)) {
@@ -498,7 +498,7 @@ SectorUseTarget FindSectorUseTarget(
             [&](engine::Entity entity,
                     SectorItem& item,
                     SectorObjectTransform& transform) {
-                if (item.takePending || !IsItemSettled(item.presentation)
+                if (!IsSectorObjectEnabled(world, entity) || item.takePending || !IsItemSettled(item.presentation)
                         || item.title.empty()
                         || !std::isfinite(item.takeDistance)
                         || item.takeDistance <= 0.0f) {
@@ -538,7 +538,7 @@ SectorUseTarget FindSectorUseTarget(
                         SectorDynamicModel& prop,
                         SectorObjectTransform& transform,
                         engine::AnimatedModelInstance& instance) {
-                    if (world.Has<NpcRuntimeInstance>(entity)) return;
+                    if (!IsSectorObjectEnabled(world, entity) || world.Has<NpcRuntimeInstance>(entity)) return;
                     if ((!world.Has<SectorPropDrag>(entity) && (!includeDynamicProps || prop.onUseScript.empty() || prop.useConsumed))
                             || !std::isfinite(prop.useDistance)
                             || prop.useDistance <= 0.0f) {
@@ -768,7 +768,7 @@ std::string_view SectorUseTargetTitle(
         const SectorUseTarget& target)
 {
     if (target.kind == SectorUseTargetKind::Ladder) return "Ladder";
-    if (!world.IsAlive(target.entity)) return {};
+    if (!IsSectorObjectEnabled(world, target.entity)) return {};
     if (target.kind == SectorUseTargetKind::Npc && world.Has<NpcRuntimeInstance>(target.entity))
         return world.Get<NpcRuntimeInstance>(target.entity).displayName;
     if (target.kind == SectorUseTargetKind::Item

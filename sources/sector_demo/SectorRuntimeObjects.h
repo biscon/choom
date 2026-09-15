@@ -50,7 +50,21 @@ struct SectorObject {
     int currentSectorId = -1;
     bool visible = true;
     bool itemDropTarget = false;
+    bool enabled = true;
+    // Editor-only display/simulation override; never persisted.
+    bool authoringPreview = false;
 };
+
+inline bool IsSectorObjectEnabled(const SectorObject& object)
+{
+    return object.enabled || object.authoringPreview;
+}
+
+inline bool IsSectorObjectEnabled(const engine::World& world, engine::Entity entity)
+{
+    return world.IsAlive(entity) && (!world.Has<SectorObject>(entity)
+            || IsSectorObjectEnabled(world.Get<SectorObject>(entity)));
+}
 
 struct SectorObjectLighting {
     BakedObjectLightingSample baked = {};
@@ -276,8 +290,18 @@ struct SectorRuntimeObjectState {
     bool doorSpatialStateChanged = true;
     bool doorCollisionCacheInitialized = false;
     std::string objectSectorLookupWarning;
+    bool objectVisibilityChanged = false;
     bool worldReserved = false;
+    bool authoringPreview = false;
 };
+
+// Changes participation without replacing components or authored settings.
+bool SetSectorRuntimeObjectEnabled(engine::World& world,
+        SectorRuntimeObjectState& state, engine::Entity entity, bool enabled);
+void SetSectorRuntimeObjectAuthoringPreview(engine::World& world,
+        SectorRuntimeObjectState& state, bool authoringPreview);
+void RefreshSectorRuntimeObjectColliders(engine::World& world,
+        SectorRuntimeObjectState& state);
 
 void ReserveSectorRuntimeObjectWorld(
         engine::World& world,

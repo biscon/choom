@@ -39,6 +39,8 @@ ranges, return values, behavior, and failure details.
   `closeDoor(doorId)`, `toggleDoor(doorId)`.
 - **[Inventory queries](#inventory-queries):**
   `hasInventoryItemInstance(instanceId)`, `hasInventoryItemDefinition(definitionId)`.
+- **[Object enabled state](#object-enabled-state):** `setPropEnabled(propId, enabled)`,
+  `setItemEnabled(instanceId, enabled)`, `setNpcEnabled(npcId, enabled)`.
 - **[Prop animation](#dynamic-props-and-animation):**
   `playPropAnimation(propId [, animationName [, mode]])`,
   `pausePropAnimation(propId)`, `resumePropAnimation(propId)`,
@@ -493,6 +495,49 @@ end
 
 This callback is separate from a dynamic prop's own no-argument
 `onUseScript`, which continues to run from the centered E-key Use interaction.
+
+## Object enabled state
+
+### `setPropEnabled(propId, enabled) -> true | false, reason`
+### `setItemEnabled(instanceId, enabled) -> true | false, reason`
+### `setNpcEnabled(npcId, enabled) -> true | false, reason`
+
+Set the enabled state of a placed dynamic prop, world item, or NPC using its
+**Instance ID**. The second argument must be a Lua Boolean. Prop commands target
+dynamic props; static props and NPCs are not accepted by `setPropEnabled`.
+Missing targets return `false, reason`. Setting the current state again succeeds.
+
+```lua
+function openSecurityWing()
+    setPropEnabled("temporary_barricade", false)
+    setItemEnabled("security_key", true)
+    setNpcEnabled("security_guard", true)
+end
+```
+
+The **Enabled** checkbox in these objects' inspectors controls their initial
+state. New placements and older levels without the field default to enabled.
+Disabled objects remain visible and selectable in 2D and free-camera authoring;
+gameplay preview and game sessions honor the flag.
+
+During gameplay, disabled objects are not rendered, cast no runtime shadows,
+do not collide, and cannot be picked up, used, dragged, hit, or targeted with a
+carried item. Their animation and world presentation pause. Disabled NPCs also
+pause AI, movement, combat, patrol and corpse timers, and stop their sounds.
+Re-enabling resumes ordinary state without resetting position, health, item
+quantity, animation playback settings, or single-use consumption. Collision
+resumes only if it was configured for that object.
+
+Disabling an NPC cancels its active scripted movement, body-look, animation,
+and speech operations with an `NPC disabled` reason. Its conversation ends and
+releases player controls. New movement, look, teleport, speech, and animation
+operations reject disabled NPCs; state setters such as `setNpcHealth` remain
+available. Re-enabling does not restart cancelled operations.
+
+Enabled state is saved per level and restored on save/load and level revisits.
+The commands do not recreate collected items or despawned NPCs and do not change
+inventory entries. An item whose pickup has already committed cannot be toggled,
+even while its pickup animation is still visible.
 
 ## Dynamic props and animation
 

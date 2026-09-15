@@ -75,7 +75,7 @@ DragMotionStep NextMotionStep(float position, float length, float maxSpeed, floa
 
 bool Valid(engine::World &world, engine::Entity e)
 {
-    return world.IsAlive(e) && world.Has<SectorPropDrag>(e) &&
+    return IsSectorObjectEnabled(world, e) && world.Has<SectorPropDrag>(e) &&
            world.Has<SectorObjectTransform>(e) && world.Has<SectorStaticModelCollider>(e) &&
            world.Get<SectorStaticModelCollider>(e).resolved &&
            !world.Get<SectorStaticModelCollider>(e).failed;

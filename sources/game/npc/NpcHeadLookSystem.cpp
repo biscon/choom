@@ -243,6 +243,7 @@ void UpdateNpcHeadLookSystem(
                     SectorDynamicModel& dynamicModel,
                     engine::AnimatedModelInstance& instance,
                     engine::AnimatedModelAnimator& animator) {
+                if (!IsSectorObjectEnabled(world, entity)) return;
                 const engine::ModelAsset* asset =
                         assets.GetModelAsset(instance.model);
                 if (asset == nullptr

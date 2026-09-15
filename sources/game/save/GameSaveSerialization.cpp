@@ -428,6 +428,7 @@ Json LevelJson(const GameSaveLevelState& level)
         if (value.dragPathEditorId > 0) json["drag"] = Json{
                 {"pathEditorId", value.dragPathEditorId}, {"distanceWorld", value.dragDistanceWorld}};
         if (value.hasAnimator) json["animator"] = AnimatorJson(value.animator);
+        json["enabled"] = value.enabled;
         root["props"].push_back(std::move(json));
     }
     for (const GameSaveNpcState& value : level.npcs) {
@@ -455,7 +456,15 @@ Json LevelJson(const GameSaveLevelState& level)
                     {"stoppedByScript", value.stoppedByScript},
                     {"destinationInitialized", value.destinationInitialized}};
         }
+        json["enabled"] = value.enabled;
         root["npcs"].push_back(std::move(json));
+    }
+    if (!level.items.empty()) {
+        root["items"] = Json::array();
+        for (const auto& item : level.items)
+            root["items"].push_back(Json{{"placedObjectId", item.placedObjectId},
+                    {"instanceId", item.instanceId}, {"sessionDrop", item.sessionDrop},
+                    {"enabled", item.enabled}});
     }
     for (const GameSaveBillboardState& value : level.billboards) {
         root["billboards"].push_back(Json{{"placedObjectId", value.placedObjectId},
@@ -520,8 +529,25 @@ GameSaveLevelState ReadLevel(const Json& root)
             level.ductAccesses.push_back(state);
         }
     }
+    if (const auto items = root.find("items"); items != root.end()) {
+        Require(items->is_array(), "items must be an array");
+        std::set<std::pair<bool, int>> itemIds;
+        for (const auto& value : *items) {
+            GameSaveItemState item;
+            item.placedObjectId = value.at("placedObjectId").get<int>();
+            item.instanceId = value.at("instanceId").get<std::string>();
+            item.sessionDrop = value.value("sessionDrop", false);
+            item.enabled = value.value("enabled", true);
+            Require(item.placedObjectId > 0 && !item.instanceId.empty()
+                            && item.instanceId.find('\0') == std::string::npos
+                            && itemIds.emplace(item.sessionDrop, item.placedObjectId).second,
+                    "duplicate or invalid saved item identity");
+            level.items.push_back(std::move(item));
+        }
+    }
     for (const Json& value : root.at("props")) {
         GameSavePropState state;
+        state.enabled = value.value("enabled", true);
         state.placedObjectId = value.at("placedObjectId").get<int>();
         state.instanceId = value.value("instanceId", std::string{});
         state.emissiveScale = value.value("emissiveScale", 1.0f);
@@ -559,6 +585,7 @@ GameSaveLevelState ReadLevel(const Json& root)
     }
     for (const Json& value : root.at("npcs")) {
         GameSaveNpcState state;
+        state.enabled = value.value("enabled", true);
         state.placedObjectId = value.at("placedObjectId").get<int>();
         state.instanceId = value.at("instanceId").get<std::string>();
         state.position = ReadVec3(value.at("position"), "npc.position");

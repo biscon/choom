@@ -239,6 +239,43 @@ float SelectNpcAmbientDelay(NpcAudioRecord& record)
     return minimum + unit * (maximum - minimum);
 }
 
+void TrackNpcObjectSound(NpcRuntimeInstance& npc, engine::AssetManager& assets,
+        engine::AudioSystem& audio, engine::SoundPlaybackHandle playback)
+{
+    if (engine::IsNull(playback)) return;
+    for (auto& tracked : npc.objectSoundPlaybacks) {
+        if (!audio.IsSoundPlaying(tracked)) {
+            tracked = playback;
+            return;
+        }
+    }
+    TraceLog(LOG_WARNING, "NPC '%s' exceeded overlapping sound capacity", npc.instanceId.c_str());
+    audio.StopSound(assets, npc.objectSoundPlaybacks.front());
+    std::move(npc.objectSoundPlaybacks.begin() + 1, npc.objectSoundPlaybacks.end(),
+            npc.objectSoundPlaybacks.begin());
+    npc.objectSoundPlaybacks.back() = playback;
+}
+
+void StopNpcObjectAudio(engine::World& world, engine::AssetManager& assets,
+        engine::AudioSystem& audio, NpcAudioRuntime* runtime, engine::Entity entity)
+{
+    if (runtime) {
+        if (auto* record = FindRecord(*runtime, entity)) {
+            StopVocalPlayback(assets, audio, *record);
+            record->pendingEvent = NpcVocalEvent::None;
+        }
+    }
+    if (world.IsAlive(entity) && world.Has<NpcRuntimeInstance>(entity)) {
+        auto& npc = world.Get<NpcRuntimeInstance>(entity);
+        for (auto& playback : npc.objectSoundPlaybacks) {
+            audio.StopSound(assets, playback);
+            playback = engine::NullSoundPlaybackHandle();
+        }
+    }
+    if (world.IsAlive(entity) && world.Has<NpcAiState>(entity))
+        world.Get<NpcAiState>(entity).playerDetectionAudioPending = false;
+}
+
 void UpdateNpcAudioSystem(
         engine::World& world,
         engine::AssetManager& assets,
@@ -247,8 +284,16 @@ void UpdateNpcAudioSystem(
         float rawDt)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    world.ForEach<NpcRuntimeInstance>([&](engine::Entity entity, NpcRuntimeInstance&) {
+        if (!IsSectorObjectEnabled(world, entity))
+            StopNpcObjectAudio(world, assets, audio, &runtime, entity);
+    });
     world.ForEach<NpcAiState>(
             [&](engine::Entity entity, NpcAiState& ai) {
+                if (!IsSectorObjectEnabled(world, entity)) {
+                    ai.playerDetectionAudioPending = false;
+                    return;
+                }
                 if (!ai.playerDetectionAudioPending) return;
                 if (world.Has<NpcCombatState>(entity)
                         && world.Get<NpcCombatState>(entity).dead) {
@@ -265,6 +310,11 @@ void UpdateNpcAudioSystem(
                 || !world.Has<SectorObjectTransform>(record.entity)) {
             StopVocalPlayback(assets, audio, record);
             record.occupied = false;
+            continue;
+        }
+        if (!IsSectorObjectEnabled(world, record.entity)) {
+            StopVocalPlayback(assets, audio, record);
+            record.pendingEvent = NpcVocalEvent::None;
             continue;
         }
         if (world.Has<NpcCombatState>(record.entity)
