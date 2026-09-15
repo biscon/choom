@@ -136,6 +136,7 @@ struct SectorCompiledLocalFogVolume {
     float noiseAmount = 0.75f;
     float flowDirectionDegrees = 0.0f;
     float flowSpeedWorld = 0.20f;
+    std::string instanceId;
 };
 
 // Derived runtime representation of an authoring-owned level marker.

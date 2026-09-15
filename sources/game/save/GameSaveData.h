@@ -112,6 +112,11 @@ struct GameSaveBillboardState {
     bool finished = false;
 };
 
+struct GameSaveFogVolumeState {
+    std::string instanceId;
+    bool enabled = true;
+};
+
 struct GameSaveDynamicLightState {
     std::string instanceId;
     Color color = WHITE;
@@ -145,6 +150,7 @@ struct GameSaveLevelState {
     std::vector<GameSaveDynamicLightState> dynamicLights;
     std::vector<GameSaveTriggerState> triggers;
     std::vector<GameSaveItemState> items;
+    std::vector<GameSaveFogVolumeState> fogVolumes;
 };
 
 struct GameSavePlayerState {

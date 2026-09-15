@@ -496,6 +496,29 @@ end
 This callback is separate from a dynamic prop's own no-argument
 `onUseScript`, which continues to run from the centered E-key Use interaction.
 
+## Fog volume enabled state
+
+```lua
+local ok, reason = setFogVolumeEnabled("engine_room_fog", false)
+setFogVolumeEnabled("engine_room_fog", true)
+```
+
+Use the fog inspector's **Instance ID**, which is unique among fog volumes in the
+level. New volumes receive an editable ID such as `fog_volume_12`; older levels
+receive stable generated IDs when loaded. IDs contain 1–63 letters, digits,
+underscores, or dashes and are persisted in the level file.
+
+The **Enabled** checkbox sets the starting state and defaults to true. Disabled
+volumes remain available to Lua. The command requires a Boolean and returns
+`true` on success, or `false, reason` if the volume is missing or its authored
+position could not resolve to a runtime sector. Repeating the current state succeeds.
+
+Disabling removes the fog's visual effect; enabling uses its existing animation
+timing. Runtime enabled state persists in save games and when revisiting levels.
+Older saves without fog state use the level's authored defaults. Normal script
+initialization runs after restoration, so an unconditional toggle in `init()`
+can override the restored state.
+
 ## Object enabled state
 
 ### `setPropEnabled(propId, enabled) -> true | false, reason`

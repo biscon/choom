@@ -1942,12 +1942,25 @@ void StableDoorAndDynamicLightBindingsMutateRuntimeTargets()
     light.id = 7;
     light.instanceId = "warning_light";
     map.dynamicPointLights.push_back(light);
+    game::SectorCompiledLocalFogVolume fog;
+    fog.instanceId = "engine_room_fog";
+    fog.enabled = false;
+    map.compiledLocalFogVolumes.push_back(fog);
     ScriptFiles files;
 
     game::InitializeSectorScriptHost(host, objects, map, runtime);
     files.Write(R"(
 function init()
     local opened = openDoor("test_door")
+    assert(setFogVolumeEnabled("engine_room_fog", true))
+    assert(setFogVolumeEnabled("engine_room_fog", true))
+    assert(setFogVolumeEnabled("engine_room_fog", false))
+    local missingFog, fogReason = setFogVolumeEnabled("missing", true)
+    assert(not missingFog and type(fogReason) == "string")
+    assert(not setFogVolumeEnabled("", true))
+    assert(not setFogVolumeEnabled("engine_room_fog\0suffix", true))
+    assert(not pcall(setFogVolumeEnabled, "engine_room_fog", 1))
+    assert(not pcall(setFogVolumeEnabled, "engine_room_fog", "false"))
     local disabled = setDynamicLightEnabled("warning_light", false)
     local intensity = setDynamicLightIntensity("warning_light", 3.5)
     local colored = setDynamicLightColor("warning_light", 255, 40, 20)
@@ -1962,6 +1975,13 @@ end
     assert(Create(context, runtime, persistent, host, files));
     assert(persistent.bools.at("bindings_ok"));
     assert(context.world.Get<game::SectorDoorMotion>(door).targetOpenFraction == 1.0f);
+    assert(!map.compiledLocalFogVolumes[0].enabled);
+    assert(engine::ScriptSystemExecuteConsole(runtime,
+            "assert(setFogVolumeEnabled('engine_room_fog', true))").success);
+    assert(map.compiledLocalFogVolumes[0].enabled);
+    assert(engine::ScriptSystemExecuteConsole(runtime,
+            "assert(setFogVolumeEnabled('engine_room_fog', false))").success);
+    assert(!map.compiledLocalFogVolumes[0].enabled);
     assert(!map.dynamicPointLights[0].enabled);
     assert(std::fabs(map.dynamicPointLights[0].intensity - 3.5f) < 0.0001f);
     assert(map.dynamicPointLights[0].color.r == 255

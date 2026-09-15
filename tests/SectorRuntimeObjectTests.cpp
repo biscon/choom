@@ -11600,6 +11600,45 @@ void TestSectorBillboardDirectionalClipSelectionWraparound()
             "billboard direction selection wraps near negative pi for front-facing camera");
 }
 
+void TestGameSaveRestoresFogVolumeState()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState objects;
+    game::SectorScriptHost host;
+    game::SectorTopologyMap map;
+    game::SectorCompiledLocalFogVolume first;
+    first.instanceId = "entry_fog";
+    first.enabled = false;
+    game::SectorCompiledLocalFogVolume second;
+    second.instanceId = "room_fog";
+    map.compiledLocalFogVolumes = {first, second};
+    const auto saved = game::CaptureGameSaveLevelState(world, assets, map, objects, host, "room");
+    Check(saved.fogVolumes.size() == 2 && !saved.fogVolumes[0].enabled
+                    && saved.fogVolumes[1].enabled,
+            "fog capture includes both enabled and disabled volumes");
+    std::vector<game::GameSaveLevelState> levels;
+    game::UpsertGameSaveLevelState(levels, saved);
+    // Reload/revisit with reordered volumes and opposite authored defaults.
+    map.compiledLocalFogVolumes = {second, first};
+    map.compiledLocalFogVolumes[0].enabled = false;
+    map.compiledLocalFogVolumes[1].enabled = true;
+    const auto* visited = game::FindGameSaveLevelState(levels, "room");
+    Check(visited != nullptr, "visited level retains fog state");
+    if (visited != nullptr) game::ApplyGameSaveLevelMapState(map, *visited);
+    Check(map.compiledLocalFogVolumes[0].enabled && !map.compiledLocalFogVolumes[1].enabled,
+            "fog restore matches stable instance IDs instead of array positions");
+    game::GameSaveLevelState oldSave;
+    game::ApplyGameSaveLevelMapState(map, oldSave);
+    Check(map.compiledLocalFogVolumes[0].enabled && !map.compiledLocalFogVolumes[1].enabled,
+            "old saves leave current authored fog defaults intact");
+    map.compiledLocalFogVolumes[1].instanceId = "new_fog";
+    map.compiledLocalFogVolumes[1].enabled = true;
+    game::ApplyGameSaveLevelMapState(map, saved);
+    Check(map.compiledLocalFogVolumes[1].enabled,
+            "missing saved fog IDs do not affect new fog volumes");
+}
+
 void TestGameSaveRestoresPropAndItemEnabledState()
 {
     engine::World world;
@@ -13730,6 +13769,7 @@ int main()
     TestSectorBillboardDirectionalClipSelection();
     TestSectorBillboardDirectionalClipSelectionWraparound();
     TestSectorRuntimeObjectCurrentSectorSystem();
+    TestGameSaveRestoresFogVolumeState();
     TestGameSaveRestoresPropAndItemEnabledState();
     TestGameSaveRestoresNpcSectorAndLighting();
     TestSectorRuntimeObjectBakedLightingSystem();

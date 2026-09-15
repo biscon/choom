@@ -4695,6 +4695,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
             }
             SectorAuthoringFogVolume volume;
             volume.id = ReadInt(fogJson, "id", context);
+            volume.instanceId = ReadOptionalString(fogJson, "instanceId", context, "");
             volume.x = ReadCoord(fogJson, "x", context);
             volume.y = ReadCoord(fogJson, "y", context);
             volume.enabled = ReadOptionalBool(fogJson, "enabled", context, volume.enabled);
@@ -5079,13 +5080,15 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    AssignMissingSectorAuthoringFogVolumeInstanceIds(graph);
     const std::vector<SectorAuthoringValidationIssue> issues =
             ValidateSectorAuthoringGraphReferences(graph);
     const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return (issue.objectKind == SectorAuthoringObjectKind::LevelMarker
                         || issue.objectKind == SectorAuthoringObjectKind::Patrol
                         || issue.objectKind == SectorAuthoringObjectKind::SoundEmitter
-                        || issue.objectKind == SectorAuthoringObjectKind::Trigger)
+                        || issue.objectKind == SectorAuthoringObjectKind::Trigger
+                        || issue.objectKind == SectorAuthoringObjectKind::FogVolume)
                 && issue.severity == SectorAuthoringValidationSeverity::Error;
     });
     if (markerError != issues.end()) {
@@ -5371,6 +5374,7 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
     if (!graph.fogVolumes.empty()) {
         graphJson["fogVolumes"] = Json::array();
         const SectorAuthoringFogVolume defaults;
+        std::set<std::string> instanceIds;
         for (const SectorAuthoringFogVolume* source : SortedById(graph.fogVolumes)) {
             const std::string context = "authoring fog volume " + std::to_string(source->id);
             RequireFinite(source->bottomOffsetWorld, context + ".bottomOffsetWorld");
@@ -5387,8 +5391,16 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             RequireFinite(source->noiseAmount, context + ".noiseAmount");
             RequireFinite(source->flowDirectionDegrees, context + ".flowDirectionDegrees");
             RequireFinite(source->flowSpeedWorld, context + ".flowSpeedWorld");
-            const SectorAuthoringFogVolume volume = NormalizeSectorAuthoringFogVolume(*source);
-            Json fogJson{{"id", volume.id}, {"x", volume.x}, {"y", volume.y}};
+            SectorAuthoringFogVolume volume = NormalizeSectorAuthoringFogVolume(*source);
+            if (volume.instanceId.empty()) {
+                volume.instanceId = AllocateSectorAuthoringFogVolumeInstanceId(graph, volume.id);
+            }
+            if (!IsValidSectorScriptInstanceId(volume.instanceId)
+                    || !instanceIds.insert(volume.instanceId).second) {
+                Fail(context + ": invalid or duplicate fog volume instance ID");
+            }
+            Json fogJson{{"id", volume.id}, {"x", volume.x}, {"y", volume.y},
+                    {"instanceId", volume.instanceId}};
             if (volume.enabled != defaults.enabled) fogJson["enabled"] = volume.enabled;
             if (volume.shape != defaults.shape) fogJson["shape"] = "box";
             if (volume.analyticStyle != defaults.analyticStyle) fogJson["analyticStyle"] = "room";

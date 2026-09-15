@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cstdio>
 #include <string>
 
 namespace game {
@@ -988,7 +989,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             return MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
                     *selectedAuthoringFogVolume,
                     rowH,
-                    gap);
+                    gap,
+                    context.fogVolumeUiState.instanceIdError.empty() ? 0.0f
+                            : MeasureSectorEditorWrappedTextHeight(smallConfig, assets, smallFont,
+                                    context.fogVolumeUiState.instanceIdError.c_str(), scrollContentW));
         }
         if (selectedReflectionProbe != nullptr) {
             return 38.0f + 16.0f * (rowH + gap) + 42.0f;
@@ -3137,6 +3141,33 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 engine::UITextJustify::Left,
                 config.textColor);
         y += 38.0f;
+
+        if (fogUi.instanceIdVolumeId != fogVolumeId) {
+            std::snprintf(fogUi.instanceIdBuffer, sizeof(fogUi.instanceIdBuffer),
+                    "%s", selectedAuthoringFogVolume->instanceId.c_str());
+            fogUi.instanceIdVolumeId = fogVolumeId;
+            fogUi.instanceIdError.clear();
+        }
+        const auto idLayout = BuildSectorEditorInspectorStackedOptionRowLayout(
+                y, contentW, rowH, gap);
+        engine::Text(ui, config, assets, idLayout.labelRect, font, "Instance ID",
+                engine::UITextJustify::Left, config.mutedTextColor);
+        const auto idResult = engine::TextInput(ui, config, input, assets,
+                "sector_editor_fog_volume_instance_id", idLayout.fieldRect, font,
+                fogUi.instanceIdBuffer, sizeof(fogUi.instanceIdBuffer),
+                1, sizeof(fogUi.instanceIdBuffer) - 1, engine::UITextJustify::Left);
+        if (idResult.submitted) {
+            editing.SetInstanceId(fogVolumeId, fogUi.instanceIdBuffer, fogUi.instanceIdError);
+        }
+        y += idLayout.height + gap;
+        if (!fogUi.instanceIdError.empty()) {
+            const float errorHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig, assets, smallFont, fogUi.instanceIdError.c_str(), contentW);
+            engine::Text(ui, smallConfig, assets, Rectangle{0.0f, y, contentW, errorHeight},
+                    smallFont, fogUi.instanceIdError.c_str(), engine::UITextJustify::Left,
+                    smallConfig.invalidColor, true);
+            y += errorHeight + gap;
+        }
 
         bool enabled = selectedAuthoringFogVolume->enabled;
         if (engine::Checkbox(

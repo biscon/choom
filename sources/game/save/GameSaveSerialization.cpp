@@ -471,6 +471,13 @@ Json LevelJson(const GameSaveLevelState& level)
                 {"timeSeconds", value.timeSeconds}, {"speed", value.speed},
                 {"playing", value.playing}, {"loop", value.loop}, {"finished", value.finished}});
     }
+    if (!level.fogVolumes.empty()) {
+        root["fogVolumes"] = Json::array();
+        for (const auto& volume : level.fogVolumes) {
+            root["fogVolumes"].push_back(Json{{"instanceId", volume.instanceId},
+                    {"enabled", volume.enabled}});
+        }
+    }
     for (const GameSaveDynamicLightState& value : level.dynamicLights) {
         root["dynamicLights"].push_back(Json{{"instanceId", value.instanceId},
                 {"color", ColorJson(value.color)}, {"intensity", value.intensity},
@@ -646,6 +653,18 @@ GameSaveLevelState ReadLevel(const Json& root)
         RequireFinite(state.speed, "billboard.speed");
         Require(state.timeSeconds >= 0.0f, "billboard time must not be negative");
         level.billboards.push_back(std::move(state));
+    }
+    if (const auto fog = root.find("fogVolumes"); fog != root.end()) {
+        Require(fog->is_array(), "fogVolumes must be an array");
+        std::set<std::string> fogIds;
+        for (const auto& value : *fog) {
+            GameSaveFogVolumeState volume{value.at("instanceId").get<std::string>(),
+                    value.value("enabled", true)};
+            Require(!volume.instanceId.empty()
+                            && fogIds.insert(volume.instanceId).second,
+                    "duplicate or invalid saved fog volume ID");
+            level.fogVolumes.push_back(std::move(volume));
+        }
     }
     std::set<std::string> lightIds;
     for (const Json& value : root.at("dynamicLights")) {

@@ -15383,6 +15383,32 @@ void TestLevelMarkerModulesStayIndependentOfSectorEditor()
 
 } // namespace
 
+void TestFogVolumeInstanceIdsAreStableAndUnique()
+{
+    game::SectorAuthoringGraph graph;
+    game::SectorAuthoringFogVolume named;
+    named.id = 3;
+    named.instanceId = "fog_volume_1";
+    game::SectorAuthoringFogVolume first;
+    first.id = 1;
+    game::SectorAuthoringFogVolume second;
+    second.id = 2;
+    graph.fogVolumes = {second, named, first};
+    game::AssignMissingSectorAuthoringFogVolumeInstanceIds(graph);
+    Check(graph.fogVolumes[0].instanceId == "fog_volume_2"
+                  && graph.fogVolumes[1].instanceId == "fog_volume_1"
+                  && graph.fogVolumes[2].instanceId == "fog_volume_1_2",
+          "fog migration preserves names and resolves generated-name collisions");
+    std::reverse(graph.fogVolumes.begin(), graph.fogVolumes.end());
+    game::AssignMissingSectorAuthoringFogVolumeInstanceIds(graph);
+    Check(graph.fogVolumes[0].instanceId == "fog_volume_1_2"
+                  && graph.fogVolumes[2].instanceId == "fog_volume_2",
+          "fog IDs stay stable after reorder and repeated migration");
+    graph.fogVolumes[0].instanceId = "fog_volume_2";
+    Check(!game::DeriveSectorTopologyMapFromAuthoringGraph(graph).success,
+          "duplicate fog instance IDs reject derivation");
+}
+
 void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
 {
     game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
@@ -15416,6 +15442,8 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
           "resolved authoring fog volume compiles for renderer");
     if (!result.topology.compiledLocalFogVolumes.empty()) {
         const game::SectorCompiledLocalFogVolume& compiled = result.topology.compiledLocalFogVolumes[0];
+        Check(compiled.instanceId == "fog_volume_1" && compiled.enabled,
+              "programmatic fog receives a deterministic runtime ID and defaults enabled");
         Check(compiled.sourceAuthoringFogVolumeId == 1 && Near(compiled.centerWorld.y, 0.345f),
               "compiled fog volume uses source ID and floor-relative height");
         Check(compiled.shape == game::SectorLocalFogShape::Box
@@ -15428,6 +15456,14 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
                       && Near(compiled.flowSpeedWorld, 0.20f),
               "compiled fog volume preserves readable coherent-noise defaults");
     }
+
+    graph.fogVolumes[0].instanceId = "engine_room_fog";
+    graph.fogVolumes[0].enabled = false;
+    result = game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(result.success && result.topology.compiledLocalFogVolumes.size() == 1
+                  && result.topology.compiledLocalFogVolumes[0].instanceId == "engine_room_fog"
+                  && !result.topology.compiledLocalFogVolumes[0].enabled,
+          "disabled authored fog compiles with its script ID for later enabling");
 
     graph.fogVolumes[0].x = 400;
     graph.fogVolumes[0].y = 400;
@@ -15450,6 +15486,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     game::SectorAuthoringFogVolume volume;
     volume.id = 7;
+    volume.instanceId = "engine_room_fog";
+    volume.enabled = false;
     volume.x = 48;
     volume.y = 64;
     volume.color = Color{12, 34, 56, 255};
@@ -15471,6 +15509,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
                   && !saved.contains("localFogVolumes"),
           "fog volumes serialize only inside authoring graph");
     const Json& savedFog = saved["authoringGraph"]["fogVolumes"][0];
+    Check(savedFog.value("instanceId", "") == "engine_room_fog" && !savedFog.at("enabled").get<bool>(),
+          "fog script ID and disabled starting state serialize");
     Check(!savedFog.contains("noiseAmount")
                   && !savedFog.contains("noiseScaleWorld")
                   && !savedFog.contains("flowSpeedWorld"),
@@ -15502,6 +15542,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
           "authoring fog volume document loads");
     Check(loaded.graph.fogVolumes.size() == 1
                   && loaded.graph.fogVolumes[0].id == 7
+                  && loaded.graph.fogVolumes[0].instanceId == "engine_room_fog"
+                  && !loaded.graph.fogVolumes[0].enabled
                   && loaded.graph.fogVolumes[0].shape == game::SectorLocalFogShape::Box
                   && loaded.graph.fogVolumes[0].analyticStyle
                           == game::SectorAnalyticFogStyle::Room
@@ -15513,6 +15555,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
           "authoring fog volume properties round-trip");
 
     Json legacy = saved;
+    legacy["authoringGraph"]["fogVolumes"][0].erase("instanceId");
+    legacy["authoringGraph"]["fogVolumes"][0].erase("enabled");
     legacy["authoringGraph"]["fogVolumes"][0].erase("shape");
     legacy["authoringGraph"]["fogVolumes"][0].erase("analyticStyle");
     legacy["authoringGraph"]["fogVolumes"][0].erase("yawDegrees");
@@ -15525,6 +15569,31 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
                           == game::SectorAnalyticFogStyle::Cloudy
                   && Near(legacyLoaded.graph.fogVolumes[0].yawDegrees, 0.0f),
           "older fog volumes default to a cloudy unrotated ellipsoid");
+    Check(legacyLoaded.graph.fogVolumes[0].instanceId == "fog_volume_7"
+                  && legacyLoaded.graph.fogVolumes[0].enabled,
+          "legacy fog gets a stable name and defaults enabled");
+    Check(game::SaveSectorAuthoringDocumentToJsonString(legacyLoaded, json, &error),
+          "migrated fog saves");
+    game::SectorAuthoringDocument migrated;
+    Check(game::LoadSectorAuthoringDocumentFromJsonString(json, migrated, &error)
+                  && migrated.graph.fogVolumes[0].instanceId == "fog_volume_7"
+                  && migrated.derivation.topology.compiledLocalFogVolumes[0].instanceId == "fog_volume_7",
+          "migrated fog ID survives save, reload, and derivation");
+    Check(!Json::parse(json)["authoringGraph"]["fogVolumes"][0].contains("enabled"),
+          "enabled default stays omitted on level save");
+    Json badId = saved;
+    badId["authoringGraph"]["fogVolumes"][0]["instanceId"] = "invalid name";
+    Check(!game::LoadSectorAuthoringDocumentFromJsonString(badId.dump(), migrated, &error),
+          "invalid fog script ID rejects load");
+    badId = saved;
+    badId["authoringGraph"]["fogVolumes"].push_back(badId["authoringGraph"]["fogVolumes"][0]);
+    badId["authoringGraph"]["fogVolumes"][1]["id"] = 8;
+    Check(!game::LoadSectorAuthoringDocumentFromJsonString(badId.dump(), migrated, &error),
+          "duplicate fog script IDs reject load");
+    auto invalidDocument = document;
+    invalidDocument.graph.fogVolumes[0].instanceId = "invalid name";
+    Check(!game::SaveSectorAuthoringDocumentToJsonString(invalidDocument, json, &error),
+          "invalid fog script ID rejects save");
 
     Json legacyBoxStyle = saved;
     legacyBoxStyle["authoringGraph"]["fogVolumes"][0].erase("analyticStyle");
@@ -15601,6 +15670,27 @@ void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
           "fog volume placement marks dirty and invalidates 2D cache");
 
     const int id = documentState.authoring.authoringGraph.fogVolumes[0].id;
+    Check(documentState.authoring.authoringGraph.fogVolumes[0].instanceId == "fog_volume_1"
+                  && documentState.authoring.authoringGraph.fogVolumes[0].enabled,
+          "newly placed fog has a generated script ID and is enabled");
+    std::string idError;
+    Check(editing.SetInstanceId(id, "entry_fog", idError) && idError.empty()
+                  && documentState.map.topologyMap.compiledLocalFogVolumes[0].instanceId == "entry_fog"
+                  && !editorState.topologyRenderCache.valid,
+          "fog script ID editing updates authoring, derivation, and invalidates cache");
+    documentState.lifecycle.topologyDocumentDirty = false;
+    editorState.topologyRenderCache.valid = true;
+    Check(!editing.SetInstanceId(id, "bad id", idError) && !idError.empty()
+                  && documentState.authoring.authoringGraph.fogVolumes[0].instanceId == "entry_fog"
+                  && !documentState.lifecycle.topologyDocumentDirty && editorState.topologyRenderCache.valid,
+          "invalid fog ID edit leaves document and cache untouched");
+    game::SectorAuthoringFogVolume other;
+    other.id = 2;
+    other.instanceId = "reserved_fog";
+    documentState.authoring.authoringGraph.fogVolumes.push_back(other);
+    Check(!editing.SetInstanceId(id, "reserved_fog", idError) && !idError.empty(),
+          "fog ID editing rejects duplicate names");
+    documentState.authoring.authoringGraph.fogVolumes.pop_back();
     documentState.lifecycle.topologyDocumentDirty = false;
     documentState.lifecycle.hasUnsavedChanges = false;
     editorState.topologyRenderCache.valid = true;
@@ -16312,6 +16402,7 @@ int main()
     TestAuthoredPaths();
     TestLevelMarkerAuthoringSelectionCacheAndPicking();
     TestLevelMarkerModulesStayIndependentOfSectorEditor();
+    TestFogVolumeInstanceIdsAreStableAndUnique();
     TestAuthoringFogVolumeDerivationAndUnresolvedWarning();
     TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio();
     TestAuthoringFogVolumeSerializationRoundTrip();

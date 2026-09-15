@@ -210,6 +210,11 @@ GameSaveLevelState CaptureGameSaveLevelState(
     CaptureLights(map.dynamicPointLights, result.dynamicLights);
     CaptureLights(map.dynamicSpotLights, result.dynamicLights);
     CaptureLights(map.dynamicRectLights, result.dynamicLights);
+    for (const auto& volume : map.compiledLocalFogVolumes) {
+        if (!volume.instanceId.empty()) {
+            result.fogVolumes.push_back({volume.instanceId, volume.enabled});
+        }
+    }
     for (const SectorScriptTriggerState& trigger : scriptHost.triggers) {
         if (trigger.triggerIndex >= map.triggers.size()) continue;
         result.triggers.push_back(GameSaveTriggerState{
@@ -368,6 +373,11 @@ void ApplyGameSaveLevelMapState(
     ApplyLights(map.dynamicPointLights, state);
     ApplyLights(map.dynamicSpotLights, state);
     ApplyLights(map.dynamicRectLights, state);
+    for (auto& volume : map.compiledLocalFogVolumes) {
+        const auto saved = std::find_if(state.fogVolumes.begin(), state.fogVolumes.end(),
+                [&volume](const auto& value) { return value.instanceId == volume.instanceId; });
+        if (saved != state.fogVolumes.end()) volume.enabled = saved->enabled;
+    }
 }
 
 void ApplyGameSaveLevelRuntimeState(

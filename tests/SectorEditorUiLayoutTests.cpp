@@ -532,15 +532,25 @@ void TestFogVolumeInspectorLayoutIncludesConditionalRows()
     Check(Near(
                   game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
                           volume, rowH, gap),
-                  38.0f + 21.0f * (rowH + gap) + fogStyleRowHeight),
+                  38.0f + 21.0f * (rowH + gap) + 2.0f * fogStyleRowHeight),
           "ellipsoid fog inspector includes style and path controls");
 
     volume.shape = game::SectorLocalFogShape::Box;
     Check(Near(
                   game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
                           volume, rowH, gap),
-                  38.0f + 22.0f * (rowH + gap) + fogStyleRowHeight),
-          "box fog inspector includes style, yaw, and reaches the delete row");
+                  38.0f + 22.0f * (rowH + gap) + 2.0f * fogStyleRowHeight),
+          "box fog inspector includes instance ID, style, yaw, and reaches the delete row");
+    Check(Near(game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                       volume, rowH, gap, 96.0f),
+                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                       volume, rowH, gap) + 96.0f + gap),
+          "wrapped fog ID validation errors contribute their full height");
+    const auto idLayout = game::BuildSectorEditorInspectorStackedOptionRowLayout(
+            0.0f, 220.0f, rowH, gap);
+    Check(idLayout.fieldRect.y >= idLayout.labelRect.y + idLayout.labelRect.height
+                  && idLayout.fieldRect.x + idLayout.fieldRect.width <= 220.0f,
+          "fog instance ID uses full width below its label in narrow panes");
 
     const game::SectorEditorInspectorNumericRowLayout rgbLayout =
             game::BuildSectorEditorInspectorRightRgb8RowLayout(

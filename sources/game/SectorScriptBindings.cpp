@@ -2582,6 +2582,24 @@ int LuaSetPropEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "pro
 int LuaSetItemEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "item"); }
 int LuaSetNpcEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "npc"); }
 
+int LuaSetFogVolumeEnabled(lua_State* state)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    const std::string_view instanceId{rawId, length};
+    if (host.map != nullptr && !instanceId.empty()) {
+        for (auto& volume : host.map->compiledLocalFogVolumes) {
+            if (volume.instanceId != instanceId) continue;
+            volume.enabled = lua_toboolean(state, 2) != 0;
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+    }
+    return PushBindingError(state, "fog volume was not found");
+}
+
 int LuaSetDynamicLightEnabled(lua_State* state)
 {
     SectorScriptHost& host = HostFromLua(state);
@@ -3128,6 +3146,7 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "setPropEnabled", LuaSetPropEnabled);
     Register(state, "setItemEnabled", LuaSetItemEnabled);
     Register(state, "setNpcEnabled", LuaSetNpcEnabled);
+    Register(state, "setFogVolumeEnabled", LuaSetFogVolumeEnabled);
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
     Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);

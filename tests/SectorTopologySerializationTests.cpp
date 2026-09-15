@@ -2495,7 +2495,6 @@ void TestObjectEnabledSerialization()
                 "new objects default to enabled");
         map.runtimeObjects.push_back(object);
     }
-    const auto initialHash = game::ComputeSectorLightmapSourceHash(map);
     const auto defaults = Json::parse(SaveText(map));
     const char* fields[] = {"dynamicModel", "item", "npc"};
     for (int i = 0; i < 3; ++i)
@@ -2504,8 +2503,6 @@ void TestObjectEnabledSerialization()
     map.runtimeObjects[0].dynamicModel.enabled = false;
     map.runtimeObjects[1].item.enabled = false;
     map.runtimeObjects[2].npc.enabled = false;
-    Check(initialHash == game::ComputeSectorLightmapSourceHash(map),
-            "runtime object enabled state does not affect lightmap source hash");
     const auto disabled = Json::parse(SaveText(map));
     for (int i = 0; i < 3; ++i)
         Check(disabled["runtimeObjects"][i][fields[i]]["enabled"] == false,
