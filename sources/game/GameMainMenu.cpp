@@ -1,4 +1,5 @@
 #include "game/GameMainMenu.h"
+#include "game/GameSettingsLayout.h"
 
 #include <raylib.h>
 
@@ -199,6 +200,7 @@ bool DrawGameOverOverlay(
 
 GameGraphicsSettingsAction DrawGameGraphicsSettings(
         engine::UIContext& ui,
+        engine::UIScrollState& scroll,
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
@@ -208,211 +210,174 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
         const char* statusText)
 {
     DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
-
-    constexpr float panelWidth = 620.0f;
-    constexpr float panelHeight = 1026.0f;
-    constexpr float padding = 44.0f;
-    constexpr float rowHeight = 48.0f;
+    const float panelWidth = std::min(680.0f,
+            std::max(0.0f, config.overlayBounds.width - 48.0f));
+    const float padding = std::min(32.0f, panelWidth * 0.08f);
+    const float contentWidth = std::max(0.0f, panelWidth - config.scrollbarSize);
+    const float rowWidth = std::max(0.0f, contentWidth - padding * 2.0f);
+    engine::UIConfig textConfig = config;
+    const engine::FontAsset* textFont = assets.GetFont(smallFont);
+    if (textFont != nullptr) textConfig.fontSize = static_cast<float>(textFont->pixelSize);
+    const float rowHeight = std::max(48.0f, textConfig.fontSize + config.paddingY * 2.0f);
+    const auto textWidth = [&](const char* text) {
+        return textFont != nullptr
+                ? MeasureTextEx(textFont->font, text, textConfig.fontSize,
+                        textConfig.textSpacing).x
+                : static_cast<float>(MeasureText(text, static_cast<int>(textConfig.fontSize)));
+    };
+    float labelWidth = 0.0f;
+    for (std::size_t i = 0; i < GameSettingsLabels.size(); ++i) {
+        if (GameSettingsRowHasValue(static_cast<GameSettingsRow>(i))) {
+            labelWidth = std::max(labelWidth,
+                    textWidth(GameSettingsLabels[i]) + config.paddingX * 2.0f);
+        }
+    }
+    std::array<float, GameSettingsLabels.size()> textHeights{};
+    const float checkboxTextOffset = rowHeight + config.paddingX * 2.0f;
+    for (std::size_t i = 0; i < textHeights.size(); ++i) {
+        const auto row = static_cast<GameSettingsRow>(i);
+        const bool checkbox = row >= GameSettingsRow::Fxaa && row <= GameSettingsRow::Vsync;
+        textHeights[i] = engine::MeasureWrappedTextHeight(textConfig, assets,
+                std::max(1.0f, rowWidth - (checkbox ? checkboxTextOffset : 0.0f)),
+                smallFont, GameSettingsLabels[i]);
+    }
+    const float statusHeight = engine::MeasureWrappedTextHeight(
+            textConfig, assets, rowWidth, smallFont, statusText);
+    const GameSettingsLayout layout = MeasureGameSettingsLayout(
+            contentWidth, padding, labelWidth, rowHeight, textHeights, statusHeight,
+            textWidth("Defaults") + config.paddingX * 2.0f + 16.0f);
+    const float panelHeight = std::min(layout.contentHeight,
+            std::max(0.0f, config.overlayBounds.height - 48.0f));
     const Rectangle panel{
             config.overlayBounds.x + (config.overlayBounds.width - panelWidth) * 0.5f,
             config.overlayBounds.y + (config.overlayBounds.height - panelHeight) * 0.5f,
-            panelWidth,
-            panelHeight};
+            panelWidth, panelHeight};
     DrawRectangleRounded(panel, config.cornerRadius, config.cornerSegments, config.panelColor);
     DrawRectangleRoundedLinesEx(panel, config.cornerRadius, config.cornerSegments,
             config.borderThickness, config.borderColor);
 
     engine::BeginUI(ui, input);
-    engine::Text(config, assets,
-            Rectangle{panel.x + padding, panel.y + 24.0f,
-                    panel.width - padding * 2.0f, 54.0f},
-            font, "Settings", engine::UITextJustify::Center);
+    const engine::UIScrollAreaResult scrollArea = engine::BeginScrollArea(
+            ui, config, input, "game_settings_content", panel,
+            {contentWidth, layout.contentHeight}, scroll, false, 0.0f);
+    engine::Text(ui, config, assets,
+            {padding, 24.0f, rowWidth, 54.0f}, font, "Settings", engine::UITextJustify::Center);
 
-    float y = panel.y + 96.0f;
-    const float labelWidth = 225.0f;
-    const float controlX = panel.x + padding + labelWidth;
-    const float controlWidth = panel.width - padding * 2.0f - labelWidth;
-    constexpr float sensitivityValueWidth = 76.0f;
-    engine::Text(config, assets,
-            Rectangle{panel.x + padding, y, labelWidth, rowHeight},
-            smallFont, "Mouse sensitivity", engine::UITextJustify::Left);
-    engine::Slider(ui, config, input, "settings_mouse_sensitivity",
-            Rectangle{controlX, y, controlWidth - sensitivityValueWidth, rowHeight},
-            0.0f, 5.0f, draft.playerCamera.mouseSensitivity);
-    char sensitivityText[16];
-    std::snprintf(sensitivityText, sizeof(sensitivityText), "%.2f",
-            draft.playerCamera.mouseSensitivity);
-    engine::Text(config, assets,
-            Rectangle{controlX + controlWidth - sensitivityValueWidth, y,
-                    sensitivityValueWidth, rowHeight},
-            smallFont, sensitivityText, engine::UITextJustify::Right);
-    y += rowHeight + 14.0f;
-
-    const char* renderScaleOptions[] = {"75%", "100%", "125%", "150%", "200%"};
-    const float renderScales[] = {0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
-    int renderScaleIndex = 0;
-    float closest = 100.0f;
-    for (int i = 0; i < 5; ++i) {
-        const float distance = std::fabs(draft.graphics.renderScale - renderScales[i]);
-        if (distance < closest) {
-            closest = distance;
-            renderScaleIndex = i;
+    // Slider value space follows the actual font metrics.
+    const float valueWidth = std::max(64.0f, textWidth("2.00") + config.paddingX * 2.0f);
+    const auto slider = [&](const char* id, Rectangle bounds, float minValue,
+                            float maxValue, float& value) {
+        Rectangle field = bounds;
+        field.width = std::max(0.0f, bounds.width - valueWidth - 8.0f);
+        engine::Slider(ui, config, input, id, field, minValue, maxValue, value);
+        char text[16];
+        std::snprintf(text, sizeof(text), "%.2f", value);
+        engine::Text(ui, textConfig, assets,
+                {bounds.x + bounds.width - valueWidth, bounds.y, valueWidth, bounds.height},
+                smallFont, text, engine::UITextJustify::Right);
+    };
+    const auto intSlider = [&](const char* id, Rectangle bounds, int minValue,
+                               int maxValue, int& value, bool zeroMeansAll = false) {
+        Rectangle field = bounds;
+        field.width = std::max(0.0f, bounds.width - valueWidth - 8.0f);
+        engine::IntSlider(ui, config, input, id, field, minValue, maxValue, value);
+        char text[16];
+        if (zeroMeansAll && value == 0) std::snprintf(text, sizeof(text), "All");
+        else std::snprintf(text, sizeof(text), "%d", value);
+        engine::Text(ui, textConfig, assets,
+                {bounds.x + bounds.width - valueWidth, bounds.y, valueWidth, bounds.height},
+                smallFont, text, engine::UITextJustify::Right);
+    };
+    bool* checkboxValues[] = {&draft.graphics.fxaa, &draft.graphics.depthPrepass,
+            &draft.hdrBloom.enabled, &draft.graphics.showFpsCounter,
+            &draft.graphics.performanceOverlay, &draft.graphics.vsync};
+    const char* checkboxIds[] = {"graphics_fxaa", "graphics_depth_prepass", "graphics_bloom",
+            "graphics_fps_counter", "graphics_performance_overlay", "graphics_vsync"};
+    static_assert(sizeof(checkboxValues) / sizeof(checkboxValues[0])
+            == static_cast<std::size_t>(GameSettingsRow::Vsync)
+                    - static_cast<std::size_t>(GameSettingsRow::Fxaa) + 1);
+    for (std::size_t i = 0; i < layout.rows.size(); ++i) {
+        const auto row = static_cast<GameSettingsRow>(i);
+        const Rectangle bounds = layout.rows[i];
+        const Rectangle field = layout.fields[i];
+        if (row >= GameSettingsRow::Fxaa && row <= GameSettingsRow::Vsync) {
+            const std::size_t index = i - static_cast<std::size_t>(GameSettingsRow::Fxaa);
+            // Keep the check mark its usual size when the label wraps, while
+            // retaining a click target over the entire row.
+            engine::UIConfig checkboxConfig = config;
+            checkboxConfig.paddingY += (bounds.height - rowHeight) * 0.5f;
+            engine::Checkbox(ui, checkboxConfig, input, assets, checkboxIds[index],
+                    bounds, smallFont, "", *checkboxValues[index]);
+            engine::Text(ui, textConfig, assets,
+                    {bounds.x + checkboxTextOffset, bounds.y,
+                            std::max(0.0f, bounds.width - checkboxTextOffset), bounds.height},
+                    smallFont, GameSettingsLabels[i], engine::UITextJustify::Left, BLANK, true);
+            continue;
+        }
+        engine::Text(ui, textConfig, assets, bounds, smallFont, GameSettingsLabels[i],
+                engine::UITextJustify::Left,
+                GameSettingsRowHasValue(row) ? config.textColor : config.mutedTextColor, true);
+        switch (row) {
+            case GameSettingsRow::Gamma:
+                slider("graphics_gamma", field, engine::MinimumDisplayGamma,
+                        engine::MaximumDisplayGamma, draft.graphics.gamma);
+                break;
+            case GameSettingsRow::Sensitivity:
+                slider("settings_mouse_sensitivity", field, 0.0f, 5.0f,
+                        draft.playerCamera.mouseSensitivity);
+                break;
+            case GameSettingsRow::RenderScale: {
+                const char* options[] = {"75%", "100%", "125%", "150%", "200%"};
+                const float scales[] = {0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+                int selected = 0;
+                for (int j = 1; j < 5; ++j) {
+                    if (std::fabs(draft.graphics.renderScale - scales[j])
+                            < std::fabs(draft.graphics.renderScale - scales[selected])) selected = j;
+                }
+                if (engine::Option(ui, textConfig, input, assets, "graphics_render_scale",
+                            field, smallFont, options, 5, selected)) draft.graphics.renderScale = scales[selected];
+                break;
+            }
+            case GameSettingsRow::LightBudget:
+                intSlider("graphics_dynamic_light_budget", field,
+                        MinFpsDynamicLights, MaxFpsDynamicLights, draft.graphics.maxDynamicLights);
+                break;
+            case GameSettingsRow::ShadowUpdates:
+                intSlider("graphics_shadow_updates_per_frame", field,
+                        MinFpsShadowLightUpdatesPerFrame, MaxFpsShadowLightUpdatesPerFrame,
+                        draft.graphics.maxShadowLightUpdatesPerFrame, true);
+                break;
+            case GameSettingsRow::ShadowQuality: {
+                const char* options[] = {"Off", "Low", "Medium", "High"};
+                int selected = static_cast<int>(draft.graphics.shadowQuality);
+                if (engine::Option(ui, textConfig, input, assets, "graphics_shadow_quality",
+                            field, smallFont, options, 4, selected)) {
+                    draft.graphics.shadowQuality = static_cast<FpsShadowQuality>(selected);
+                }
+                break;
+            }
+            case GameSettingsRow::Fov:
+                intSlider("graphics_horizontal_fov", field,
+                        MinFpsHorizontalFovDegrees, MaxFpsHorizontalFovDegrees,
+                        draft.graphics.horizontalFovDegrees);
+                break;
+            default: break;
         }
     }
-    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
-            smallFont, "Render scale", engine::UITextJustify::Left);
-    if (engine::Option(ui, config, input, assets, "graphics_render_scale",
-                Rectangle{controlX, y, controlWidth, rowHeight}, smallFont,
-                renderScaleOptions, 5, renderScaleIndex)) {
-        draft.graphics.renderScale = renderScales[renderScaleIndex];
-    }
-    y += rowHeight + 14.0f;
-
-    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
-            smallFont, "Dynamic light budget", engine::UITextJustify::Left);
-    constexpr float lightValueWidth = 64.0f;
-    engine::IntSlider(
-            ui,
-            config,
-            input,
-            "graphics_dynamic_light_budget",
-            Rectangle{controlX, y, controlWidth - lightValueWidth, rowHeight},
-            MinFpsDynamicLights,
-            MaxFpsDynamicLights,
-            draft.graphics.maxDynamicLights);
-    char lightBudgetText[16];
-    std::snprintf(lightBudgetText, sizeof(lightBudgetText), "%d",
-            draft.graphics.maxDynamicLights);
-    engine::Text(config, assets,
-            Rectangle{controlX + controlWidth - lightValueWidth, y,
-                    lightValueWidth, rowHeight},
-            smallFont, lightBudgetText, engine::UITextJustify::Right);
-    y += rowHeight + 14.0f;
-
-    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
-            smallFont, "Shadow updates/frame", engine::UITextJustify::Left);
-    engine::IntSlider(
-            ui,
-            config,
-            input,
-            "graphics_shadow_updates_per_frame",
-            Rectangle{controlX, y, controlWidth - lightValueWidth, rowHeight},
-            MinFpsShadowLightUpdatesPerFrame,
-            MaxFpsShadowLightUpdatesPerFrame,
-            draft.graphics.maxShadowLightUpdatesPerFrame);
-    char shadowUpdateBudgetText[16];
-    if (draft.graphics.maxShadowLightUpdatesPerFrame == 0) {
-        std::snprintf(shadowUpdateBudgetText, sizeof(shadowUpdateBudgetText), "All");
-    } else {
-        std::snprintf(shadowUpdateBudgetText, sizeof(shadowUpdateBudgetText), "%d",
-                draft.graphics.maxShadowLightUpdatesPerFrame);
-    }
-    engine::Text(config, assets,
-            Rectangle{controlX + controlWidth - lightValueWidth, y,
-                    lightValueWidth, rowHeight},
-            smallFont, shadowUpdateBudgetText, engine::UITextJustify::Right);
-    y += rowHeight + 14.0f;
-
-    const char* qualityOptions[] = {"Off", "Low", "Medium", "High"};
-    int shadowQuality = static_cast<int>(draft.graphics.shadowQuality);
-    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
-            smallFont, "Shadow quality", engine::UITextJustify::Left);
-    if (engine::Option(ui, config, input, assets, "graphics_shadow_quality",
-                Rectangle{controlX, y, controlWidth, rowHeight}, smallFont,
-                qualityOptions, 4, shadowQuality)) {
-        draft.graphics.shadowQuality = static_cast<FpsShadowQuality>(shadowQuality);
-    }
-    y += rowHeight + 14.0f;
-
-    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
-            smallFont, "Horizontal FOV", engine::UITextJustify::Left);
-    constexpr float fovValueWidth = 64.0f;
-    engine::IntSlider(
-            ui,
-            config,
-            input,
-            "graphics_horizontal_fov",
-            Rectangle{controlX, y, controlWidth - fovValueWidth, rowHeight},
-            MinFpsHorizontalFovDegrees,
-            MaxFpsHorizontalFovDegrees,
-            draft.graphics.horizontalFovDegrees);
-    char fovText[16];
-    std::snprintf(
-            fovText,
-            sizeof(fovText),
-            "%d",
-            draft.graphics.horizontalFovDegrees);
-    engine::Text(
-            config,
-            assets,
-            Rectangle{controlX + controlWidth - fovValueWidth, y,
-                    fovValueWidth, rowHeight},
-            smallFont,
-            fovText,
-            engine::UITextJustify::Right);
-    y += rowHeight + 14.0f;
-
-    engine::Checkbox(ui, config, input, assets, "graphics_fxaa",
-            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
-            smallFont, "FXAA", draft.graphics.fxaa);
-    y += rowHeight + 8.0f;
-    engine::Checkbox(ui, config, input, assets, "graphics_depth_prepass",
-            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
-            smallFont, "Depth pre-pass", draft.graphics.depthPrepass);
-    y += rowHeight + 8.0f;
-    engine::Checkbox(ui, config, input, assets, "graphics_bloom",
-            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
-            smallFont, "HDR bloom", draft.hdrBloom.enabled);
-    y += rowHeight + 8.0f;
-    engine::Checkbox(ui, config, input, assets, "graphics_fps_counter",
-            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
-            smallFont, "FPS counter", draft.graphics.showFpsCounter);
-    y += rowHeight + 8.0f;
-    engine::Checkbox(ui, config, input, assets, "graphics_performance_overlay",
-            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
-            smallFont, "Performance overlay (F9)", draft.graphics.performanceOverlay);
-    y += rowHeight + 8.0f;
-    engine::Checkbox(ui, config, input, assets, "graphics_vsync",
-            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
-            smallFont, "VSync", draft.graphics.vsync);
-    y += rowHeight + 4.0f;
-    engine::Text(
-            config,
-            assets,
-            Rectangle{panel.x + padding, y,
-                    panel.width - padding * 2.0f, 42.0f},
-            smallFont,
-            "You must restart the game for VSync changes to take effect.",
-            engine::UITextJustify::Left,
-            config.mutedTextColor,
-            true);
-    y += 42.0f + 12.0f;
-
     GameGraphicsSettingsAction result = GameGraphicsSettingsAction::None;
-    const float buttonGap = 10.0f;
-    const float buttonWidth = (panel.width - padding * 2.0f - buttonGap * 2.0f) / 3.0f;
-    if (engine::Button(ui, config, input, assets, "graphics_defaults",
-                Rectangle{panel.x + padding, y, buttonWidth, rowHeight},
-                smallFont, "Defaults")) {
-        result = GameGraphicsSettingsAction::Defaults;
+    const char* buttonLabels[] = {"Defaults", "Cancel", "Apply"};
+    const char* buttonIds[] = {"graphics_defaults", "graphics_cancel", "graphics_apply"};
+    const GameGraphicsSettingsAction actions[] = {GameGraphicsSettingsAction::Defaults,
+            GameGraphicsSettingsAction::Cancel, GameGraphicsSettingsAction::Apply};
+    for (std::size_t i = 0; i < layout.buttons.size(); ++i) {
+        if (engine::Button(ui, textConfig, input, assets, buttonIds[i], layout.buttons[i],
+                    smallFont, buttonLabels[i])) result = actions[i];
     }
-    if (engine::Button(ui, config, input, assets, "graphics_cancel",
-                Rectangle{panel.x + padding + buttonWidth + buttonGap, y,
-                        buttonWidth, rowHeight}, smallFont, "Cancel")) {
-        result = GameGraphicsSettingsAction::Cancel;
+    if (statusHeight > 0.0f) {
+        engine::Text(ui, textConfig, assets, layout.status, smallFont, statusText,
+                engine::UITextJustify::Left, config.invalidColor, true);
     }
-    if (engine::Button(ui, config, input, assets, "graphics_apply",
-                Rectangle{panel.x + padding + (buttonWidth + buttonGap) * 2.0f, y,
-                        buttonWidth, rowHeight}, smallFont, "Apply")) {
-        result = GameGraphicsSettingsAction::Apply;
-    }
-    y += rowHeight + 8.0f;
-    if (statusText != nullptr && statusText[0] != '\0') {
-        engine::Text(config, assets,
-                Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, 42.0f},
-                smallFont, statusText, engine::UITextJustify::Center,
-                config.invalidColor, true);
-    }
+    engine::EndScrollArea(ui, config, input, scrollArea, scroll);
     engine::EndUI(ui, config, input, assets);
     return result;
 }

@@ -3,6 +3,7 @@
 #include "game/PlayerCameraSettings.h"
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/render/ColorTransfer.h"
 #include "engine/render/HdrEffectPolicy.h"
 #include "engine/render/ToneMapping.h"
 #include "game/PlayerHealthVisual.h"
@@ -317,6 +318,7 @@ inline constexpr int DefaultFpsShadowLightUpdatesPerFrame = 2;
 
 struct FpsGraphicsSettings {
     float renderScale = 1.5f;
+    float gamma = 1.0f;
     bool fxaa = true;
     FpsShadowQuality shadowQuality = FpsShadowQuality::High;
     int maxDynamicLights = DefaultFpsDynamicLights;

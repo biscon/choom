@@ -13,6 +13,15 @@ float ClampNormalized(float value)
 
 } // namespace
 
+Vector3 ApplyDisplayGamma(Vector3 displayRgb, float gamma)
+{
+    const float exponent = 1.0f / NormalizeDisplayGamma(gamma);
+    return {
+            std::pow(ClampNormalized(displayRgb.x), exponent),
+            std::pow(ClampNormalized(displayRgb.y), exponent),
+            std::pow(ClampNormalized(displayRgb.z), exponent)};
+}
+
 float SrgbNormalizedChannelToLinear(float srgb)
 {
     srgb = ClampNormalized(srgb);

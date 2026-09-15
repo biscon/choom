@@ -636,6 +636,8 @@ int main(int argc, char** argv)
             scenePresentationShader, "presentationToneMapper");
     const int presentationExposureLoc = GetShaderLocation(
             scenePresentationShader, "presentationExposureEv");
+    const int presentationGammaLoc = GetShaderLocation(
+            scenePresentationShader, "presentationGamma");
     const int presentationDesaturationLoc = GetShaderLocation(
             scenePresentationShader, "presentationDesaturation");
     const int presentationVignetteOpacityLoc = GetShaderLocation(
@@ -816,6 +818,9 @@ int main(int argc, char** argv)
     FrameDipTrace frameDipTrace;
     frameDipTrace.Initialize(argc, argv);
 
+    engine::ScenePresentationEffectParameters cachedPresentationEffects;
+    float presentedGamma = 1.0f;
+
     while (!WindowShouldClose() && !application.QuitRequested())
     {
         const double frameStartSeconds = frameDipTrace.Enabled()
@@ -920,6 +925,7 @@ int main(int argc, char** argv)
         application.ProcessPendingGameSave(
                 context, scenePresentationTarget.texture);
         application.ProcessDeferredDebugActions(context);
+        bool worldTargetsReplaced = false;
         if (const game::FpsApplicationSettings* pending =
                     application.PendingGraphicsSettings()) {
             const float requestedScale = pending->graphics.renderScale;
@@ -949,6 +955,7 @@ int main(int argc, char** argv)
                     replacementWorld = {};
                     replacementViewmodel = {};
                     currentWorldRenderScale = requestedScale;
+                    worldTargetsReplaced = true;
                 } else {
                     engine::UnloadRenderTarget(replacementWorld);
                     unloadViewmodelTarget(replacementViewmodel);
@@ -977,7 +984,10 @@ int main(int argc, char** argv)
         const bool collectPerformanceDiagnostics = frameDipTrace.Enabled()
                 || application.ApplicationSettings().graphics.performanceOverlay;
         performanceProfiler.BeginFrame(collectPerformanceDiagnostics);
-        if (application.ShouldRefreshBackground() && render3D) {
+        const bool refreshBackground = application.ShouldRefreshBackground()
+                || worldTargetsReplaced;
+        const float presentationGamma = application.PresentationGamma();
+        if (refreshBackground && render3D) {
             performanceProfiler.Begin(RenderProfilePass::Shadows);
             application.Render3DShadowMaps(context);
             performanceProfiler.End(RenderProfilePass::Shadows);
@@ -1019,6 +1029,18 @@ int main(int argc, char** argv)
                 EndTextureMode();
             }
 
+            cachedPresentationEffects = application.ScenePresentationEffects();
+        } else if (refreshBackground
+                && contentKind == game::ApplicationContentKind::Editor2D) {
+            BeginTextureMode(editorTarget);
+            ClearBackground(Color{8, 10, 14, 255});
+            application.Render2D(assets);
+            EndTextureMode();
+        }
+
+        // Re-present the cached HDR scene when gamma changes in the paused
+        // Settings menu. World rendering and gameplay effects remain frozen.
+        if (render3D && (refreshBackground || presentationGamma != presentedGamma)) {
             const engine::RenderTarget* hdrDebugSource =
                     application.HdrDebugPresentationSource();
             const Texture2D linearSceneTexture = hdrDebugSource != nullptr
@@ -1030,12 +1052,14 @@ int main(int argc, char** argv)
             BeginTextureMode(scenePresentationTarget);
             ClearBackground(BLANK);
             rlDisableColorBlend();
-            const engine::ScenePresentationEffectParameters presentationEffects =
-                    application.ScenePresentationEffects();
+            const engine::ScenePresentationEffectParameters& presentationEffects =
+                    cachedPresentationEffects;
             const engine::ToneMappingSettings toneMapping =
                     engine::NormalizeToneMappingSettings(
                             application.ApplicationSettings().toneMapping);
             const int toneMapper = static_cast<int>(toneMapping.toneMapper);
+            SetShaderValue(scenePresentationShader, presentationGammaLoc,
+                    &presentationGamma, SHADER_UNIFORM_FLOAT);
             SetShaderValue(
                     scenePresentationShader,
                     presentationToneMapperLoc,
@@ -1119,12 +1143,7 @@ int main(int argc, char** argv)
             rlEnableColorBlend();
             EndTextureMode();
             performanceProfiler.End(RenderProfilePass::Presentation);
-        } else if (application.ShouldRefreshBackground()
-                && contentKind == game::ApplicationContentKind::Editor2D) {
-            BeginTextureMode(editorTarget);
-            ClearBackground(Color{8, 10, 14, 255});
-            application.Render2D(assets);
-            EndTextureMode();
+            presentedGamma = presentationGamma;
         }
 
         // draw world and ui to screen

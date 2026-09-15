@@ -1,3 +1,4 @@
+#include "game/GameSettingsLayout.h"
 #include "sector_editor/materials/SectorEditorMaterialFormLayout.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorMainMenu.h"
@@ -41,6 +42,52 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.x + a.width > b.x
             && a.y < b.y + b.height
             && a.y + a.height > b.y;
+}
+
+void TestGameSettingsLayout()
+{
+    using Row = game::GameSettingsRow;
+    for (float width : {248.0f, 400.0f, 664.0f}) {
+        for (float fontSize : {18.0f, 24.0f, 32.0f}) {
+            std::array<float, game::GameSettingsLabels.size()> heights;
+            heights.fill(fontSize + 8.0f);
+            heights[static_cast<std::size_t>(Row::GammaHelp)] = fontSize * 3.0f;
+            heights[static_cast<std::size_t>(Row::VsyncHelp)] = fontSize * 4.0f;
+            heights[static_cast<std::size_t>(Row::Performance)] = fontSize * 2.0f;
+            for (float statusHeight : {0.0f, 160.0f, 600.0f}) {
+                const auto layout = game::MeasureGameSettingsLayout(width, 20.0f,
+                        fontSize * 13.0f, 48.0f, heights, statusHeight);
+                float previousBottom = 0.0f;
+                for (std::size_t i = 0; i < layout.rows.size(); ++i) {
+                    const Rectangle row = layout.rows[i];
+                    Check(row.y >= previousBottom, "settings rows never overlap preceding content");
+                    Check(row.x >= 0 && row.x + row.width <= width,
+                            "settings labels stay within the reserved content width");
+                    previousBottom = row.y + row.height;
+                    if (game::GameSettingsRowHasValue(static_cast<Row>(i))) {
+                        const Rectangle field = layout.fields[i];
+                        Check(!Overlaps(row, field), "settings labels and controls never overlap");
+                        Check(field.width > 0 && field.x + field.width <= width,
+                                "settings fields remain usable on narrow panels");
+                        previousBottom = std::max(previousBottom, field.y + field.height);
+                    }
+                }
+                const Rectangle apply = layout.buttons.back();
+                Check(layout.buttons.front().y >= previousBottom,
+                        "settings buttons follow all controls and help text");
+                Check(layout.buttons.front().y >= layout.status.y + statusHeight,
+                        "settings errors appear before the action buttons");
+                Check(layout.contentHeight >= apply.y + apply.height + 24.0f,
+                        "settings scroll extent includes the final button and bottom padding");
+                for (float viewportHeight : {300.0f, 672.0f, 1032.0f}) {
+                    const float maxScroll = std::max(0.0f, layout.contentHeight - viewportHeight);
+                    Check(apply.y - maxScroll >= 0.0f
+                                    && apply.y + apply.height - maxScroll <= viewportHeight,
+                            "Apply is fully visible at maximum scroll");
+                }
+            }
+        }
+    }
 }
 
 void TestPreviewObjectAdjustmentLayout()
@@ -1125,6 +1172,7 @@ void TestBaseboardLayout()
 
 int main()
 {
+    TestGameSettingsLayout();
     TestPreviewObjectAdjustmentLayout();
     TestMaterialBrowserFilterLayout();
     TestMaterialFormMacroLayout();

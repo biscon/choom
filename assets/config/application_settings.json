@@ -12,6 +12,7 @@
   },
   "graphics": {
     "renderScale": 1.0,
+    "gamma": 0.9967213273048401,
     "fxaa": true,
     "shadowQuality": "high",
     "maxDynamicLights": 32,

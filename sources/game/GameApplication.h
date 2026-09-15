@@ -73,6 +73,7 @@ public:
         return applicationSettings;
     }
     const FpsApplicationSettings* PendingGraphicsSettings() const;
+    float PresentationGamma() const;
     bool CommitPendingGraphicsSettings(std::string& error);
     void RejectPendingGraphicsSettings(const std::string& error);
     void TogglePerformanceOverlay();
@@ -154,6 +155,7 @@ private:
     engine::DebugConsoleData debugConsole;
     std::string menuStatus;
     engine::UIScrollState mainMenuScroll;
+    engine::UIScrollState graphicsSettingsScroll;
     std::optional<MainMenuAction> pendingMenuAction;
     std::optional<GameGraphicsSettingsAction> pendingSettingsAction;
     std::optional<FpsApplicationSettings> pendingGraphicsSettings;

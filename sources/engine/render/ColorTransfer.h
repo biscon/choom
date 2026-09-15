@@ -2,7 +2,23 @@
 
 #include <raylib.h>
 
+#include <algorithm>
+#include <cmath>
+
 namespace engine {
+
+inline constexpr float MinimumDisplayGamma = 0.5f;
+inline constexpr float MaximumDisplayGamma = 2.0f;
+
+// User adjustment of display-encoded RGB, separate from the sRGB transfer.
+// 1 is neutral; larger values brighten midtones without lifting black.
+inline float NormalizeDisplayGamma(float gamma)
+{
+    return std::isfinite(gamma)
+            ? std::clamp(gamma, MinimumDisplayGamma, MaximumDisplayGamma)
+            : 1.0f;
+}
+Vector3 ApplyDisplayGamma(Vector3 displayRgb, float gamma);
 
 // Exact IEC 61966-2-1 sRGB transfer functions for normalized color channels.
 float SrgbNormalizedChannelToLinear(float srgb);

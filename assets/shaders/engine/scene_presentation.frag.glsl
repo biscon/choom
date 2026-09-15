@@ -5,6 +5,7 @@ in vec4 fragColor;
 uniform sampler2D texture0;
 uniform int presentationToneMapper;
 uniform float presentationExposureEv;
+uniform float presentationGamma;
 uniform float presentationDesaturation;
 uniform float presentationVignetteOpacity;
 uniform vec3 presentationVignetteColorLinear;
@@ -72,7 +73,11 @@ void main()
             mapped,
             clamp(presentationVignetteColorLinear, 0.0, 1.0),
             vignetteMask * clamp(presentationVignetteOpacity, 0.0, 1.0));
+    vec3 displayRgb = LinearSceneToDisplaySrgb(mapped);
+    // Monitor adjustment follows (and does not replace) the sRGB transfer.
+    displayRgb = pow(clamp(displayRgb, 0.0, 1.0),
+            vec3(1.0 / clamp(presentationGamma, 0.5, 2.0)));
     finalColor = vec4(
-            LinearSceneToDisplaySrgb(mapped),
+            displayRgb,
             clamp(scene.a, 0.0, 1.0)) * fragColor;
 }

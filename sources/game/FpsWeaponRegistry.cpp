@@ -1058,6 +1058,7 @@ const char* FpsShadowQualityName(FpsShadowQuality quality)
 
 FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings)
 {
+    settings.gamma = engine::NormalizeDisplayGamma(settings.gamma);
     if (!std::isfinite(settings.renderScale)) {
         settings.renderScale = 1.5f;
     }
@@ -1799,6 +1800,19 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     Fail("application settings.graphics.renderScale must be between 0.5 and 2.0");
                 }
                 parsed.graphics.renderScale = static_cast<float>(value);
+            }
+            const auto gamma = graphics->find("gamma");
+            if (gamma != graphics->end()) {
+                if (!gamma->is_number()) {
+                    Fail("application settings.graphics.gamma must be a number");
+                }
+                const double value = gamma->get<double>();
+                if (!std::isfinite(value)
+                        || value < engine::MinimumDisplayGamma
+                        || value > engine::MaximumDisplayGamma) {
+                    Fail("application settings.graphics.gamma must be between 0.5 and 2.0");
+                }
+                parsed.graphics.gamma = static_cast<float>(value);
             }
             const auto fxaa = graphics->find("fxaa");
             if (fxaa != graphics->end()) {
@@ -2604,6 +2618,7 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             NormalizeFpsGraphicsSettings(settings.graphics);
     root["graphics"] = {
             {"renderScale", graphics.renderScale},
+            {"gamma", graphics.gamma},
             {"fxaa", graphics.fxaa},
             {"shadowQuality", FpsShadowQualityName(graphics.shadowQuality)},
             {"maxDynamicLights", graphics.maxDynamicLights},
