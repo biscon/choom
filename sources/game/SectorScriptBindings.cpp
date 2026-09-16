@@ -3174,6 +3174,71 @@ int LuaPlayMapSound(lua_State* state)
     return PushAudioResult(state, success, error);
 }
 
+int LuaPlayMapMusic(lua_State* state)
+{
+    luaL_checktype(state, 1, LUA_TSTRING);
+    size_t idLength = 0;
+    const char* rawId = lua_tolstring(state, 1, &idLength);
+    bool loop = true;
+    if (!lua_isnoneornil(state, 2)) {
+        luaL_checktype(state, 2, LUA_TBOOLEAN);
+        loop = lua_toboolean(state, 2);
+    }
+    double volume = 1.0;
+    if (!lua_isnoneornil(state, 3)) {
+        luaL_checktype(state, 3, LUA_TNUMBER);
+        volume = lua_tonumber(state, 3);
+    }
+    if (!std::isfinite(volume) || volume < 0.0 || volume > 1.0) {
+        return luaL_argerror(state, 3, "volume must be finite and between 0 and 1");
+    }
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.audio.playMapMusic == nullptr) {
+        lua_pushnil(state);
+        lua_pushliteral(state, "level audio runtime is unavailable");
+        return 2;
+    }
+    const std::string id{rawId, idLength};
+    std::string error;
+    const int64_t handle = host.audio.playMapMusic(
+            host.audio.userData, engine::ScriptSystemEngineFromLua(state),
+            id, loop, static_cast<float>(volume), error);
+    if (handle > 0) {
+        lua_pushinteger(state, handle);
+        return 1;
+    }
+    lua_pushnil(state);
+    lua_pushlstring(state, error.data(), error.size());
+    return 2;
+}
+
+int LuaStopMapMusic(lua_State* state)
+{
+    const bool byId = lua_type(state, 1) == LUA_TSTRING;
+    if (!byId && !lua_isinteger(state, 1)) {
+        return luaL_argerror(state, 1, "expected a Music ID string or integer playback handle");
+    }
+    SectorScriptHost& host = HostFromLua(state);
+    if ((byId && host.audio.stopMapMusicById == nullptr)
+            || (!byId && host.audio.stopMapMusicByHandle == nullptr)) {
+        return PushAudioResult(state, false, "level audio runtime is unavailable");
+    }
+    std::string error;
+    bool success = false;
+    if (byId) {
+        size_t idLength = 0;
+        const char* rawId = lua_tolstring(state, 1, &idLength);
+        const std::string id{rawId, idLength};
+        success = host.audio.stopMapMusicById(
+                host.audio.userData, engine::ScriptSystemEngineFromLua(state), id, error);
+    } else {
+        success = host.audio.stopMapMusicByHandle(
+                host.audio.userData, engine::ScriptSystemEngineFromLua(state),
+                lua_tointeger(state, 1), error);
+    }
+    return PushAudioResult(state, success, error);
+}
+
 int LuaPlaySoundEmitter(lua_State* state)
 {
     size_t idLength = 0;
@@ -3432,6 +3497,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "enableTrigger", LuaEnableTrigger);
     Register(state, "disableTrigger", LuaDisableTrigger);
     Register(state, "playMapSound", LuaPlayMapSound);
+    Register(state, "playMapMusic", LuaPlayMapMusic);
+    Register(state, "stopMapMusic", LuaStopMapMusic);
     Register(state, "playSoundEmitter", LuaPlaySoundEmitter);
     Register(state, "stopSoundEmitter", LuaStopSoundEmitter);
     lua_pushinteger(state, static_cast<lua_Integer>(SectorCutsceneTextPosition::Top));

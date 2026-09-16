@@ -98,6 +98,22 @@ SectorScriptAudioApi MakeSectorScriptAudioApi(SectorSceneRuntime& scene)
         return static_cast<SectorSceneRuntime*>(userData)->PlayLevelSound(
                 context, id, volume, pitch, error);
     };
+    api.playMapMusic = [](void* userData, engine::EngineContext& context,
+                              const std::string& id, bool loop, float volume,
+                              std::string& error) {
+        return static_cast<SectorSceneRuntime*>(userData)->PlayLevelMusic(
+                context, id, loop, volume, error);
+    };
+    api.stopMapMusicById = [](void* userData, engine::EngineContext& context,
+                                const std::string& id, std::string& error) {
+        return static_cast<SectorSceneRuntime*>(userData)->StopLevelMusic(
+                context, id, error);
+    };
+    api.stopMapMusicByHandle = [](void* userData, engine::EngineContext& context,
+                                    int64_t handle, std::string& error) {
+        return static_cast<SectorSceneRuntime*>(userData)->StopLevelMusic(
+                context, handle, error);
+    };
     api.playSoundEmitter = [](void* userData, engine::EngineContext& context,
                                   const std::string& id, const float* volume,
                                   float pitch, std::string& error) {

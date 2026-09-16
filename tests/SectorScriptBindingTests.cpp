@@ -2506,6 +2506,125 @@ end
     game::ResetSectorScriptHost(host);
 }
 
+void MapMusicBindingsValidateAndForwardPlayback()
+{
+    struct Capture {
+        int plays = 0;
+        int stoppedIds = 0;
+        int stoppedHandles = 0;
+    } capture;
+    game::SectorScriptAudioApi audio;
+    audio.userData = &capture;
+    // Use a token beyond double's exact integer range to catch lossy conversion.
+    constexpr int64_t token = INT64_C(9007199254740993);
+    audio.playMapMusic = [](void* userData, engine::EngineContext&,
+                                const std::string& id, bool loop, float volume,
+                                std::string& error) -> int64_t {
+        auto& value = *static_cast<Capture*>(userData);
+        ++value.plays;
+        if (id != "theme") {
+            error = "music unavailable";
+            return 0;
+        }
+        if (value.plays <= 2) {
+            assert(loop && volume == 1.0f);
+        } else if (value.plays == 3) {
+            assert(!loop && volume == 0.25f);
+        } else if (value.plays == 4) {
+            assert(loop && volume == 0.0f);
+        } else {
+            assert(false && "invalid arguments reached audio runtime");
+        }
+        return INT64_C(9007199254740993);
+    };
+    audio.stopMapMusicById = [](void* userData, engine::EngineContext&,
+                                  const std::string& id, std::string& error) {
+        ++static_cast<Capture*>(userData)->stoppedIds;
+        if (id == "theme" || id == "123") return true;
+        error = "unknown music ID";
+        return false;
+    };
+    audio.stopMapMusicByHandle = [](void* userData, engine::EngineContext&,
+                                      int64_t handle, std::string& error) {
+        ++static_cast<Capture*>(userData)->stoppedHandles;
+        if (handle == token) return true;
+        error = "invalid or stale handle";
+        return false;
+    };
+
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    ScriptFiles files;
+    game::InitializeSectorScriptHost(
+            host, objects, map, runtime, nullptr, nullptr, audio);
+    files.Write(R"(
+function init()
+    local music = assert(playMapMusic("theme"))
+    assert(math.type(music) == "integer" and music == 9007199254740993)
+    assert(playMapMusic("theme", nil, nil) == music)
+    assert(playMapMusic("theme", false, 0.25) == music)
+    assert(playMapMusic("theme", true, 0) == music)
+    assert(stopMapMusic(music))
+    assert(stopMapMusic(music))
+    assert(stopMapMusic("theme"))
+    assert(stopMapMusic("123")) -- numeric string is an ID, never a handle
+    local handle, reason = playMapMusic("missing")
+    assert(handle == nil and reason == "music unavailable")
+    local ok, reason = stopMapMusic("missing")
+    assert(ok == false and reason == "unknown music ID")
+    for _, invalid in ipairs({0, -1, 123}) do
+        local ok, reason = stopMapMusic(invalid)
+        assert(ok == false and reason == "invalid or stale handle")
+    end
+    assert(not pcall(playMapMusic))
+    assert(not pcall(playMapMusic, 123))
+    for _, invalid in ipairs({0, 1, "true", {}}) do
+        assert(not pcall(playMapMusic, "theme", invalid))
+    end
+    for _, invalid in ipairs({-0.01, 1.01, math.huge, -math.huge, 0/0, "0.5", true, {}}) do
+        assert(not pcall(playMapMusic, "theme", true, invalid))
+    end
+    assert(not pcall(stopMapMusic))
+    for _, invalid in ipairs({true, {}, 1.5, math.huge}) do
+        assert(not pcall(stopMapMusic, invalid))
+    end
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(capture.plays == 5 && capture.stoppedIds == 3 && capture.stoppedHandles == 5);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
+void MapMusicBindingsReportUnavailableRuntime()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    ScriptFiles files;
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function init()
+    local music, reason = playMapMusic("theme")
+    assert(music == nil and reason == "level audio runtime is unavailable")
+    for _, target in ipairs({"theme", 1}) do
+        local ok, reason = stopMapMusic(target)
+        assert(ok == false and reason == "level audio runtime is unavailable")
+    end
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
 void CutsceneBindingsControlFadeAndCaptionTimelines(bool cinematic)
 {
     struct ControlCapture {
@@ -3956,6 +4075,8 @@ void RunSectorScriptBindingTests()
     TravelPreservesFirstRequest();
     TriggerContainmentUsesExplicitCoordinateSpaces();
     MapAudioBindingsForwardOptionalPlaybackSettings();
+    MapMusicBindingsValidateAndForwardPlayback();
+    MapMusicBindingsReportUnavailableRuntime();
     CutsceneBindingsControlFadeAndCaptionTimelines(false);
     CutsceneBindingsControlFadeAndCaptionTimelines(true);
     AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();

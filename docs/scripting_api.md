@@ -12,6 +12,7 @@ ranges, return values, behavior, and failure details.
 - **[Lifecycle](#script-files-and-lifecycle):** `init()`, `shutdown()`;
   `FrameDelta` is the read-only frame delta in seconds.
 - **[Audio](#level-audio):** `playMapSound(soundId [, volume [, pitch]])`,
+  `playMapMusic(musicId [, loop [, volume]])`, `stopMapMusic(handleOrMusicId)`,
   `playSoundEmitter(emitterId [, volume [, pitch]])`,
   `stopSoundEmitter(emitterId)`.
 - **[Tasks](#tasks-and-timing):** `delay(milliseconds)`,
@@ -160,9 +161,10 @@ elapsed = elapsed + FrameDelta
 
 ## Level audio
 
-Map audio IDs come from the level's **Sound Editor**. Roomtones use entries
-authored as `Music (streaming)`; the APIs below use buffered `Sound`
-entries. Invalid IDs or assets that are not ready return `false, reason`.
+Map audio IDs come from the level's **Sound Editor**. `playMapSound` uses buffered
+`Sound` entries; `playMapMusic` and roomtones use `Music (streaming)` entries.
+Emitters support either type. Expected failures return `false, reason`, except
+`playMapMusic`, which returns `nil, reason`.
 
 ### `playMapSound(soundId [, volume [, pitch]]) -> true | false, reason`
 
@@ -171,6 +173,44 @@ Plays a non-positional one-shot. Volume defaults to `1.0` and is limited to
 
 ```lua
 playMapSound("light_switch_click", 0.8, 1.05)
+```
+
+### `playMapMusic(musicId [, loop [, volume]]) -> handle | nil, reason`
+
+Plays non-positional streaming Music. `loop` defaults to `true`; volume defaults
+to `1.0` and must be finite and within `0.0..1.0`. Music is unaffected by distance,
+occlusion, underwater muffling, or roomtone fades. It follows global audio
+pause/resume and stops when the level audio is unloaded or rebuilt.
+
+Only one script playback runs per Music ID. Calling again while it is playing
+updates loop and volume without restarting and returns the same positive integer
+handle. Different IDs can play simultaneously, even if they reference the same
+file. These streams are independent of roomtones and emitters.
+
+After stopping or natural completion, playing again starts from the beginning
+with a new handle. Handles are runtime-only: do not save them across level loads.
+Unknown/non-Music IDs, pending/failed assets, unavailable or paused audio, and
+exhausted playback capacity return `nil, reason`. Invalid argument types or volume
+ranges raise Lua errors.
+
+```lua
+local music, reason = playMapMusic("theme", true, 0.7)
+if music then
+    playMapMusic("theme", true, 0.4) -- adjust without restarting
+    stopMapMusic(music)
+end
+```
+
+### `stopMapMusic(handleOrMusicId) -> true | false, reason`
+
+Stops script music by its integer playback handle or authored Music ID string.
+Stopping an already-stopped playback is harmless. A handle becomes stale when
+that ID starts a new playback or the level audio is unloaded; stale handles cannot
+stop a replacement playback. Unknown/non-Music IDs and invalid/stale handles
+return `false, reason`. Roomtones and emitters are unaffected.
+
+```lua
+stopMapMusic("theme")
 ```
 
 ### `playSoundEmitter(emitterId [, volume [, pitch]]) -> true | false, reason`

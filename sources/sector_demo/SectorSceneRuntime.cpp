@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <set>
 
 namespace game {
@@ -584,6 +585,9 @@ void SectorSceneRuntime::StopLevelAudio(engine::EngineContext& context)
     for (const auto& entry : levelMusicById) {
         context.audio.StopMusic(context.assets, entry.second);
     }
+    for (const auto& entry : mapMusicById) {
+        context.audio.StopMusic(context.assets, entry.second.music);
+    }
     for (const RoomtonePlayback& playback : roomtonePlaybacks) {
         context.audio.StopMusic(context.assets, playback.music);
     }
@@ -601,6 +605,7 @@ void SectorSceneRuntime::StopLevelAudio(engine::EngineContext& context)
     audioScope = engine::NullAssetScopeHandle();
     levelSounds.clear();
     levelMusicById.clear();
+    mapMusicById.clear();
     footstepSets.clear();
     footstepSetBySectorId.clear();
     footstepPlayback = FootstepPlaybackState{};
@@ -698,6 +703,79 @@ bool SectorSceneRuntime::PlayLevelSound(
     }
     error.clear();
     return true;
+}
+
+int64_t SectorSceneRuntime::PlayLevelMusic(
+        engine::EngineContext& context,
+        const std::string& id,
+        bool loop,
+        float volume,
+        std::string& error)
+{
+    const auto found = mapMusicById.find(id);
+    if (found == mapMusicById.end()) {
+        error = "map Music ID was not found or is not streaming Music: " + id;
+        return 0;
+    }
+    MapMusicPlayback& playback = found->second;
+    if (!context.assets.IsReady(playback.music)) {
+        error = engine::IsNull(playback.music) || context.assets.HasFailed(playback.music)
+                ? "map Music failed to load: " + id
+                : "map Music is not ready: " + id;
+        return 0;
+    }
+    if (!std::isfinite(volume) || volume < 0.0f || volume > 1.0f) {
+        error = "volume must be finite and between 0 and 1";
+        return 0;
+    }
+    const bool alreadyPlaying = context.audio.IsMusicPlaying(playback.music);
+    if (!alreadyPlaying && nextMapMusicToken == std::numeric_limits<int64_t>::max()) {
+        error = "map Music playback handles exhausted";
+        return 0;
+    }
+    engine::MusicPlaybackSettings settings;
+    settings.looping = loop;
+    settings.volume = volume;
+    settings.affectedByListenerEffects = false;
+    if (!context.audio.PlayMusic(context.assets, playback.music, settings)) {
+        error = "map Music could not start (audio unavailable, paused, or playback capacity exhausted): " + id;
+        return 0;
+    }
+    if (!alreadyPlaying) playback.token = nextMapMusicToken++;
+    error.clear();
+    return playback.token;
+}
+
+bool SectorSceneRuntime::StopLevelMusic(
+        engine::EngineContext& context,
+        const std::string& id,
+        std::string& error)
+{
+    const auto found = mapMusicById.find(id);
+    if (found == mapMusicById.end()) {
+        error = "map Music ID was not found or is not streaming Music: " + id;
+        return false;
+    }
+    context.audio.StopMusic(context.assets, found->second.music);
+    error.clear();
+    return true;
+}
+
+bool SectorSceneRuntime::StopLevelMusic(
+        engine::EngineContext& context,
+        int64_t handle,
+        std::string& error)
+{
+    if (handle > 0) {
+        for (const auto& entry : mapMusicById) {
+            if (entry.second.token != handle) continue;
+            context.audio.StopMusic(context.assets, entry.second.music);
+            error.clear();
+            return true;
+        }
+    }
+    error = "map Music playback handle is invalid or stale";
+    return false;
 }
 
 bool SectorSceneRuntime::PlaySoundEmitter(
@@ -879,6 +957,7 @@ void SectorSceneRuntime::BeginLevelAudio(
     }
     levelSounds.reserve(map.audioSettings.soundsById.size());
     levelMusicById.reserve(map.audioSettings.soundsById.size());
+    mapMusicById.reserve(map.audioSettings.soundsById.size());
     for (const auto& entry : map.audioSettings.soundsById) {
         const SectorSoundDefinition& definition = entry.second;
         const std::string path = ResolveSectorAudioAssetPath(definition.path);
@@ -887,6 +966,11 @@ void SectorSceneRuntime::BeginLevelAudio(
                     audioScope,
                     path.c_str());
             if (!engine::IsNull(handle)) levelMusicById.emplace(entry.first, handle);
+            const std::string instanceKey = "map_music:" + entry.first;
+            MapMusicPlayback playback;
+            playback.music = context.assets.RequestMusicInstance(
+                    audioScope, instanceKey.c_str(), path.c_str());
+            mapMusicById.emplace(entry.first, playback);
         } else {
             const engine::SoundHandle handle = context.assets.RequestSound(
                     audioScope,
