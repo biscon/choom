@@ -19,6 +19,8 @@ struct InputFrameState {
     Vector2 previousMousePosition = {};
     Vector2 mouseDelta = {};
     float mouseWheelMove = 0.0f;
+    bool windowFocused = false;
+    bool cursorOnScreen = false;
 };
 
 struct KeyRepeatState {
@@ -56,6 +58,8 @@ public:
     Vector2 MousePosition() const;
     Vector2 MouseDelta() const;
     float MouseWheelMove() const;
+    bool WindowFocused() const { return frameState.windowFocused; }
+    bool CursorOnScreen() const { return frameState.cursorOnScreen; }
 
     template <typename Func>
     void ForEachEvent(InputEventType type, bool unhandledOnly, Func func);

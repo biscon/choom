@@ -334,6 +334,14 @@ if(BUILD_TESTING)
     target_include_directories(application_flow_tests PRIVATE sources)
     add_test(NAME application_flow COMMAND application_flow_tests)
 
+    add_executable(game_cursor_tests
+            tests/GameCursorTests.cpp
+            sources/game/ApplicationFlow.cpp
+    )
+    target_include_directories(game_cursor_tests PRIVATE sources)
+    target_link_libraries(game_cursor_tests PRIVATE raylib)
+    add_test(NAME game_cursor COMMAND game_cursor_tests)
+
     add_executable(game_save_tests
             tests/GameSaveTests.cpp
             sources/game/save/GameSaveSerialization.cpp

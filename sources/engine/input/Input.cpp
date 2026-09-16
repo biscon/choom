@@ -45,6 +45,8 @@ void Input::BeginFrame()
 
 void Input::PollRaylib(float dt)
 {
+    frameState.windowFocused = IsWindowFocused();
+    frameState.cursorOnScreen = IsCursorOnScreen();
     frameState.mousePosition = GetMousePosition();
     frameState.mouseDelta = Vector2{
             frameState.mousePosition.x - frameState.previousMousePosition.x,

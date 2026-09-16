@@ -113,7 +113,33 @@ bool GameApplication::Init(
     ApplyPerspectiveFov();
     flow = ApplicationFlowState{};
     initialized = true;
+    LoadGameCursorAssets(context.assets, cursorAssets);
+    UpdateCursorVisibility();
     return true;
+}
+
+GameCursorMode GameApplication::CursorMode() const
+{
+    return ResolveGameCursorMode(
+            flow, gameSession.IsLoadOverlayVisible(), gameSession.CursorUiState());
+}
+
+void GameApplication::UpdateCursorVisibility()
+{
+    // HideCursor changes GLFW's capture mode. Never call it on an already
+    // hidden/captured mouse: gameplay mouse-look owns that capture state.
+    if (CursorMode() != GameCursorMode::Native && !IsCursorHidden()) HideCursor();
+}
+
+void GameApplication::RenderCursor(
+        engine::AssetManager& assets,
+        const engine::Input& input,
+        Vector2 logicalSize,
+        Rectangle presentationViewport) const
+{
+    if (CursorMode() != GameCursorMode::Arrow
+            || !input.WindowFocused() || !input.CursorOnScreen()) return;
+    DrawGameCursor(assets, cursorAssets, input.MousePosition(), logicalSize, presentationViewport);
 }
 
 void GameApplication::UpdateMainThreadPreparation(
@@ -177,6 +203,8 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     graphicsSettingsOpen = false;
     editorAttachedToGame = false;
     itemIconDiagnosticReported = false;
+    cursorAssets = {};
+    if (initialized) EnableCursor();
     initialized = false;
 }
 
@@ -1301,6 +1329,9 @@ void GameApplication::EndGameToMainMenu(engine::EngineContext& context)
 
 void GameApplication::OpenEditor(engine::EngineContext& context)
 {
+    // Hand native visibility back before the editor applies its own capture
+    // rules. A failed transition is hidden again by UpdateCursorVisibility.
+    if (CursorMode() != GameCursorMode::Native) ShowCursor();
     if (gameSession.IsRunning()) {
         gameSession.SuspendForEditor(context);
         context.audio.StopAll(context.assets);
