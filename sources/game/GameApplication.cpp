@@ -114,7 +114,7 @@ bool GameApplication::Init(
     flow = ApplicationFlowState{};
     initialized = true;
     LoadGameCursorAssets(context.assets, cursorAssets);
-    UpdateCursorVisibility();
+    if (!IsCursorHidden()) HideCursor();
     return true;
 }
 
@@ -124,11 +124,31 @@ GameCursorMode GameApplication::CursorMode() const
             flow, gameSession.IsLoadOverlayVisible(), gameSession.CursorUiState());
 }
 
-void GameApplication::UpdateCursorVisibility()
+void GameApplication::RememberCursorPosition(const engine::Input& input)
 {
+    RememberGameCursorPosition(cursorPosition, CursorMode(), input.MousePosition(),
+            input.WindowFocused(), input.CursorOnScreen());
+}
+
+void GameApplication::UpdateCursorVisibility(
+        engine::Input& input, Vector2 logicalSize,
+        Rectangle presentationViewport, Vector2 windowSize)
+{
+    const GameCursorMode mode = CursorMode();
+    const bool nativeVisible = !IsCursorHidden();
     // HideCursor changes GLFW's capture mode. Never call it on an already
     // hidden/captured mouse: gameplay mouse-look owns that capture state.
-    if (CursorMode() != GameCursorMode::Native && !IsCursorHidden()) HideCursor();
+    if (mode != GameCursorMode::Native && nativeVisible) HideCursor();
+    if (RequestGameCursorPositionRestore(
+                cursorPosition, mode, nativeVisible, input.WindowFocused())) {
+        Vector2 windowPosition{};
+        if (BuildGameCursorRestorePosition(cursorPosition.logicalPosition,
+                    logicalSize, presentationViewport, windowSize, windowPosition)) {
+            input.SetMousePosition(static_cast<int>(windowPosition.x), static_cast<int>(windowPosition.y));
+            cursorPosition.logicalPosition = input.MousePosition();
+            cursorPosition.restorePending = false;
+        }
+    }
 }
 
 void GameApplication::RenderCursor(
@@ -204,6 +224,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     editorAttachedToGame = false;
     itemIconDiagnosticReported = false;
     cursorAssets = {};
+    cursorPosition = {};
     if (initialized) EnableCursor();
     initialized = false;
 }

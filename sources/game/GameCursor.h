@@ -5,11 +5,76 @@
 
 #include <raylib.h>
 
+#include <algorithm>
+#include <cmath>
+
 namespace engine { class AssetManager; }
 
 namespace game {
 
 enum class GameCursorMode { Native, Hidden, Arrow };
+
+struct GameCursorPositionState {
+    Vector2 logicalPosition{};
+    GameCursorMode previousMode = GameCursorMode::Hidden;
+    bool hasPosition = false;
+    bool restorePending = false;
+};
+
+// Called before UI/game updates can change capture and recenter the mouse.
+inline void RememberGameCursorPosition(
+        GameCursorPositionState& state, GameCursorMode mode,
+        Vector2 logicalPosition, bool focused, bool onScreen)
+{
+    if (mode != GameCursorMode::Arrow) return;
+    if (!focused) {
+        state.restorePending = state.hasPosition;
+        return;
+    }
+    if (!onScreen || state.restorePending) return;
+    state.logicalPosition = logicalPosition;
+    state.hasPosition = true;
+}
+
+inline bool RequestGameCursorPositionRestore(
+        GameCursorPositionState& state, GameCursorMode mode,
+        bool nativeCursorVisible, bool focused)
+{
+    if (mode != GameCursorMode::Arrow) {
+        state.previousMode = mode;
+        state.restorePending = false;
+        return false;
+    }
+    // EnableCursor recenters even when capture was already released. Native
+    // visibility detects those calls even if the arrow never disappeared.
+    if (state.hasPosition && (state.previousMode != mode
+            || nativeCursorVisible || !focused)) state.restorePending = true;
+    state.previousMode = mode;
+    return focused && state.hasPosition && state.restorePending;
+}
+
+inline Vector2 GameCursorWindowPosition(
+        Vector2 logicalMouse, Vector2 logicalSize, Rectangle viewport)
+{
+    // Invert Main's integer SetMouseOffset and logical SetMouseScale exactly.
+    return {
+            static_cast<float>(static_cast<int>(viewport.x)) + logicalMouse.x * viewport.width / logicalSize.x,
+            static_cast<float>(static_cast<int>(viewport.y)) + logicalMouse.y * viewport.height / logicalSize.y};
+}
+
+inline bool BuildGameCursorRestorePosition(
+        Vector2 logicalMouse, Vector2 logicalSize, Rectangle viewport,
+        Vector2 windowSize, Vector2& windowPosition)
+{
+    if (logicalSize.x <= 0 || logicalSize.y <= 0
+            || viewport.width <= 0 || viewport.height <= 0
+            || windowSize.x < 1 || windowSize.y < 1) return false;
+    const Vector2 position = GameCursorWindowPosition(logicalMouse, logicalSize, viewport);
+    windowPosition = {
+            std::clamp(std::round(position.x), 0.0f, windowSize.x - 1),
+            std::clamp(std::round(position.y), 0.0f, windowSize.y - 1)};
+    return true;
+}
 
 struct GameCursorUiState {
     bool inventoryOpen = false;
@@ -66,11 +131,7 @@ inline Rectangle BuildGameCursorDestination(
     const float scaleX = viewport.width / logicalSize.x;
     const float scaleY = viewport.height / logicalSize.y;
     const float spriteScale = GameCursorLogicalHeight / sprite.source.height;
-    // Main's SetMouseOffset uses integer viewport offsets. Invert that exact
-    // transform so fractional letterbox margins do not shift the cursor tip.
-    const Vector2 mouse{
-            static_cast<float>(static_cast<int>(viewport.x)) + logicalMouse.x * scaleX,
-            static_cast<float>(static_cast<int>(viewport.y)) + logicalMouse.y * scaleY};
+    const Vector2 mouse = GameCursorWindowPosition(logicalMouse, logicalSize, viewport);
     return {
             mouse.x - (sprite.hotspot.x - sprite.source.x) * spriteScale * scaleX,
             mouse.y - (sprite.hotspot.y - sprite.source.y) * spriteScale * scaleY,

@@ -23,6 +23,15 @@ struct InputFrameState {
     bool cursorOnScreen = false;
 };
 
+// A deliberate warp is not mouse motion. Keep the next frame's baseline in
+// sync without resetting wheel, focus, button, repeat, or click state.
+inline void SynchronizeInputMousePosition(InputFrameState& frame, Vector2 position)
+{
+    frame.mousePosition = position;
+    frame.previousMousePosition = position;
+    frame.mouseDelta = {};
+}
+
 struct KeyRepeatState {
     bool down = false;
     float heldTime = 0.0f;
@@ -56,6 +65,8 @@ public:
     bool IsMouseButtonDown(int button) const;
 
     Vector2 MousePosition() const;
+    // Window pixels, before raylib's mouse offset/scale. Does not emit events.
+    void SetMousePosition(int windowX, int windowY);
     Vector2 MouseDelta() const;
     float MouseWheelMove() const;
     bool WindowFocused() const { return frameState.windowFocused; }

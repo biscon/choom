@@ -59,7 +59,10 @@ public:
     bool IsGlobalPreparationFinished() const;
     void UpdateDebugConsole(engine::EngineContext& context, float dt);
     void ProcessDeferredDebugActions(engine::EngineContext& context);
-    void UpdateCursorVisibility();
+    void RememberCursorPosition(const engine::Input& input);
+    void UpdateCursorVisibility(
+            engine::Input& input, Vector2 logicalSize,
+            Rectangle presentationViewport, Vector2 windowSize);
     void RenderCursor(
             engine::AssetManager& assets,
             const engine::Input& input,
@@ -140,6 +143,7 @@ private:
 
     ApplicationFlowState flow;
     GameCursorAssets cursorAssets;
+    GameCursorPositionState cursorPosition;
     FpsApplicationSettings applicationSettings;
     SectorMaterialRegistry materialRegistry;
     ItemRegistry itemRegistry;

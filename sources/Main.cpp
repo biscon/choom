@@ -851,6 +851,7 @@ int main(int argc, char** argv)
 
         context.input.BeginFrame();
         context.input.PollRaylib(dt);
+        application.RememberCursorPosition(context.input);
         application.UpdateDebugConsole(context, dt);
         bool windowModeChanged = false;
         context.input.ForEachEvent(
@@ -925,7 +926,10 @@ int main(int argc, char** argv)
         application.ProcessPendingGameSave(
                 context, scenePresentationTarget.texture);
         application.ProcessDeferredDebugActions(context);
-        application.UpdateCursorVisibility();
+        application.UpdateCursorVisibility(
+                context.input,
+                {static_cast<float>(INTERNAL_WIDTH), static_cast<float>(INTERNAL_HEIGHT)},
+                dst, {static_cast<float>(screenW), static_cast<float>(screenH)});
         bool worldTargetsReplaced = false;
         if (const game::FpsApplicationSettings* pending =
                     application.PendingGraphicsSettings()) {

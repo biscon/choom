@@ -215,6 +215,14 @@ Vector2 Input::MousePosition() const
     return frameState.mousePosition;
 }
 
+void Input::SetMousePosition(int windowX, int windowY)
+{
+    ::SetMousePosition(windowX, windowY);
+    // Read back the rounded position through the active logical transform;
+    // event polling still happens only once per frame in PollRaylib.
+    SynchronizeInputMousePosition(frameState, GetMousePosition());
+}
+
 Vector2 Input::MouseDelta() const
 {
     return frameState.mouseDelta;

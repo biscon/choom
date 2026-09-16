@@ -1,4 +1,5 @@
 #include "game/GameCursor.h"
+#include "engine/input/Input.h"
 
 #include <cassert>
 #include <cmath>
@@ -53,6 +54,122 @@ void Near(float actual, float expected)
     assert(std::fabs(actual - expected) < 0.001f);
 }
 
+void PositionSurvivesDialogueAndOtherUiTransitions()
+{
+    using Mode = game::GameCursorMode;
+    game::GameCursorPositionState state;
+    // With no history, first use leaves the current pointer alone.
+    assert(!game::RequestGameCursorPositionRestore(state, Mode::Arrow, true, true));
+    game::RememberGameCursorPosition(state, Mode::Arrow, {430, 900}, true, true);
+    assert(state.hasPosition);
+
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        assert(!game::RequestGameCursorPositionRestore(state, Mode::Hidden, false, true));
+        // Hidden speech / mouse-look cannot replace the UI location.
+        game::RememberGameCursorPosition(state, Mode::Hidden, {960, 540}, true, true);
+        assert(game::RequestGameCursorPositionRestore(state, Mode::Arrow, true, true));
+        Near(state.logicalPosition.x, 430);
+        Near(state.logicalPosition.y, 900);
+        state.restorePending = false; // warp completed
+        assert(!game::RequestGameCursorPositionRestore(state, Mode::Arrow, false, true));
+    }
+
+    // Opening another UI shares the latest real pointer position. Even an
+    // arrow-to-arrow capture release (e.g. inventory -> menu) needs restoration.
+    game::RememberGameCursorPosition(state, Mode::Arrow, {710, 820}, true, true);
+    assert(game::RequestGameCursorPositionRestore(state, Mode::Arrow, true, true));
+    Near(state.logicalPosition.x, 710);
+    Near(state.logicalPosition.y, 820);
+    state.restorePending = false;
+
+    assert(!game::RequestGameCursorPositionRestore(state, Mode::Native, false, true));
+    game::RememberGameCursorPosition(state, Mode::Native, {50, 50}, true, true);
+    assert(game::RequestGameCursorPositionRestore(state, Mode::Arrow, false, true));
+    Near(state.logicalPosition.x, 710);
+    Near(state.logicalPosition.y, 820);
+}
+
+void FocusLossDefersRestorationWithoutLosingHistory()
+{
+    using Mode = game::GameCursorMode;
+    game::GameCursorPositionState state;
+    game::RememberGameCursorPosition(state, Mode::Arrow, {400, 850}, true, true);
+    assert(game::RequestGameCursorPositionRestore(state, Mode::Arrow, false, true));
+    state.restorePending = false;
+
+    // Leaving the client area must not save off-window positions.
+    game::RememberGameCursorPosition(state, Mode::Arrow, {-300, -400}, true, false);
+    Near(state.logicalPosition.x, 400);
+    game::RememberGameCursorPosition(state, Mode::Arrow, {960, 540}, false, true);
+    assert(!game::RequestGameCursorPositionRestore(state, Mode::Arrow, true, false));
+    assert(state.restorePending);
+    // On the first focused frame, the newly polled desktop position must not
+    // overwrite the saved UI position before restoration runs.
+    game::RememberGameCursorPosition(state, Mode::Arrow, {10, 20}, true, true);
+    assert(game::RequestGameCursorPositionRestore(state, Mode::Arrow, false, true));
+    Near(state.logicalPosition.x, 400);
+    Near(state.logicalPosition.y, 850);
+    state.restorePending = false;
+    game::RememberGameCursorPosition(state, Mode::Arrow, {450, 870}, true, true);
+    assert(!game::RequestGameCursorPositionRestore(state, Mode::Arrow, false, true));
+    Near(state.logicalPosition.x, 450);
+
+    assert(!game::RequestGameCursorPositionRestore(state, Mode::Hidden, false, false));
+    assert(!game::RequestGameCursorPositionRestore(state, Mode::Arrow, true, false));
+    assert(state.restorePending);
+    assert(game::RequestGameCursorPositionRestore(state, Mode::Arrow, false, true));
+    Near(state.logicalPosition.y, 870);
+}
+
+void RestorationUsesCurrentViewportAndClampsToWindow()
+{
+    const Vector2 logicalSize{1920, 1080};
+    Vector2 position{};
+    assert(game::BuildGameCursorRestorePosition(
+            {480, 900}, logicalSize, {0, 0, 1920, 1080}, {1920, 1080}, position));
+    Near(position.x, 480);
+    Near(position.y, 900);
+    assert(game::BuildGameCursorRestorePosition(
+            {480, 900}, logicalSize, {0, 150, 960, 540}, {960, 840}, position));
+    Near(position.x, 240);
+    Near(position.y, 600);
+    assert(game::BuildGameCursorRestorePosition(
+            {480, 900}, logicalSize, {320, 0, 1920, 1080}, {2560, 1080}, position));
+    Near(position.x, 800);
+    Near(position.y, 900);
+    assert(game::BuildGameCursorRestorePosition(
+            {480, 900}, logicalSize, {0, 122.5f, 1000, 562.5f}, {1000, 808}, position));
+    Near(position.x, 250);
+    Near(position.y, 591); // integer offset 122 + 468.75, rounded to a pixel
+    assert(game::BuildGameCursorRestorePosition(
+            {-500, 5000}, logicalSize, {0, 0, 960, 540}, {960, 540}, position));
+    Near(position.x, 0);
+    Near(position.y, 539);
+    assert(!game::BuildGameCursorRestorePosition({}, logicalSize, {}, {960, 540}, position));
+    assert(!game::BuildGameCursorRestorePosition({}, {}, {0, 0, 960, 540}, {960, 540}, position));
+    assert(!game::BuildGameCursorRestorePosition({}, logicalSize, {0, 0, 960, 540}, {}, position));
+}
+
+void WarpingSynchronizesInputWithoutArtificialMotion()
+{
+    engine::InputFrameState frame;
+    frame.mousePosition = {960, 540};
+    frame.previousMousePosition = {900, 500};
+    frame.mouseDelta = {60, 40};
+    frame.mouseWheelMove = 2;
+    frame.windowFocused = true;
+    frame.cursorOnScreen = true;
+    engine::SynchronizeInputMousePosition(frame, {430, 900});
+    Near(frame.mousePosition.x, 430);
+    Near(frame.mousePosition.y, 900);
+    Near(frame.previousMousePosition.x, 430);
+    Near(frame.previousMousePosition.y, 900);
+    Near(frame.mouseDelta.x, 0);
+    Near(frame.mouseDelta.y, 0);
+    Near(frame.mouseWheelMove, 2);
+    assert(frame.windowFocused && frame.cursorOnScreen);
+}
+
 void HotspotTracksMouseAtEveryPresentationScale()
 {
     const Vector2 logicalSize{1920, 1080};
@@ -91,5 +208,9 @@ void HotspotTracksMouseAtEveryPresentationScale()
 int main()
 {
     PointerVisibilityFollowsInteractiveUi();
+    PositionSurvivesDialogueAndOtherUiTransitions();
+    FocusLossDefersRestorationWithoutLosingHistory();
+    RestorationUsesCurrentViewportAndClampsToWindow();
+    WarpingSynchronizesInputWithoutArtificialMotion();
     HotspotTracksMouseAtEveryPresentationScale();
 }
