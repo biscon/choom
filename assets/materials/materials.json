@@ -386,6 +386,34 @@
       "roughnessFactor": 0.6499999761581421,
       "normalStrength": 1.0
     },
+    "tunnel_concrete_ceiling": {
+      "albedoTexturePath": "assets/images/walls/seamless_worn_concrete.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 6.0,
+        "darkening": 0.30000001192092896,
+        "roughnessChange": 0.11999999731779099
+      }
+    },
+    "tunnel_wall_concrete": {
+      "albedoTexturePath": "assets/images/walls/seamless_worn_concrete.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/patchy_wear.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.25,
+        "roughnessChange": 0.11999999731779099
+      }
+    },
     "veg_billboard_01": {
       "albedoTexturePath": "assets/images/hub/veg_billboard_01.png",
       "filter": "anisotropic8x",
