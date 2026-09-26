@@ -1,0 +1,705 @@
+{
+  "kit": "Litter / trash kit",
+  "units": "metres",
+  "gltf_up": "+Y",
+  "gltf_front": "+Z",
+  "assets": [
+    {
+      "type": "bag",
+      "notes": "Sealed full bag with tied gathered neck; flattened base.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Trash_Bag_Large",
+      "file": "exports/gltf/Trash_Bag_Large.gltf",
+      "triangles": 3740,
+      "bounds_min_blender": [
+        -0.25565123558044434,
+        -0.21315863728523254,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.25565123558044434,
+        0.21315863728523254,
+        0.6670775413513184
+      ],
+      "dimensions_blender_xyz": [
+        0.5113,
+        0.42632,
+        0.66708
+      ],
+      "dimensions_gltf_xyz": [
+        0.5113,
+        0.66708,
+        0.42632
+      ]
+    },
+    {
+      "type": "bag",
+      "notes": "Sealed full bag with tied gathered neck; flattened base.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Trash_Bag_Slumped",
+      "file": "exports/gltf/Trash_Bag_Slumped.gltf",
+      "triangles": 3740,
+      "bounds_min_blender": [
+        -0.3013051748275757,
+        -0.2527969777584076,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.3013051748275757,
+        0.2527969777584076,
+        0.40043455362319946
+      ],
+      "dimensions_blender_xyz": [
+        0.60261,
+        0.50559,
+        0.40043
+      ],
+      "dimensions_gltf_xyz": [
+        0.60261,
+        0.40043,
+        0.50559
+      ]
+    },
+    {
+      "type": "bag",
+      "notes": "Sealed full bag with tied gathered neck; flattened base.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Trash_Bag_Small",
+      "file": "exports/gltf/Trash_Bag_Small.gltf",
+      "triangles": 3740,
+      "bounds_min_blender": [
+        -0.16679808497428894,
+        -0.1472567468881607,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.16679808497428894,
+        0.1472567468881607,
+        0.3593025803565979
+      ],
+      "dimensions_blender_xyz": [
+        0.3336,
+        0.29451,
+        0.3593
+      ],
+      "dimensions_gltf_xyz": [
+        0.3336,
+        0.3593,
+        0.29451
+      ]
+    },
+    {
+      "type": "bottle",
+      "notes": "Opaque dusty glass approximation; open mouth with inner wall, integral worn label.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Bottle_Green",
+      "file": "exports/gltf/Bottle_Green.gltf",
+      "triangles": 1212,
+      "bounds_min_blender": [
+        -0.032999999821186066,
+        -0.032999999821186066,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.032999999821186066,
+        0.032999999821186066,
+        0.2750000059604645
+      ],
+      "dimensions_blender_xyz": [
+        0.066,
+        0.066,
+        0.275
+      ],
+      "dimensions_gltf_xyz": [
+        0.066,
+        0.275,
+        0.066
+      ]
+    },
+    {
+      "type": "bottle",
+      "notes": "Opaque dusty glass approximation; open mouth with inner wall, integral worn label.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Bottle_Amber",
+      "file": "exports/gltf/Bottle_Amber.gltf",
+      "triangles": 1212,
+      "bounds_min_blender": [
+        -0.03099999949336052,
+        -0.03099999949336052,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.03099999949336052,
+        0.03099999949336052,
+        0.24500000476837158
+      ],
+      "dimensions_blender_xyz": [
+        0.062,
+        0.062,
+        0.245
+      ],
+      "dimensions_gltf_xyz": [
+        0.062,
+        0.245,
+        0.062
+      ]
+    },
+    {
+      "type": "bottle",
+      "notes": "Opaque faded PET; dented ribbed walls and engaged cap.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Bottle_Plastic_Dented",
+      "file": "exports/gltf/Bottle_Plastic_Dented.gltf",
+      "triangles": 1584,
+      "bounds_min_blender": [
+        -0.03543681651353836,
+        -0.03200000151991844,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.03543681651353836,
+        0.03200000151991844,
+        0.21299999952316284
+      ],
+      "dimensions_blender_xyz": [
+        0.07087,
+        0.064,
+        0.213
+      ],
+      "dimensions_gltf_xyz": [
+        0.07087,
+        0.213,
+        0.064
+      ]
+    },
+    {
+      "type": "broken_glass",
+      "notes": "Open jagged fracture with 4 mm glass wall; grounded side resting orientation.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Bottle_Broken_Body",
+      "file": "exports/gltf/Bottle_Broken_Body.gltf",
+      "triangles": 316,
+      "bounds_min_blender": [
+        -0.06601826101541519,
+        -0.04003635793924332,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.06601826101541519,
+        0.04003635793924332,
+        0.06599999964237213
+      ],
+      "dimensions_blender_xyz": [
+        0.13204,
+        0.08007,
+        0.066
+      ],
+      "dimensions_gltf_xyz": [
+        0.13204,
+        0.066,
+        0.08007
+      ]
+    },
+    {
+      "type": "broken_glass",
+      "notes": "Separate hollow neck/shoulder with irregular broken annular edge.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Bottle_Broken_Neck",
+      "file": "exports/gltf/Bottle_Broken_Neck.gltf",
+      "triangles": 672,
+      "bounds_min_blender": [
+        -0.04194224625825882,
+        -0.029718317091464996,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.04194224625825882,
+        0.029718317091464996,
+        0.04800000041723251
+      ],
+      "dimensions_blender_xyz": [
+        0.08388,
+        0.05944,
+        0.048
+      ],
+      "dimensions_gltf_xyz": [
+        0.08388,
+        0.048,
+        0.05944
+      ]
+    },
+    {
+      "type": "broken_glass",
+      "notes": "Individual thick shard, slightly curved.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Glass_Shard_Small",
+      "file": "exports/gltf/Glass_Shard_Small.gltf",
+      "triangles": 16,
+      "bounds_min_blender": [
+        -0.02188575640320778,
+        -0.016106795519590378,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.02188575640320778,
+        0.016106795519590378,
+        0.013491613790392876
+      ],
+      "dimensions_blender_xyz": [
+        0.04377,
+        0.03221,
+        0.01349
+      ],
+      "dimensions_gltf_xyz": [
+        0.04377,
+        0.01349,
+        0.03221
+      ]
+    },
+    {
+      "type": "broken_glass",
+      "notes": "Individual thick shard, slightly curved.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Glass_Shard_Medium",
+      "file": "exports/gltf/Glass_Shard_Medium.gltf",
+      "triangles": 12,
+      "bounds_min_blender": [
+        -0.038474034518003464,
+        -0.025706861168146133,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.038474034518003464,
+        0.025706861168146133,
+        0.026071444153785706
+      ],
+      "dimensions_blender_xyz": [
+        0.07695,
+        0.05141,
+        0.02607
+      ],
+      "dimensions_gltf_xyz": [
+        0.07695,
+        0.02607,
+        0.05141
+      ]
+    },
+    {
+      "type": "broken_glass",
+      "notes": "Individual thick shard, slightly curved.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Glass_Shard_Large",
+      "file": "exports/gltf/Glass_Shard_Large.gltf",
+      "triangles": 16,
+      "bounds_min_blender": [
+        -0.044512808322906494,
+        -0.0298275388777256,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.044512808322906494,
+        0.0298275388777256,
+        0.02172200381755829
+      ],
+      "dimensions_blender_xyz": [
+        0.08903,
+        0.05966,
+        0.02172
+      ],
+      "dimensions_gltf_xyz": [
+        0.08903,
+        0.02172,
+        0.05966
+      ]
+    },
+    {
+      "type": "scatter",
+      "notes": "Six independently grounded thick shards; deliberately separate islands.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Glass_Shards_Cluster",
+      "file": "exports/gltf/Glass_Shards_Cluster.gltf",
+      "triangles": 100,
+      "bounds_min_blender": [
+        -0.14429283142089844,
+        -0.08985944092273712,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.14429283142089844,
+        0.08985944092273712,
+        0.03229907900094986
+      ],
+      "dimensions_blender_xyz": [
+        0.28859,
+        0.17972,
+        0.0323
+      ],
+      "dimensions_gltf_xyz": [
+        0.28859,
+        0.0323,
+        0.17972
+      ]
+    },
+    {
+      "type": "can",
+      "notes": "Crushed 330 ml can; real drinking aperture, rim and pull tab; resting on side.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Can_Crushed_Red",
+      "file": "exports/gltf/Can_Crushed_Red.gltf",
+      "triangles": 1900,
+      "bounds_min_blender": [
+        -0.04694913700222969,
+        -0.041511617600917816,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.04694913327693939,
+        0.041511617600917816,
+        0.07383111864328384
+      ],
+      "dimensions_blender_xyz": [
+        0.0939,
+        0.08302,
+        0.07383
+      ],
+      "dimensions_gltf_xyz": [
+        0.0939,
+        0.07383,
+        0.08302
+      ]
+    },
+    {
+      "type": "can",
+      "notes": "Crushed 330 ml can; real drinking aperture, rim and pull tab; resting on side.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Can_Crushed_Blue",
+      "file": "exports/gltf/Can_Crushed_Blue.gltf",
+      "triangles": 1900,
+      "bounds_min_blender": [
+        -0.043283507227897644,
+        -0.04785893112421036,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.043283507227897644,
+        0.04785893112421036,
+        0.07651595026254654
+      ],
+      "dimensions_blender_xyz": [
+        0.08657,
+        0.09572,
+        0.07652
+      ],
+      "dimensions_gltf_xyz": [
+        0.08657,
+        0.07652,
+        0.09572
+      ]
+    },
+    {
+      "type": "wrapper",
+      "notes": "Thin two-sided printed film with foil reverse, serrated ends and irregular curls.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Wrapper_Candy_Red",
+      "file": "exports/gltf/Wrapper_Candy_Red.gltf",
+      "triangles": 348,
+      "bounds_min_blender": [
+        -0.08271999657154083,
+        -0.03750000149011612,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.08271999657154083,
+        0.03750000149011612,
+        0.033464908599853516
+      ],
+      "dimensions_blender_xyz": [
+        0.16544,
+        0.075,
+        0.03346
+      ],
+      "dimensions_gltf_xyz": [
+        0.16544,
+        0.03346,
+        0.075
+      ]
+    },
+    {
+      "type": "wrapper",
+      "notes": "Thin two-sided printed film with foil reverse, serrated ends and irregular curls.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Wrapper_Snack_Yellow",
+      "file": "exports/gltf/Wrapper_Snack_Yellow.gltf",
+      "triangles": 348,
+      "bounds_min_blender": [
+        -0.09306000173091888,
+        -0.0625,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.09306000173091888,
+        0.0625,
+        0.047098271548748016
+      ],
+      "dimensions_blender_xyz": [
+        0.18612,
+        0.125,
+        0.0471
+      ],
+      "dimensions_gltf_xyz": [
+        0.18612,
+        0.0471,
+        0.125
+      ]
+    },
+    {
+      "type": "wrapper",
+      "notes": "Thin two-sided printed film with foil reverse, serrated ends and irregular curls.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Wrapper_Foil_Crumpled",
+      "file": "exports/gltf/Wrapper_Foil_Crumpled.gltf",
+      "triangles": 348,
+      "bounds_min_blender": [
+        -0.04911499843001366,
+        -0.04100000113248825,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.04911499843001366,
+        0.04100000113248825,
+        0.06731206923723221
+      ],
+      "dimensions_blender_xyz": [
+        0.09823,
+        0.082,
+        0.06731
+      ],
+      "dimensions_gltf_xyz": [
+        0.09823,
+        0.06731,
+        0.082
+      ]
+    },
+    {
+      "type": "cup",
+      "notes": "Hollow used paper cup with thick rolled lip; resting on side.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Cup_Paper_Discarded",
+      "file": "exports/gltf/Cup_Paper_Discarded.gltf",
+      "triangles": 636,
+      "bounds_min_blender": [
+        -0.05748782306909561,
+        -0.04719705134630203,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.05748781934380531,
+        0.04719705134630203,
+        0.0866382047533989
+      ],
+      "dimensions_blender_xyz": [
+        0.11498,
+        0.09439,
+        0.08664
+      ],
+      "dimensions_gltf_xyz": [
+        0.11498,
+        0.08664,
+        0.09439
+      ]
+    },
+    {
+      "type": "cup",
+      "notes": "Separate black cup lid, underside closed and top recessed.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Cup_Lid",
+      "file": "exports/gltf/Cup_Lid.gltf",
+      "triangles": 636,
+      "bounds_min_blender": [
+        -0.041999999433755875,
+        -0.041999999433755875,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.041999999433755875,
+        0.041999999433755875,
+        0.013000000268220901
+      ],
+      "dimensions_blender_xyz": [
+        0.084,
+        0.084,
+        0.013
+      ],
+      "dimensions_gltf_xyz": [
+        0.084,
+        0.013,
+        0.084
+      ]
+    },
+    {
+      "type": "paper",
+      "notes": "Faceted crumpled paper with irregular folds.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Paper_Ball",
+      "file": "exports/gltf/Paper_Ball.gltf",
+      "triangles": 320,
+      "bounds_min_blender": [
+        -0.04076804965734482,
+        -0.03485405072569847,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.04076804965734482,
+        0.03485405072569847,
+        0.05699976533651352
+      ],
+      "dimensions_blender_xyz": [
+        0.08154,
+        0.06971,
+        0.057
+      ],
+      "dimensions_gltf_xyz": [
+        0.08154,
+        0.057,
+        0.06971
+      ]
+    },
+    {
+      "type": "paper",
+      "notes": "Thin curled paper; print deliberately indistinct.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Paper_Dirty_Sheet",
+      "file": "exports/gltf/Paper_Dirty_Sheet.gltf",
+      "triangles": 248,
+      "bounds_min_blender": [
+        -0.09000000357627869,
+        -0.125,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.09000000357627869,
+        0.125,
+        0.038807421922683716
+      ],
+      "dimensions_blender_xyz": [
+        0.18,
+        0.25,
+        0.03881
+      ],
+      "dimensions_gltf_xyz": [
+        0.18,
+        0.03881,
+        0.25
+      ]
+    },
+    {
+      "type": "paper",
+      "notes": "Thin curled paper; print deliberately indistinct.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Newspaper_Discarded",
+      "file": "exports/gltf/Newspaper_Discarded.gltf",
+      "triangles": 248,
+      "bounds_min_blender": [
+        -0.14499999582767487,
+        -0.19499999284744263,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.14499999582767487,
+        0.19499999284744263,
+        0.03950139135122299
+      ],
+      "dimensions_blender_xyz": [
+        0.29,
+        0.39,
+        0.0395
+      ],
+      "dimensions_gltf_xyz": [
+        0.29,
+        0.0395,
+        0.39
+      ]
+    },
+    {
+      "type": "cardboard",
+      "notes": "Flattened carton, joined folded wings and 3.8 mm edge thickness.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Cardboard_Flattened",
+      "file": "exports/gltf/Cardboard_Flattened.gltf",
+      "triangles": 60,
+      "bounds_min_blender": [
+        -0.27000001072883606,
+        -0.20000000298023224,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.27000001072883606,
+        0.20000000298023224,
+        0.04879999905824661
+      ],
+      "dimensions_blender_xyz": [
+        0.54,
+        0.4,
+        0.0488
+      ],
+      "dimensions_gltf_xyz": [
+        0.54,
+        0.0488,
+        0.4
+      ]
+    },
+    {
+      "type": "cardboard",
+      "notes": "Small discarded open carton with four bent flaps, continuous hollow shell and thick edges.",
+      "pivot": "bottom centre of bounds",
+      "mesh_nodes": 1,
+      "name": "Cardboard_Box_Torn_Open",
+      "file": "exports/gltf/Cardboard_Box_Torn_Open.gltf",
+      "triangles": 76,
+      "bounds_min_blender": [
+        -0.26899999380111694,
+        -0.20900000631809235,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.26899999380111694,
+        0.20900000631809235,
+        0.18000000715255737
+      ],
+      "dimensions_blender_xyz": [
+        0.538,
+        0.418,
+        0.18
+      ],
+      "dimensions_gltf_xyz": [
+        0.538,
+        0.18,
+        0.418
+      ]
+    }
+  ],
+  "total_triangles": 23428
+}

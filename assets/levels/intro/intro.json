@@ -18,20 +18,6 @@
       "yawDegrees": 0.0
     },
     {
-      "id": 2,
-      "kind": "static_model",
-      "staticModel": {
-        "instanceId": "prop_2",
-        "modelPath": "assets/models/debris/Chip_14cm.gltf"
-      },
-      "position": [
-        13.0,
-        0.0,
-        -3.0
-      ],
-      "yawDegrees": 0.0
-    },
-    {
       "id": 3,
       "kind": "static_model",
       "staticModel": {
@@ -91,11 +77,11 @@
       "door": {
         "instanceId": "door_6",
         "anchor": {
-          "lineDefId": 32,
+          "lineDefId": 28,
           "frontSectorId": 1,
           "backSectorId": 3,
-          "frontSideDefId": 18,
-          "backSideDefId": 35,
+          "frontSideDefId": 20,
+          "backSideDefId": 39,
           "endpointA": [
             80,
             896
@@ -1517,6 +1503,780 @@
         -68.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 99,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "electrical2",
+        "useTitle": "Examine",
+        "useDistance": 2.0,
+        "onUseScript": "useElectrical2",
+        "modelPath": "assets/models/electric_box_31.glb",
+        "collision": true,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        256.79998779296875,
+        14.0,
+        -21.1200008392334
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 100,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "lever_2",
+        "useTitle": "Lever",
+        "useDistance": 2.0,
+        "onUseScript": "useLever2",
+        "modelPath": "assets/models/dynamic/lever_power_switch_1.glb",
+        "heightOffsetWorld": 1.4600000381469727,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        249.1999969482422,
+        14.0,
+        -21.1200008392334
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 101,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_101",
+        "modelPath": "assets/models/litter/Trash_Bag_Slumped.gltf",
+        "collision": true
+      },
+      "position": [
+        21.760000228881836,
+        0.0,
+        29.0
+      ],
+      "yawDegrees": 97.99999237060547
+    },
+    {
+      "id": 102,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_102",
+        "modelPath": "assets/models/litter/Cup_Paper_Discarded.gltf"
+      },
+      "position": [
+        20.0,
+        0.0,
+        27.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 103,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_103",
+        "modelPath": "assets/models/litter/Glass_Shards_Cluster.gltf"
+      },
+      "position": [
+        19.600000381469727,
+        0.0,
+        30.399999618530273
+      ],
+      "yawDegrees": 108.99999237060547
+    },
+    {
+      "id": 104,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_104",
+        "modelPath": "assets/models/litter/Bottle_Broken_Body.gltf"
+      },
+      "position": [
+        18.799999237060547,
+        0.0,
+        28.799999237060547
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 105,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_105",
+        "modelPath": "assets/models/litter/Bottle_Broken_Neck.gltf"
+      },
+      "position": [
+        18.0,
+        0.0,
+        30.399999618530273
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 106,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_106",
+        "modelPath": "assets/models/litter/Cardboard_Flattened.gltf"
+      },
+      "position": [
+        21.600000381469727,
+        0.0,
+        32.0
+      ],
+      "yawDegrees": 84.0
+    },
+    {
+      "id": 107,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_107",
+        "modelPath": "assets/models/litter/Paper_Ball.gltf"
+      },
+      "position": [
+        20.719999313354492,
+        0.0,
+        31.440000534057617
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 108,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_108",
+        "modelPath": "assets/models/litter/Wrapper_Candy_Red.gltf"
+      },
+      "position": [
+        21.760000228881836,
+        0.0,
+        32.560001373291016
+      ],
+      "yawDegrees": 26.249998092651367
+    },
+    {
+      "id": 109,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_109",
+        "modelPath": "assets/models/litter/Trash_Bag_Small.gltf"
+      },
+      "position": [
+        22.559999465942383,
+        0.0,
+        25.760000228881836
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 110,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_110",
+        "modelPath": "assets/models/litter/Can_Crushed_Blue.gltf"
+      },
+      "position": [
+        20.799999237060547,
+        0.0,
+        25.600000381469727
+      ],
+      "yawDegrees": 61.999996185302734
+    },
+    {
+      "id": 111,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_111",
+        "modelPath": "assets/models/litter/Newspaper_Discarded.gltf"
+      },
+      "position": [
+        -21.200000762939453,
+        0.0,
+        17.600000381469727
+      ],
+      "yawDegrees": 43.0
+    },
+    {
+      "id": 112,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_112",
+        "modelPath": "assets/models/litter/Bottle_Plastic_Dented.gltf"
+      },
+      "position": [
+        -23.200000762939453,
+        0.0,
+        19.200000762939453
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 113,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_113",
+        "modelPath": "assets/models/litter/Can_Crushed_Red.gltf"
+      },
+      "position": [
+        -22.399999618530273,
+        0.0,
+        18.399999618530273
+      ],
+      "yawDegrees": 87.99999237060547
+    },
+    {
+      "id": 114,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_114",
+        "modelPath": "assets/models/litter/Cardboard_Box_Torn_Open.gltf"
+      },
+      "position": [
+        -21.200000762939453,
+        0.0,
+        12.0
+      ],
+      "yawDegrees": 72.0
+    },
+    {
+      "id": 115,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_115",
+        "modelPath": "assets/models/litter/Cup_Lid.gltf"
+      },
+      "position": [
+        3.0,
+        -1.0,
+        34.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 116,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_116",
+        "modelPath": "assets/models/litter/Cup_Paper_Discarded.gltf",
+        "heightOffsetWorld": -0.004999995231628418
+      },
+      "position": [
+        4.0,
+        -1.0,
+        33.0
+      ],
+      "yawDegrees": -75.0
+    },
+    {
+      "id": 117,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_117",
+        "modelPath": "assets/models/litter/Paper_Dirty_Sheet.gltf"
+      },
+      "position": [
+        -5.0,
+        -1.0,
+        2.0
+      ],
+      "yawDegrees": 70.0
+    },
+    {
+      "id": 118,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_118",
+        "modelPath": "assets/models/litter/Wrapper_Foil_Crumpled.gltf"
+      },
+      "position": [
+        6.0,
+        -1.0,
+        -13.0
+      ],
+      "yawDegrees": 50.0
+    },
+    {
+      "id": 119,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_119",
+        "modelPath": "assets/models/litter/Trash_Bag_Large.gltf"
+      },
+      "position": [
+        -18.799999237060547,
+        0.0,
+        -65.5999984741211
+      ],
+      "yawDegrees": 60.0
+    },
+    {
+      "id": 120,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_120",
+        "modelPath": "assets/models/litter/Trash_Bag_Small.gltf"
+      },
+      "position": [
+        -20.799999237060547,
+        0.0,
+        -62.79999923706055
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 121,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_121",
+        "modelPath": "assets/models/litter/Glass_Shards_Cluster.gltf"
+      },
+      "position": [
+        -18.399999618530273,
+        0.0,
+        -63.20000076293945
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 122,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_122",
+        "modelPath": "assets/models/litter/Bottle_Amber.gltf"
+      },
+      "position": [
+        -22.239999771118164,
+        0.0,
+        -62.08000183105469
+      ],
+      "yawDegrees": 31.25
+    },
+    {
+      "id": 123,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_123",
+        "modelPath": "assets/models/litter/Bottle_Plastic_Dented.gltf"
+      },
+      "position": [
+        -20.799999237060547,
+        0.0,
+        -61.439998626708984
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 124,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_124",
+        "modelPath": "assets/models/litter/Can_Crushed_Red.gltf"
+      },
+      "position": [
+        -21.760000228881836,
+        0.0,
+        -61.279998779296875
+      ],
+      "yawDegrees": 24.499998092651367
+    },
+    {
+      "id": 125,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_125",
+        "modelPath": "assets/models/litter/Glass_Shard_Large.gltf"
+      },
+      "position": [
+        15.0,
+        -1.0,
+        -41.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 126,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_126",
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationZDegrees": 90.0,
+        "heightOffsetWorld": 2.200000047683716,
+        "scale": 2.0,
+        "castsShadow": false
+      },
+      "position": [
+        8.5600004196167,
+        0.0,
+        -78.95999908447266
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 127,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_127",
+        "modelPath": "assets/models/litter/Newspaper_Discarded.gltf"
+      },
+      "position": [
+        25.0,
+        0.0,
+        -29.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 128,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_128",
+        "modelPath": "assets/models/litter/Paper_Ball.gltf"
+      },
+      "position": [
+        23.0,
+        0.0,
+        -25.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 129,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_129",
+        "modelPath": "assets/models/litter/Bottle_Broken_Body.gltf"
+      },
+      "position": [
+        26.0,
+        0.0,
+        -27.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 130,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_130",
+        "modelPath": "assets/models/litter/Bottle_Broken_Neck.gltf"
+      },
+      "position": [
+        27.0,
+        0.0,
+        -28.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 131,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_131",
+        "modelPath": "assets/models/litter/Glass_Shards_Cluster.gltf"
+      },
+      "position": [
+        28.0,
+        0.0,
+        -27.200000762939453
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 132,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_132",
+        "modelPath": "assets/models/litter/Trash_Bag_Slumped.gltf"
+      },
+      "position": [
+        63.0,
+        0.0,
+        -76.4000015258789
+      ],
+      "yawDegrees": 120.0
+    },
+    {
+      "id": 133,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_133",
+        "modelPath": "assets/models/litter/Trash_Bag_Small.gltf"
+      },
+      "position": [
+        60.0,
+        0.0,
+        -78.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 134,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_134",
+        "modelPath": "assets/models/litter/Bottle_Amber.gltf"
+      },
+      "position": [
+        60.0,
+        0.0,
+        -76.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 135,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_135",
+        "modelPath": "assets/models/litter/Bottle_Green.gltf"
+      },
+      "position": [
+        61.0,
+        0.0,
+        -75.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 136,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_136",
+        "modelPath": "assets/models/litter/Bottle_Plastic_Dented.gltf"
+      },
+      "position": [
+        60.79999923706055,
+        0.0,
+        -76.4000015258789
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 137,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_137",
+        "modelPath": "assets/models/litter/Can_Crushed_Blue.gltf"
+      },
+      "position": [
+        59.20000076293945,
+        0.0,
+        -76.80000305175781
+      ],
+      "yawDegrees": 45.0
+    },
+    {
+      "id": 138,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_138",
+        "modelPath": "assets/models/litter/Paper_Dirty_Sheet.gltf"
+      },
+      "position": [
+        66.80000305175781,
+        0.0,
+        -75.19999694824219
+      ],
+      "yawDegrees": -61.0
+    },
+    {
+      "id": 139,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_139",
+        "modelPath": "assets/models/litter/Wrapper_Snack_Yellow.gltf"
+      },
+      "position": [
+        66.0,
+        0.0,
+        -78.0
+      ],
+      "yawDegrees": -38.0
+    },
+    {
+      "id": 140,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_140",
+        "modelPath": "assets/models/litter/Wrapper_Foil_Crumpled.gltf"
+      },
+      "position": [
+        52.0,
+        -1.0,
+        -50.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 141,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_141",
+        "modelPath": "assets/models/litter/Wrapper_Candy_Red.gltf"
+      },
+      "position": [
+        85.0,
+        -1.0,
+        -60.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 142,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_142",
+        "modelPath": "assets/models/litter/Cup_Paper_Discarded.gltf"
+      },
+      "position": [
+        111.0,
+        -1.0,
+        -50.0
+      ],
+      "yawDegrees": 120.99999237060547
+    },
+    {
+      "id": 143,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_143",
+        "modelPath": "assets/models/litter/Cup_Lid.gltf"
+      },
+      "position": [
+        110.80000305175781,
+        -1.0,
+        -51.20000076293945
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 144,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_144",
+        "modelPath": "assets/models/litter/Trash_Bag_Large.gltf"
+      },
+      "position": [
+        116.80000305175781,
+        0.0,
+        -34.400001525878906
+      ],
+      "yawDegrees": -12.999999046325684
+    },
+    {
+      "id": 145,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_145",
+        "modelPath": "assets/models/litter/Trash_Bag_Small.gltf"
+      },
+      "position": [
+        120.4000015258789,
+        0.0,
+        -33.599998474121094
+      ],
+      "yawDegrees": 55.999996185302734
+    },
+    {
+      "id": 146,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_146",
+        "modelPath": "assets/models/litter/Trash_Bag_Slumped.gltf"
+      },
+      "position": [
+        124.4000015258789,
+        0.0,
+        -34.400001525878906
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 147,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_147",
+        "modelPath": "assets/models/litter/Can_Crushed_Blue.gltf"
+      },
+      "position": [
+        121.5999984741211,
+        0.0,
+        -34.79999923706055
+      ],
+      "yawDegrees": 64.0
+    },
+    {
+      "id": 148,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_148",
+        "modelPath": "assets/models/litter/Can_Crushed_Red.gltf"
+      },
+      "position": [
+        119.19999694824219,
+        0.0,
+        -34.79999923706055
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 149,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_149",
+        "modelPath": "assets/models/litter/Wrapper_Snack_Yellow.gltf"
+      },
+      "position": [
+        120.4000015258789,
+        0.0,
+        -36.0
+      ],
+      "yawDegrees": 55.0
+    },
+    {
+      "id": 150,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_150",
+        "modelPath": "assets/models/litter/Paper_Ball.gltf"
+      },
+      "position": [
+        124.0,
+        0.0,
+        -36.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 151,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_151",
+        "modelPath": "assets/models/litter/Bottle_Amber.gltf"
+      },
+      "position": [
+        122.4000015258789,
+        0.0,
+        -32.79999923706055
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 152,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_152",
+        "modelPath": "assets/models/litter/Wrapper_Snack_Yellow.gltf"
+      },
+      "position": [
+        -3.0,
+        -1.0,
+        -58.0
+      ],
+      "yawDegrees": 53.999996185302734
     }
   ],
   "staticLights": [
@@ -2124,23 +2884,64 @@
       }
     },
     {
-      "id": 3,
-      "instanceId": "light_point_3",
+      "id": 5,
+      "instanceId": "light_point_5",
       "position": [
-        35.0,
+        -0.0,
         13.399999618530273,
-        -52.0
+        -22.0
       ],
-      "radius": 64.0,
+      "radius": 100.0,
       "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "enabled": false,
+      "castsShadow": true
+    },
+    {
+      "id": 6,
+      "instanceId": "light_point_6",
+      "position": [
+        8.55933952331543,
+        17.6680850982666,
+        -78.78436279296875
+      ],
+      "radius": 32.0,
+      "intensity": 0.75,
       "color": {
         "r": 255,
         "g": 250,
         "b": 241,
         "a": 255
       },
-      "enabled": false,
-      "castsShadow": true
+      "castsShadow": true,
+      "shadowStrength": 0.8999999761581421,
+      "shadowSoftness": 2.0,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.75,
+            "centerOffsetWorld": [
+              -0.0029082298278808594,
+              -0.001163482666015625,
+              -0.056067466735839844
+            ],
+            "brightness": 0.09000000357627869,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        }
+      }
     }
   ],
   "dynamicSpotLights": [],
@@ -2153,7 +2954,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -2217,7 +3018,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "517e1a2b4f926e41",
+    "sourceHash": "b609d061ad9f84d8",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -2225,20 +3026,20 @@
         0.0
       ],
       "rgbMax": [
-        0.6533203125,
-        0.62451171875,
-        0.57470703125
+        0.65380859375,
+        0.625,
+        0.5751953125
       ],
-      "auxiliaryMin": 0.451171875,
+      "auxiliaryMin": 0.450927734375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
+      "sampleCount": 4194304,
       "rgbChannelsAboveOne": 0
     },
     "objectProbes": {
       "path": "assets/levels/intro/intro.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "517e1a2b4f926e41",
-      "count": 1430,
+      "sourceHash": "b609d061ad9f84d8",
+      "count": 1432,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -2250,31 +3051,24 @@
           0.05000000074505806
         ],
         "rgbMax": [
-          1.2705283164978027,
-          1.2178936004638672,
-          1.1266133785247803
+          1.2696599960327148,
+          1.2170634269714355,
+          1.1258496046066284
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 8580,
-        "rgbChannelsAboveOne": 18
+        "sampleCount": 8592,
+        "rgbChannelsAboveOne": 24
       }
     },
     "staticModels": {
       "path": "assets/levels/intro/intro.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "517e1a2b4f926e41",
-      "modelCount": 15,
-      "objectCount": 95,
+      "sourceHash": "b609d061ad9f84d8",
+      "modelCount": 36,
+      "objectCount": 146,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/intro/intro.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "editorSettings": {
     "gridSize": 1
@@ -2594,12 +3388,12 @@
       {
         "id": 64,
         "x": 3904,
-        "y": -368
+        "y": -336
       },
       {
         "id": 65,
         "x": 4288,
-        "y": -368
+        "y": -336
       },
       {
         "id": 66,
@@ -2760,14 +3554,29 @@
         "id": 102,
         "x": 4208,
         "y": -5424
+      },
+      {
+        "id": 103,
+        "x": -384,
+        "y": -128
+      },
+      {
+        "id": 104,
+        "x": 1728,
+        "y": -512
+      },
+      {
+        "id": 105,
+        "x": 384,
+        "y": 224
+      },
+      {
+        "id": 106,
+        "x": 1344,
+        "y": -1280
       }
     ],
     "lines": [
-      {
-        "id": 4,
-        "startVertexId": 4,
-        "endVertexId": 1
-      },
       {
         "id": 5,
         "startVertexId": 1,
@@ -2784,11 +3593,6 @@
         "endVertexId": 8
       },
       {
-        "id": 13,
-        "startVertexId": 8,
-        "endVertexId": 9
-      },
-      {
         "id": 15,
         "startVertexId": 6,
         "endVertexId": 10
@@ -2797,16 +3601,6 @@
         "id": 16,
         "startVertexId": 10,
         "endVertexId": 7
-      },
-      {
-        "id": 20,
-        "startVertexId": 12,
-        "endVertexId": 3
-      },
-      {
-        "id": 21,
-        "startVertexId": 11,
-        "endVertexId": 13
       },
       {
         "id": 23,
@@ -3317,79 +4111,49 @@
         "id": 179,
         "startVertexId": 102,
         "endVertexId": 96
+      },
+      {
+        "id": 180,
+        "startVertexId": 4,
+        "endVertexId": 103
+      },
+      {
+        "id": 181,
+        "startVertexId": 103,
+        "endVertexId": 1
+      },
+      {
+        "id": 182,
+        "startVertexId": 11,
+        "endVertexId": 104
+      },
+      {
+        "id": 183,
+        "startVertexId": 104,
+        "endVertexId": 13
+      },
+      {
+        "id": 184,
+        "startVertexId": 12,
+        "endVertexId": 105
+      },
+      {
+        "id": 185,
+        "startVertexId": 105,
+        "endVertexId": 3
+      },
+      {
+        "id": 186,
+        "startVertexId": 8,
+        "endVertexId": 106
+      },
+      {
+        "id": 187,
+        "startVertexId": 106,
+        "endVertexId": 9
       }
     ],
     "lineSides": [
-      {
-        "lineId": 4,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -1.875
-            ]
-          },
-          "materialId": "tunnel_wall_concrete",
-          "decal": {
-            "materialId": "concrete_decal_damp_damage",
-            "uv": {
-              "scale": [
-                0.5,
-                1.0
-              ],
-              "offset": [
-                -1.0,
-                0.10000000149011612
-              ]
-            },
-            "opacity": 1.0,
-            "emissive": false,
-            "tint": [
-              1.0,
-              1.0,
-              1.0
-            ],
-            "bloomIntensity": 1.0
-          }
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "tunnel_concrete_ceiling"
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "tunnel_concrete_ceiling"
-        },
-        "baseboard": {
-          "enabled": true,
-          "height": 7.5,
-          "thickness": 0.25,
-          "materialId": "worn_gray_metal_step_512"
-        }
-      },
       {
         "lineId": 5,
         "side": "front",
@@ -3538,76 +4302,6 @@
         }
       },
       {
-        "lineId": 13,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              1.926682710647583,
-              -1.875
-            ]
-          },
-          "materialId": "tunnel_wall_concrete",
-          "decal": {
-            "materialId": "concrete_decal_spalled_patch",
-            "uv": {
-              "scale": [
-                1.0,
-                1.0
-              ],
-              "offset": [
-                -3.0,
-                -0.20000000298023224
-              ]
-            },
-            "opacity": 1.0,
-            "emissive": false,
-            "tint": [
-              1.0,
-              1.0,
-              1.0
-            ],
-            "bloomIntensity": 1.0
-          }
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "tunnel_concrete_ceiling"
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "tunnel_concrete_ceiling"
-        },
-        "baseboard": {
-          "enabled": true,
-          "height": 7.5,
-          "thickness": 0.25,
-          "materialId": "worn_gray_metal_step_512"
-        }
-      },
-      {
         "lineId": 15,
         "side": "front",
         "wall": {
@@ -3671,146 +4365,6 @@
             ]
           },
           "materialId": "tunnel_wall_concrete"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "tunnel_concrete_ceiling"
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "tunnel_concrete_ceiling"
-        },
-        "baseboard": {
-          "enabled": true,
-          "height": 7.5,
-          "thickness": 0.25,
-          "materialId": "worn_gray_metal_step_512"
-        }
-      },
-      {
-        "lineId": 20,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.5153881907463074,
-              -1.875
-            ]
-          },
-          "materialId": "tunnel_wall_concrete",
-          "decal": {
-            "materialId": "concrete_decal_branching_cracks",
-            "uv": {
-              "scale": [
-                1.0,
-                1.0
-              ],
-              "offset": [
-                -2.200000047683716,
-                -0.6000000238418579
-              ]
-            },
-            "opacity": 1.0,
-            "emissive": false,
-            "tint": [
-              1.0,
-              1.0,
-              1.0
-            ],
-            "bloomIntensity": 1.0
-          }
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "tunnel_concrete_ceiling"
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          },
-          "materialId": "tunnel_concrete_ceiling"
-        },
-        "baseboard": {
-          "enabled": true,
-          "height": 7.5,
-          "thickness": 0.25,
-          "materialId": "worn_gray_metal_step_512"
-        }
-      },
-      {
-        "lineId": 21,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              15.926682472229004,
-              -1.875
-            ]
-          },
-          "materialId": "tunnel_wall_concrete",
-          "decal": {
-            "materialId": "concrete_decal_old_repair",
-            "uv": {
-              "scale": [
-                1.0,
-                1.0
-              ],
-              "offset": [
-                -3.0,
-                -0.6000000238418579
-              ]
-            },
-            "opacity": 1.0,
-            "emissive": false,
-            "tint": [
-              1.0,
-              1.0,
-              1.0
-            ],
-            "bloomIntensity": 1.0
-          }
         },
         "lower": {
           "uv": {
@@ -5084,7 +5638,28 @@
               0.0
             ]
           },
-          "materialId": "tunnel_concrete_ceiling"
+          "materialId": "tunnel_concrete_ceiling",
+          "decal": {
+            "materialId": "graffiti_decal_anarchy_red",
+            "uv": {
+              "scale": [
+                2.5,
+                3.0
+              ],
+              "offset": [
+                -1.100000023841858,
+                -0.10000000149011612
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "bloomIntensity": 1.0
+          }
         }
       },
       {
@@ -5533,7 +6108,28 @@
               -4.0625
             ]
           },
-          "materialId": "tunnel_wall_concrete"
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_spalled_patch",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.30000001192092896,
+                -1.399999976158142
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -5656,7 +6252,28 @@
               -4.0625
             ]
           },
-          "materialId": "tunnel_wall_concrete"
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "graffiti_decal_tag_jot",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.15000000596046448,
+                -0.6000000238418579
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -6426,7 +7043,28 @@
               0.0
             ]
           },
-          "materialId": "tunnel_wall_concrete"
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_branching_cracks",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.4000000059604645,
+                0.0
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         }
       },
       {
@@ -8368,6 +9006,566 @@
             ]
           }
         }
+      },
+      {
+        "lineId": 180,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_damp_damage",
+            "uv": {
+              "scale": [
+                0.5,
+                1.0
+              ],
+              "offset": [
+                -1.0,
+                0.10000000149011612
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 7.5,
+          "thickness": 0.25,
+          "materialId": "worn_gray_metal_step_512"
+        }
+      },
+      {
+        "lineId": 181,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "graffiti_decal_piece_jot",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.4000000059604645,
+                -0.5
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 7.5,
+          "thickness": 0.25,
+          "materialId": "worn_gray_metal_step_512"
+        }
+      },
+      {
+        "lineId": 182,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              15.926682472229004,
+              -1.875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_old_repair",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -3.0,
+                -0.6000000238418579
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 7.5,
+          "thickness": 0.25,
+          "materialId": "worn_gray_metal_step_512"
+        }
+      },
+      {
+        "lineId": 183,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              15.926682472229004,
+              -1.875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "graffiti_decal_slogan_red",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -2.5,
+                -0.30000001192092896
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 7.5,
+          "thickness": 0.25,
+          "materialId": "worn_gray_metal_step_512"
+        }
+      },
+      {
+        "lineId": 184,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.5153881907463074,
+              -1.875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "graffiti_decal_tag_moa",
+            "uv": {
+              "scale": [
+                2.0,
+                2.0
+              ],
+              "offset": [
+                -2.299999952316284,
+                -1.2999999523162842
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 7.5,
+          "thickness": 0.25,
+          "materialId": "worn_gray_metal_step_512"
+        }
+      },
+      {
+        "lineId": 185,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.5153881907463074,
+              -1.875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_branching_cracks",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -1.5,
+                -0.6000000238418579
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 7.5,
+          "thickness": 0.25,
+          "materialId": "worn_gray_metal_step_512"
+        }
+      },
+      {
+        "lineId": 186,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              1.926682710647583,
+              -1.875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_spalled_patch",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -3.0,
+                -0.20000000298023224
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 7.5,
+          "thickness": 0.25,
+          "materialId": "worn_gray_metal_step_512"
+        }
+      },
+      {
+        "lineId": 187,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              1.926682710647583,
+              -1.875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "graffiti_decal_piece_vim",
+            "uv": {
+              "scale": [
+                0.5,
+                0.75
+              ],
+              "offset": [
+                0.0,
+                -0.25
+              ]
+            },
+            "opacity": 0.8999999761581421,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "baseboard": {
+          "enabled": true,
+          "height": 7.5,
+          "thickness": 0.25,
+          "materialId": "worn_gray_metal_step_512"
+        }
       }
     ],
     "faceAnchors": [
@@ -8520,7 +9718,7 @@
           },
           "materialId": "tunnel_concrete_ceiling"
         },
-        "floorMaterialId": "large_industrial_tiles_512",
+        "floorMaterialId": "large_industrial_tiles_dirty",
         "ceilingMaterialId": "tunnel_concrete_ceiling",
         "ceilingDecal": {
           "materialId": "concrete_decal_old_repair",
@@ -9284,7 +10482,7 @@
         "name": "Sector 13",
         "x": 3914,
         "y": -377,
-        "floorZ": 22.0,
+        "floorZ": 14.0,
         "ceilingZ": 36.0,
         "floorUv": {
           "scale": [
