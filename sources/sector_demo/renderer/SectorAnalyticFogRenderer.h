@@ -1,6 +1,5 @@
 #pragma once
 
-#include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
@@ -24,8 +23,7 @@ public:
             const SectorTopologyMap& map,
             const Camera3D& camera,
             float runtimeSeconds,
-            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
-            const RuntimePortalVisibilityResult& visibility);
+            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
     void Shutdown();
 
     int EligibleVolumeCount() const { return eligibleCount; }

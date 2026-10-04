@@ -72,7 +72,11 @@ void UpdateActiveSectorEditorMapPointManipulations(
         SectorCoord y = 0;
         if (VisibleAuthoringToSectorCoord(snapped.x, x)
                 && VisibleAuthoringToSectorCoord(snapped.y, y)) {
-            context.fogVolumeEditing->UpdateMove(SectorTopologyCoordPoint{x, y});
+            if (context.manipulationState.authoringFogVolumeDrag.resizing) {
+                context.fogVolumeEditing->UpdateResize({x, y});
+            } else {
+                context.fogVolumeEditing->UpdateMove({x, y});
+            }
         }
     }
     if (context.manipulationState.authoringReflectionProbeDrag.active
@@ -147,7 +151,11 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
     }
     if (context.manipulationState.authoringFogVolumeDrag.active
             && context.fogVolumeEditing != nullptr) {
-        context.fogVolumeEditing->FinishMove();
+        if (context.manipulationState.authoringFogVolumeDrag.resizing) {
+            context.fogVolumeEditing->FinishResize();
+        } else {
+            context.fogVolumeEditing->FinishMove();
+        }
     }
     if (context.manipulationState.authoringReflectionProbeDrag.active
             && context.reflectionProbeEditing != nullptr) {

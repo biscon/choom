@@ -5675,6 +5675,7 @@ void SectorEditor::DrawAuthoringFogVolumes() const
     const auto drawVolume = [this](
             const SectorAuthoringFogVolume& volume,
             SectorTopologyCoordPoint point,
+            Vector2 radii,
             Color outline,
             bool resolved,
             bool drawLabel) {
@@ -5683,11 +5684,11 @@ void SectorEditor::DrawAuthoringFogVolumes() const
                 SectorCoordToVisibleAuthoring(point.y)};
         const Vector2 center = MapToScreen(mapCenter);
         const Vector2 edgeX = MapToScreen(Vector2{
-                mapCenter.x + SectorWorldToAuthoringDistance(volume.radiusXWorld),
+                mapCenter.x + SectorWorldToAuthoringDistance(radii.x),
                 mapCenter.y});
         const Vector2 edgeZ = MapToScreen(Vector2{
                 mapCenter.x,
-                mapCenter.y + SectorWorldToAuthoringDistance(volume.radiusZWorld)});
+                mapCenter.y + SectorWorldToAuthoringDistance(radii.y)});
         const float radiusX = std::max(2.0f, std::fabs(edgeX.x - center.x));
         const float radiusY = std::max(2.0f, std::fabs(edgeZ.y - center.y));
         Color fill = volume.enabled ? volume.color : Color{112, 118, 122, 255};
@@ -5699,41 +5700,29 @@ void SectorEditor::DrawAuthoringFogVolumes() const
         const float minimumFraction = roomStyle ? 0.005f : 0.01f;
         const float maximumFraction = roomStyle ? 0.20f : 0.45f;
         const float minimumHalfExtent = std::min(
-                {volume.radiusXWorld, volume.heightWorld * 0.5f, volume.radiusZWorld});
+                {radii.x, volume.heightWorld * 0.5f, radii.y});
         const float normalizedSoftness = std::clamp(
                 volume.edgeSoftness, 0.0f, 1.0f);
         const float edgeWidth = minimumHalfExtent
                 * (minimumFraction
                         + (maximumFraction - minimumFraction) * normalizedSoftness);
         innerScaleX = std::clamp(
-                1.0f - edgeWidth / std::max(volume.radiusXWorld, 0.0001f),
+                1.0f - edgeWidth / std::max(radii.x, 0.0001f),
                 0.05f,
                 1.0f);
         innerScaleZ = std::clamp(
-                1.0f - edgeWidth / std::max(volume.radiusZWorld, 0.0001f),
+                1.0f - edgeWidth / std::max(radii.y, 0.0001f),
                 0.05f,
                 1.0f);
         Color inner = outline;
         inner.a = 130;
         if (drawBox) {
-            const float cosine = std::cos(volume.yawDegrees * DEG2RAD);
-            const float sine = std::sin(volume.yawDegrees * DEG2RAD);
             const auto boxCorners = [&](float scaleX, float scaleZ) {
+                const auto handles = BuildSectorEditorFogVolumeHandleMapPoints(
+                        point, {radii.x * scaleX, radii.y * scaleZ}, volume.yawDegrees);
                 std::array<Vector2, 4> corners{};
-                constexpr std::array<Vector2, 4> signs = {
-                        Vector2{-1.0f, -1.0f},
-                        Vector2{1.0f, -1.0f},
-                        Vector2{1.0f, 1.0f},
-                        Vector2{-1.0f, 1.0f}};
-                for (std::size_t index = 0; index < signs.size(); ++index) {
-                    const float localX = signs[index].x * volume.radiusXWorld * scaleX;
-                    const float localZ = signs[index].y * volume.radiusZWorld * scaleZ;
-                    const Vector2 mapCorner{
-                            mapCenter.x + SectorWorldToAuthoringDistance(
-                                    cosine * localX + sine * localZ),
-                            mapCenter.y + SectorWorldToAuthoringDistance(
-                                    -sine * localX + cosine * localZ)};
-                    corners[index] = MapToScreen(mapCorner);
+                for (std::size_t i = 0; i < corners.size(); ++i) {
+                    corners[i] = MapToScreen(handles[i]);
                 }
                 return corners;
             };
@@ -5802,19 +5791,29 @@ void SectorEditor::DrawAuthoringFogVolumes() const
                                 : hovered
                                         ? Color{244, 192, 70, 255}
                                         : Color{116, 205, 164, 230};
-        drawVolume(
-                volume,
-                SectorTopologyCoordPoint{volume.x, volume.y},
-                outline,
-                resolved,
-                true);
+        const auto& drag = manipulationState.authoringFogVolumeDrag;
+        Vector2 radii{volume.radiusXWorld, volume.radiusZWorld};
+        if (drag.active && drag.resizing && drag.fogVolumeId == volume.id) {
+            radii = drag.previewRadii;
+        }
+        drawVolume(volume, {volume.x, volume.y}, radii, outline, resolved, true);
+        if (selected && volume.shape == SectorLocalFogShape::Box
+                && state.currentTool == SectorEditorTool::Select) {
+            for (const Vector2 handle : BuildSectorEditorFogVolumeHandleMapPoints(
+                         {volume.x, volume.y}, radii, volume.yawDegrees)) {
+                const Vector2 screen = MapToScreen(handle);
+                const Rectangle rect{screen.x - 4.0f, screen.y - 4.0f, 8.0f, 8.0f};
+                DrawRectangleRec(rect, Color{25, 35, 40, 255});
+                DrawRectangleLinesEx(rect, 1.5f, outline);
+            }
+        }
     }
 }
 
 void SectorEditor::DrawAuthoringFogVolumeMoveOverlay() const
 {
     const AuthoringFogVolumeDragState& drag = manipulationState.authoringFogVolumeDrag;
-    if (!drag.active || !drag.hasPreviewPoint) {
+    if (!drag.active || drag.resizing || !drag.hasPreviewPoint) {
         return;
     }
     const SectorAuthoringFogVolume* volume = FindSectorAuthoringFogVolume(AuthoringGraph(), drag.fogVolumeId);

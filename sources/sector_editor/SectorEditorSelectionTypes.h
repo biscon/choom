@@ -110,6 +110,12 @@ struct AuthoringVertexDragState {
 
 struct AuthoringFogVolumeDragState {
     bool active = false;
+    bool resizing = false;
+    Vector2 resizeSigns = {};
+    SectorTopologyCoordPoint resizeStartPoint = {};
+    Vector2 originalRadii = {};
+    Vector2 previewRadii = {};
+    float yawDegrees = 0.0f;
     int fogVolumeId = -1;
     SectorTopologyCoordPoint originalPoint = {};
     SectorTopologyCoordPoint previewPoint = {};

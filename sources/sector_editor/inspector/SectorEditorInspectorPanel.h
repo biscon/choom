@@ -175,6 +175,12 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
     return height;
 }
 
+inline float SectorEditorFogVolumeFitRowHeight(
+        const SectorAuthoringFogVolume& volume, float rowHeight, float gap)
+{
+    return volume.shape == SectorLocalFogShape::Box ? rowHeight + gap : 0.0f;
+}
+
 inline float MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
         const SectorAuthoringFogVolume& volume,
         float rowHeight,
@@ -186,6 +192,7 @@ inline float MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
         ++rowCount; // Yaw.
     }
     float height = 38.0f + static_cast<float>(rowCount) * (rowHeight + gap);
+    height += SectorEditorFogVolumeFitRowHeight(volume, rowHeight, gap);
     height += 2.0f * (SectorEditorInspectorStackedOptionRowHeight(rowHeight, gap) + gap); // ID and style.
     if (instanceIdErrorHeight > 0.0f) height += instanceIdErrorHeight + gap;
     return height;

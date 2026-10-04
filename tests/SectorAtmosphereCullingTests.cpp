@@ -1,4 +1,6 @@
 #include "sector_demo/renderer/SectorAtmosphereCulling.h"
+#include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorPortalVisibility.h"
 
 #include <cassert>
 #include <cmath>
@@ -151,6 +153,67 @@ void TestAnalyticFogEdgeBounds()
     assert(yawed.z > unexpandedYawed.z);
 }
 
+void TestFogVolumeCullingAcrossSectors()
+{
+    game::SectorCompiledLocalFogVolume volume;
+    volume.enabled = true;
+    volume.maxOpacity = 0.8f;
+    volume.shape = game::SectorLocalFogShape::Box;
+    volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
+    volume.topologySectorId = 1;
+    volume.centerWorld = {0, 0, 10};
+    volume.radiiWorld = {12, 3, 12};
+    game::RuntimePortalVisibilityResult visibility;
+    visibility.validStartSector = true;
+    visibility.visibleSectorIds = {2, 3};
+    assert(!game::ShouldDrawRuntimeSectorForVisibility(volume.topologySectorId, visibility));
+    // Different visible rooms inside one volume must still receive fog even
+    // though the center's sector is absent from portal visibility.
+    for (float x : {-6.0f, 6.0f}) {
+        Camera3D camera = TestCamera();
+        camera.position = {x, 0, 8};
+        camera.target = {x, 0, 9};
+        const auto scissor = game::ComputeSectorAnalyticFogVolumeScissor(
+                volume, camera, 1, 0.1f, 100, 100);
+        assert(scissor.width == 100 && scissor.height == 100);
+    }
+    const auto project = [&volume]() {
+        return game::ComputeSectorAnalyticFogVolumeScissor(
+                volume, TestCamera(), 1, 0.1f, 100, 100);
+    };
+    volume.enabled = false;
+    assert(project().Empty());
+    volume.enabled = true;
+    volume.maxOpacity = 0;
+    assert(project().Empty());
+    volume.maxOpacity = 1;
+    volume.centerWorld = {100, 0, 10};
+    volume.radiiWorld = {1, 1, 1};
+    assert(project().Empty());
+    volume.centerWorld = {0, 0, -10};
+    assert(project().Empty());
+    volume.centerWorld = {0, 0, 10};
+    volume.radiiWorld = {4, 1, 1};
+    const auto horizontal = project();
+    volume.yawRadians = PI * 0.5f;
+    assert(project().width < horizontal.width);
+    volume.yawRadians = PI * 0.25f;
+    assert(!project().Empty());
+    volume.centerWorld = {0, 0, 1};
+    assert(project().width == 100); // Conservative near-plane fallback.
+    volume.centerWorld = {0, 0, 10};
+    volume.radiiWorld = {2, 2, 2};
+    volume.yawRadians = 0;
+    const auto room = project();
+    volume.analyticStyle = game::SectorAnalyticFogStyle::Cloudy;
+    volume.edgeSoftness = 1;
+    volume.noiseAmount = 1;
+    const auto cloudy = project();
+    assert(cloudy.width > room.width && cloudy.height > room.height);
+    volume.shape = game::SectorLocalFogShape::Ellipsoid;
+    assert(!project().Empty());
+}
+
 void TestDynamicLightMasks()
 {
     game::SectorBillboardDynamicLightContext lights;
@@ -201,5 +264,6 @@ int main()
     TestYawedBounds();
     TestAnalyticFogEdgeBounds();
     TestDynamicLightMasks();
+    TestFogVolumeCullingAcrossSectors();
     return 0;
 }

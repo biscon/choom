@@ -1,4 +1,6 @@
 #include "sector_editor/tools/select/SectorEditorSelectTool.h"
+
+#include "sector_demo/SectorTopologyUnits.h"
 #include "sector_editor/tools/path/SectorEditorPathTool.h"
 
 #include "engine/input/Input.h"
@@ -256,6 +258,36 @@ bool HandleSelectMousePress(SectorEditorToolContext& context, const engine::Inpu
 
     SectorEditorManipulationServiceContext manipulationContext =
             context.buildManipulationServiceContext();
+    if (context.fogVolumeEditing && context.mapToScreen
+            && manipulationContext.screenToMap && manipulationContext.snapMapPoint) {
+        const auto* volume = context.fogVolumeEditing->Selected();
+        if (volume && volume->shape == SectorLocalFogShape::Box) {
+            const auto handles = BuildSectorEditorFogVolumeHandleMapPoints(
+                    {volume->x, volume->y}, {volume->radiusXWorld, volume->radiusZWorld}, volume->yawDegrees);
+            int bestHandle = -1;
+            float bestDistanceSquared = 8.0f * 8.0f;
+            for (std::size_t i = 0; i < handles.size(); ++i) {
+                const Vector2 screen = context.mapToScreen(handles[i]);
+                const float dx = screen.x - event.mouseButton.position.x;
+                const float dy = screen.y - event.mouseButton.position.y;
+                const float distanceSquared = dx * dx + dy * dy;
+                if (distanceSquared < bestDistanceSquared) {
+                    bestDistanceSquared = distanceSquared;
+                    bestHandle = static_cast<int>(i);
+                }
+            }
+            if (bestHandle >= 0) {
+                const Vector2 snapped = manipulationContext.snapMapPoint(
+                        manipulationContext.screenToMap(event.mouseButton.position));
+                SectorTopologyCoordPoint point;
+                if (VisibleAuthoringToSectorCoord(snapped.x, point.x)
+                        && VisibleAuthoringToSectorCoord(snapped.y, point.y)) {
+                    manipulationContext.manipulationState.selectDragArm = {};
+                    return context.fogVolumeEditing->BeginResize(volume->id, bestHandle, point);
+                }
+            }
+        }
+    }
     ArmSectorEditorSelectedDrag(manipulationContext, event.mouseButton.position);
     return manipulationContext.manipulationState.selectDragArm.active;
 }

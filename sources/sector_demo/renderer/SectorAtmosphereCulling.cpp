@@ -1,5 +1,7 @@
 #include "sector_demo/renderer/SectorAtmosphereCulling.h"
 
+#include "sector_demo/SectorTopologyMap.h"
+
 #include <raymath.h>
 
 #include <algorithm>
@@ -189,6 +191,36 @@ SectorAtmosphereScissorRect ProjectSectorAtmosphereBoundsToScissor(
             minimumY,
             std::max(maximumX - minimumX, 0),
             std::max(maximumY - minimumY, 0)};
+}
+
+SectorAtmosphereScissorRect ComputeSectorAnalyticFogVolumeScissor(
+        const SectorCompiledLocalFogVolume& volume,
+        const Camera3D& camera,
+        float aspectRatio,
+        float nearPlane,
+        int targetWidth,
+        int targetHeight)
+{
+    if (!volume.enabled || volume.maxOpacity <= 0.0f) return {};
+    const bool roomStyle = volume.analyticStyle == SectorAnalyticFogStyle::Room;
+    const float edgeExpansion = roomStyle
+            ? 0.0f
+            : ComputeSectorAnalyticFogCloudyEdgeExpansion(
+                    volume.radiiWorld,
+                    volume.edgeSoftness,
+                    volume.noiseAmount);
+    const Vector3 renderRadii{
+            volume.radiiWorld.x + edgeExpansion,
+            volume.radiiWorld.y + edgeExpansion,
+            volume.radiiWorld.z + edgeExpansion};
+    const Vector3 boundsExtents = volume.shape == SectorLocalFogShape::Box
+            ? ComputeSectorAtmosphereYawedHalfExtents(
+                    renderRadii, volume.yawRadians)
+            : renderRadii;
+    const Vector3 minimum = Vector3Subtract(volume.centerWorld, boundsExtents);
+    const Vector3 maximum = Vector3Add(volume.centerWorld, boundsExtents);
+    return ProjectSectorAtmosphereBoundsToScissor(
+            camera, aspectRatio, nearPlane, minimum, maximum, targetWidth, targetHeight);
 }
 
 SectorAtmosphereScissorRect UnionSectorAtmosphereScissors(

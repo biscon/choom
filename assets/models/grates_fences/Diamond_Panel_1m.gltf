@@ -1,0 +1,302 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.40",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "GRATES AND FENCES",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Diamond_Panel_1m_Export"
+    }
+  ],
+  "materials": [
+    {
+      "name": "GF_Galvanized",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.5
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 1.0
+      }
+    },
+    {
+      "name": "GF_Olive",
+      "normalTexture": {
+        "index": 3,
+        "scale": 0.5
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 4
+        },
+        "metallicRoughnessTexture": {
+          "index": 5
+        }
+      },
+      "occlusionTexture": {
+        "index": 5,
+        "strength": 1.0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Diamond_Panel_1m.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 3
+    },
+    {
+      "sampler": 0,
+      "source": 4
+    },
+    {
+      "sampler": 0,
+      "source": 5
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_normal_opengl",
+      "uri": "textures/Galvanized_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_basecolor",
+      "uri": "textures/Galvanized_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_orm",
+      "uri": "textures/Galvanized_orm.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Olive_normal_opengl",
+      "uri": "textures/Olive_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Olive_basecolor",
+      "uri": "textures/Olive_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Olive_orm",
+      "uri": "textures/Olive_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 192,
+      "max": [
+        0.929794192314148,
+        2.2990000247955322,
+        0.041999999433755875
+      ],
+      "min": [
+        0.07020577043294907,
+        0.16099999845027924,
+        0.028999999165534973
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 192,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 192,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 192,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 360,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 956,
+      "max": [
+        0.949999988079071,
+        2.380000114440918,
+        0.032499998807907104
+      ],
+      "min": [
+        0.05000000074505806,
+        0.07999999821186066,
+        -0.032499998807907104
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 956,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 956,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 956,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 1536,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 2304,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2304,
+      "byteOffset": 2304,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1536,
+      "byteOffset": 4608,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3072,
+      "byteOffset": 6144,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 720,
+      "byteOffset": 9216,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 11472,
+      "byteOffset": 9936,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 11472,
+      "byteOffset": 21408,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 7648,
+      "byteOffset": 32880,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 15296,
+      "byteOffset": 40528,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3072,
+      "byteOffset": 55824,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 58896,
+      "uri": "Diamond_Panel_1m.bin"
+    }
+  ]
+}

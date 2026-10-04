@@ -8,6 +8,8 @@
 
 namespace game {
 
+struct SectorCompiledLocalFogVolume;
+
 struct SectorAtmosphereScissorRect {
     int x = 0;
     int y = 0;
@@ -37,6 +39,15 @@ SectorAtmosphereScissorRect ProjectSectorAtmosphereBoundsToScissor(
         float nearPlane,
         Vector3 boundsMin,
         Vector3 boundsMax,
+        int targetWidth,
+        int targetHeight);
+
+// Fog bounds can span sectors; the center sector is not a visibility constraint.
+SectorAtmosphereScissorRect ComputeSectorAnalyticFogVolumeScissor(
+        const SectorCompiledLocalFogVolume& volume,
+        const Camera3D& camera,
+        float aspectRatio,
+        float nearPlane,
         int targetWidth,
         int targetHeight);
 

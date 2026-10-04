@@ -2619,8 +2619,7 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                 map,
                 camera,
                 runtimeSeconds,
-                objectLightProbes,
-                visibilityResult);
+                objectLightProbes);
     }
     EndAtmosphereGpuPass(2);
 

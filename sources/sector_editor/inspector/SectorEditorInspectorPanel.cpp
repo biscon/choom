@@ -3308,6 +3308,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         if (boxShape) {
             drawFloat("sector_editor_fog_volume_yaw", "Yaw (degrees)", selectedAuthoringFogVolume->yawDegrees, 16, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::yawDegrees);
         }
+        if (boxShape) {
+            if (engine::Button(ui, config, input, assets,
+                        "sector_editor_fog_volume_fit", {0.0f, y, contentW, rowH},
+                        font, "Fit Sector")) {
+                editing.FitToSector(fogVolumeId);
+            }
+            y += SectorEditorFogVolumeFitRowHeight(*selectedAuthoringFogVolume, rowH, gap);
+        }
         drawFloat("sector_editor_fog_volume_bottom", "Bottom offset", selectedAuthoringFogVolume->bottomOffsetWorld, 2, -16.0f, 16.0f, 3, &SectorAuthoringFogVolume::bottomOffsetWorld);
         drawFloat("sector_editor_fog_volume_radius_x", boxShape ? "Half extent X" : "Radius X", selectedAuthoringFogVolume->radiusXWorld, 3, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusXWorld);
         drawFloat("sector_editor_fog_volume_radius_z", boxShape ? "Half extent Z" : "Radius Z", selectedAuthoringFogVolume->radiusZWorld, 4, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusZWorld);

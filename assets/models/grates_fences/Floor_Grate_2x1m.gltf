@@ -1,0 +1,302 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.40",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "GRATES AND FENCES",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Floor_Grate_2x1m_Export"
+    }
+  ],
+  "materials": [
+    {
+      "name": "GF_Galvanized",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.5
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 1.0
+      }
+    },
+    {
+      "name": "GF_Charcoal",
+      "normalTexture": {
+        "index": 3,
+        "scale": 0.5
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 4
+        },
+        "metallicRoughnessTexture": {
+          "index": 5
+        }
+      },
+      "occlusionTexture": {
+        "index": 5,
+        "strength": 1.0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Floor_Grate_2x1m.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "sampler": 0,
+      "source": 3
+    },
+    {
+      "sampler": 0,
+      "source": 4
+    },
+    {
+      "sampler": 0,
+      "source": 5
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_normal_opengl",
+      "uri": "textures/Galvanized_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_basecolor",
+      "uri": "textures/Galvanized_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_orm",
+      "uri": "textures/Galvanized_orm.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Charcoal_normal_opengl",
+      "uri": "textures/Charcoal_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Charcoal_basecolor",
+      "uri": "textures/Charcoal_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Charcoal_orm",
+      "uri": "textures/Charcoal_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 2688,
+      "max": [
+        0.9599999785423279,
+        0.05550000071525574,
+        0.4625000059604645
+      ],
+      "min": [
+        -0.9599999785423279,
+        0.008500000461935997,
+        -0.4625000059604645
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 2688,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 2688,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 2688,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 3696,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 384,
+      "max": [
+        1,
+        0.05999999865889549,
+        0.5
+      ],
+      "min": [
+        -1,
+        0,
+        -0.5
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 384,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 384,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 384,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 528,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 32256,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 32256,
+      "byteOffset": 32256,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 21504,
+      "byteOffset": 64512,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 43008,
+      "byteOffset": 86016,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 7392,
+      "byteOffset": 129024,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4608,
+      "byteOffset": 136416,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4608,
+      "byteOffset": 141024,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3072,
+      "byteOffset": 145632,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6144,
+      "byteOffset": 148704,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1056,
+      "byteOffset": 154848,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 155904,
+      "uri": "Floor_Grate_2x1m.bin"
+    }
+  ]
+}

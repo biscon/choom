@@ -540,8 +540,8 @@ void TestFogVolumeInspectorLayoutIncludesConditionalRows()
     Check(Near(
                   game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
                           volume, rowH, gap),
-                  38.0f + 22.0f * (rowH + gap) + 2.0f * fogStyleRowHeight),
-          "box fog inspector includes instance ID, style, yaw, and reaches the delete row");
+                  38.0f + 23.0f * (rowH + gap) + 2.0f * fogStyleRowHeight),
+          "box fog inspector includes instance ID, style, yaw, Fit Sector, and reaches the delete row");
     Check(Near(game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
                        volume, rowH, gap, 96.0f),
                   game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(

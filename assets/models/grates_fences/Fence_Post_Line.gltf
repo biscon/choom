@@ -1,0 +1,176 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.40",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "GRATES AND FENCES",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Fence_Post_Line_Export"
+    }
+  ],
+  "materials": [
+    {
+      "name": "GF_Galvanized",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.5
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 1.0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Fence_Post_Line.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_normal_opengl",
+      "uri": "textures/Galvanized_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_basecolor",
+      "uri": "textures/Galvanized_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Galvanized_orm",
+      "uri": "textures/Galvanized_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 1142,
+      "max": [
+        0.08500000089406967,
+        2.440000057220459,
+        0.08500000089406967
+      ],
+      "min": [
+        -0.08500000089406967,
+        0,
+        -0.08500000089406967
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 1142,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 1142,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 1142,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 1884,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 13704,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 13704,
+      "byteOffset": 13704,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 9136,
+      "byteOffset": 27408,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 18272,
+      "byteOffset": 36544,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3768,
+      "byteOffset": 54816,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 58584,
+      "uri": "Fence_Post_Line.bin"
+    }
+  ]
+}
