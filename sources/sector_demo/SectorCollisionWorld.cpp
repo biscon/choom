@@ -979,6 +979,14 @@ bool SectorCollisionWorld::BuildFromTopology(
         if (!AppendWorldLoop(map, loops.outer, collisionSector.outerLoop, errorMessage, sector->id)) {
             return false;
         }
+        collisionSector.boundsMinXZ = collisionSector.outerLoop.points.front();
+        collisionSector.boundsMaxXZ = collisionSector.boundsMinXZ;
+        for (Vector2 point : collisionSector.outerLoop.points) {
+            collisionSector.boundsMinXZ.x = std::min(collisionSector.boundsMinXZ.x, point.x);
+            collisionSector.boundsMinXZ.y = std::min(collisionSector.boundsMinXZ.y, point.y);
+            collisionSector.boundsMaxXZ.x = std::max(collisionSector.boundsMaxXZ.x, point.x);
+            collisionSector.boundsMaxXZ.y = std::max(collisionSector.boundsMaxXZ.y, point.y);
+        }
         collisionSector.holeLoops.reserve(loops.holes.size());
         for (const SectorTopologyLoop& hole : loops.holes) {
             SectorCollisionLoop collisionHole;
@@ -1954,6 +1962,99 @@ bool SectorCollisionWorld::AllowsActorPlacement(
         }
     }
     return true;
+}
+
+int SectorCollisionWorld::ResolveLightingSectorForBounds(
+        int originSectorId, BoundingBox bounds, bool hasBounds) const
+{
+    if (FindSector(originSectorId) != nullptr) return originSectorId;
+    if (!hasBounds || !IsFinite(bounds.min) || !IsFinite(bounds.max)
+            || bounds.min.x > bounds.max.x || bounds.min.y > bounds.max.y
+            || bounds.min.z > bounds.max.z) return 0;
+    const Vector3 center{bounds.min.x * 0.5f + bounds.max.x * 0.5f,
+                         bounds.min.y * 0.5f + bounds.max.y * 0.5f,
+                         bounds.min.z * 0.5f + bounds.max.z * 0.5f};
+    const Vector2 xz{center.x, center.z};
+    const int centerSector = FindSectorContainingPoint(xz);
+    if (centerSector != 0 && BoundsOverlapSector(centerSector, bounds)) return centerSector;
+
+    int nearestSector = 0;
+    double nearestDistanceSquared = std::numeric_limits<double>::infinity();
+    // Sectors are sorted by ID at build time; strict comparison keeps the
+    // lowest ID on ties, independent of camera visibility and edit history.
+    for (const SectorCollisionSector& sector : sectors) {
+        if (!BoundsOverlapSector(sector.sectorId, bounds)) continue;
+        double planarDistanceSquared = 0.0;
+        if (!SectorContainsPoint(sector, xz)) {
+            planarDistanceSquared = std::numeric_limits<double>::infinity();
+            for (const SectorCollisionEdge& edge : sector.edges) {
+                const Vector2 closest = ClosestPointOnSegment(xz, edge.a, edge.b);
+                const double dx = static_cast<double>(center.x) - closest.x;
+                const double dz = static_cast<double>(center.z) - closest.y;
+                planarDistanceSquared = std::min(planarDistanceSquared, dx * dx + dz * dz);
+            }
+        }
+        const double verticalDistance = center.y < sector.heights.floorZ
+                ? sector.heights.floorZ - center.y
+                : (sector.ceilingSolid && center.y > sector.heights.ceilingZ
+                        ? center.y - sector.heights.ceilingZ : 0.0);
+        const double distanceSquared = planarDistanceSquared + verticalDistance * verticalDistance;
+        if (distanceSquared < nearestDistanceSquared) {
+            nearestDistanceSquared = distanceSquared;
+            nearestSector = sector.sectorId;
+        }
+    }
+    return nearestSector;
+}
+
+bool SectorCollisionWorld::BoundsOverlapSector(int sectorId, BoundingBox bounds) const
+{
+    if (!IsFinite(bounds.min) || !IsFinite(bounds.max)
+            || bounds.min.x > bounds.max.x || bounds.min.y > bounds.max.y
+            || bounds.min.z > bounds.max.z) return false;
+    const SectorCollisionSector* sector = FindSector(sectorId);
+    if (sector == nullptr) return false;
+    if (bounds.max.y < sector->heights.floorZ - CollisionPointEpsilon
+            || (sector->ceilingSolid
+                && bounds.min.y > sector->heights.ceilingZ + CollisionPointEpsilon)) return false;
+
+    const Vector2 minimum{bounds.min.x - CollisionPointEpsilon,
+                          bounds.min.z - CollisionPointEpsilon};
+    const Vector2 maximum{bounds.max.x + CollisionPointEpsilon,
+                          bounds.max.z + CollisionPointEpsilon};
+    if (maximum.x < sector->boundsMinXZ.x || minimum.x > sector->boundsMaxXZ.x
+            || maximum.y < sector->boundsMinXZ.y || minimum.y > sector->boundsMaxXZ.y)
+        return false;
+
+    // Segment/rectangle clipping also detects a sector enclosed by the bounds,
+    // and contact with hole boundaries. No corner sampling alone can do that.
+    const auto overlapsLoop = [&](const SectorCollisionLoop& loop) {
+        for (size_t i = 0; i < loop.points.size(); ++i) {
+            const Vector2 a = loop.points[i];
+            const Vector2 b = loop.points[(i + 1) % loop.points.size()];
+            float enter = 0.0f;
+            float leave = 1.0f;
+            const auto clipAxis = [&](float start, float end, float low, float high) {
+                const float delta = end - start;
+                if (delta == 0.0f) return start >= low && start <= high;
+                const float first = (low - start) / delta;
+                const float second = (high - start) / delta;
+                enter = std::max(enter, std::min(first, second));
+                leave = std::min(leave, std::max(first, second));
+                return enter <= leave;
+            };
+            if (clipAxis(a.x, b.x, minimum.x, maximum.x)
+                    && clipAxis(a.y, b.y, minimum.y, maximum.y)) return true;
+        }
+        return false;
+    };
+    if (overlapsLoop(sector->outerLoop)) return true;
+    for (const SectorCollisionLoop& hole : sector->holeLoops) {
+        if (overlapsLoop(hole)) return true;
+    }
+    // With no boundary intersections the whole rectangle is in one region:
+    // sector interior, exterior, or a hole. Classify any point in it.
+    return SectorContainsPoint(*sector, {bounds.min.x, bounds.min.z});
 }
 
 bool SectorCollisionWorld::SectorContainsPoint(

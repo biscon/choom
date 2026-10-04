@@ -7,6 +7,7 @@
 #include "sector_demo/SectorReflectionProbes.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorStaticModelCollision.h"
+#include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorStructuralPrimitives.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
@@ -4729,6 +4730,41 @@ void TestStaticModelPreparationReusesReadyEditorModels()
                   && !prepared.objects[0].castsShadow
                   && prepared.objects[1].castsShadow,
           "reused ready models preserve per-prop bake settings while copying shared geometry once");
+
+    const std::string originalHash = game::ComputeSectorLightmapSourceHash(map);
+    const auto prepareAgain = [&]() {
+        return game::PrepareSectorStaticModelsForLightmapBake(map, assets, {}, prepared, error,
+                [&](const std::string&) { return &readyModel; });
+    };
+    Check(prepareAgain() && game::ComputeSectorLightmapSourceHash(map) == originalHash,
+          "lighting membership remains derived and does not change existing source hashes");
+    // Model-local translation is already included in imported/runtime bounds.
+    readyModel.transform = MatrixTranslate(1, 0, 0);
+    map.runtimeObjects.front().position.x = game::SectorWorldToAuthoringDistance(-2);
+    const std::string movedHash = game::ComputeSectorLightmapSourceHash(map);
+    Check(movedHash != originalHash, "moving the prop continues to invalidate its baked hash");
+    Check(prepareAgain() && prepared.objects.size() == 2
+                  && prepared.objects.front().containingSectorId == 10,
+          "bake accepts offset model bounds overlapping room despite outside origin");
+    game::SectorCollisionWorld lookup;
+    Check(lookup.BuildFromTopology(map), "runtime/bake lighting comparison room builds");
+    const BoundingBox importedBounds{{1, 0, 0}, {3, 0, 1}};
+    const auto& placed = map.runtimeObjects.front();
+    const Vector3 runtimePosition{-2, 0, game::SectorAuthoringToWorldDistance(placed.position.z)};
+    const BoundingBox runtimeBounds = game::TransformSectorStaticModelBounds(importedBounds,
+            game::BuildSectorStaticModelAuthoredTransform(runtimePosition, 0, 0, 0, placed.staticModel.scale));
+    Check(!prepared.objects.empty()
+                  && lookup.ResolveLightingSectorForBounds(-1, runtimeBounds, true)
+                        == prepared.objects.front().containingSectorId,
+          "runtime and bake resolve the same transformed bounds lighting sector");
+    Check(game::ComputeSectorLightmapSourceHash(map) == movedHash,
+          "bounds-based bake preparation does not persist derived lighting membership");
+    map.runtimeObjects.front().staticModel.scale = .1f;
+    Check(game::ComputeSectorLightmapSourceHash(map) != movedHash,
+          "scale remains part of static prop lightmap source hash");
+    Check(!prepareAgain()
+                  && error.find("bounds overlapping a sector") != std::string::npos,
+          "bake still rejects prop with neither origin nor bounds inside any sector");
 
     Check(assets.Initialize()
                   && assets.GlobalScope().index == 0,

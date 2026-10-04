@@ -18,8 +18,8 @@
     "baseboard_metal": {
       "albedoTexturePath": "assets/images/baseboards/baseboard_metal.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 1.0,
-      "roughnessFactor": 1.0,
+      "metallicFactor": 0.800000011920929,
+      "roughnessFactor": 0.4000000059604645,
       "normalStrength": 0.15000000596046448
     },
     "baseboard_painted_white": {
@@ -313,6 +313,20 @@
         "maskPath": "assets/images/macros/patchy_wear.png",
         "repeatMeters": 6.0,
         "darkening": 0.30000001192092896,
+        "roughnessChange": 0.11999999731779099
+      }
+    },
+    "long_white_tiles": {
+      "albedoTexturePath": "assets/images/hires/long_white_tiles.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.3799999952316284,
         "roughnessChange": 0.11999999731779099
       }
     },

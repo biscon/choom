@@ -300,7 +300,8 @@ public:
             engine::World& runtimeObjectWorld);
     void ReserveShadowCasterCapacity(size_t capacity);
     void PrepareVisibleDraws(engine::AssetManager& assets, engine::World& world,
-            const Camera3D& camera, float aspect, const RuntimePortalVisibilityResult& visibility);
+            const Camera3D& camera, float aspect, const RuntimePortalVisibilityResult& visibility,
+            const SectorCollisionWorld* visibilityWorld);
     void DrawPreparedDepth(engine::AssetManager& assets, engine::World& world,
             Material depthMaterial, const std::vector<engine::TextureHandle>& lightmapTextures);
     std::size_t VisibleOpaqueObjects() const { return staticDraws.size() + modelDoorDraws.size(); }

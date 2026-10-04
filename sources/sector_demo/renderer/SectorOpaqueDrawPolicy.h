@@ -2,6 +2,7 @@
 
 #include "engine/assets/ModelAssets.h"
 #include "engine/ecs/Entity.h"
+#include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include <raymath.h>
 #include <algorithm>
@@ -68,6 +69,25 @@ inline bool SectorOpaqueModelVisible(bool objectVisible, int sectorId,
 {
     return objectVisible && ShouldDrawRuntimeSectorForVisibility(sectorId, visibility) &&
            (!hasBounds || SectorBoundsInView(camera, aspect, nearPlane, farPlane, bounds));
+}
+
+// Offset pivots and large props can extend into visible sectors even when the
+// origin does not. Keep ordinary origin membership as the inexpensive fast path.
+inline bool SectorStaticPropVisible(bool objectVisible, int sectorId,
+                                    const RuntimePortalVisibilityResult& visibility,
+                                    const Camera3D& camera, float aspect, float nearPlane,
+                                    float farPlane, BoundingBox bounds, bool hasBounds,
+                                    const SectorCollisionWorld* visibilityWorld)
+{
+    if (!objectVisible || (hasBounds
+            && !SectorBoundsInView(camera, aspect, nearPlane, farPlane, bounds))) return false;
+    if (ShouldDrawRuntimeSectorForVisibility(sectorId, visibility)) return true;
+    if (!hasBounds || visibilityWorld == nullptr) return false;
+    // Boundary-only sectors behind closed portals do not expose runtime props.
+    for (int visibleSectorId : visibility.visibleSectorIds) {
+        if (visibilityWorld->BoundsOverlapSector(visibleSectorId, bounds)) return true;
+    }
+    return false;
 }
 
 inline bool SectorPaneVisible(bool objectVisible, bool paneVisible, int frontSector, int backSector,

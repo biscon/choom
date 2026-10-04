@@ -3108,6 +3108,23 @@
         -40.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 207,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_207",
+        "modelPath": "assets/models/grates_fences/Diamond_Panel_4m.gltf",
+        "heightOffsetWorld": -0.07500004768371582,
+        "scale": 1.0499999523162842,
+        "collision": true
+      },
+      "position": [
+        615.2000122070313,
+        9.0,
+        -232.8000030517578
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -4417,6 +4434,23 @@
           }
         }
       }
+    },
+    {
+      "id": 7,
+      "instanceId": "light_point_7",
+      "position": [
+        356.0,
+        14.399999618530273,
+        27.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      }
     }
   ],
   "dynamicSpotLights": [],
@@ -4559,7 +4593,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "001f6296fd47a2da",
+    "sourceHash": "81039ed0a4f228cb",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4579,8 +4613,8 @@
     "objectProbes": {
       "path": "assets/levels/intro/intro.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "001f6296fd47a2da",
-      "count": 4130,
+      "sourceHash": "81039ed0a4f228cb",
+      "count": 4544,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -4593,21 +4627,21 @@
         ],
         "rgbMax": [
           1.0182116031646729,
-          1.0,
-          1.0
+          0.9766853451728821,
+          0.904670000076294
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 24780,
+        "sampleCount": 27264,
         "rgbChannelsAboveOne": 12
       }
     },
     "staticModels": {
       "path": "assets/levels/intro/intro.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "001f6296fd47a2da",
-      "modelCount": 45,
-      "objectCount": 198,
+      "sourceHash": "81039ed0a4f228cb",
+      "modelCount": 46,
+      "objectCount": 200,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -5213,12 +5247,12 @@
       },
       {
         "id": 130,
-        "x": 10496,
+        "x": 10752,
         "y": -3712
       },
       {
         "id": 131,
-        "x": 10496,
+        "x": 10752,
         "y": 384
       },
       {
@@ -5293,18 +5327,68 @@
       },
       {
         "id": 146,
-        "x": 5504,
+        "x": 5376,
         "y": 256
       },
       {
         "id": 147,
-        "x": 5504,
+        "x": 5376,
         "y": 1152
       },
       {
         "id": 148,
         "x": 6112,
         "y": 1152
+      },
+      {
+        "id": 149,
+        "x": 9856,
+        "y": -3712
+      },
+      {
+        "id": 150,
+        "x": 9856,
+        "y": -5888
+      },
+      {
+        "id": 151,
+        "x": 10368,
+        "y": -5888
+      },
+      {
+        "id": 152,
+        "x": 10368,
+        "y": -3712
+      },
+      {
+        "id": 153,
+        "x": 9856,
+        "y": -3968
+      },
+      {
+        "id": 154,
+        "x": 10368,
+        "y": -3968
+      },
+      {
+        "id": 155,
+        "x": 8960,
+        "y": -13184
+      },
+      {
+        "id": 156,
+        "x": 8960,
+        "y": 8320
+      },
+      {
+        "id": 157,
+        "x": 9344,
+        "y": 8320
+      },
+      {
+        "id": 158,
+        "x": 9344,
+        "y": -13184
       }
     ],
     "lines": [
@@ -6029,11 +6113,6 @@
         "endVertexId": 123
       },
       {
-        "id": 237,
-        "startVertexId": 133,
-        "endVertexId": 130
-      },
-      {
         "id": 238,
         "startVertexId": 131,
         "endVertexId": 134
@@ -6044,11 +6123,6 @@
         "endVertexId": 134
       },
       {
-        "id": 243,
-        "startVertexId": 135,
-        "endVertexId": 136
-      },
-      {
         "id": 244,
         "startVertexId": 136,
         "endVertexId": 133
@@ -6057,11 +6131,6 @@
         "id": 245,
         "startVertexId": 134,
         "endVertexId": 137
-      },
-      {
-        "id": 246,
-        "startVertexId": 137,
-        "endVertexId": 132
       },
       {
         "id": 248,
@@ -6132,6 +6201,91 @@
         "id": 263,
         "startVertexId": 148,
         "endVertexId": 143
+      },
+      {
+        "id": 264,
+        "startVertexId": 133,
+        "endVertexId": 149
+      },
+      {
+        "id": 267,
+        "startVertexId": 150,
+        "endVertexId": 151
+      },
+      {
+        "id": 268,
+        "startVertexId": 149,
+        "endVertexId": 152
+      },
+      {
+        "id": 269,
+        "startVertexId": 152,
+        "endVertexId": 130
+      },
+      {
+        "id": 271,
+        "startVertexId": 149,
+        "endVertexId": 153
+      },
+      {
+        "id": 272,
+        "startVertexId": 153,
+        "endVertexId": 150
+      },
+      {
+        "id": 273,
+        "startVertexId": 151,
+        "endVertexId": 154
+      },
+      {
+        "id": 274,
+        "startVertexId": 154,
+        "endVertexId": 152
+      },
+      {
+        "id": 275,
+        "startVertexId": 153,
+        "endVertexId": 154
+      },
+      {
+        "id": 276,
+        "startVertexId": 135,
+        "endVertexId": 155
+      },
+      {
+        "id": 279,
+        "startVertexId": 156,
+        "endVertexId": 132
+      },
+      {
+        "id": 280,
+        "startVertexId": 155,
+        "endVertexId": 156
+      },
+      {
+        "id": 281,
+        "startVertexId": 137,
+        "endVertexId": 157
+      },
+      {
+        "id": 282,
+        "startVertexId": 157,
+        "endVertexId": 156
+      },
+      {
+        "id": 283,
+        "startVertexId": 155,
+        "endVertexId": 158
+      },
+      {
+        "id": 284,
+        "startVertexId": 158,
+        "endVertexId": 136
+      },
+      {
+        "id": 285,
+        "startVertexId": 157,
+        "endVertexId": 158
       }
     ],
     "lineSides": [
@@ -8655,6 +8809,47 @@
             ]
           },
           "materialId": "brick_repair_512"
+        }
+      },
+      {
+        "lineId": 99,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
         }
       },
       {
@@ -12371,6 +12566,47 @@
       },
       {
         "lineId": 217,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        }
+      },
+      {
+        "lineId": 217,
         "side": "back",
         "wall": {
           "uv": {
@@ -12837,6 +13073,383 @@
         }
       },
       {
+        "lineId": 230,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 232,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.1875
+            ]
+          },
+          "materialId": "painted_plaster_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 234,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 235,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 238,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.1875
+            ]
+          },
+          "materialId": "painted_plaster_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 240,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.5625
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 240,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.1875
+            ]
+          },
+          "materialId": "painted_plaster_wall"
+        }
+      },
+      {
+        "lineId": 244,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 245,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
         "lineId": 248,
         "side": "front",
         "wall": {
@@ -13009,6 +13622,47 @@
         }
       },
       {
+        "lineId": 254,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
         "lineId": 256,
         "side": "front",
         "wall": {
@@ -13078,7 +13732,7 @@
               0.0
             ]
           },
-          "materialId": "brick_repair_512"
+          "materialId": "worn_gray_metal_step_512"
         },
         "upper": {
           "uv": {
@@ -13092,6 +13746,754 @@
             ]
           },
           "materialId": "fortress_stone_mossy_512"
+        }
+      },
+      {
+        "lineId": 258,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 264,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.1875
+            ]
+          },
+          "materialId": "painted_plaster_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 267,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 268,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.1875
+            ]
+          },
+          "materialId": "painted_plaster_wall"
+        }
+      },
+      {
+        "lineId": 269,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.1875
+            ]
+          },
+          "materialId": "painted_plaster_wall"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 271,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 272,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 273,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 274,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 275,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        }
+      },
+      {
+        "lineId": 276,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 279,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 280,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
+        }
+      },
+      {
+        "lineId": 281,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 282,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 283,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 284,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -2.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 285,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_concrete_ceiling"
         }
       }
     ],
@@ -14851,8 +16253,8 @@
         "name": "Sector 25",
         "x": 9103,
         "y": -1894,
-        "floorZ": 0.0,
-        "ceilingZ": 35.0,
+        "floorZ": -1.0,
+        "ceilingZ": 37.0,
         "floorUv": {
           "scale": [
             1.0,
@@ -14879,7 +16281,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.07500000298023224,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -14915,7 +16317,9 @@
               0.0
             ]
           }
-        }
+        },
+        "floorMaterialId": "hub_cobble_dirty_512",
+        "ceilingMaterialId": "tunnel_concrete_ceiling"
       },
       {
         "id": 26,
@@ -15022,7 +16426,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.4000000059604645,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -15058,7 +16462,9 @@
               0.0
             ]
           }
-        }
+        },
+        "floorMaterialId": "large_industrial_tiles_dirty",
+        "ceilingMaterialId": "concrete_floor1"
       },
       {
         "id": 28,
@@ -15165,7 +16571,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.07500000298023224,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -15201,7 +16607,9 @@
               0.0
             ]
           }
-        }
+        },
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "worn_gray_metal_step_512"
       },
       {
         "id": 31,
@@ -15277,7 +16685,299 @@
           "materialId": "brick_repair_512"
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
-        "ceilingMaterialId": "fortress_stone_mossy_512"
+        "ceilingMaterialId": "large_industrial_tiles_512"
+      },
+      {
+        "id": 32,
+        "name": "Sector 18",
+        "x": 9983,
+        "y": -5226,
+        "floorZ": 9.0,
+        "ceilingZ": 100.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.4000000059604645,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "large_industrial_tiles_512",
+        "ceilingMaterialId": "tunnel_wall_concrete"
+      },
+      {
+        "id": 33,
+        "name": "Sector 29",
+        "x": 9983,
+        "y": -3842,
+        "floorZ": 9.0,
+        "ceilingZ": 35.0,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.4000000059604645,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "large_industrial_tiles_512",
+        "ceilingMaterialId": "tunnel_concrete_ceiling"
+      },
+      {
+        "id": 34,
+        "name": "Sector 32",
+        "x": 8895,
+        "y": -13122,
+        "floorZ": 0.0,
+        "ceilingZ": 36.0,
+        "floorUv": {
+          "scale": [
+            2.0,
+            2.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.07500000298023224,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "metal_plate",
+        "ceilingMaterialId": "tunnel_concrete_ceiling"
+      },
+      {
+        "id": 35,
+        "name": "Sector 33",
+        "x": 9407,
+        "y": -13122,
+        "floorZ": 0.0,
+        "ceilingZ": 36.0,
+        "floorUv": {
+          "scale": [
+            2.0,
+            2.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.07500000298023224,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "metal_plate",
+        "ceilingMaterialId": "tunnel_concrete_ceiling"
       }
     ],
     "fogVolumes": [
@@ -15299,6 +16999,29 @@
         "edgeSoftness": 1.0,
         "noiseScaleWorld": 0.25,
         "noiseAmount": 0.5
+      },
+      {
+        "id": 2,
+        "x": 9152,
+        "y": -8160,
+        "instanceId": "fog_volume_2",
+        "shape": "box",
+        "analyticStyle": "room",
+        "bottomOffsetWorld": 0.0,
+        "radiusXWorld": 2.875,
+        "radiusZWorld": 33.375,
+        "heightWorld": 4.0,
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 255
+        },
+        "maxOpacity": 1.0,
+        "analyticEndDistanceWorld": 70.0,
+        "analyticFalloffExponent": 0.5,
+        "edgeSoftness": 1.0,
+        "noiseAmount": 0.10000000149011612
       }
     ],
     "reflectionProbes": [
@@ -15527,6 +17250,155 @@
           "solidBottom": 33.20000076293945,
           "low": 33.20000076293945,
           "high": 46.20000076293945
+        }
+      },
+      {
+        "id": 5,
+        "kind": "stairs",
+        "x": 10112,
+        "z": -4736,
+        "yawDegrees": 180.0,
+        "material": {
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "stairs": {
+          "width": 512,
+          "run": 1536,
+          "bottom": 9.0,
+          "rise": 80.0,
+          "stepCount": 32
+        }
+      },
+      {
+        "id": 6,
+        "kind": "box",
+        "x": 10112,
+        "z": -1664,
+        "material": {
+          "materialId": "tunnel_concrete_ceiling"
+        },
+        "box": {
+          "width": 256,
+          "depth": 256,
+          "bottom": 9.0,
+          "top": 14.0
+        }
+      },
+      {
+        "id": 7,
+        "kind": "cylinder",
+        "x": 10112,
+        "z": -1664,
+        "material": {
+          "materialId": "tunnel_wall_concrete"
+        },
+        "cylinder": {
+          "radius": 112,
+          "bottom": 14.0,
+          "top": 51.0
+        }
+      },
+      {
+        "id": 8,
+        "kind": "box",
+        "x": 10112,
+        "z": -1664,
+        "material": {
+          "materialId": "tunnel_wall_concrete"
+        },
+        "box": {
+          "width": 256,
+          "depth": 256,
+          "bottom": 46.0,
+          "top": 51.0
+        }
+      },
+      {
+        "id": 9,
+        "kind": "box",
+        "x": 10112,
+        "z": -2816,
+        "material": {
+          "materialId": "tunnel_wall_concrete"
+        },
+        "box": {
+          "width": 256,
+          "depth": 256,
+          "bottom": 9.0,
+          "top": 14.0
+        }
+      },
+      {
+        "id": 10,
+        "kind": "box",
+        "x": 10112,
+        "z": -512,
+        "material": {
+          "materialId": "tunnel_wall_concrete"
+        },
+        "box": {
+          "width": 256,
+          "depth": 256,
+          "bottom": 9.0,
+          "top": 14.0
+        }
+      },
+      {
+        "id": 11,
+        "kind": "cylinder",
+        "x": 10112,
+        "z": -2816,
+        "material": {
+          "materialId": "tunnel_wall_concrete"
+        },
+        "cylinder": {
+          "radius": 112,
+          "bottom": 14.0,
+          "top": 51.0
+        }
+      },
+      {
+        "id": 12,
+        "kind": "box",
+        "x": 10112,
+        "z": -2816,
+        "material": {
+          "materialId": "tunnel_wall_concrete"
+        },
+        "box": {
+          "width": 256,
+          "depth": 256,
+          "bottom": 46.0,
+          "top": 51.0
+        }
+      },
+      {
+        "id": 13,
+        "kind": "cylinder",
+        "x": 10112,
+        "z": -512,
+        "material": {
+          "materialId": "tunnel_wall_concrete"
+        },
+        "cylinder": {
+          "radius": 112,
+          "bottom": 14.0,
+          "top": 51.0
+        }
+      },
+      {
+        "id": 14,
+        "kind": "box",
+        "x": 10112,
+        "z": -512,
+        "material": {
+          "materialId": "tunnel_wall_concrete"
+        },
+        "box": {
+          "width": 256,
+          "depth": 256,
+          "bottom": 46.0,
+          "top": 51.0
         }
       }
     ]

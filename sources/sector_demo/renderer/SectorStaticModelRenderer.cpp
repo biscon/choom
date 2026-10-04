@@ -804,7 +804,8 @@ void SectorStaticModelRenderer::ReserveShadowCasterCapacity(size_t capacity)
 void SectorStaticModelRenderer::PrepareVisibleDraws(engine::AssetManager &assets,
                                                     engine::World &world, const Camera3D &camera,
                                                     float aspect,
-                                                    const RuntimePortalVisibilityResult &visibility)
+                                                    const RuntimePortalVisibilityResult &visibility,
+                                                    const SectorCollisionWorld* visibilityWorld)
 {
     staticDraws.clear();
     modelDoorDraws.clear();
@@ -830,11 +831,13 @@ void SectorStaticModelRenderer::PrepareVisibleDraws(engine::AssetManager &assets
                 transform.rotationZRadians, prop.scale);
             // ModelAsset bounds already include model.transform.
             const BoundingBox bounds =
-                asset->hasLocalBounds ? TransformSectorDoorModelBounds(asset->localBounds, authored)
+                asset->hasLocalBounds ? TransformSectorStaticModelBounds(asset->localBounds, authored)
                                       : BoundingBox{transform.position, transform.position};
-            if (!SectorOpaqueModelVisible(object.visible, object.currentSectorId, visibility,
+            if (!SectorStaticPropVisible(object.visible && IsSectorObjectEnabled(object),
+                                          object.currentSectorId, visibility,
                                           camera, aspect, rlGetCullDistanceNear(),
-                                          rlGetCullDistanceFar(), bounds, asset->hasLocalBounds)) {
+                                          rlGetCullDistanceFar(), bounds, asset->hasLocalBounds,
+                                          visibilityWorld)) {
                 ++culledOpaqueObjects;
                 countCulled(asset);
                 return;
@@ -1384,7 +1387,6 @@ void SectorStaticModelRenderer::Draw(
              useHighlight,
              &considered,
              &drawn,
-             &portalCulled,
              &skipped](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
@@ -1394,12 +1396,8 @@ void SectorStaticModelRenderer::Draw(
                         !staticCaptureOnly && entity == useHighlight.entity
                                 ? useHighlight.strength : 0.0f);
                 ++considered;
-                if (!ShouldDrawRuntimeSectorForVisibility(
-                            object.currentSectorId,
-                            visibility)) {
-                    ++portalCulled;
-                    return;
-                }
+                // The shared depth/color draw list already resolved visibility
+                // using the prop bounds, which may cross its origin sector.
                 if ((!object.visible || !IsSectorObjectEnabled(object))) {
                     ++skipped;
                     return;
@@ -1470,21 +1468,21 @@ void SectorStaticModelRenderer::Draw(
                         ? TransformSectorStaticSpecularReceiverBounds(
                                 modelAsset->localBounds,
                                 authoredTransform,
-                                object.currentSectorId,
+                                staticModel.lightingSectorId,
                                 transform.position)
                         : SectorReceiverBounds{
-                                object.currentSectorId,
+                                staticModel.lightingSectorId,
                                 transform.position,
                                 transform.position};
                 const SectorStaticSpecularLightContext staticSpecularContext =
                         SelectSectorStaticSpecularLights(
                                 staticSpecularLights,
                                 receiverBounds,
-                                object.currentSectorId,
+                                staticModel.lightingSectorId,
                                 visibility,
                                 surfaceLightmapBakeCurrent && hasRemapData);
                 PrepareReceiverEnvironment(Vector3Scale(Vector3Add(receiverBounds.min,receiverBounds.max),0.5f),
-                        object.currentSectorId,&receiverBounds);
+                        staticModel.lightingSectorId,&receiverBounds);
                 UploadSectorStaticSpecularLights(
                         shader,
                         staticSpecularLocations,

@@ -1255,6 +1255,21 @@ bool PrepareSectorStaticModelsForLightmapBake(
         source.prepared = true;
     }
 
+    // Imported positions already contain model.transform, like runtime asset
+    // bounds. Cache once per shared model, then apply each authored transform.
+    std::vector<BoundingBox> localBounds;
+    localBounds.reserve(outData.models.size());
+    for (const SectorStaticModelLightmapModel& model : outData.models) {
+        const float infinity = std::numeric_limits<float>::infinity();
+        BoundingBox bounds{{infinity, infinity, infinity}, {-infinity, -infinity, -infinity}};
+        for (const SectorStaticModelLightmapMesh& mesh : model.meshes) {
+            for (Vector3 p : mesh.importedPositions) {
+                bounds.min = {std::min(bounds.min.x, p.x), std::min(bounds.min.y, p.y), std::min(bounds.min.z, p.z)};
+                bounds.max = {std::max(bounds.max.x, p.x), std::max(bounds.max.y, p.y), std::max(bounds.max.z, p.z)};
+            }
+        }
+        localBounds.push_back(bounds);
+    }
     SectorCollisionWorld sectorLookup;
     std::string lookupError;
     if (!sectorLookup.BuildFromTopology(map, &lookupError)) {
@@ -1286,15 +1301,21 @@ bool PrepareSectorStaticModelsForLightmapBake(
             return false;
         }
         const Vector3 worldPosition = StaticModelWorldPosition(*object);
-        const int sectorId = sectorLookup.FindSectorContainingPoint(
+        const int originSectorId = sectorLookup.FindSectorContainingPoint(
                 Vector2{worldPosition.x, worldPosition.z});
+        const BoundingBox bounds = TransformSectorStaticModelBounds(
+                localBounds[static_cast<size_t>(modelIndex->second)],
+                BuildSectorStaticModelAuthoredTransform(worldPosition,
+                        object->staticModel.rotationXRadians, object->yawRadians,
+                        object->staticModel.rotationZRadians, object->staticModel.scale));
+        const int sectorId = sectorLookup.ResolveLightingSectorForBounds(originSectorId, bounds, true);
         if (sectorId == 0) {
             unloadScope();
             outData = {};
             outError = "Bake failed: static model object "
                     + std::to_string(object->id)
                     + " ('" + object->staticModel.modelPath
-                    + "') is not inside a sector";
+                    + "') has neither an origin inside a sector nor bounds overlapping a sector";
             return false;
         }
         SectorStaticModelLightmapObject preparedObject;
