@@ -192,7 +192,9 @@ bool SphereOverlapsBounds(const SectorPreviewDynamicPointLightUniform& light, co
             ? std::sqrt(light.innerConeCos * light.innerConeCos
                     + light.outerConeCos * light.outerConeCos)
             : 0.0f;
-    const float influenceRadius = light.radius + planeExtent;
+    const float swayExtent = light.positionSway.enabled
+            ? std::hypot(light.positionSway.horizontalRadiusWorld, light.positionSway.verticalAmountWorld) : 0.0f;
+    const float influenceRadius = light.radius + planeExtent + swayExtent;
     return DistanceSq(light.position, closest) <= influenceRadius * influenceRadius;
 }
 
@@ -259,7 +261,9 @@ float DynamicPointLightSelectionScore(
         return -1.0f;
     }
 
-    const float atten = std::max(0.0f, 1.0f - (distance / light.radius));
+    const float swayExtent = light.positionSway.enabled
+            ? std::hypot(light.positionSway.horizontalRadiusWorld,light.positionSway.verticalAmountWorld) : 0.0f;
+    const float atten = std::max(0.0f, 1.0f - (distance / (light.radius + swayExtent)));
     const float score = light.intensity * brightness * atten * atten;
     return std::isfinite(score) ? score : -1.0f;
 }
@@ -383,6 +387,31 @@ float SmoothStep(float edge0, float edge1, float value)
 }
 
 } // namespace
+
+Vector3 EvaluateDynamicLightPositionSway(int lightId, double seconds, const SectorLightPositionSway& sway)
+{
+    if (!sway.enabled || !std::isfinite(seconds) || !std::isfinite(sway.speed)
+            || !std::isfinite(sway.horizontalRadiusWorld) || !std::isfinite(sway.verticalAmountWorld)) return {};
+    // Reduce in double precision before converting segment indices. Quintic
+    // interpolation gives continuous velocity/acceleration at segment joins.
+    const double time = std::fmod(std::max(0.0, seconds) * std::clamp(sway.speed, 0.05f, 5.0f), 1000000.0);
+    const auto noise = [&](double rate, uint32_t salt) {
+        const double x = time * rate + HashDynamicLightFlicker01(lightId, 0, salt);
+        const int segment = static_cast<int>(std::floor(x));
+        const float u = static_cast<float>(x - segment);
+        const float w = u*u*u*(u*(u*6 - 15) + 10);
+        const float a = HashDynamicLightFlicker01(lightId, segment, salt) * 2 - 1;
+        const float b = HashDynamicLightFlicker01(lightId, segment + 1, salt) * 2 - 1;
+        return a + (b-a)*w;
+    };
+    const auto axis = [&](uint32_t salt) { return 0.8f*noise(1.5,salt) + 0.2f*noise(4.1,salt ^ 0xa511e9b3u); };
+    Vector3 offset{axis(0x68bc21ebu), axis(0x02e5be93u), axis(0x967a889bu)};
+    const float horizontal = std::sqrt(offset.x*offset.x + offset.z*offset.z);
+    const float scale = std::clamp(sway.horizontalRadiusWorld,0.0f,1.0f) / std::max(1.0f,horizontal);
+    offset.x *= scale; offset.z *= scale;
+    offset.y *= std::clamp(sway.verticalAmountWorld,0.0f,1.0f);
+    return offset;
+}
 
 float EvaluateDynamicLightFlickerMultiplier(
         int lightId,
@@ -536,6 +565,8 @@ bool MakeSectorPreviewDynamicPointLightUniform(
     outLight.lightId = light.id;
     outLight.kind = SectorPreviewDynamicLightKind::Point;
     outLight.position = SectorAuthoringToWorldPosition(light.position);
+    outLight.basePosition = outLight.position;
+    outLight.positionSway = light.positionSway;
     outLight.direction = Vector3{0.0f, -1.0f, 0.0f};
     outLight.color = engine::SrgbColorBytesToLinearSceneRgb(light.color);
     outLight.radius = SectorAuthoringToWorldDistance(light.radius);

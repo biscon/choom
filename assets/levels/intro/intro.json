@@ -6428,6 +6428,12 @@
       "flicker": true,
       "flickerSpeed": 2.0,
       "flickerAmount": 0.15000000596046448,
+      "positionSway": {
+        "enabled": true,
+        "horizontalRadiusWorld": 0.029999999329447746,
+        "verticalAmountWorld": 0.029999999329447746,
+        "speed": 0.5
+      },
       "castsShadow": true,
       "shadowStrength": 0.8999999761581421,
       "shadowSoftness": 4.0
@@ -6756,7 +6762,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "c2656b89a45bd8b0",
+    "sourceHash": "580206a1e9294f31",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -6776,17 +6782,17 @@
     "objectProbes": {
       "path": "assets/levels/intro/intro.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "c2656b89a45bd8b0",
-      "count": 4064,
+      "sourceHash": "580206a1e9294f31",
+      "count": 4070,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
       "format": "layeredAmbientCubeLinearHdrF32LE",
       "storedStatistics": {
         "rgbMin": [
-          0.023627450689673424,
-          0.02450980432331562,
-          0.02500000037252903
+          0.009999999776482582,
+          0.0074509805999696255,
+          0.0035294117406010628
         ],
         "rgbMax": [
           1.0182116031646729,
@@ -6795,16 +6801,16 @@
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 24384,
+        "sampleCount": 24420,
         "rgbChannelsAboveOne": 12
       }
     },
     "staticModels": {
       "path": "assets/levels/intro/intro.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "c2656b89a45bd8b0",
-      "modelCount": 66,
-      "objectCount": 275,
+      "sourceHash": "580206a1e9294f31",
+      "modelCount": 78,
+      "objectCount": 295,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -17524,8 +17530,8 @@
               1.0
             ],
             "offset": [
-              0.0,
-              0.0
+              0.625,
+              -1.1875
             ]
           },
           "materialId": "brick_repair_512",
@@ -20301,6 +20307,53 @@
           13.5,
           1.5,
           2.0
+        ]
+      },
+      {
+        "id": 8,
+        "x": 5760,
+        "z": 704,
+        "influenceOffsetWorld": [
+          -0.125,
+          0.0,
+          0.0
+        ],
+        "halfExtentsWorld": [
+          2.875,
+          1.5,
+          3.5
+        ]
+      },
+      {
+        "id": 9,
+        "x": 9152,
+        "z": -1792,
+        "yWorld": 2.25,
+        "influenceOffsetWorld": [
+          0.0,
+          0.0,
+          -27.0
+        ],
+        "halfExtentsWorld": [
+          1.5,
+          2.375,
+          62.0
+        ]
+      },
+      {
+        "id": 10,
+        "x": 10112,
+        "z": -1968,
+        "yWorld": 3.75,
+        "influenceOffsetWorld": [
+          0.0,
+          0.0,
+          1.375
+        ],
+        "halfExtentsWorld": [
+          5.0,
+          2.625,
+          15.0
         ]
       }
     ],

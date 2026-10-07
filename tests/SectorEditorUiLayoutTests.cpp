@@ -1,4 +1,5 @@
 #include "game/GameSettingsLayout.h"
+#include "sector_editor/inspector/SectorEditorLightSwayLayout.h"
 #include "sector_editor/materials/SectorEditorMaterialFormLayout.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/inspector/SectorEditorParticleEmitterInspector.h"
@@ -1307,6 +1308,17 @@ void TestBaseboardLayout()
 
 int main()
 {
+    for (float height : {24.0f,36.0f,48.0f}) {
+        const float gap = 8;
+        float bottom = height + gap;
+        for (const char* label : game::DynamicLightSwayLabels) {
+            Check(label[0] != 0,"sway numeric rows have labels");
+            bottom += height*1.5f + gap + height + gap;
+        }
+        Check(std::fabs(bottom-game::DynamicLightSwayInspectorContentHeight(height,gap)) < 0.001f,
+                "sway content extent includes stacked labels, fields, and gaps at every scale");
+    }
+
     TestGameSettingsLayout();
     TestPreviewObjectAdjustmentLayout();
     TestMaterialBrowserFilterLayout();

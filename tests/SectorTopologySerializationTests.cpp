@@ -850,6 +850,7 @@ void TestDynamicPointLightRoundTrip()
             2.5f,
             0.65f
     });
+    original.dynamicPointLights.back().positionSway = {true,0.08f,0.02f,1.7f};
     original.dynamicPointLights.back().castsShadow = true;
     original.dynamicPointLights.back().shadowPriority = 7;
     original.dynamicPointLights.back().shadowBias = 0.003f;
@@ -920,6 +921,19 @@ void TestDynamicPointLightRoundTrip()
           "round-tripped dynamic point light preserves flicker and shadow settings");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "topology with dynamic point lights validates");
+    Check(flickerLight && flickerLight->positionSway == game::SectorLightPositionSway{true,0.08f,0.02f,1.7f},
+            "position sway settings round trip in world units");
+    Check(light && !light->positionSway.enabled && !saved["dynamicPointLights"][1].contains("positionSway"),
+            "old/default point lights omit sway and remain stationary");
+    auto badSway = saved;
+    badSway["dynamicPointLights"][0]["positionSway"]["speed"] = "fast";
+    SectorTopologyMap invalidSway;
+    Check(!LoadText(badSway.dump(),invalidSway,error),"invalid sway settings reject the level load");
+    badSway = saved;
+    badSway["dynamicPointLights"][0]["positionSway"]["horizontalRadiusWorld"] = 50;
+    Check(LoadText(badSway.dump(),invalidSway,error)
+            && game::FindSectorTopologyDynamicLight(invalidSway,5)->positionSway.horizontalRadiusWorld == 1,
+            "sway ranges use the existing clamped light-setting load policy");
 
     Json withoutLights = saved;
     withoutLights.erase("dynamicPointLights");

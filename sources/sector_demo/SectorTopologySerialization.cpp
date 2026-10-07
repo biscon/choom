@@ -3338,6 +3338,15 @@ Json WriteDynamicPointLight(const SectorTopologyDynamicPointLight& light, const 
             {"color", WriteColor(light.color)}};
     if (!light.enabled) lightJson["enabled"] = false;
     WriteDynamicLightFlickerFields(lightJson, light, context);
+    const auto& sway = light.positionSway;
+    RequireFinite(sway.horizontalRadiusWorld, context + ".positionSway.horizontalRadiusWorld");
+    RequireFinite(sway.verticalAmountWorld, context + ".positionSway.verticalAmountWorld");
+    RequireFinite(sway.speed, context + ".positionSway.speed");
+    if (sway != SectorLightPositionSway{}) lightJson["positionSway"] = {
+            {"enabled", sway.enabled},
+            {"horizontalRadiusWorld", std::clamp(sway.horizontalRadiusWorld,0.0f,1.0f)},
+            {"verticalAmountWorld", std::clamp(sway.verticalAmountWorld,0.0f,1.0f)},
+            {"speed", std::clamp(sway.speed,0.05f,5.0f)}};
     if (light.castsShadow) lightJson["castsShadow"] = true;
     if (shadowPriority != DynamicSpotLightDefaultShadowPriority) {
         lightJson["shadowPriority"] = shadowPriority;
@@ -4326,6 +4335,15 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
             light.enabled = ReadOptionalBool(value, "enabled", context, true);
+            if (const auto it = value.find("positionSway"); it != value.end()) {
+                if (!it->is_object()) Fail(context + ".positionSway must be an object");
+                auto& sway = light.positionSway;
+                const auto swayContext = context + ".positionSway";
+                sway.enabled = ReadOptionalBool(*it,"enabled",swayContext,false);
+                sway.horizontalRadiusWorld = ReadOptionalClampedFloat(*it,"horizontalRadiusWorld",swayContext,0.05f,0.0f,1.0f);
+                sway.verticalAmountWorld = ReadOptionalClampedFloat(*it,"verticalAmountWorld",swayContext,0.03f,0.0f,1.0f);
+                sway.speed = ReadOptionalClampedFloat(*it,"speed",swayContext,1.0f,0.05f,5.0f);
+            }
             light.flicker = ReadOptionalBool(value, "flicker", context, false);
             light.flickerSpeed = ReadOptionalClampedFloat(
                     value,

@@ -11,6 +11,37 @@ Static baked spotlights are authored and baked separately from runtime dynamic
 lights. Dynamic spotlights can optionally use runtime shadow maps; dynamic-sector
 lighting is future work.
 
+## Point-light position sway
+
+Dynamic point lights now have independent **Position sway** controls in the
+inspector. The defaults are disabled, a horizontal radius of 0.05 meters,
+vertical displacement of ±0.03 meters, and speed 1.0. Distances accept 0–1 meters;
+speed accepts 0.05–5. These distances are world units, unlike the authored base
+position. Sway works independently of brightness flicker and Cast Shadows.
+
+The optional `positionSway` JSON object stores `enabled`,
+`horizontalRadiusWorld`, `verticalAmountWorld`, and `speed`. Missing fields use
+the defaults. The base position stays fixed for editing and saving. The intro
+barrel's `light_point_7` enables the default sway without changing its existing
+lighting or particle settings.
+
+The runtime blends two deterministic smooth-noise frequencies, seeded by light
+ID. Shadowed lights request a new position every frame. Each point shadow uses
+six atlas tiles; they update as a group under the existing light-update budget.
+When a sway update is deferred, direct lighting and shadow sampling retain the
+previous matching position and shadow matrices. Moving the light cannot reuse
+stationary shadow depths indefinitely, so expect additional shadow GPU work.
+Existing reserved-light priorities still apply: an exhausted budget can hold a
+fire light stationary until an update becomes available.
+
+Halo centers and dust emitter volumes follow the published position. Reflection
+probes capture the stationary base light. Sway is excluded from baked-lightmap
+hashes and does not mutate topology or player collision/physics. Inspector edits
+use the existing document/cache invalidation service; runtime motion does not.
+
+The historical first-pass notes below describe the original implementation,
+including older light and shadow limits.
+
 ## Implemented First Pass Notes
 
 - Authored dynamic point lights are map-level runtime shader lights, separate

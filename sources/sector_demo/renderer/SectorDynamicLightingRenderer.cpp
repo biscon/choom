@@ -23,21 +23,6 @@ namespace game {
 
 namespace {
 
-bool ShadowMatrixMatches(
-        const SectorPreviewDynamicSpotLightShadowMatrix& left,
-        const SectorPreviewDynamicSpotLightShadowMatrix& right)
-{
-    return left.lightId == right.lightId
-            && left.shadowSlot == right.shadowSlot
-            && left.kind == right.kind
-            && left.cubeFace == right.cubeFace
-            && std::memcmp(&left.lightPosition,
-                    &right.lightPosition, sizeof(Vector3)) == 0
-            && left.lightRadius == right.lightRadius
-            && std::memcmp(&left.lightViewProjection,
-                    &right.lightViewProjection, sizeof(Matrix)) == 0;
-}
-
 bool DynamicPortalBlockerMatches(
         const RuntimePortalDynamicBlocker& left,
         const RuntimePortalDynamicBlocker& right)
@@ -697,7 +682,8 @@ void SectorDynamicLightingRenderer::UpdateSelection(
         const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
         engine::World* runtimeObjectWorld,
         const RuntimeSectorVisibilityGraph* visibilityGraph,
-        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers)
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers,
+        float runtimeSeconds)
 {
     BuildReceiverBounds(sectorReceiverBounds, runtimeObjectWorld);
     UpdateLightingReachability(
@@ -737,6 +723,13 @@ void SectorDynamicLightingRenderer::UpdateSelection(
             ShadowSlotBudget(),
             shadowCasters,
             shadowAtlasSlotOwners);
+    // Rank using stable source values; only the selected runtime copies move.
+    for (auto& light : selectedLights) {
+        light.basePosition = light.position;
+        if (!captureSelection && light.kind == SectorPreviewDynamicLightKind::Point)
+            light.position = Vector3Add(light.basePosition,
+                    EvaluateDynamicLightPositionSway(light.lightId,runtimeSeconds,light.positionSway));
+    }
     BuildSectorPreviewDynamicSpotLightShadowMatrices(
             selectedLights,
             shadowCasters,
@@ -850,61 +843,8 @@ void SectorDynamicLightingRenderer::UpdateSelectionStats(
 
 void SectorDynamicLightingRenderer::RefreshShadowTileRequirements()
 {
-    for (ShadowAtlasTileState& state : shadowAtlasTileStates) {
-        state.assigned = false;
-    }
-
-    for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : shadowMatrices) {
-        if (matrix.shadowSlot < 0
-                || static_cast<std::size_t>(matrix.shadowSlot)
-                        >= shadowAtlasTileStates.size()) {
-            continue;
-        }
-        ShadowAtlasTileState& state =
-                shadowAtlasTileStates[static_cast<std::size_t>(matrix.shadowSlot)];
-        const bool compatible = state.valid
-                && ShadowMatrixMatches(state.matrix, matrix);
-        state.assigned = true;
-        state.matrix = matrix;
-        if (!compatible) {
-            state.valid = false;
-            if (!state.dirty) {
-                state.dirtySerial = nextShadowDirtySerial++;
-            }
-            state.dirty = true;
-            if (state.dirtySerial == 0) {
-                state.dirtySerial = nextShadowDirtySerial++;
-            }
-        }
-    }
-
-    // Multi-face point and rect shadows form one cache entry and must always be
-    // rebuilt together. Give every face the oldest serial in its span.
-    for (const SectorPreviewDynamicSpotLightShadowCaster& caster : shadowCasters) {
-        if (caster.shadowSlot < 0 || caster.shadowSlotCount <= 0) continue;
-        uint64_t serial = 0;
-        bool dirty = false;
-        for (int offset = 0; offset < caster.shadowSlotCount; ++offset) {
-            const std::size_t slot = static_cast<std::size_t>(
-                    caster.shadowSlot + offset);
-            if (slot >= shadowAtlasTileStates.size()) continue;
-            const ShadowAtlasTileState& state = shadowAtlasTileStates[slot];
-            dirty = dirty || state.dirty;
-            if (state.dirtySerial != 0
-                    && (serial == 0 || state.dirtySerial < serial)) {
-                serial = state.dirtySerial;
-            }
-        }
-        if (!dirty) continue;
-        if (serial == 0) serial = nextShadowDirtySerial++;
-        for (int offset = 0; offset < caster.shadowSlotCount; ++offset) {
-            const std::size_t slot = static_cast<std::size_t>(
-                    caster.shadowSlot + offset);
-            if (slot >= shadowAtlasTileStates.size()) continue;
-            shadowAtlasTileStates[slot].dirty = true;
-            shadowAtlasTileStates[slot].dirtySerial = serial;
-        }
-    }
+    RefreshSectorDynamicShadowTiles(selectedLights,shadowMatrices,shadowCasters,
+            shadowAtlasTileStates,nextShadowDirtySerial);
 }
 
 SectorBillboardDynamicLightContext SectorDynamicLightingRenderer::BuildLightContext(
@@ -1103,6 +1043,10 @@ SectorPreviewDynamicSpotLightShadowUniforms SectorDynamicLightingRenderer::PackS
         }
         if (!valid) result.dynamicLightShadowSlots[lightIndex] = -1;
     }
+    // Deferred sway still samples the matrices used to render the retained tiles.
+    for (size_t slot = 0; slot < shadowAtlasTileStates.size(); ++slot)
+        if (shadowAtlasTileStates[slot].assigned && shadowAtlasTileStates[slot].valid)
+            result.shadowLightMatrices[slot] = shadowAtlasTileStates[slot].matrix.lightViewProjection;
     result.shadowAtlasTilesPerRow = DynamicShadowAtlasTilesPerRow;
     return result;
 }
@@ -1594,6 +1538,10 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
     for (std::size_t updateIndex = 0; updateIndex < updateCount; ++updateIndex) {
         const SectorPreviewDynamicSpotLightShadowCaster& updateCaster =
                 shadowCasters[pendingShadowLightUpdates[updateIndex].casterIndex];
+        // Never overwrite only part of a moving point light's retained cube.
+        if (selectedLights[updateCaster.dynamicLightIndex].positionSway.enabled
+                && maxShadowFacesPerFrame != std::numeric_limits<std::size_t>::max()
+                && shadowRenderStats.renderedTiles + updateCaster.shadowSlotCount > maxShadowFacesPerFrame) continue;
         bool lightCacheable = true;
         for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : shadowMatrices) {
             if (matrix.lightId != updateCaster.lightId
@@ -1950,6 +1898,8 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             rlEnableBackfaceCulling();
         }
         activeMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = activeDefaultTexture;
+        renderedTile.matrix = matrix;
+        renderedTile.light = light;
         renderedTile.valid = lightCacheable;
         renderedTile.dirty = !lightCacheable;
         if (lightCacheable) renderedTile.dirtySerial = 0;

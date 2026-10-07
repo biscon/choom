@@ -83,7 +83,8 @@ bool AtmosphereSourceChanged(
         const SectorTopologyDynamicPointLight& before,
         const SectorTopologyDynamicPointLight& after)
 {
-    return before.enabled != after.enabled
+    return before.positionSway != after.positionSway
+            || before.enabled != after.enabled
             || before.flicker != after.flicker
             || before.flickerSpeed != after.flickerSpeed
             || before.flickerAmount != after.flickerAmount
@@ -384,6 +385,7 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError,
     height += 2.0f * (rowH + gap); // Delete and convert.
     height += rowH + gap; // Enabled.
     height += 3.0f * (rowH + gap); // Flicker controls.
+    height += DynamicLightSwayInspectorContentHeight(rowH,gap);
     height += 5.0f * (rowH + gap); // Shadow controls.
     height += 5.0f * (rowH + gap); // Position/intensity/radius.
     height += 3.0f * (rowH + gap); // RGB.
@@ -1042,11 +1044,30 @@ bool DrawSelectedDynamicLightInspector(
             3,
             DynamicLightFloatField::FlickerAmount);
 
+    auto sway = light.positionSway;
+    if (engine::Checkbox(ui,config,input,assets,"dynamic_light_position_sway",
+                {0,y,contentW,rowH},font,"Position sway",sway.enabled))
+        lightEditing.SetDynamicLightPositionSway(light,sway);
+    y += rowH + gap;
+    float* swayValues[]{&sway.horizontalRadiusWorld,&sway.verticalAmountWorld,&sway.speed};
+    engine::UIFloatInputState* swayInputs[]{&uiState.lightSwayHorizontalInput,
+            &uiState.lightSwayVerticalInput,&uiState.lightSwaySpeedInput};
+    const char* swayIds[]{"light_sway_horizontal","light_sway_vertical","light_sway_speed"};
+    for (int i = 0; i < DynamicLightSwayFieldCount; ++i) {
+        engine::Text(ui,config,assets,{0,y,contentW,rowH*1.5f},font,DynamicLightSwayLabels[i],
+                engine::UITextJustify::Left,config.textColor,true);
+        y += rowH*1.5f + gap;
+        const auto result = engine::FloatInput(ui,config,input,assets,swayIds[i],
+                {0,y,contentW,rowH},font,*swayValues[i],*swayInputs[i],i == 2 ? 0.05f : 0.0f,i == 2 ? 5.0f : 1.0f,3);
+        if (result.changed) lightEditing.SetDynamicLightPositionSway(light,sway);
+        y += rowH + gap;
+    }
+
     bool castsShadow = light.castsShadow;
     if (engine::Checkbox(ui, config, input, assets,
                 "sector_editor_dynamic_light_casts_shadow",
                 Rectangle{0.0f, y, contentW, rowH}, font,
-                "Cast Shadows (2 atlas slots)", castsShadow)
+                "Cast Shadows (6 atlas slots)", castsShadow)
             && castsShadow != light.castsShadow) {
         lightEditing.SetDynamicLightCastsShadow(light, castsShadow);
     }

@@ -2096,6 +2096,7 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
                 runtimeObjectWorld);
         dynamicLightState.RenderShadowMaps(context);
     }
+    dynamicLightState.PublishShadowPositions();
 }
 
 bool SectorMeshRenderer::EnsureHdrSceneScratch(
@@ -2892,7 +2893,7 @@ void SectorMeshRenderer::UpdateVisibilityDebug(
             meshes.sectorReceiverBounds,
             runtimeObjectWorld,
             visibilityGraphValid ? &visibilityGraph : nullptr,
-            dynamicPortalBlockers);
+            dynamicPortalBlockers, runtimeSeconds);
     renderDebugText = "draw records: "
             + std::to_string(visibleDrawRecordCount)
             + " / "

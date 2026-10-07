@@ -33,6 +33,8 @@ still visible in direct lighting and atmosphere, but its time-varying modulation
 and flicker settings do not dirty probes or modulate captured lighting. Scripted
 dimming, switching off/on, and other real light edits still refresh captures.
 Camera-selection fades are also excluded from reflection snapshots.
+Point-light position sway is likewise excluded: captures use the authored base
+position, and sway settings or motion do not repeatedly dirty reflection probes.
 
 During normal rendering only probes requested by main-view receivers may run.
 Sector surfaces, models, doors/covers, windows, liquids and viewmodels collect

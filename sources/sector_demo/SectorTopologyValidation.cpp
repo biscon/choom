@@ -793,6 +793,13 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
             AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
                      "flicker speed must be finite");
         }
+        const auto& sway = light.positionSway;
+        if (!std::isfinite(sway.horizontalRadiusWorld) || sway.horizontalRadiusWorld < 0 || sway.horizontalRadiusWorld > 1
+                || !std::isfinite(sway.verticalAmountWorld) || sway.verticalAmountWorld < 0 || sway.verticalAmountWorld > 1
+                || !std::isfinite(sway.speed) || sway.speed < 0.05f || sway.speed > 5) {
+            AddIssue(&issues,SectorTopologyObjectKind::DynamicLight,light.id,
+                    "position sway distances must be 0-1 meters and speed 0.05-5");
+        }
         if (!std::isfinite(light.flickerAmount)) {
             AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
                      "flicker amount must be finite");

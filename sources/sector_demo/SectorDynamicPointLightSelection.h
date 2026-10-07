@@ -100,6 +100,9 @@ struct SectorPreviewDynamicPointLightUniform {
     // shadow casters while their respective budgets are non-zero.
     bool reserveSelection = false;
     bool reserveShadow = false;
+    SectorLightPositionSway positionSway;
+    Vector3 basePosition{}; // Stable source position, before procedural sway.
+
 };
 
 struct SectorPreviewDynamicPointLightSource {
@@ -209,6 +212,8 @@ bool MakeSectorPreviewDynamicSpotLightUniform(
 bool MakeSectorPreviewDynamicRectLightUniform(
         const SectorTopologyDynamicRectLight& light,
         SectorPreviewDynamicPointLightUniform& outLight);
+
+Vector3 EvaluateDynamicLightPositionSway(int lightId, double seconds, const SectorLightPositionSway& sway);
 
 float EvaluateDynamicLightFlickerMultiplier(
         int lightId,

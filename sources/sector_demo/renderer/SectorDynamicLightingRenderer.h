@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/SectorDynamicShadowCache.h"
 
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshTypes.h"
@@ -189,7 +190,8 @@ public:
             const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
             engine::World* runtimeObjectWorld,
             const RuntimeSectorVisibilityGraph* visibilityGraph = nullptr,
-            const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers = nullptr);
+            const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers = nullptr,
+            float runtimeSeconds = 0.0f);
     void BuildSectorLightContexts(
             const std::vector<SectorReceiverBounds>& sectorBounds,
             bool dynamicLightingEnabled,
@@ -272,6 +274,7 @@ public:
     bool HasShadowMaterial() const { return shadowMaterialLoaded; }
     bool IsShadowRenderReady() const;
     void BeginShadowFrame(bool enabled);
+    void PublishShadowPositions() { PublishSectorSwayShadowPositions(selectedLights, shadowCasters, shadowAtlasTileStates); }
     const SectorDynamicShadowRenderStats& ShadowRenderStats() const {
         return shadowRenderStats;
     }
@@ -284,13 +287,7 @@ public:
 
 private:
     std::size_t maxShadowFacesPerFrame = std::numeric_limits<std::size_t>::max();
-    struct ShadowAtlasTileState {
-        SectorPreviewDynamicSpotLightShadowMatrix matrix{};
-        bool assigned = false;
-        bool valid = false;
-        bool dirty = true;
-        uint64_t dirtySerial = 0;
-    };
+    using ShadowAtlasTileState = SectorDynamicShadowTileState;
 
     void ReserveSelectionBuffers();
     void UpdateLightingReachability(

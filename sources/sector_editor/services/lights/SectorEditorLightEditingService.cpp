@@ -173,6 +173,9 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     uiState.lightStartFeatherInput = engine::UIFloatInputState{};
     uiState.lightFlickerSpeedInput = engine::UIFloatInputState{};
     uiState.lightFlickerAmountInput = engine::UIFloatInputState{};
+    uiState.lightSwayHorizontalInput = engine::UIFloatInputState{};
+    uiState.lightSwayVerticalInput = engine::UIFloatInputState{};
+    uiState.lightSwaySpeedInput = engine::UIFloatInputState{};
     uiState.lightShadowPriorityInput = engine::UIIntInputState{};
     uiState.lightShadowBiasInput = engine::UIFloatInputState{};
     uiState.lightShadowStrengthInput = engine::UIFloatInputState{};
@@ -1940,6 +1943,20 @@ bool SectorEditorLightEditingService::SetDynamicLightInstanceId(
 {
     if (!SetDynamicLightInstanceIdValue(context_.map, light, value, error)) return false;
     MarkEdited(TextFormat("Updated dynamic rect %d instance ID", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicLightPositionSway(
+        SectorTopologyDynamicPointLight& light, SectorLightPositionSway sway)
+{
+    if (!std::isfinite(sway.horizontalRadiusWorld) || !std::isfinite(sway.verticalAmountWorld)
+            || !std::isfinite(sway.speed)) return false;
+    sway.horizontalRadiusWorld = std::clamp(sway.horizontalRadiusWorld,0.0f,1.0f);
+    sway.verticalAmountWorld = std::clamp(sway.verticalAmountWorld,0.0f,1.0f);
+    sway.speed = std::clamp(sway.speed,0.05f,5.0f);
+    if (light.positionSway == sway) return false;
+    light.positionSway = sway;
+    MarkEdited(TextFormat("Updated dynamic light %d position sway",light.id));
     return true;
 }
 

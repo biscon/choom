@@ -2,6 +2,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorDynamicPointLightSelection.h"
+#include "sector_demo/SectorDynamicShadowCache.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorRectLight.h"
@@ -2103,6 +2104,99 @@ void TestCompactDynamicSpotShadowProjection()
           "compact spotlight basis and depth projection match the reference matrix");
 }
 
+void TestPositionSwayAndShadowPublication()
+{
+    game::SectorLightPositionSway sway;
+    Check(Vector3LengthSqr(game::EvaluateDynamicLightPositionSway(7,1.2,sway)) == 0,
+            "sway is opt-in");
+    sway.enabled = true;
+    const auto sample = game::EvaluateDynamicLightPositionSway(7,1.2,sway);
+    Check(Vector3Distance(sample,game::EvaluateDynamicLightPositionSway(7,1.2,sway)) == 0,
+            "sway is deterministic and independent of update frequency");
+    Check(Vector3Distance(sample,game::EvaluateDynamicLightPositionSway(8,1.2,sway)) > 0.0001f,
+            "different light IDs have independent motion");
+    auto twice = sway; twice.speed = 2;
+    Check(Vector3Distance(game::EvaluateDynamicLightPositionSway(7,0.6,twice),sample) < 0.00001f,
+            "speed scales the motion clock");
+    auto previous = game::EvaluateDynamicLightPositionSway(7,0,sway);
+    for (int step = 1; step <= 12000; ++step) {
+        const auto p = game::EvaluateDynamicLightPositionSway(7,step/1000.0,sway);
+        Check(std::hypot(p.x,p.z) <= sway.horizontalRadiusWorld + 0.000001f
+                && std::fabs(p.y) <= sway.verticalAmountWorld + 0.000001f,
+                "sway stays inside horizontal and vertical bounds");
+        Check(Vector3Distance(p,previous) < 0.002f,"sway remains continuous across noise segment boundaries");
+        previous = p;
+    }
+    Check(Vector3LengthSqr(game::EvaluateDynamicLightPositionSway(7,NAN,sway)) == 0,
+            "nonfinite sway time safely produces no displacement");
+    auto zero = sway; zero.horizontalRadiusWorld = zero.verticalAmountWorld = 0;
+    Check(Vector3LengthSqr(game::EvaluateDynamicLightPositionSway(7,1.2,zero)) == 0,"zero amplitudes are stationary");
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> lights(3);
+    std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> casters(3);
+    for (int i = 0; i < 3; ++i) {
+        auto& light = lights[i]; light.lightId = i+1; light.castsShadow = true;
+        light.position = light.basePosition = {static_cast<float>(i*10),1,0};
+        light.radius = 10; light.intensity = 1; light.positionSway = sway;
+        auto& caster = casters[i]; caster.lightId = light.lightId; caster.dynamicLightIndex = i;
+        caster.shadowSlot = i*6; caster.shadowSlotCount = 6;
+    }
+    std::vector<game::SectorPreviewDynamicSpotLightShadowMatrix> matrices;
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(lights,casters,matrices);
+    std::array<game::SectorDynamicShadowTileState,game::MaxDynamicSpotLightShadowCasters> tiles{};
+    uint64_t serial = 1;
+    game::RefreshSectorDynamicShadowTiles(lights,matrices,casters,tiles,serial);
+    Check(!game::SectorShadowSpanValid(casters[0],tiles),"cold shadow is not published");
+    const auto render = [&](int lightIndex) {
+        for (const auto& m : matrices) if (m.dynamicLightIndex == lightIndex) {
+            auto& tile = tiles[m.shadowSlot]; tile.matrix = m; tile.light = lights[lightIndex];
+            tile.valid = true; tile.dirty = false; tile.dirtySerial = 0;
+        }
+    };
+    for (int i = 0; i < 3; ++i) render(i);
+    game::RefreshSectorDynamicShadowTiles(lights,matrices,casters,tiles,serial);
+    Check(!tiles[0].dirty,"unchanged light pose reuses its cached shadow");
+    for (auto& light : lights) light.position = Vector3Add(light.basePosition,
+            game::EvaluateDynamicLightPositionSway(light.lightId,0.8,sway));
+    const auto requested = lights;
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(lights,casters,matrices);
+    game::RefreshSectorDynamicShadowTiles(lights,matrices,casters,tiles,serial);
+    std::vector<game::SectorDynamicShadowUpdateRequest> updates;
+    for (int i = 0; i < 3; ++i) {
+        Check(game::SectorShadowSpanValid(casters[i],tiles),"sway retains all six old shadow faces while queued");
+        const auto& tile = tiles[i*6];
+        updates.push_back({static_cast<size_t>(i),!tile.valid,i == 2,tile.dirtySerial,6});
+    }
+    game::SortSectorDynamicShadowUpdateRequests(updates);
+    Check(updates.front().casterIndex == 2,"reserved light priority is preserved");
+    const auto count = game::SectorDynamicShadowUpdateCount(updates.size(),1);
+    Check(count == 1,"sway respects the existing light update budget");
+    render(static_cast<int>(updates[0].casterIndex));
+    game::PublishSectorSwayShadowPositions(lights,casters,tiles);
+    Check(Vector3Distance(lights[0].position,lights[0].basePosition) == 0
+            && Vector3Distance(lights[1].position,lights[1].basePosition) == 0,
+            "deferred lights retain the position matching their shadow contents");
+    Check(Vector3Distance(lights[2].position,requested[2].position) == 0,
+            "completed six-face update publishes the requested light position");
+    lights = requested;
+    const auto queueAge = tiles[0].dirtySerial;
+    lights[0].position.x += 0.01f;
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(lights,casters,matrices);
+    game::RefreshSectorDynamicShadowTiles(lights,matrices,casters,tiles,serial);
+    Check(tiles[0].dirtySerial == queueAge,"continuing sway does not reset queue age");
+    lights[0].basePosition.x += 1;
+    game::RefreshSectorDynamicShadowTiles(lights,matrices,casters,tiles,serial);
+    Check(!game::SectorShadowSpanValid(casters[0],tiles),"authored movement invalidates retained sway shadows");
+    lights[1].radius += 1;
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(lights,casters,matrices);
+    game::RefreshSectorDynamicShadowTiles(lights,matrices,casters,tiles,serial);
+    Check(!game::SectorShadowSpanValid(casters[1],tiles),"radius edits invalidate retained sway shadows");
+    tiles[12].valid = false;
+    game::RefreshSectorDynamicShadowTiles(lights,matrices,casters,tiles,serial);
+    for (int slot = 12; slot < 18; ++slot)
+        Check(!tiles[slot].valid,"partial sway shadow groups are never published");
+}
+
 void TestDynamicShadowUpdateScheduling()
 {
     std::vector<game::SectorDynamicShadowUpdateRequest> pending;
@@ -3129,6 +3223,7 @@ int main()
     TestDynamicSpotLightShadowCasterSelection();
     TestDynamicSpotLightShadowMatrices();
     TestCompactDynamicSpotShadowProjection();
+    TestPositionSwayAndShadowPublication();
     TestDynamicShadowUpdateScheduling();
     TestReservedRuntimeLightSelection();
     TestPersistentDynamicShadowSlotOwnership();

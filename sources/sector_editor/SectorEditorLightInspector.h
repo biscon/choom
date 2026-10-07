@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_editor/inspector/SectorEditorLightSwayLayout.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
