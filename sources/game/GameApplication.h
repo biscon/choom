@@ -59,6 +59,15 @@ public:
     bool IsGlobalPreparationFinished() const;
     void UpdateDebugConsole(engine::EngineContext& context, float dt);
     void ProcessDeferredDebugActions(engine::EngineContext& context);
+    void RememberCursorPosition(const engine::Input& input);
+    void UpdateCursorVisibility(
+            engine::Input& input, Vector2 logicalSize,
+            Rectangle presentationViewport, Vector2 windowSize);
+    void RenderCursor(
+            engine::AssetManager& assets,
+            const engine::Input& input,
+            Vector2 logicalSize,
+            Rectangle presentationViewport) const;
     void RenderDebugConsole(
             engine::AssetManager& assets,
             int logicalWidth,
@@ -130,8 +139,11 @@ private:
     SectorUnderwaterRenderContext ActiveUnderwaterRenderContext() const;
     bool DebugConsoleAvailable() const;
     void ApplyPerspectiveFov();
+    GameCursorMode CursorMode() const;
 
     ApplicationFlowState flow;
+    GameCursorAssets cursorAssets;
+    GameCursorPositionState cursorPosition;
     FpsApplicationSettings applicationSettings;
     SectorMaterialRegistry materialRegistry;
     ItemRegistry itemRegistry;

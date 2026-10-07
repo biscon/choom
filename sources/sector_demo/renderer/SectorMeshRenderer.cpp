@@ -1407,7 +1407,8 @@ void SectorMeshRenderer::DrawScene(
     std::sort(visibleSectorDraws.begin(), visibleSectorDraws.end(), SectorOpaqueDrawLess);
     if (runtimeObjectWorld) {
         const auto& objectVisibility = capture ? capture->connectedVisibility : visibilityResult;
-        staticModelRenderer.PrepareVisibleDraws(assets, *runtimeObjectWorld, camera, viewAspect, objectVisibility);
+        staticModelRenderer.PrepareVisibleDraws(assets, *runtimeObjectWorld, camera, viewAspect,
+                objectVisibility, visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
         doorRenderer.PrepareVisibleDraws(assets, *runtimeObjectWorld, camera, viewAspect, objectVisibility);
     }
     SectorPbrContributionSettings pbrContributionSettings = this->pbrContributionSettings;
@@ -2619,8 +2620,7 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                 map,
                 camera,
                 runtimeSeconds,
-                objectLightProbes,
-                visibilityResult);
+                objectLightProbes);
     }
     EndAtmosphereGpuPass(2);
 

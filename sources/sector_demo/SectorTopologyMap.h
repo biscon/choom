@@ -147,6 +147,16 @@ struct SectorCompiledLevelMarker {
     float yawRadians = 0.0f;
 };
 
+struct SectorCompiledCamera {
+    int sourceAuthoringCameraId = -1;
+    std::string id;
+    Vector3 position = {};
+    float yawRadians = 0.0f;
+    float pitchRadians = 0.0f;
+    float rollRadians = 0.0f;
+    float verticalFovDegrees = 75.0f;
+};
+
 enum class SectorPatrolMode {
     Once,
     Loop,
@@ -469,6 +479,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyDynamicRectLight> dynamicRectLights;
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     std::vector<SectorCompiledLevelMarker> levelMarkers;
+    std::vector<SectorCompiledCamera> cameras;
     std::vector<SectorCompiledPatrol> patrols;
     std::vector<SectorCompiledPath> paths;
     std::vector<SectorCompiledSoundEmitter> soundEmitters;
@@ -602,9 +613,15 @@ bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 const SectorCompiledLevelMarker* FindSectorCompiledLevelMarker(
         const SectorTopologyMap& map,
         const std::string& id);
+const SectorCompiledCamera* FindSectorCompiledCamera(
+        const SectorTopologyMap& map,
+        const std::string& id);
 const SectorCompiledLevelMarker* FindSectorCompiledLevelMarkerByAuthoringId(
         const SectorTopologyMap& map,
         int sourceAuthoringMarkerId);
+const SectorCompiledCamera* FindSectorCompiledCameraByAuthoringId(
+        const SectorTopologyMap& map,
+        int sourceAuthoringCameraId);
 const SectorCompiledPatrol* FindSectorCompiledPatrol(
         const SectorTopologyMap& map,
         int sourceAuthoringPatrolId);

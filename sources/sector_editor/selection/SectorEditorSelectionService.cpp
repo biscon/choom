@@ -875,6 +875,22 @@ void SelectSectorEditorAuthoringLevelMarkerTarget(
     context.ui.inspectorScroll.offset = Vector2{};
 }
 
+void SelectSectorEditorAuthoringCameraTarget(
+        SectorEditorSelectionServiceContext& context,
+        int cameraId)
+{
+    if (FindSectorAuthoringCamera(context.authoringGraph, cameraId) == nullptr) {
+        ClearSectorEditorSelection(context);
+        return;
+    }
+    ClearSectorEditorSelection(context);
+    SelectSectorEditorAuthoringCamera(
+            context.authoringGraph,
+            context.selectionState,
+            cameraId);
+    context.ui.inspectorScroll.offset = Vector2{};
+}
+
 void SelectSectorEditorAuthoringStructuralPrimitiveTarget(
         SectorEditorSelectionServiceContext& context,
         int primitiveId)

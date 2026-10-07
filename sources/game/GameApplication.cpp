@@ -113,7 +113,53 @@ bool GameApplication::Init(
     ApplyPerspectiveFov();
     flow = ApplicationFlowState{};
     initialized = true;
+    LoadGameCursorAssets(context.assets, cursorAssets);
+    if (!IsCursorHidden()) HideCursor();
     return true;
+}
+
+GameCursorMode GameApplication::CursorMode() const
+{
+    return ResolveGameCursorMode(
+            flow, gameSession.IsLoadOverlayVisible(), gameSession.CursorUiState());
+}
+
+void GameApplication::RememberCursorPosition(const engine::Input& input)
+{
+    RememberGameCursorPosition(cursorPosition, CursorMode(), input.MousePosition(),
+            input.WindowFocused(), input.CursorOnScreen());
+}
+
+void GameApplication::UpdateCursorVisibility(
+        engine::Input& input, Vector2 logicalSize,
+        Rectangle presentationViewport, Vector2 windowSize)
+{
+    const GameCursorMode mode = CursorMode();
+    const bool nativeVisible = !IsCursorHidden();
+    // HideCursor changes GLFW's capture mode. Never call it on an already
+    // hidden/captured mouse: gameplay mouse-look owns that capture state.
+    if (mode != GameCursorMode::Native && nativeVisible) HideCursor();
+    if (RequestGameCursorPositionRestore(
+                cursorPosition, mode, nativeVisible, input.WindowFocused())) {
+        Vector2 windowPosition{};
+        if (BuildGameCursorRestorePosition(cursorPosition.logicalPosition,
+                    logicalSize, presentationViewport, windowSize, windowPosition)) {
+            input.SetMousePosition(static_cast<int>(windowPosition.x), static_cast<int>(windowPosition.y));
+            cursorPosition.logicalPosition = input.MousePosition();
+            cursorPosition.restorePending = false;
+        }
+    }
+}
+
+void GameApplication::RenderCursor(
+        engine::AssetManager& assets,
+        const engine::Input& input,
+        Vector2 logicalSize,
+        Rectangle presentationViewport) const
+{
+    if (CursorMode() != GameCursorMode::Arrow
+            || !input.WindowFocused() || !input.CursorOnScreen()) return;
+    DrawGameCursor(assets, cursorAssets, input.MousePosition(), logicalSize, presentationViewport);
 }
 
 void GameApplication::UpdateMainThreadPreparation(
@@ -177,6 +223,9 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     graphicsSettingsOpen = false;
     editorAttachedToGame = false;
     itemIconDiagnosticReported = false;
+    cursorAssets = {};
+    cursorPosition = {};
+    if (initialized) EnableCursor();
     initialized = false;
 }
 
@@ -716,7 +765,7 @@ GameApplication::ActiveUnderwaterRenderContext() const
     const SectorLiquidMovementState* state = nullptr;
     if (BackgroundScreen() == ApplicationScreen::Game
             && gameSession.IsRunning()) {
-        state = &gameSession.LiquidMovementState();
+        state = &gameSession.ViewLiquidMovementState();
     } else if (BackgroundScreen() == ApplicationScreen::Editor
             && editor.IsPreview3DActive()) {
         state = &editor.PreviewLiquidMovementState();
@@ -752,15 +801,15 @@ GameApplication::ScenePresentationEffects() const
             && gameSession.IsRunning()
             && !IsSectorBloomDiagnosticView(
                     gameScene.Renderer().BloomDebugView())) {
-        liquidState = &gameSession.LiquidMovementState();
+        liquidState = &gameSession.ViewLiquidMovementState();
         const PlayerLowHealthVisualApplicationSettings& settings =
                 applicationSettings.playerHealth.lowHealthVisual;
-        const float strength = PlayerLowHealthVisualStrength(
+        const float strength = gameSession.HasActiveLevelCamera() ? 0.0f : PlayerLowHealthVisualStrength(
                 gameSession.PlayerHealth(), settings);
         const Vector4 vignetteColor = engine::SrgbColorBytesToLinearSceneRgba(
                 settings.vignetteColor);
         result.desaturation = settings.maximumDesaturation * strength;
-        result.vignetteOpacity = PlayerLowHealthVignetteOpacity(
+        result.vignetteOpacity = gameSession.HasActiveLevelCamera() ? 0.0f : PlayerLowHealthVignetteOpacity(
                 gameSession.PlayerHealth(), settings);
         result.vignetteColorLinear = {
                 vignetteColor.x,
@@ -799,7 +848,7 @@ float GameApplication::UnderwaterAudioMuffling() const
     const SectorLiquidMovementState* liquidState = nullptr;
     if (BackgroundScreen() == ApplicationScreen::Game
             && gameSession.IsRunning()) {
-        liquidState = &gameSession.LiquidMovementState();
+        liquidState = &gameSession.ViewLiquidMovementState();
     } else if (BackgroundScreen() == ApplicationScreen::Editor
             && editor.IsPreview3DActive()) {
         liquidState = &editor.PreviewLiquidMovementState();
@@ -1301,6 +1350,9 @@ void GameApplication::EndGameToMainMenu(engine::EngineContext& context)
 
 void GameApplication::OpenEditor(engine::EngineContext& context)
 {
+    // Hand native visibility back before the editor applies its own capture
+    // rules. A failed transition is hidden again by UpdateCursorVisibility.
+    if (CursorMode() != GameCursorMode::Native) ShowCursor();
     if (gameSession.IsRunning()) {
         gameSession.SuspendForEditor(context);
         context.audio.StopAll(context.assets);

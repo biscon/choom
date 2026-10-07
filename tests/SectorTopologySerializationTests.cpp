@@ -5395,6 +5395,44 @@ void TestLevelMarkerRoundTripAndEntryResolution()
           "duplicate Level Marker reference IDs are rejected");
 }
 
+void TestCameraAuthoringRoundTrip()
+{
+    auto document = MakeAuthoringDocumentFromMap(MakeSquare());
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(SaveAuthoringText(document), loaded, error)
+            && loaded.graph.cameras.empty(), "old documents load without cameras");
+    document.graph.cameras.push_back({1, "office_bed", 24, 40, 12.8f, 45, 20, -12, 60});
+    document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+    const Json saved = Json::parse(SaveAuthoringText(document));
+    Check(saved["authoringGraph"].contains("cameras") && !saved.contains("cameras"),
+            "cameras persist in authoring graph only");
+    Check(LoadAuthoringText(saved.dump(), loaded, error), "camera document loads");
+    Check(loaded.graph.cameras.size() == 1 && loaded.derivation.topology.cameras.size() == 1,
+            "camera authoring compiles after load");
+    const auto& camera = loaded.derivation.topology.cameras[0];
+    Check(camera.id == "office_bed" && Near(camera.position.x, 1.5f)
+            && Near(camera.position.y, 12.8f) && Near(camera.pitchRadians, 20 * DEG2RAD)
+            && Near(camera.rollRadians, -12 * DEG2RAD) && Near(camera.verticalFovDegrees, 60),
+            "camera position, aim, roll and FOV survive round trip");
+    Json invalid = saved;
+    invalid["authoringGraph"]["cameras"][0]["id"] = "player";
+    Check(!LoadAuthoringText(invalid.dump(), loaded, error), "player camera ID is reserved");
+    invalid = saved;
+    invalid["authoringGraph"]["cameras"].push_back(invalid["authoringGraph"]["cameras"][0]);
+    invalid["authoringGraph"]["cameras"][1]["editorId"] = 2;
+    Check(!LoadAuthoringText(invalid.dump(), loaded, error), "duplicate camera script IDs rejected");
+    invalid = saved;
+    invalid["authoringGraph"]["cameras"][0]["verticalFovDegrees"] = 180;
+    Check(!LoadAuthoringText(invalid.dump(), loaded, error), "invalid camera FOV rejected");
+    invalid = saved;
+    invalid["authoringGraph"]["cameras"][0].erase("pitchDegrees");
+    invalid["authoringGraph"]["cameras"][0].erase("rollDegrees");
+    invalid["authoringGraph"]["cameras"][0].erase("verticalFovDegrees");
+    Check(LoadAuthoringText(invalid.dump(), loaded, error)
+            && Near(loaded.graph.cameras[0].verticalFovDegrees, 75), "camera lens defaults load");
+}
+
 void TestTriggerRoundTripAndValidation()
 {
     const std::vector<game::SectorTriggerPoint> rectangle{
@@ -6121,6 +6159,7 @@ int main()
     TestGraphNativeMapLevelRoundTrip();
     TestGraphNativeLegacyImportPathStillWorks();
     TestLevelMarkerRoundTripAndEntryResolution();
+    TestCameraAuthoringRoundTrip();
     TestPatrolRoundTripDefaultsAndValidation();
     TestTriggerRoundTripAndValidation();
     TestFootstepSetRoundTripAndDefaults();

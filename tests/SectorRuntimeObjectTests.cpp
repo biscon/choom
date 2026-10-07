@@ -1213,6 +1213,53 @@ game::SectorTopologyMap MakeNavigationSquareMap()
     return map;
 }
 
+void TestStaticPropLightingUsesBounds()
+{
+    auto map = MakeNavigationSquareMap();
+    map.sectors.front().ambientColor = {90, 170, 230, 255};
+    map.sectors.front().ambientIntensity = 0.8f;
+    game::SectorCollisionWorld lookup;
+    Check(lookup.BuildFromTopology(map), "static prop lighting room builds");
+    engine::ModelAsset asset;
+    asset.hasLocalBounds = true;
+    asset.localBounds = {{.05f, .08f, -.04f}, {3.95f, 2.38f, .04f}};
+    game::SectorStaticModel model;
+    model.scale = 1.05f;
+    game::SectorObjectTransform transform{{.1f, 0, 2}};
+    game::RefreshSectorStaticModelLighting(model, transform, 10, &asset, &lookup, map);
+    const auto ambient = model.containingSectorAmbient;
+    const float exposure = model.environmentExposure;
+    transform.position.x = -.1f;
+    Check(lookup.FindSectorContainingPoint({transform.position.x, transform.position.z}) == 0,
+          "moved fence origin is outside room");
+    game::RefreshSectorStaticModelLighting(model, transform, -1, &asset, &lookup, map);
+    Check(model.lightingSectorId == 10 && Near(model.containingSectorAmbient, ambient)
+                  && Near(model.environmentExposure, exposure) && !model.lightingPending,
+          "fence retains room ambient and exposure after its origin leaves sector");
+    game::RefreshSectorStaticModelLighting(model, transform, -1, nullptr, &lookup, map);
+    Check(model.lightingPending && model.lightingSectorId <= 0
+                  && Near(model.containingSectorAmbient, Vector3{.15f, .15f, .15f}),
+          "pending model uses default ambient until bounds become available");
+    game::RefreshSectorStaticModelLighting(model, transform, -1, &asset, &lookup, map);
+    Check(!model.lightingPending && model.lightingSectorId == 10
+                  && Near(model.containingSectorAmbient, ambient),
+          "model readiness refresh resolves bounds lighting");
+    transform.position.x = -4;
+    model.scale = 1;
+    game::RefreshSectorStaticModelLighting(model, transform, -1, &asset, &lookup, map);
+    Check(model.lightingSectorId == 0, "unscaled fence outside room uses default lighting");
+    model.scale = 1.05f;
+    game::RefreshSectorStaticModelLighting(model, transform, -1, &asset, &lookup, map);
+    Check(model.lightingSectorId == 10, "scale refresh resolves new sector overlap");
+    transform.yawRadians = PI / 2;
+    game::RefreshSectorStaticModelLighting(model, transform, -1, &asset, &lookup, map);
+    Check(model.lightingSectorId == 0, "rotating bounds away removes lighting sector");
+    transform = {{.1f, 0, 2}};
+    game::RefreshSectorStaticModelLighting(model, transform, 10, &asset, &lookup, map);
+    Check(model.lightingSectorId == 10 && Near(model.containingSectorAmbient, ambient),
+          "restoring placement restores original room lighting");
+}
+
 void TestNpcUseRetainsOcclusion()
 {
     using namespace game;
@@ -7437,6 +7484,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     definition.id = "runtime_test_npc";
     definition.name = "Runtime Test";
     definition.voice = "female";
+    definition.speechColor = {255, 128, 191};
     definition.hostile = true;
     definition.canOpenDoors = false;
     definition.baseHealth = 160;
@@ -7480,6 +7528,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
           "NPC runtime reuses animated dynamic-model rendering components");
     const game::NpcRuntimeInstance& npc =
             world.Get<game::NpcRuntimeInstance>(entity);
+    Check(npc.displayName == definition.name && npc.speechColor == definition.speechColor,
+          "NPC spawn copies the display name and authored speech color");
     const game::NpcAnimationState& npcAnimation =
             world.Get<game::NpcAnimationState>(entity);
     const game::Health& health = world.Get<game::Health>(entity);
@@ -13769,6 +13819,7 @@ int main()
     TestSectorBillboardDirectionalClipSelection();
     TestSectorBillboardDirectionalClipSelectionWraparound();
     TestSectorRuntimeObjectCurrentSectorSystem();
+    TestStaticPropLightingUsesBounds();
     TestGameSaveRestoresFogVolumeState();
     TestGameSaveRestoresPropAndItemEnabledState();
     TestGameSaveRestoresNpcSectorAndLighting();

@@ -1,6 +1,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 
 #include "sector_demo/SectorTopologyUnits.h"
+#include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
@@ -9,6 +10,169 @@
 #include <utility>
 
 namespace game {
+
+std::array<Vector2, 8> BuildSectorEditorFogVolumeHandleMapPoints(
+        SectorTopologyCoordPoint center, Vector2 radiiWorld, float yawDegrees)
+{
+    std::array<Vector2, 8> points{};
+    const float cosine = std::cos(yawDegrees * DEG2RAD);
+    const float sine = std::sin(yawDegrees * DEG2RAD);
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const float x = FogVolumeResizeHandleSigns[i].x * radiiWorld.x;
+        const float z = FogVolumeResizeHandleSigns[i].y * radiiWorld.y;
+        points[i] = {
+                SectorCoordToVisibleAuthoring(center.x)
+                        + SectorWorldToAuthoringDistance(cosine * x + sine * z),
+                SectorCoordToVisibleAuthoring(center.y)
+                        + SectorWorldToAuthoringDistance(-sine * x + cosine * z)};
+    }
+    return points;
+}
+
+bool SectorEditorAuthoringFogVolumeEditingService::FitToSector(int fogVolumeId)
+{
+    const auto* volume = FindSectorAuthoringFogVolume(context_.authoringGraph, fogVolumeId);
+    int sectorId = -1;
+    if (volume == nullptr || volume->shape != SectorLocalFogShape::Box
+            || !CanResolvePoint({volume->x, volume->y}, &sectorId)) {
+        context_.statusText = "Fit Sector requires a box fog volume inside a current non-void sector";
+        return false;
+    }
+    const auto* sector = FindSectorTopologySector(context_.topologyMap, sectorId);
+    if (sector == nullptr) {
+        context_.statusText = "Fit Sector failed: derived sector is missing";
+        return false;
+    }
+    const auto indexes = BuildSectorTopologyIndexes(context_.topologyMap);
+    const auto sides = indexes.sideDefIndicesBySectorId.find(sectorId);
+    if (sides == indexes.sideDefIndicesBySectorId.end()) {
+        context_.statusText = "Fit Sector failed: derived sector boundaries are missing";
+        return false;
+    }
+    SectorCoord minX = std::numeric_limits<SectorCoord>::max();
+    SectorCoord minZ = minX;
+    SectorCoord maxX = std::numeric_limits<SectorCoord>::min();
+    SectorCoord maxZ = maxX;
+    for (const auto sideIndex : sides->second) {
+        const auto* line = FindSectorTopologyLineDef(context_.topologyMap,
+                context_.topologyMap.sideDefs[sideIndex].lineDefId);
+        if (line == nullptr) continue;
+        for (const int vertexId : {line->startVertexId, line->endVertexId}) {
+            const auto* vertex = FindSectorTopologyVertex(context_.topologyMap, vertexId);
+            if (vertex == nullptr) continue;
+            minX = std::min(minX, vertex->x); maxX = std::max(maxX, vertex->x);
+            minZ = std::min(minZ, vertex->y); maxZ = std::max(maxZ, vertex->y);
+        }
+    }
+    if (minX >= maxX || minZ >= maxZ) {
+        context_.statusText = "Fit Sector failed: sector has no usable bounds";
+        return false;
+    }
+    SectorAuthoringFogVolume fitted = *volume;
+    fitted.x = static_cast<SectorCoord>(std::llround((double(minX) + maxX) * 0.5));
+    fitted.y = static_cast<SectorCoord>(std::llround((double(minZ) + maxZ) * 0.5));
+    // Point resolution can fall back to an enclosing face when the point is
+    // on a nested face boundary. Fog compilation rejects all such boundaries.
+    bool onBoundary = false;
+    for (const auto& line : context_.topologyMap.lineDefs) {
+        const auto* start = FindSectorTopologyVertex(context_.topologyMap, line.startVertexId);
+        const auto* end = FindSectorTopologyVertex(context_.topologyMap, line.endVertexId);
+        if (start != nullptr && end != nullptr
+                && SectorTopologyPointOnSegment({fitted.x, fitted.y},
+                        {start->x, start->y}, {end->x, end->y})) {
+            onBoundary = true;
+            break;
+        }
+    }
+    int fittedSectorId = -1;
+    if (onBoundary || !CanResolvePoint({fitted.x, fitted.y}, &fittedSectorId) || fittedSectorId != sectorId) {
+        context_.statusText = "Fit Sector failed: bounds center is not strictly inside the original sector";
+        return false;
+    }
+    fitted.yawDegrees = 0.0f;
+    fitted.bottomOffsetWorld = 0.0f;
+    fitted.radiusXWorld = SectorCoordDistanceToWorldDistance(
+            std::max(double(fitted.x) - minX, double(maxX) - fitted.x));
+    fitted.radiusZWorld = SectorCoordDistanceToWorldDistance(
+            std::max(double(fitted.y) - minZ, double(maxZ) - fitted.y));
+    fitted.heightWorld = SectorAuthoringToWorldDistance(sector->ceilingZ - sector->floorZ);
+    const auto normalized = NormalizeSectorAuthoringFogVolume(fitted);
+    if (normalized.radiusXWorld != fitted.radiusXWorld
+            || normalized.radiusZWorld != fitted.radiusZWorld
+            || normalized.heightWorld != fitted.heightWorld) {
+        context_.statusText = "Fit Sector failed: bounds exceed supported fog dimensions (half extents 0.05-64 m, height 0.05-32 m)";
+        return false;
+    }
+    return MutateById(fogVolumeId, "Fitted fog volume to sector",
+            [&fitted](SectorAuthoringFogVolume& value) {
+                if (value.x == fitted.x && value.y == fitted.y
+                        && value.radiusXWorld == fitted.radiusXWorld
+                        && value.radiusZWorld == fitted.radiusZWorld
+                        && value.heightWorld == fitted.heightWorld
+                        && value.bottomOffsetWorld == 0.0f && value.yawDegrees == 0.0f) return false;
+                value = fitted;
+                return true;
+            });
+}
+
+bool SectorEditorAuthoringFogVolumeEditingService::BeginResize(
+        int fogVolumeId, int handleIndex, SectorTopologyCoordPoint startPoint)
+{
+    const auto* volume = FindSectorAuthoringFogVolume(context_.authoringGraph, fogVolumeId);
+    if (volume == nullptr || volume->shape != SectorLocalFogShape::Box
+            || handleIndex < 0 || handleIndex >= static_cast<int>(FogVolumeResizeHandleSigns.size())
+            || !BeginMove(fogVolumeId)) return false;
+    auto& drag = context_.manipulationState.authoringFogVolumeDrag;
+    drag.resizing = true;
+    drag.resizeStartPoint = startPoint;
+    drag.resizeSigns = FogVolumeResizeHandleSigns[static_cast<std::size_t>(handleIndex)];
+    drag.originalRadii = {volume->radiusXWorld, volume->radiusZWorld};
+    drag.previewRadii = drag.originalRadii;
+    drag.yawDegrees = volume->yawDegrees;
+    return true;
+}
+
+void SectorEditorAuthoringFogVolumeEditingService::UpdateResize(SectorTopologyCoordPoint point)
+{
+    auto& drag = context_.manipulationState.authoringFogVolumeDrag;
+    if (!drag.active || !drag.resizing) return;
+    const float dx = SectorCoordDistanceToWorldDistance(double(point.x) - drag.resizeStartPoint.x);
+    const float dz = SectorCoordDistanceToWorldDistance(double(point.y) - drag.resizeStartPoint.y);
+    const float cosine = std::cos(drag.yawDegrees * DEG2RAD);
+    const float sine = std::sin(drag.yawDegrees * DEG2RAD);
+    SectorAuthoringFogVolume candidate;
+    candidate.radiusXWorld = drag.resizeSigns.x == 0 ? drag.originalRadii.x
+            : drag.originalRadii.x + drag.resizeSigns.x * (cosine * dx - sine * dz);
+    candidate.radiusZWorld = drag.resizeSigns.y == 0 ? drag.originalRadii.y
+            : drag.originalRadii.y + drag.resizeSigns.y * (sine * dx + cosine * dz);
+    candidate = NormalizeSectorAuthoringFogVolume(candidate);
+    drag.previewRadii = {candidate.radiusXWorld, candidate.radiusZWorld};
+}
+
+bool SectorEditorAuthoringFogVolumeEditingService::FinishResize()
+{
+    const auto drag = context_.manipulationState.authoringFogVolumeDrag;
+    if (!drag.active || !drag.resizing) return false;
+    CancelMove();
+    const auto* volume = FindSectorAuthoringFogVolume(context_.authoringGraph, drag.fogVolumeId);
+    if (volume == nullptr || volume->shape != SectorLocalFogShape::Box
+            || !IsSectorEditorAuthoringDerivationCurrent(context_.derivation)
+            || volume->x != drag.originalPoint.x || volume->y != drag.originalPoint.y
+            || volume->radiusXWorld != drag.originalRadii.x
+            || volume->radiusZWorld != drag.originalRadii.y || volume->yawDegrees != drag.yawDegrees) {
+        context_.statusText = "Fog volume resize cancelled: source changed";
+        return false;
+    }
+    if (drag.previewRadii.x == drag.originalRadii.x && drag.previewRadii.y == drag.originalRadii.y) {
+        context_.statusText = "Fog volume size unchanged";
+        return true;
+    }
+    return MutateById(drag.fogVolumeId, "Resized fog volume", [&drag](SectorAuthoringFogVolume& value) {
+        value.radiusXWorld = drag.previewRadii.x;
+        value.radiusZWorld = drag.previewRadii.y;
+        return true;
+    });
+}
 
 SectorEditorAuthoringFogVolumeEditingService::SectorEditorAuthoringFogVolumeEditingService(
         SectorEditorAuthoringFogVolumeEditingServiceContext context)

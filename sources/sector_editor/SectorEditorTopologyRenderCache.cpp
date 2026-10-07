@@ -761,6 +761,18 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cache.levelMarkers.push_back(std::move(cached));
     }
 
+    cache.cameras.reserve(authoringGraph.cameras.size());
+    for (const SectorAuthoringCamera& marker : authoringGraph.cameras) {
+        CachedAuthoringCameraDraw cached;
+        cached.cameraId = marker.id;
+        cached.referenceId = marker.referenceId;
+        cached.map = Vector2{
+                SectorCoordToVisibleAuthoring(marker.x),
+                SectorCoordToVisibleAuthoring(marker.z)};
+        cached.yawDegrees = marker.yawDegrees;
+        cache.cameras.push_back(std::move(cached));
+    }
+
     cache.soundEmitters.reserve(authoringGraph.soundEmitters.size());
     for (const SectorAuthoringSoundEmitter& emitter : authoringGraph.soundEmitters) {
         CachedAuthoringSoundEmitterDraw cached;
@@ -1286,6 +1298,30 @@ void AppendCachedLevelMarkerPickCandidates(
         if (distance2 <= tolerance2) {
             outCandidates.push_back(SectorEditorPickCandidate{
                     SectorEditorPickTarget{SectorEditorPickKind::LevelMarker, marker.markerId},
+                    distance2});
+        }
+    }
+}
+
+void AppendCachedCameraPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates)
+{
+    if (!cache.valid || tolerancePixels < 0.0f) {
+        return;
+    }
+    const float tolerance2 = tolerancePixels * tolerancePixels;
+    for (const CachedAuthoringCameraDraw& marker : cache.cameras) {
+        const Vector2 center = CachedMapToScreen(context, marker.map);
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 <= tolerance2) {
+            outCandidates.push_back(SectorEditorPickCandidate{
+                    SectorEditorPickTarget{SectorEditorPickKind::Camera, marker.cameraId},
                     distance2});
         }
     }
@@ -2088,6 +2124,51 @@ void DrawCachedLevelMarkers(
 
         const Vector2 direction = SectorEditorLevelMarkerOrientationDirection(
                 marker.orientationDegrees);
+        const Vector2 tip{center.x + direction.x * 22.0f, center.y + direction.y * 22.0f};
+        DrawLineEx(center, tip, selected ? 3.0f : 2.0f, color);
+        DrawEditorMarkerDisc(tip, selected ? 3.5f : 3.0f, color);
+        DrawText(marker.referenceId.c_str(), static_cast<int>(center.x + 11.0f),
+                static_cast<int>(center.y - 16.0f), 12, color);
+    }
+}
+
+Vector2 SectorEditorCameraOrientationDirection(float yawDegrees)
+{
+    return {std::cos(yawDegrees * DEG2RAD), std::sin(yawDegrees * DEG2RAD)};
+}
+
+void DrawCachedCameras(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const CameraDragState* drag)
+{
+    const Color outline{28, 18, 40, 255};
+    const Color normal{196, 104, 244, 255};
+    const Color selectedColor{92, 224, 244, 255};
+    const Color hoveredColor{236, 168, 255, 255};
+    for (const CachedAuthoringCameraDraw& marker : cache.cameras) {
+        Vector2 map = marker.map;
+        if (drag != nullptr && drag->active && drag->cameraId == marker.cameraId) {
+            map = Vector2{
+                    SectorCoordToVisibleAuthoring(drag->previewX),
+                    SectorCoordToVisibleAuthoring(drag->previewZ)};
+        }
+        const bool selected = context.selectedAuthoring.kind == SectorAuthoringSelectionKind::Camera
+                && context.selectedAuthoring.cameraId == marker.cameraId;
+        const bool hovered = context.hoveredAuthoring.kind == SectorAuthoringSelectionKind::Camera
+                && context.hoveredAuthoring.cameraId == marker.cameraId;
+        const Color color = selected ? selectedColor : hovered ? hoveredColor : normal;
+        const Vector2 center = CachedMapToScreen(context, map);
+        const float radius = selected ? 9.0f : 7.0f;
+        DrawRectangleRec({center.x - radius, center.y - radius * 0.65f,
+                radius * 1.5f, radius * 1.3f}, color);
+        DrawRectangleLinesEx({center.x - radius, center.y - radius * 0.65f,
+                radius * 1.5f, radius * 1.3f}, 1.5f, outline);
+        DrawTriangle({center.x + radius * 0.5f, center.y},
+                {center.x + radius * 1.3f, center.y + radius * 0.65f},
+                {center.x + radius * 1.3f, center.y - radius * 0.65f}, color);
+
+        const Vector2 direction = SectorEditorCameraOrientationDirection(marker.yawDegrees);
         const Vector2 tip{center.x + direction.x * 22.0f, center.y + direction.y * 22.0f};
         DrawLineEx(center, tip, selected ? 3.0f : 2.0f, color);
         DrawEditorMarkerDisc(tip, selected ? 3.5f : 3.0f, color);

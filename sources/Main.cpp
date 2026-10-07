@@ -463,7 +463,7 @@ int main(int argc, char** argv)
     InitWindow(STARTUP_WINDOW_WIDTH, STARTUP_WINDOW_HEIGHT, "Engine");
     // Presentation is encoded explicitly by the global presentation shader.
     glDisable(GL_FRAMEBUFFER_SRGB);
-    //HideCursor();
+    HideCursor();
 
     SetExitKey(0);
 
@@ -851,6 +851,7 @@ int main(int argc, char** argv)
 
         context.input.BeginFrame();
         context.input.PollRaylib(dt);
+        application.RememberCursorPosition(context.input);
         application.UpdateDebugConsole(context, dt);
         bool windowModeChanged = false;
         context.input.ForEachEvent(
@@ -925,6 +926,10 @@ int main(int argc, char** argv)
         application.ProcessPendingGameSave(
                 context, scenePresentationTarget.texture);
         application.ProcessDeferredDebugActions(context);
+        application.UpdateCursorVisibility(
+                context.input,
+                {static_cast<float>(INTERNAL_WIDTH), static_cast<float>(INTERNAL_HEIGHT)},
+                dst, {static_cast<float>(screenW), static_cast<float>(screenH)});
         bool worldTargetsReplaced = false;
         if (const game::FpsApplicationSettings* pending =
                     application.PendingGraphicsSettings()) {
@@ -1212,6 +1217,9 @@ int main(int argc, char** argv)
                     0.0f,
                     WHITE);
             application.RenderLoadingOverlay(dst, screenW, screenH);
+            application.RenderCursor(
+                    assets, context.input,
+                    {static_cast<float>(INTERNAL_WIDTH), static_cast<float>(INTERNAL_HEIGHT)}, dst);
         }
         rlDrawRenderBatchActive();
         performanceProfiler.End(RenderProfilePass::FinalComposite);
@@ -1232,7 +1240,6 @@ int main(int argc, char** argv)
     context.audio.StopAll(context.assets);
     context.assets.Shutdown();
     context.audio.Shutdown();
-    //ShowCursor();
     CloseWindow();
     return 0;
 }

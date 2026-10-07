@@ -1,0 +1,182 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.40",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "LITTER KIT",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Bottle_Broken_Neck_Export"
+    }
+  ],
+  "materials": [
+    {
+      "name": "Litter_GreenGlass",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.6499999761581421
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        },
+        "baseColorFactor": [
+          0.045,
+          0.125,
+          0.024,
+          1
+        ]
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 1.0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Broken shoulder and neck.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Dusty_Glass_normal_opengl",
+      "uri": "textures/Dusty_Glass_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Dusty_Glass_basecolor",
+      "uri": "textures/Dusty_Glass_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Dusty_Glass_orm",
+      "uri": "textures/Dusty_Glass_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 572,
+      "max": [
+        0.04194224625825882,
+        0.04800000041723251,
+        0.029718317091464996
+      ],
+      "min": [
+        -0.04194224625825882,
+        0,
+        -0.029718317091464996
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 572,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 572,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 572,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 2016,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 6864,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6864,
+      "byteOffset": 6864,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4576,
+      "byteOffset": 13728,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 9152,
+      "byteOffset": 18304,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4032,
+      "byteOffset": 27456,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 31488,
+      "uri": "Bottle_Broken_Neck.bin"
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.40",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "LITTER KIT",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Cup_Lid_Export"
+    }
+  ],
+  "materials": [
+    {
+      "name": "Litter_Lid",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.04500000178813934,
+          0.05000000074505806,
+          0.04899999871850014,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.6499999761581421
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Molded cup lid.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 491,
+      "max": [
+        0.041999999433755875,
+        0.013000000268220901,
+        0.041999999433755875
+      ],
+      "min": [
+        -0.041999999433755875,
+        0,
+        -0.041999999433755875
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 491,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 491,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 491,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 1908,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 5892,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 5892,
+      "byteOffset": 5892,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3928,
+      "byteOffset": 11784,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 7856,
+      "byteOffset": 15712,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3816,
+      "byteOffset": 23568,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 27384,
+      "uri": "Cup_Lid.bin"
+    }
+  ]
+}

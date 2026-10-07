@@ -1,0 +1,1075 @@
+{
+  "kit": "Ashdown Subway",
+  "units": "metres",
+  "gltf_up": "+Y",
+  "gltf_front": "+Z",
+  "assets": [
+    {
+      "notes": "1.435 m gauge at inside rail-head faces. Repeat 8 m along Blender +Y / glTF -Z. Sleeper base Z=0; rail head Z=.330.",
+      "pivot": "start centre at sleeper base",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "repeat_offset_gltf": [
+        0,
+        0,
+        -8
+      ],
+      "name": "Track_Straight_8m",
+      "file": "exports/gltf/Track_Straight_8m.gltf",
+      "triangles": 5016,
+      "bounds_min_blender": [
+        -1.1749999523162842,
+        0.0,
+        0.0
+      ],
+      "bounds_max_blender": [
+        1.1749999523162842,
+        8.0,
+        0.33000001311302185
+      ],
+      "dimensions_blender_xyz": [
+        2.35,
+        8.0,
+        0.33
+      ],
+      "dimensions_gltf_xyz": [
+        2.35,
+        0.33,
+        8.0
+      ],
+      "bounds_min_gltf": [
+        -1.1749999523162842,
+        0.0,
+        -8.0
+      ],
+      "bounds_max_gltf": [
+        1.1749999523162842,
+        0.33000001311302185,
+        -0.0
+      ],
+      "nominal_length_m": 8,
+      "repeat_axis_gltf": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "notes": "1.435 m gauge at inside rail-head faces. Repeat 16 m along Blender +Y / glTF -Z. Sleeper base Z=0; rail head Z=.330.",
+      "pivot": "start centre at sleeper base",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "repeat_offset_gltf": [
+        0,
+        0,
+        -16
+      ],
+      "name": "Track_Straight_16m",
+      "file": "exports/gltf/Track_Straight_16m.gltf",
+      "triangles": 9944,
+      "bounds_min_blender": [
+        -1.1749999523162842,
+        0.0,
+        0.0
+      ],
+      "bounds_max_blender": [
+        1.1749999523162842,
+        16.0,
+        0.33000001311302185
+      ],
+      "dimensions_blender_xyz": [
+        2.35,
+        16.0,
+        0.33
+      ],
+      "dimensions_gltf_xyz": [
+        2.35,
+        0.33,
+        16.0
+      ],
+      "bounds_min_gltf": [
+        -1.1749999523162842,
+        0.0,
+        -16.0
+      ],
+      "bounds_max_gltf": [
+        1.1749999523162842,
+        0.33000001311302185,
+        -0.0
+      ],
+      "nominal_length_m": 16,
+      "repeat_axis_gltf": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "notes": "Closed exterior only; opaque dusty windows. 16.6 m body with couplers; rail-wheel tread sits at .330 m. Align centreline with tracks; forward Blender -Y / glTF +Z.",
+      "pivot": "track-bed centre beneath car; tread height .330 m",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "rail_head_height_m": 0.33,
+      "name": "Subway_Car_Ashdown",
+      "file": "exports/gltf/Subway_Car_Ashdown.gltf",
+      "triangles": 32604,
+      "bounds_min_blender": [
+        -1.524999976158142,
+        -9.038000106811523,
+        0.3070000112056732
+      ],
+      "bounds_max_blender": [
+        1.524999976158142,
+        9.038000106811523,
+        3.8580000400543213
+      ],
+      "dimensions_blender_xyz": [
+        3.05,
+        18.076,
+        3.551
+      ],
+      "dimensions_gltf_xyz": [
+        3.05,
+        3.551,
+        18.076
+      ],
+      "bounds_min_gltf": [
+        -1.524999976158142,
+        0.3070000112056732,
+        -9.038000106811523
+      ],
+      "bounds_max_gltf": [
+        1.524999976158142,
+        3.8580000400543213,
+        9.038000106811523
+      ],
+      "body_length_m": 16.6,
+      "overall_length_m": 18.076,
+      "max_height_from_track_bed_m": 3.8580000400543213
+    },
+    {
+      "notes": "1.834 m wide, seat height .47 m; bottom-centred.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Bench_Three_Seat",
+      "file": "exports/gltf/Bench_Three_Seat.gltf",
+      "triangles": 1164,
+      "bounds_min_blender": [
+        -0.9169999957084656,
+        -0.30000001192092896,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.9169999957084656,
+        0.2800000011920929,
+        0.8999999761581421
+      ],
+      "dimensions_blender_xyz": [
+        1.834,
+        0.58,
+        0.9
+      ],
+      "dimensions_gltf_xyz": [
+        1.834,
+        0.9,
+        0.58
+      ],
+      "bounds_min_gltf": [
+        -0.9169999957084656,
+        0.0,
+        -0.2800000011920929
+      ],
+      "bounds_max_gltf": [
+        0.9169999957084656,
+        0.8999999761581421,
+        0.30000001192092896
+      ]
+    },
+    {
+      "notes": "1.834 m wide, seat height .47 m; bottom-centred.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Bench_Backless",
+      "file": "exports/gltf/Bench_Backless.gltf",
+      "triangles": 1248,
+      "bounds_min_blender": [
+        -0.9169999957084656,
+        -0.30000001192092896,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.9169999957084656,
+        0.30000001192092896,
+        0.7016823887825012
+      ],
+      "dimensions_blender_xyz": [
+        1.834,
+        0.6,
+        0.70168
+      ],
+      "dimensions_gltf_xyz": [
+        1.834,
+        0.70168,
+        0.6
+      ],
+      "bounds_min_gltf": [
+        -0.9169999957084656,
+        0.0,
+        -0.30000001192092896
+      ],
+      "bounds_max_gltf": [
+        0.9169999957084656,
+        0.7016823887825012,
+        0.30000001192092896
+      ]
+    },
+    {
+      "notes": "Open top, real basket apertures and inner liner; .504 m diameter, .834 m tall.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Trash_Bin_Round",
+      "file": "exports/gltf/Trash_Bin_Round.gltf",
+      "triangles": 3324,
+      "bounds_min_blender": [
+        -0.25200000405311584,
+        -0.25200000405311584,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.25200000405311584,
+        0.25200000405311584,
+        0.8334999680519104
+      ],
+      "dimensions_blender_xyz": [
+        0.504,
+        0.504,
+        0.8335
+      ],
+      "dimensions_gltf_xyz": [
+        0.504,
+        0.8335,
+        0.504
+      ],
+      "bounds_min_gltf": [
+        -0.25200000405311584,
+        0.0,
+        -0.25200000405311584
+      ],
+      "bounds_max_gltf": [
+        0.25200000405311584,
+        0.8334999680519104,
+        0.25200000405311584
+      ]
+    },
+    {
+      "notes": "Open rectangular bin with printed recycling panel.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Recycling_Bin",
+      "file": "exports/gltf/Recycling_Bin.gltf",
+      "triangles": 408,
+      "bounds_min_blender": [
+        -0.24699999392032623,
+        -0.22550000250339508,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.24699999392032623,
+        0.22550000250339508,
+        0.8809999823570251
+      ],
+      "dimensions_blender_xyz": [
+        0.494,
+        0.451,
+        0.881
+      ],
+      "dimensions_gltf_xyz": [
+        0.494,
+        0.881,
+        0.451
+      ],
+      "bounds_min_gltf": [
+        -0.24699999392032623,
+        0.0,
+        -0.22550000250339508
+      ],
+      "bounds_max_gltf": [
+        0.24699999392032623,
+        0.8809999823570251,
+        0.22550000250339508
+      ]
+    },
+    {
+      "notes": "Wall mounting plane Blender Y=+0.052; front -Y.",
+      "pivot": "bottom centre, rear mounting plane offset +0.052 Y",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Station_Sign_Wall",
+      "file": "exports/gltf/Station_Sign_Wall.gltf",
+      "triangles": 56,
+      "bounds_min_blender": [
+        -1.2000000476837158,
+        -0.009999999776482582,
+        0.0
+      ],
+      "bounds_max_blender": [
+        1.2000000476837158,
+        0.052000001072883606,
+        0.3400000035762787
+      ],
+      "dimensions_blender_xyz": [
+        2.4,
+        0.062,
+        0.34
+      ],
+      "dimensions_gltf_xyz": [
+        2.4,
+        0.34,
+        0.062
+      ],
+      "bounds_min_gltf": [
+        -1.2000000476837158,
+        0.0,
+        -0.052000001072883606
+      ],
+      "bounds_max_gltf": [
+        1.2000000476837158,
+        0.3400000035762787,
+        0.009999999776482582
+      ],
+      "mounting_plane_local_gltf_z": -0.052,
+      "placement_offset_out_from_wall_m": 0.052
+    },
+    {
+      "notes": "Wall mounting plane Blender Y=+0.052; front -Y.",
+      "pivot": "bottom centre, rear mounting plane offset +0.052 Y",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Line_03_Wall",
+      "file": "exports/gltf/Line_03_Wall.gltf",
+      "triangles": 56,
+      "bounds_min_blender": [
+        -1.149999976158142,
+        -0.009999999776482582,
+        0.0
+      ],
+      "bounds_max_blender": [
+        1.149999976158142,
+        0.052000001072883606,
+        0.36000001430511475
+      ],
+      "dimensions_blender_xyz": [
+        2.3,
+        0.062,
+        0.36
+      ],
+      "dimensions_gltf_xyz": [
+        2.3,
+        0.36,
+        0.062
+      ],
+      "bounds_min_gltf": [
+        -1.149999976158142,
+        0.0,
+        -0.052000001072883606
+      ],
+      "bounds_max_gltf": [
+        1.149999976158142,
+        0.36000001430511475,
+        0.009999999776482582
+      ],
+      "mounting_plane_local_gltf_z": -0.052,
+      "placement_offset_out_from_wall_m": 0.052
+    },
+    {
+      "notes": "Wall mounting plane Blender Y=+0.052; front -Y.",
+      "pivot": "bottom centre, rear mounting plane offset +0.052 Y",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Route_Map_Wall",
+      "file": "exports/gltf/Route_Map_Wall.gltf",
+      "triangles": 56,
+      "bounds_min_blender": [
+        -0.3199999928474426,
+        -0.009999999776482582,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.3199999928474426,
+        0.052000001072883606,
+        1.100000023841858
+      ],
+      "dimensions_blender_xyz": [
+        0.64,
+        0.062,
+        1.1
+      ],
+      "dimensions_gltf_xyz": [
+        0.64,
+        1.1,
+        0.062
+      ],
+      "bounds_min_gltf": [
+        -0.3199999928474426,
+        0.0,
+        -0.052000001072883606
+      ],
+      "bounds_max_gltf": [
+        0.3199999928474426,
+        1.100000023841858,
+        0.009999999776482582
+      ],
+      "mounting_plane_local_gltf_z": -0.052,
+      "placement_offset_out_from_wall_m": 0.052
+    },
+    {
+      "notes": "Wall mounting plane Blender Y=+0.052; front -Y.",
+      "pivot": "bottom centre, rear mounting plane offset +0.052 Y",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Timetable_Wall",
+      "file": "exports/gltf/Timetable_Wall.gltf",
+      "triangles": 56,
+      "bounds_min_blender": [
+        -0.3199999928474426,
+        -0.009999999776482582,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.3199999928474426,
+        0.052000001072883606,
+        1.100000023841858
+      ],
+      "dimensions_blender_xyz": [
+        0.64,
+        0.062,
+        1.1
+      ],
+      "dimensions_gltf_xyz": [
+        0.64,
+        1.1,
+        0.062
+      ],
+      "bounds_min_gltf": [
+        -0.3199999928474426,
+        0.0,
+        -0.052000001072883606
+      ],
+      "bounds_max_gltf": [
+        0.3199999928474426,
+        1.100000023841858,
+        0.009999999776482582
+      ],
+      "mounting_plane_local_gltf_z": -0.052,
+      "placement_offset_out_from_wall_m": 0.052
+    },
+    {
+      "notes": "Wall mounting plane Blender Y=+0.052; front -Y.",
+      "pivot": "bottom centre, rear mounting plane offset +0.052 Y",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Advertisement_Solton",
+      "file": "exports/gltf/Advertisement_Solton.gltf",
+      "triangles": 56,
+      "bounds_min_blender": [
+        -0.5099999904632568,
+        -0.009999999776482582,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.5099999904632568,
+        0.052000001072883606,
+        1.5499999523162842
+      ],
+      "dimensions_blender_xyz": [
+        1.02,
+        0.062,
+        1.55
+      ],
+      "dimensions_gltf_xyz": [
+        1.02,
+        1.55,
+        0.062
+      ],
+      "bounds_min_gltf": [
+        -0.5099999904632568,
+        0.0,
+        -0.052000001072883606
+      ],
+      "bounds_max_gltf": [
+        0.5099999904632568,
+        1.5499999523162842,
+        0.009999999776482582
+      ],
+      "mounting_plane_local_gltf_z": -0.052,
+      "placement_offset_out_from_wall_m": 0.052
+    },
+    {
+      "notes": "Wall mounting plane Blender Y=+0.052; front -Y.",
+      "pivot": "bottom centre, rear mounting plane offset +0.052 Y",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Advertisement_North_Coast",
+      "file": "exports/gltf/Advertisement_North_Coast.gltf",
+      "triangles": 56,
+      "bounds_min_blender": [
+        -0.5099999904632568,
+        -0.009999999776482582,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.5099999904632568,
+        0.052000001072883606,
+        1.5499999523162842
+      ],
+      "dimensions_blender_xyz": [
+        1.02,
+        0.062,
+        1.55
+      ],
+      "dimensions_gltf_xyz": [
+        1.02,
+        1.55,
+        0.062
+      ],
+      "bounds_min_gltf": [
+        -0.5099999904632568,
+        0.0,
+        -0.052000001072883606
+      ],
+      "bounds_max_gltf": [
+        0.5099999904632568,
+        1.5499999523162842,
+        0.009999999776482582
+      ],
+      "mounting_plane_local_gltf_z": -0.052,
+      "placement_offset_out_from_wall_m": 0.052
+    },
+    {
+      "notes": "Two sided. Origin at ceiling attachment; assembly hangs downward.",
+      "pivot": "ceiling mounting plane",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Line_03_Suspended",
+      "file": "exports/gltf/Line_03_Suspended.gltf",
+      "triangles": 228,
+      "bounds_min_blender": [
+        -1.149999976158142,
+        -0.052000001072883606,
+        -0.8100000023841858
+      ],
+      "bounds_max_blender": [
+        1.149999976158142,
+        0.052000101655721664,
+        0.0
+      ],
+      "dimensions_blender_xyz": [
+        2.3,
+        0.104,
+        0.81
+      ],
+      "dimensions_gltf_xyz": [
+        2.3,
+        0.81,
+        0.104
+      ],
+      "bounds_min_gltf": [
+        -1.149999976158142,
+        -0.8100000023841858,
+        -0.052000101655721664
+      ],
+      "bounds_max_gltf": [
+        1.149999976158142,
+        0.0,
+        0.052000001072883606
+      ],
+      "mounting_plane_local_gltf_y": 0
+    },
+    {
+      "notes": "Two sided. Origin at ceiling attachment; assembly hangs downward.",
+      "pivot": "ceiling mounting plane",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Exit_Sign_Suspended",
+      "file": "exports/gltf/Exit_Sign_Suspended.gltf",
+      "triangles": 228,
+      "bounds_min_blender": [
+        -0.30000001192092896,
+        -0.052000001072883606,
+        -0.6899999976158142
+      ],
+      "bounds_max_blender": [
+        0.30000001192092896,
+        0.052000027149915695,
+        0.0
+      ],
+      "dimensions_blender_xyz": [
+        0.6,
+        0.104,
+        0.69
+      ],
+      "dimensions_gltf_xyz": [
+        0.6,
+        0.69,
+        0.104
+      ],
+      "bounds_min_gltf": [
+        -0.30000001192092896,
+        -0.6899999976158142,
+        -0.052000027149915695
+      ],
+      "bounds_max_gltf": [
+        0.30000001192092896,
+        0.0,
+        0.052000001072883606
+      ],
+      "mounting_plane_local_gltf_y": 0,
+      "emission_strength": 0.65,
+      "arrow_direction_local_gltf": [
+        -1,
+        0,
+        0
+      ]
+    },
+    {
+      "notes": "Wall mounting plane Blender Y=+0.052; front -Y.",
+      "pivot": "bottom centre, rear mounting plane offset +0.052 Y",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Exit_Sign_Wall",
+      "file": "exports/gltf/Exit_Sign_Wall.gltf",
+      "triangles": 56,
+      "bounds_min_blender": [
+        -0.30000001192092896,
+        -0.009999999776482582,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.30000001192092896,
+        0.052000001072883606,
+        0.23999999463558197
+      ],
+      "dimensions_blender_xyz": [
+        0.6,
+        0.062,
+        0.24
+      ],
+      "dimensions_gltf_xyz": [
+        0.6,
+        0.24,
+        0.062
+      ],
+      "bounds_min_gltf": [
+        -0.30000001192092896,
+        0.0,
+        -0.052000001072883606
+      ],
+      "bounds_max_gltf": [
+        0.30000001192092896,
+        0.23999999463558197,
+        0.009999999776482582
+      ],
+      "mounting_plane_local_gltf_z": -0.052,
+      "placement_offset_out_from_wall_m": 0.052,
+      "emission_strength": 0.65,
+      "arrow_direction_local_gltf": [
+        -1,
+        0,
+        0
+      ]
+    },
+    {
+      "notes": "Static hands at approximately 10:05. Wall mounting plane Blender Y=.045.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Station_Clock",
+      "file": "exports/gltf/Station_Clock.gltf",
+      "triangles": 908,
+      "bounds_min_blender": [
+        -0.29100000858306885,
+        -0.0989999994635582,
+        -1.6880221664905548e-08
+      ],
+      "bounds_max_blender": [
+        0.29100000858306885,
+        0.04500000178813934,
+        0.5819999575614929
+      ],
+      "dimensions_blender_xyz": [
+        0.582,
+        0.144,
+        0.582
+      ],
+      "dimensions_gltf_xyz": [
+        0.582,
+        0.582,
+        0.144
+      ],
+      "bounds_min_gltf": [
+        -0.29100000858306885,
+        -1.6880221664905548e-08,
+        -0.04500000178813934
+      ],
+      "bounds_max_gltf": [
+        0.29100000858306885,
+        0.5819999575614929,
+        0.0989999994635582
+      ],
+      "mounting_plane_local_gltf_z": -0.045,
+      "placement_offset_out_from_wall_m": 0.045
+    },
+    {
+      "notes": "Wall mounting plane Blender Y=.0525. Button is static.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Emergency_Intercom",
+      "file": "exports/gltf/Emergency_Intercom.gltf",
+      "triangles": 324,
+      "bounds_min_blender": [
+        -0.11999999731779099,
+        -0.06800000369548798,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.11999999731779099,
+        0.05249999836087227,
+        0.46000000834465027
+      ],
+      "dimensions_blender_xyz": [
+        0.24,
+        0.1205,
+        0.46
+      ],
+      "dimensions_gltf_xyz": [
+        0.24,
+        0.46,
+        0.1205
+      ],
+      "bounds_min_gltf": [
+        -0.11999999731779099,
+        0.0,
+        -0.05249999836087227
+      ],
+      "bounds_max_gltf": [
+        0.11999999731779099,
+        0.46000000834465027,
+        0.06800000369548798
+      ],
+      "mounting_plane_local_gltf_z": -0.0525,
+      "placement_offset_out_from_wall_m": 0.0525
+    },
+    {
+      "notes": "Wall cabinet, .69 x .26 x 1.30 m.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Electrical_Service_Cabinet",
+      "file": "exports/gltf/Electrical_Service_Cabinet.gltf",
+      "triangles": 308,
+      "bounds_min_blender": [
+        -0.3449999988079071,
+        -0.16599999368190765,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.3449999988079071,
+        0.15000000596046448,
+        1.2999999523162842
+      ],
+      "dimensions_blender_xyz": [
+        0.69,
+        0.316,
+        1.3
+      ],
+      "dimensions_gltf_xyz": [
+        0.69,
+        1.3,
+        0.316
+      ],
+      "bounds_min_gltf": [
+        -0.3449999988079071,
+        0.0,
+        -0.15000000596046448
+      ],
+      "bounds_max_gltf": [
+        0.3449999988079071,
+        1.2999999523162842,
+        0.16599999368190765
+      ],
+      "mounting_plane_local_gltf_z": -0.15,
+      "placement_offset_out_from_wall_m": 0.15
+    },
+    {
+      "notes": "Repeat along Blender +Y / glTF -Z. 0.40 m wide; place on top of platform.",
+      "pivot": "start centre at platform surface",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "repeat_offset_gltf": [
+        0,
+        0,
+        -1
+      ],
+      "name": "Platform_Edge_Tactile_1m",
+      "file": "exports/gltf/Platform_Edge_Tactile_1m.gltf",
+      "triangles": 1164,
+      "bounds_min_blender": [
+        -0.20000000298023224,
+        0.0,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.20000000298023224,
+        1.0,
+        0.03999999910593033
+      ],
+      "dimensions_blender_xyz": [
+        0.4,
+        1.0,
+        0.04
+      ],
+      "dimensions_gltf_xyz": [
+        0.4,
+        0.04,
+        1.0
+      ],
+      "bounds_min_gltf": [
+        -0.20000000298023224,
+        0.0,
+        -1.0
+      ],
+      "bounds_max_gltf": [
+        0.20000000298023224,
+        0.03999999910593033,
+        -0.0
+      ],
+      "nominal_length_m": 1,
+      "repeat_axis_gltf": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "notes": "Repeat along Blender +Y / glTF -Z. 0.40 m wide; place on top of platform.",
+      "pivot": "start centre at platform surface",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "repeat_offset_gltf": [
+        0,
+        0,
+        -2
+      ],
+      "name": "Platform_Edge_Tactile_2m",
+      "file": "exports/gltf/Platform_Edge_Tactile_2m.gltf",
+      "triangles": 2284,
+      "bounds_min_blender": [
+        -0.20000000298023224,
+        0.0,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.20000000298023224,
+        2.0,
+        0.03999999910593033
+      ],
+      "dimensions_blender_xyz": [
+        0.4,
+        2.0,
+        0.04
+      ],
+      "dimensions_gltf_xyz": [
+        0.4,
+        0.04,
+        2.0
+      ],
+      "bounds_min_gltf": [
+        -0.20000000298023224,
+        0.0,
+        -2.0
+      ],
+      "bounds_max_gltf": [
+        0.20000000298023224,
+        0.03999999910593033,
+        -0.0
+      ],
+      "nominal_length_m": 2,
+      "repeat_axis_gltf": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "notes": "Terminal accessory aligned to track base; rail clamp bottoms .325 m. Front -Y.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Track_Buffer_Stop",
+      "file": "exports/gltf/Track_Buffer_Stop.gltf",
+      "triangles": 732,
+      "bounds_min_blender": [
+        -1.1749999523162842,
+        -0.25999999046325684,
+        0.32499998807907104
+      ],
+      "bounds_max_blender": [
+        1.1749999523162842,
+        1.0399999618530273,
+        1.2799999713897705
+      ],
+      "dimensions_blender_xyz": [
+        2.35,
+        1.3,
+        0.955
+      ],
+      "dimensions_gltf_xyz": [
+        2.35,
+        0.955,
+        1.3
+      ],
+      "bounds_min_gltf": [
+        -1.1749999523162842,
+        0.32499998807907104,
+        -1.0399999618530273
+      ],
+      "bounds_max_gltf": [
+        1.1749999523162842,
+        1.2799999713897705,
+        0.25999999046325684
+      ]
+    },
+    {
+      "notes": "Revised detailed machine: folded cabinet, deep product cavity, 12 labelled dispensing lanes, two-deep packets or two-deep cans/bottles. Opaque backing without transmission. Height 1.91 m; bottom-centred pivot.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Vending_Snacks",
+      "file": "exports/gltf/Vending_Snacks.gltf",
+      "triangles": 13824,
+      "bounds_min_blender": [
+        -0.4880000054836273,
+        -0.4880000054836273,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.4880000054836273,
+        0.44300001859664917,
+        1.909999966621399
+      ],
+      "dimensions_blender_xyz": [
+        0.976,
+        0.931,
+        1.91
+      ],
+      "dimensions_gltf_xyz": [
+        0.976,
+        1.91,
+        0.931
+      ],
+      "bounds_min_gltf": [
+        -0.4880000054836273,
+        0.0,
+        -0.44300001859664917
+      ],
+      "bounds_max_gltf": [
+        0.4880000054836273,
+        1.909999966621399,
+        0.4880000054836273
+      ]
+    },
+    {
+      "notes": "Revised detailed machine: folded cabinet, deep product cavity, 12 labelled dispensing lanes, two-deep packets or two-deep cans/bottles. Opaque backing without transmission. Height 1.91 m; bottom-centred pivot.",
+      "pivot": "bottom centre",
+      "mesh_nodes": 1,
+      "hinged": false,
+      "name": "Vending_Drinks",
+      "file": "exports/gltf/Vending_Drinks.gltf",
+      "triangles": 27216,
+      "bounds_min_blender": [
+        -0.4880000054836273,
+        -0.4880000054836273,
+        0.0
+      ],
+      "bounds_max_blender": [
+        0.4880000054836273,
+        0.44300001859664917,
+        1.909999966621399
+      ],
+      "dimensions_blender_xyz": [
+        0.976,
+        0.931,
+        1.91
+      ],
+      "dimensions_gltf_xyz": [
+        0.976,
+        1.91,
+        0.931
+      ],
+      "bounds_min_gltf": [
+        -0.4880000054836273,
+        0.0,
+        -0.44300001859664917
+      ],
+      "bounds_max_gltf": [
+        0.4880000054836273,
+        1.909999966621399,
+        0.4880000054836273
+      ]
+    }
+  ],
+  "shared_texture_sets": [
+    "Steel",
+    "Teal",
+    "Charcoal",
+    "Sleeper",
+    "TrainSteel",
+    "TrainTeal",
+    "Signage",
+    "Advertisements",
+    "VendingProducts",
+    "VendingControls"
+  ],
+  "normal_convention": "OpenGL Y+",
+  "orm_channels": {
+    "R": "occlusion",
+    "G": "roughness",
+    "B": "metallic"
+  },
+  "total_triangles": 101316,
+  "station": "Ashdown",
+  "line": "03",
+  "shared_png_count": 22,
+  "texture_resolutions": {
+    "surface_maps": [
+      512,
+      512
+    ],
+    "train_surface_maps": [
+      512,
+      1024
+    ],
+    "VendingProducts": [
+      1024,
+      1024
+    ],
+    "VendingControls": [
+      1024,
+      1024
+    ],
+    "Signage": [
+      1024,
+      1024
+    ],
+    "Advertisements": [
+      1024,
+      1024
+    ]
+  },
+  "reference_scene_exported": false
+}

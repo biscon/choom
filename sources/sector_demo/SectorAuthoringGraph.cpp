@@ -1958,6 +1958,11 @@ int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph)
     return AllocateNextId(graph.levelMarkers);
 }
 
+int AllocateSectorAuthoringCameraId(const SectorAuthoringGraph& graph)
+{
+    return AllocateNextId(graph.cameras);
+}
+
 int AllocateSectorAuthoringPatrolId(const SectorAuthoringGraph& graph)
 {
     int next = 1;
@@ -2027,6 +2032,11 @@ bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id)
     });
 }
 
+bool IsValidSectorAuthoringCameraReferenceId(const std::string& id)
+{
+    return id != "player" && IsValidSectorAuthoringLevelMarkerReferenceId(id);
+}
+
 bool IsValidSectorAuthoringSoundEmitterReferenceId(const std::string& id)
 {
     return IsValidSectorAuthoringLevelMarkerReferenceId(id);
@@ -2063,6 +2073,17 @@ std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringG
     for (int suffix = 1; suffix < std::numeric_limits<int>::max(); ++suffix) {
         const std::string candidate = "marker_" + std::to_string(suffix);
         if (FindSectorAuthoringLevelMarkerByReferenceId(graph, candidate) == nullptr) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+std::string AllocateSectorAuthoringCameraReferenceId(const SectorAuthoringGraph& graph)
+{
+    for (int suffix = 1; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = "camera_" + std::to_string(suffix);
+        if (FindSectorAuthoringCameraByReferenceId(graph, candidate) == nullptr) {
             return candidate;
         }
     }
@@ -2236,6 +2257,13 @@ const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
     return FindById(graph.levelMarkers, id);
 }
 
+const SectorAuthoringCamera* FindSectorAuthoringCamera(
+        const SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.cameras, id);
+}
+
 SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
         SectorAuthoringGraph& graph,
         int id)
@@ -2243,11 +2271,30 @@ SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
     return FindById(graph.levelMarkers, id);
 }
 
+SectorAuthoringCamera* FindSectorAuthoringCamera(
+        SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.cameras, id);
+}
+
 const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
         const SectorAuthoringGraph& graph,
         const std::string& referenceId)
 {
     for (const SectorAuthoringLevelMarker& marker : graph.levelMarkers) {
+        if (marker.referenceId == referenceId) {
+            return &marker;
+        }
+    }
+    return nullptr;
+}
+
+const SectorAuthoringCamera* FindSectorAuthoringCameraByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& referenceId)
+{
+    for (const SectorAuthoringCamera& marker : graph.cameras) {
         if (marker.referenceId == referenceId) {
             return &marker;
         }
@@ -2784,6 +2831,32 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
         if (!std::isfinite(marker.y) || !std::isfinite(marker.orientationDegrees)) {
             AddIssue(issues, SectorAuthoringObjectKind::LevelMarker, marker.id,
                      "Authoring level marker transform must be finite");
+        }
+    }
+
+    std::set<int> cameraIds;
+    std::set<std::string> cameraReferenceIds;
+    for (const SectorAuthoringCamera& marker : graph.cameras) {
+        if (!IsValidSectorAuthoringId(marker.id)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Camera, marker.id,
+                     "Invalid authoring camera ID");
+        } else if (!cameraIds.insert(marker.id).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::Camera, marker.id,
+                     "Duplicate authoring camera ID");
+        }
+        if (!IsValidSectorAuthoringCameraReferenceId(marker.referenceId)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Camera, marker.id,
+                     "Level marker reference ID must contain 1-63 letters, digits, underscores, or dashes");
+        } else if (!cameraReferenceIds.insert(marker.referenceId).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::Camera, marker.id,
+                     "Duplicate camera reference ID");
+        }
+        if (!std::isfinite(marker.y) || !std::isfinite(marker.yawDegrees) || !std::isfinite(marker.pitchDegrees)
+                || std::fabs(marker.pitchDegrees) > 89.9f || !std::isfinite(marker.rollDegrees)
+                || !std::isfinite(marker.verticalFovDegrees) || marker.verticalFovDegrees < 1.0f
+                || marker.verticalFovDegrees > 179.0f) {
+            AddIssue(issues, SectorAuthoringObjectKind::Camera, marker.id,
+                     "Authoring camera transform must be finite");
         }
     }
 
@@ -3391,6 +3464,22 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
                 SectorCoordToVisibleAuthoring(marker.z)};
         compiled.yawRadians = marker.orientationDegrees * DegreesToRadians;
         result.topology.levelMarkers.push_back(std::move(compiled));
+    }
+
+    result.topology.cameras.reserve(graph.cameras.size());
+    for (const SectorAuthoringCamera& marker : graph.cameras) {
+        SectorCompiledCamera compiled;
+        compiled.sourceAuthoringCameraId = marker.id;
+        compiled.id = marker.referenceId;
+        compiled.position = Vector3{
+                SectorCoordToVisibleAuthoring(marker.x),
+                marker.y,
+                SectorCoordToVisibleAuthoring(marker.z)};
+        compiled.yawRadians = marker.yawDegrees * DegreesToRadians;
+        compiled.pitchRadians = marker.pitchDegrees * DegreesToRadians;
+        compiled.rollRadians = marker.rollDegrees * DegreesToRadians;
+        compiled.verticalFovDegrees = marker.verticalFovDegrees;
+        result.topology.cameras.push_back(std::move(compiled));
     }
 
     for (const auto& path : graph.paths) result.topology.paths.push_back(CompileSectorPath(path));

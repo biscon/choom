@@ -87,7 +87,15 @@ struct SectorStaticModel {
     std::string instanceId;
     float emissiveScale = 1.0f;
     SectorPropEmissionColors emissiveColors;
+    // Derived presentation state, separate from gameplay/origin membership.
+    int lightingSectorId = -1;
+    bool lightingPending = true;
 };
+
+void RefreshSectorStaticModelLighting(
+        SectorStaticModel& model, const SectorObjectTransform& transform, int originSectorId,
+        const engine::ModelAsset* asset, const SectorCollisionWorld* lookupWorld,
+        const SectorTopologyMap& map);
 
 struct SectorDynamicModel {
     int placedObjectId = 0;

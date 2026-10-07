@@ -132,6 +132,7 @@ void SelectSectorEditorAuthoringVertexTarget(SectorEditorSelectionServiceContext
 void SelectSectorEditorAuthoringFaceAnchorTarget(SectorEditorSelectionServiceContext& context, int faceAnchorId);
 void SelectSectorEditorAuthoringFogVolumeTarget(SectorEditorSelectionServiceContext& context, int fogVolumeId);
 void SelectSectorEditorAuthoringLevelMarkerTarget(SectorEditorSelectionServiceContext& context, int levelMarkerId);
+void SelectSectorEditorAuthoringCameraTarget(SectorEditorSelectionServiceContext& context, int cameraId);
 void SelectSectorEditorAuthoringStructuralPrimitiveTarget(
         SectorEditorSelectionServiceContext& context,
         int primitiveId);

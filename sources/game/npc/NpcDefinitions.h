@@ -9,6 +9,8 @@
 namespace game {
 
 inline constexpr int kNpcDefinitionFormatVersion = 1;
+inline constexpr std::array<int, 3> kDefaultNpcSpeechColor{255, 255, 255};
+inline constexpr size_t kMaximumNpcNameBytes = 255;
 inline constexpr const char* kNpcDefinitionsAssetRoot = "assets/npcs";
 inline constexpr const char* kNpcCharacterModelsAssetRoot =
         "assets/models/characters";
@@ -167,6 +169,7 @@ struct NpcDefinition {
     std::string id;
     std::string name;
     std::string voice = "male";
+    std::array<int, 3> speechColor = kDefaultNpcSpeechColor;
     bool hostile = false;
     std::string aiType;
     bool canOpenDoors = true;

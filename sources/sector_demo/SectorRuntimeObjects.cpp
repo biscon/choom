@@ -6,6 +6,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorSwingDoorCatalog.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
@@ -900,6 +901,27 @@ Vector3 ComputeSectorModelAmbient(
     return StaticModelSectorAmbient(map, sectorId);
 }
 
+void RefreshSectorStaticModelLighting(
+        SectorStaticModel& model, const SectorObjectTransform& transform, int originSectorId,
+        const engine::ModelAsset* asset, const SectorCollisionWorld* lookupWorld,
+        const SectorTopologyMap& map)
+{
+    const bool hasBounds = asset != nullptr && asset->hasLocalBounds;
+    const BoundingBox bounds = hasBounds
+            ? TransformSectorStaticModelBounds(asset->localBounds,
+                    BuildSectorStaticModelAuthoredTransform(transform.position,
+                            transform.rotationXRadians, transform.yawRadians,
+                            transform.rotationZRadians, model.scale))
+            : BoundingBox{};
+    model.lightingSectorId = lookupWorld != nullptr
+            ? lookupWorld->ResolveLightingSectorForBounds(originSectorId, bounds, hasBounds)
+            : originSectorId;
+    model.lightingPending = asset == nullptr;
+    model.containingSectorAmbient = StaticModelSectorAmbient(map, model.lightingSectorId);
+    model.environmentExposure = StaticModelEnvironmentExposure(
+            map, model.lightingSectorId, model.containingSectorAmbient);
+}
+
 void EnsureSectorRuntimeObjectWorldReserved(
         engine::World& world,
         SectorRuntimeObjectState& state,
@@ -1558,6 +1580,10 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.staticModel.castsShadow,
                     placedObject.staticModel.instanceId,
                     1.0f});
+            RefreshSectorStaticModelLighting(world.Get<SectorStaticModel>(entity),
+                    world.Get<SectorObjectTransform>(entity), object.currentSectorId,
+                    assets.GetModelAsset(model),
+                    state.objectSectorLookupWorldValid ? &state.objectSectorLookupWorld : nullptr, map);
             if (placedObject.staticModel.collision) {
                 world.Add(entity, SectorStaticModelCollider{
                         placedObject.id});
@@ -1650,6 +1676,7 @@ void SpawnPlacedRuntimeObjects(
                     definition->voice});
             auto& npcInstance = world.Get<NpcRuntimeInstance>(entity);
             npcInstance.displayName = definition->name;
+            npcInstance.speechColor = definition->speechColor;
             npcInstance.onUseScript = placedObject.npc.onUseScript;
             npcInstance.useDistance = placedObject.npc.useDistance;
             if (placedObject.npc.patrolEditorId > 0
@@ -2082,6 +2109,18 @@ void UpdateSectorRuntimeObjects(
         const SectorDoorPlayerObstacle* playerObstacle,
         const std::vector<SectorDoorPlayerObstacle>* doorObstacles)
 {
+    // Resolve bounds-dependent lighting once when a pending static model becomes
+    // available. Settled props are never rescanned during normal frame updates.
+    if (state.staticModelPendingCount > 0) {
+        world.ForEach<SectorObjectTransform, SectorObject, SectorStaticModel>(
+                [&](engine::Entity, SectorObjectTransform& transform, SectorObject& object,
+                    SectorStaticModel& model) {
+                    if (!model.lightingPending) return;
+                    RefreshSectorStaticModelLighting(model, transform, object.currentSectorId,
+                            assets.GetModelAsset(model.model),
+                            state.objectSectorLookupWorldValid ? &state.objectSectorLookupWorld : nullptr, map);
+                });
+    }
     world.ForEach<
             SectorDuctAccess,
             SectorObject,
@@ -2359,8 +2398,9 @@ bool SynchronizeSectorPlacedRuntimeObjectTransform(
             map, object.currentSectorId, ambient);
     if (world.Has<SectorStaticModel>(entry->entity)) {
         SectorStaticModel& model = world.Get<SectorStaticModel>(entry->entity);
-        model.containingSectorAmbient = ambient;
-        model.environmentExposure = exposure;
+        RefreshSectorStaticModelLighting(model, transform, object.currentSectorId,
+                assets.GetModelAsset(model.model),
+                state.objectSectorLookupWorldValid ? &state.objectSectorLookupWorld : nullptr, map);
     }
     if (world.Has<SectorDynamicModel>(entry->entity)) {
         SectorDynamicModel& model = world.Get<SectorDynamicModel>(entry->entity);

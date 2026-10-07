@@ -1,0 +1,275 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.40",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "LITTER KIT",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Wrapper_Snack_Yellow_Export"
+    }
+  ],
+  "materials": [
+    {
+      "name": "Litter_Print",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.6499999761581421
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        },
+        "baseColorFactor": [
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 1.0
+      }
+    },
+    {
+      "name": "Litter_Foil",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.49000000953674316,
+          0.5099999904632568,
+          0.5,
+          1
+        ],
+        "metallicFactor": 0.6499999761581421,
+        "roughnessFactor": 0.5799999833106995
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Crumpled wrapper film.003",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Packaging_Atlas_normal_opengl",
+      "uri": "textures/Packaging_Atlas_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Packaging_Atlas_basecolor",
+      "uri": "textures/Packaging_Atlas_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Packaging_Atlas_orm",
+      "uri": "textures/Packaging_Atlas_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 420,
+      "max": [
+        0.09306000173091888,
+        0.047098271548748016,
+        0.0625
+      ],
+      "min": [
+        -0.09306000173091888,
+        0.0004999998491257429,
+        -0.0625
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 420,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 420,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 420,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 420,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 524,
+      "max": [
+        0.09306000173091888,
+        0.047098271548748016,
+        0.0625
+      ],
+      "min": [
+        -0.09306000173091888,
+        0,
+        -0.0625
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 524,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 524,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 524,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 624,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 5040,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 5040,
+      "byteOffset": 5040,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3360,
+      "byteOffset": 10080,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6720,
+      "byteOffset": 13440,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 840,
+      "byteOffset": 20160,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6288,
+      "byteOffset": 21000,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6288,
+      "byteOffset": 27288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4192,
+      "byteOffset": 33576,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 8384,
+      "byteOffset": 37768,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1248,
+      "byteOffset": 46152,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 47400,
+      "uri": "Wrapper_Snack_Yellow.bin"
+    }
+  ]
+}

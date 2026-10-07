@@ -45,6 +45,8 @@ void Input::BeginFrame()
 
 void Input::PollRaylib(float dt)
 {
+    frameState.windowFocused = IsWindowFocused();
+    frameState.cursorOnScreen = IsCursorOnScreen();
     frameState.mousePosition = GetMousePosition();
     frameState.mouseDelta = Vector2{
             frameState.mousePosition.x - frameState.previousMousePosition.x,
@@ -211,6 +213,14 @@ bool Input::IsMouseButtonDown(int button) const
 Vector2 Input::MousePosition() const
 {
     return frameState.mousePosition;
+}
+
+void Input::SetMousePosition(int windowX, int windowY)
+{
+    ::SetMousePosition(windowX, windowY);
+    // Read back the rounded position through the active logical transform;
+    // event polling still happens only once per frame in PollRaylib.
+    SynchronizeInputMousePosition(frameState, GetMousePosition());
 }
 
 Vector2 Input::MouseDelta() const

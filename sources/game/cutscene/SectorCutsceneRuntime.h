@@ -6,6 +6,7 @@
 #include "engine/scripting/ScriptData.h"
 #include "game/navigation/SectorNavigationTypes.h"
 #include "game/npc/NpcRuntime.h"
+#include "sector_demo/SectorViewPose.h"
 
 #include <array>
 #include <cstddef>
@@ -28,9 +29,12 @@ class SectorCollisionWorld;
 class SectorNavigationWorld;
 struct SectorDynamicDoorCollider;
 struct SectorFpsControllerConfig;
+struct SectorTopologyMap;
 struct SectorFpsControllerState;
 
 inline constexpr size_t kSectorCutsceneMaximumCaptionBytes = 8192;
+inline constexpr size_t kSectorCutsceneMaximumDisplayCaptionBytes =
+        kSectorCutsceneMaximumCaptionBytes + kMaximumNpcNameBytes + 2;
 inline constexpr size_t kSectorCutsceneMaximumCaptionCodepoints = 2048;
 
 enum class SectorCutsceneLookTargetKind : uint8_t {
@@ -50,6 +54,8 @@ enum class SectorCutsceneTextPosition : int {
 };
 
 struct SectorCutsceneLookState {
+    int cameraIndex = -1;
+    bool tracking = false;
     uint64_t token = 0;
     engine::ScriptOperationHandle operation{};
     engine::Entity entity = engine::NullEntity();
@@ -107,6 +113,10 @@ struct SectorCutsceneCaptionState {
     SectorCutsceneCaptionKind kind = SectorCutsceneCaptionKind::Say;
     SectorCutsceneTextPosition position = SectorCutsceneTextPosition::Bottom;
     std::string text;
+    // Presentation only: speech timing and reveal offsets refer to text above.
+    std::string displayText;
+    size_t speakerPrefixBytes = 0;
+    Color color = WHITE;
     size_t codepointCount = 0;
     size_t visibleByteCount = 0;
     double revealSeconds = 0.0;
@@ -129,6 +139,8 @@ struct SectorCutsceneCaptionState {
 
 // Borrowed load-time data used only while constructing a caption.
 struct SectorCutsceneSpeechOptions {
+    std::string_view speakerName;
+    Color color = WHITE;
     engine::Entity speaker = engine::NullEntity();
     bool playerSpeaker = false;
     engine::DialogueMood mood = engine::DialogueMood::Neutral;
@@ -160,7 +172,28 @@ struct SectorCutscenePresentationLayout {
     float captionY = 0.0f;
 };
 
+struct SectorCutsceneCamera {
+    std::string id;
+    SectorViewPose authoredPose;
+    SectorViewPose pose;
+    float authoredFov = 75.0f;
+    float fov = 75.0f;
+};
+
+struct SectorCutsceneCameraMove {
+    int cameraIndex = -1;
+    uint64_t token = 0;
+    engine::ScriptOperationHandle operation{};
+    Vector3 start{}, destination{};
+    double elapsedSeconds = 0.0, durationSeconds = 0.0;
+    bool active = false;
+};
+
 struct SectorCutsceneRuntime {
+    std::vector<SectorCutsceneCamera> cameras;
+    int activeCameraIndex = -1;
+    SectorCutsceneCameraMove cameraMove;
+    float playerFov = 75.0f;
     SectorCutscenePlayerMoveState playerMove;
     SectorCutsceneLookState look;
     SectorCutsceneCaptionState caption;
@@ -173,6 +206,15 @@ struct SectorCutsceneRuntime {
     uint64_t nextToken = 1;
     bool controlsEnabled = true;
 };
+
+void LoadSectorCutsceneCameras(SectorCutsceneRuntime& runtime, const SectorTopologyMap& map);
+void ResetSectorCutsceneCameraOverrides(SectorCutsceneRuntime& runtime);
+SectorCutsceneCamera* ActiveSectorCutsceneCamera(SectorCutsceneRuntime& runtime);
+const SectorCutsceneCamera* ActiveSectorCutsceneCamera(const SectorCutsceneRuntime& runtime);
+bool BeginSectorCutsceneCameraMove(SectorCutsceneRuntime& runtime, Vector3 destination,
+        double durationSeconds, uint64_t& token, std::string& error);
+void UpdateSectorCutsceneCameraMove(SectorCutsceneRuntime& runtime,
+        engine::ScriptRuntime& scripts, float dt);
 
 void InitializeSectorCutsceneRuntime(SectorCutsceneRuntime& runtime);
 void ResetSectorCutsceneRuntime(
@@ -249,6 +291,8 @@ void BindSectorCutsceneLookOperation(
         uint64_t token,
         engine::ScriptOperationHandle operation);
 void CancelSectorCutsceneLook(SectorCutsceneRuntime& runtime, uint64_t token);
+bool AdvanceSectorCutsceneLookPose(SectorCutsceneLookState& look, SectorViewPose& pose,
+        Vector3 target, float dt);
 void UpdateSectorCutsceneLook(
         SectorCutsceneRuntime& runtime,
         engine::World& world,

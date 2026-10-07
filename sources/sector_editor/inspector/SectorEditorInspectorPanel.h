@@ -18,7 +18,9 @@
 #include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/cameras/SectorEditorCameraEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
+#include "sector_editor/services/cameras/SectorEditorCameraEditingState.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
@@ -49,6 +51,7 @@ enum class SectorEditorInspectorPanelRequestKind {
     OpenDeleteSelectedFogVolumeConfirmation,
     OpenDeleteSelectedReflectionProbeConfirmation,
     OpenDeleteSelectedLevelMarkerConfirmation,
+    OpenDeleteSelectedCameraConfirmation,
     OpenDeleteSelectedSoundEmitterConfirmation,
     OpenDeleteSelectedTriggerConfirmation,
     BakeLightmaps,
@@ -90,6 +93,7 @@ struct SectorEditorInspectorPanelContext {
     FogVolumeEditingUiState& fogVolumeUiState;
     ReflectionProbeEditingUiState& reflectionProbeUiState;
     LevelMarkerEditingUiState& levelMarkerUiState;
+    CameraEditingUiState& cameraUiState;
     SoundEmitterEditingUiState& soundEmitterUiState;
     TriggerEditingUiState& triggerUiState;
     SectorEditorStructuralPrimitiveEditingUiState& structuralPrimitiveUiState;
@@ -106,6 +110,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
     SectorEditorReflectionProbeEditingService& reflectionProbeEditing;
     SectorEditorLevelMarkerEditingService& levelMarkerEditing;
+    SectorEditorCameraEditingService& cameraEditing;
     SectorEditorSoundEmitterEditingService& soundEmitterEditing;
     SectorEditorTriggerEditingService& triggerEditing;
     SectorEditorAuthoringFaceMergeService& authoringFaceMerge;
@@ -170,6 +175,12 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
     return height;
 }
 
+inline float SectorEditorFogVolumeFitRowHeight(
+        const SectorAuthoringFogVolume& volume, float rowHeight, float gap)
+{
+    return volume.shape == SectorLocalFogShape::Box ? rowHeight + gap : 0.0f;
+}
+
 inline float MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
         const SectorAuthoringFogVolume& volume,
         float rowHeight,
@@ -181,6 +192,7 @@ inline float MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
         ++rowCount; // Yaw.
     }
     float height = 38.0f + static_cast<float>(rowCount) * (rowHeight + gap);
+    height += SectorEditorFogVolumeFitRowHeight(volume, rowHeight, gap);
     height += 2.0f * (SectorEditorInspectorStackedOptionRowHeight(rowHeight, gap) + gap); // ID and style.
     if (instanceIdErrorHeight > 0.0f) height += instanceIdErrorHeight + gap;
     return height;

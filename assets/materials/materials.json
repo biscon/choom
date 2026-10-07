@@ -18,8 +18,8 @@
     "baseboard_metal": {
       "albedoTexturePath": "assets/images/baseboards/baseboard_metal.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 1.0,
-      "roughnessFactor": 1.0,
+      "metallicFactor": 0.800000011920929,
+      "roughnessFactor": 0.4000000059604645,
       "normalStrength": 0.15000000596046448
     },
     "baseboard_painted_white": {
@@ -176,6 +176,62 @@
       "roughnessFactor": 0.75,
       "normalStrength": 1.0
     },
+    "graffiti_decal_anarchy_red": {
+      "albedoTexturePath": "assets/images/decals/graffiti/graffiti_decal_anarchy_red.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "graffiti_decal_piece_jot": {
+      "albedoTexturePath": "assets/images/decals/graffiti/graffiti_decal_piece_jot.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "graffiti_decal_piece_moa": {
+      "albedoTexturePath": "assets/images/decals/graffiti/graffiti_decal_piece_moa.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "graffiti_decal_piece_vim": {
+      "albedoTexturePath": "assets/images/decals/graffiti/graffiti_decal_piece_vim.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "graffiti_decal_slogan_red": {
+      "albedoTexturePath": "assets/images/decals/graffiti/graffiti_decal_slogan_red.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "graffiti_decal_tag_jot": {
+      "albedoTexturePath": "assets/images/decals/graffiti/graffiti_decal_tag_jot.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "graffiti_decal_tag_moa": {
+      "albedoTexturePath": "assets/images/decals/graffiti/graffiti_decal_tag_moa.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
+    "graffiti_decal_tag_vim": {
+      "albedoTexturePath": "assets/images/decals/graffiti/graffiti_decal_tag_vim.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.8500000238418579,
+      "normalStrength": 1.0
+    },
     "hub_cobble_512": {
       "albedoTexturePath": "assets/images/hub/hub_cobble_512.png",
       "filter": "anisotropic8x",
@@ -195,6 +251,13 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.8500000238418579,
       "roughnessFactor": 0.550000011920929,
+      "normalStrength": 1.0
+    },
+    "hub_mud_gravel_512": {
+      "albedoTexturePath": "assets/images/hub/hub_mud_gravel_512.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
       "normalStrength": 1.0
     },
     "hydraulic_blast_door_512": {
@@ -243,6 +306,34 @@
         "maskPath": "assets/images/macros/patchy_wear.png",
         "repeatMeters": 4.0,
         "darkening": 0.25,
+        "roughnessChange": 0.11999999731779099
+      }
+    },
+    "large_industrial_tiles_dirty": {
+      "albedoTexturePath": "assets/images/floors/large_industrial_tiles_512.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/patchy_wear.png",
+        "repeatMeters": 6.0,
+        "darkening": 0.30000001192092896,
+        "roughnessChange": 0.11999999731779099
+      }
+    },
+    "long_white_tiles": {
+      "albedoTexturePath": "assets/images/hires/long_white_tiles.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.3799999952316284,
         "roughnessChange": 0.11999999731779099
       }
     },
@@ -385,6 +476,34 @@
       "metallicFactor": 0.0,
       "roughnessFactor": 0.6499999761581421,
       "normalStrength": 1.0
+    },
+    "tunnel_concrete_ceiling": {
+      "albedoTexturePath": "assets/images/walls/seamless_worn_concrete.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/broad_grime.png",
+        "repeatMeters": 6.0,
+        "darkening": 0.30000001192092896,
+        "roughnessChange": 0.11999999731779099
+      }
+    },
+    "tunnel_wall_concrete": {
+      "albedoTexturePath": "assets/images/walls/seamless_worn_concrete.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0,
+      "macro": {
+        "enabled": true,
+        "maskPath": "assets/images/macros/patchy_wear.png",
+        "repeatMeters": 8.0,
+        "darkening": 0.25,
+        "roughnessChange": 0.11999999731779099
+      }
     },
     "veg_billboard_01": {
       "albedoTexturePath": "assets/images/hub/veg_billboard_01.png",

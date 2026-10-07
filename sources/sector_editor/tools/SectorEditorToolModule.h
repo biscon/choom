@@ -9,6 +9,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/cameras/SectorEditorCameraEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
@@ -44,6 +45,7 @@ struct SectorEditorToolContext {
     SectorEditorAuthoringFogVolumeEditingService* fogVolumeEditing = nullptr;
     SectorEditorReflectionProbeEditingService* reflectionProbeEditing = nullptr;
     SectorEditorLevelMarkerEditingService* levelMarkerEditing = nullptr;
+    SectorEditorCameraEditingService* cameraEditing = nullptr;
     SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr;
     SectorEditorAuthoringFaceMergeService* authoringFaceMerge = nullptr;
     SectorEditorTriggerEditingService* triggerEditing = nullptr;

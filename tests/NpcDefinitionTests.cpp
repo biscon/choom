@@ -345,6 +345,66 @@ void TestDialogueVoiceDefinition()
     }
 }
 
+void TestSpeechColorDefinitionAndEditor()
+{
+    auto definition = MakeDefinition("speech_test");
+    game::NpcDefinition parsed;
+    std::string json;
+    std::string error;
+    const std::array<int, 3> pink{255, 128, 191};
+    Check(definition.speechColor == game::kDefaultNpcSpeechColor
+                  && game::SerializeNpcDefinitionJson(definition, json, error)
+                  && !Json::parse(json).contains("speechColor")
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.speechColor == game::kDefaultNpcSpeechColor,
+          "new and older NPC definitions use white without a format migration");
+    definition.speechColor = pink;
+    Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                  && Json::parse(json)["speechColor"] == Json::array({255, 128, 191})
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && parsed.speechColor == pink,
+          "RGB speech color round-trips");
+    auto invalid = Json::parse(json);
+    for (const Json& value : {Json(nullptr), Json("pink"), Json(255),
+            Json::array({255, 128}), Json::array({255, 128, 191, 255}),
+            Json::array({-1, 0, 0}), Json::array({256, 0, 0}),
+            Json::array({0, 0.5, 0}), Json::array({0, true, 0}),
+            Json::array({0, "128", 0}), Json::array({4294967296ULL, 0, 0})}) {
+        invalid["speechColor"] = value;
+        Check(!game::ParseNpcDefinitionJson(invalid.dump(), parsed, error),
+              "malformed or out-of-range RGB color is rejected before conversion");
+    }
+    definition.speechColor = {0, 256, 0};
+    Check(!game::SerializeNpcDefinitionJson(definition, json, error),
+          "invalid in-memory colors cannot be saved");
+
+    Sandbox sandbox;
+    definition.speechColor = game::kDefaultNpcSpeechColor;
+    Check(game::SaveNpcDefinition(sandbox.root / "speech_test.json", definition, error),
+          "speech color editor fixture saves");
+    game::SectorEditorNpcEditorState state;
+    game::SectorEditorNpcEditorSessionState session;
+    std::string status;
+    game::SectorEditorNpcEditorService service{state, session, status, sandbox.root};
+    Check(service.Open(), "speech color fixture opens");
+    service.SetSelectedSpeechColor(pink);
+    service.SetSelectedSpeechColor({-1, 0, 0});
+    Check(service.SelectedDraft()->definition.speechColor == pink,
+          "color draft rejects invalid channels");
+    Check(service.SaveAndClose(nullptr) && service.Open()
+                  && service.SelectedDraft()->definition.speechColor == pink,
+          "color-only edits are detected, saved, and reloaded");
+    service.SetSelectedSpeechColor({0, 128, 255});
+    service.Cancel(nullptr);
+    Check(service.Open() && service.SelectedDraft()->definition.speechColor == pink,
+          "Cancel discards speech color edits");
+    service.SetSelectedSpeechColor(game::kDefaultNpcSpeechColor);
+    Check(service.SaveAndClose(nullptr) && service.Open()
+                  && service.SelectedDraft()->definition.speechColor == game::kDefaultNpcSpeechColor,
+          "speech color can be reset to white and reloaded");
+    service.Cancel(nullptr);
+}
+
 void TestHeadLookDefinitionRoundTripAndValidation()
 {
     game::NpcDefinition definition = MakeDefinition("friendly_look");
@@ -975,6 +1035,7 @@ int main()
 {
     TestRoundTripDefaultsAndSharedClips();
     TestDialogueVoiceDefinition();
+    TestSpeechColorDefinitionAndEditor();
     TestHeadLookDefinitionRoundTripAndValidation();
     TestBodyPartDamageRoundTripAndValidation();
     TestBoneImpactRoundTripAndValidation();

@@ -123,6 +123,18 @@ struct SectorAuthoringLevelMarker {
     float orientationDegrees = 0.0f;
 };
 
+struct SectorAuthoringCamera {
+    int id = -1;
+    std::string referenceId;
+    SectorCoord x = 0;
+    SectorCoord z = 0;
+    float y = 0.0f;
+    float yawDegrees = 0.0f;
+    float pitchDegrees = 0.0f;
+    float rollDegrees = 0.0f;
+    float verticalFovDegrees = 75.0f;
+};
+
 struct SectorAuthoringPatrolWaypoint {
     int levelMarkerId = -1;
     int delayMilliseconds = 0;
@@ -171,6 +183,7 @@ struct SectorAuthoringGraph {
     std::vector<SectorAuthoringFogVolume> fogVolumes;
     std::vector<SectorAuthoringReflectionProbe> reflectionProbes;
     std::vector<SectorAuthoringLevelMarker> levelMarkers;
+    std::vector<SectorAuthoringCamera> cameras;
     std::vector<SectorAuthoringPatrol> patrols;
     std::vector<SectorAuthoringPath> paths;
     int nextPathId = 1;
@@ -193,6 +206,7 @@ enum class SectorAuthoringObjectKind {
     FogVolume,
     ReflectionProbe,
     LevelMarker,
+    Camera,
     Patrol,
     Path,
     SoundEmitter,
@@ -425,15 +439,18 @@ std::string AllocateSectorAuthoringFogVolumeInstanceId(const SectorAuthoringGrap
 void AssignMissingSectorAuthoringFogVolumeInstanceIds(SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringReflectionProbeId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph);
+int AllocateSectorAuthoringCameraId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringPatrolId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringSoundEmitterId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringStructuralPrimitiveId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph);
+std::string AllocateSectorAuthoringCameraReferenceId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringPatrolReferenceId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringSoundEmitterReferenceId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringTriggerReferenceId(const SectorAuthoringGraph& graph);
 bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id);
+bool IsValidSectorAuthoringCameraReferenceId(const std::string& id);
 bool IsValidSectorAuthoringPatrolReferenceId(const std::string& id);
 bool IsValidSectorAuthoringSoundEmitterReferenceId(const std::string& id);
 bool IsValidSectorTriggerReferenceId(const std::string& id);
@@ -475,10 +492,19 @@ SectorAuthoringReflectionProbe NormalizeSectorAuthoringReflectionProbe(
 const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,
         int id);
+const SectorAuthoringCamera* FindSectorAuthoringCamera(
+        const SectorAuthoringGraph& graph,
+        int id);
 SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
         SectorAuthoringGraph& graph,
         int id);
+SectorAuthoringCamera* FindSectorAuthoringCamera(
+        SectorAuthoringGraph& graph,
+        int id);
 const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& referenceId);
+const SectorAuthoringCamera* FindSectorAuthoringCameraByReferenceId(
         const SectorAuthoringGraph& graph,
         const std::string& referenceId);
 const SectorAuthoringPatrol* FindSectorAuthoringPatrol(

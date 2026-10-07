@@ -672,6 +672,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::ReflectionProbe: return "Reflection Probe";
         case SectorEditorTool::Trigger: return "Trigger";
         case SectorEditorTool::LevelMarker: return "Level Marker";
+        case SectorEditorTool::Camera: return "Camera";
         case SectorEditorTool::Path: return "Path";
         case SectorEditorTool::SoundEmitter: return "Sound Emitter";
         case SectorEditorTool::StaticLight: return "Static Light";
@@ -696,6 +697,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
             || tool == SectorEditorTool::Trigger
             || tool == SectorEditorTool::Path
             || tool == SectorEditorTool::LevelMarker
+            || tool == SectorEditorTool::Camera
             || tool == SectorEditorTool::SoundEmitter
             || tool == SectorEditorTool::AuthoringMove;
 }
@@ -739,6 +741,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringReflectionProbe: return "reflection probe";
         case SectorEditorPickKind::Trigger: return "trigger";
         case SectorEditorPickKind::LevelMarker: return "level marker";
+        case SectorEditorPickKind::Camera: return "camera";
         case SectorEditorPickKind::Path: return "path";
         case SectorEditorPickKind::SoundEmitter: return "sound emitter";
     }
@@ -768,6 +771,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::AuthoringReflectionProbe:
         case SectorEditorPickKind::Trigger:
         case SectorEditorPickKind::LevelMarker:
+        case SectorEditorPickKind::Camera:
         case SectorEditorPickKind::SoundEmitter:
             return target.id >= 0;
         case SectorEditorPickKind::None:
@@ -791,6 +795,7 @@ int SectorEditorPickPriority(SectorEditorPickKind kind)
 {
     switch (kind) {
         case SectorEditorPickKind::LevelMarker: return 0;
+        case SectorEditorPickKind::Camera: return 0;
         case SectorEditorPickKind::AuthoringReflectionProbe: return 0;
         case SectorEditorPickKind::RuntimeObject: return 1;
         case SectorEditorPickKind::StructuralPrimitive: return 2;
@@ -1196,6 +1201,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::DynamicSpotLight: return "Dynamic Spot: click inside a sector to place a runtime spot light";
         case SectorEditorTool::Path: return "Path: click waypoints; Enter confirms; Esc/right click cancels";
         case SectorEditorTool::LevelMarker: return "Level Marker: click inside a sector to place a named entry or reference point";
+        case SectorEditorTool::Camera: return "Camera: click to place a named cutscene viewpoint";
         case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Select to move selected primitives";
     }
     return "";

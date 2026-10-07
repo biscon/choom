@@ -52,6 +52,7 @@ bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceCo
             || context.manipulationState.authoringFogVolumeDrag.active
             || context.manipulationState.authoringReflectionProbeDrag.active
             || (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active)
+            || (context.cameraEditing != nullptr && context.cameraEditing->Drag().active)
             || (context.soundEmitterEditing != nullptr && context.soundEmitterEditing->Drag().active)
             || (context.triggerEditing != nullptr && context.triggerEditing->IsMoving())
             || context.lightState.lightDrag.active
@@ -71,7 +72,11 @@ void UpdateActiveSectorEditorMapPointManipulations(
         SectorCoord y = 0;
         if (VisibleAuthoringToSectorCoord(snapped.x, x)
                 && VisibleAuthoringToSectorCoord(snapped.y, y)) {
-            context.fogVolumeEditing->UpdateMove(SectorTopologyCoordPoint{x, y});
+            if (context.manipulationState.authoringFogVolumeDrag.resizing) {
+                context.fogVolumeEditing->UpdateResize({x, y});
+            } else {
+                context.fogVolumeEditing->UpdateMove({x, y});
+            }
         }
     }
     if (context.manipulationState.authoringReflectionProbeDrag.active
@@ -90,6 +95,13 @@ void UpdateActiveSectorEditorMapPointManipulations(
             && context.screenToMap
             && context.snapMapPoint) {
         context.levelMarkerEditing->UpdateMove(
+                context.snapMapPoint(context.screenToMap(screenPoint)));
+    }
+    if (context.cameraEditing != nullptr
+            && context.cameraEditing->Drag().active
+            && context.screenToMap
+            && context.snapMapPoint) {
+        context.cameraEditing->UpdateMove(
                 context.snapMapPoint(context.screenToMap(screenPoint)));
     }
     if (context.soundEmitterEditing != nullptr
@@ -139,7 +151,11 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
     }
     if (context.manipulationState.authoringFogVolumeDrag.active
             && context.fogVolumeEditing != nullptr) {
-        context.fogVolumeEditing->FinishMove();
+        if (context.manipulationState.authoringFogVolumeDrag.resizing) {
+            context.fogVolumeEditing->FinishResize();
+        } else {
+            context.fogVolumeEditing->FinishMove();
+        }
     }
     if (context.manipulationState.authoringReflectionProbeDrag.active
             && context.reflectionProbeEditing != nullptr) {
@@ -147,6 +163,9 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
     }
     if (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active) {
         context.levelMarkerEditing->FinishMove();
+    }
+    if (context.cameraEditing != nullptr && context.cameraEditing->Drag().active) {
+        context.cameraEditing->FinishMove();
     }
     if (context.soundEmitterEditing != nullptr && context.soundEmitterEditing->Drag().active) {
         context.soundEmitterEditing->FinishMove();
@@ -190,6 +209,10 @@ bool CancelFirstActiveSectorEditorManipulation(
     }
     if (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active) {
         context.levelMarkerEditing->CancelMove(authoringVertexMessage);
+        return true;
+    }
+    if (context.cameraEditing != nullptr && context.cameraEditing->Drag().active) {
+        context.cameraEditing->CancelMove(authoringVertexMessage);
         return true;
     }
     if (context.soundEmitterEditing != nullptr && context.soundEmitterEditing->Drag().active) {
@@ -236,6 +259,9 @@ void CancelActiveSectorEditorManipulation(
     }
     if (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active) {
         context.levelMarkerEditing->CancelMove(authoringVertexMessage);
+    }
+    if (context.cameraEditing != nullptr && context.cameraEditing->Drag().active) {
+        context.cameraEditing->CancelMove(authoringVertexMessage);
     }
     if (context.soundEmitterEditing != nullptr && context.soundEmitterEditing->Drag().active) {
         context.soundEmitterEditing->CancelMove(authoringVertexMessage);
@@ -357,6 +383,11 @@ void StartSectorEditorSelectedManipulation(
         case SectorEditorPickKind::LevelMarker:
             if (context.levelMarkerEditing != nullptr) {
                 context.levelMarkerEditing->BeginMove(target.id);
+            }
+            break;
+        case SectorEditorPickKind::Camera:
+            if (context.cameraEditing != nullptr) {
+                context.cameraEditing->BeginMove(target.id);
             }
             break;
         case SectorEditorPickKind::SoundEmitter:

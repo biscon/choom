@@ -12,6 +12,7 @@ ranges, return values, behavior, and failure details.
 - **[Lifecycle](#script-files-and-lifecycle):** `init()`, `shutdown()`;
   `FrameDelta` is the read-only frame delta in seconds.
 - **[Audio](#level-audio):** `playMapSound(soundId [, volume [, pitch]])`,
+  `playMapMusic(musicId [, loop [, volume]])`, `stopMapMusic(handleOrMusicId)`,
   `playSoundEmitter(emitterId [, volume [, pitch]])`,
   `stopSoundEmitter(emitterId)`.
 - **[Tasks](#tasks-and-timing):** `delay(milliseconds)`,
@@ -81,6 +82,9 @@ ranges, return values, behavior, and failure details.
   `movePlayer(levelMarkerId [, gait [, movementSpeed [, options]]])`,
   `startMovePlayer(x, z [, gait [, movementSpeed [, options]]])`,
   `startMovePlayer(levelMarkerId [, gait [, movementSpeed [, options]]])`.
+- **[Level cameras](#level-cameras):** `setActiveCamera`, `setCameraPosition`,
+  `setCameraRotation`, `setCameraFov`, `moveCamera`, `startMoveCamera`,
+  `trackCameraNpc`, `stopCameraTracking`.
 - **[Camera looks](#animated-camera-looks):**
   `lookAtNpc(instanceId, durationMs [, targetHeight])`,
   `startLookAtNpc(instanceId, durationMs [, targetHeight])`,
@@ -157,9 +161,10 @@ elapsed = elapsed + FrameDelta
 
 ## Level audio
 
-Map audio IDs come from the level's **Sound Editor**. Roomtones use entries
-authored as `Music (streaming)`; the APIs below use buffered `Sound`
-entries. Invalid IDs or assets that are not ready return `false, reason`.
+Map audio IDs come from the level's **Sound Editor**. `playMapSound` uses buffered
+`Sound` entries; `playMapMusic` and roomtones use `Music (streaming)` entries.
+Emitters support either type. Expected failures return `false, reason`, except
+`playMapMusic`, which returns `nil, reason`.
 
 ### `playMapSound(soundId [, volume [, pitch]]) -> true | false, reason`
 
@@ -168,6 +173,44 @@ Plays a non-positional one-shot. Volume defaults to `1.0` and is limited to
 
 ```lua
 playMapSound("light_switch_click", 0.8, 1.05)
+```
+
+### `playMapMusic(musicId [, loop [, volume]]) -> handle | nil, reason`
+
+Plays non-positional streaming Music. `loop` defaults to `true`; volume defaults
+to `1.0` and must be finite and within `0.0..1.0`. Music is unaffected by distance,
+occlusion, underwater muffling, or roomtone fades. It follows global audio
+pause/resume and stops when the level audio is unloaded or rebuilt.
+
+Only one script playback runs per Music ID. Calling again while it is playing
+updates loop and volume without restarting and returns the same positive integer
+handle. Different IDs can play simultaneously, even if they reference the same
+file. These streams are independent of roomtones and emitters.
+
+After stopping or natural completion, playing again starts from the beginning
+with a new handle. Handles are runtime-only: do not save them across level loads.
+Unknown/non-Music IDs, pending/failed assets, unavailable or paused audio, and
+exhausted playback capacity return `nil, reason`. Invalid argument types or volume
+ranges raise Lua errors.
+
+```lua
+local music, reason = playMapMusic("theme", true, 0.7)
+if music then
+    playMapMusic("theme", true, 0.4) -- adjust without restarting
+    stopMapMusic(music)
+end
+```
+
+### `stopMapMusic(handleOrMusicId) -> true | false, reason`
+
+Stops script music by its integer playback handle or authored Music ID string.
+Stopping an already-stopped playback is harmless. A handle becomes stale when
+that ID starts a new playback or the level audio is unloaded; stale handles cannot
+stop a replacement playback. Unknown/non-Music IDs and invalid/stale handles
+return `false, reason`. Roomtones and emitters are unaffected.
+
+```lua
+stopMapMusic("theme")
 ```
 
 ### `playSoundEmitter(emitterId [, volume [, pitch]]) -> true | false, reason`
@@ -1119,7 +1162,8 @@ long wrapped captions move upward when needed to fit. Font size and wrapping
 remain unchanged. Explicit `TOP` and `CENTER` text retain their normal positions.
 
 `endCutscene()` immediately restores controls and HUD while the bars slide out.
-Like `enableControls(true)`, it cancels active scripted player movement and looks.
+Like `enableControls(true)`, it cancels active scripted player movement and looks,
+returns to the player camera, and resets runtime level-camera poses.
 Repeated calls are harmless, and reversing a transition preserves its current
 position. A full transition takes 350 ms; reversal retraces the remaining portion.
 
@@ -1227,6 +1271,131 @@ bounds: `0` is the bottom and `1` is the top. Targets are followed live while
 they move. `lookAtProp` accepts static 3D and dynamic props from their shared
 instance-ID namespace. Only one scripted look may be active.
 
+### Level cameras
+
+Place a **Camera** in the editor's tools pane and give it a unique Script ID
+(for example `office_bed` or `security_hall`). Cameras participate in the Select
+tool's overlapping click stack and can be dragged in 2D without changing height.
+The inspector edits position, yaw, pitch, roll, and vertical FOV. Select a camera,
+enter 3D FreeFly preview, unlock with F11, and click **Pilot Camera**. Use WASD,
+mouse look, Space/Ctrl for height, Shift for precision, and Q/E for roll.
+Enter/Apply saves; Escape/Cancel restores the previous preview without saving.
+FOV is editable in the unlocked pilot overlay. Piloted X/Z positions round to
+the authoring grid (1/16 map unit).
+
+```text
+setActiveCamera(cameraId) -> true | false, reason
+setCameraPosition(x, y, z) -> true | false, reason
+setCameraRotation(yawDegrees, pitchDegrees, rollDegrees) -> true | false, reason
+setCameraFov(verticalDegrees) -> true | false, reason
+moveCamera(dx, dy, dz, durationMs) -> true | false, reason
+moveCamera(markerId, durationMs, floorOffsetY) -> true | false, reason
+startMoveCamera(dx, dy, dz, durationMs) -> operation | nil, reason
+startMoveCamera(markerId, durationMs, floorOffsetY) -> operation | nil, reason
+trackCameraNpc(instanceId [, turnDurationMs [, targetHeight]]) -> true | false, reason
+stopCameraTracking() -> true | false, reason
+```
+
+`setActiveCamera("office_bed")` instantly switches the rendered view.
+`setActiveCamera("player")` returns to the player without ending the cutscene or
+restoring controls. `player` is reserved and cannot be an authored camera ID.
+Camera IDs follow marker syntax: 1–63 letters, digits, underscores, or dashes;
+they are case-sensitive and unique among cameras in the level.
+
+These commands require the managed task that owns locked controls, acquired
+with `startCutscene()` or `enableControls(false)`. The position/rotation/FOV,
+movement, and tracking commands additionally require an active level camera.
+Unknown IDs, competing ownership, and invalid values fail without changing the
+current view. `endCutscene()`, `enableControls(true)`, owner-task completion,
+failure or cancellation, and map unload return to the player. The existing
+conversation rule still requires `endConversation()` before restoring controls.
+
+Runtime camera poses are separate from the saved map. Cuts between cameras
+retain their modified poses within the current control lock. Restoring controls
+resets all cameras to their authored poses. Switching to an already active
+camera is a no-op. Switching views cancels outgoing standalone look/tracking
+and camera-movement operations; scripted player movement and its attached
+arrival look remain tied to the player.
+
+**Units:** camera scripting uses **world units**, with Y up.
+Editor position fields use **map units**; currently 8 map units equal 1 world
+unit. Rotation uses degrees: yaw 0 faces +X, yaw 90 faces +Z, and positive pitch
+looks up. Pitch is limited to −89.9..89.9 degrees; vertical FOV is 1..179 degrees.
+All numeric arguments must be finite. Durations use non-negative milliseconds.
+`setCameraFov` edits vertical FOV, independently of the player's horizontal-FOV
+setting.
+
+`moveCamera(dx, dy, dz, durationMs)` adds offsets along the **world axes** to the
+active camera's current position when the call starts. Camera rotation does not
+rotate these offsets; repeated calls accumulate movement. Numeric camera movement
+previously accepted absolute destinations; update existing calls accordingly.
+`setCameraPosition(x, y, z)` still sets an absolute world position.
+
+`moveCamera(markerId, durationMs, floorOffsetY)` moves to the level marker's X/Z
+position and the containing sector's floor height plus `floorOffsetY`. The offset
+is required and uses world units. The marker's authored Y and rotation are
+ignored. Negative offsets are allowed. An unknown marker, marker outside a sector,
+unavailable floor lookup, non-finite values, or coordinate overflow fails without
+changing the camera or its current operation. The destination is resolved once
+when movement starts. `startMoveCamera` supports both forms with the same meanings.
+
+```lua
+moveCamera(2, 0.5, 0, 1000) -- Offset by +2 X and +0.5 Y over one second.
+moveCamera("marker_1", 1000, 1.65) -- Finish 1.65 world units above the sector floor.
+local move = startMoveCamera("marker_2", 2000, 1.65)
+await(move)
+```
+
+Camera movement follows a straight line with the same quintic smoother-step
+ease-in/ease-out as scripted looks, without navigation or collision. Zero-duration
+movement applies immediately. `startMoveCamera` supports `await`, `operationStatus`, and
+`cancelOperation`. Cancellation holds the last reached position. One camera move
+and one aiming operation may run together; competing operations fail. Position
+and rotation setters fail while an operation owns that channel. FOV can change
+during movement or aiming.
+
+Existing `lookAtNpc`/`lookAtProp` and their async forms aim the active view when
+started. With the player view active, their previous behavior is unchanged.
+`screenShake` also affects the rendered view. Player collision, physical sector
+lookup, movement, oxygen, and physics remain at the player; remote rendering
+visibility, spatial audio, and underwater presentation use the camera viewpoint.
+Remote cameras omit the player viewmodel, headbob, recoil, and injury effects.
+
+`trackCameraNpc` returns immediately and keeps the camera position and roll
+fixed while aiming at a moving NPC. It eases into the initial aim over
+`turnDurationMs` (default 750), then continually follows the NPC's live visual
+bounds. `targetHeight` defaults to 0.5 and ranges from 0 (bottom) to 1 (top).
+Movement can run concurrently with tracking. `stopCameraTracking()` is idempotent
+and holds the last rotation; call it before starting another look. If the NPC
+is removed, disabled, unavailable for rendering, or coincides with the camera,
+tracking stops, keeps the last pose, and prints a warning.
+
+```lua
+function officeBedScene()
+    assert(startCutscene())
+    assert(fadeOut(250))
+    assert(setActiveCamera("office_bed"))
+    assert(trackCameraNpc("elin", 500, 0.75))
+    assert(fadeIn(250))
+    say("elin", "Stay still. Let me look at that.")
+    assert(fadeOut(250))
+    assert(setActiveCamera("player"))
+    assert(fadeIn(250))
+    assert(endCutscene())
+end
+
+function showClosingGate()
+    assert(startCutscene())
+    assert(setActiveCamera("gate_view"))
+    assert(moveDoor("puzzle_gate", 0.0, 2500))
+    assert(endCutscene())
+end
+```
+
+Camera primitives are editor/viewpoint data: they have no rendered game model,
+collision, or baked-light contribution. Camera edits do not change the lightmap
+source hash or require rebaking.
+
 ### Screen shake
 
 ```text
@@ -1313,11 +1482,21 @@ to male. The optional mood is `neutral` (default), `happy`, `angry`, `afraid`,
 `panicked`, `pained`, or `relieved`. Pass `nil` for mood to specify only `holdMs`.
 Unknown NPC IDs or moods fail before replacing the current caption.
 
+NPC speech uses the NPC editor's **Speech color** (RGB channels from 0–255),
+which defaults to white for new and existing definitions. Elin is configured pink.
+Both `say(npcId, ...)` and `startSay(npcId, ...)` prefix the message with the NPC's
+Name and `: `, for example `Elin: Where did you put those cuffs?`. An empty Name
+falls back to the placed instance ID. The entire line uses the speech color;
+the name appears immediately while the message types out. The prefix does not
+change voice playback, message reveal timing, or hold duration.
+
 `say(message)` speaks as the player using the **male** voice, with independent
 session-only clip history and local, non-positional playback. Its optional second
 argument is a table with `mood` and `holdMs`; omitted fields use the same defaults
 as NPC speech. A second string selects the existing NPC signature. `startSay`
 accepts both forms and retains the same shared-caption operation behavior.
+Player speech stays white with no name prefix. Silent `text` captions retain
+their existing appearance.
 Use `text` for silent captions.
 
 ```lua

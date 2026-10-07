@@ -18,6 +18,7 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int 
 SectorAuthoringSelectionTarget MakeSectorAuthoringFogVolumeSelectionTarget(int fogVolumeId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringReflectionProbeSelectionTarget(int probeId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int markerId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringCameraSelectionTarget(int cameraId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringSoundEmitterSelectionTarget(int emitterId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringTriggerSelectionTarget(int triggerId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringStructuralPrimitiveSelectionTarget(int primitiveId);
@@ -65,6 +66,10 @@ bool SelectSectorEditorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int markerId);
+bool SelectSectorEditorAuthoringCamera(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int cameraId);
 bool SelectSectorEditorAuthoringSoundEmitter(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -99,6 +104,10 @@ bool SetHoveredSectorEditorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int markerId);
+bool SetHoveredSectorEditorAuthoringCamera(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int cameraId);
 bool SetHoveredSectorEditorAuthoringSoundEmitter(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -332,6 +341,7 @@ enum class SectorEditorInspectorTargetKind {
     AuthoringFogVolume,
     AuthoringReflectionProbe,
     AuthoringLevelMarker,
+    AuthoringCamera,
     AuthoringSoundEmitter,
     AuthoringTrigger,
     AuthoringStructuralPrimitive,
@@ -347,6 +357,7 @@ struct SectorEditorInspectorTarget {
     int fogVolumeId = -1;
     int reflectionProbeId = -1;
     int levelMarkerId = -1;
+    int cameraId = -1;
     int soundEmitterId = -1;
     int triggerId = -1;
     int structuralPrimitiveId = -1;

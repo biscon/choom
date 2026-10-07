@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
+#include "sector_editor/services/cameras/SectorEditorCameraEditingState.h"
 #include "engine/ui/UI.h"
 #include "game/FpsViewmodel.h"
 #include "game/navigation/SectorNavigationWorld.h"
@@ -57,9 +58,13 @@ struct SectorEditorPreviewOverlayContext {
     std::string& statusText;
     SectorMeshRenderer& preview;
     SectorEditorRuntimeObjectEditingService& runtimeObjectEditing;
+    CameraEditingState* cameraState = nullptr;
 };
 
 struct SectorEditorPreviewOverlayResult {
+    bool requestStartCameraPilot = false;
+    bool requestApplyCameraPilot = false;
+    bool requestCancelCameraPilot = false;
     bool requestStartLightPilot = false;
     bool requestApplyLightPilot = false;
     bool requestCancelLightPilot = false;

@@ -705,7 +705,7 @@ bool ParsePlayerArrivalLook(
         error = "targetHeight must be between 0 and 1";
         return false;
     }
-    if (host.cutscene->look.active) {
+    if (host.cutscene->look.active && host.cutscene->look.cameraIndex < 0) {
         error = "camera already has an active scripted look";
         return false;
     }
@@ -1060,7 +1060,7 @@ int LuaTeleportPlayer(lua_State* state)
                 "player movement interrupted by teleport");
         CancelSectorCutscenePlayerMove(cutscene, host.navigation, cutscene.playerMove.token);
     }
-    if (cutscene.look.active) {
+    if (cutscene.look.active && cutscene.look.cameraIndex < 0) {
         engine::ScriptSystemCancelOperation(context, *host.scripts, cutscene.look.operation,
                 "player look interrupted by teleport");
         CancelSectorCutsceneLook(cutscene, cutscene.look.token);
@@ -1186,6 +1186,230 @@ int LuaStartNpcLookAtProp(lua_State* state) { return StartNpcLook(state, ScriptN
 int LuaNpcLookAtMarker(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Marker, false); }
 int LuaStartNpcLookAtMarker(lua_State* state) { return StartNpcLook(state, ScriptNpcLookTarget::Marker, true); }
 
+bool OwnsCameraControls(lua_State* state, const SectorScriptHost& host)
+{
+    const auto task = engine::ScriptSystemTryCurrentTaskFromLua(state);
+    return host.cutscene && !host.cutscene->controlsEnabled && engine::IsValid(task)
+            && task == host.cutscene->controlsOwnerTask;
+}
+
+void CancelScriptCameraMove(engine::EngineContext&, void* context, uint64_t token)
+{
+    auto& host = *static_cast<SectorScriptHost*>(context);
+    if (host.cutscene && host.cutscene->cameraMove.token == token)
+        host.cutscene->cameraMove.active = false;
+}
+
+void CancelCameraViewOperations(engine::EngineContext& context, SectorScriptHost& host,
+        const char* reason)
+{
+    if (!host.cutscene || !host.scripts) return;
+    auto& runtime = *host.cutscene;
+    if (runtime.cameraMove.active && engine::IsValid(runtime.cameraMove.operation))
+        engine::ScriptSystemCancelOperation(context, *host.scripts, runtime.cameraMove.operation, reason);
+    runtime.cameraMove = {};
+    if (runtime.look.active && engine::IsValid(runtime.look.operation))
+        engine::ScriptSystemCancelOperation(context, *host.scripts, runtime.look.operation, reason);
+    runtime.look = {};
+}
+
+int LuaSetActiveCamera(lua_State* state)
+{
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const std::string_view id{rawId, length};
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host))
+        return PushCutsceneStartError(state, false, "camera activation requires the task owning locked controls");
+    int index = -1;
+    if (id != "player") {
+        for (size_t i = 0; i < host.cutscene->cameras.size(); ++i)
+            if (host.cutscene->cameras[i].id == id) { index = static_cast<int>(i); break; }
+        if (index < 0) return PushCutsceneStartError(state, false, "camera ID was not found");
+    }
+    if (index != host.cutscene->activeCameraIndex) {
+        CancelCameraViewOperations(engine::ScriptSystemEngineFromLua(state), host, "camera switched");
+        host.cutscene->activeCameraIndex = index;
+    }
+    lua_pushboolean(state, true);
+    return 1;
+}
+
+int SetCameraTransform(lua_State* state, int kind)
+{
+    const float a = static_cast<float>(luaL_checknumber(state, 1));
+    const float b = kind == 2 ? 0.0f : static_cast<float>(luaL_checknumber(state, 2));
+    const float c = kind == 2 ? 0.0f : static_cast<float>(luaL_checknumber(state, 3));
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host) || !ActiveSectorCutsceneCamera(*host.cutscene))
+        return PushCutsceneStartError(state, false, "camera edit requires an active level camera and its control-owning task");
+    auto& runtime = *host.cutscene;
+    if (!std::isfinite(a) || !std::isfinite(b) || !std::isfinite(c)
+            || (kind == 1 && std::fabs(b) > 89.9f) || (kind == 2 && (a < 1 || a > 179)))
+        return PushCutsceneStartError(state, false, "invalid camera transform or FOV");
+    if ((kind == 0 && runtime.cameraMove.active) || (kind == 1 && runtime.look.active))
+        return PushCutsceneStartError(state, false, "camera channel is controlled by an operation; cancel it first");
+    auto& camera = *ActiveSectorCutsceneCamera(runtime);
+    if (kind == 0) camera.pose.position = {a, b, c};
+    else if (kind == 1) {
+        camera.pose.yawRadians = std::remainder(a, 360.0f) * DEG2RAD;
+        camera.pose.pitchRadians = b * DEG2RAD;
+        camera.pose.rollRadians = std::remainder(c, 360.0f) * DEG2RAD;
+    } else camera.fov = a;
+    lua_pushboolean(state, true);
+    return 1;
+}
+int LuaSetCameraPosition(lua_State* state) { return SetCameraTransform(state, 0); }
+int LuaSetCameraRotation(lua_State* state) { return SetCameraTransform(state, 1); }
+int LuaSetCameraFov(lua_State* state) { return SetCameraTransform(state, 2); }
+
+bool ResolveCameraMoveArguments(lua_State* state, const SectorScriptHost& host,
+        Vector3& destination, double& seconds, std::string& error)
+{
+    const bool markerTarget = lua_type(state, 1) == LUA_TSTRING;
+    if (lua_gettop(state) != (markerTarget ? 3 : 4)) {
+        error = "camera movement expects dx, dy, dz, durationMs or markerId, durationMs, floorOffsetY";
+        return false;
+    }
+    const auto* camera = ActiveSectorCutsceneCamera(*host.cutscene);
+    if (camera == nullptr) {
+        error = "no level camera is active";
+        return false;
+    }
+    for (int i = markerTarget ? 2 : 1; i <= lua_gettop(state); ++i) {
+        luaL_checktype(state, i, LUA_TNUMBER);
+    }
+    const double milliseconds = lua_tonumber(state, markerTarget ? 2 : 4);
+    if (!std::isfinite(milliseconds) || milliseconds < 0.0) {
+        error = "camera duration must be finite and non-negative";
+        return false;
+    }
+    seconds = milliseconds / 1000.0;
+    const auto validCoordinate = [](double value) {
+        return std::isfinite(value) && std::fabs(value) <= std::numeric_limits<float>::max();
+    };
+    double x = camera->pose.position.x;
+    double y = camera->pose.position.y;
+    double z = camera->pose.position.z;
+    if (markerTarget) {
+        size_t length = 0;
+        const char* rawId = lua_tolstring(state, 1, &length);
+        const std::string id{rawId, length};
+        const double offset = lua_tonumber(state, 3);
+        if (id.empty() || !validCoordinate(offset)) {
+            error = "camera marker ID must not be empty and floor offset must be a finite world coordinate";
+            return false;
+        }
+        const auto* marker = host.map ? FindSectorCompiledLevelMarker(*host.map, id) : nullptr;
+        if (marker == nullptr) {
+            error = "level marker was not found";
+            return false;
+        }
+        if (!host.runtimeObjects || !host.runtimeObjects->objectSectorLookupWorldValid) {
+            error = "camera marker floor lookup is unavailable";
+            return false;
+        }
+        const Vector3 markerPosition = SectorAuthoringToWorldPosition(marker->position);
+        const auto& world = host.runtimeObjects->objectSectorLookupWorld;
+        const int sectorId = world.FindSectorContainingPoint({markerPosition.x, markerPosition.z});
+        SectorCollisionHeights heights;
+        if (!world.GetSectorFloorCeiling(sectorId, &heights)) {
+            error = "camera marker is outside a sector with a known floor";
+            return false;
+        }
+        x = markerPosition.x;
+        y = static_cast<double>(heights.floorZ) + offset;
+        z = markerPosition.z;
+    } else {
+        const double dx = lua_tonumber(state, 1);
+        const double dy = lua_tonumber(state, 2);
+        const double dz = lua_tonumber(state, 3);
+        if (!validCoordinate(dx) || !validCoordinate(dy) || !validCoordinate(dz)) {
+            error = "camera offsets must be finite world coordinates";
+            return false;
+        }
+        x += dx;
+        y += dy;
+        z += dz;
+    }
+    if (!validCoordinate(x) || !validCoordinate(y) || !validCoordinate(z)) {
+        error = "camera destination exceeds finite world coordinates";
+        return false;
+    }
+    destination = {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
+    return true;
+}
+
+int StartCameraMove(lua_State* state, bool async)
+{
+    const int originalTop = lua_gettop(state);
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host))
+        return PushCutsceneStartError(state, async, "camera movement requires the task owning locked controls");
+    auto& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    uint64_t token = 0;
+    std::string error;
+    Vector3 destination{};
+    double seconds = 0.0;
+    if (!ResolveCameraMoveArguments(state, host, destination, seconds, error))
+        return PushCutsceneStartError(state, async, error);
+    if (!BeginSectorCutsceneCameraMove(*host.cutscene, destination, seconds, token, error))
+        return PushCutsceneStartError(state, async, error);
+    if (seconds == 0 && !async) {
+        ActiveSectorCutsceneCamera(*host.cutscene)->pose.position = destination;
+        host.cutscene->cameraMove = {};
+        lua_pushboolean(state, true);
+        return 1;
+    }
+    const auto operation = engine::ScriptSystemCreateOperation(scripts,
+            async ? engine::ScriptOperationLaunchStyle::Async : engine::ScriptOperationLaunchStyle::Blocking,
+            engine::ScriptSystemTryCurrentTaskFromLua(state), "moveCamera", token, CancelScriptCameraMove);
+    if (!engine::IsValid(operation)) {
+        host.cutscene->cameraMove = {};
+        return PushCutsceneStartError(state, async, "could not allocate camera movement operation");
+    }
+    host.cutscene->cameraMove.operation = operation;
+    if (!async) return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+    engine::ScriptSystemPushOperationUserdata(state, operation);
+    if (seconds == 0) UpdateSectorCutsceneCameraMove(*host.cutscene, scripts, 0);
+    return 1;
+}
+int LuaMoveCamera(lua_State* state) { return StartCameraMove(state, false); }
+int LuaStartMoveCamera(lua_State* state) { return StartCameraMove(state, true); }
+
+int LuaTrackCameraNpc(lua_State* state)
+{
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const double seconds = luaL_optnumber(state, 2, 750.0) / 1000.0;
+    const float height = static_cast<float>(luaL_optnumber(state, 3, 0.5));
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host) || !ActiveSectorCutsceneCamera(*host.cutscene) || !host.playerState)
+        return PushCutsceneStartError(state, false, "tracking requires an active level camera and its control-owning task");
+    auto& context = engine::ScriptSystemEngineFromLua(state);
+    const auto entity = FindNpcEntity(context.world, std::string_view{rawId, length});
+    if (engine::IsNull(entity) || !IsSectorObjectEnabled(context.world, entity))
+        return PushCutsceneStartError(state, false, "tracking NPC was not found or is disabled");
+    std::string error;
+    uint64_t token;
+    if (!BeginSectorCutsceneLook(*host.cutscene, entity, SectorCutsceneLookTargetKind::Npc,
+            height, seconds, *host.playerState, token, error))
+        return PushCutsceneStartError(state, false, error);
+    host.cutscene->look.tracking = true;
+    lua_pushboolean(state, true);
+    return 1;
+}
+
+int LuaStopCameraTracking(lua_State* state)
+{
+    auto& host = HostFromLua(state);
+    if (!OwnsCameraControls(state, host) || !ActiveSectorCutsceneCamera(*host.cutscene))
+        return PushCutsceneStartError(state, false, "stopping tracking requires an active level camera and its control-owning task");
+    if (host.cutscene->look.tracking) host.cutscene->look = {};
+    lua_pushboolean(state, true);
+    return 1;
+}
+
 int StartLook(lua_State* state, SectorCutsceneLookTargetKind kind, bool async)
 {
     const int originalTop = lua_gettop(state);
@@ -1203,6 +1427,8 @@ int StartLook(lua_State* state, SectorCutsceneLookTargetKind kind, bool async)
         return PushCutsceneStartError(
                 state, async, "player cutscene look runtime is unavailable");
     }
+    if (host.cutscene->activeCameraIndex >= 0 && !OwnsCameraControls(state, host))
+        return PushCutsceneStartError(state, async, "camera look requires the task owning locked controls");
     size_t idLength = 0;
     const char* rawId = luaL_checklstring(state, 1, &idLength);
     const std::string_view id{rawId, idLength};
@@ -1465,7 +1691,13 @@ int StartCaption(
         }
         if (originalTop > 4)
             return PushCutsceneStartError(state, async, "say expects npcId, message, optional mood and holdMs");
-        speech.history = &context.world.Get<NpcRuntimeInstance>(speech.speaker).dialogueHistory;
+        const auto& npc = context.world.Get<NpcRuntimeInstance>(speech.speaker);
+        speech.history = &npc.dialogueHistory;
+        speech.speakerName = npc.displayName.empty() ? npc.instanceId : npc.displayName;
+        speech.color = Color{
+                static_cast<unsigned char>(npc.speechColor[0]),
+                static_cast<unsigned char>(npc.speechColor[1]),
+                static_cast<unsigned char>(npc.speechColor[2]), 255};
         speech.seed = 2166136261u ^ static_cast<uint32_t>(host.cutscene->nextToken);
         for (size_t i = 0; i < idLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(id[i])) * 16777619u;
         for (size_t i = 0; i < textLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(rawText[i])) * 16777619u;
@@ -1720,7 +1952,11 @@ bool ApplyCutsceneControlsEnabled(
             host.controls.userData, context, enabled, error)) {
         return false;
     }
-    if (enabled) host.cutscene->presentation.active = false;
+    if (enabled) {
+        CancelCameraViewOperations(context, host, "controls re-enabled");
+        ResetSectorCutsceneCameraOverrides(*host.cutscene);
+        host.cutscene->presentation.active = false;
+    }
     host.cutscene->controlsEnabled = enabled;
     host.cutscene->controlsOwnerTask = enabled
             ? engine::ScriptTaskHandle{} : ownerTask;
@@ -2938,6 +3174,71 @@ int LuaPlayMapSound(lua_State* state)
     return PushAudioResult(state, success, error);
 }
 
+int LuaPlayMapMusic(lua_State* state)
+{
+    luaL_checktype(state, 1, LUA_TSTRING);
+    size_t idLength = 0;
+    const char* rawId = lua_tolstring(state, 1, &idLength);
+    bool loop = true;
+    if (!lua_isnoneornil(state, 2)) {
+        luaL_checktype(state, 2, LUA_TBOOLEAN);
+        loop = lua_toboolean(state, 2);
+    }
+    double volume = 1.0;
+    if (!lua_isnoneornil(state, 3)) {
+        luaL_checktype(state, 3, LUA_TNUMBER);
+        volume = lua_tonumber(state, 3);
+    }
+    if (!std::isfinite(volume) || volume < 0.0 || volume > 1.0) {
+        return luaL_argerror(state, 3, "volume must be finite and between 0 and 1");
+    }
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.audio.playMapMusic == nullptr) {
+        lua_pushnil(state);
+        lua_pushliteral(state, "level audio runtime is unavailable");
+        return 2;
+    }
+    const std::string id{rawId, idLength};
+    std::string error;
+    const int64_t handle = host.audio.playMapMusic(
+            host.audio.userData, engine::ScriptSystemEngineFromLua(state),
+            id, loop, static_cast<float>(volume), error);
+    if (handle > 0) {
+        lua_pushinteger(state, handle);
+        return 1;
+    }
+    lua_pushnil(state);
+    lua_pushlstring(state, error.data(), error.size());
+    return 2;
+}
+
+int LuaStopMapMusic(lua_State* state)
+{
+    const bool byId = lua_type(state, 1) == LUA_TSTRING;
+    if (!byId && !lua_isinteger(state, 1)) {
+        return luaL_argerror(state, 1, "expected a Music ID string or integer playback handle");
+    }
+    SectorScriptHost& host = HostFromLua(state);
+    if ((byId && host.audio.stopMapMusicById == nullptr)
+            || (!byId && host.audio.stopMapMusicByHandle == nullptr)) {
+        return PushAudioResult(state, false, "level audio runtime is unavailable");
+    }
+    std::string error;
+    bool success = false;
+    if (byId) {
+        size_t idLength = 0;
+        const char* rawId = lua_tolstring(state, 1, &idLength);
+        const std::string id{rawId, idLength};
+        success = host.audio.stopMapMusicById(
+                host.audio.userData, engine::ScriptSystemEngineFromLua(state), id, error);
+    } else {
+        success = host.audio.stopMapMusicByHandle(
+                host.audio.userData, engine::ScriptSystemEngineFromLua(state),
+                lua_tointeger(state, 1), error);
+    }
+    return PushAudioResult(state, success, error);
+}
+
 int LuaPlaySoundEmitter(lua_State* state)
 {
     size_t idLength = 0;
@@ -3037,6 +3338,7 @@ void InitializeSectorScriptHost(
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
     host.cutscene = cutscene;
+    if (cutscene) LoadSectorCutsceneCameras(*cutscene, map);
     host.dialogue = nullptr;
     host.keypad = nullptr;
     host.note = nullptr;
@@ -3168,6 +3470,14 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "endConversation", LuaEndConversation);
     Register(state, "startCutscene", LuaStartCutscene);
     Register(state, "endCutscene", LuaEndCutscene);
+    Register(state, "setActiveCamera", LuaSetActiveCamera);
+    Register(state, "setCameraPosition", LuaSetCameraPosition);
+    Register(state, "setCameraRotation", LuaSetCameraRotation);
+    Register(state, "setCameraFov", LuaSetCameraFov);
+    Register(state, "moveCamera", LuaMoveCamera);
+    Register(state, "startMoveCamera", LuaStartMoveCamera);
+    Register(state, "trackCameraNpc", LuaTrackCameraNpc);
+    Register(state, "stopCameraTracking", LuaStopCameraTracking);
     Register(state, "movePlayer", LuaMovePlayer);
     Register(state, "startMovePlayer", LuaStartMovePlayer);
     Register(state, "teleportPlayer", LuaTeleportPlayer);
@@ -3187,6 +3497,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "enableTrigger", LuaEnableTrigger);
     Register(state, "disableTrigger", LuaDisableTrigger);
     Register(state, "playMapSound", LuaPlayMapSound);
+    Register(state, "playMapMusic", LuaPlayMapMusic);
+    Register(state, "stopMapMusic", LuaStopMapMusic);
     Register(state, "playSoundEmitter", LuaPlaySoundEmitter);
     Register(state, "stopSoundEmitter", LuaStopSoundEmitter);
     lua_pushinteger(state, static_cast<lua_Integer>(SectorCutsceneTextPosition::Top));

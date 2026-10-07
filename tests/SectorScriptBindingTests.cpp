@@ -421,6 +421,273 @@ void DisablingNpcCancelsAnimationAndConversation()
     assert(!fixture.host.conversation.active && fixture.cutscene.controlsEnabled);
 }
 
+void CameraBindingsMovementTrackingAndCleanup()
+{
+    NpcScriptFixture fixture;
+    fixture.host.controls.setControlsEnabled =
+            [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+    fixture.map.cameras.push_back({1, "bed", {0, 16, 0}, 0, 0, 0.2f, 60});
+    fixture.map.cameras.push_back({2, "door", {80, 16, 80}, 1, 0, 0, 75});
+    game::LoadSectorCutsceneCameras(fixture.cutscene, fixture.map);
+    const auto playerBefore = fixture.playerState;
+    fixture.files.Write(R"lua(
+function init() end
+function cameraScene()
+    assert(not setActiveCamera("bed"))
+    assert(startCutscene())
+    assert(not setActiveCamera("missing"))
+    assert(setActiveCamera("bed"))
+    assert(setCameraPosition(1, 2, 3))
+    assert(setCameraRotation(30, 20, 10))
+    assert(setCameraFov(55))
+    assert(not setCameraFov(180))
+    assert(not setCameraPosition(0/0, 2, 3))
+    move = assert(startMoveCamera(4, 0, 0, 1000))
+    assert(not startMoveCamera(6, 2, 3, 1000))
+    assert(not setCameraPosition(4, 2, 3))
+    assert(await(move))
+    assert(setActiveCamera("door"))
+    assert(setActiveCamera("bed"))
+    assert(trackCameraNpc("script_guard", 500, 0.7))
+    assert(not startLookAtNpc("script_guard", 100))
+    assert(not setCameraRotation(0, 0, 0))
+    trackingStarted = true
+    delay(1000)
+    assert(stopCameraTracking())
+    assert(setCameraRotation(10, 5, 15))
+    assert(moveCamera(6, 2, 3, 0))
+    assert(setActiveCamera("player"))
+    assert(setActiveCamera("bed"))
+    local cancelled = assert(startMoveCamera(100, 2, 3, 1000))
+    assert(cancelOperation(cancelled))
+    assert(operationStatus(cancelled) == "cancelled")
+    local instant = assert(startMoveCamera(6, 2, 3, 0))
+    assert(await(instant))
+    local outgoingMove = assert(startMoveCamera(100, 2, 3, 1000))
+    local outgoingLook = assert(startLookAtNpc("script_guard", 1000))
+    assert(setActiveCamera("door"))
+    assert(operationStatus(outgoingMove) == "cancelled")
+    assert(operationStatus(outgoingLook) == "cancelled")
+    assert(endCutscene())
+    finished = true
+end
+)lua");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    TeleportConsole(fixture, "assert(startScript('cameraScene'))");
+    fixture.Update(0.001f);
+    auto* camera = game::ActiveSectorCutsceneCamera(fixture.cutscene);
+    assert(camera && camera->fov == 55 && camera->pose.position.x == 1);
+    TeleportConsole(fixture, "assert(not setActiveCamera('door')); assert(not setCameraFov(80))");
+    game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 0.5f);
+    assert(std::fabs(camera->pose.position.x - 3) < 0.0001f);
+    game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 0.5f);
+    assert(camera->pose.position.x == 5 && !fixture.cutscene.cameraMove.active);
+    fixture.Update(0.01f);
+    TeleportConsole(fixture, "assert(trackingStarted)");
+    assert(fixture.cutscene.look.tracking && fixture.cutscene.look.cameraIndex == 0);
+    assert(game::ActiveSectorCutsceneCamera(fixture.cutscene)->pose.position.x == 5);
+    assert(fixture.playerState.feetPosition.x == playerBefore.feetPosition.x
+            && fixture.playerState.yawRadians == playerBefore.yawRadians
+            && fixture.playerState.currentSectorId == playerBefore.currentSectorId);
+    // A missing render asset is a recoverable lost target, not a player-camera mutation.
+    game::UpdateSectorCutsceneLook(fixture.cutscene, fixture.context.world, fixture.context.assets,
+            fixture.playerState, fixture.playerConfig, fixture.runtime, 0.1f);
+    assert(!fixture.cutscene.look.active);
+    for (int i = 0; i < 20; ++i) fixture.Update(0.1f);
+    TeleportConsole(fixture, "assert(finished)");
+    assert(!game::ActiveSectorCutsceneCamera(fixture.cutscene) && fixture.cutscene.controlsEnabled);
+    assert(fixture.cutscene.cameras[0].pose.position.x == 0 && fixture.cutscene.cameras[0].fov == 60);
+}
+
+void CameraRelativeAndMarkerMovementUsesEasing()
+{
+    for (const bool async : {false, true}) {
+        for (const bool marker : {false, true}) {
+            for (const int duration : {0, 1000}) {
+                NpcScriptFixture fixture;
+                fixture.host.controls.setControlsEnabled =
+                        [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+                fixture.map.sectors[0].floorZ = 16.0f;
+                fixture.map.sectors[0].ceilingZ = 64.0f;
+                assert(fixture.objects.objectSectorLookupWorld.BuildFromTopology(fixture.map));
+                fixture.map.levelMarkers[0].position.y = 60.0f;
+                fixture.map.cameras.push_back({1, "test", {0, 16, 0}, 0, 0, 0, 60});
+                game::LoadSectorCutsceneCameras(fixture.cutscene, fixture.map);
+                const auto playerBefore = fixture.playerState;
+                const auto queriesBefore = fixture.navigation.Counters().successfulQueries;
+                const std::string arguments = marker
+                        ? "'run_target', " + std::to_string(duration) + ", 1.65"
+                        : "4, 1, -2, " + std::to_string(duration);
+                const std::string move = async
+                        ? "op = assert(startMoveCamera(" + arguments + ")); assert(await(op)); "
+                        : "assert(moveCamera(" + arguments + ")); ";
+                fixture.files.Write("function init() end\nfunction cameraScene() assert(startCutscene()); "
+                        "assert(setActiveCamera('test')); assert(setCameraPosition(1, 2, 3)); "
+                        "assert(setCameraRotation(90, 20, 10)); " + move
+                        + (duration == 0 ? move : "")
+                        + "completed = true; delay(10000); end");
+                assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+                TeleportConsole(fixture, "assert(startScript('cameraScene'))");
+                engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.0f);
+                auto* camera = game::ActiveSectorCutsceneCamera(fixture.cutscene);
+                assert(camera);
+                const Vector3 start{1, 2, 3};
+                const Vector3 destination = marker ? Vector3{14, 3.65f, 8} : Vector3{5, 3, 1};
+                const auto rotation = camera->pose;
+                if (duration > 0) {
+                    assert(Vector3Distance(camera->pose.position, start) < 0.0001f);
+                    assert(Vector3Distance(fixture.cutscene.cameraMove.destination, destination) < 0.0001f);
+                    // Resolve the destination once, even if the marker data changes later.
+                    fixture.map.levelMarkers[0].position = {32, 0, 32};
+                    const float easedFractions[] = {0.103515625f, 0.5f, 0.896484375f, 1.0f};
+                    for (const float fraction : easedFractions) {
+                        game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 0.25f);
+                        assert(Vector3Distance(camera->pose.position,
+                                Vector3Lerp(start, destination, fraction)) < 0.0001f);
+                    }
+                    assert(!fixture.cutscene.cameraMove.active);
+                    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.0f);
+                } else {
+                    // Repeated numeric offsets accumulate; marker destinations stay fixed.
+                    const Vector3 expected = marker ? destination : Vector3{9, 4, -1};
+                    assert(Vector3Distance(camera->pose.position, expected) < 0.0001f);
+                    assert(!fixture.cutscene.cameraMove.active);
+                }
+                TeleportConsole(fixture, "assert(completed)");
+                if (async) TeleportConsole(fixture, "assert(operationStatus(op) == 'succeeded')");
+                assert(camera->pose.yawRadians == rotation.yawRadians
+                        && camera->pose.pitchRadians == rotation.pitchRadians
+                        && camera->pose.rollRadians == rotation.rollRadians);
+                assert(Vector3Distance(fixture.playerState.feetPosition, playerBefore.feetPosition) == 0);
+                assert(fixture.playerState.currentSectorId == playerBefore.currentSectorId
+                        && fixture.playerState.verticalVelocity == playerBefore.verticalVelocity);
+                assert(fixture.navigation.Counters().successfulQueries == queriesBefore);
+            }
+        }
+    }
+}
+
+void CameraMoveValidationAndMarkerCancellation()
+{
+    NpcScriptFixture fixture;
+    fixture.host.controls.setControlsEnabled =
+            [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+    fixture.map.cameras.push_back({1, "test", {0, 16, 0}, 0, 0, 0, 60});
+    game::LoadSectorCutsceneCameras(fixture.cutscene, fixture.map);
+    fixture.files.Write(R"lua(
+function init() end
+function cameraScene()
+    assert(startCutscene())
+    assert(not moveCamera(0, 0, 0, 1)) -- Player view has no level camera to move.
+    assert(setActiveCamera('test'))
+    assert(setCameraPosition(1, 2, 3))
+    for _, call in ipairs({moveCamera, startMoveCamera}) do
+        for _, args in ipairs({{}, {1, 2}, {1, 2, 3, 4, 5}, {'run_target', 1000},
+                {'run_target', 1000, 1, 2}, {'missing', 1000, 1}, {'', 1000, 1},
+                {'outside_target', 1000, 1}, {'run_target', -1, 1},
+                {'run_target', math.huge, 1}, {'run_target', 1, 0/0},
+                {'run_target', 1, math.huge}, {'run_target', 1, 1e100},
+                {0/0, 0, 0, 1000}, {0, math.huge, 0, 1000},
+                {0, 0, 1e100, 1000}, {0, 0, 0, -1}, {0, 0, 0, math.huge}}) do
+            local result, reason = call(table.unpack(args))
+            assert(not result and type(reason) == 'string')
+        end
+        assert(not pcall(call, false, 0, 0, 1))
+        assert(not pcall(call, 0, '0', 0, 1))
+        assert(not pcall(call, 'run_target', '1000', 1))
+    end
+    validationDone = true
+    delay(10)
+    assert(not startMoveCamera('run_target', 1000, 1)) -- Lookup is disabled by fixture.
+    unavailableChecked = true
+    delay(10)
+    assert(not startMoveCamera('run_target', 1000, 1)) -- Map is unavailable.
+    mapChecked = true
+    delay(10)
+    assert(setCameraPosition(3e38, 2, 3))
+    assert(not startMoveCamera(3e38, 0, 0, 1000)) -- Finite operands overflow the destination.
+    assert(setCameraPosition(1, 2, 3))
+    assert(trackCameraNpc('script_guard', 500, 0.7))
+    pending = assert(startMoveCamera('run_target', 1000, 1.65))
+    assert(not moveCamera('missing', 1000, 1))
+    assert(not startMoveCamera(1, 0, 0, 1000))
+    assert(operationStatus(pending) == 'pending')
+    pendingStarted = true
+    delay(10)
+    assert(cancelOperation(pending))
+    assert(operationStatus(pending) == 'cancelled')
+    cancelled = true
+    delay(10)
+    assert(moveCamera('walk_target', 0, -0.25))
+    instant = assert(startMoveCamera('walk_target', 0, -0.5))
+    assert(await(instant))
+    negativeOffsetDone = true
+    delay(10000)
+end
+)lua");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    TeleportConsole(fixture, "assert(startScript('cameraScene'))");
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.0f);
+    TeleportConsole(fixture, "assert(validationDone)");
+    auto* camera = game::ActiveSectorCutsceneCamera(fixture.cutscene);
+    assert(camera && Vector3Distance(camera->pose.position, {1, 2, 3}) == 0);
+    assert(!fixture.cutscene.cameraMove.active && fixture.cutscene.nextToken == 1);
+    fixture.objects.objectSectorLookupWorldValid = false;
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(unavailableChecked)");
+    fixture.objects.objectSectorLookupWorldValid = true;
+    fixture.host.map = nullptr;
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(mapChecked)");
+    fixture.host.map = &fixture.map;
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(pendingStarted)");
+    assert(fixture.cutscene.look.active && fixture.cutscene.look.tracking);
+    assert(Vector3Distance(fixture.cutscene.cameraMove.destination, {14, 1.65f, 8}) < 0.0001f);
+    game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 0.25f);
+    const Vector3 cancelledPosition = camera->pose.position;
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(cancelled)");
+    assert(!fixture.cutscene.cameraMove.active && fixture.cutscene.look.tracking);
+    game::UpdateSectorCutsceneCameraMove(fixture.cutscene, fixture.runtime, 10.0f);
+    assert(Vector3Distance(camera->pose.position, cancelledPosition) == 0);
+    engine::ScriptSystemUpdate(fixture.context, fixture.runtime, 0.02f);
+    TeleportConsole(fixture, "assert(negativeOffsetDone)");
+    assert(Vector3Distance(camera->pose.position, {4, -0.5f, 8}) < 0.0001f);
+}
+
+void CameraTrackingMathAndOwnerRecovery()
+{
+    game::SectorCutsceneLookState look;
+    look.cameraIndex = 0; look.tracking = true; look.durationSeconds = 1;
+    game::SectorViewPose pose{{0, 2, 0}, 0, 0, 0.3f};
+    assert(game::AdvanceSectorCutsceneLookPose(look, pose, {0, 2, 10}, 0.5f));
+    assert(std::fabs(pose.yawRadians - PI / 4) < 0.0001f);
+    assert(game::AdvanceSectorCutsceneLookPose(look, pose, {0, 2, 10}, 0.5f));
+    assert(std::fabs(pose.yawRadians - PI / 2) < 0.0001f);
+    assert(game::AdvanceSectorCutsceneLookPose(look, pose, {-10, 4, 0}, 0.1f));
+    const auto forward = game::SectorViewForward(pose);
+    assert(forward.x < -0.9f && forward.y > 0 && pose.rollRadians == 0.3f);
+    assert(pose.position.x == 0 && pose.position.y == 2);
+    assert(!game::AdvanceSectorCutsceneLookPose(look, pose, pose.position, 0.1f));
+
+    for (const char* ending : {"error('camera task failed')", "return"}) {
+        NpcScriptFixture fixture;
+        fixture.host.controls.setControlsEnabled =
+                [](void*, engine::EngineContext&, bool, std::string&) { return true; };
+        fixture.map.cameras.push_back({1, "test", {0, 16, 0}, 0, 0, 0, 60});
+        game::LoadSectorCutsceneCameras(fixture.cutscene, fixture.map);
+        fixture.files.Write(std::string("function init() assert(startCutscene()); assert(setActiveCamera('test')); ")
+                + "assert(setCameraPosition(20, 20, 20)); assert(startMoveCamera(30,30,30,10000)); delay(10); "
+                + ending + " end");
+        assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+        assert(game::ActiveSectorCutsceneCamera(fixture.cutscene));
+        for (int i = 0; i < 5; ++i) fixture.Update(0.1f);
+        assert(fixture.cutscene.controlsEnabled && !game::ActiveSectorCutsceneCamera(fixture.cutscene)
+                && !fixture.cutscene.cameraMove.active && fixture.cutscene.cameras[0].pose.position.x == 0);
+    }
+}
+
 void MarkerTeleportsApplyExactPositionsAndFacingImmediately()
 {
     NpcScriptFixture fixture;
@@ -2239,6 +2506,125 @@ end
     game::ResetSectorScriptHost(host);
 }
 
+void MapMusicBindingsValidateAndForwardPlayback()
+{
+    struct Capture {
+        int plays = 0;
+        int stoppedIds = 0;
+        int stoppedHandles = 0;
+    } capture;
+    game::SectorScriptAudioApi audio;
+    audio.userData = &capture;
+    // Use a token beyond double's exact integer range to catch lossy conversion.
+    constexpr int64_t token = INT64_C(9007199254740993);
+    audio.playMapMusic = [](void* userData, engine::EngineContext&,
+                                const std::string& id, bool loop, float volume,
+                                std::string& error) -> int64_t {
+        auto& value = *static_cast<Capture*>(userData);
+        ++value.plays;
+        if (id != "theme") {
+            error = "music unavailable";
+            return 0;
+        }
+        if (value.plays <= 2) {
+            assert(loop && volume == 1.0f);
+        } else if (value.plays == 3) {
+            assert(!loop && volume == 0.25f);
+        } else if (value.plays == 4) {
+            assert(loop && volume == 0.0f);
+        } else {
+            assert(false && "invalid arguments reached audio runtime");
+        }
+        return INT64_C(9007199254740993);
+    };
+    audio.stopMapMusicById = [](void* userData, engine::EngineContext&,
+                                  const std::string& id, std::string& error) {
+        ++static_cast<Capture*>(userData)->stoppedIds;
+        if (id == "theme" || id == "123") return true;
+        error = "unknown music ID";
+        return false;
+    };
+    audio.stopMapMusicByHandle = [](void* userData, engine::EngineContext&,
+                                      int64_t handle, std::string& error) {
+        ++static_cast<Capture*>(userData)->stoppedHandles;
+        if (handle == token) return true;
+        error = "invalid or stale handle";
+        return false;
+    };
+
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    ScriptFiles files;
+    game::InitializeSectorScriptHost(
+            host, objects, map, runtime, nullptr, nullptr, audio);
+    files.Write(R"(
+function init()
+    local music = assert(playMapMusic("theme"))
+    assert(math.type(music) == "integer" and music == 9007199254740993)
+    assert(playMapMusic("theme", nil, nil) == music)
+    assert(playMapMusic("theme", false, 0.25) == music)
+    assert(playMapMusic("theme", true, 0) == music)
+    assert(stopMapMusic(music))
+    assert(stopMapMusic(music))
+    assert(stopMapMusic("theme"))
+    assert(stopMapMusic("123")) -- numeric string is an ID, never a handle
+    local handle, reason = playMapMusic("missing")
+    assert(handle == nil and reason == "music unavailable")
+    local ok, reason = stopMapMusic("missing")
+    assert(ok == false and reason == "unknown music ID")
+    for _, invalid in ipairs({0, -1, 123}) do
+        local ok, reason = stopMapMusic(invalid)
+        assert(ok == false and reason == "invalid or stale handle")
+    end
+    assert(not pcall(playMapMusic))
+    assert(not pcall(playMapMusic, 123))
+    for _, invalid in ipairs({0, 1, "true", {}}) do
+        assert(not pcall(playMapMusic, "theme", invalid))
+    end
+    for _, invalid in ipairs({-0.01, 1.01, math.huge, -math.huge, 0/0, "0.5", true, {}}) do
+        assert(not pcall(playMapMusic, "theme", true, invalid))
+    end
+    assert(not pcall(stopMapMusic))
+    for _, invalid in ipairs({true, {}, 1.5, math.huge}) do
+        assert(not pcall(stopMapMusic, invalid))
+    end
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(capture.plays == 5 && capture.stoppedIds == 3 && capture.stoppedHandles == 5);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
+void MapMusicBindingsReportUnavailableRuntime()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    ScriptFiles files;
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function init()
+    local music, reason = playMapMusic("theme")
+    assert(music == nil and reason == "level audio runtime is unavailable")
+    for _, target in ipairs({"theme", 1}) do
+        local ok, reason = stopMapMusic(target)
+        assert(ok == false and reason == "level audio runtime is unavailable")
+    end
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
 void CutsceneBindingsControlFadeAndCaptionTimelines(bool cinematic)
 {
     struct ControlCapture {
@@ -2393,10 +2779,19 @@ void AutomaticVoicedSpeechReturnsAfterShortHoldAndFade()
     for (bool player : {false, true}) {
         for (const std::string& text : {std::string{"Wait."}, std::string{"Wait..."}, std::string(200, 'a') + "."}) {
             NpcScriptFixture fixture;
+            auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+            npc.displayName = "Elin";
+            npc.speechColor = {255, 128, 191};
             fixture.files.Write("function init() assert(say(" + std::string(player ? "" : "'script_guard', ")
                     + "'" + text + "')); setFlag('speech_done', true) end");
             assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
             auto& caption = fixture.cutscene.caption;
+            assert(caption.text == text);
+            assert(caption.displayText == (player ? text : "Elin: " + text));
+            assert(caption.speakerPrefixBytes == (player ? 0 : 6));
+            assert(caption.visibleByteCount == 0);
+            assert(caption.color.r == 255 && caption.color.g == (player ? 255 : 128)
+                    && caption.color.b == (player ? 255 : 191));
             assert(!caption.explicitHold && caption.holdSeconds == 0.35);
             assert(caption.revealSeconds == caption.speechTimeline.reveals.back().seconds);
             const auto update = [&](float dt) {
@@ -2432,6 +2827,9 @@ void SkippedVoicedSpeechHoldsBeforeCompletingScript()
         for (bool async : {false, true}) {
             for (int phase = 0; phase < 3; ++phase) {
                 NpcScriptFixture fixture;
+                auto& speaker = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+                speaker.displayName = u8"Élin";
+                speaker.speechColor = {255, 128, 191};
                 const std::string text = u8"Wait, élan! Another person...";
                 const std::string arguments = (player ? "" : "'script_guard', ")
                         + std::string("'") + text + "'"
@@ -2444,6 +2842,10 @@ void SkippedVoicedSpeechHoldsBeforeCompletingScript()
                         fixture.host, fixture.files));
                 auto& caption = fixture.cutscene.caption;
                 auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+                const std::string prefix = player ? "" : u8"Élin: ";
+                assert(caption.displayText == prefix + text);
+                assert(caption.speakerPrefixBytes == prefix.size());
+                assert(caption.color.g == (player ? 255 : 128));
                 const auto update = [&](float dt, bool voices = true) {
                     game::UpdateSectorCutsceneSpeech(fixture.cutscene, fixture.context.world,
                             fixture.context.assets, fixture.context.audio, dt, voices);
@@ -2655,6 +3057,91 @@ void DisabledDialogueVoicesKeepTextAndCanBeReenabled()
     update(0.8f, false);
     assert(!cutscene.caption.active);
     game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
+}
+
+void SpeechPresentationResetsWithoutChangingMessageTiming()
+{
+    NpcScriptFixture fixture;
+    auto& npc = fixture.context.world.Get<game::NpcRuntimeInstance>(fixture.npc);
+    npc.displayName = u8"Élin";
+    npc.speechColor = {255, 128, 191};
+    fixture.files.Write("function init() end");
+    assert(Create(fixture.context, fixture.runtime, fixture.persistent, fixture.host, fixture.files));
+    const auto run = [&](const char* command) {
+        assert(engine::ScriptSystemExecuteConsole(fixture.runtime, command).success);
+    };
+    auto& caption = fixture.cutscene.caption;
+    const std::string message = u8"Wait, élan!";
+    run(u8"assert(startSay('script_guard', 'Wait, élan!'))");
+    assert(caption.text == message && caption.displayText == u8"Élin: Wait, élan!");
+    assert(caption.visibleByteCount == 0 && caption.speakerPrefixBytes == std::string(u8"Élin: ").size());
+    assert(caption.color.r == 255 && caption.color.g == 128 && caption.color.b == 191);
+
+    const auto token = caption.token;
+    run("assert(startSay('missing', 'Invalid') == nil)");
+    run("assert(startSay('script_guard', 'Invalid', 'bad_mood') == nil)");
+    run("assert(startSay('script_guard', '', nil, 100) == nil)");
+    assert(caption.token == token && caption.displayText == u8"Élin: Wait, élan!");
+    assert(caption.color.g == 128);
+
+    npc.displayName.clear();
+    npc.speechColor = {0, 128, 255};
+    run("assert(startSay('script_guard', 'Hello.'))");
+    assert(caption.displayText == "script_guard: Hello.");
+    assert(caption.color.r == 0 && caption.color.g == 128 && caption.color.b == 255);
+    run("assert(startSay('Player line.', {mood='afraid', holdMs=200}))");
+    assert(caption.displayText == "Player line." && caption.speakerPrefixBytes == 0);
+    assert(caption.color.r == 255 && caption.color.g == 255 && caption.color.b == 255);
+    assert(caption.playerSpeaker && caption.holdSeconds == 0.2);
+    run("assert(startSay('script_guard', 'Hello.'))");
+    run("assert(startText('Silent card.', CENTER))");
+    assert(caption.displayText == "Silent card." && caption.speakerPrefixBytes == 0);
+    assert(caption.color.r == 245 && caption.color.g == 245 && caption.color.b == 240);
+
+    game::SectorCutsceneRuntime plain;
+    game::SectorCutsceneRuntime named;
+    game::InitializeSectorCutsceneRuntime(plain);
+    game::InitializeSectorCutsceneRuntime(named);
+    game::SectorCutsceneSpeechOptions speech;
+    engine::DialogueVoice voice;
+    voice.banks[0].push_back({engine::SoundHandle{7, 1}, 0.3f, 0});
+    speech.voice = &voice;
+    uint64_t resultToken = 0;
+    std::string error;
+    assert(game::BeginSectorCutsceneCaption(plain, game::SectorCutsceneCaptionKind::Say,
+            game::SectorCutsceneTextPosition::Bottom, message, nullptr, resultToken, error, &speech));
+    speech.speakerName = u8"Élin";
+    speech.color = Color{255, 128, 191, 255};
+    assert(game::BeginSectorCutsceneCaption(named, game::SectorCutsceneCaptionKind::Say,
+            game::SectorCutsceneTextPosition::Bottom, message, nullptr, resultToken, error, &speech));
+    assert(named.caption.codepointCount == plain.caption.codepointCount);
+    assert(named.caption.revealSeconds == plain.caption.revealSeconds);
+    assert(named.caption.holdSeconds == plain.caption.holdSeconds);
+    assert(named.caption.speechTimeline.cues.size() == plain.caption.speechTimeline.cues.size());
+    for (size_t i = 0; i < named.caption.speechTimeline.cues.size(); ++i) {
+        const auto& left = named.caption.speechTimeline.cues[i];
+        const auto& right = plain.caption.speechTimeline.cues[i];
+        assert(left.beginByte == right.beginByte && left.endByte == right.endByte);
+        assert(left.source == right.source);
+    }
+    for (const bool voiceTiming : {false, true, false}) {
+        game::SetSectorCutsceneCaptionVoiceTiming(plain, voiceTiming);
+        game::SetSectorCutsceneCaptionVoiceTiming(named, voiceTiming);
+        game::UpdateSectorCutsceneTimelines(plain, fixture.runtime, 0.07f);
+        game::UpdateSectorCutsceneTimelines(named, fixture.runtime, 0.07f);
+        assert(named.caption.visibleByteCount == plain.caption.visibleByteCount);
+        assert(named.caption.revealSeconds == plain.caption.revealSeconds);
+    }
+    std::string maximumMessage;
+    for (size_t i = 0; i < game::kSectorCutsceneMaximumCaptionCodepoints; ++i) {
+        maximumMessage += u8"\U0001F600";
+    }
+    assert(maximumMessage.size() == game::kSectorCutsceneMaximumCaptionBytes);
+    const std::string maximumName(game::kMaximumNpcNameBytes, 'N');
+    speech.speakerName = maximumName;
+    assert(game::BeginSectorCutsceneCaption(named, game::SectorCutsceneCaptionKind::Say,
+            game::SectorCutsceneTextPosition::Bottom, maximumMessage, nullptr, resultToken, error, &speech));
+    assert(named.caption.displayText == maximumName + ": " + maximumMessage);
 }
 
 void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
@@ -3529,6 +4016,10 @@ end
 
 void RunSectorScriptBindingTests()
 {
+    CameraBindingsMovementTrackingAndCleanup();
+    CameraRelativeAndMarkerMovementUsesEasing();
+    CameraMoveValidationAndMarkerCancellation();
+    CameraTrackingMathAndOwnerRecovery();
     ObjectEnabledBindingsAndNpcSuspension();
     DisablingNpcCancelsAnimationAndConversation();
     ScreenShakeBindingsAndLifecycle();
@@ -3584,9 +4075,12 @@ void RunSectorScriptBindingTests()
     TravelPreservesFirstRequest();
     TriggerContainmentUsesExplicitCoordinateSpaces();
     MapAudioBindingsForwardOptionalPlaybackSettings();
+    MapMusicBindingsValidateAndForwardPlayback();
+    MapMusicBindingsReportUnavailableRuntime();
     CutsceneBindingsControlFadeAndCaptionTimelines(false);
     CutsceneBindingsControlFadeAndCaptionTimelines(true);
     AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree();
+    SpeechPresentationResetsWithoutChangingMessageTiming();
     SpeechCompletionGatesCaptionHold();
     AutomaticVoicedSpeechReturnsAfterShortHoldAndFade();
     SkippedVoicedSpeechHoldsBeforeCompletingScript();

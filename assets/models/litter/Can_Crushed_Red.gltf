@@ -1,0 +1,275 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.40",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "LITTER KIT",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Can_Crushed_Red_Export"
+    }
+  ],
+  "materials": [
+    {
+      "name": "Litter_Tin",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.550000011920929,
+          0.5899999737739563,
+          0.6000000238418579,
+          1
+        ],
+        "metallicFactor": 0.7799999713897705,
+        "roughnessFactor": 0.4000000059604645
+      }
+    },
+    {
+      "name": "Litter_Print",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.6499999761581421
+      },
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        },
+        "baseColorFactor": [
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 1.0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Creased can shell.002",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 4,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7,
+            "TANGENT": 8
+          },
+          "indices": 9,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 1
+    },
+    {
+      "sampler": 0,
+      "source": 2
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "Packaging_Atlas_normal_opengl",
+      "uri": "textures/Packaging_Atlas_normal_opengl.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Packaging_Atlas_basecolor",
+      "uri": "textures/Packaging_Atlas_basecolor.png"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "Packaging_Atlas_orm",
+      "uri": "textures/Packaging_Atlas_orm.png"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 1266,
+      "max": [
+        0.04694913327693939,
+        0.07066966593265533,
+        0.041511617600917816
+      ],
+      "min": [
+        -0.04694913700222969,
+        0,
+        -0.041511617600917816
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 1266,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 1266,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 1266,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 4548,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 231,
+      "max": [
+        0.037020035088062286,
+        0.07383111864328384,
+        0.039646223187446594
+      ],
+      "min": [
+        -0.04012194275856018,
+        0,
+        -0.03813803195953369
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 231,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 231,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 231,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 1152,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 15192,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 15192,
+      "byteOffset": 15192,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 10128,
+      "byteOffset": 30384,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 20256,
+      "byteOffset": 40512,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 9096,
+      "byteOffset": 60768,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2772,
+      "byteOffset": 69864,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2772,
+      "byteOffset": 72636,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1848,
+      "byteOffset": 75408,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3696,
+      "byteOffset": 77256,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2304,
+      "byteOffset": 80952,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 83256,
+      "uri": "Can_Crushed_Red.bin"
+    }
+  ]
+}

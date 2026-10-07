@@ -26,6 +26,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/cameras/SectorEditorCameraEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
@@ -15748,6 +15749,220 @@ void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
           "fog volume placement fails clearly outside derived faces");
 }
 
+struct FogVolumeEditingFixture {
+    game::SectorEditorDocumentState document;
+    game::SectorEditorState editor;
+    game::SelectionState selection;
+    game::ManipulationState manipulation;
+    std::string status;
+    game::SectorEditorAuthoringFogVolumeEditingService editing;
+    uint64_t cleanRevision = 0;
+
+    explicit FogVolumeEditingFixture(game::SectorAuthoringGraph graph)
+        : editing({game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+                  document.map.topologyMap, document.authoring.authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(document.derivation),
+                  editor.topologyRenderRevision, editor.topologyRenderCache,
+                  selection, manipulation, status})
+    {
+        document.authoring.authoringGraph = std::move(graph);
+        Check(game::RefreshSectorEditorAuthoringDerivation(
+                      editor, game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+                      document.map.topologyMap, document.authoring.authoringGraph,
+                      game::MakeSectorEditorDerivationDocumentAccess(document.derivation)),
+              "fog editing fixture derives");
+    }
+
+    int PlaceBox(game::SectorTopologyCoordPoint point)
+    {
+        int id = -1;
+        Check(editing.Place(point, &id), "fog box fixture placement succeeds");
+        Check(editing.MutateById(id, "Box", [](auto& volume) {
+            volume.shape = game::SectorLocalFogShape::Box;
+            volume.radiusXWorld = 1;
+            volume.radiusZWorld = 2;
+            volume.yawDegrees = 0;
+            return true;
+        }), "fog box fixture shape updates");
+        Clean();
+        return id;
+    }
+
+    void Clean()
+    {
+        document.lifecycle.topologyDocumentDirty = false;
+        document.lifecycle.hasUnsavedChanges = false;
+        editor.topologyRenderCache.valid = true;
+        cleanRevision = editor.topologyRenderRevision;
+    }
+
+    bool IsClean() const
+    {
+        return !document.lifecycle.topologyDocumentDirty
+                && !document.lifecycle.hasUnsavedChanges
+                && editor.topologyRenderCache.valid
+                && editor.topologyRenderRevision == cleanRevision;
+    }
+};
+
+void TestFogBoxResizeAndManipulationLifecycle()
+{
+    FogVolumeEditingFixture fixture(MakeGraphFromConnectedLines(
+            {{0, 0}, {512, 0}, {512, 512}, {0, 512}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}}));
+    const int id = fixture.PlaceBox({128, 128});
+    auto& editing = fixture.editing;
+    auto& drag = fixture.manipulation.authoringFogVolumeDrag;
+    const auto original = *editing.Selected();
+    const auto handles = game::BuildSectorEditorFogVolumeHandleMapPoints(
+            {128, 128}, {1, 2}, 90);
+    Check(Near(handles[2].x, 24) && Near(handles[2].y, 0)
+                  && Near(handles[5].x, 8) && Near(handles[5].y, 0),
+          "fog resize corners and edge midpoints follow rendered yaw convention");
+    Check(!editing.BeginResize(id, -1, {128, 128})
+                  && !editing.BeginResize(id, 8, {128, 128}) && fixture.IsClean(),
+          "invalid fog resize handles do not mutate the document");
+    Check(editing.BeginResize(id, 2, {128, 128}), "fog corner resize begins");
+    editing.UpdateResize({256, 384});
+    Check(Near(drag.previewRadii.x, 2) && Near(drag.previewRadii.y, 4)
+                  && Near(editing.Selected()->radiusXWorld, 1) && fixture.IsClean(),
+          "fog corner resize previews both axes without dirtying or deriving");
+    Check(editing.FinishResize(), "fog corner resize commits");
+    Check(Near(editing.Selected()->radiusXWorld, 2)
+                  && Near(editing.Selected()->radiusZWorld, 4)
+                  && editing.Selected()->x == original.x && editing.Selected()->y == original.y
+                  && Near(editing.Selected()->heightWorld, original.heightWorld)
+                  && Near(editing.Selected()->bottomOffsetWorld, original.bottomOffsetWorld)
+                  && !fixture.editor.topologyRenderCache.valid
+                  && fixture.document.lifecycle.hasUnsavedChanges
+                  && Near(fixture.document.map.topologyMap.compiledLocalFogVolumes[0].radiiWorld.x, 2),
+          "fog resize preserves anchor and vertical bounds and refreshes compiled output/cache");
+    const auto committedRevision = fixture.editor.topologyRenderRevision;
+    Check(!editing.FinishResize() && fixture.editor.topologyRenderRevision == committedRevision,
+          "fog resize commits at most once");
+    fixture.Clean();
+    Check(editing.BeginResize(id, 5, {128, 128}), "unchanged edge drag begins");
+    editing.UpdateResize({128, 128});
+    Check(editing.FinishResize() && fixture.IsClean(), "clicking a fog handle does not dirty the document");
+    Check(editing.BeginResize(id, 5, {128, 128}), "edge resize begins");
+    editing.UpdateResize({-100000, 100000});
+    Check(Near(drag.previewRadii.x, 0.05f) && Near(drag.previewRadii.y, 4),
+          "crossing the center clamps the selected axis without changing the other axis");
+    editing.UpdateResize({100000, 100000});
+    Check(Near(drag.previewRadii.x, 64), "fog resize respects maximum half extent");
+    editing.CancelMove();
+    Check(fixture.IsClean() && !drag.active && Near(editing.Selected()->radiusXWorld, 2),
+          "cancelled resize leaves graph, topology, and cache untouched");
+
+    editing.MutateById(id, "Rotate", [](auto& volume) { volume.yawDegrees = 90; return true; });
+    fixture.Clean();
+    game::LightEditingState lights;
+    game::RuntimeObjectDragState objects;
+    game::SectorEditorTool tool = game::SectorEditorTool::Select;
+    game::SectorEditorManipulationServiceContext context{
+            tool, fixture.document.map.topologyMap, fixture.document.authoring.authoringGraph,
+            fixture.manipulation, lights, objects, fixture.status};
+    context.fogVolumeEditing = &editing;
+    context.screenToMap = [](Vector2 point) { return point; };
+    context.snapMapPoint = [](Vector2 point) {
+        return Vector2{std::round(point.x), std::round(point.y)};
+    };
+    Check(editing.BeginResize(id, 5, {128, 128}), "rotated edge resize begins");
+    game::UpdateActiveSectorEditorMapPointManipulations(context, {8.2f, 0.2f});
+    Check(Near(drag.previewRadii.x, 3) && Near(drag.previewRadii.y, 4) && fixture.IsClean(),
+          "shared manipulation snaps mouse input and resizes along rotated local axes");
+    game::FinishActiveSectorEditorManipulation(context);
+    Check(!drag.active && Near(editing.Selected()->radiusXWorld, 3)
+                  && Near(editing.Selected()->yawDegrees, 90),
+          "shared release commits rotated resize without changing yaw");
+    fixture.Clean();
+    Check(editing.BeginResize(id, 0, {128, 128}), "rotated corner resize begins");
+    game::UpdateActiveSectorEditorMapPointManipulations(context, {0, 16});
+    Check(Near(drag.previewRadii.x, 4) && Near(drag.previewRadii.y, 5),
+          "rotated corner resize changes both local axes");
+    Check(game::CancelFirstActiveSectorEditorManipulation(context, "cancel", "cancel", "cancel")
+                  && fixture.IsClean() && !drag.active,
+          "shared Escape cancellation handles fog resize");
+    Check(editing.BeginResize(id, 5, {128, 128}), "stale resize begins");
+    editing.UpdateResize({128, 0});
+    fixture.document.derivation.authoringDerivedTopologyStale = true;
+    Check(!editing.FinishResize() && fixture.IsClean() && !drag.active
+                  && Near(editing.Selected()->radiusXWorld, 3),
+          "resize rejects a stale derivation without a partial commit");
+}
+
+void TestFogFitSectorBoundsAndRejection()
+{
+    auto graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {513, 0}, {513, 257}, {0, 257}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(graph, 1, 128, 128, "Fog room");
+    graph.faceAnchors[0].floorZ = 8;
+    graph.faceAnchors[0].ceilingZ = 40;
+    FogVolumeEditingFixture fixture(graph);
+    const int id = fixture.PlaceBox({128, 128});
+    fixture.editing.MutateById(id, "Rotate", [](auto& volume) {
+        volume.yawDegrees = 37;
+        volume.bottomOffsetWorld = 2;
+        volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
+        return true;
+    });
+    fixture.Clean();
+    const auto before = *fixture.editing.Selected();
+    Check(fixture.editing.FitToSector(id), "Fit Sector succeeds for a valid box");
+    const auto fitted = *fixture.editing.Selected();
+    Check(fitted.x == 257 && fitted.y == 129
+                  && Near(fitted.radiusXWorld, 257.0f / 128)
+                  && Near(fitted.radiusZWorld, 129.0f / 128)
+                  && Near(fitted.heightWorld, 4) && Near(fitted.bottomOffsetWorld, 0)
+                  && Near(fitted.yawDegrees, 0) && fitted.instanceId == before.instanceId
+                  && fitted.analyticStyle == before.analyticStyle
+                  && Near(fitted.maxOpacity, before.maxOpacity),
+          "Fit Sector rounds center, encloses bounds, fits height, resets yaw and preserves appearance");
+    const auto compiled = fixture.document.map.topologyMap.compiledLocalFogVolumes[0];
+    Check(Near(compiled.centerWorld.y - compiled.radiiWorld.y, 1)
+                  && Near(compiled.centerWorld.y + compiled.radiiWorld.y, 5)
+                  && !fixture.editor.topologyRenderCache.valid
+                  && fixture.document.lifecycle.hasUnsavedChanges,
+          "Fit Sector uses the nonzero floor and refreshes compiled output and cache");
+    fixture.Clean();
+    fixture.editing.FitToSector(id);
+    Check(fixture.IsClean(), "repeated identical Fit Sector is a no-op");
+    fixture.document.derivation.authoringDerivedTopologyStale = true;
+    Check(!fixture.editing.FitToSector(id) && fixture.IsClean(), "Fit Sector rejects stale derivation");
+
+    const auto rejectsFit = [](game::SectorAuthoringGraph input, const char* message) {
+        FogVolumeEditingFixture rejected(std::move(input));
+        const int rejectedId = rejected.PlaceBox({16, 16});
+        const auto beforeVolume = *rejected.editing.Selected();
+        const auto beforeCompiled = rejected.document.map.topologyMap.compiledLocalFogVolumes[0];
+        Check(!rejected.editing.FitToSector(rejectedId) && rejected.IsClean()
+                      && rejected.editing.Selected()->x == beforeVolume.x
+                      && rejected.editing.Selected()->y == beforeVolume.y
+                      && Near(rejected.editing.Selected()->radiusXWorld, beforeVolume.radiusXWorld)
+                      && Near(rejected.document.map.topologyMap.compiledLocalFogVolumes[0].centerWorld.x,
+                              beforeCompiled.centerWorld.x)
+                      && !rejected.status.empty(), message);
+    };
+    rejectsFit(MakeGraphFromConnectedLines(
+            {{0, 0}, {512, 0}, {512, 128}, {128, 128}, {128, 512}, {0, 512}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 1}}),
+            "Fit Sector rejects concave bounds whose center falls outside");
+    rejectsFit(MakeNestedRectangleGraph(2),
+            "Fit Sector rejects a bounds center in a nested sector");
+    rejectsFit(MakeGraphFromConnectedLines(
+            {{0, 0}, {256, 0}, {256, 256}, {0, 256},
+             {128, 64}, {192, 64}, {192, 192}, {128, 192}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {5, 6}, {6, 7}, {7, 8}, {8, 5}}),
+            "Fit Sector rejects a bounds center on a nested-sector boundary");
+    rejectsFit(MakeGraphFromConnectedLines(
+            {{0, 0}, {20000, 0}, {20000, 512}, {0, 512}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}}),
+            "Fit Sector rejects oversized planar bounds rather than silently clamping");
+    graph.faceAnchors[0].ceilingZ = 400;
+    rejectsFit(graph, "Fit Sector rejects excessive floor-to-ceiling height");
+}
+
 void TestReflectionProbeSelectManipulationCommitsSnappedMove()
 {
     game::SectorEditorDocumentState documentState;
@@ -15860,6 +16075,78 @@ void TestReflectionProbeSelectManipulationCommitsSnappedMove()
                   && !documentState.lifecycle.topologyDocumentDirty
                   && editorState.topologyRenderCache.valid,
           "reflection probe move rejects destinations outside derived non-void faces");
+}
+
+void TestCameraEditingSelectionAndPilot()
+{
+    game::SectorEditorDocumentState documentState;
+    documentState.authoring.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    documentState.derivation.authoringDerivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(
+                    documentState.authoring.authoringGraph);
+    documentState.map.topologyMap = documentState.derivation.authoringDerivation.topology;
+    documentState.derivation.lastValidAuthoringDerivedTopology = documentState.map.topologyMap;
+    documentState.derivation.authoringDerivationState =
+            game::SectorEditorAuthoringDerivationState::ValidCurrent;
+    documentState.derivation.authoringDerivedTopologyStale = false;
+
+    game::SectorEditorState editorState;
+    editorState.topologyRenderCache.valid = true;
+    game::SelectionState selection;
+    game::CameraEditingState editingState;
+    std::string status;
+    game::SectorEditorCameraEditingService editing{
+            game::SectorEditorCameraEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    documentState.authoring.authoringGraph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    editorState.topologyRenderRevision,
+                    editorState.topologyRenderCache,
+                    selection,
+                    editingState,
+                    status}};
+
+    Check(editing.Place({5, 5}), "camera placement succeeds");
+    auto& graph = documentState.authoring.authoringGraph;
+    const int id = graph.cameras[0].id;
+    Check(graph.cameras[0].referenceId == "camera_1" && Near(graph.cameras[0].y, 12.8f)
+            && documentState.map.topologyMap.cameras.size() == 1, "camera gets identity, eye height and runtime record");
+    Check(documentState.lifecycle.topologyDocumentDirty && !editorState.topologyRenderCache.valid,
+            "camera placement invalidates render cache");
+    Check(editing.SetSelectedPosition({5, 20, 5}), "camera height can be set");
+    const auto revision = editorState.topologyRenderRevision;
+    Check(editing.BeginMove(id), "camera drag starts");
+    editing.UpdateMove({200, 200});
+    editing.CancelMove();
+    Check(graph.cameras[0].x == 80 && editorState.topologyRenderRevision == revision,
+            "cancelled camera drag does not mutate document or cache");
+    Check(editing.BeginMove(id), "camera drag restarts");
+    editing.UpdateMove({200, 200});
+    Check(editing.FinishMove() && graph.cameras[0].x == 3200 && Near(graph.cameras[0].y, 20),
+            "camera drag can leave a sector and preserves absolute height");
+    Check(editing.ApplyPilot(id, {0, 18, 0}, 90, 80, 20, 50), "pilot pose commits atomically");
+    Check(Near(graph.cameras[0].pitchDegrees, 80) && Near(graph.cameras[0].verticalFovDegrees, 50),
+            "pilot stores lens and rotation");
+    const auto pilotRevision = editorState.topologyRenderRevision;
+    Check(!editing.ApplyPilot(id, {0, 18, 0}, 90, 100, 0, 50)
+            && pilotRevision == editorState.topologyRenderRevision, "invalid pilot pose is rejected without mutation");
+    Check(editing.Place({0, 0}), "overlapping camera can be placed on a boundary");
+    auto cache = game::BuildSectorEditorTopologyRenderCache(documentState.map.topologyMap,
+            graph, documentState.derivation.authoringDerivation, editorState.topologyRenderRevision);
+    game::SectorEditorTopologyDrawContext draw;
+    draw.canvasRect = {0, 0, 200, 200}; draw.viewZoom = 1;
+    std::vector<game::SectorEditorPickCandidate> candidates;
+    game::AppendCachedCameraPickCandidates(cache, draw, {100, 100}, 12, candidates);
+    Check(candidates.size() == 2, "both overlapping cameras enter click stack");
+    candidates = game::SortSectorEditorPickCandidates(std::move(candidates));
+    Check(candidates[0].target.kind == game::SectorEditorPickKind::Camera,
+            "camera candidates use normal stack ordering");
+    Check(!editing.RenameSelected("player") && !editing.RenameSelected("camera_1"),
+            "reserved and duplicate camera IDs are rejected");
+    Check(editing.RenameSelected("security_cam") && editing.DeleteSelected(), "camera rename and deletion work");
 }
 
 void TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache()
@@ -16407,8 +16694,11 @@ int main()
     TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio();
     TestAuthoringFogVolumeSerializationRoundTrip();
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
+    TestFogBoxResizeAndManipulationLifecycle();
+    TestFogFitSectorBoundsAndRejection();
     TestReflectionProbeSelectManipulationCommitsSnappedMove();
     TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache();
+    TestCameraEditingSelectionAndPilot();
     TestLevelMarkerDragPreservesFloorOffset();
     TestTriggerEditingServiceCommitsAuthoringAndDragOnce();
     TestEmptyGraph();

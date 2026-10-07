@@ -2,6 +2,7 @@
 
 #include "engine/EngineContext.h"
 #include "game/GameLevelLoading.h"
+#include "game/GameCursor.h"
 #include "game/Health.h"
 #include "game/SectorLevelLoader.h"
 #include "game/FpsPlayerRuntime.h"
@@ -96,6 +97,11 @@ public:
     bool HandleEscape();
     void ReleaseDraggedProp(engine::EngineContext& context) { EndSectorPropDrag(context,controller.propDrag); }
     bool IsInventoryOpen() const { return inventoryUi.open; }
+    GameCursorUiState CursorUiState() const {
+        if (!IsActive()) return {};
+        return {inventoryUi.open, heldObjectUse.phase != ItemHeldUsePhase::Inactive,
+                dialogue.active, keypad.active, gameOver};
+    }
 
     bool RebuildFromMap(
             engine::EngineContext& context,
@@ -148,6 +154,10 @@ public:
     const PlayerOxygen& PlayerOxygenState() const { return playerOxygen; }
     const SectorLiquidMovementState& LiquidMovementState() const {
         return controller.liquidMovement;
+    }
+    bool HasActiveLevelCamera() const { return ActiveSectorCutsceneCamera(cutscene) != nullptr; }
+    const SectorLiquidMovementState& ViewLiquidMovementState() const {
+        return HasActiveLevelCamera() ? cameraLiquidState : controller.liquidMovement;
     }
     void SetGodMode(bool enabled);
     void SetInvisible(bool enabled) { invisible = enabled; }
@@ -276,6 +286,8 @@ private:
     engine::ScriptRuntime scripts;
     SectorScriptHost scriptHost;
     SectorCutsceneRuntime cutscene;
+    SectorLiquidMovementState cameraLiquidState;
+    int cameraViewSectorId = 0;
     mutable SectorDialogueRuntime dialogue;
     engine::DialogueVoiceLibrary dialogueVoices;
     SectorGameNavigationDebugState navigationDebug;

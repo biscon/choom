@@ -1,4 +1,6 @@
 #include "game/cutscene/SectorCutsceneRuntime.h"
+#include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorTopologyUnits.h"
 
 #include "engine/assets/AssetManager.h"
 #include "engine/assets/FontAssets.h"
@@ -313,6 +315,7 @@ bool ResolveLookTargetPoint(
         Vector3& point)
 {
     if (!world.IsAlive(look.entity)
+            || (look.tracking && !IsSectorObjectEnabled(world, look.entity))
             || !world.Has<SectorObjectTransform>(look.entity)) return false;
     const SectorObjectTransform& transform =
             world.Get<SectorObjectTransform>(look.entity);
@@ -427,10 +430,95 @@ size_t BuildWrappedLines(
 
 } // namespace
 
+void LoadSectorCutsceneCameras(SectorCutsceneRuntime& runtime, const SectorTopologyMap& map)
+{
+    runtime.cameras.clear();
+    runtime.cameras.reserve(map.cameras.size());
+    runtime.activeCameraIndex = -1;
+    runtime.cameraMove = {};
+    for (const auto& source : map.cameras) {
+        SectorCutsceneCamera camera;
+        camera.id = source.id;
+        camera.authoredPose = {SectorAuthoringToWorldPosition(source.position),
+                source.yawRadians, source.pitchRadians, source.rollRadians};
+        camera.pose = camera.authoredPose;
+        camera.authoredFov = camera.fov = source.verticalFovDegrees;
+        runtime.cameras.push_back(std::move(camera));
+    }
+}
+
+SectorCutsceneCamera* ActiveSectorCutsceneCamera(SectorCutsceneRuntime& runtime)
+{
+    return runtime.activeCameraIndex >= 0
+            && static_cast<size_t>(runtime.activeCameraIndex) < runtime.cameras.size()
+            ? &runtime.cameras[runtime.activeCameraIndex] : nullptr;
+}
+
+const SectorCutsceneCamera* ActiveSectorCutsceneCamera(const SectorCutsceneRuntime& runtime)
+{
+    return runtime.activeCameraIndex >= 0
+            && static_cast<size_t>(runtime.activeCameraIndex) < runtime.cameras.size()
+            ? &runtime.cameras[runtime.activeCameraIndex] : nullptr;
+}
+
+void ResetSectorCutsceneCameraOverrides(SectorCutsceneRuntime& runtime)
+{
+    runtime.activeCameraIndex = -1;
+    runtime.cameraMove = {};
+    if (runtime.look.cameraIndex >= 0) runtime.look = {};
+    for (auto& camera : runtime.cameras) {
+        camera.pose = camera.authoredPose;
+        camera.fov = camera.authoredFov;
+    }
+}
+
+bool BeginSectorCutsceneCameraMove(SectorCutsceneRuntime& runtime, Vector3 destination,
+        double durationSeconds, uint64_t& token, std::string& error)
+{
+    const auto* camera = ActiveSectorCutsceneCamera(runtime);
+    if (!camera || runtime.cameraMove.active) {
+        error = camera ? "camera already has an active move" : "no level camera is active";
+        return false;
+    }
+    if (!std::isfinite(destination.x) || !std::isfinite(destination.y)
+            || !std::isfinite(destination.z) || !std::isfinite(durationSeconds) || durationSeconds < 0) {
+        error = "camera destination and duration must be finite; duration must be non-negative";
+        return false;
+    }
+    runtime.cameraMove = {};
+    auto& move = runtime.cameraMove;
+    move.cameraIndex = runtime.activeCameraIndex;
+    move.start = camera->pose.position;
+    move.destination = destination;
+    move.durationSeconds = durationSeconds;
+    move.token = token = runtime.nextToken++;
+    move.active = true;
+    error.clear();
+    return true;
+}
+
+void UpdateSectorCutsceneCameraMove(SectorCutsceneRuntime& runtime,
+        engine::ScriptRuntime& scripts, float dt)
+{
+    auto& move = runtime.cameraMove;
+    if (!move.active) return;
+    move.elapsedSeconds += SafeDelta(dt);
+    const float progress = move.durationSeconds <= 0 ? 1.0f
+            : static_cast<float>(move.elapsedSeconds / move.durationSeconds);
+    auto& pose = runtime.cameras[move.cameraIndex].pose;
+    pose.position = Vector3Lerp(move.start, move.destination, Smootherstep(progress));
+    if (progress >= 1) {
+        pose.position = move.destination;
+        move.active = false;
+        engine::ScriptSystemCompleteOperation(scripts, move.operation);
+    }
+}
+
 void InitializeSectorCutsceneRuntime(SectorCutsceneRuntime& runtime)
 {
     runtime = SectorCutsceneRuntime{};
     runtime.caption.text.reserve(kSectorCutsceneMaximumCaptionBytes);
+    runtime.caption.displayText.reserve(kSectorCutsceneMaximumDisplayCaptionBytes);
     engine::ReserveDialogueTimeline(runtime.caption.speechTimeline);
 }
 
@@ -444,6 +532,7 @@ void ResetSectorCutsceneRuntime(
             kSectorCutsceneMaximumCaptionBytes);
     runtime = SectorCutsceneRuntime{};
     runtime.caption.text.reserve(captionCapacity);
+    runtime.caption.displayText.reserve(kSectorCutsceneMaximumDisplayCaptionBytes);
     engine::ReserveDialogueTimeline(runtime.caption.speechTimeline);
 }
 
@@ -620,7 +709,7 @@ bool AdvanceSectorCutscenePlayerCamera(
                     *arrivalTarget, dt);
         }
     }
-    if (runtime.look.active || move.arrived) {
+    if ((runtime.look.active && runtime.look.cameraIndex < 0) || move.arrived) {
         move.facingVelocity = 0.0f;
         return true;
     }
@@ -770,7 +859,7 @@ bool BeginSectorCutsceneLook(
         uint64_t& outToken,
         std::string& error)
 {
-    if (runtime.look.active || (runtime.playerMove.active
+    if (runtime.look.active || (runtime.activeCameraIndex < 0 && runtime.playerMove.active
             && runtime.playerMove.arrivalLook.active)) {
         error = "camera already has an active scripted look";
         return false;
@@ -786,8 +875,10 @@ bool BeginSectorCutsceneLook(
     look.entity = entity;
     look.targetKind = kind;
     look.targetHeight = targetHeight;
-    look.startYawRadians = player.yawRadians;
-    look.startPitchRadians = player.pitchRadians;
+    look.cameraIndex = runtime.activeCameraIndex;
+    const auto* camera = ActiveSectorCutsceneCamera(runtime);
+    look.startYawRadians = camera ? camera->pose.yawRadians : player.yawRadians;
+    look.startPitchRadians = camera ? camera->pose.pitchRadians : player.pitchRadians;
     look.durationSeconds = durationSeconds;
     look.active = true;
     runtime.look = look;
@@ -813,6 +904,26 @@ void CancelSectorCutsceneLook(SectorCutsceneRuntime& runtime, uint64_t token)
     }
 }
 
+bool AdvanceSectorCutsceneLookPose(SectorCutsceneLookState& look, SectorViewPose& pose,
+        Vector3 target, float dt)
+{
+    const Vector3 delta = Vector3Subtract(target, pose.position);
+    const float horizontal = std::sqrt(delta.x * delta.x + delta.z * delta.z);
+    if (horizontal <= MovementEpsilon && std::fabs(delta.y) <= MovementEpsilon) return false;
+    look.elapsedSeconds += SafeDelta(dt);
+    const float progress = look.durationSeconds <= 0 ? 1.0f
+            : static_cast<float>(look.elapsedSeconds / look.durationSeconds);
+    const float eased = Smootherstep(progress);
+    const float targetYaw = look.cameraIndex >= 0 && horizontal <= MovementEpsilon ? pose.yawRadians : std::atan2(delta.z, delta.x);
+    const float rawPitch = std::atan2(delta.y, std::max(horizontal, MovementEpsilon));
+    const float targetPitch = look.cameraIndex >= 0
+            ? std::clamp(rawPitch, -89.9f * DEG2RAD, 89.9f * DEG2RAD) : ClampSectorFpsPitch(rawPitch);
+    pose.yawRadians = look.startYawRadians + ShortestAngleDelta(look.startYawRadians, targetYaw) * eased;
+    pose.pitchRadians = look.startPitchRadians + (targetPitch - look.startPitchRadians) * eased;
+    if (look.cameraIndex < 0) pose.pitchRadians = ClampSectorFpsPitch(pose.pitchRadians);
+    return true;
+}
+
 void UpdateSectorCutsceneLook(
         SectorCutsceneRuntime& runtime,
         engine::World& world,
@@ -828,35 +939,30 @@ void UpdateSectorCutsceneLook(
     if (!ResolveLookTargetPoint(world, assets, look, target)) {
         const engine::ScriptOperationHandle operation = look.operation;
         look.active = false;
-        engine::ScriptSystemFailOperation(
-                scripts, operation, "look target was removed or is not ready");
+        if (look.tracking) TraceLog(LOG_WARNING, "Camera tracking stopped: target removed or unavailable");
+        else engine::ScriptSystemFailOperation(scripts, operation, "look target was removed or is not ready");
         return;
     }
-    const Vector3 eye = SectorFpsControllerEyePosition(
-            player, playerConfig);
-    const Vector3 delta = Vector3Subtract(target, eye);
-    const float horizontal = std::sqrt(delta.x * delta.x + delta.z * delta.z);
-    if (horizontal <= MovementEpsilon && std::fabs(delta.y) <= MovementEpsilon) {
-        const engine::ScriptOperationHandle operation = look.operation;
+    auto* camera = look.cameraIndex >= 0 ? &runtime.cameras[look.cameraIndex] : nullptr;
+    const Vector3 eye = camera ? camera->pose.position : SectorFpsControllerEyePosition(player, playerConfig);
+    SectorViewPose pose{eye, camera ? camera->pose.yawRadians : player.yawRadians,
+            camera ? camera->pose.pitchRadians : player.pitchRadians, 0};
+    if (!AdvanceSectorCutsceneLookPose(look, pose, target, dt)) {
         look.active = false;
-        engine::ScriptSystemFailOperation(scripts, operation,
-                "look target coincides with the camera");
+        if (look.tracking) TraceLog(LOG_WARNING, "Camera tracking stopped: target coincides with camera");
+        else engine::ScriptSystemFailOperation(scripts, look.operation, "look target coincides with the camera");
         return;
     }
-    look.elapsedSeconds += SafeDelta(dt);
-    const float progress = look.durationSeconds <= 0.0
-            ? 1.0f
+    if (camera) {
+        camera->pose.yawRadians = pose.yawRadians;
+        camera->pose.pitchRadians = pose.pitchRadians;
+    } else {
+        player.yawRadians = pose.yawRadians;
+        player.pitchRadians = pose.pitchRadians;
+    }
+    const float progress = look.durationSeconds <= 0 ? 1.0f
             : static_cast<float>(look.elapsedSeconds / look.durationSeconds);
-    const float eased = Smootherstep(progress);
-    const float targetYaw = std::atan2(delta.z, delta.x);
-    const float targetPitch = ClampSectorFpsPitch(
-            std::atan2(delta.y, std::max(horizontal, MovementEpsilon)));
-    player.yawRadians = look.startYawRadians
-            + ShortestAngleDelta(look.startYawRadians, targetYaw) * eased;
-    player.pitchRadians = ClampSectorFpsPitch(
-            look.startPitchRadians
-            + (targetPitch - look.startPitchRadians) * eased);
-    if (progress >= 1.0f) {
+    if (progress >= 1.0f && !look.tracking) {
         const engine::ScriptOperationHandle operation = look.operation;
         look.active = false;
         engine::ScriptSystemCompleteOperation(scripts, operation);
@@ -893,8 +999,18 @@ bool BeginSectorCutsceneCaption(
                 : "caption text exceeds 2048 codepoints";
         return false;
     }
+    const bool spoken = kind == SectorCutsceneCaptionKind::Say;
+    const std::string_view speakerName = spoken && speech && !speech->playerSpeaker
+            ? speech->speakerName : std::string_view{};
+    bool validNameUtf8 = false;
+    CountCodepoints(speakerName, validNameUtf8);
+    if (speakerName.size() > kMaximumNpcNameBytes || !validNameUtf8
+            || speakerName.find_first_of("\r\n") != std::string_view::npos) {
+        error = "caption speaker name must be single-line UTF-8 of at most 255 bytes";
+        return false;
+    }
     SectorCutsceneCaptionState& caption = runtime.caption;
-    if (kind == SectorCutsceneCaptionKind::Say) {
+    if (spoken) {
         const engine::DialogueSettings defaults;
         if (!engine::BuildDialogueTimeline(text,
                 speech ? speech->mood : engine::DialogueMood::Neutral,
@@ -922,6 +1038,16 @@ bool BeginSectorCutsceneCaption(
     caption.mood = speech ? speech->mood : engine::DialogueMood::Neutral;
     caption.position = position;
     caption.text.assign(text.data(), text.size());
+    caption.displayText.clear();
+    if (!speakerName.empty()) {
+        caption.displayText.append(speakerName.data(), speakerName.size());
+        caption.displayText.append(": ");
+    }
+    caption.speakerPrefixBytes = caption.displayText.size();
+    caption.displayText.append(text.data(), text.size());
+    caption.color = spoken
+            ? (speech && !speech->playerSpeaker ? speech->color : WHITE)
+            : Color{245, 245, 240, 255};
     caption.codepointCount = codepoints;
     caption.visibleByteCount = kind == SectorCutsceneCaptionKind::Text
             ? text.size() : 0;
@@ -1205,24 +1331,25 @@ void DrawSectorCutsceneCaption(
     const float maximumWidth = viewport.width * 0.80f;
     std::array<WrappedLine, MaximumWrappedLines> lines{};
     const size_t lineCount = BuildWrappedLines(
-            caption.text, font, maximumWidth, lines);
+            caption.displayText, font, maximumWidth, lines);
     if (lineCount == 0) return;
     const float blockHeight = static_cast<float>(lineCount) * lineAdvance - 8.0f;
     const float y = BuildSectorCutscenePresentationLayout(
             runtime.presentation, viewport, caption.position, blockHeight).captionY;
     const unsigned char alpha = static_cast<unsigned char>(std::lround(
             std::clamp(caption.opacity, 0.0f, 1.0f) * 255.0f));
-    std::array<char, kSectorCutsceneMaximumCaptionBytes + 1> lineBuffer{};
+    const size_t visibleBytes = caption.speakerPrefixBytes + caption.visibleByteCount;
+    std::array<char, kSectorCutsceneMaximumDisplayCaptionBytes + 1> lineBuffer{};
     for (size_t index = 0; index < lineCount; ++index) {
         size_t start = lines[index].start;
-        size_t end = std::min(lines[index].end, caption.visibleByteCount);
-        while (start < end && (caption.text[start] == ' '
-                || caption.text[start] == '\t')) ++start;
-        while (end > start && (caption.text[end - 1] == ' '
-                || caption.text[end - 1] == '\t')) --end;
+        size_t end = std::min(lines[index].end, visibleBytes);
+        while (start < end && (caption.displayText[start] == ' '
+                || caption.displayText[start] == '\t')) ++start;
+        while (end > start && (caption.displayText[end - 1] == ' '
+                || caption.displayText[end - 1] == '\t')) --end;
         if (end > start) {
             const size_t length = std::min(end - start, lineBuffer.size() - 1);
-            std::memcpy(lineBuffer.data(), caption.text.data() + start, length);
+            std::memcpy(lineBuffer.data(), caption.displayText.data() + start, length);
             lineBuffer[length] = '\0';
             const Vector2 measured = MeasureTextEx(
                     font, lineBuffer.data(), fontSize, 1.0f);
@@ -1233,7 +1360,7 @@ void DrawSectorCutsceneCaption(
                     Vector2{position.x + 2.0f, position.y + 2.0f},
                     fontSize, 1.0f, Color{0, 0, 0, alpha});
             DrawTextEx(font, lineBuffer.data(), position,
-                    fontSize, 1.0f, Color{245, 245, 240, alpha});
+                    fontSize, 1.0f, Color{caption.color.r, caption.color.g, caption.color.b, alpha});
         }
     }
 }

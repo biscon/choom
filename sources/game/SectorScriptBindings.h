@@ -99,6 +99,12 @@ struct SectorScriptAudioApi {
     void* userData = nullptr;
     bool (*playMapSound)(void*, engine::EngineContext&, const std::string&,
             float, float, std::string&) = nullptr;
+    int64_t (*playMapMusic)(void*, engine::EngineContext&, const std::string&,
+            bool, float, std::string&) = nullptr;
+    bool (*stopMapMusicById)(void*, engine::EngineContext&, const std::string&,
+            std::string&) = nullptr;
+    bool (*stopMapMusicByHandle)(void*, engine::EngineContext&, int64_t,
+            std::string&) = nullptr;
     bool (*playSoundEmitter)(void*, engine::EngineContext&, const std::string&,
             const float*, float, std::string&) = nullptr;
     bool (*stopSoundEmitter)(void*, engine::EngineContext&, const std::string&,

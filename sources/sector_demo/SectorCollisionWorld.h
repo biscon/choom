@@ -47,6 +47,9 @@ struct SectorCollisionSector {
     bool ceilingSolid = true;
     SectorCollisionLoop outerLoop;
     std::vector<SectorCollisionLoop> holeLoops;
+    // Cached world XZ extent for read-only bounds queries.
+    Vector2 boundsMinXZ = {};
+    Vector2 boundsMaxXZ = {};
     std::vector<SectorCollisionEdge> edges;
     std::vector<int> portalNeighbors;
 };
@@ -124,6 +127,11 @@ public:
 
     const SectorCollisionSector* FindSector(int sectorId) const;
     bool GetSectorFloorCeiling(int sectorId, SectorCollisionHeights* out) const;
+    // Conservative overlap with the sector volume, including boundary contact.
+    // Uses cached loops; does not test structural solids or alter actor collision.
+    bool BoundsOverlapSector(int sectorId, BoundingBox bounds) const;
+    // Presentation/bake membership only; origin membership keeps precedence.
+    int ResolveLightingSectorForBounds(int originSectorId, BoundingBox bounds, bool hasBounds) const;
     bool ResolveActorVerticalContext(
             int sectorId,
             const SectorCollisionVerticalQuery& query,

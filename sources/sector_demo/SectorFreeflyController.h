@@ -34,6 +34,7 @@ void UpdateSectorFreeflyController(
         SectorFreeflyControllerState& state,
         engine::Input& input,
         float dt,
-        float moveSpeedScale);
+        float moveSpeedScale,
+        float pitchLimitRadians = 1.45f);
 
 } // namespace game

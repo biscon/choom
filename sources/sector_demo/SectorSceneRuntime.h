@@ -163,6 +163,20 @@ public:
             const float* volumeOverride,
             float pitch,
             std::string& error);
+    int64_t PlayLevelMusic(
+            engine::EngineContext& context,
+            const std::string& id,
+            bool loop,
+            float volume,
+            std::string& error);
+    bool StopLevelMusic(
+            engine::EngineContext& context,
+            const std::string& id,
+            std::string& error);
+    bool StopLevelMusic(
+            engine::EngineContext& context,
+            int64_t handle,
+            std::string& error);
     bool StopSoundEmitter(
             engine::EngineContext& context,
             const std::string& id,
@@ -207,6 +221,13 @@ private:
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::SoundHandle> levelSounds;
     std::unordered_map<std::string, engine::MusicHandle> levelMusicById;
+    struct MapMusicPlayback {
+        engine::MusicHandle music = engine::NullMusicHandle();
+        int64_t token = 0;
+    };
+    std::unordered_map<std::string, MapMusicPlayback> mapMusicById;
+    // Never reset on audio teardown: old script handles must not alias replays.
+    int64_t nextMapMusicToken = 1;
     std::unordered_map<std::string, LoadedFootstepSet> footstepSets;
     std::unordered_map<int, std::string> footstepSetBySectorId;
     FootstepPlaybackState footstepPlayback;
