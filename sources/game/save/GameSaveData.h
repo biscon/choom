@@ -112,6 +112,12 @@ struct GameSaveBillboardState {
     bool finished = false;
 };
 
+struct GameSaveParticleEmitterState {
+    std::string instanceId;
+    bool enabled = true;
+    float intensity = 1.0f;
+};
+
 struct GameSaveFogVolumeState {
     std::string instanceId;
     bool enabled = true;
@@ -151,6 +157,7 @@ struct GameSaveLevelState {
     std::vector<GameSaveTriggerState> triggers;
     std::vector<GameSaveItemState> items;
     std::vector<GameSaveFogVolumeState> fogVolumes;
+    std::vector<GameSaveParticleEmitterState> particleEmitters;
 };
 
 struct GameSavePlayerState {

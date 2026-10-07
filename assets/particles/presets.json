@@ -1,0 +1,75 @@
+[
+  {
+    "preset": 0,
+    "presetName": "Fire Barrel",
+    "tint": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "shape": 1,
+    "emission": 0,
+    "collision": 0,
+    "dimensions": [
+      0.75,
+      0.10000000149011612,
+      0.75
+    ],
+    "drift": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": 0.5,
+    "intensity": 3.0,
+    "speed": 1.0,
+    "lifetime": 0.5,
+    "spread": 0.30000001192092896,
+    "turbulence": 0.5,
+    "swirl": 0.0,
+    "gravity": 0.0,
+    "drag": 0.30000001192092896,
+    "smokeAmount": 0.25,
+    "emberAmount": 0.30000001192092896,
+    "burstInterval": 0.75,
+    "burstCount": 20.0,
+    "restitution": 0.3499999940395355,
+    "maxDistance": 50.0,
+    "seed": 1,
+    "textures": [
+      {
+        "path": "",
+        "columns": 1,
+        "rows": 1,
+        "frames": 1,
+        "fps": 12.0,
+        "randomStart": true
+      },
+      {
+        "path": "",
+        "columns": 1,
+        "rows": 1,
+        "frames": 1,
+        "fps": 12.0,
+        "randomStart": true
+      },
+      {
+        "path": "",
+        "columns": 1,
+        "rows": 1,
+        "frames": 1,
+        "fps": 12.0,
+        "randomStart": true
+      },
+      {
+        "path": "",
+        "columns": 1,
+        "rows": 1,
+        "frames": 1,
+        "fps": 12.0,
+        "randomStart": true
+      }
+    ]
+  }
+]

@@ -675,6 +675,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::Camera: return "Camera";
         case SectorEditorTool::Path: return "Path";
         case SectorEditorTool::SoundEmitter: return "Sound Emitter";
+        case SectorEditorTool::ParticleEmitter: return "Particle Emitter";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
         case SectorEditorTool::StaticRectLight: return "Static Rect Light";
@@ -699,6 +700,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
             || tool == SectorEditorTool::LevelMarker
             || tool == SectorEditorTool::Camera
             || tool == SectorEditorTool::SoundEmitter
+            || tool == SectorEditorTool::ParticleEmitter
             || tool == SectorEditorTool::AuthoringMove;
 }
 
@@ -744,6 +746,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::Camera: return "camera";
         case SectorEditorPickKind::Path: return "path";
         case SectorEditorPickKind::SoundEmitter: return "sound emitter";
+        case SectorEditorPickKind::ParticleEmitter: return "particle emitter";
     }
     return "unknown";
 }
@@ -773,6 +776,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::LevelMarker:
         case SectorEditorPickKind::Camera:
         case SectorEditorPickKind::SoundEmitter:
+        case SectorEditorPickKind::ParticleEmitter:
             return target.id >= 0;
         case SectorEditorPickKind::None:
         case SectorEditorPickKind::AuthoringLine:

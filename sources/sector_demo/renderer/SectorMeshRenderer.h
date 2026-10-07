@@ -1,4 +1,5 @@
 #pragma once
+#include "sector_demo/renderer/SectorParticleRenderer.h"
 #include "sector_demo/renderer/SectorWorldDiagnostics.h"
 #include "sector_demo/renderer/SectorRuntimeReflectionProbes.h"
 #include "sector_demo/renderer/SectorReflectionSampling.h"
@@ -61,6 +62,8 @@ struct SectorAtmosphereDiagnostics {
     double lightHaloGpuMilliseconds = 0.0;
     double dustGpuMilliseconds = 0.0;
     double underwaterParticlesGpuMilliseconds = 0.0;
+    double particlesGpuMilliseconds = 0.0;
+    engine::ParticleDiagnostics particles;
     int dynamicLightCount = 0;
     int analyticFogEligibleCount = 0;
     int analyticFogActiveCount = 0;
@@ -316,7 +319,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t AtmosphereGpuPassCount = 7;
+    static constexpr std::size_t AtmosphereGpuPassCount = 8;
     static constexpr std::size_t AtmosphereGpuQueryLatency = 4;
 
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -473,6 +476,8 @@ private:
     SectorAnalyticLightShaftRenderer analyticLightShaftRenderer;
     SectorLightProxyRenderer lightProxyRenderer;
     SectorLightDustRenderer lightDustRenderer;
+    SectorParticleRenderer particleRenderer;
+    float particleDelta = 0.0f;
     SectorUnderwaterRenderer underwaterRenderer;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;

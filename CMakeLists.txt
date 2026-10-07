@@ -51,6 +51,8 @@ target_include_directories(lua55 PUBLIC sources/lua)
 
 # These reusable modules are also linked by graphics-free shader tools/tests.
 list(FILTER PROJECT_SOURCES EXCLUDE REGEX "/engine/render/Shader(Source|Program)\\.cpp$")
+list(FILTER PROJECT_SOURCES EXCLUDE REGEX "/engine/particles/ParticleSystem\\.cpp$")
+list(FILTER PROJECT_SOURCES EXCLUDE REGEX "/sector_demo/particles/SectorParticleSettings\\.cpp$")
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE sources)
@@ -528,6 +530,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/paths/SectorEditorPathEditingService.cpp
             sources/sector_editor/tools/path/SectorEditorPathTool.cpp
             sources/sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.cpp
+            sources/sector_editor/services/particle_emitters/SectorEditorParticleEmitterEditingService.cpp
             sources/sector_editor/services/triggers/SectorEditorTriggerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
@@ -1083,4 +1086,29 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
             "${PACKAGE_DIR}/assets"
     )
 
+endif()
+
+# Shared graphics-free particle simulation/settings are used by topology tests too.
+add_library(particle_core STATIC
+    sources/engine/particles/ParticleSystem.cpp
+    sources/sector_demo/particles/SectorParticleSettings.cpp)
+target_include_directories(particle_core PUBLIC sources)
+target_link_libraries(particle_core PUBLIC raylib)
+target_link_libraries(${PROJECT_NAME} PRIVATE particle_core)
+get_property(particle_consumers DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(consumer IN LISTS particle_consumers)
+    get_target_property(consumer_type ${consumer} TYPE)
+    if(consumer_type STREQUAL "EXECUTABLE")
+        get_target_property(consumer_sources ${consumer} SOURCES)
+        if("${consumer_sources}" MATCHES "SectorAuthoringGraph.cpp|SectorTopologySerialization.cpp|ParticleSystemTests.cpp")
+            target_link_libraries(${consumer} PRIVATE particle_core)
+        endif()
+    endif()
+endforeach()
+
+if(BUILD_TESTING)
+    target_link_libraries(sector_editor_ui_layout_tests PRIVATE particle_core)
+    add_executable(particle_system_tests tests/ParticleSystemTests.cpp)
+    target_link_libraries(particle_system_tests PRIVATE particle_core)
+    add_test(NAME particle_system COMMAND particle_system_tests)
 endif()

@@ -55,6 +55,7 @@ enum class SectorAuthoringSelectionKind {
     Camera,
     Path,
     SoundEmitter,
+    ParticleEmitter,
     Trigger,
     StructuralPrimitive
 };
@@ -70,6 +71,7 @@ struct SectorAuthoringSelectionTarget {
     int cameraId = -1;
     int pathId = -1;
     int soundEmitterId = -1;
+    int particleEmitterId = -1;
     int triggerId = -1;
     int structuralPrimitiveId = -1;
 };
@@ -158,6 +160,7 @@ enum class SectorEditorPickKind {
     Camera,
     Path,
     SoundEmitter,
+    ParticleEmitter,
     Trigger
 };
 
@@ -197,6 +200,15 @@ struct LevelMarkerDragState {
 struct CameraDragState {
     bool active = false;
     int cameraId = -1;
+    SectorCoord originalX = 0;
+    SectorCoord originalZ = 0;
+    SectorCoord previewX = 0;
+    SectorCoord previewZ = 0;
+};
+
+struct ParticleEmitterDragState {
+    bool active = false;
+    int emitterId = -1;
     SectorCoord originalX = 0;
     SectorCoord originalZ = 0;
     SectorCoord previewX = 0;

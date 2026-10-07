@@ -23,6 +23,7 @@
 #include "sector_editor/services/cameras/SectorEditorCameraEditingState.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
+#include "sector_editor/inspector/SectorEditorParticleEmitterInspector.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.h"
@@ -53,6 +54,7 @@ enum class SectorEditorInspectorPanelRequestKind {
     OpenDeleteSelectedLevelMarkerConfirmation,
     OpenDeleteSelectedCameraConfirmation,
     OpenDeleteSelectedSoundEmitterConfirmation,
+    OpenDeleteSelectedParticleEmitterConfirmation,
     OpenDeleteSelectedTriggerConfirmation,
     BakeLightmaps,
     RefreshPreviewLightSources
@@ -95,6 +97,8 @@ struct SectorEditorInspectorPanelContext {
     LevelMarkerEditingUiState& levelMarkerUiState;
     CameraEditingUiState& cameraUiState;
     SoundEmitterEditingUiState& soundEmitterUiState;
+    ParticleEmitterEditingUiState& particleEmitterUiState;
+    SectorEditorParticlePreview& particlePreview;
     TriggerEditingUiState& triggerUiState;
     SectorEditorStructuralPrimitiveEditingUiState& structuralPrimitiveUiState;
     std::string& statusText;
@@ -112,6 +116,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorLevelMarkerEditingService& levelMarkerEditing;
     SectorEditorCameraEditingService& cameraEditing;
     SectorEditorSoundEmitterEditingService& soundEmitterEditing;
+    SectorEditorParticleEmitterEditingService& particleEmitterEditing;
     SectorEditorTriggerEditingService& triggerEditing;
     SectorEditorAuthoringFaceMergeService& authoringFaceMerge;
     SectorEditorStructuralPrimitiveEditingService& structuralPrimitiveEditing;

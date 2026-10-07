@@ -188,6 +188,7 @@ struct SectorAuthoringGraph {
     std::vector<SectorAuthoringPath> paths;
     int nextPathId = 1;
     std::vector<SectorAuthoringSoundEmitter> soundEmitters;
+    std::vector<SectorAuthoringParticleEmitter> particleEmitters;
     std::vector<SectorAuthoringTrigger> triggers;
     std::vector<SectorAuthoringStructuralPrimitive> structuralPrimitives;
 };
@@ -210,6 +211,7 @@ enum class SectorAuthoringObjectKind {
     Patrol,
     Path,
     SoundEmitter,
+    ParticleEmitter,
     Trigger
     ,StructuralPrimitive
 };
@@ -319,6 +321,7 @@ enum class SectorAuthoringDerivationDiagnosticKind {
     NonIntegerVertex,
     InvalidTopology,
     UnresolvedFogVolume,
+    UnresolvedParticleEmitter,
     UnresolvedReflectionProbe
     ,InvalidStructuralPrimitive
     ,UnresolvedStructuralPrimitiveMembership
@@ -597,5 +600,10 @@ bool ResolveSectorAuthoringPointToDerivedSector(
         const SectorAuthoringDerivationResult& derivation,
         SectorTopologyCoordPoint point,
         int* outTopologySectorId = nullptr);
+
+int AllocateSectorAuthoringParticleEmitterId(const SectorAuthoringGraph& graph);
+std::string AllocateSectorAuthoringParticleEmitterReferenceId(const SectorAuthoringGraph& graph);
+const SectorAuthoringParticleEmitter* FindSectorAuthoringParticleEmitter(const SectorAuthoringGraph& graph, int id);
+SectorAuthoringParticleEmitter* FindSectorAuthoringParticleEmitter(SectorAuthoringGraph& graph, int id);
 
 } // namespace game

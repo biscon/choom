@@ -1185,6 +1185,8 @@ bool SectorMeshRenderer::RebuildRendererResources(
     analyticLightShaftRenderer.Initialize();
     lightProxyRenderer.Initialize();
     lightDustRenderer.Initialize();
+    particleRenderer.Initialize(assets, assetScope, map.particleEmitters);
+    particleDelta = 0;
     bloomRenderer.Initialize();
     InitializeHdrCompositeShader();
 
@@ -1199,6 +1201,8 @@ void SectorMeshRenderer::Shutdown(engine::AssetManager& assets)
 
 void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
 {
+    particleRenderer.Shutdown();
+    particleDelta = 0;
     worldProfiler.Shutdown();
     worldDiagnosticsEnabled = false;
     runtimeReflections.Shutdown();
@@ -1342,6 +1346,7 @@ void SectorMeshRenderer::AdvanceRuntime(float dt)
 {
     if (std::isfinite(dt) && dt > 0.0f) {
         runtimeSeconds += dt;
+        particleDelta = std::min(0.1f, particleDelta + dt);
     }
 }
 
@@ -2311,7 +2316,8 @@ void SectorMeshRenderer::BeginAtmosphereGpuFrame(bool enabled)
                     &atmosphereDiagnostics.lightHaloGpuMilliseconds,
                     &atmosphereDiagnostics.dustGpuMilliseconds,
                     &atmosphereDiagnostics
-                            .underwaterParticlesGpuMilliseconds};
+                            .underwaterParticlesGpuMilliseconds,
+                    &atmosphereDiagnostics.particlesGpuMilliseconds};
             for (std::size_t pass = 0; pass < AtmosphereGpuPassCount; ++pass) {
                 if ((issuedMask & (1u << pass)) == 0) continue;
                 GLuint64 startNanoseconds = 0;
@@ -2474,13 +2480,30 @@ bool SectorMeshRenderer::ApplyTransparentSurfaces(
         worldProfiler.End();
     }
 
+    bool particlesApplied = false;
+    if (map != nullptr) {
+        particleRenderer.Update(particleDelta, map->particleEmitters,
+                visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr, camera);
+        particleDelta = 0;
+        const bool sampleDepth = sceneTarget.actual.depth == engine::RenderTargetDepthKind::SampleableTexture
+                && EnsureHdrSceneColorView(sceneTarget);
+        BeginAtmosphereGpuPass(7);
+        particleRenderer.Draw(assets, sampleDepth ? hdrSceneColorView : sceneTarget.native,
+                sampleDepth ? &sceneTarget.native.depth : nullptr, camera, map,
+                visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+                doorLighting.objectLightProbes, &lightContext, &visibilityResult);
+        EndAtmosphereGpuPass(7);
+        atmosphereDiagnostics.particles = particleRenderer.Diagnostics();
+        particlesApplied = atmosphereDiagnostics.particles.visible > 0;
+    }
+
     if (!visibleWindows && !visibleLiquids) {
         worldProfiler.diagnostics.panes = 0;
         worldProfiler.diagnostics.panesCulled = windowRenderer.ConsideredCount();
         worldProfiler.FinishFrame();
         atmosphereDiagnostics.world = worldProfiler.diagnostics;
         renderDebugText += " | transparents: idle";
-        return causticsApplied || preGlassShaftApplied || preGlassHaloApplied;
+        return particlesApplied || causticsApplied || preGlassShaftApplied || preGlassHaloApplied;
     }
 
     bool refractionReady = visibleLiquids

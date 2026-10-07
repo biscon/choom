@@ -370,6 +370,13 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     cameraEditingState,
                     statusText});
+    particleEmitterEditingService.emplace(
+            SectorEditorParticleEmitterEditingServiceContext{
+                    Lifecycle(), TopologyMap(), AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision, state.topologyRenderCache,
+                    selectionState, particleEmitterEditingState, statusText});
+    LoadParticleInspectorPresets(particleEmitterEditingUiState);
     soundEmitterEditingService.emplace(
             SectorEditorSoundEmitterEditingServiceContext{
                     Lifecycle(), TopologyMap(), AuthoringGraph(),
@@ -403,6 +410,7 @@ bool SectorEditor::Init(engine::EngineContext& context)
 void SectorEditor::Shutdown(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
+    particlePreview.Shutdown(assets);
     SectorEditorAudioAssetPickerService audioPicker{
             context, audioAssetPickerSessionState};
     audioPicker.Close(npcEditorState.audioPicker.assetPicker);
@@ -461,6 +469,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     cameraEditingUiState = CameraEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
+    particleEmitterEditingState = ParticleEmitterEditingState{};
+    particleEmitterEditingUiState.bufferedEmitterId = -1;
     soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
@@ -472,6 +482,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     levelMarkerEditingService.reset();
     cameraEditingService.reset();
     soundEmitterEditingService.reset();
+    particleEmitterEditingService.reset();
     triggerEditingService.reset();
     structuralPrimitiveEditingService.reset();
     playerAudio = PlayerAudioRuntime{};
@@ -634,6 +645,11 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
     engine::Input& input = context.input;
     engine::AssetManager& assets = context.assets;
+    particlePreview.Synchronize(assets,
+            state.mode == SectorEditorMode::Edit2D && particleEmitterEditingService
+                    ? particleEmitterEditingService->Selected() : nullptr,
+            state.topologyRenderRevision, dt);
+
     if (state.footstepPicker.open) {
         BuildFootstepService().UpdatePreview();
     }
@@ -653,6 +669,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         }
         if (cameraEditingService) {
             cameraEditingService->CancelMove(nullptr);
+        }
+        if (particleEmitterEditingService) {
+            particleEmitterEditingService->CancelMove(nullptr);
         }
         if (soundEmitterEditingService) {
             soundEmitterEditingService->CancelMove(nullptr);
@@ -1413,6 +1432,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
     context.soundEmitterEditing = soundEmitterEditingService
             ? &soundEmitterEditingService.value()
             : nullptr;
+    context.particleEmitterEditing = particleEmitterEditingService
+            ? &particleEmitterEditingService.value()
+            : nullptr;
     context.authoringFaceMerge = authoringFaceMergeService
             ? &authoringFaceMergeService.value()
             : nullptr;
@@ -1935,6 +1957,21 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     pathEditingService->Cancel(); statusText = "Path edit cancelled";
                     engine::ConsumeEvent(event); return;
                 }
+                if (particleEmitterEditingService && particleEmitterEditingService->Selected()) {
+                    if (event.key.key == KEY_DELETE) {
+                        const int id = particleEmitterEditingService->Selected()->id;
+                        OpenConfirmation("Delete Particle Emitter", "Delete the selected Particle Emitter?", [this,id]() {
+                            if (particleEmitterEditingService && particleEmitterEditingService->Selected()
+                                    && particleEmitterEditingService->Selected()->id == id)
+                                particleEmitterEditingService->DeleteSelected();
+                        });
+                        engine::ConsumeEvent(event); return;
+                    }
+                    if (event.key.key == KEY_D && (input.IsKeyDown(KEY_LEFT_CONTROL) || input.IsKeyDown(KEY_RIGHT_CONTROL))) {
+                        particleEmitterEditingService->DuplicateSelected();
+                        engine::ConsumeEvent(event); return;
+                    }
+                }
                 if (event.key.key == KEY_DELETE && pathEditingService && pathEditingService->Selected()) {
                     if (pathEditingState.waypointId) pathEditingService->Dissolve(); else pathEditingService->Delete();
                     engine::ConsumeEvent(event); return;
@@ -2386,6 +2423,11 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
                 SectorEditorPickKind::Camera,
                 selectionState.selectedAuthoring.cameraId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::ParticleEmitter
+            && selectionState.selectedAuthoring.particleEmitterId >= 0) {
+        return {SectorEditorPickKind::ParticleEmitter,
+                selectionState.selectedAuthoring.particleEmitterId};
+    }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::SoundEmitter
             && selectionState.selectedAuthoring.soundEmitterId >= 0) {
         return {SectorEditorPickKind::SoundEmitter,
@@ -2415,6 +2457,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + AuthoringGraph().levelMarkers.size()
             + AuthoringGraph().cameras.size()
             + AuthoringGraph().soundEmitters.size()
+            + AuthoringGraph().particleEmitters.size()
             + AuthoringGraph().triggers.size()
             + AuthoringGraph().structuralPrimitives.size()
             + 3);
@@ -2476,6 +2519,9 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             screenPoint,
             ScreenLightPickPixels,
             candidates);
+    AppendCachedParticleEmitterPickCandidates(
+            state.topologyRenderCache, pickContext, screenPoint,
+            ScreenLightPickPixels, candidates);
     AppendCachedSoundEmitterPickCandidates(
             state.topologyRenderCache, pickContext, screenPoint,
             ScreenLightPickPixels, candidates);
@@ -3751,6 +3797,9 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
             : nullptr;
     context.soundEmitterEditing = soundEmitterEditingService
             ? &soundEmitterEditingService.value()
+            : nullptr;
+    context.particleEmitterEditing = particleEmitterEditingService
+            ? &particleEmitterEditingService.value()
             : nullptr;
     context.triggerEditing = triggerEditingService ? &triggerEditingService.value() : nullptr;
     context.screenToMap = [this](Vector2 screenPoint) {
@@ -5622,6 +5671,10 @@ void SectorEditor::DrawTopologyDocument()
             state.topologyRenderCache,
             drawContext,
             cameraEditingService ? &cameraEditingService->Drag() : nullptr);
+    DrawCachedParticleEmitters(
+            state.topologyRenderCache,
+            drawContext,
+            particleEmitterEditingService ? &particleEmitterEditingService->Drag() : nullptr);
     DrawCachedSoundEmitters(
             state.topologyRenderCache,
             drawContext,
@@ -6441,6 +6494,11 @@ void SectorEditor::DrawToolsPanel(
                 && tool != SectorEditorTool::Select) {
             cameraEditingService->CancelMove("Cancelled Camera move");
         }
+        if (particleEmitterEditingService
+                && particleEmitterEditingService->Drag().active
+                && tool != SectorEditorTool::Select) {
+            particleEmitterEditingService->CancelMove("Cancelled Particle Emitter move");
+        }
         if (soundEmitterEditingService
                 && soundEmitterEditingService->Drag().active
                 && tool != SectorEditorTool::Select) {
@@ -6510,6 +6568,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Camera: click to place a cutscene viewpoint";
         } else if (tool == SectorEditorTool::LevelMarker) {
             statusText = "Level Marker: click strictly inside a sector";
+        } else if (tool == SectorEditorTool::ParticleEmitter) {
+            statusText = "Particle Emitter: click inside a sector";
         } else if (tool == SectorEditorTool::SoundEmitter) {
             statusText = "Sound Emitter: click inside a sector";
         } else if (tool == SectorEditorTool::Trigger) {
@@ -6712,6 +6772,8 @@ void SectorEditor::DrawSectorsPanel(
             levelMarkerEditingUiState,
             cameraEditingUiState,
             soundEmitterEditingUiState,
+            particleEmitterEditingUiState,
+            particlePreview,
             triggerEditingUiState,
             structuralPrimitiveEditingUiState,
             statusText,
@@ -6728,6 +6790,7 @@ void SectorEditor::DrawSectorsPanel(
             levelMarkerEditingService.value(),
             cameraEditingService.value(),
             soundEmitterEditingService.value(),
+            particleEmitterEditingService.value(),
             triggerEditingService.value(),
             authoringFaceMergeService.value(),
             structuralPrimitiveEditing,
@@ -6835,6 +6898,14 @@ void SectorEditor::DrawSectorsPanel(
                         if (cameraEditingService) {
                             cameraEditingService->DeleteSelected();
                         }
+                    });
+            break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedParticleEmitterConfirmation:
+            OpenConfirmation(
+                    "Delete Particle Emitter",
+                    "Delete the selected Particle Emitter?",
+                    [this]() {
+                        if (particleEmitterEditingService) particleEmitterEditingService->DeleteSelected();
                     });
             break;
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedSoundEmitterConfirmation:
@@ -7670,6 +7741,8 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     cameraEditingUiState = CameraEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
+    particleEmitterEditingState = ParticleEmitterEditingState{};
+    particleEmitterEditingUiState.bufferedEmitterId = -1;
     soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
@@ -7723,6 +7796,9 @@ bool SectorEditor::LoadLevel(
     }
     if (cameraEditingService) {
         cameraEditingService->CancelMove(nullptr);
+    }
+    if (particleEmitterEditingService) {
+        particleEmitterEditingService->CancelMove(nullptr);
     }
     if (soundEmitterEditingService) {
         soundEmitterEditingService->CancelMove(nullptr);
@@ -7826,6 +7902,8 @@ bool SectorEditor::LoadLevel(
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     cameraEditingUiState = CameraEditingUiState{};
     soundEmitterEditingState = SoundEmitterEditingState{};
+    particleEmitterEditingState = ParticleEmitterEditingState{};
+    particleEmitterEditingUiState.bufferedEmitterId = -1;
     soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
@@ -8036,6 +8114,9 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     }
     if (cameraEditingService) {
         cameraEditingService->CancelMove(nullptr);
+    }
+    if (particleEmitterEditingService) {
+        particleEmitterEditingService->CancelMove(nullptr);
     }
     if (soundEmitterEditingService) {
         soundEmitterEditingService->CancelMove(nullptr);

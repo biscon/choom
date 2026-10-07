@@ -28,6 +28,7 @@
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/cameras/SectorEditorCameraEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
+#include "sector_editor/services/particle_emitters/SectorEditorParticleEmitterEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorPreviewObjectGrid.h"
@@ -16460,6 +16461,81 @@ void TestTriggerEditingServiceCommitsAuthoringAndDragOnce()
           "trigger deletion removes authoring and compiled runtime data");
 }
 
+void TestParticleEmitterAuthoringAndEditing()
+{
+    game::SectorEditorDocumentState document;
+    auto& graph = document.authoring.authoringGraph;
+    graph = MakeGraphFromConnectedLines({{0,0},{160,0},{160,160},{0,160}},{{1,2},{2,3},{3,4},{4,1}});
+    document.derivation.authoringDerivation = game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    document.map.topologyMap = document.derivation.authoringDerivation.topology;
+    document.derivation.lastValidAuthoringDerivedTopology = document.map.topologyMap;
+    document.derivation.authoringDerivationState = game::SectorEditorAuthoringDerivationState::ValidCurrent;
+    document.derivation.authoringDerivedTopologyStale = false;
+    game::SectorEditorState state;
+    game::SelectionState selection;
+    game::ParticleEmitterEditingState editingState;
+    std::string status;
+    game::SectorEditorParticleEmitterEditingService editing{{
+            game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),document.map.topologyMap,graph,
+            game::MakeSectorEditorDerivationDocumentAccess(document.derivation),state.topologyRenderRevision,
+            state.topologyRenderCache,selection,editingState,status}};
+    const auto hash = game::ComputeSectorLightmapSourceHash(document.map.topologyMap);
+    state.topologyRenderCache.valid = true;
+    Check(editing.Place({3,3}), "particle placement succeeds in authored room");
+    Check(graph.particleEmitters.size() == 1 && document.map.topologyMap.particleEmitters.size() == 1,
+            "particle source compiles to runtime record");
+    if (graph.particleEmitters.empty() || document.map.topologyMap.particleEmitters.empty()) return;
+    Check(document.map.topologyMap.particleEmitters[0].sectorId > 0,
+            "particle resolves sector after topology derivation succeeds");
+    Check(document.lifecycle.hasUnsavedChanges && !state.topologyRenderCache.valid,
+            "particle placement invalidates cache and dirties document");
+    const int id = editing.Selected()->id;
+    const auto originalX = editing.Selected()->x;
+    Check(editing.BeginMove(id), "particle begins drag"); editing.UpdateMove({5,5});
+    Check(editing.Selected()->x == originalX, "particle drag is only a preview");
+    editing.CancelMove(); Check(editing.Selected()->x == originalX, "cancel preserves source");
+    Check(editing.BeginMove(id), "particle second drag begins"); editing.UpdateMove({5,5});
+    Check(editing.FinishMove() && editing.Selected()->x == 80, "particle drag commits exact coordinates");
+    const auto revision = state.topologyRenderRevision;
+    Check(editing.BeginMove(id), "invalid particle drag begins"); editing.UpdateMove({100,100});
+    Check(!editing.FinishMove() && state.topologyRenderRevision == revision && editing.Selected()->x == 80,
+            "outside-sector movement rejects without changing source or cache");
+    auto candidate = *editing.Selected(); candidate.settings = game::MakeSectorParticlePreset(game::SectorParticlePreset::MistSwirl);
+    candidate.referenceId = "room_mist"; candidate.heightWorld = 0.25f;
+    Check(editing.Apply(candidate), "particle inspector settings commit");
+    Check(editing.DuplicateSelected() && graph.particleEmitters.size() == 2,
+            "particle duplicates with stable fresh identities");
+    Check(graph.particleEmitters[0].referenceId != graph.particleEmitters[1].referenceId,
+            "duplicated script names are unique");
+    Check(game::ComputeSectorLightmapSourceHash(document.map.topologyMap) == hash,
+            "all particle edits are excluded from lightmap source hash");
+    auto cache = game::BuildSectorEditorTopologyRenderCache(document.map.topologyMap,graph,
+            document.derivation.authoringDerivation,state.topologyRenderRevision);
+    Check(cache.particleEmitters.size() == 2 && cache.particleEmitters[0].footprintCount == 4,
+            "particle cache stores box footprint");
+    game::SectorAuthoringDocument saved; saved.graph = graph; saved.mapData = document.map.topologyMap;
+    saved.derivation = document.derivation.authoringDerivation;
+    std::string json,error; game::SectorAuthoringDocument loaded;
+    Check(game::SaveSectorAuthoringDocumentToJsonString(saved,json,&error)
+            && game::LoadSectorAuthoringDocumentFromJsonString(json,loaded,&error), "particle level round trip");
+    Check(loaded.graph.particleEmitters.size() == 2
+            && loaded.graph.particleEmitters[0].settings.preset == game::SectorParticlePreset::MistSwirl
+            && loaded.graph.particleEmitters[0].heightWorld == 0.25f,
+            "particle snapshot and transform persist");
+    auto invalid = graph; invalid.particleEmitters[1].referenceId = invalid.particleEmitters[0].referenceId;
+    Check(!game::DeriveSectorTopologyMapFromAuthoringGraph(invalid).success, "duplicate particle script names rejected");
+    auto invalidJson = Json::parse(json);
+    invalidJson["authoringGraph"]["particleEmitters"][1]["id"] =
+            invalidJson["authoringGraph"]["particleEmitters"][0]["id"];
+    Check(!game::LoadSectorAuthoringDocumentFromJsonString(invalidJson.dump(),loaded,&error),
+            "duplicate particle names reject the level load rather than leaving a broken document");
+    invalid = graph; invalid.particleEmitters[0].x = 100000;
+    const auto unresolved = game::DeriveSectorTopologyMapFromAuthoringGraph(invalid);
+    Check(unresolved.success && unresolved.topology.particleEmitters[0].sectorId < 0,
+            "unresolved loaded emitter is retained and unavailable for emission");
+    Check(editing.DeleteSelected() && graph.particleEmitters.size() == 1, "particle deletion commits");
+}
+
 void TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio()
 {
     game::SectorEditorState editorState;
@@ -16691,6 +16767,7 @@ int main()
     TestLevelMarkerModulesStayIndependentOfSectorEditor();
     TestFogVolumeInstanceIdsAreStableAndUnique();
     TestAuthoringFogVolumeDerivationAndUnresolvedWarning();
+    TestParticleEmitterAuthoringAndEditing();
     TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio();
     TestAuthoringFogVolumeSerializationRoundTrip();
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();

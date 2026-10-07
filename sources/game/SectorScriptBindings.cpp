@@ -2817,6 +2817,38 @@ int LuaSetPropEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "pro
 int LuaSetItemEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "item"); }
 int LuaSetNpcEnabled(lua_State* state) { return LuaSetObjectEnabled(state, "npc"); }
 
+int LuaParticleCommand(lua_State* state, int command)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const std::string_view id{rawId, length};
+    double value = 0;
+    if (command == 0) luaL_checktype(state, 2, LUA_TBOOLEAN);
+    else {
+        value = command == 2 ? luaL_optnumber(state, 2, 1.0) : luaL_checknumber(state, 2);
+        if (!std::isfinite(value) || value < 0 || value > 100 || (command == 2 && value == 0))
+            return PushBindingError(state, "particle intensity/burst scale must be finite, within 0-100 (burst > 0)");
+    }
+    if (host.map) for (auto& emitter : host.map->particleEmitters) {
+        if (emitter.id != id) continue;
+        if (emitter.sectorId <= 0) return PushBindingError(state, "particle emitter position is unresolved");
+        if (command == 0) {
+            emitter.enabled = lua_toboolean(state, 2) != 0;
+            if (!emitter.enabled) emitter.pendingBurst = 0;
+        } else if (command == 1) emitter.runtimeIntensity = static_cast<float>(value);
+        else {
+            if (!emitter.enabled) return PushBindingError(state, "particle emitter is disabled");
+            emitter.pendingBurst = std::min(100.0f, emitter.pendingBurst + static_cast<float>(value));
+        }
+        lua_pushboolean(state, 1); return 1;
+    }
+    return PushBindingError(state, "particle emitter was not found");
+}
+int LuaSetParticleEmitterEnabled(lua_State* state) { return LuaParticleCommand(state, 0); }
+int LuaSetParticleEmitterIntensity(lua_State* state) { return LuaParticleCommand(state, 1); }
+int LuaTriggerParticleEmitter(lua_State* state) { return LuaParticleCommand(state, 2); }
+
 int LuaSetFogVolumeEnabled(lua_State* state)
 {
     SectorScriptHost& host = HostFromLua(state);
@@ -3448,6 +3480,9 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "setItemEnabled", LuaSetItemEnabled);
     Register(state, "setNpcEnabled", LuaSetNpcEnabled);
     Register(state, "setFogVolumeEnabled", LuaSetFogVolumeEnabled);
+    Register(state, "setParticleEmitterEnabled", LuaSetParticleEmitterEnabled);
+    Register(state, "setParticleEmitterIntensity", LuaSetParticleEmitterIntensity);
+    Register(state, "triggerParticleEmitter", LuaTriggerParticleEmitter);
     Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
     Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
     Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);

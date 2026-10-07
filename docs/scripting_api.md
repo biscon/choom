@@ -539,6 +539,66 @@ end
 This callback is separate from a dynamic prop's own no-argument
 `onUseScript`, which continues to run from the centered E-key Use interaction.
 
+## Particle emitters
+
+Placed particle emitters use the particle inspector's unique **Script name**.
+
+In the 2D editor, choose **Particle Emitter**, click inside a sector, and select
+the emitter to open its inspector. Drag with Select to move it; Ctrl+D duplicates
+it and Delete removes it through the usual confirmation. Height is in meters
+above the local floor. Yaw/pitch control emission direction; pitch 90 points up.
+
+Choose Fire, Smoke, Vapor, Mist Swirl, Steam Jet, or Electric Sparks, then adjust
+scale, intensity, speed, lifetime, spread, and tint/opacity. Fire also exposes
+smoke and ember amounts. The isolated preview has pause, restart, burst, orbit,
+and zoom controls and a simple collision floor. It deliberately previews enabled
+emission even when **Enabled at start** is unchecked.
+
+Advanced settings cover point/disc/box sources, drift, turbulence, gravity,
+drag, emission mode, static-world collision, distance, and texture overrides.
+Disc orientation follows emission direction; box dimensions use world axes.
+Texture paths must be relative paths below `assets/`. Empty paths use supplied
+art; pending or failed custom textures fall back to that art. Regular-grid
+flipbooks run left-to-right, then top-to-bottom. Use transparent padding around
+each frame to reduce filtering bleed. The supplied art uses static variants.
+
+**Save custom preset** writes a settings snapshot to `assets/particles/presets.json`.
+Saving under an existing custom name replaces that library entry. Built-ins are
+read-only. Placements keep their own settings until a preset is selected or
+explicitly reapplied; they do not require the custom library to load.
+
+The world has a fixed 8,192-particle pool; the isolated preview has 1,024 slots.
+Up to 128 live particles per pool may use static collision. Births beyond either
+budget are dropped with a diagnostic warning. Distant sources reduce emission;
+particles are culled individually against the view and portal visibility.
+The profiler exposes counts, dropped births, collision queries, and CPU/GPU time.
+Particles draw before glass and water in the existing transparency pipeline;
+intersecting transparent surfaces can therefore show ordering limitations.
+
+```lua
+setParticleEmitterEnabled("furnace", true)
+setParticleEmitterIntensity("furnace", 0.5)
+triggerParticleEmitter("broken_cable", 1.0)
+```
+
+- `setParticleEmitterEnabled(id, enabled)` requires a Boolean. Disabling stops
+  emission and cancels queued bursts; existing particles finish naturally.
+- `setParticleEmitterIntensity(id, multiplier)` scales authored emission quantity.
+  Values must be finite and within 0–100; zero stops births without hiding live particles.
+- `triggerParticleEmitter(id, burstScale = 1)` queues a preset burst for the next
+  simulation step. Scale must be finite, greater than zero, and at most 100.
+  The emitter must be enabled. Pending burst requests accumulate up to 100.
+
+Commands return `true`, or `false, reason` for missing/unresolved emitters,
+invalid numeric ranges, or disabled burst targets. Lua type errors follow the
+other bindings. Names contain 1–63 letters, digits, underscores, or dashes.
+
+Enabled state and intensity persist across saves and level revisits. Older saves
+use authored defaults. Live particles and queued bursts are not saved; continuous
+effects prewarm on restoration. Level initialization scripts run after restoration
+and can override restored values. Particles are visual: use separate light primitives
+for illumination and separate gameplay logic for damage.
+
 ## Fog volume enabled state
 
 ```lua

@@ -2926,6 +2926,24 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
         }
     }
 
+    std::set<int> particleIds;
+    std::set<std::string> particleNames;
+    for (const auto& emitter : graph.particleEmitters) {
+        std::string error;
+        if (!IsValidSectorAuthoringId(emitter.id) || !particleIds.insert(emitter.id).second
+                || !IsValidSectorAuthoringSoundEmitterReferenceId(emitter.referenceId)
+                || !particleNames.insert(emitter.referenceId).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::ParticleEmitter, emitter.id,
+                    "Particle emitter requires unique positive editor ID and unique 1-63 character script name");
+        }
+        if (!std::isfinite(emitter.heightWorld) || !std::isfinite(emitter.yawDegrees)
+                || !std::isfinite(emitter.pitchDegrees)
+                || !ValidateSectorParticleSettings(emitter.settings, error)) {
+            AddIssue(issues, SectorAuthoringObjectKind::ParticleEmitter, emitter.id,
+                    "Invalid particle emitter transform/settings: " + error);
+        }
+    }
+
     std::set<int> emitterIds;
     std::set<std::string> emitterReferenceIds;
     for (const SectorAuthoringSoundEmitter& emitter : graph.soundEmitters) {
@@ -3597,6 +3615,30 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
     }
 
     result.success = true;
+    result.topology.particleEmitters.reserve(graph.particleEmitters.size());
+    for (const auto& emitter : graph.particleEmitters) {
+        SectorCompiledParticleEmitter compiled;
+        compiled.sourceAuthoringEmitterId = emitter.id;
+        compiled.id = emitter.referenceId;
+        compiled.enabled = emitter.enabled;
+        compiled.settings = emitter.settings;
+        compiled.yawDegrees = emitter.yawDegrees;
+        compiled.pitchDegrees = emitter.pitchDegrees;
+        compiled.positionWorld = {SectorCoordToWorldDistance(emitter.x), emitter.heightWorld,
+                SectorCoordToWorldDistance(emitter.z)};
+        int sectorId = -1;
+        if (ResolveSectorAuthoringPointToDerivedSector(result, {emitter.x, emitter.z}, &sectorId)) {
+            compiled.sectorId = sectorId;
+            const auto* sector = FindSectorTopologySector(result.topology, sectorId);
+            if (sector != nullptr) compiled.positionWorld.y += SectorAuthoringToWorldDistance(sector->floorZ);
+        }
+        if (compiled.sectorId <= 0) AddDerivationDiagnostic(result.diagnostics,
+                SectorAuthoringDerivationDiagnosticKind::UnresolvedParticleEmitter, emitter.id,
+                "Particle emitter is outside a non-void sector or on its boundary; emission disabled",
+                SectorAuthoringValidationSeverity::Warning);
+        result.topology.particleEmitters.push_back(std::move(compiled));
+    }
+
     return result;
 }
 
@@ -3790,6 +3832,28 @@ bool ResolveSectorAuthoringPointToDerivedSector(
         }
     }
     return false;
+}
+
+int AllocateSectorAuthoringParticleEmitterId(const SectorAuthoringGraph& graph)
+{
+    return AllocateNextId(graph.particleEmitters);
+}
+std::string AllocateSectorAuthoringParticleEmitterReferenceId(const SectorAuthoringGraph& graph)
+{
+    for (int n = 1; n < 1000000; ++n) {
+        const std::string id = "particle_" + std::to_string(n);
+        if (std::none_of(graph.particleEmitters.begin(), graph.particleEmitters.end(),
+                [&](const auto& e) { return e.referenceId == id; })) return id;
+    }
+    return {};
+}
+const SectorAuthoringParticleEmitter* FindSectorAuthoringParticleEmitter(const SectorAuthoringGraph& graph, int id)
+{
+    return FindById(graph.particleEmitters, id);
+}
+SectorAuthoringParticleEmitter* FindSectorAuthoringParticleEmitter(SectorAuthoringGraph& graph, int id)
+{
+    return FindById(graph.particleEmitters, id);
 }
 
 } // namespace game

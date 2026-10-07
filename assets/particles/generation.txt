@@ -1,0 +1,21 @@
+Particle billboard provenance
+Generated with the OpenAI image_gen tool, transparent_background=true.
+The PNGs are original generated RGBA outputs, copied without image edits.
+Runtime atlas packing/resizing happens during explicit resource initialization.
+
+For flame.png, smoke.png, vapor.png, spark.png, exact prompt template:
+Use case: photorealistic-natural. Asset type: game particle billboard texture. {subject}. Square image, isolated centered texture occupies middle 70 percent with generous fully transparent padding on all sides. Actual transparent RGBA background. A single particle only, no scene, floor, cast shadow, lettering, border, checkerboard or opaque backdrop. Designed to be layered hundreds of times in a 3D particle system. Naturalistic industrial game VFX, restrained realistic detail.
+
+Subjects:
+flame.png: A single isolated narrow orange-yellow flame wisp, wispy broken edges, translucent taper, bright pale core, realistic fire texture, no smoke
+smoke.png: A single isolated soft neutral gray smoke puff, irregular wispy lobes and feathered semitransparent edges, subtle three dimensional internal detail, no black outline
+vapor.png: A single isolated thin white translucent vapor wisp, irregular curling S shape with fine soft wispy edges and gaps, subtle naturalistic detail, not a dense cloud
+spark.png: A single isolated very narrow warm white electric spark streak, tapered pointed ends, small bright center, subtle orange edge glow, vertical alignment
+
+For flame_alt.png, smoke_alt.png, vapor_alt.png, exact prompt template:
+Use case: photorealistic-natural. Game VFX particle billboard texture variant. {subject} Square image, actual fully transparent RGBA background. Soft alpha falloff. Centered at 65 percent of canvas size with ample transparent margin. No floor, scene, shadow, checkerboard, text or border. Detailed naturalistic industrial game particle art designed for overlapping translucent quads.
+
+Subjects:
+flame_alt.png: A single isolated naturalistic orange flame cluster, two short asymmetrical forked wisps curling outward, translucent orange outer flame and warm pale core, irregular airy gaps, soft delicate edges.
+smoke_alt.png: A single isolated rounded diffuse gray smoke puff, broad soft rolling lobes, airy wispy edges, low contrast internal detail, translucent throughout rather than opaque solid cloud.
+vapor_alt.png: A single isolated very thin semitransparent white vapor curl, loose C shaped wisp with airy gaps and wispy feathered edges, diffuse natural steam.

@@ -195,6 +195,12 @@ public:
                 atmosphere.world.sectorTriangles + atmosphere.world.modelTriangles,
                 atmosphere.world.sectorTrianglesCulled + atmosphere.world.modelTrianglesCulled),
                 16, detailY + 200, 16, SKYBLUE);
+        DrawText(TextFormat("effects %zu/%zu draws %zu drops %llu rays %llu CPU %.2f/%.2f GPU %.2f ms",
+                atmosphere.particles.visible, atmosphere.particles.active, atmosphere.particles.drawCalls,
+                static_cast<unsigned long long>(atmosphere.particles.droppedBirths),
+                static_cast<unsigned long long>(atmosphere.particles.collisionQueries),
+                atmosphere.particles.updateMilliseconds, atmosphere.particles.drawCpuMilliseconds,
+                atmosphere.particlesGpuMilliseconds),16,detailY + 220,16,SKYBLUE);
     }
 
 private:

@@ -47,6 +47,7 @@ enum class SectorEditorTool {
     Camera,
     Path,
     SoundEmitter,
+    ParticleEmitter,
     StaticLight,
     StaticSpotLight,
     StaticRectLight,

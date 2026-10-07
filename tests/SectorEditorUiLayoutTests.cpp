@@ -1,6 +1,7 @@
 #include "game/GameSettingsLayout.h"
 #include "sector_editor/materials/SectorEditorMaterialFormLayout.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/inspector/SectorEditorParticleEmitterInspector.h"
 #include "sector_editor/SectorEditorMainMenu.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
@@ -819,10 +820,31 @@ void TestMainMenuWorkspaceAndToolsLayouts()
     Check(Near(itemExpanded - collapsed, rowH + gap),
           "tools content height includes the conditional Item definition row");
     Check(Near(collapsed, 26.0f + 5.0f * (rowH + gap)
-                  + 22.0f + 26.0f + 23.0f * (rowH + gap)
+                  + 22.0f + 26.0f + 24.0f * (rowH + gap)
                   + 22.0f + 26.0f + gap + 2.0f * (rowH + gap)
                   + 22.0f + (rowH + gap) + 12.0f),
           "tools content height reaches the final Grid control with padding");
+}
+
+void TestParticleInspectorLayout()
+{
+    for (const float height : {24.0f,36.0f,48.0f}) {
+        game::SectorAuthoringParticleEmitter emitter;
+        game::ParticleEmitterEditingUiState ui;
+        const float collapsed = game::MeasureSectorEditorParticleEmitterInspectorContentHeight(emitter,ui,height,8);
+        ui.advanced = true; ui.textureAdvanced = true; ui.message = "A long validation message";
+        emitter.settings.shape = engine::ParticleShape::Box;
+        emitter.settings.collision = engine::ParticleCollision::Bounce;
+        const float expanded = game::MeasureSectorEditorParticleEmitterInspectorContentHeight(emitter,ui,height,8);
+        Check(expanded > collapsed, "particle inspector includes advanced, texture, box and collision rows");
+        float finalBottom = 0;
+        game::WalkSectorParticleInspectorRows(emitter,true,true,true,[&](game::SectorParticleInspectorRow row) {
+            finalBottom += game::SectorParticleInspectorRowExtent(row,height,8);
+        });
+        Check(expanded >= finalBottom + 12, "particle inspector reaches Delete with bottom padding at each UI scale");
+        Check(game::SectorParticleInspectorLabelHeight(height) >= height,
+                "particle labels reserve independent vertical space above full-width inputs");
+    }
 }
 
 void TestLevelSettingsAppliesCompleteLightmapDraft()
@@ -1313,6 +1335,7 @@ int main()
     TestPreviewSettingsModalCopiesObjectProbeSettings();
     TestPreviewSettingsScrollableContentHeightsReachLastControls();
     TestMainMenuWorkspaceAndToolsLayouts();
+    TestParticleInspectorLayout();
     TestLevelSettingsAppliesCompleteLightmapDraft();
     TestAuthoringFaceInspectorHeightIncludesAllSections();
     TestPreviewSettingsModalResetPreservesSessionView();

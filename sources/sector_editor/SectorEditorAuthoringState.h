@@ -20,6 +20,7 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringReflectionProbeSelectionTarget
 SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int markerId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringCameraSelectionTarget(int cameraId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringSoundEmitterSelectionTarget(int emitterId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringParticleEmitterSelectionTarget(int emitterId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringTriggerSelectionTarget(int triggerId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringStructuralPrimitiveSelectionTarget(int primitiveId);
 
@@ -74,6 +75,10 @@ bool SelectSectorEditorAuthoringSoundEmitter(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int emitterId);
+bool SelectSectorEditorAuthoringParticleEmitter(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int emitterId);
 bool SelectSectorEditorAuthoringTrigger(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -109,6 +114,10 @@ bool SetHoveredSectorEditorAuthoringCamera(
         SelectionState& selectionState,
         int cameraId);
 bool SetHoveredSectorEditorAuthoringSoundEmitter(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int emitterId);
+bool SetHoveredSectorEditorAuthoringParticleEmitter(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int emitterId);
@@ -343,6 +352,7 @@ enum class SectorEditorInspectorTargetKind {
     AuthoringLevelMarker,
     AuthoringCamera,
     AuthoringSoundEmitter,
+    AuthoringParticleEmitter,
     AuthoringTrigger,
     AuthoringStructuralPrimitive,
     AuthoringUnavailable,
@@ -359,6 +369,7 @@ struct SectorEditorInspectorTarget {
     int levelMarkerId = -1;
     int cameraId = -1;
     int soundEmitterId = -1;
+    int particleEmitterId = -1;
     int triggerId = -1;
     int structuralPrimitiveId = -1;
     SectorAuthoringSideId side;
