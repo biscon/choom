@@ -253,6 +253,13 @@
       "roughnessFactor": 0.550000011920929,
       "normalStrength": 1.0
     },
+    "hub_mud_gravel_512": {
+      "albedoTexturePath": "assets/images/hub/hub_mud_gravel_512.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0
+    },
     "hydraulic_blast_door_512": {
       "albedoTexturePath": "assets/images/doors/hydraulic_blast_door_512.png",
       "filter": "anisotropic8x",

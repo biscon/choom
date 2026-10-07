@@ -3285,6 +3285,613 @@
         -16.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 227,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_227",
+        "modelPath": "assets/models/subway/Track_Straight_16m.gltf"
+      },
+      "position": [
+        572.0,
+        -1.0,
+        -232.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 228,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_228",
+        "modelPath": "assets/models/subway/Track_Straight_16m.gltf"
+      },
+      "position": [
+        572.0,
+        -1.0,
+        -104.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 229,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_229",
+        "modelPath": "assets/models/subway/Track_Straight_16m.gltf"
+      },
+      "position": [
+        572.0,
+        -1.0,
+        24.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 230,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_230",
+        "modelPath": "assets/models/subway/Track_Straight_16m.gltf"
+      },
+      "position": [
+        572.0,
+        -1.0,
+        152.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 231,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_231",
+        "modelPath": "assets/models/subway/Track_Buffer_Stop.gltf",
+        "heightOffsetWorld": -0.32499998807907104
+      },
+      "position": [
+        572.0,
+        -1.0,
+        152.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 232,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_232",
+        "modelPath": "assets/models/subway/Subway_Car_Ashdown.gltf",
+        "collision": true
+      },
+      "position": [
+        572.0,
+        -1.0,
+        -280.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 233,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_233",
+        "modelPath": "assets/models/subway/Station_Sign_Wall.gltf",
+        "heightOffsetWorld": 2.875,
+        "castsShadow": false
+      },
+      "position": [
+        671.5999755859375,
+        9.0,
+        -140.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 234,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_234",
+        "modelPath": "assets/models/subway/Station_Sign_Wall.gltf",
+        "heightOffsetWorld": 2.875,
+        "castsShadow": false
+      },
+      "position": [
+        671.6799926757813,
+        9.0,
+        -68.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 235,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_235",
+        "modelPath": "assets/models/subway/Timetable_Wall.gltf",
+        "heightOffsetWorld": 1.125,
+        "castsShadow": false
+      },
+      "position": [
+        671.5999755859375,
+        9.0,
+        -144.16000366210938
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 236,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_236",
+        "modelPath": "assets/models/subway/Route_Map_Wall.gltf",
+        "heightOffsetWorld": 1.125,
+        "castsShadow": false
+      },
+      "position": [
+        671.6799926757813,
+        9.0,
+        -136.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 237,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_237",
+        "modelPath": "assets/models/subway/Electrical_Service_Cabinet.gltf",
+        "heightOffsetWorld": 0.625,
+        "collision": true
+      },
+      "position": [
+        670.0,
+        9.0,
+        -2.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 238,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_238",
+        "modelPath": "assets/models/subway/Exit_Sign_Wall.gltf",
+        "heightOffsetWorld": 2.424999952316284,
+        "castsShadow": false
+      },
+      "position": [
+        659.5999755859375,
+        9.0,
+        -231.60000610351563
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 239,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_239",
+        "modelPath": "assets/models/subway/Bench_Three_Seat.gltf",
+        "collision": true
+      },
+      "position": [
+        669.0,
+        9.0,
+        -162.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 240,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_240",
+        "modelPath": "assets/models/subway/Bench_Three_Seat.gltf",
+        "collision": true
+      },
+      "position": [
+        669.0,
+        9.0,
+        -118.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 241,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_241",
+        "modelPath": "assets/models/subway/Bench_Three_Seat.gltf",
+        "collision": true
+      },
+      "position": [
+        669.0,
+        9.0,
+        -90.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 242,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_242",
+        "modelPath": "assets/models/subway/Bench_Three_Seat.gltf",
+        "collision": true
+      },
+      "position": [
+        669.0,
+        9.0,
+        -48.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 243,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_243",
+        "modelPath": "assets/models/subway/Timetable_Wall.gltf",
+        "heightOffsetWorld": 1.125,
+        "castsShadow": false
+      },
+      "position": [
+        671.5999755859375,
+        9.0,
+        -72.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 244,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_244",
+        "modelPath": "assets/models/subway/Route_Map_Wall.gltf",
+        "heightOffsetWorld": 1.125,
+        "castsShadow": false
+      },
+      "position": [
+        671.5999755859375,
+        9.0,
+        -64.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 245,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_245",
+        "modelPath": "assets/models/subway/Trash_Bin_Round.gltf"
+      },
+      "position": [
+        669.5999755859375,
+        9.0,
+        -107.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 246,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_246",
+        "modelPath": "assets/models/subway/Recycling_Bin.gltf"
+      },
+      "position": [
+        669.5999755859375,
+        9.0,
+        -101.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 247,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_247",
+        "modelPath": "assets/models/subway/Advertisement_North_Coast.gltf",
+        "heightOffsetWorld": 1.125,
+        "castsShadow": false
+      },
+      "position": [
+        671.5999755859375,
+        9.0,
+        -122.80000305175781
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 248,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_248",
+        "modelPath": "assets/models/subway/Advertisement_Solton.gltf",
+        "heightOffsetWorld": 1.125,
+        "castsShadow": false
+      },
+      "position": [
+        671.6799926757813,
+        9.0,
+        -113.19999694824219
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 249,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_249",
+        "modelPath": "assets/models/subway/Advertisement_North_Coast.gltf",
+        "heightOffsetWorld": 1.125,
+        "castsShadow": false
+      },
+      "position": [
+        671.6799926757813,
+        9.0,
+        -94.80000305175781
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 250,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_250",
+        "modelPath": "assets/models/subway/Advertisement_Solton.gltf",
+        "heightOffsetWorld": 1.125,
+        "castsShadow": false
+      },
+      "position": [
+        671.5999755859375,
+        9.0,
+        -85.12000274658203
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 251,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_251",
+        "modelPath": "assets/models/subway/Emergency_Intercom.gltf",
+        "heightOffsetWorld": 1.2750000953674316
+      },
+      "position": [
+        671.6799926757813,
+        9.0,
+        -104.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 252,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_252",
+        "modelPath": "assets/models/subway/Vending_Drinks.gltf",
+        "collision": true
+      },
+      "position": [
+        668.3200073242188,
+        9.0,
+        -28.399999618530273
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 253,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_253",
+        "modelPath": "assets/models/subway/Vending_Snacks.gltf",
+        "collision": true
+      },
+      "position": [
+        668.4000244140625,
+        9.0,
+        -12.399999618530273
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 254,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_254",
+        "modelPath": "assets/models/subway/Recycling_Bin.gltf",
+        "collision": true
+      },
+      "position": [
+        669.0,
+        9.0,
+        -21.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 255,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_255",
+        "modelPath": "assets/models/subway/Vending_Drinks.gltf",
+        "collision": true
+      },
+      "position": [
+        668.4000244140625,
+        9.0,
+        -182.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 256,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_256",
+        "modelPath": "assets/models/subway/Vending_Snacks.gltf",
+        "collision": true
+      },
+      "position": [
+        668.4000244140625,
+        9.0,
+        -197.60000610351563
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 257,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_257",
+        "modelPath": "assets/models/subway/Recycling_Bin.gltf",
+        "collision": true
+      },
+      "position": [
+        669.0,
+        9.0,
+        -190.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 258,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_258",
+        "modelPath": "assets/models/subway/Trash_Bin_Round.gltf",
+        "collision": true
+      },
+      "position": [
+        669.2000122070313,
+        9.0,
+        -175.1999969482422
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 259,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_259",
+        "modelPath": "assets/models/subway/Trash_Bin_Round.gltf"
+      },
+      "position": [
+        669.5999755859375,
+        9.0,
+        -35.20000076293945
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 260,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_260",
+        "modelPath": "assets/models/subway/Bench_Backless.gltf",
+        "collision": true
+      },
+      "position": [
+        632.0,
+        9.0,
+        -78.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 261,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_261",
+        "modelPath": "assets/models/subway/Bench_Backless.gltf",
+        "collision": true
+      },
+      "position": [
+        632.0,
+        9.0,
+        -58.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 262,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_262",
+        "modelPath": "assets/models/subway/Trash_Bin_Round.gltf",
+        "collision": true
+      },
+      "position": [
+        632.0,
+        9.0,
+        -68.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 263,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_263",
+        "modelPath": "assets/models/subway/Bench_Backless.gltf",
+        "collision": true
+      },
+      "position": [
+        632.0,
+        9.0,
+        -150.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 264,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_264",
+        "modelPath": "assets/models/subway/Bench_Backless.gltf",
+        "collision": true
+      },
+      "position": [
+        632.0,
+        9.0,
+        -130.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 265,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_265",
+        "modelPath": "assets/models/subway/Trash_Bin_Round.gltf",
+        "collision": true
+      },
+      "position": [
+        632.0,
+        9.0,
+        -140.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 266,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_266",
+        "modelPath": "assets/models/subway/Station_Clock.gltf",
+        "heightOffsetWorld": 3.375,
+        "scale": 1.5,
+        "castsShadow": false
+      },
+      "position": [
+        632.0,
+        9.0,
+        -231.52000427246094
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -4067,7 +4674,32 @@
       }
     }
   ],
-  "staticSpotLights": [],
+  "staticSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        572.0,
+        13.399999618530273,
+        -184.0
+      ],
+      "target": [
+        572.0824584960938,
+        17.44768524169922,
+        -216.38162231445313
+      ],
+      "range": 50.0,
+      "sourceRadius": 0.0,
+      "intensity": 0.5,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "outerConeDegrees": 25.0,
+      "castsShadow": false
+    }
+  ],
   "staticRectLights": [
     {
       "id": 1,
@@ -5093,7 +5725,149 @@
       }
     }
   ],
-  "dynamicSpotLights": [],
+  "dynamicSpotLights": [
+    {
+      "id": 1,
+      "instanceId": "light_spot_1",
+      "position": [
+        565.0,
+        12.333809852600098,
+        -211.0
+      ],
+      "target": [
+        564.65576171875,
+        9.347257614135742,
+        -160.00115966796875
+      ],
+      "range": 120.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 241,
+        "g": 250,
+        "b": 255,
+        "a": 255
+      },
+      "innerConeDegrees": 10.0,
+      "outerConeDegrees": 20.0,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              0.005401611328125,
+              -0.014424324035644531,
+              -0.12778663635253906
+            ],
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 1.0,
+            "scatteringTint": {
+              "r": 241,
+              "g": 250,
+              "b": 255,
+              "a": 255
+            }
+          },
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.02332305908203125,
+              0.0038776397705078125,
+              -0.4126243591308594
+            ],
+            "widthScale": 0.6499999761581421,
+            "brightness": 0.02500000037252903,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 1.0,
+            "scatteringTint": {
+              "r": 241,
+              "g": 250,
+              "b": 255,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 64,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.009999999776482582,
+          "opacity": 0.20000000298023224
+        }
+      }
+    },
+    {
+      "id": 2,
+      "instanceId": "light_spot_2",
+      "position": [
+        579.0,
+        12.133715629577637,
+        -211.0
+      ],
+      "target": [
+        579.229736328125,
+        9.835921287536621,
+        -159.96482849121094
+      ],
+      "range": 120.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 241,
+        "g": 250,
+        "b": 255,
+        "a": 255
+      },
+      "innerConeDegrees": 10.0,
+      "outerConeDegrees": 20.0,
+      "castsShadow": true,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              0.005401611328125,
+              -0.014424324035644531,
+              -0.12778663635253906
+            ],
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 1.0,
+            "scatteringTint": {
+              "r": 241,
+              "g": 250,
+              "b": 255,
+              "a": 255
+            }
+          },
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.0210113525390625,
+              0.011929035186767578,
+              -0.40987586975097656
+            ],
+            "widthScale": 0.6499999761581421,
+            "brightness": 0.02500000037252903,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 1.0,
+            "scatteringTint": {
+              "r": 241,
+              "g": 250,
+              "b": 255,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 64,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.009999999776482582,
+          "opacity": 0.20000000298023224
+        }
+      }
+    }
+  ],
   "dynamicRectLights": [
     {
       "id": 9,
@@ -5168,7 +5942,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -5232,7 +6007,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "2a5bcfa4c5c6473b",
+    "sourceHash": "7c60939f95d04a45",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -5240,20 +6015,20 @@
         0.0
       ],
       "rgbMax": [
-        0.98681640625,
-        0.7431640625,
-        0.5498046875
+        0.97119140625,
+        0.73095703125,
+        0.5771484375
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
+      "sampleCount": 16777216,
       "rgbChannelsAboveOne": 0
     },
     "objectProbes": {
       "path": "assets/levels/intro/intro.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "2a5bcfa4c5c6473b",
-      "count": 4564,
+      "sourceHash": "7c60939f95d04a45",
+      "count": 4064,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -5265,27 +6040,37 @@
           0.02500000037252903
         ],
         "rgbMax": [
-          1.0018882751464844,
-          0.9610804319381714,
-          0.890311598777771
+          1.0031827688217163,
+          0.9623183012008667,
+          0.8914503455162048
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 27384,
-        "rgbChannelsAboveOne": 1
+        "sampleCount": 24384,
+        "rgbChannelsAboveOne": 6
       }
     },
     "staticModels": {
       "path": "assets/levels/intro/intro.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "2a5bcfa4c5c6473b",
-      "modelCount": 46,
-      "objectCount": 210,
+      "sourceHash": "7c60939f95d04a45",
+      "modelCount": 64,
+      "objectCount": 250,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
       {
         "path": "assets/levels/intro/intro.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/intro/intro.lightmap.2.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/intro/intro.lightmap.3.bin",
         "width": 2048,
         "height": 2048
       }
@@ -5899,12 +6684,12 @@
       {
         "id": 131,
         "x": 10752,
-        "y": 512
+        "y": 128
       },
       {
         "id": 132,
         "x": 8832,
-        "y": 8320
+        "y": 2688
       },
       {
         "id": 133,
@@ -5914,7 +6699,7 @@
       {
         "id": 134,
         "x": 9472,
-        "y": 512
+        "y": 128
       },
       {
         "id": 135,
@@ -5929,7 +6714,7 @@
       {
         "id": 137,
         "x": 9472,
-        "y": 8320
+        "y": 2688
       },
       {
         "id": 138,
@@ -6024,17 +6809,32 @@
       {
         "id": 156,
         "x": 8960,
-        "y": 8320
+        "y": 2688
       },
       {
         "id": 157,
         "x": 9344,
-        "y": 8320
+        "y": 2688
       },
       {
         "id": 158,
         "x": 9344,
         "y": -13184
+      },
+      {
+        "id": 159,
+        "x": 10752,
+        "y": -2432
+      },
+      {
+        "id": 160,
+        "x": 10752,
+        "y": -1280
+      },
+      {
+        "id": 161,
+        "x": 10752,
+        "y": -128
       }
     ],
     "lines": [
@@ -6744,11 +7544,6 @@
         "endVertexId": 135
       },
       {
-        "id": 232,
-        "startVertexId": 130,
-        "endVertexId": 131
-      },
-      {
         "id": 234,
         "startVertexId": 132,
         "endVertexId": 57
@@ -6932,6 +7727,26 @@
         "id": 285,
         "startVertexId": 157,
         "endVertexId": 158
+      },
+      {
+        "id": 286,
+        "startVertexId": 130,
+        "endVertexId": 159
+      },
+      {
+        "id": 288,
+        "startVertexId": 159,
+        "endVertexId": 160
+      },
+      {
+        "id": 290,
+        "startVertexId": 160,
+        "endVertexId": 161
+      },
+      {
+        "id": 291,
+        "startVertexId": 161,
+        "endVertexId": 131
       }
     ],
     "lineSides": [
@@ -13732,7 +14547,28 @@
               -2.1875
             ]
           },
-          "materialId": "tunnel_wall_concrete"
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_old_repair",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                0.0,
+                0.0
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -13757,51 +14593,6 @@
               0.0
             ]
           }
-        }
-      },
-      {
-        "lineId": 232,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -3.1875
-            ]
-          },
-          "materialId": "tunnel_wall_concrete"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "baseboard": {
-          "enabled": true,
-          "materialId": "baseboard_metal"
         }
       },
       {
@@ -13859,7 +14650,28 @@
               -2.1875
             ]
           },
-          "materialId": "tunnel_wall_concrete"
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "graffiti_decal_piece_jot",
+            "uv": {
+              "scale": [
+                0.4000000059604645,
+                0.6000000238418579
+              ],
+              "offset": [
+                -0.5,
+                -0.4000000059604645
+              ]
+            },
+            "opacity": 0.949999988079071,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -13896,8 +14708,8 @@
               1.0
             ],
             "offset": [
-              0.0,
-              -2.1875
+              2.5,
+              -3.1875
             ]
           },
           "materialId": "tunnel_wall_concrete"
@@ -14449,7 +15261,28 @@
               -3.1875
             ]
           },
-          "materialId": "tunnel_wall_concrete"
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_branching_cracks",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                0.0,
+                0.0
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -14572,11 +15405,32 @@
               1.0
             ],
             "offset": [
-              0.0,
+              -1.5,
               -3.1875
             ]
           },
-          "materialId": "tunnel_wall_concrete"
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_spalled_patch",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.20000000298023224,
+                -1.2000000476837158
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -15140,6 +15994,270 @@
             ]
           },
           "materialId": "tunnel_concrete_ceiling"
+        }
+      },
+      {
+        "lineId": 286,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "graffiti_decal_piece_moa",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -0.4000000059604645,
+                -1.399999976158142
+              ]
+            },
+            "opacity": 0.949999988079071,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 288,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -4.5,
+              -3.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_damp_damage",
+            "uv": {
+              "scale": [
+                0.5,
+                1.0
+              ],
+              "offset": [
+                -0.699999988079071,
+                0.10000000149011612
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 290,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -3.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "graffiti_decal_tag_vim",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                -1.600000023841858,
+                -1.2000000476837158
+              ]
+            },
+            "opacity": 0.949999988079071,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 291,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              4.5,
+              -3.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete",
+          "decal": {
+            "materialId": "concrete_decal_old_repair",
+            "uv": {
+              "scale": [
+                1.0,
+                1.0
+              ],
+              "offset": [
+                0.0,
+                -1.2000000476837158
+              ]
+            },
+            "opacity": 1.0,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
+          }
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
         }
       }
     ],
@@ -16927,7 +18045,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.07500000298023224,
+        "ambientIntensity": 0.02500000037252903,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -16964,7 +18082,7 @@
             ]
           }
         },
-        "floorMaterialId": "hub_cobble_dirty_512",
+        "floorMaterialId": "hub_mud_gravel_512",
         "ceilingMaterialId": "tunnel_concrete_ceiling"
       },
       {
@@ -17042,8 +18160,8 @@
       {
         "id": 27,
         "name": "Sector 27",
-        "x": 9983,
-        "y": 254,
+        "x": 10111,
+        "y": -2994,
         "floorZ": 9.0,
         "ceilingZ": 51.0,
         "floorUv": {
@@ -17512,7 +18630,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.07500000298023224,
+        "ambientIntensity": 0.02500000037252903,
         "defaultWall": {
           "uv": {
             "scale": [
@@ -17585,7 +18703,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.07500000298023224,
+        "ambientIntensity": 0.02500000037252903,
         "defaultWall": {
           "uv": {
             "scale": [
