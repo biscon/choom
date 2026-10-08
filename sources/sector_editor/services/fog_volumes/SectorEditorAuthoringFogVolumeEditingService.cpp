@@ -7,9 +7,28 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <tuple>
 #include <utility>
 
 namespace game {
+namespace {
+
+bool SameFogConfig(const SectorAuthoringFogVolume& a, const SectorAuthoringFogVolume& b)
+{
+    const auto fields = [](const SectorAuthoringFogVolume& value) {
+        return std::tie(value.enabled, value.shape, value.analyticStyle,
+                value.yawDegrees, value.bottomOffsetWorld,
+                value.radiusXWorld, value.radiusZWorld, value.heightWorld,
+                value.color.r, value.color.g, value.color.b, value.color.a,
+                value.maxOpacity, value.analyticStartDistanceWorld,
+                value.analyticEndDistanceWorld, value.analyticFalloffExponent,
+                value.edgeSoftness, value.noiseScaleWorld, value.noiseAmount,
+                value.flowDirectionDegrees, value.flowSpeedWorld);
+    };
+    return fields(a) == fields(b);
+}
+
+} // namespace
 
 std::array<Vector2, 8> BuildSectorEditorFogVolumeHandleMapPoints(
         SectorTopologyCoordPoint center, Vector2 radiiWorld, float yawDegrees)
@@ -318,6 +337,46 @@ bool SectorEditorAuthoringFogVolumeEditingService::SetPosition(
         volume.y = point.y;
         return true;
     });
+}
+
+bool SectorEditorAuthoringFogVolumeEditingService::CopySelectedConfig(
+        SectorEditorConfigClipboardState& clipboard) const
+{
+    const auto* selected = Selected();
+    if (selected == nullptr) return false;
+    SectorAuthoringFogVolume config = *selected;
+    config.id = -1;
+    config.instanceId.clear();
+    config.x = 0;
+    config.y = 0;
+    clipboard.kind = SectorEditorConfigKind::FogVolume;
+    clipboard.payload = std::move(config);
+    context_.statusText = "Copied fog volume config.";
+    return true;
+}
+
+bool SectorEditorAuthoringFogVolumeEditingService::PasteSelectedConfig(
+        const SectorEditorConfigClipboardState& clipboard)
+{
+    const auto* selected = Selected();
+    const auto* source = std::get_if<SectorAuthoringFogVolume>(&clipboard.payload);
+    if (selected == nullptr || source == nullptr
+            || clipboard.kind != SectorEditorConfigKind::FogVolume) return false;
+
+    SectorAuthoringFogVolume candidate = NormalizeSectorAuthoringFogVolume(*source);
+    candidate.id = selected->id;
+    candidate.instanceId = selected->instanceId;
+    candidate.x = selected->x;
+    candidate.y = selected->y;
+    if (SameFogConfig(*selected, candidate)) {
+        context_.statusText = "Selected fog volume already matches copied config.";
+        return false;
+    }
+    return MutateById(candidate.id, "Pasted fog volume config",
+            [&candidate](SectorAuthoringFogVolume& volume) {
+                volume = candidate;
+                return true;
+            });
 }
 
 bool SectorEditorAuthoringFogVolumeEditingService::DeleteSelected()

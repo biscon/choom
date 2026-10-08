@@ -353,6 +353,47 @@ bool SectorEditorStructuralPrimitiveEditingService::CommitPreviewValue(
             });
 }
 
+bool SectorEditorStructuralPrimitiveEditingService::CopySelectedConfig(
+        SectorEditorConfigClipboardState& clipboard) const
+{
+    const auto* selected = Selected();
+    if (selected == nullptr) return false;
+    SectorAuthoringStructuralPrimitive config = *selected;
+    config.id = -1;
+    config.x = 0;
+    config.z = 0;
+    clipboard.kind = SectorEditorStructuralConfigKind(config.kind);
+    clipboard.payload = std::move(config);
+    context_.statusText = TextFormat("Copied %s config.",
+            SectorEditorConfigKindName(clipboard.kind));
+    return true;
+}
+
+bool SectorEditorStructuralPrimitiveEditingService::PasteSelectedConfig(
+        const SectorEditorConfigClipboardState& clipboard)
+{
+    const auto* selected = Selected();
+    const auto* source = std::get_if<SectorAuthoringStructuralPrimitive>(&clipboard.payload);
+    if (selected == nullptr || source == nullptr
+            || source->kind != selected->kind
+            || clipboard.kind != SectorEditorStructuralConfigKind(selected->kind)) return false;
+
+    SectorAuthoringStructuralPrimitive candidate = *source;
+    candidate.id = selected->id;
+    candidate.x = selected->x;
+    candidate.z = selected->z;
+    candidate.yawDegrees = WrapDegrees(candidate.yawDegrees);
+    candidate.pitchDegrees = WrapDegrees(candidate.pitchDegrees);
+    candidate.rollDegrees = WrapDegrees(candidate.rollDegrees);
+    if (SamePrimitive(*selected, candidate)) {
+        context_.statusText = TextFormat("Selected %s already matches copied config.",
+                SectorEditorConfigKindName(clipboard.kind));
+        return false;
+    }
+    return CommitPreviewValue(candidate.id, candidate,
+            TextFormat("Pasted %s config", SectorEditorConfigKindName(clipboard.kind)));
+}
+
 bool SectorEditorStructuralPrimitiveEditingService::DeleteSelected()
 {
     const SectorAuthoringStructuralPrimitive* selected = Selected();

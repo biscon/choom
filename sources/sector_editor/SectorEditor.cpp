@@ -9642,6 +9642,8 @@ bool SectorEditor::CopySelectedConfig(engine::AssetManager& assets)
             BuildRuntimeObjectEditingService();
     SectorEditorMaterialEditingService materialEditing =
             BuildMaterialEditingService();
+    SectorEditorStructuralPrimitiveEditingService structuralPrimitiveEditing =
+            BuildStructuralPrimitiveEditingService();
     SectorEditorConfigClipboardService service{
             SectorEditorConfigClipboardServiceContext{
                     state,
@@ -9656,6 +9658,8 @@ bool SectorEditor::CopySelectedConfig(engine::AssetManager& assets)
                     lightEditing,
                     runtimeObjectEditing,
                     materialEditing,
+                    fogVolumeEditingService.value(),
+                    structuralPrimitiveEditing,
                     assets,
                     statusText}};
     return service.Copy();
@@ -9675,6 +9679,8 @@ bool SectorEditor::PasteSelectedConfig(engine::AssetManager& assets)
             BuildRuntimeObjectEditingService();
     SectorEditorMaterialEditingService materialEditing =
             BuildMaterialEditingService();
+    SectorEditorStructuralPrimitiveEditingService structuralPrimitiveEditing =
+            BuildStructuralPrimitiveEditingService();
     SectorEditorConfigClipboardService service{
             SectorEditorConfigClipboardServiceContext{
                     state,
@@ -9689,6 +9695,8 @@ bool SectorEditor::PasteSelectedConfig(engine::AssetManager& assets)
                     lightEditing,
                     runtimeObjectEditing,
                     materialEditing,
+                    fogVolumeEditingService.value(),
+                    structuralPrimitiveEditing,
                     assets,
                     statusText}};
     const bool changed = service.Paste();
@@ -9705,7 +9713,15 @@ bool SectorEditor::PasteSelectedConfig(engine::AssetManager& assets)
             && sceneRuntime.Renderer().IsRendererReady()) {
         sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
     }
-    if (target.kind == SectorEditorConfigKind::Sector
+    if (target.kind == SectorEditorConfigKind::FogVolume) {
+        fogVolumeEditingUiState = FogVolumeEditingUiState{};
+    }
+    if (IsSectorEditorStructuralConfigKind(target.kind)) {
+        structuralPrimitiveEditingUiState = SectorEditorStructuralPrimitiveEditingUiState{};
+    }
+    if ((target.kind == SectorEditorConfigKind::Sector
+                || target.kind == SectorEditorConfigKind::FogVolume
+                || IsSectorEditorStructuralConfigKind(target.kind))
             && state.mode == SectorEditorMode::Preview3D
             && engineContext != nullptr) {
         RebuildPreviewMeshesPreservingView(*engineContext);

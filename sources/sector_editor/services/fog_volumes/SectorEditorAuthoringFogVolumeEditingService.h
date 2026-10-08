@@ -4,6 +4,7 @@
 #include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
+#include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardTypes.h"
 
 #include <array>
 #include <functional>
@@ -44,6 +45,8 @@ public:
             const std::function<bool(SectorAuthoringFogVolume&)>& mutate);
     bool SetInstanceId(int fogVolumeId, const std::string& instanceId, std::string& outError);
     bool SetPosition(int fogVolumeId, SectorTopologyCoordPoint point, const char* status);
+    bool CopySelectedConfig(SectorEditorConfigClipboardState& clipboard) const;
+    bool PasteSelectedConfig(const SectorEditorConfigClipboardState& clipboard);
     bool DeleteSelected();
     bool FitToSector(int fogVolumeId);
 

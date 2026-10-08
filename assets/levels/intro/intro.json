@@ -5348,6 +5348,146 @@
         -40.0
       ],
       "yawDegrees": 180.0
+    },
+    {
+      "id": 366,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_366",
+        "modelPath": "assets/models/storage/Drum_Steel_Red_200L.gltf",
+        "heightOffsetWorld": 0.1599999964237213,
+        "collision": true
+      },
+      "position": [
+        545.5999755859375,
+        0.0,
+        -43.599998474121094
+      ],
+      "yawDegrees": 12.0
+    },
+    {
+      "id": 367,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_367",
+        "modelPath": "assets/models/storage/Drum_Steel_Red_200L.gltf",
+        "heightOffsetWorld": 0.1599999964237213,
+        "collision": true
+      },
+      "position": [
+        546.0,
+        0.0,
+        -48.79999923706055
+      ],
+      "yawDegrees": -3.0
+    },
+    {
+      "id": 368,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_368",
+        "modelPath": "assets/models/storage/Crate_Wood_900.gltf",
+        "heightOffsetWorld": 0.1599999964237213,
+        "collision": true
+      },
+      "position": [
+        538.7999877929688,
+        0.0,
+        -43.599998474121094
+      ],
+      "yawDegrees": -174.99998474121094
+    },
+    {
+      "id": 369,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_369",
+        "modelPath": "assets/models/storage/Drum_Steel_Small_60L.gltf",
+        "heightOffsetWorld": 0.1599999964237213,
+        "collision": true
+      },
+      "position": [
+        533.2000122070313,
+        0.0,
+        -42.400001525878906
+      ],
+      "yawDegrees": -34.0
+    },
+    {
+      "id": 370,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_370",
+        "modelPath": "assets/models/storage/Crate_Wood_600.gltf",
+        "heightOffsetWorld": 0.1599999964237213,
+        "collision": true
+      },
+      "position": [
+        546.4000244140625,
+        0.0,
+        -54.0
+      ],
+      "yawDegrees": -87.99999237060547
+    },
+    {
+      "id": 371,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_371",
+        "modelPath": "assets/models/litter/Trash_Bag_Large.gltf",
+        "scale": 1.2000000476837158,
+        "collision": true
+      },
+      "position": [
+        547.0,
+        0.0,
+        -70.0
+      ],
+      "yawDegrees": 43.999996185302734
+    },
+    {
+      "id": 372,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_372",
+        "modelPath": "assets/models/litter/Can_Crushed_Red.gltf"
+      },
+      "position": [
+        506.0,
+        0.0,
+        -50.0
+      ],
+      "yawDegrees": 12.0
+    },
+    {
+      "id": 373,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_373",
+        "modelPath": "assets/models/litter/Wrapper_Snack_Yellow.gltf"
+      },
+      "position": [
+        431.0,
+        0.0,
+        -63.0
+      ],
+      "yawDegrees": 96.0
+    },
+    {
+      "id": 374,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "draymond",
+        "instanceId": "draymond",
+        "scale": 1.0750000476837158,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        345.0,
+        0.0,
+        30.0
+      ],
+      "yawDegrees": 70.0
     }
   ],
   "staticLights": [
@@ -7209,24 +7349,6 @@
       }
     },
     {
-      "id": 9,
-      "instanceId": "light_point_9",
-      "position": [
-        478.0,
-        14.399999618530273,
-        -49.0
-      ],
-      "radius": 164.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      },
-      "enabled": false
-    },
-    {
       "id": 23,
       "instanceId": "light_point_23",
       "position": [
@@ -7598,6 +7720,10 @@
   },
   "audio": {
     "sounds": {
+      "fire_crackle": {
+        "path": "ambience/fire_crackle.ogg",
+        "type": "music"
+      },
       "lever_down": {
         "path": "sfx/lever_down.wav",
         "type": "sound"
@@ -7605,6 +7731,18 @@
       "lever_up": {
         "path": "sfx/lever_up.wav",
         "type": "sound"
+      },
+      "room_tone_1": {
+        "path": "ambience/room-tone-1.mp3",
+        "type": "music"
+      },
+      "room_tone_2": {
+        "path": "ambience/damp-cavern-ambience.ogg",
+        "type": "music"
+      },
+      "steam_loop": {
+        "path": "sfx/steam_loop.ogg",
+        "type": "music"
       }
     }
   },
@@ -7614,7 +7752,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "5545f903b9282ee2",
+    "sourceHash": "f31d14fa11d5af3f",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -7634,7 +7772,7 @@
     "objectProbes": {
       "path": "assets/levels/intro/intro.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "5545f903b9282ee2",
+      "sourceHash": "f31d14fa11d5af3f",
       "count": 4070,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -7660,9 +7798,9 @@
     "staticModels": {
       "path": "assets/levels/intro/intro.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "5545f903b9282ee2",
+      "sourceHash": "f31d14fa11d5af3f",
       "modelCount": 87,
-      "objectCount": 344,
+      "objectCount": 352,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -15477,7 +15615,28 @@
               -1.5
             ]
           },
-          "materialId": "brick_repair_512"
+          "materialId": "brick_repair_512",
+          "decal": {
+            "materialId": "graffiti_decal_tag_jot",
+            "uv": {
+              "scale": [
+                2.0,
+                2.0
+              ],
+              "offset": [
+                -2.5,
+                -1.0
+              ]
+            },
+            "opacity": 0.8999999761581421,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              0.8500000238418579
+            ],
+            "bloomIntensity": 1.0
+          }
         },
         "lower": {
           "uv": {
@@ -19412,7 +19571,12 @@
           "materialId": "brick_repair_512"
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
-        "ceilingMaterialId": "ceiling_concrete_dark"
+        "ceilingMaterialId": "ceiling_concrete_dark",
+        "footstepSet": "Tile_Reverb",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "room_tone_2"
+        }
       },
       {
         "id": 12,
@@ -19879,7 +20043,8 @@
           "materialId": "brick_repair_512"
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
-        "ceilingMaterialId": "ceiling_concrete_dark"
+        "ceilingMaterialId": "ceiling_concrete_dark",
+        "footstepSet": "Tile_Reverb"
       },
       {
         "id": 19,
@@ -19955,7 +20120,8 @@
           "materialId": "brick_repair_512"
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
-        "ceilingMaterialId": "ceiling_concrete_dark"
+        "ceilingMaterialId": "ceiling_concrete_dark",
+        "footstepSet": "Tile_Reverb"
       },
       {
         "id": 20,
@@ -20031,7 +20197,12 @@
           "materialId": "brick_repair_512"
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
-        "ceilingMaterialId": "ceiling_concrete_dark"
+        "ceilingMaterialId": "ceiling_concrete_dark",
+        "footstepSet": "Tile_Reverb",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "room_tone_2"
+        }
       },
       {
         "id": 21,
@@ -20251,7 +20422,8 @@
           "materialId": "brick_repair_512"
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
-        "ceilingMaterialId": "ceiling_concrete_dark"
+        "ceilingMaterialId": "ceiling_concrete_dark",
+        "footstepSet": "Tile_Reverb"
       },
       {
         "id": 24,
@@ -20766,7 +20938,12 @@
           "materialId": "brick_repair_512"
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
-        "ceilingMaterialId": "ceiling_concrete_dark"
+        "ceilingMaterialId": "ceiling_concrete_dark",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "room_tone_1",
+          "volume": 0.75
+        }
       },
       {
         "id": 32,
@@ -21143,7 +21320,7 @@
         "shape": "box",
         "analyticStyle": "room",
         "bottomOffsetWorld": 0.0,
-        "radiusXWorld": 10.75,
+        "radiusXWorld": 13.25,
         "radiusZWorld": 8.625,
         "heightWorld": 3.0,
         "maxOpacity": 0.44999998807907104,
@@ -21198,6 +21375,44 @@
         "edgeSoftness": 1.0,
         "noiseScaleWorld": 0.25,
         "noiseAmount": 0.25
+      },
+      {
+        "id": 4,
+        "x": 6768,
+        "y": -2560,
+        "instanceId": "fog_volume_4",
+        "shape": "box",
+        "analyticStyle": "room",
+        "bottomOffsetWorld": 0.0,
+        "radiusXWorld": 15.75,
+        "radiusZWorld": 4.5,
+        "heightWorld": 3.0,
+        "maxOpacity": 0.44999998807907104,
+        "analyticStartDistanceWorld": 1.0,
+        "analyticEndDistanceWorld": 12.0,
+        "analyticFalloffExponent": 0.5,
+        "edgeSoftness": 1.0,
+        "noiseScaleWorld": 0.25,
+        "noiseAmount": 0.5
+      },
+      {
+        "id": 5,
+        "x": 7424,
+        "y": 768,
+        "instanceId": "fog_volume_5",
+        "shape": "box",
+        "analyticStyle": "room",
+        "bottomOffsetWorld": 0.0,
+        "radiusXWorld": 9.875,
+        "radiusZWorld": 4.5,
+        "heightWorld": 3.0,
+        "maxOpacity": 0.44999998807907104,
+        "analyticStartDistanceWorld": 1.0,
+        "analyticEndDistanceWorld": 12.0,
+        "analyticFalloffExponent": 0.5,
+        "edgeSoftness": 1.0,
+        "noiseScaleWorld": 0.25,
+        "noiseAmount": 0.5
       }
     ],
     "reflectionProbes": [
@@ -21393,6 +21608,7 @@
           "intensity": 3.0,
           "speed": 1.0,
           "lifetime": 0.5,
+          "timeScale": 1.0,
           "spread": 0.30000001192092896,
           "turbulence": 0.5,
           "swirl": 0.0,
@@ -21475,6 +21691,7 @@
           "intensity": 0.75,
           "speed": 0.5,
           "lifetime": 0.75,
+          "timeScale": 1.0,
           "spread": 0.07999999821186066,
           "turbulence": 0.5,
           "swirl": 0.0,
@@ -21528,7 +21745,7 @@
         "id": "particle_3",
         "x": 9152,
         "z": -3584,
-        "heightWorld": 0.20000000298023224,
+        "heightWorld": 0.0,
         "yawDegrees": 0.0,
         "pitchDegrees": 90.0,
         "settings": {
@@ -21538,7 +21755,7 @@
             255,
             255,
             255,
-            255
+            200
           ],
           "shape": 2,
           "emission": 0,
@@ -21554,14 +21771,15 @@
             0.0
           ],
           "scale": 1.0,
-          "intensity": 1.5,
-          "speed": 0.10000000149011612,
+          "intensity": 2.5,
+          "speed": 0.20000000298023224,
           "lifetime": 2.0,
+          "timeScale": 0.3499999940395355,
           "spread": 0.30000001192092896,
           "turbulence": 0.20000000298023224,
-          "swirl": 0.20000000298023224,
+          "swirl": 0.15000000596046448,
           "gravity": 0.0,
-          "drag": 3.9000000953674316,
+          "drag": 0.30000001192092896,
           "smokeAmount": 0.5,
           "emberAmount": 0.30000001192092896,
           "burstInterval": 0.75,
@@ -21604,6 +21822,17 @@
             }
           ]
         }
+      }
+    ],
+    "soundEmitters": [
+      {
+        "editorId": 1,
+        "id": "sound_emitter_1",
+        "x": 5632,
+        "y": 16.0,
+        "z": 512,
+        "soundId": "fire_crackle",
+        "loop": true
       }
     ],
     "triggers": [
@@ -21870,6 +22099,23 @@
           "depth": 256,
           "bottom": 46.0,
           "top": 51.0
+        }
+      },
+      {
+        "id": 15,
+        "kind": "cylinder",
+        "x": 5632,
+        "z": 512,
+        "collision": false,
+        "castsBakedShadow": false,
+        "castsDynamicShadow": false,
+        "material": {
+          "materialId": "wood_table_worn"
+        },
+        "cylinder": {
+          "radius": 35,
+          "bottom": 0.0,
+          "top": 5.0
         }
       }
     ]

@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "id": "draymond",
+  "name": "Draymond",
+  "speechColor": [
+    75,
+    45,
+    35
+  ],
+  "modelPath": "assets/models/characters/Draymond.glb",
+  "headLook": {
+    "enabled": true,
+    "boneName": "mixamorig:Neck"
+  },
+  "actions": {
+    "idle": {
+      "animation": "Idle_2",
+      "animationSpeed": 0.6000000238418579
+    },
+    "walk": {
+      "animation": "Walking_2",
+      "movementSpeed": 1.5,
+      "footstepPhases": [
+        0.30000001192092896,
+        0.800000011920929
+      ]
+    },
+    "run": {
+      "animation": "Running",
+      "movementSpeed": 3.0,
+      "footstepPhases": [
+        0.30000001192092896,
+        0.800000011920929
+      ]
+    },
+    "attack": {},
+    "hurt": {},
+    "death": {}
+  }
+}

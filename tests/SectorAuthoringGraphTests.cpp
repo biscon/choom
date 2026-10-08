@@ -15809,6 +15809,287 @@ struct FogVolumeEditingFixture {
     }
 };
 
+void TestFogVolumeConfigClipboard()
+{
+    FogVolumeEditingFixture fixture(MakeGraphFromConnectedLines(
+            {{0, 0}, {512, 0}, {512, 512}, {0, 512}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}}));
+    const int sourceId = fixture.PlaceBox({128, 128});
+    auto& editing = fixture.editing;
+    Check(editing.MutateById(sourceId, "Source config", [](auto& volume) {
+        volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
+        volume.yawDegrees = 45.0f;
+        volume.bottomOffsetWorld = 0.4f;
+        volume.radiusXWorld = 2.5f;
+        volume.radiusZWorld = 3.5f;
+        volume.heightWorld = 1.25f;
+        volume.color = Color{20, 40, 60, 255};
+        volume.maxOpacity = 0.6f;
+        volume.analyticStartDistanceWorld = 0.3f;
+        volume.analyticEndDistanceWorld = 4.0f;
+        volume.analyticFalloffExponent = 2.0f;
+        volume.edgeSoftness = 0.5f;
+        volume.noiseScaleWorld = 1.5f;
+        volume.noiseAmount = 0.25f;
+        volume.flowDirectionDegrees = 120.0f;
+        volume.flowSpeedWorld = 0.5f;
+        return true;
+    }), "fog clipboard fixture changes all appearance and dimension settings");
+    const auto source = *editing.Selected();
+    fixture.Clean();
+    game::SectorEditorConfigClipboardState clipboard;
+    Check(editing.CopySelectedConfig(clipboard) && fixture.IsClean()
+                  && clipboard.kind == game::SectorEditorConfigKind::FogVolume,
+          "copying fog config preserves clean document and cache");
+    const auto* copied = std::get_if<game::SectorAuthoringFogVolume>(&clipboard.payload);
+    Check(copied != nullptr && copied->id == -1 && copied->instanceId.empty(),
+          "fog clipboard omits source identity");
+
+    int destinationId = -1;
+    Check(editing.Place({320, 320}, &destinationId), "fog clipboard destination is placed");
+    const auto original = *editing.Selected();
+    game::SectorEditorPreviewSelectionState preview;
+    for (const auto mode : {game::SectorEditorMode::Edit2D, game::SectorEditorMode::Preview3D}) {
+        const auto target = game::ResolveSectorEditorConfigTarget(mode,
+                fixture.document.map.topologyMap, fixture.document.authoring.authoringGraph,
+                game::MakeSectorEditorDerivationDocumentAccess(fixture.document.derivation),
+                fixture.selection, preview);
+        Check(target.kind == game::SectorEditorConfigKind::FogVolume && target.id == destinationId,
+              "selected fog resolves as a clipboard target in both editor modes");
+    }
+    fixture.Clean();
+    const auto hashBefore = game::ComputeSectorLightmapSourceHash(fixture.document.map.topologyMap);
+    Check(editing.PasteSelectedConfig(clipboard)
+                  && fixture.document.lifecycle.topologyDocumentDirty
+                  && !fixture.editor.topologyRenderCache.valid
+                  && fixture.editor.topologyRenderRevision > fixture.cleanRevision,
+          "fog paste commits through authoring and invalidates the render cache");
+    const auto result = *editing.Selected();
+    Check(result.id == original.id && result.instanceId == original.instanceId
+                  && result.x == original.x && result.y == original.y,
+          "fog paste preserves destination identity and planar position");
+    Check(result.enabled == source.enabled && result.shape == source.shape
+                  && result.analyticStyle == source.analyticStyle
+                  && Near(result.yawDegrees, source.yawDegrees)
+                  && Near(result.bottomOffsetWorld, source.bottomOffsetWorld)
+                  && Near(result.radiusXWorld, source.radiusXWorld)
+                  && Near(result.radiusZWorld, source.radiusZWorld)
+                  && Near(result.heightWorld, source.heightWorld),
+          "fog paste copies shape, rotation, dimensions, and height offset");
+    Check(result.color.r == source.color.r && result.color.g == source.color.g
+                  && result.color.b == source.color.b && result.color.a == source.color.a
+                  && Near(result.maxOpacity, source.maxOpacity)
+                  && Near(result.analyticStartDistanceWorld, source.analyticStartDistanceWorld)
+                  && Near(result.analyticEndDistanceWorld, source.analyticEndDistanceWorld)
+                  && Near(result.analyticFalloffExponent, source.analyticFalloffExponent)
+                  && Near(result.edgeSoftness, source.edgeSoftness)
+                  && Near(result.noiseScaleWorld, source.noiseScaleWorld)
+                  && Near(result.noiseAmount, source.noiseAmount)
+                  && Near(result.flowDirectionDegrees, source.flowDirectionDegrees)
+                  && Near(result.flowSpeedWorld, source.flowSpeedWorld),
+          "fog paste copies all appearance and flow settings");
+    const auto& compiled = fixture.document.map.topologyMap.compiledLocalFogVolumes;
+    Check(compiled.size() == 2 && compiled.back().instanceId == original.instanceId
+                  && compiled.back().shape == source.shape
+                  && compiled.back().analyticStyle == source.analyticStyle,
+          "fog paste refreshes compiled rendering data");
+    Check(game::ComputeSectorLightmapSourceHash(fixture.document.map.topologyMap) == hashBefore,
+          "fog config paste does not change the lightmap source hash");
+    fixture.Clean();
+    Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean(),
+          "identical fog config paste is a clean no-op");
+
+    auto& config = std::get<game::SectorAuthoringFogVolume>(clipboard.payload);
+    config.enabled = false;
+    config.maxOpacity = 2.0f;
+    config.radiusXWorld = -1.0f;
+    Check(editing.PasteSelectedConfig(clipboard) && !editing.Selected()->enabled
+                  && Near(editing.Selected()->maxOpacity, 1.0f)
+                  && Near(editing.Selected()->radiusXWorld, 0.05f),
+          "fog paste copies disabled state and normalizes out-of-range config");
+    fixture.Clean();
+    Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean(),
+          "normalization-equivalent fog paste is a clean no-op");
+    clipboard.kind = game::SectorEditorConfigKind::StructureBox;
+    Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean(),
+          "fog paste rejects a mismatched clipboard kind");
+    clipboard.kind = game::SectorEditorConfigKind::FogVolume;
+    clipboard.payload = std::monostate{};
+    Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean(),
+          "fog paste rejects a missing payload");
+    fixture.selection.selectedAuthoring.fogVolumeId = 9999;
+    Check(!editing.CopySelectedConfig(clipboard) && !editing.PasteSelectedConfig(clipboard)
+                  && fixture.IsClean(), "fog clipboard rejects missing selection IDs");
+    Check(game::ResolveSectorEditorConfigTarget(game::SectorEditorMode::Edit2D,
+                  fixture.document.map.topologyMap, fixture.document.authoring.authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(fixture.document.derivation),
+                  fixture.selection, preview).kind == game::SectorEditorConfigKind::None,
+          "missing fog target does not fall back to a sector config target");
+}
+
+void TestStructuralPrimitiveConfigClipboard()
+{
+    using Kind = game::SectorStructuralPrimitiveKind;
+    std::set<game::SectorEditorConfigKind> configKinds;
+    for (const auto kind : {Kind::Box, Kind::Ramp, Kind::Stairs, Kind::Cylinder, Kind::Sphere, Kind::Ladder}) {
+        FogVolumeEditingFixture fixture(MakeGraphFromConnectedLines(
+                {{0, 0}, {512, 0}, {512, 512}, {0, 512}},
+                {{1, 2}, {2, 3}, {3, 4}, {4, 1}}));
+        auto& graph = fixture.document.authoring.authoringGraph;
+        auto source = game::DefaultSectorAuthoringStructuralPrimitive(kind);
+        source.id = 1;
+        source.x = 128;
+        source.z = 128;
+        source.yawDegrees = 30.0f;
+        source.pitchDegrees = kind == Kind::Ladder ? 0.0f : 10.0f;
+        source.rollDegrees = kind == Kind::Ladder ? 0.0f : 15.0f;
+        source.collision = false;
+        source.receivesLightmap = false;
+        source.castsBakedShadow = false;
+        source.castsDynamicShadow = false;
+        source.materials.defaultSurface.materialId = "copied_material";
+        source.materials.defaultSurface.uv.scale = {2.0f, 3.0f};
+        source.materials.defaultSurface.uv.offset = {4.0f, 5.0f};
+        for (auto& override : source.materials.overrides) {
+            override.enabled = true;
+            override.settings.materialId = "copied_override";
+            override.settings.uv.scale = {6.0f, 7.0f};
+            override.settings.uv.offset = {8.0f, 9.0f};
+        }
+        source.box = {32, 48, 2.0f, 10.0f};
+        source.ramp = {32, 48, 1.0f, 2.0f, 12.0f};
+        source.stairs = {32, 48, 2.0f, 10.0f, 5};
+        source.cylinder = {32, 2.0f, 12.0f, 10};
+        source.sphere = {32, 10.0f, 6, 10};
+        source.ladder = {64, 2.0f, 12.0f, 1.5f, 6};
+        auto destination = game::DefaultSectorAuthoringStructuralPrimitive(kind);
+        destination.id = 2;
+        destination.x = 320;
+        destination.z = 320;
+        graph.structuralPrimitives = {source, destination};
+        Check(game::RefreshSectorEditorAuthoringDerivation(fixture.editor,
+                      game::MakeSectorEditorDocumentLifecycleAccess(fixture.document.lifecycle),
+                      fixture.document.map.topologyMap, graph,
+                      game::MakeSectorEditorDerivationDocumentAccess(fixture.document.derivation)),
+              "structural clipboard fixture derives");
+        game::SectorEditorStructuralPrimitiveEditingState editingState;
+        game::SectorEditorStructuralPrimitiveEditingService editing({fixture.editor,
+                game::MakeSectorEditorDocumentLifecycleAccess(fixture.document.lifecycle),
+                fixture.document.map.topologyMap, graph,
+                game::MakeSectorEditorDerivationDocumentAccess(fixture.document.derivation),
+                fixture.selection, editingState, fixture.status});
+        Check(editing.Select(source.id), "structural clipboard selects source");
+        fixture.Clean();
+        game::SectorEditorConfigClipboardState clipboard;
+        Check(editing.CopySelectedConfig(clipboard) && fixture.IsClean()
+                      && clipboard.kind == game::SectorEditorStructuralConfigKind(kind),
+              "structural copy identifies its subtype without editing the document");
+        configKinds.insert(clipboard.kind);
+        Check(editing.Select(destination.id), "structural clipboard selects destination");
+        game::SectorEditorPreviewSelectionState preview;
+        for (const auto mode : {game::SectorEditorMode::Edit2D, game::SectorEditorMode::Preview3D}) {
+            const auto target = game::ResolveSectorEditorConfigTarget(mode,
+                    fixture.document.map.topologyMap, graph,
+                    game::MakeSectorEditorDerivationDocumentAccess(fixture.document.derivation),
+                    fixture.selection, preview);
+            Check(target.kind == clipboard.kind && target.id == destination.id,
+                  "structural clipboard resolves the selected subtype in both modes");
+        }
+        const auto hashBefore = game::ComputeSectorLightmapSourceHash(fixture.document.map.topologyMap);
+        Check(editing.PasteSelectedConfig(clipboard)
+                      && fixture.document.lifecycle.topologyDocumentDirty
+                      && !fixture.editor.topologyRenderCache.valid
+                      && fixture.editor.topologyRenderRevision == fixture.cleanRevision + 1,
+              "structural paste commits once and invalidates the render cache");
+        const auto result = *editing.Selected();
+        Check(result.id == destination.id && result.kind == destination.kind
+                      && result.x == destination.x && result.z == destination.z,
+              "structural paste preserves destination identity, kind, and position");
+        Check(result.enabled == source.enabled && result.collision == source.collision
+                      && result.receivesLightmap == source.receivesLightmap
+                      && result.castsBakedShadow == source.castsBakedShadow
+                      && result.castsDynamicShadow == source.castsDynamicShadow
+                      && Near(result.yawDegrees, source.yawDegrees)
+                      && Near(result.pitchDegrees, source.pitchDegrees)
+                      && Near(result.rollDegrees, source.rollDegrees),
+              "structural paste copies rotation and collision/lighting flags");
+        Check(result.materials.defaultSurface.materialId == "copied_material"
+                      && Near(result.materials.defaultSurface.uv.scale.x, 2.0f)
+                      && Near(result.materials.defaultSurface.uv.scale.y, 3.0f)
+                      && Near(result.materials.defaultSurface.uv.offset.x, 4.0f)
+                      && Near(result.materials.defaultSurface.uv.offset.y, 5.0f),
+              "structural paste copies base material and UV settings");
+        for (const auto& override : result.materials.overrides) {
+            Check(override.enabled && override.settings.materialId == "copied_override"
+                          && Near(override.settings.uv.scale.x, 6.0f)
+                          && Near(override.settings.uv.scale.y, 7.0f)
+                          && Near(override.settings.uv.offset.x, 8.0f)
+                          && Near(override.settings.uv.offset.y, 9.0f),
+                  "structural paste copies every material override and UV setting");
+        }
+        Check(result.box.width == 32 && result.box.depth == 48
+                      && Near(result.box.bottom, 2.0f) && Near(result.box.top, 10.0f)
+                      && result.ramp.width == 32 && result.ramp.run == 48
+                      && Near(result.ramp.solidBottom, 1.0f) && Near(result.ramp.low, 2.0f)
+                      && Near(result.ramp.high, 12.0f)
+                      && result.stairs.width == 32 && result.stairs.run == 48
+                      && Near(result.stairs.bottom, 2.0f) && Near(result.stairs.rise, 10.0f)
+                      && result.stairs.stepCount == 5
+                      && result.cylinder.radius == 32 && Near(result.cylinder.bottom, 2.0f)
+                      && Near(result.cylinder.top, 12.0f) && result.cylinder.radialSegments == 10
+                      && result.sphere.radius == 32 && Near(result.sphere.centerHeight, 10.0f)
+                      && result.sphere.latitudeSegments == 6 && result.sphere.longitudeSegments == 10
+                      && result.ladder.width == 64 && Near(result.ladder.bottom, 2.0f)
+                      && Near(result.ladder.height, 12.0f) && Near(result.ladder.thicknessScale, 1.5f)
+                      && result.ladder.rungCount == 6,
+              "structural paste copies dimensions, authored heights, and tessellation parameters");
+        Check(game::IsSectorEditorAuthoringDerivationCurrent(
+                      game::MakeSectorEditorDerivationDocumentAccess(fixture.document.derivation))
+                      && game::ComputeSectorLightmapSourceHash(fixture.document.map.topologyMap) != hashBefore,
+              "structural paste refreshes derivation and bake-relevant source hash");
+        fixture.Clean();
+        Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean(),
+              "identical structural paste is a clean no-op");
+        auto& config = std::get<game::SectorAuthoringStructuralPrimitive>(clipboard.payload);
+        config.kind = kind == Kind::Box ? Kind::Ramp : Kind::Box;
+        clipboard.kind = game::SectorEditorStructuralConfigKind(config.kind);
+        Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean(),
+              "structural paste rejects other structural subtypes");
+        clipboard.kind = game::SectorEditorStructuralConfigKind(kind);
+        Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean(),
+              "structural paste checks payload subtype as well as clipboard kind");
+        config = source;
+        config.box.width = 0;
+        config.ramp.width = 0;
+        config.stairs.width = 0;
+        config.cylinder.radius = 0;
+        config.sphere.radius = 0;
+        config.ladder.width = 0;
+        const auto hashAfter = game::ComputeSectorLightmapSourceHash(fixture.document.map.topologyMap);
+        Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean()
+                      && editing.Selected()->box.width == result.box.width
+                      && game::ComputeSectorLightmapSourceHash(fixture.document.map.topologyMap) == hashAfter,
+              "invalid structural config is rejected without changing graph, cache, or compiled geometry");
+        config = source;
+        config.enabled = false;
+        Check(editing.PasteSelectedConfig(clipboard) && !editing.Selected()->enabled,
+              "structural paste copies disabled state");
+        fixture.Clean();
+        clipboard.payload = std::monostate{};
+        Check(!editing.PasteSelectedConfig(clipboard) && fixture.IsClean(),
+              "structural paste rejects a missing payload");
+        fixture.selection.selectedAuthoring.structuralPrimitiveId = 9999;
+        Check(!editing.CopySelectedConfig(clipboard) && !editing.PasteSelectedConfig(clipboard)
+                      && fixture.IsClean(), "structural clipboard rejects missing selection IDs");
+        Check(game::ResolveSectorEditorConfigTarget(game::SectorEditorMode::Edit2D,
+                      fixture.document.map.topologyMap, graph,
+                      game::MakeSectorEditorDerivationDocumentAccess(fixture.document.derivation),
+                      fixture.selection, preview).kind == game::SectorEditorConfigKind::None,
+              "missing structural target does not fall back to a sector config target");
+    }
+    Check(configKinds.size() == 6, "all structural types have distinct clipboard compatibility kinds");
+}
+
 void TestFogBoxResizeAndManipulationLifecycle()
 {
     FogVolumeEditingFixture fixture(MakeGraphFromConnectedLines(
@@ -16783,6 +17064,8 @@ int main()
     TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio();
     TestAuthoringFogVolumeSerializationRoundTrip();
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
+    TestFogVolumeConfigClipboard();
+    TestStructuralPrimitiveConfigClipboard();
     TestFogBoxResizeAndManipulationLifecycle();
     TestFogFitSectorBoundsAndRejection();
     TestReflectionProbeSelectManipulationCommitsSnappedMove();

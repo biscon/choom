@@ -2,9 +2,11 @@
 
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.h"
 
 #include <utility>
 
@@ -204,6 +206,21 @@ SectorEditorConfigTarget ResolveSectorEditorConfigTarget(
         }
     }
 
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume) {
+        const auto* volume = FindSectorAuthoringFogVolume(
+                authoringGraph, selectionState.selectedAuthoring.fogVolumeId);
+        return volume != nullptr
+                ? SectorEditorConfigTarget{SectorEditorConfigKind::FogVolume, volume->id}
+                : SectorEditorConfigTarget{};
+    }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::StructuralPrimitive) {
+        const auto* primitive = FindSectorAuthoringStructuralPrimitive(
+                authoringGraph, selectionState.selectedAuthoring.structuralPrimitiveId);
+        return primitive != nullptr
+                ? SectorEditorConfigTarget{SectorEditorStructuralConfigKind(primitive->kind), primitive->id}
+                : SectorEditorConfigTarget{};
+    }
+
     if (selectionState.selectedAuthoring.kind
                     == SectorAuthoringSelectionKind::FaceAnchor
             && FindSectorAuthoringFaceAnchor(
@@ -294,6 +311,12 @@ bool SectorEditorConfigClipboardService::Copy()
         context_.statusText = "Copied sector config.";
         return true;
     }
+    if (target.kind == SectorEditorConfigKind::FogVolume) {
+        return context_.fogVolumeEditing.CopySelectedConfig(context_.clipboard);
+    }
+    if (IsSectorEditorStructuralConfigKind(target.kind)) {
+        return context_.structuralPrimitiveEditing.CopySelectedConfig(context_.clipboard);
+    }
     if (IsRuntimeObjectKind(target.kind)) {
         return context_.runtimeObjectEditing.CopySelectedConfig(context_.clipboard);
     }
@@ -357,6 +380,12 @@ bool SectorEditorConfigClipboardService::Paste()
             context_.uiState.roomtoneBufferedFaceId = -1;
         }
         return changed;
+    }
+    if (target.kind == SectorEditorConfigKind::FogVolume) {
+        return context_.fogVolumeEditing.PasteSelectedConfig(context_.clipboard);
+    }
+    if (IsSectorEditorStructuralConfigKind(target.kind)) {
+        return context_.structuralPrimitiveEditing.PasteSelectedConfig(context_.clipboard);
     }
     if (IsRuntimeObjectKind(target.kind)) {
         return context_.runtimeObjectEditing.PasteSelectedConfig(context_.clipboard);
