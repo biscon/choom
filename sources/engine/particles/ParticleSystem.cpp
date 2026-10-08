@@ -67,16 +67,30 @@ void Emit(ParticlePool& pool, size_t emitterIndex, int layerIndex, int count)
         if (collision) ++pool.collidingCount;
     }
 }
-void Tick(ParticlePool& pool, const ParticleUpdateContext& context, bool prewarm)
+float SimulationScale(const ParticleEmitterDefinition& definition, bool prewarm)
 {
-    pool.time += Step;
+    // Prewarm describes simulation seconds, so playback does not change initial fullness.
+    if (prewarm || !std::isfinite(definition.timeScale)) return 1.0f;
+    return std::clamp(definition.timeScale, 0.0f, 4.0f);
+}
+float SimulationStep(const ParticleEmitterDefinition& definition, bool prewarm, int substep)
+{
+    return Step * std::clamp(SimulationScale(definition, prewarm) - substep, 0.0f, 1.0f);
+}
+void TickSubstep(ParticlePool& pool, const ParticleUpdateContext& context, bool prewarm, int substep)
+{
+    for (auto& emitter : pool.emitters)
+        emitter.time += SimulationStep(emitter.definition, prewarm, substep);
     for (size_t i = 0; i < pool.count;) {
         Particle& p = pool.particles[i];
-        const auto& d = pool.emitters[p.emitter].definition;
+        const auto& emitter = pool.emitters[p.emitter];
+        const auto& d = emitter.definition;
+        const float dt = SimulationStep(d, prewarm, substep);
+        if (dt == 0) { ++i; continue; }
         const auto& layer = d.layers[p.layer];
-        p.age += Step;
-        p.lightingAge += Step;
-        const float t = pool.time + p.phase;
+        p.age += dt;
+        p.lightingAge += dt;
+        const float t = emitter.time + p.phase;
         const Vector3 offset = Vector3Subtract(p.position, d.position);
         const Vector3 swirl = Vector3Scale(Vector3CrossProduct(d.direction, offset),
                 d.swirl / (1.0f + Vector3Length(offset)));
@@ -84,10 +98,10 @@ void Tick(ParticlePool& pool, const ParticleUpdateContext& context, bool prewarm
                 std::sin(t * 1.31f + p.position.x) * 0.35f,
                 std::cos(t * 1.91f + p.position.y)};
         const Vector3 force = Vector3Add(Vector3Scale(noise, d.turbulence), swirl);
-        p.velocity = Vector3Add(p.velocity, Vector3Scale(force, Step));
-        p.velocity.y += layer.gravity * Step;
-        p.velocity = Vector3Scale(p.velocity, std::exp(-layer.drag * Step));
-        Vector3 next = Vector3Add(p.position, Vector3Scale(Vector3Add(p.velocity, d.drift), Step));
+        p.velocity = Vector3Add(p.velocity, Vector3Scale(force, dt));
+        p.velocity.y += layer.gravity * dt;
+        p.velocity = Vector3Scale(p.velocity, std::exp(-layer.drag * dt));
+        Vector3 next = Vector3Add(p.position, Vector3Scale(Vector3Add(p.velocity, d.drift), dt));
         if (p.collision && context.trace != nullptr && p.age < p.lifetime) {
             ++pool.diagnostics.collisionQueries;
             const auto hit = context.trace(context.user, p.position, next);
@@ -101,7 +115,7 @@ void Tick(ParticlePool& pool, const ParticleUpdateContext& context, bool prewarm
             }
         }
         p.position = next;
-        p.rotation += layer.spin * Step;
+        p.rotation += layer.spin * dt;
         if (p.age >= p.lifetime) {
             if (p.collision) --pool.collidingCount;
             p = pool.particles[--pool.count];
@@ -111,6 +125,8 @@ void Tick(ParticlePool& pool, const ParticleUpdateContext& context, bool prewarm
         auto& emitter = pool.emitters[i];
         const auto& d = emitter.definition;
         if (!emitter.enabled) { emitter.pendingBurst = 0; continue; }
+        const float dt = SimulationStep(d, prewarm, substep);
+        if (dt == 0) continue;
         float lod = 1;
         if (context.distanceLod) {
             const float distance = Vector3Distance(context.camera, d.position);
@@ -119,12 +135,12 @@ void Tick(ParticlePool& pool, const ParticleUpdateContext& context, bool prewarm
         float burst = prewarm ? 0 : emitter.pendingBurst;
         if (!prewarm) emitter.pendingBurst = 0;
         if (!prewarm && d.emission == ParticleEmission::RepeatingBurst) {
-            emitter.burstTimer -= Step;
+            emitter.burstTimer -= dt;
             if (emitter.burstTimer <= 0) { burst += 1; emitter.burstTimer = std::max(Step, d.burstInterval); }
         }
         for (int layer = 0; layer < d.layerCount; ++layer) {
             const float rate = d.layers[layer].rate;
-            float births = d.emission == ParticleEmission::Continuous ? rate * Step : 0;
+            float births = d.emission == ParticleEmission::Continuous ? rate * dt : 0;
             births += burst * d.burstCount * rate / std::max(1.0f, d.layers[0].rate);
             births *= emitter.intensity * lod;
             float& remainder = emitter.emissionRemainders[layer];
@@ -134,6 +150,17 @@ void Tick(ParticlePool& pool, const ParticleUpdateContext& context, bool prewarm
             Emit(pool, i, layer, count);
         }
     }
+}
+void Tick(ParticlePool& pool, const ParticleUpdateContext& context, bool prewarm)
+{
+    pool.time += Step;
+    int substeps = 1;
+    for (const auto& emitter : pool.emitters)
+        substeps = std::max(substeps, static_cast<int>(std::ceil(SimulationScale(emitter.definition, prewarm))));
+    // At most four passes, retaining particle-before-emission ordering and the
+    // original integration step at normal speed. Slow playback still updates every tick.
+    for (int substep = 0; substep < substeps; ++substep)
+        TickSubstep(pool, context, prewarm, substep);
 }
 } // namespace
 
@@ -153,6 +180,7 @@ void ResetParticlePool(ParticlePool& pool)
         emitter.randomState = emitter.definition.seed ? emitter.definition.seed : 1;
         emitter.emissionRemainders = {};
         emitter.burstTimer = emitter.pendingBurst = 0;
+        emitter.time = 0;
     }
 }
 bool TriggerParticleBurst(ParticlePool& pool, size_t index, float scale)

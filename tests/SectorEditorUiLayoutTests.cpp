@@ -839,12 +839,23 @@ void TestParticleInspectorLayout()
         const float expanded = game::MeasureSectorEditorParticleEmitterInspectorContentHeight(emitter,ui,height,8);
         Check(expanded > collapsed, "particle inspector includes advanced, texture, box and collision rows");
         float finalBottom = 0;
+        int playbackRows = 0;
         game::WalkSectorParticleInspectorRows(emitter,true,true,true,[&](game::SectorParticleInspectorRow row) {
             finalBottom += game::SectorParticleInspectorRowExtent(row,height,8);
+            if (row == game::ParticleInspectorTimeScale) {
+                ++playbackRows;
+                Check(game::IsSectorParticleInspectorLabelled(row), "playback label has its own row above the input");
+            }
+            if (row >= game::ParticleInspectorPositionX && row <= game::ParticleInspectorFps)
+                Check(static_cast<size_t>(row - game::ParticleInspectorPositionX) < ui.numbers.size(),
+                        "particle numeric input storage covers every field row");
         });
+        Check(playbackRows == 1, "expanded particle inspector includes playback speed exactly once");
         Check(expanded >= finalBottom + 12, "particle inspector reaches Delete with bottom padding at each UI scale");
         Check(game::SectorParticleInspectorLabelHeight(height) >= height,
                 "particle labels reserve independent vertical space above full-width inputs");
+        Check(game::SectorParticleInspectorLabelHeight(height, game::ParticleInspectorSpeed) >= height * 2,
+                "long initial-speed label reserves two lines in the narrow inspector");
     }
 }
 

@@ -49,6 +49,7 @@ bool ValidateSectorParticleSettings(const SectorParticleSettings& s, std::string
             || s.presetName.empty() || s.presetName.size() > 63
             || !range(s.scale, 0.01f, 100) || !range(s.intensity, 0, 100)
             || !range(s.speed, 0, 100) || !range(s.lifetime, 0.01f, 20)
+            || !range(s.timeScale, 0, 4)
             || !range(s.spread, 0, 10) || !range(s.turbulence, 0, 20)
             || !range(s.swirl, -20, 20) || !range(s.gravity, -100, 100)
             || !range(s.drag, 0, 20) || !range(s.smokeAmount, 0, 10)
@@ -80,6 +81,7 @@ engine::ParticleEmitterDefinition CompileSectorParticleDefinition(const SectorCo
 {
     const auto& s = e.settings;
     engine::ParticleEmitterDefinition d;
+    d.timeScale = s.timeScale;
     d.position = e.positionWorld;
     const float yaw = e.yawDegrees * DEG2RAD, pitch = e.pitchDegrees * DEG2RAD;
     d.direction = {std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)};
@@ -143,6 +145,7 @@ nlohmann::ordered_json WriteSectorParticleSettings(const SectorParticleSettings&
     j["drift"] = {s.drift.x, s.drift.y, s.drift.z};
 #define WRITE_FIELD(name) j[#name] = s.name
     WRITE_FIELD(scale); WRITE_FIELD(intensity); WRITE_FIELD(speed); WRITE_FIELD(lifetime);
+    WRITE_FIELD(timeScale);
     WRITE_FIELD(spread); WRITE_FIELD(turbulence); WRITE_FIELD(swirl); WRITE_FIELD(gravity);
     WRITE_FIELD(drag); WRITE_FIELD(smokeAmount); WRITE_FIELD(emberAmount);
     WRITE_FIELD(burstInterval); WRITE_FIELD(burstCount); WRITE_FIELD(restitution);
@@ -183,6 +186,7 @@ SectorParticleSettings ReadSectorParticleSettings(const nlohmann::ordered_json& 
     s.dimensions = vector("dimensions", s.dimensions); s.drift = vector("drift", s.drift);
 #define READ_FIELD(name) s.name = j.value(#name, s.name)
     READ_FIELD(scale); READ_FIELD(intensity); READ_FIELD(speed); READ_FIELD(lifetime);
+    READ_FIELD(timeScale);
     READ_FIELD(spread); READ_FIELD(turbulence); READ_FIELD(swirl); READ_FIELD(gravity);
     READ_FIELD(drag); READ_FIELD(smokeAmount); READ_FIELD(emberAmount);
     READ_FIELD(burstInterval); READ_FIELD(burstCount); READ_FIELD(restitution);

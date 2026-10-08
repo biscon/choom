@@ -92,7 +92,7 @@ bool DrawSectorEditorParticleEmitterInspector(engine::UIContext& ui, const engin
     WalkSectorParticleInspectorRows(source, state.advanced, state.textureAdvanced, !state.message.empty(), [&](SectorParticleInspectorRow row) {
         char id[64]; std::snprintf(id, sizeof(id), "particle_field_%d", static_cast<int>(row));
         float fieldY = y;
-        const auto label = [&](const char* value) { text(value, y, SectorParticleInspectorLabelHeight(rowHeight)); fieldY = y + SectorParticleInspectorLabelHeight(rowHeight) + gap; };
+        const auto label = [&](const char* value) { text(value, y, SectorParticleInspectorLabelHeight(rowHeight, row)); fieldY = y + SectorParticleInspectorLabelHeight(rowHeight, row) + gap; };
         const auto number = [&](const char* name, float& value, float lo, float hi, int decimals = 2) {
             label(name);
             auto& buffer = state.numbers[static_cast<size_t>(row - ParticleInspectorPositionX)];
@@ -168,7 +168,8 @@ bool DrawSectorEditorParticleEmitterInspector(engine::UIContext& ui, const engin
             case ParticleInspectorPitch: number("Pitch (90 = up)",e.pitchDegrees,-90,90); break;
             case ParticleInspectorScale: number("Scale",e.settings.scale,0.01f,100); break;
             case ParticleInspectorIntensity: number("Intensity",e.settings.intensity,0,100); break;
-            case ParticleInspectorSpeed: number("Speed / jet strength",e.settings.speed,0,100); break;
+            case ParticleInspectorTimeScale: number("Playback speed",e.settings.timeScale,0,4); break;
+            case ParticleInspectorSpeed: number("Initial speed / jet strength",e.settings.speed,0,100); break;
             case ParticleInspectorLifetime: number("Lifetime multiplier",e.settings.lifetime,0.01f,20); break;
             case ParticleInspectorSpread: number("Spread",e.settings.spread,0,10); break;
             case ParticleInspectorTintR: case ParticleInspectorTintG: case ParticleInspectorTintB: case ParticleInspectorTintA: {

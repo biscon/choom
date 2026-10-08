@@ -23,6 +23,7 @@ struct SectorParticleSettings {
     float intensity = 1;
     Color tint = WHITE;
     float speed = 1;
+    float timeScale = 1;
     float lifetime = 1;
     float spread = 0.3f;
     engine::ParticleShape shape = engine::ParticleShape::Disc;

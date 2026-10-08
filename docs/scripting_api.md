@@ -554,6 +554,16 @@ smoke and ember amounts. The isolated preview has pause, restart, burst, orbit,
 and zoom controls and a simple collision floor. It deliberately previews enabled
 emission even when **Enabled at start** is unchecked.
 
+**Playback speed** controls the entire emitter (0–4, default 1). At 0.5 the
+effect takes twice as long: movement, swirl, sprite rotation, turbulence,
+emission, aging/fading, and flipbook animation all slow together, preserving
+travel distance and usual density within simulation tolerances. **Initial speed
+/ jet strength** only changes launch velocity. Zero freezes live particles and
+holds triggered bursts until playback resumes; disabling still cancels bursts.
+Prewarming uses simulation seconds, keeping the initial fullness independent
+of playback speed. Editing settings restarts the isolated preview as usual.
+Playback speed is saved with the placement and custom presets; older data uses 1.
+
 Advanced settings cover point/disc/box sources, drift, turbulence, gravity,
 drag, emission mode, static-world collision, distance, and texture overrides.
 Disc orientation follows emission direction; box dimensions use world axes.

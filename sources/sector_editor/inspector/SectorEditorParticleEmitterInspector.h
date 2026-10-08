@@ -16,7 +16,7 @@ struct ParticleEmitterEditingUiState {
     char name[64]{};
     char presetName[64]{};
     std::array<std::array<char, 512>, 4> texturePaths{};
-    std::array<engine::UIFloatInputState, 48> numbers{};
+    std::array<engine::UIFloatInputState, ParticleInspectorFps - ParticleInspectorPositionX + 1> numbers{};
     std::vector<SectorParticleSettings> presets;
     std::vector<std::string> presetNames;
     std::string message;

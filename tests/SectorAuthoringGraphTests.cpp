@@ -16505,7 +16505,14 @@ void TestParticleEmitterAuthoringAndEditing()
             "outside-sector movement rejects without changing source or cache");
     auto candidate = *editing.Selected(); candidate.settings = game::MakeSectorParticlePreset(game::SectorParticlePreset::MistSwirl);
     candidate.referenceId = "room_mist"; candidate.heightWorld = 0.25f;
+    candidate.settings.timeScale = 0.5f;
+    const auto beforePlaybackEdit = state.topologyRenderRevision;
     Check(editing.Apply(candidate), "particle inspector settings commit");
+    Check(state.topologyRenderRevision > beforePlaybackEdit && !state.topologyRenderCache.valid
+            && document.lifecycle.hasUnsavedChanges,
+            "particle playback edit invalidates cache and dirties document");
+    Check(document.map.topologyMap.particleEmitters[0].settings.timeScale == 0.5f,
+            "particle playback speed reaches derived runtime settings");
     Check(editing.DuplicateSelected() && graph.particleEmitters.size() == 2,
             "particle duplicates with stable fresh identities");
     Check(graph.particleEmitters[0].referenceId != graph.particleEmitters[1].referenceId,
@@ -16523,6 +16530,8 @@ void TestParticleEmitterAuthoringAndEditing()
             && game::LoadSectorAuthoringDocumentFromJsonString(json,loaded,&error), "particle level round trip");
     Check(loaded.graph.particleEmitters.size() == 2
             && loaded.graph.particleEmitters[0].settings.preset == game::SectorParticlePreset::MistSwirl
+            && loaded.graph.particleEmitters[0].settings.timeScale == 0.5f
+            && loaded.graph.particleEmitters[1].settings.timeScale == 0.5f
             && loaded.graph.particleEmitters[0].heightWorld == 0.25f,
             "particle snapshot and transform persist");
     auto invalid = graph; invalid.particleEmitters[1].referenceId = invalid.particleEmitters[0].referenceId;

@@ -28,6 +28,8 @@ struct ParticleLayer {
 };
 
 struct ParticleEmitterDefinition {
+    // Playback rate for the whole effect; zero freezes simulation.
+    float timeScale = 1.0f;
     Vector3 position{};
     Vector3 direction{0, 1, 0};
     Vector3 dimensions{0.2f, 0.2f, 0.2f};
@@ -49,6 +51,7 @@ struct ParticleEmitterDefinition {
 
 struct ParticleEmitterState {
     ParticleEmitterDefinition definition;
+    float time = 0.0f;
     bool enabled = true;
     float intensity = 1.0f;
     std::array<float, 3> emissionRemainders{};
