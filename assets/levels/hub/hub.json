@@ -14189,7 +14189,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -14317,7 +14317,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "dc0e37b1d9f308d8",
+    "sourceHash": "3e7db0b920af14bb",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -14325,19 +14325,19 @@
         0.0
       ],
       "rgbMax": [
-        1.666015625,
-        1.666015625,
-        1.666015625
+        1.587890625,
+        1.564453125,
+        1.564453125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 12582912,
-      "rgbChannelsAboveOne": 1034
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 179
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "dc0e37b1d9f308d8",
+      "sourceHash": "3e7db0b920af14bb",
       "count": 3946,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -14350,36 +14350,24 @@
           0.04647058993577957
         ],
         "rgbMax": [
-          2.153351306915283,
-          1.9732475280761719,
-          1.8862031698226929
+          2.150747299194336,
+          1.9708508253097534,
+          1.8839268684387207
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23676,
-        "rgbChannelsAboveOne": 22
+        "rgbChannelsAboveOne": 23
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "dc0e37b1d9f308d8",
+      "sourceHash": "3e7db0b920af14bb",
       "modelCount": 141,
       "objectCount": 399,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      },
-      {
-        "path": "assets/levels/hub/hub.lightmap.2.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "editorSettings": {
     "gridSize": 1

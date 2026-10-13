@@ -3929,10 +3929,10 @@
       "id": 269,
       "kind": "dynamic_model",
       "dynamicModel": {
-        "instanceId": "electrical3",
+        "instanceId": "electrical4",
         "useTitle": "Examine",
         "useDistance": 2.0,
-        "onUseScript": "useElectrical2",
+        "onUseScript": "useElectrical4",
         "modelPath": "assets/models/electric_box_31.glb",
         "collision": true,
         "loop": false,
@@ -3949,10 +3949,10 @@
       "id": 270,
       "kind": "dynamic_model",
       "dynamicModel": {
-        "instanceId": "lever_3",
+        "instanceId": "lever_4",
         "useTitle": "Lever",
         "useDistance": 2.0,
-        "onUseScript": "useLever2",
+        "onUseScript": "useLever4",
         "modelPath": "assets/models/dynamic/lever_power_switch_1.glb",
         "heightOffsetWorld": 1.4600000381469727,
         "loop": false,
@@ -5488,6 +5488,117 @@
         30.0
       ],
       "yawDegrees": 70.0
+    },
+    {
+      "id": 375,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "electrical3",
+        "useTitle": "Examine",
+        "useDistance": 2.0,
+        "onUseScript": "useElectrical3",
+        "modelPath": "assets/models/electric_box_31.glb",
+        "collision": true,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        464.0,
+        0.0,
+        55.91999816894531
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 376,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_376",
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationZDegrees": 90.0,
+        "heightOffsetWorld": 2.015000104904175,
+        "scale": 2.0,
+        "castsShadow": false
+      },
+      "position": [
+        464.0,
+        0.0,
+        55.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 377,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "lever_3",
+        "useTitle": "Lever",
+        "useDistance": 2.0,
+        "onUseScript": "useLever3",
+        "modelPath": "assets/models/dynamic/lever_power_switch_1.glb",
+        "heightOffsetWorld": 1.4600000381469727,
+        "loop": false,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        455.0,
+        0.0,
+        55.91999816894531
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 378,
+      "kind": "door",
+      "door": {
+        "instanceId": "exit_door",
+        "anchor": {
+          "lineDefId": 191,
+          "frontSectorId": 27,
+          "backSectorId": 37,
+          "frontSideDefId": 237,
+          "backSideDefId": 240,
+          "endpointA": [
+            9872,
+            128
+          ],
+          "endpointB": [
+            9712,
+            128
+          ]
+        },
+        "canOpenScript": "canOpenExitDoor",
+        "width": 1.25,
+        "height": 2.9375,
+        "normalOffset": 0.125,
+        "visual": "model",
+        "modelAssetId": "security_reinforced",
+        "modelFit": "fit_width",
+        "motion": "swing",
+        "openDistance": 2.9375
+      },
+      "position": [
+        612.0,
+        9.5,
+        8.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 379,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "exit_sign",
+        "modelPath": "assets/models/subway/Exit_Sign_Wall.gltf",
+        "heightOffsetWorld": 1.625,
+        "castsShadow": false
+      },
+      "position": [
+        600.0,
+        9.0,
+        7.760000228881836
+      ],
+      "yawDegrees": 180.0
     }
   ],
   "staticLights": [
@@ -7429,6 +7540,47 @@
           }
         }
       }
+    },
+    {
+      "id": 25,
+      "instanceId": "light_point_25",
+      "position": [
+        463.9741516113281,
+        16.165987014770508,
+        54.634246826171875
+      ],
+      "radius": 48.0,
+      "intensity": 0.75,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 241,
+        "a": 255
+      },
+      "castsShadow": true,
+      "shadowStrength": 0.8999999761581421,
+      "shadowSoftness": 2.0,
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.75,
+            "centerOffsetWorld": [
+              -0.000301361083984375,
+              -0.007976770401000977,
+              0.16428184509277344
+            ],
+            "brightness": 0.09000000357627869,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 241,
+              "a": 255
+            }
+          }
+        }
+      }
     }
   ],
   "dynamicSpotLights": [
@@ -7720,6 +7872,14 @@
   },
   "audio": {
     "sounds": {
+      "electrical_current": {
+        "path": "sfx/electrical_current.mp3",
+        "type": "sound"
+      },
+      "electrical_hum": {
+        "path": "sfx/electrical_hum_loop.ogg",
+        "type": "sound"
+      },
       "fire_crackle": {
         "path": "ambience/fire_crackle.ogg",
         "type": "music"
@@ -7752,7 +7912,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "f31d14fa11d5af3f",
+    "sourceHash": "9155cf956bf855bb",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -7772,8 +7932,8 @@
     "objectProbes": {
       "path": "assets/levels/intro/intro.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "f31d14fa11d5af3f",
-      "count": 4070,
+      "sourceHash": "9155cf956bf855bb",
+      "count": 4072,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -7791,16 +7951,16 @@
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 24420,
+        "sampleCount": 24432,
         "rgbChannelsAboveOne": 12
       }
     },
     "staticModels": {
       "path": "assets/levels/intro/intro.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "f31d14fa11d5af3f",
+      "sourceHash": "9155cf956bf855bb",
       "modelCount": 87,
-      "objectCount": 352,
+      "objectCount": 354,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -8583,6 +8743,26 @@
         "id": 165,
         "x": 5888,
         "y": 256
+      },
+      {
+        "id": 166,
+        "x": 9712,
+        "y": 128
+      },
+      {
+        "id": 167,
+        "x": 9712,
+        "y": 160
+      },
+      {
+        "id": 168,
+        "x": 9872,
+        "y": 160
+      },
+      {
+        "id": 169,
+        "x": 9872,
+        "y": 128
       }
     ],
     "lines": [
@@ -9302,11 +9482,6 @@
         "endVertexId": 123
       },
       {
-        "id": 238,
-        "startVertexId": 131,
-        "endVertexId": 134
-      },
-      {
         "id": 240,
         "startVertexId": 133,
         "endVertexId": 134
@@ -9520,6 +9695,36 @@
         "id": 298,
         "startVertexId": 164,
         "endVertexId": 165
+      },
+      {
+        "id": 300,
+        "startVertexId": 166,
+        "endVertexId": 134
+      },
+      {
+        "id": 301,
+        "startVertexId": 166,
+        "endVertexId": 167
+      },
+      {
+        "id": 302,
+        "startVertexId": 167,
+        "endVertexId": 168
+      },
+      {
+        "id": 303,
+        "startVertexId": 131,
+        "endVertexId": 169
+      },
+      {
+        "id": 304,
+        "startVertexId": 169,
+        "endVertexId": 166
+      },
+      {
+        "id": 305,
+        "startVertexId": 168,
+        "endVertexId": 169
       }
     ],
     "lineSides": [
@@ -16582,51 +16787,6 @@
         }
       },
       {
-        "lineId": 238,
-        "side": "front",
-        "wall": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              2.5,
-              -3.1875
-            ]
-          },
-          "materialId": "tunnel_wall_concrete"
-        },
-        "lower": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "baseboard": {
-          "enabled": true,
-          "materialId": "baseboard_metal"
-        }
-      },
-      {
         "lineId": 240,
         "side": "front",
         "wall": {
@@ -18735,6 +18895,265 @@
             ]
           }
         }
+      },
+      {
+        "lineId": 300,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              2.5,
+              -3.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 301,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.75
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 302,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.75
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 303,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              2.5,
+              -3.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "baseboard": {
+          "enabled": true,
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 304,
+        "side": "front",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              2.5,
+              -3.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "worn_gray_metal_step_512"
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.625,
+              -3.1875
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "baseboard": {
+          "materialId": "baseboard_metal"
+        }
+      },
+      {
+        "lineId": 305,
+        "side": "back",
+        "wall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "materialId": "tunnel_wall_concrete"
+        },
+        "lower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
       }
     ],
     "faceAnchors": [
@@ -18812,7 +19231,12 @@
           "materialId": "brick_repair_512"
         },
         "floorMaterialId": "metal_plate",
-        "ceilingMaterialId": "tunnel_concrete_ceiling"
+        "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "footstepSet": "LowMetal_Mono",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "room_tone_1"
+        }
       },
       {
         "id": 2,
@@ -18889,6 +19313,10 @@
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
         "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "room_tone_1"
+        },
         "ceilingDecal": {
           "materialId": "concrete_decal_old_repair",
           "uv": {
@@ -19056,7 +19484,8 @@
           }
         },
         "floorMaterialId": "metal_plate",
-        "ceilingMaterialId": "tunnel_concrete_ceiling"
+        "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 5,
@@ -19202,7 +19631,8 @@
           }
         },
         "floorMaterialId": "metal_plate",
-        "ceilingMaterialId": "tunnel_concrete_ceiling"
+        "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 7,
@@ -19422,7 +19852,12 @@
           }
         },
         "floorMaterialId": "metal_plate",
-        "ceilingMaterialId": "tunnel_concrete_ceiling"
+        "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "footstepSet": "LowMetal_Mono",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "room_tone_1"
+        }
       },
       {
         "id": 10,
@@ -20572,7 +21007,8 @@
           }
         },
         "floorMaterialId": "hub_mud_gravel_512",
-        "ceilingMaterialId": "tunnel_concrete_ceiling"
+        "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "footstepSet": "DirtRoad_Mono"
       },
       {
         "id": 26,
@@ -20717,7 +21153,8 @@
           }
         },
         "floorMaterialId": "large_industrial_tiles_dirty",
-        "ceilingMaterialId": "tunnel_concrete_ceiling"
+        "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "footstepSet": "Tile_Reverb"
       },
       {
         "id": 28,
@@ -21162,7 +21599,8 @@
           }
         },
         "floorMaterialId": "metal_plate",
-        "ceilingMaterialId": "tunnel_concrete_ceiling"
+        "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 35,
@@ -21235,7 +21673,8 @@
           }
         },
         "floorMaterialId": "metal_plate",
-        "ceilingMaterialId": "tunnel_concrete_ceiling"
+        "ceilingMaterialId": "tunnel_concrete_ceiling",
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 36,
@@ -21309,6 +21748,79 @@
         },
         "floorMaterialId": "worn_steel_512",
         "ceilingMaterialId": "worn_steel_512"
+      },
+      {
+        "id": 37,
+        "name": "Sector 35",
+        "x": 9731,
+        "y": 142,
+        "floorZ": 9.5,
+        "ceilingZ": 29.5,
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.07500000298023224,
+        "defaultWall": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "floorMaterialId": "worn_gray_metal_step_512",
+        "ceilingMaterialId": "tunnel_concrete_ceiling"
       }
     ],
     "fogVolumes": [
@@ -21822,6 +22334,338 @@
             }
           ]
         }
+      },
+      {
+        "editorId": 4,
+        "id": "sparks_3",
+        "x": 7424,
+        "z": 860,
+        "heightWorld": 1.2999999523162842,
+        "yawDegrees": 180.0,
+        "pitchDegrees": 45.0,
+        "settings": {
+          "preset": 5,
+          "presetName": "Electric Sparks Box",
+          "tint": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "shape": 0,
+          "emission": 1,
+          "collision": 2,
+          "dimensions": [
+            0.4000000059604645,
+            0.10000000149011612,
+            0.4000000059604645
+          ],
+          "drift": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.6000000238418579,
+          "intensity": 1.0,
+          "speed": 0.75,
+          "lifetime": 1.25,
+          "timeScale": 1.0,
+          "spread": 0.800000011920929,
+          "turbulence": 0.5,
+          "swirl": 0.0,
+          "gravity": -5.0,
+          "drag": 0.10000000149011612,
+          "smokeAmount": 0.5,
+          "emberAmount": 0.30000001192092896,
+          "burstInterval": 1.75,
+          "burstCount": 20.0,
+          "restitution": 0.3499999940395355,
+          "maxDistance": 50.0,
+          "seed": 1,
+          "textures": [
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            }
+          ]
+        }
+      },
+      {
+        "editorId": 5,
+        "id": "sparks_1",
+        "x": 120,
+        "z": -1248,
+        "heightWorld": 1.2999999523162842,
+        "yawDegrees": 0.0,
+        "pitchDegrees": 45.0,
+        "settings": {
+          "preset": 5,
+          "presetName": "Electric Sparks Box",
+          "tint": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "shape": 0,
+          "emission": 1,
+          "collision": 2,
+          "dimensions": [
+            0.4000000059604645,
+            0.10000000149011612,
+            0.4000000059604645
+          ],
+          "drift": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.6000000238418579,
+          "intensity": 1.0,
+          "speed": 0.75,
+          "lifetime": 1.25,
+          "timeScale": 1.0,
+          "spread": 0.800000011920929,
+          "turbulence": 0.5,
+          "swirl": 0.0,
+          "gravity": -5.0,
+          "drag": 0.10000000149011612,
+          "smokeAmount": 0.5,
+          "emberAmount": 0.30000001192092896,
+          "burstInterval": 1.75,
+          "burstCount": 20.0,
+          "restitution": 0.3499999940395355,
+          "maxDistance": 50.0,
+          "seed": 1,
+          "textures": [
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            }
+          ]
+        }
+      },
+      {
+        "editorId": 6,
+        "id": "sparks_2",
+        "x": 4108,
+        "z": -376,
+        "heightWorld": 1.2999999523162842,
+        "yawDegrees": 180.0,
+        "pitchDegrees": 45.0,
+        "settings": {
+          "preset": 5,
+          "presetName": "Electric Sparks Box",
+          "tint": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "shape": 0,
+          "emission": 1,
+          "collision": 2,
+          "dimensions": [
+            0.4000000059604645,
+            0.10000000149011612,
+            0.4000000059604645
+          ],
+          "drift": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.6000000238418579,
+          "intensity": 1.0,
+          "speed": 0.75,
+          "lifetime": 1.25,
+          "timeScale": 1.0,
+          "spread": 0.800000011920929,
+          "turbulence": 0.5,
+          "swirl": 0.0,
+          "gravity": -5.0,
+          "drag": 0.10000000149011612,
+          "smokeAmount": 0.5,
+          "emberAmount": 0.30000001192092896,
+          "burstInterval": 1.75,
+          "burstCount": 20.0,
+          "restitution": 0.3499999940395355,
+          "maxDistance": 50.0,
+          "seed": 1,
+          "textures": [
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            }
+          ]
+        }
+      },
+      {
+        "editorId": 7,
+        "id": "sparks_4",
+        "x": 10384,
+        "z": 96,
+        "heightWorld": 1.2999999523162842,
+        "yawDegrees": 180.0,
+        "pitchDegrees": 45.0,
+        "settings": {
+          "preset": 5,
+          "presetName": "Electric Sparks Box",
+          "tint": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "shape": 0,
+          "emission": 1,
+          "collision": 2,
+          "dimensions": [
+            0.4000000059604645,
+            0.10000000149011612,
+            0.4000000059604645
+          ],
+          "drift": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.6000000238418579,
+          "intensity": 1.0,
+          "speed": 0.75,
+          "lifetime": 1.25,
+          "timeScale": 1.0,
+          "spread": 0.800000011920929,
+          "turbulence": 0.5,
+          "swirl": 0.0,
+          "gravity": -5.0,
+          "drag": 0.10000000149011612,
+          "smokeAmount": 0.5,
+          "emberAmount": 0.30000001192092896,
+          "burstInterval": 1.75,
+          "burstCount": 20.0,
+          "restitution": 0.3499999940395355,
+          "maxDistance": 50.0,
+          "seed": 1,
+          "textures": [
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            },
+            {
+              "path": "",
+              "columns": 1,
+              "rows": 1,
+              "frames": 1,
+              "fps": 12.0,
+              "randomStart": true
+            }
+          ]
+        }
       }
     ],
     "soundEmitters": [
@@ -21832,6 +22676,46 @@
         "y": 16.0,
         "z": 512,
         "soundId": "fire_crackle",
+        "loop": true
+      },
+      {
+        "editorId": 2,
+        "id": "sound_emitter_2",
+        "x": 128,
+        "y": 15.0,
+        "z": -1264,
+        "soundId": "electrical_hum",
+        "volume": 0.25,
+        "loop": true
+      },
+      {
+        "editorId": 3,
+        "id": "sound_emitter_3",
+        "x": 4112,
+        "y": 30.0,
+        "z": -368,
+        "soundId": "electrical_hum",
+        "volume": 0.25,
+        "loop": true
+      },
+      {
+        "editorId": 4,
+        "id": "sound_emitter_4",
+        "x": 7424,
+        "y": 15.0,
+        "z": 864,
+        "soundId": "electrical_hum",
+        "volume": 0.25,
+        "loop": true
+      },
+      {
+        "editorId": 5,
+        "id": "sound_emitter_5",
+        "x": 10368,
+        "y": 24.0,
+        "z": 96,
+        "soundId": "electrical_hum",
+        "volume": 0.25,
         "loop": true
       }
     ],
@@ -21859,6 +22743,30 @@
           }
         ],
         "script": "introTrigger1"
+      },
+      {
+        "editorId": 2,
+        "id": "flashlight_hint_trigger",
+        "shape": "rectangle",
+        "points": [
+          {
+            "x": 5504,
+            "z": -1152
+          },
+          {
+            "x": 5632,
+            "z": -1152
+          },
+          {
+            "x": 5632,
+            "z": -640
+          },
+          {
+            "x": 5504,
+            "z": -640
+          }
+        ],
+        "script": "flashlightHintTrigger"
       }
     ],
     "structuralPrimitives": [
