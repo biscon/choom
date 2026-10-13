@@ -59,7 +59,7 @@ end
 function exitLevel()
     assert(enableControls(false))
     fadeOut(1000)
-    text("After walking through the dark tunnels for a while, you finally spot the last panel.", CENTER)
+    text("After walking through the dark tunnels for a while, I finally spot the last panel.", CENTER)
     delay(4000)
     -- assert(enableControls(true))
     changeMap("hub")
