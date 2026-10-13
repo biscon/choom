@@ -1,0 +1,25 @@
+{
+    "choiceSets": [
+        {
+            "id": "draymond_intro_topics",
+            "options": [
+                {
+                    "id": "greeting",
+                    "text": "How are you holding up old man?."
+                },
+                {
+                    "id": "snitching",
+                    "text": "Have you seen anyone fuck around with the electrical panels?."
+                },
+                {
+                    "id": "xmas",
+                    "text": "What are you up to this Christmas?."
+                },
+                {
+                    "id": "goodbye",
+                    "text": "Goodbye."
+                }
+            ]
+        }
+    ]
+}

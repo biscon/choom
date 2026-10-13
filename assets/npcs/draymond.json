@@ -3,9 +3,9 @@
   "id": "draymond",
   "name": "Draymond",
   "speechColor": [
-    75,
-    45,
-    35
+    85,
+    200,
+    50
   ],
   "modelPath": "assets/models/characters/Draymond.glb",
   "headLook": {

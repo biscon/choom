@@ -5478,6 +5478,7 @@
       "kind": "npc",
       "npc": {
         "definitionId": "draymond",
+        "onUseScript": "useDraymond",
         "instanceId": "draymond",
         "scale": 1.0750000476837158,
         "shadowMode": "dynamic"
