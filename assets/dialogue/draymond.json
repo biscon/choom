@@ -5,19 +5,19 @@
             "options": [
                 {
                     "id": "greeting",
-                    "text": "How are you holding up old man?."
+                    "text": "How you holding up, old man?"
                 },
                 {
                     "id": "snitching",
-                    "text": "Have you seen anyone fuck around with the electrical panels?."
+                    "text": "You seen anyone fucking around with the electrical panels?"
                 },
                 {
                     "id": "xmas",
-                    "text": "What are you up to this Christmas?."
+                    "text": "What are you doing for Christmas?"
                 },
                 {
                     "id": "goodbye",
-                    "text": "Goodbye."
+                    "text": "Catch you later, Dray."
                 }
             ]
         }

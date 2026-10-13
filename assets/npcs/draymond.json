@@ -10,7 +10,8 @@
   "modelPath": "assets/models/characters/Draymond.glb",
   "headLook": {
     "enabled": true,
-    "boneName": "mixamorig:Neck"
+    "boneName": "mixamorig:Neck",
+    "maxYawDegrees": 45.0
   },
   "actions": {
     "idle": {
