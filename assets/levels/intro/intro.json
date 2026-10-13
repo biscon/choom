@@ -7892,6 +7892,10 @@
         "path": "sfx/lever_up.wav",
         "type": "sound"
       },
+      "minimal_piano": {
+        "path": "music/minimal_piano.mp3",
+        "type": "music"
+      },
       "room_tone_1": {
         "path": "ambience/room-tone-1.mp3",
         "type": "music"

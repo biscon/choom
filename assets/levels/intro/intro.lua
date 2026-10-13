@@ -16,6 +16,7 @@ end
 
 function introCutscene1()
     teleportPlayer("default")
+    playMapMusic("minimal_piano", false, 0.45)
     assert(startCutscene())
     delay(1000)
     text("Christmas Eve. Four electrical faults on a line that's supposed to be dead", BOTTOM)
@@ -48,15 +49,20 @@ end
 function canOpenExitDoor()
     local canOpen = flag("intro_examined_electrical1") and flag("intro_examined_electrical2") and flag("intro_examined_electrical3") and flag("intro_examined_electrical4")
     if canOpen then
-        fadeOut(1000)
-        delay(1000)
-        text("After walking through the dark tunnels for a while, you finally spot the last panel.", CENTER)
-        delay(4000)
-        changeMap("hub")
+        startScript("exitLevel")
         return false
     end
     startText("I cannot leave before I have checked all the electrical panels.", CENTER)
     return false
+end
+
+function exitLevel()
+    assert(enableControls(false))
+    fadeOut(1000)
+    text("After walking through the dark tunnels for a while, you finally spot the last panel.", CENTER)
+    delay(4000)
+    -- assert(enableControls(true))
+    changeMap("hub")
 end
 
 
@@ -171,7 +177,7 @@ function useElectrical2()
         playMapSound("electrical_current", 0.45)
         delay(4000)
         fadeIn(1000)
-        startText("This ones seems to be drawing an unusual amount of power. I should check the next.", BOTTOM)
+        startText("Nothing out of the ordinary, let's move on.", BOTTOM)
         setFlag("intro_examined_electrical2", true)
         assert(enableControls(true))
     end
