@@ -61,14 +61,15 @@ void BeginLoadDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library
     }
     const auto catalog = ReadDialogueVoiceCatalog(assetsRoot);
     library.voices.reserve(catalog.size());
-    library.pending.reserve(catalog.size() * DialogueMoodCount * DialogueVowelCount);
+    library.pending.reserve(catalog.size() * DialogueMoodCount * (DialogueVowelCount + DialogueConsonantCount));
     for (const auto& entry : catalog) {
         try {
             const auto manifest = ReadJson(entry.manifest);
             DialogueVoice voice;
             voice.id = entry.id;
+            voice.continuousPitch = manifest.value("continuous_pitch", false);
             std::vector<DialogueSourceRequest> pending;
-            pending.reserve(DialogueMoodCount * DialogueVowelCount);
+            pending.reserve(DialogueMoodCount * (DialogueVowelCount + DialogueConsonantCount));
             for (size_t m = 0; m < DialogueMoodCount; ++m) {
                 const auto mood = static_cast<DialogueMood>(m);
                 const auto* name = DialogueMoodName(mood);
@@ -79,6 +80,16 @@ void BeginLoadDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library
                 for (size_t v = 0; v < DialogueVowelCount; ++v) {
                     const auto* vowel = DialogueVowelName(static_cast<DialogueVowel>(v));
                     if (bank.contains(vowel)) pending.push_back({ChildPath(entry.manifest.parent_path(), bank.at(vowel).get<std::string>()), library.voices.size(), mood, static_cast<uint32_t>(v)});
+                }
+                if (manifest.contains("consonants") && manifest.at("consonants").contains(name)) {
+                    const auto& consonants = manifest.at("consonants").at(name);
+                    if (!consonants.is_object()) throw std::runtime_error("Expected consonant-keyed bank");
+                    for (size_t c = 0; c < DialogueConsonantCount; ++c) {
+                        const auto* consonant = DialogueConsonantName(static_cast<DialogueConsonant>(c));
+                        if (consonants.contains(consonant)) pending.push_back({
+                            ChildPath(entry.manifest.parent_path(), consonants.at(consonant).get<std::string>()),
+                            library.voices.size(), mood, static_cast<uint32_t>(DialogueVowelCount+c)});
+                    }
                 }
                 if (manifest.contains("prosody") && manifest.at("prosody").contains(name)) {
                     const auto& p = manifest.at("prosody").at(name);
@@ -108,19 +119,25 @@ void PrepareDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library, 
             continue;
         }
         WaveFormat(&wave, 48000, 16, 1);
-        auto& bank = library.voices[request.voice].banks[static_cast<size_t>(request.mood)];
+        auto& voice = library.voices[request.voice];
+        auto& clip = request.source < DialogueVowelCount
+                ? voice.banks[static_cast<size_t>(request.mood)][request.source]
+                : voice.consonants[static_cast<size_t>(request.mood)][request.source-DialogueVowelCount];
         if (IsWaveValid(wave) && wave.sampleRate == 48000 && wave.sampleSize == 16 && wave.channels == 1) {
-            const std::string key = "dialogue:vowel:" + request.path.generic_string();
+            const std::string key = "dialogue:speech:" + request.path.generic_string();
             const SoundHandle sound = assets.CreateSoundFromPcm(library.scope, key.c_str(),
                     static_cast<const int16_t*>(wave.data), wave.frameCount, wave.sampleRate);
-            if (!IsNull(sound)) bank[request.source] = {sound, float(wave.frameCount) / wave.sampleRate, request.source};
+            if (!IsNull(sound)) clip = {sound, float(wave.frameCount) / wave.sampleRate, request.source};
         }
         UnloadWave(wave);
     }
     if (library.prepared == library.pending.size()) {
         // Completed preparation never runs again in normal gameplay.
-        for (auto& voice : library.voices) for (auto& bank : voice.banks) {
-            for (auto& clip : bank) if (assets.HasFailed(clip.sound)) clip = {};
+        for (auto& voice : library.voices) {
+            for (auto& bank : voice.banks)
+                for (auto& clip : bank) if (assets.HasFailed(clip.sound)) clip = {};
+            for (auto& bank : voice.consonants)
+                for (auto& clip : bank) if (assets.HasFailed(clip.sound)) clip = {};
         }
     }
 }
@@ -164,8 +181,10 @@ void UpdateDialoguePlayback(AssetManager& assets, AudioSystem& audio,
             continue;
         }
         slot.elapsed += dt;
-        auto mix = SoundPlaybackSettings{slot.cue.volume,
-                DialogueCuePitch(slot.cue, slot.cue.start + slot.elapsed), 0};
+        // A token change can replace the timeline. Releasing sounds retain
+        // their last pitch and never follow indices into the replacement line.
+        if (!slot.releasing) slot.pitch = DialogueTimelinePitch(timeline, slot.cue, playback.sequence.position + dt);
+        auto mix = SoundPlaybackSettings{slot.cue.volume, slot.pitch, 0};
         if (slot.releasing) {
             slot.releaseRemaining = std::max(0.0f, slot.releaseRemaining - std::min(dt, 0.02f));
             mix.volume *= slot.releaseRemaining / 0.04f;
@@ -174,18 +193,27 @@ void UpdateDialoguePlayback(AssetManager& assets, AudioSystem& audio,
         if (positional && !slot.releasing) audio.SetSoundPosition(slot.handle, position);
     }
     if (!active) return;
-    const auto* cue = AdvanceDialogueSequence(timeline, playback.sequence, dt);
-    if (!cue || !audible || IsNull(cue->sound)) return;
-    for (auto& slot : playback.slots) if (IsNull(slot.handle)) {
-        PositionalSoundSettings spatial;
-        spatial.position = position;
-        spatial.minimumDistanceWorld = 1;
-        spatial.maximumDistanceWorld = 25;
-        const SoundPlaybackSettings mix{cue->volume, DialogueCuePitch(*cue, cue->start), 0};
-        slot.cue = *cue;
-        slot.handle = positional ? audio.PlaySoundAt(assets, cue->sound, spatial, mix)
-                : audio.PlaySound(assets, cue->sound, mix);
-        break;
+    const DialogueCue* consonant = nullptr;
+    const auto* vowel = AdvanceDialogueSequence(timeline, playback.sequence, dt, false, &consonant);
+    if (!audible) return;
+    for (const auto* cue : {vowel, consonant}) {
+        if (!cue || IsNull(cue->sound)) continue;
+        const size_t first = IsDialogueConsonant(*cue) ? 4 : 0;
+        const size_t last = IsDialogueConsonant(*cue) ? playback.slots.size() : 4;
+        for (size_t i = first; i < last; ++i) {
+            auto& slot = playback.slots[i];
+            if (!IsNull(slot.handle)) continue;
+            PositionalSoundSettings spatial;
+            spatial.position = position;
+            spatial.minimumDistanceWorld = 1;
+            spatial.maximumDistanceWorld = 25;
+            slot.pitch = DialogueTimelinePitch(timeline, *cue, playback.sequence.position);
+            const SoundPlaybackSettings mix{cue->volume, slot.pitch, 0};
+            slot.cue = *cue;
+            slot.handle = positional ? audio.PlaySoundAt(assets, cue->sound, spatial, mix)
+                    : audio.PlaySound(assets, cue->sound, mix);
+            break;
+        }
     }
 }
 } // namespace engine

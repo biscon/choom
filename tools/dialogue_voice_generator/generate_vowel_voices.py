@@ -14,6 +14,7 @@ RATE = 48000
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = Path(__file__).with_name('vowel_profiles.json')
 VOWELS = ('ah', 'eh', 'ee', 'oh', 'oo', 'uh')
+CONSONANTS = ('t', 'd', 'k', 'p', 'b', 'g', 's', 'z', 'v', 'f', 'h', 'sh', 'th', 'ch', 'ks')
 MOODS = ('neutral', 'happy', 'angry', 'afraid', 'panicked', 'pained', 'relieved')
 
 
@@ -74,7 +75,7 @@ def irregular_curve(rng, frames, depth, min_ms, max_ms):
 
 
 @lru_cache(maxsize=64)
-def glottal_table(harmonics, tilt):
+def glottal_table(harmonics, tilt, opening=.60, closing=.16):
     """Band-limited differentiated glottal flow, opening slowly and closing fast.
 
     Project the asymmetric pulse onto a finite Fourier series, then tabulate it.
@@ -82,7 +83,6 @@ def glottal_table(harmonics, tilt):
     stop at 8 kHz, well below Nyquist even with authored pitch irregularity.
     """
     size = 1024
-    opening, closing = .60, .16
     pulse = []
     for n in range(size):
         phase = n / size
@@ -141,7 +141,7 @@ def remove_dc(samples):
     return [x-correction*w for x, w in zip(samples, window)]
 
 
-def synthesize_stems(config, identity, mood, vowel):
+def legacy_synthesize_stems(config, identity, mood, vowel):
     """Return envelope-shaped voiced/breath stems before final level normalization."""
     profile, emotion, formants = config['profiles'][identity], config['moods'][mood], config['vowels'][vowel]
     settings = config['synthesis']
@@ -199,6 +199,101 @@ def synthesize_stems(config, identity, mood, vowel):
     return voiced, breath, {'target_breath_to_voice_db': target,
                            'breath_to_voice_db': db(rms(breath)/rms(voiced)),
                            'relative_formant_band_rms_db': [db(x/band_rms[0]) for x in band_rms]}
+
+
+TEXTURE_PARAMETERS = dict(cycle_jitter_percent=.6, cycle_amplitude_percent=2,
+                  extra_tilt=.4, opening_range=[.57, .59], closing_range=[.20, .22],
+                  voiced_bandwidth_scale=1.25, air_bandwidth_scale=3,
+                  broadband_air_energy_fraction=.125, broadband_highpass_hz=600,
+                  broadband_lowpass_hz=6500, breath_boost_db=3, breath_ceiling_db=-12)
+
+
+def table_sample(table, phase):
+    position = phase * len(table)
+    lo = int(position)
+    return table[lo] + (table[(lo+1) % len(table)]-table[lo])*(position-lo)
+
+
+def synthesize_stems(config, identity, mood, vowel):
+    profile, emotion = config['profiles'][identity], config['moods'][mood]
+    formants, settings = config['vowels'][vowel], config['synthesis']
+    frames = round(settings['duration_ms']*RATE/1000)
+    warmup = round(.03*RATE)
+    total = frames+warmup
+    fundamental = profile['fundamental_hz']
+    harmonics = int(8000/fundamental)
+    tilt = profile['tilt']+emotion['tilt_offset']+TEXTURE_PARAMETERS['extra_tilt']
+    tables = [glottal_table(harmonics, tilt, opening, closing)
+              for opening, closing in zip(TEXTURE_PARAMETERS['opening_range'], TEXTURE_PARAMETERS['closing_range'])]
+    # A fixed neutral reference calibrates each vowel's resonances. Do not
+    # renormalize the experimental bands: that would undo softer upper harmonics.
+    reference_table = glottal_table(harmonics, profile['tilt'])
+    rng = seeded_rng(identity, mood, vowel, 'texture-cycle-v1')
+    noise_rng = seeded_rng(identity, mood, vowel, 'texture-air-v1')
+    slow_pitch = irregular_curve(seeded_rng(identity, mood, vowel, 'pitch'),
+                                     total, settings['jitter_percent']/100, 12, 35)
+    source, reference, noise = [], [], []
+    phase = reference_phase = 0.0
+    previous_shape = shape = rng.random()
+    previous_amplitude = amplitude = 1.0
+    period_scale = 1.0
+    for n in range(total):
+        phase += fundamental/RATE*(1+slow_pitch[n])*period_scale
+        if phase >= 1:
+            phase -= 1
+            previous_shape, shape = shape, rng.random()
+            previous_amplitude = amplitude
+            amplitude = 1+rng.uniform(-1, 1)*TEXTURE_PARAMETERS['cycle_amplitude_percent']/100
+            period_scale = 1+rng.uniform(-1, 1)*TEXTURE_PARAMETERS['cycle_jitter_percent']/100
+        blend = phase*phase*(3-2*phase)
+        morph = previous_shape+(shape-previous_shape)*blend
+        strength = previous_amplitude+(amplitude-previous_amplitude)*blend
+        low, high = (table_sample(table, phase) for table in tables)
+        source.append((low+(high-low)*morph)*strength)
+        reference_phase = (reference_phase+fundamental/RATE) % 1
+        reference.append(table_sample(reference_table, reference_phase))
+        noise.append(noise_rng.uniform(-1, 1)*(.85+.15*math.sin(math.pi*min(phase/.8, 1))**2))
+    noise = high_pass(noise, 150)
+    tone, air = [0.0]*frames, [0.0]*frames
+    band_levels = []
+    for band, (f, bw, gain) in enumerate(zip(formants['formants'], formants['bandwidths'], formants['gains_db'])):
+        f *= profile['formant_scale']
+        drift = irregular_curve(seeded_rng(identity, mood, vowel, f'formant{band}'),
+                                    total, settings['formant_drift_percent']/100, 20, 55)
+        calibration = resonator(reference, f, bw, [0.0]*total)[warmup:]
+        voiced_band = resonator(source, f, bw*TEXTURE_PARAMETERS['voiced_bandwidth_scale'], drift)[warmup:]
+        breath_band = resonator(noise, f, bw*TEXTURE_PARAMETERS['air_bandwidth_scale'], drift)[warmup:]
+        gain = 10**(gain/20)/max(rms(calibration), 1e-12)
+        band_levels.append(rms(voiced_band)*gain)
+        for n in range(frames):
+            tone[n] += voiced_band[n]*gain
+            air[n] += breath_band[n]*gain
+    broad = high_pass(noise, TEXTURE_PARAMETERS['broadband_highpass_hz'])
+    high = high_pass(broad, TEXTURE_PARAMETERS['broadband_lowpass_hz'])
+    broad = [x-y for x, y in zip(broad, high)][warmup:]
+    narrow_scale, broad_scale = 1/rms(air), 1/rms(broad)
+    fraction = TEXTURE_PARAMETERS['broadband_air_energy_fraction']
+    # Nominal energy weights before mixing; branches are correlated, so measure
+    # and normalize the final breath stem below instead of assuming independence.
+    air = [a*narrow_scale*math.sqrt(1-fraction)+b*broad_scale*math.sqrt(fraction)
+           for a, b in zip(air, broad)]
+    attack = round(emotion['attack_ms']*RATE/1000)
+    release = round(settings['release_ms']*RATE/1000)
+    for n in range(frames):
+        envelope = 1.0
+        if n < attack:
+            envelope = .5-.5*math.cos(math.pi*n/attack)
+        if n >= frames-release:
+            envelope *= .5-.5*math.cos(math.pi*(frames-1-n)/release)
+        tone[n] *= envelope
+        air[n] *= envelope*(1+.7*(1-envelope))
+    tone, air = remove_dc(tone), remove_dc(air)
+    target = min(TEXTURE_PARAMETERS['breath_ceiling_db'], profile['breath_to_voice_db']
+                 +emotion['breath_offset_db']+TEXTURE_PARAMETERS['breath_boost_db'])
+    scale = rms(tone)*10**(target/20)/rms(air)
+    air = [x*scale for x in air]
+    return tone, air, dict(target_breath_to_voice_db=target,
+                          relative_formant_band_rms_db=[db(x/band_levels[0]) for x in band_levels])
 
 
 def control_crest(voiced, breath, target_ratio):
@@ -283,12 +378,64 @@ def synthesize(config, identity, mood, vowel):
     return synthesize_with_report(config, identity, mood, vowel)[0]
 
 
+CONSONANT_PARAMETERS = dict(hard_relative_rms=.18, noise_relative_rms=.25,
+                  emphasis_gain=1.6, hard_duration_ms=24, noise_duration_ms=50,
+                  hard_attack_ms=2.5, noise_attack_ms=8, noise_release_ms=15)
+
+
+def filtered_noise(noise, low, high):
+    signal = high_pass(noise, low)
+    upper = high_pass(signal, high)
+    return [x-y for x, y in zip(signal, upper)]
+
+
+def synthesize_consonant(sound, identity, mood, word, position, vowel_rms, emphasized):
+    if sound in ('ch', 'ks'):
+        hard, soft = ('t', 'sh') if sound == 'ch' else ('k', 's')
+        first = synthesize_consonant(hard, identity, mood, word, position, vowel_rms, emphasized)
+        second = synthesize_consonant(soft, identity, mood, word, position, vowel_rms, emphasized)
+        offset = round(.008*RATE)
+        result = [0.0]*max(len(first), offset+len(second))
+        for n, x in enumerate(first):
+            result[n] += x
+        for n, x in enumerate(second):
+            result[offset+n] += x
+        return result
+    hard = sound in 'tdkpbg'
+    frames = round(CONSONANT_PARAMETERS['hard_duration_ms' if hard else 'noise_duration_ms']*RATE/1000)
+    warmup = round(.02*RATE)
+    rng = seeded_rng(identity, mood, word.lower(), f'consonant-v1/{position}/{sound}')
+    noise = [rng.uniform(-1, 1) for _ in range(frames+warmup)]
+    bands = {'p': (180, 1200), 'b': (150, 1000), 'k': (700, 3500), 'g': (500, 2800),
+             't': (1800, 6500), 'd': (1000, 4500), 's': (2500, 8500), 'z': (1800, 6500),
+             'sh': (1200, 5000), 'f': (700, 6500), 'v': (400, 4200),
+             'th': (1000, 6500), 'h': (300, 4000)}
+    samples = filtered_noise(noise, *bands[sound])[warmup:]
+    attack = round(CONSONANT_PARAMETERS['hard_attack_ms' if hard else 'noise_attack_ms']*RATE/1000)
+    release = round((CONSONANT_PARAMETERS['hard_duration_ms']-CONSONANT_PARAMETERS['hard_attack_ms']
+                     if hard else CONSONANT_PARAMETERS['noise_release_ms'])*RATE/1000)
+    for n in range(frames):
+        envelope = 1.0
+        if n < attack:
+            envelope = .5-.5*math.cos(math.pi*n/attack)
+        if n >= frames-release:
+            envelope *= .5-.5*math.cos(math.pi*(frames-1-n)/release)
+        samples[n] *= envelope
+    samples = remove_dc(samples)
+    samples[0] = samples[-1] = 0.0
+    relative = CONSONANT_PARAMETERS['hard_relative_rms' if hard else 'noise_relative_rms']
+    gain = vowel_rms*relative*(CONSONANT_PARAMETERS['emphasis_gain'] if emphasized else 1)/rms(samples)
+    return [x*gain for x in samples]
+
+
 def generate(config, output):
     validate(config)
-    report = {'generator_version': 2, 'config_sha256': hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest(), 'assets': []}
+    report = {'generator_version': 3, 'config_sha256': hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest(),
+              'texture': TEXTURE_PARAMETERS, 'consonants': CONSONANT_PARAMETERS, 'assets': []}
     for identity, profile in config['profiles'].items():
         folder = output / identity
-        manifest = {'schema_version': 2, 'voice_identity_id': identity, 'display_name': profile['label'], 'moods': {}, 'prosody': {}}
+        manifest = {'schema_version': 2, 'voice_identity_id': identity, 'display_name': profile['label'],
+                    'continuous_pitch': True, 'moods': {}, 'consonants': {}, 'prosody': {}}
         for mood in MOODS:
             emotion = config['moods'][mood]
             manifest['moods'][mood] = {}
@@ -298,19 +445,39 @@ def generate(config, output):
                 prosody['wobble_hz'] = profile['wobble_hz']
                 prosody['wobble_semitones'] = max(profile['wobble_semitones'], prosody['wobble_semitones'])
             manifest['prosody'][mood] = prosody
+            levels = []
             for vowel in VOWELS:
                 relative = f'{mood}/{vowel}.wav'
                 path = folder / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 pcm, measurements = synthesize_with_report(config, identity, mood, vowel)
+                levels.append(10**(measurements['rms_dbfs']/20)*32768)
                 with wave.open(str(path), 'wb') as wav:
                     wav.setparams((1, 2, RATE, 0, 'NONE', 'not compressed'))
                     wav.writeframes(pcm)
                 manifest['moods'][mood][vowel] = relative
                 report['assets'].append({'path': f'{identity}/{relative}', 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), **measurements})
+            manifest['consonants'][mood] = {}
+            for sound in CONSONANTS:
+                # One immutable noise texture per class/voice/mood. Word timing
+                # and spelling remain deterministic without runtime synthesis.
+                samples = synthesize_consonant(sound, identity, mood, 'bank', 0, sum(levels)/len(levels), False)
+                pcm = [round(x) for x in samples]
+                if max(map(abs, pcm)) > 32767:
+                    raise ValueError(f'Clipping consonant: {identity}/{mood}/{sound}')
+                relative = f'{mood}/consonants/{sound}.wav'
+                path = folder / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with wave.open(str(path), 'wb') as wav:
+                    wav.setparams((1, 2, RATE, 0, 'NONE', 'not compressed'))
+                    wav.writeframes(struct.pack('<'+'h'*len(pcm), *pcm))
+                manifest['consonants'][mood][sound] = relative
+                report['assets'].append({'path': f'{identity}/{relative}', 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                                        'rms_dbfs': db(rms(pcm)/32768), 'peak_dbfs': db(max(map(abs, pcm))/32768),
+                                        'kind': 'consonant', 'seconds': len(pcm)/RATE})
         (folder / 'voice_manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
     (output / 'generation_manifest.json').write_text(json.dumps(report, indent=2)+'\n')
-    print(f'Generated {len(report["assets"])} deterministic vowels in {output}')
+    print(f'Generated {len(report["assets"])} deterministic speech assets in {output}')
 
 
 def main():
@@ -322,7 +489,7 @@ def main():
     config = json.loads(args.config.read_text())
     validate(config)
     if args.dry_run:
-        print(f'Validated {len(config["profiles"])} profiles; {len(config["profiles"])*42} WAVs; no writes')
+        print(f'Validated {len(config["profiles"])} profiles; {len(config["profiles"])*len(MOODS)*(len(VOWELS)+len(CONSONANTS))} WAVs; no writes')
     else:
         generate(config, args.output_dir)
 

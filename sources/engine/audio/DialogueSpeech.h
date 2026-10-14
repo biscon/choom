@@ -30,6 +30,9 @@ struct DialogueSettings {
 enum class DialogueVowel : uint8_t { Ah, Eh, Ee, Oh, Oo, Uh, Count };
 inline constexpr size_t DialogueVowelCount = static_cast<size_t>(DialogueVowel::Count);
 const char* DialogueVowelName(DialogueVowel vowel);
+enum class DialogueConsonant : uint8_t { T, D, K, P, B, G, S, Z, V, F, H, Sh, Th, Ch, Ks, Count };
+inline constexpr size_t DialogueConsonantCount = static_cast<size_t>(DialogueConsonant::Count);
+const char* DialogueConsonantName(DialogueConsonant consonant);
 struct DialogueProsody {
     float pitchSemitones = 0;
     float contourSemitones = 2;
@@ -45,7 +48,9 @@ struct DialogueClip {
 struct DialogueVoice {
     std::string id;
     std::array<std::array<DialogueClip, DialogueVowelCount>, DialogueMoodCount> banks{};
+    std::array<std::array<DialogueClip, DialogueConsonantCount>, DialogueMoodCount> consonants{};
     std::array<DialogueProsody, DialogueMoodCount> prosody{};
+    bool continuousPitch = false;
 };
 struct DialogueVoiceCatalogEntry {
     std::string id;
@@ -85,6 +90,7 @@ struct DialogueCue {
     DialogueMood bankMood = DialogueMood::Neutral;
     float wobbleHz = 0;
     float wobbleSemitones = 0;
+    uint32_t nextPitchCue = UINT32_MAX;
 };
 struct DialogueTimeline {
     std::vector<DialogueReveal> reveals;
@@ -104,9 +110,11 @@ struct DialoguePlaybackSlot {
     double elapsed = 0;
     bool releasing = false;
     float releaseRemaining = 0.0f;
+    float pitch = 1.0f;
 };
 struct DialoguePlayback {
-    std::array<DialoguePlaybackSlot, 4> slots{};
+    // Separate lanes prevent short consonants stealing sustained vowels.
+    std::array<DialoguePlaybackSlot, 6> slots{}; // four vowels, two consonants
     uint64_t token = 0;
     DialogueSequence sequence;
 };
@@ -116,10 +124,13 @@ void ReserveDialogueTimeline(DialogueTimeline& timeline);
 bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
         const DialogueSettings& settings, const DialogueVoice* voice, DialogueTimeline& timeline);
 size_t AdvanceDialogueReveal(DialogueTimeline& timeline, double elapsed);
-// Consume all due events; return only the newest if at most 50 ms late.
+// Consume all due events; newest vowel and (optionally) consonant, <=50 ms late.
 const DialogueCue* AdvanceDialogueSequence(const DialogueTimeline& timeline,
-        DialogueSequence& sequence, float dt, bool paused = false);
+        DialogueSequence& sequence, float dt, bool paused = false,
+        const DialogueCue** consonant = nullptr);
 float DialogueCuePitch(const DialogueCue& cue, double elapsed);
+bool IsDialogueConsonant(const DialogueCue& cue);
+float DialogueTimelinePitch(const DialogueTimeline& timeline, const DialogueCue& cue, double elapsed);
 
 void BeginLoadDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library,
         const std::filesystem::path& assetsRoot);

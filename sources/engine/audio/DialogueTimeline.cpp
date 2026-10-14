@@ -85,6 +85,46 @@ DialogueVowel MapVowel(uint32_t first, uint32_t second)
     }
 }
 uint32_t Hash(uint32_t hash, uint32_t value) { return (hash ^ value) * 16777619u; }
+bool StartsWith(const std::array<Character, DialogueMaximumCodepoints>& characters,
+        size_t word, size_t end, std::string_view prefix)
+{
+    if (end-word < prefix.size()) return false;
+    for (size_t i = 0; i < prefix.size(); ++i)
+        if (Fold(characters[word+i].value) != static_cast<unsigned char>(prefix[i])) return false;
+    return true;
+}
+DialogueConsonant MapConsonant(const std::array<Character, DialogueMaximumCodepoints>& characters,
+        size_t word, size_t end, size_t n, size_t& consumed)
+{
+    using C = DialogueConsonant;
+    const auto c = Fold(characters[n].value);
+    const auto next = n+1 < end ? Fold(characters[n+1].value) : 0;
+    consumed = 1;
+    if (c == 'w' && next == 'h') { consumed = 2; return C::Count; }
+    if ((c == 's' || c == 't' || c == 'p' || c == 'c') && next == 'h') {
+        consumed = 2;
+        if (c == 's') return C::Sh;
+        if (c == 't') return C::Th;
+        if (c == 'p') return C::F;
+        for (auto prefix : {"chor", "chem", "charact", "christ", "school", "echo"})
+            if (StartsWith(characters, word, end, prefix)) return C::K;
+        for (auto prefix : {"chef", "chic", "machin"})
+            if (StartsWith(characters, word, end, prefix)) return C::Sh;
+        return C::Ch;
+    }
+    if (c == 'c' && next == 'k') { consumed = 2; return C::K; }
+    if (next == c) consumed = 2;
+    switch (c) {
+    case 't': return C::T; case 'd': return C::D;
+    case 'k': case 'q': return C::K; case 'p': return C::P;
+    case 'b': return C::B; case 'g': return C::G;
+    case 's': return C::S; case 'z': return C::Z;
+    case 'v': return C::V; case 'f': return C::F; case 'h': return C::H;
+    case 'c': return next == 'e' || next == 'i' || next == 'y' ? C::S : C::K;
+    case 'x': return n == word ? C::Z : C::Ks;
+    default: consumed = 1; return C::Count;
+    }
+}
 } // namespace
 
 const char* DialogueMoodName(DialogueMood mood)
@@ -110,6 +150,18 @@ const char* DialogueVowelName(DialogueVowel vowel)
     constexpr std::array<const char*, DialogueVowelCount> names{"ah", "eh", "ee", "oh", "oo", "uh"};
     const size_t i = static_cast<size_t>(vowel);
     return i < names.size() ? names[i] : "uh";
+}
+const char* DialogueConsonantName(DialogueConsonant consonant)
+{
+    constexpr std::array<const char*, DialogueConsonantCount> names{
+        "t", "d", "k", "p", "b", "g", "s", "z", "v", "f", "h", "sh", "th", "ch", "ks"};
+    const auto i = static_cast<size_t>(consonant);
+    return i < names.size() ? names[i] : "h";
+}
+
+bool IsDialogueConsonant(const DialogueCue& cue)
+{
+    return cue.source >= DialogueVowelCount && cue.source < DialogueVowelCount+DialogueConsonantCount;
 }
 
 bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
@@ -162,6 +214,7 @@ bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
         }
         ellipsis |= dots >= 3;
         size_t finalWord = phrase;
+        uint32_t previousVowel = UINT32_MAX;
         for (size_t n = phrase; n < end; ++n)
             if (Letter(characters[n].value) && (n == phrase || !Letter(characters[n-1].value))) finalWord = n;
         for (size_t word = phrase; word < end;) {
@@ -179,7 +232,33 @@ bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
             capitals &= letters >= 2;
             size_t group = 0;
             for (size_t n = word; n < wordEnd;) {
-                if (!Vowel(characters[n].value, n == word)) { ++n; continue; }
+                if (!Vowel(characters[n].value, n == word)) {
+                    size_t consumed = 1;
+                    const auto consonant = MapConsonant(characters, word, wordEnd, n, consumed);
+                    if (voice && consonant != DialogueConsonant::Count) {
+                        const auto c = static_cast<size_t>(consonant);
+                        const DialogueClip* clip = &voice->consonants[m][c];
+                        auto bankMood = mood;
+                        if (IsNull(clip->sound)) { clip = &voice->consonants[0][c]; bankMood = DialogueMood::Neutral; }
+                        // Missing optional consonants are silent, including old manifests.
+                        if (!IsNull(clip->sound)) {
+                            DialogueCue cue;
+                            cue.start = timeline.reveals[n].seconds;
+                            cue.end = cue.start + clip->seconds;
+                            cue.source = static_cast<uint32_t>(DialogueVowelCount+c);
+                            cue.sound = clip->sound;
+                            cue.bankMood = bankMood;
+                            cue.beginByte = n ? characters[n-1].end : 0;
+                            cue.endByte = characters[n+consumed-1].end;
+                            // Relative consonant levels are baked into the clips.
+                            // Match AudioSystem's unit-volume ceiling in offline previews too.
+                            cue.volume = std::min(1.0f, settings.volume * prosody.gain * (capitals ? 1.6f : 1.0f));
+                            timeline.cues.push_back(cue);
+                        }
+                    }
+                    n += consumed;
+                    continue;
+                }
                 const size_t begin = n++;
                 while (n < wordEnd && Vowel(characters[n].value, false)) ++n;
                 const auto vowel = MapVowel(characters[begin].value, begin+1 < n ? characters[begin+1].value : 0);
@@ -209,6 +288,9 @@ bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
                 cue.wobbleHz = prosody.wobbleHz;
                 cue.wobbleSemitones = prosody.wobbleSemitones;
                 cue.end = cue.start + cue.end / cue.pitch;
+                if (voice && voice->continuousPitch && previousVowel != UINT32_MAX)
+                    timeline.cues[previousVowel].nextPitchCue = static_cast<uint32_t>(timeline.cues.size());
+                previousVowel = static_cast<uint32_t>(timeline.cues.size());
                 timeline.cues.push_back(cue);
             }
             word = wordEnd;
@@ -226,15 +308,20 @@ size_t AdvanceDialogueReveal(DialogueTimeline& timeline, double elapsed)
 }
 
 const DialogueCue* AdvanceDialogueSequence(const DialogueTimeline& timeline,
-        DialogueSequence& sequence, float rawDt, bool paused)
+        DialogueSequence& sequence, float rawDt, bool paused, const DialogueCue** consonant)
 {
+    if (consonant) *consonant = nullptr;
     if (paused) return nullptr;
     const double dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     const double elapsed = sequence.position + dt;
     sequence.position = elapsed;
     const DialogueCue* newest = nullptr;
-    while (sequence.nextCue < timeline.cues.size() && timeline.cues[sequence.nextCue].start <= sequence.position)
-        newest = &timeline.cues[sequence.nextCue++];
+    const DialogueCue* newestConsonant = nullptr;
+    while (sequence.nextCue < timeline.cues.size() && timeline.cues[sequence.nextCue].start <= sequence.position) {
+        const auto* cue = &timeline.cues[sequence.nextCue++];
+        (IsDialogueConsonant(*cue) ? newestConsonant : newest) = cue;
+    }
+    if (consonant && newestConsonant && elapsed-newestConsonant->start <= 0.05) *consonant = newestConsonant;
     sequence.finished = sequence.position >= timeline.seconds;
     return newest && elapsed - newest->start <= 0.05 ? newest : nullptr;
 }
@@ -243,5 +330,26 @@ float DialogueCuePitch(const DialogueCue& cue, double elapsed)
 {
     const double wobble = cue.wobbleSemitones * std::sin(elapsed * cue.wobbleHz * 6.283185307179586);
     return cue.pitch * std::pow(2.0, wobble / 12.0);
+}
+
+float DialogueTimelinePitch(const DialogueTimeline& timeline, const DialogueCue& cue, double elapsed)
+{
+    const DialogueCue* current = &cue;
+    float pitch = cue.pitch;
+    uint32_t previousIndex = 0;
+    while (current->nextPitchCue < timeline.cues.size()) {
+        const uint32_t index = current->nextPitchCue;
+        const auto& next = timeline.cues[index];
+        if (next.start <= current->start || index < previousIndex) break;
+        if (elapsed < next.start) {
+            const double t = std::clamp((elapsed-current->start)/(next.start-current->start), 0.0, 1.0);
+            pitch = current->pitch * std::pow(next.pitch/current->pitch, t);
+            break;
+        }
+        current = &next;
+        pitch = next.pitch;
+        previousIndex = index+1;
+    }
+    return pitch * DialogueCuePitch(cue, elapsed) / cue.pitch;
 }
 } // namespace engine

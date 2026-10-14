@@ -1579,7 +1579,7 @@ say("What was that?", { mood = "afraid", holdMs = 2000 })
 ```
 
 Enter or a left/right mouse press reveals the entire current spoken line and
-interrupts all active vowels with a short release. The text stays fully visible
+interrupts all active speech sounds with a short release. The text stays fully visible
 for **2 seconds**, then fades over 350 ms before returning `true` to the waiting
 script. This fresh reading hold replaces any remaining reveal or hold, including
 explicit `holdMs`, and also applies during a normal hold or fade. A second press
@@ -1590,7 +1590,7 @@ interaction. `startSay` uses the same behavior; silent `text` is unchanged.
 Console, pause, inventory, and held-item UI keep input priority.
 
 `say` is bottom-centered. One text clock drives UTF-8 reveal and short synthesized
-vowels; sound duration and device completion never hold text back. Rates are
+vowels and quiet consonants; sound duration and device completion never hold text back. Rates are
 neutral 30, happy 34, angry 34, afraid 28, panicked 40, pained 26, relieved 28
 codepoints/second. Spaces count. Punctuation intervals replace the normal interval:
 comma 100 ms, clause 150 ms, sentence 200 ms, ellipsis 350 ms at neutral speed,
@@ -1605,16 +1605,23 @@ phonetics. This is spelling-based babble, not TTS. Word vowel patterns and tiny
 pitch variations are deterministic; prior lines and operation IDs have no effect.
 Phrase contours, questions, exclamations, ellipses, capital words, mood, and voice
 modulation add expression. Elderly presets have a gentle 2 Hz pitch wobble.
+Shipped profiles interpolate vowel pitch continuously within phrases, including
+overlapping sounds; punctuation resets the contour. Quiet t/d/k/p/b/g bursts and
+s/z/v/f/h/sh/th noise follow character reveals. c/ch/x use simple spelling rules;
+digraphs and doubled consonants trigger once. w/y/j and nasals/liquids add no
+consonant sounds (the vowel treatment of y remains). Consonants are roughly
+12–15 dB below the vowel RMS reference, with a modest capital-word boost.
 
 The editor's **Settings → Dialogue voices** checkbox only mutes chatter. It is
 saved as `dialogueVoicesEnabled` in `assets/config/application_settings.json`.
-Disabling releases active vowels without changing reveal/hold/fade timing;
+Disabling releases active speech sounds without changing reveal/hold/fade timing;
 re-enabling plays future events without replaying missed ones. Missing voices,
 missing audio, and unavailable devices use exactly the same text clock. Missing
-mood vowels fall back individually to the neutral vowel, then silence.
+mood vowels/consonants fall back individually to their neutral sound, then silence.
 
-At most four vowels overlap. Late frames discard stale events and start at most
-the newest cue if it is within 50 ms of its scheduled time; no backlog is played.
+At most four vowels and two consonants overlap in separate playback slots. Late
+frames discard stale events and start at most the newest vowel and newest
+consonant if each is within 50 ms of its scheduled time; no backlog is played.
 Final tails may finish during the reading hold. Replacement, cancellation,
 skipping, mute, or speaker death/removal releases active sounds. NPC sound
 originates near the upper body and uses existing spatial propagation. Speaking
@@ -1622,7 +1629,7 @@ suppresses ambient vocalizations without changing combat sounds or AI hearing.
 
 The session owns a dialogue asset scope; `AssetManager` owns all sounds and
 preallocated playback aliases. WAV loading occurs during level load. Configuration
-is `assets/config/dialogue_speech.json`, with version-2 vowel manifests under
+is `assets/config/dialogue_speech.json`, with version-2 speech manifests under
 `assets/audio/dialogue_vowels`. Restart the level after changing profiles,
 configuration, or NPC voice assignments. The profile picker reads metadata when
 the NPC editor opens. Voice authoring and deterministic offline generation use
