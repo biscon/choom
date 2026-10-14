@@ -66,49 +66,49 @@
       "contour_semitones": 2,
       "gain": 1,
       "wobble_hz": 2,
-      "wobble_semitones": 0.3
+      "wobble_semitones": 0.15
     },
     "happy": {
       "pitch_semitones": 1,
       "contour_semitones": 3,
       "gain": 1.05,
       "wobble_hz": 2,
-      "wobble_semitones": 0.3
+      "wobble_semitones": 0.15
     },
     "angry": {
       "pitch_semitones": -0.5,
       "contour_semitones": 1.5,
       "gain": 1.2,
       "wobble_hz": 2,
-      "wobble_semitones": 0.3
+      "wobble_semitones": 0.15
     },
     "afraid": {
       "pitch_semitones": 1,
       "contour_semitones": 2.5,
       "gain": 0.85,
       "wobble_hz": 2,
-      "wobble_semitones": 0.3
+      "wobble_semitones": 0.2
     },
     "panicked": {
       "pitch_semitones": 2.5,
       "contour_semitones": 4,
       "gain": 1.1,
       "wobble_hz": 2,
-      "wobble_semitones": 0.45
+      "wobble_semitones": 0.2
     },
     "pained": {
       "pitch_semitones": -1,
       "contour_semitones": 3,
       "gain": 0.85,
       "wobble_hz": 2,
-      "wobble_semitones": 0.3
+      "wobble_semitones": 0.2
     },
     "relieved": {
       "pitch_semitones": -0.5,
       "contour_semitones": 3,
       "gain": 0.9,
       "wobble_hz": 2,
-      "wobble_semitones": 0.3
+      "wobble_semitones": 0.15
     }
   }
 }

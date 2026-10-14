@@ -216,16 +216,42 @@ cmake --build cmake-build-debug --target dialogue_speech_preview -j2
 cmake-build-debug/dialogue_speech_preview
 ```
 
-`vowel_profiles.json` controls six profiles, seven moods and six vowel identities.
-The generator uses additive band-limited excitation shaped by three resonances,
-with independently authored fundamental frequency and formant scale. Initial
-formant frequencies/bandwidths/gains for ah/eh/ee/oh/oo come from the first three
-bass bands in the [Csound tables](https://csound.com/manual/misc/formants/);
-uh is an authored central vowel. Spectral tilt, breath, deterministic smooth
-periodicity changes, and raised-cosine envelopes keep the sustained portions from
-being perfectly mechanical. Files last 140 ms, with mood-specific attacks and
-40 ms releases. Peak is capped at -18 dBFS and RMS targets -26 dBFS where the peak
-limit permits. Runtime gain and overlap are checked again in the preview mixer.
+`vowel_profiles.json` (authoring schema 2) controls six profiles, seven moods and
+six vowel identities. The generator uses a band-limited differentiated glottal
+pulse with a slow opening and faster closure, then filters it through three
+resonators. Fundamental frequency and vocal-tract scale remain independent.
+The original formant centers for ah/eh/ee/oh/oo derive from the first three bass
+bands in the [Csound tables](https://csound.com/manual/misc/formants/); uh is an
+authored central vowel. Revision 2 broadens the bandwidths by 1.5x and authors
+band gains against measured filtered output, avoiding the original excessive
+upper-frequency suppression. Both voiced excitation and breath pass through the
+vowel resonances; breath is high-passed at 150 Hz before filtering to remove rumble.
+
+Breath is an independently measured signal. `breath_to_voice_db` sets its RMS
+relative to the voiced stem after envelope shaping: adult -18 dB, young -20 dB,
+elderly -16 dB before mood offsets, with a -12 dB upper bound. Its envelope is
+slightly stronger near onset/release. Separate seeded random streams supply
+bounded smooth pitch irregularity (+/-0.6%), amplitude variation (+/-2%), and
+formant movement (+/-1%), instead of repeating source vibrato. Elderly runtime
+wobble stays at 2 Hz with a 0.15-semitone base depth; emotional wobble is at most
+0.2 semitones. All defaults are editable in JSON.
+
+Files still last 140 ms, with mood-specific attacks, 40 ms releases and zero
+endpoints. The configurable RMS target is now -20 dBFS and the peak ceiling
+-12 dBFS, both 6 dB above revision 1. Because the richer glottal signal has larger
+peaks, normalization alone would not reach the intended level. Minimal offline
+soft-knee peak control reduces the peak/RMS ratio before normalization, using a
+shared smooth gain for both stems and restoring their authored breath ratio.
+Drive is bounded and reported; unusual authoring can still produce a reported
+peak-limited result. There is no runtime compressor, ducking, or change to other
+sounds. Runtime volume remains 0.65 and distance attenuation is unchanged.
+
+The generation manifest records achieved RMS/peak, target and measured breath
+ratio, peak-control drive, peak-limited status, DC offset and endpoint steps.
+The shipped four-overlap bound, including the loudest mood and capital-word
+emphasis, stays below full scale. The engine preview also checks actual summed
+samples. These are headroom checks, not proof that speech cannot be masked by
+other sounds in a particular scene.
 
 Generated files go to `assets/audio/dialogue_vowels/{profile}/{mood}/{vowel}.wav`.
 Version-2 runtime manifests map each mood's vowel names to relative WAV paths and
@@ -263,3 +289,33 @@ the same sentence. Check vowel quality, recognizable identity, mood distinction,
 word-like associations, overlap harshness and clicking. Automated checks cannot
 establish that these presets sound good. In-game listening must still check
 interruption, mute/unmute, pause, positional audio and left-click reveal/dismiss.
+
+## Revision 2 listening comparisons
+
+Before regeneration, preserve the old `assets/audio/dialogue_vowels` tree and
+`assets/config/dialogue_speech.json` in a separate assets root. The initial
+revision-1 snapshot for this change is in the ignored directory
+`audio_generation/previews/vowel_revision_2/baseline_assets/`, alongside copies of
+its original generator and authoring config. Do not overwrite that baseline when
+regenerating the new assets.
+
+```sh
+python3 tools/dialogue_voice_generator/compare_vowel_voices.py \
+  --baseline-assets audio_generation/previews/vowel_revision_2/baseline_assets
+```
+
+The tool invokes the headless C++ preview for both assets roots, then produces
+16 comparisons under `audio_generation/previews/vowel_revision_2/comparisons/`:
+
+- `*_three_way.wav`: original, original +6 dB, revised; one second separates versions.
+- `*_matched.wav`: original boosted and revised, matched in whole-clip RMS.
+- Matching CSVs label sections, exact times, applied gain, RMS and peak.
+- `comparison_report.json` reports the achieved speech RMS increase.
+- `before/` and `after/` contain every profile/mood, including fixed-rate examples.
+
+The comparisons include neutral examples for all six profiles plus adult male
+and female panic. Matching downward preserves headroom and helps separate timbre
+from volume; RMS matching does not guarantee equal perceived loudness. Listen for
+audible breath without continuous hiss, reduced electronic tone, recognizable
+vowels and identities, and sufficient in-game speech level. No automated listening
+or interactive GUI verification is claimed.

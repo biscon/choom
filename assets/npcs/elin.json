@@ -2,8 +2,12 @@
   "formatVersion": 1,
   "id": "elin",
   "name": "Elin",
-  "voice": "female",
-  "speechColor": [255, 128, 191],
+  "voice": "female_young",
+  "speechColor": [
+    255,
+    128,
+    191
+  ],
   "modelPath": "assets/models/characters/Elin.glb",
   "headLook": {
     "enabled": true,

@@ -87,21 +87,21 @@
       "contour_semitones": 2.5,
       "gain": 0.85,
       "wobble_hz": 5,
-      "wobble_semitones": 0.25
+      "wobble_semitones": 0.2
     },
     "panicked": {
       "pitch_semitones": 2.5,
       "contour_semitones": 4,
       "gain": 1.1,
       "wobble_hz": 6,
-      "wobble_semitones": 0.45
+      "wobble_semitones": 0.2
     },
     "pained": {
       "pitch_semitones": -1,
       "contour_semitones": 3,
       "gain": 0.85,
       "wobble_hz": 3,
-      "wobble_semitones": 0.3
+      "wobble_semitones": 0.2
     },
     "relieved": {
       "pitch_semitones": -0.5,
