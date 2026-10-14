@@ -5,12 +5,8 @@
     "duration_ms": 140,
     "release_ms": 40,
     "peak_db": -5.5,
-    "jitter_percent": 0,
     "rms_db": -16,
-    "shimmer_percent": 0,
-    "formant_drift_percent": 0,
     "source": "stable_pulse",
-    "consonants_enabled": false,
     "output_gain_db": -3
   },
   "vowels": {
@@ -130,8 +126,7 @@
       "formant_scale": 1,
       "tilt": 1.0,
       "wobble_hz": 0,
-      "wobble_semitones": 0,
-      "breath_to_voice_db": -18
+      "wobble_semitones": 0
     },
     "female": {
       "label": "Female \u00b7 middle-aged",
@@ -139,8 +134,7 @@
       "formant_scale": 1.17,
       "tilt": 1.15,
       "wobble_hz": 0,
-      "wobble_semitones": 0,
-      "breath_to_voice_db": -18
+      "wobble_semitones": 0
     },
     "male_young": {
       "label": "Male \u00b7 young adult",
@@ -148,8 +142,7 @@
       "formant_scale": 1.05,
       "tilt": 0.95,
       "wobble_hz": 0,
-      "wobble_semitones": 0,
-      "breath_to_voice_db": -20
+      "wobble_semitones": 0
     },
     "female_young": {
       "label": "Female \u00b7 young adult",
@@ -157,8 +150,7 @@
       "formant_scale": 1.2,
       "tilt": 1.1,
       "wobble_hz": 0,
-      "wobble_semitones": 0,
-      "breath_to_voice_db": -20
+      "wobble_semitones": 0
     },
     "male_elderly": {
       "label": "Male \u00b7 elderly",
@@ -166,8 +158,7 @@
       "formant_scale": 0.98,
       "tilt": 1.3,
       "wobble_hz": 2,
-      "wobble_semitones": 0.15,
-      "breath_to_voice_db": -16
+      "wobble_semitones": 0.15
     },
     "female_elderly": {
       "label": "Female \u00b7 elderly",
@@ -175,8 +166,7 @@
       "formant_scale": 1.13,
       "tilt": 1.4,
       "wobble_hz": 2,
-      "wobble_semitones": 0.15,
-      "breath_to_voice_db": -16
+      "wobble_semitones": 0.15
     }
   },
   "moods": {
@@ -188,7 +178,6 @@
       "wobble_hz": 0,
       "wobble_semitones": 0,
       "tilt_offset": 0,
-      "breath_offset_db": 0,
       "attack_ms": 15
     },
     "happy": {
@@ -198,7 +187,6 @@
       "wobble_hz": 0,
       "wobble_semitones": 0,
       "tilt_offset": -0.2,
-      "breath_offset_db": -2,
       "attack_ms": 12
     },
     "angry": {
@@ -208,7 +196,6 @@
       "wobble_hz": 0,
       "wobble_semitones": 0,
       "tilt_offset": -0.4,
-      "breath_offset_db": -5,
       "attack_ms": 7,
       "output_gain_db": -2
     },
@@ -219,7 +206,6 @@
       "wobble_hz": 5,
       "wobble_semitones": 0.2,
       "tilt_offset": 0.3,
-      "breath_offset_db": 4,
       "attack_ms": 20
     },
     "panicked": {
@@ -229,7 +215,6 @@
       "wobble_hz": 6,
       "wobble_semitones": 0.2,
       "tilt_offset": -0.15,
-      "breath_offset_db": 4,
       "attack_ms": 10
     },
     "pained": {
@@ -239,7 +224,6 @@
       "wobble_hz": 3,
       "wobble_semitones": 0.2,
       "tilt_offset": 0.45,
-      "breath_offset_db": 4,
       "attack_ms": 25
     },
     "relieved": {
@@ -249,7 +233,6 @@
       "wobble_hz": 0,
       "wobble_semitones": 0,
       "tilt_offset": 0.3,
-      "breath_offset_db": 4,
       "attack_ms": 22
     }
   }

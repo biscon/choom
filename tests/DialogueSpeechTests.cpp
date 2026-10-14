@@ -172,50 +172,15 @@ void FrameStallsAndUnavailableDevice()
     assets.Shutdown();
 }
 
-void ConsonantsAndContinuousPitch()
+void ContinuousPitch()
 {
     auto voice = Voice();
     voice.continuousPitch = true;
-    for (auto& bank : voice.consonants) for (uint32_t c = 0; c < engine::DialogueConsonantCount; ++c)
-        bank[c] = {engine::SoundHandle{100+c, 1}, .05f, static_cast<uint32_t>(engine::DialogueVowelCount+c)};
-    engine::DialogueTimeline timeline, vowels;
-    engine::ReserveDialogueTimeline(timeline); engine::ReserveDialogueTimeline(vowels);
+    engine::DialogueTimeline timeline;
+    engine::ReserveDialogueTimeline(timeline);
     const auto* allocation = timeline.cues.data();
-    const std::string text = "SH cat city chair chef chorus box xylophone thin letter why";
-    assert(engine::BuildDialogueTimeline(text, engine::DialogueMood::Neutral, {}, &voice, timeline));
-    auto vowelVoice = Voice();
-    assert(engine::BuildDialogueTimeline(text, engine::DialogueMood::Neutral, {}, &vowelVoice, vowels));
-    assert(timeline.seconds == vowels.seconds && timeline.reveals.size() == vowels.reveals.size());
-    for (size_t i = 0; i < vowels.reveals.size(); ++i)
-        assert(vowels.reveals[i].seconds == timeline.reveals[i].seconds);
-    size_t v = 0;
-    for (const auto& cue : timeline.cues) {
-        if (engine::IsDialogueConsonant(cue)) {
-            assert(cue.pitch == 1 && cue.nextPitchCue == UINT32_MAX);
-            assert(engine::DialogueTimelinePitch(timeline, cue, cue.start+.02) == 1);
-        } else {
-            assert(cue.pitch == vowels.cues[v].pitch && cue.start == vowels.cues[v].start);
-            ++v;
-        }
-    }
-    assert(v == vowels.cues.size());
-    auto soundAt = [&](size_t byte) {
-        for (const auto& cue : timeline.cues) if (cue.beginByte == byte) return cue.source;
-        return UINT32_MAX;
-    };
-    const auto source = [](engine::DialogueConsonant c) { return engine::DialogueVowelCount+static_cast<size_t>(c); };
-    assert(soundAt(0) == source(engine::DialogueConsonant::Sh));
-    assert(soundAt(1) == UINT32_MAX);
-    assert(soundAt(text.find("cat")) == source(engine::DialogueConsonant::K));
-    assert(soundAt(text.find("city")) == source(engine::DialogueConsonant::S));
-    assert(soundAt(text.find("chair")) == source(engine::DialogueConsonant::Ch));
-    assert(soundAt(text.find("chef")) == source(engine::DialogueConsonant::Sh));
-    assert(soundAt(text.find("chorus")) == source(engine::DialogueConsonant::K));
-    assert(soundAt(text.find("box")+2) == source(engine::DialogueConsonant::Ks));
-    assert(soundAt(text.find("xylophone")) == source(engine::DialogueConsonant::Z));
-    assert(soundAt(text.find("letter")+3) == UINT32_MAX);
-    assert(soundAt(text.find("why")+1) == UINT32_MAX);
-    assert(timeline.cues[0].volume == 1.f); // emphasized, capped like AudioSystem
+    assert(engine::BuildDialogueTimeline("sh t d k p c ch x wh", engine::DialogueMood::Neutral, {}, &voice, timeline));
+    assert(timeline.cues.empty() && !timeline.reveals.empty());
 
     assert(engine::BuildDialogueTimeline(u8"atata, atata… atata", engine::DialogueMood::Neutral, {}, &voice, timeline));
     const auto& first = timeline.cues[0];
@@ -226,7 +191,7 @@ void ConsonantsAndContinuousPitch()
     assert(std::abs(engine::DialogueTimelinePitch(timeline, first, overlap)
             - engine::DialogueTimelinePitch(timeline, second, overlap)) < 1e-6);
     size_t ends = 0;
-    for (const auto& cue : timeline.cues) if (!engine::IsDialogueConsonant(cue) && cue.nextPitchCue == UINT32_MAX) {
+    for (const auto& cue : timeline.cues) if (cue.nextPitchCue == UINT32_MAX) {
         ++ends;
         assert(engine::DialogueTimelinePitch(timeline, cue, cue.start+1) == cue.pitch);
     }
@@ -234,28 +199,22 @@ void ConsonantsAndContinuousPitch()
     std::string longLine;
     for (size_t i = 0; i < 1024; ++i) longLine += "at";
     assert(engine::BuildDialogueTimeline(longLine, engine::DialogueMood::Neutral, {}, &voice, timeline));
-    assert(timeline.cues.size() == 2048 && timeline.cues.data() == allocation);
+    assert(timeline.cues.size() == 1024 && timeline.cues.data() == allocation);
 
     for (float step : {1.f/30, 1.f/60, 1.f/144}) {
         assert(engine::BuildDialogueTimeline("atata", engine::DialogueMood::Neutral, {}, &voice, timeline));
         engine::DialogueSequence sequence;
         size_t count = 0;
         while (!sequence.finished) {
-            const engine::DialogueCue* consonant = nullptr;
-            const auto* vowel = engine::AdvanceDialogueSequence(timeline, sequence, step, false, &consonant);
-            count += (vowel != nullptr) + (consonant != nullptr);
+            count += engine::AdvanceDialogueSequence(timeline, sequence, step) != nullptr;
         }
         assert(count == timeline.cues.size());
     }
     engine::DialogueSequence sequence;
-    const engine::DialogueCue* consonant = &timeline.cues[1];
-    assert(!engine::AdvanceDialogueSequence(timeline, sequence, 10, true, &consonant));
-    assert(!consonant && sequence.position == 0);
-    assert(!engine::AdvanceDialogueSequence(timeline, sequence, 10, false, &consonant));
-    assert(!consonant && sequence.finished);
-    voice.consonants[static_cast<size_t>(engine::DialogueMood::Afraid)] = {};
-    assert(engine::BuildDialogueTimeline("t", engine::DialogueMood::Afraid, {}, &voice, timeline));
-    assert(timeline.cues.size() == 1 && timeline.cues[0].bankMood == engine::DialogueMood::Neutral);
+    assert(!engine::AdvanceDialogueSequence(timeline, sequence, 10, true));
+    assert(sequence.position == 0);
+    assert(!engine::AdvanceDialogueSequence(timeline, sequence, 10));
+    assert(sequence.finished);
 }
 
 std::vector<int16_t> Pcm()
@@ -313,23 +272,16 @@ void LibraryLoading()
     assert(assets.IsFinished(handle));
     manifest["continuous_pitch"] = true;
     manifest["prosody"]["neutral"] = {{"pitch_semitones", .5}, {"contour_semitones", .5}, {"word_accent_semitones", .75}};
-    manifest["consonants"]["neutral"]["t"] = "source.wav";
     std::ofstream(root / "voice/manifest.json") << manifest.dump();
     engine::BeginLoadDialogueVoices(assets, library, root);
-    assert(library.pending.size() == 2 && library.voices[0].continuousPitch);
+    assert(library.pending.size() == 1 && library.voices[0].continuousPitch);
     assert(library.voices[0].prosody[0].pitchSemitones == .5f);
     assert(library.voices[0].prosody[0].contourSemitones == .5f);
     assert(library.voices[0].prosody[0].wordAccentSemitones == .75f);
     assert(library.voices[0].prosody[1].wordAccentSemitones == 0);
-    engine::PrepareDialogueVoices(assets, library, 2);
-    assert(library.voices[0].consonants[0][0].seconds == 1.f);
+    engine::PrepareDialogueVoices(assets, library, 1);
+    assert(library.voices[0].banks[0][0].seconds == 1.f);
     engine::UnloadDialogueVoices(assets, library);
-    manifest["consonants"]["neutral"]["t"] = "../outside.wav";
-    std::ofstream(root / "voice/manifest.json") << manifest.dump();
-    engine::BeginLoadDialogueVoices(assets, library, root);
-    assert(library.pending.empty());
-    engine::UnloadDialogueVoices(assets, library);
-    manifest.erase("consonants");
     manifest["moods"]["neutral"]["ah"] = "../outside.wav";
     std::ofstream(root / "voice/manifest.json") << manifest.dump();
     engine::BeginLoadDialogueVoices(assets, library, root);
@@ -346,7 +298,7 @@ void TestDialogueSpeech()
     DeterministicWordsAndExpression();
     WordAccents();
     FrameStallsAndUnavailableDevice();
-    ConsonantsAndContinuousPitch();
+    ContinuousPitch();
     PcmOwnership();
     LibraryLoading();
 }

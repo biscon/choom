@@ -204,9 +204,10 @@ regeneration; all source text and mood directions remain editable in JSON.
 
 ## Current vowel speech system
 
-The engine uses deterministic, stable synthesized vowels. Breath and consonants
-are disabled in the shipped bank. TTS assets and earlier noise experiments remain
-as references; no network or API key is needed to generate the current voices.
+The engine uses deterministic, stable synthesized vowels. The discarded breath,
+consonant and unstable-source experiments have been removed from the generator,
+runtime and assets. The original TTS archive is retained separately; no network
+or API key is needed to generate the current voices.
 
 ```sh
 python3 tools/dialogue_voice_generator/generate_vowel_voices.py --dry-run
@@ -217,8 +218,8 @@ cmake-build-debug/dialogue_speech_preview
 cmake-build-debug/dialogue_speech_preview --stress --output-dir /tmp/dialogue-stress
 ```
 
-`vowel_profiles.json` (authoring schema 2) selects `synthesis.source: stable_pulse`
-and `consonants_enabled: false`. Generator revision 4 implements the accepted
+`vowel_profiles.json` (authoring schema 2) uses `synthesis.source: stable_pulse`,
+the only supported source. Generator revision 5 preserves the accepted
 `male_stable_soft_pulse.wav` audition. The glottal pulse opens over 58% of its
 period and closes over 24%, with a full half-sine closure returning to zero
 before the closed phase. Its band-limited waveform is fixed from cycle to cycle:
@@ -259,23 +260,17 @@ The headless ordinary and 60-character/second capitalized stress corpora check
 summed output across all profiles and moods. This is measured corpus headroom,
 not a guarantee against clipping from arbitrary overlapping game sounds.
 The generation report records actual RMS/peak, output gain, peak-limited status,
-zero peak-control drive, absent breath ratio, DC offset and endpoint steps.
+DC offset and endpoint steps.
 
 Regeneration writes 252 vowels under
 `assets/audio/dialogue_vowels/{profile}/{mood}/{vowel}.wav`, plus six runtime
 manifests and a generation report containing config/WAV SHA-256 hashes.
-Version-2 runtime manifests retain `continuous_pitch: true` and omit the entire
-`consonants` map. Existing consonant WAVs stay on disk as inactive references;
-they are neither requested nor played. Regenerating a bank cannot accidentally
-reactivate them. Four vowel playback slots retain pause, release and skip logic.
-No synthesis or asset loading occurs during ordinary playback.
+Version-2 runtime manifests retain `continuous_pitch: true`. Four vowel playback
+slots retain pause, release and skip logic. No synthesis or asset loading occurs
+during ordinary playback.
 
-The old `texture` source, breath settings, crest control and consonant synthesis
-remain available for historical experiments. Those controls do not affect the
-stable source. Older authoring files without `source` retain texture behavior;
-`consonants_enabled` defaults to true for those older files. Regeneration is
-deterministic for identical config/tool versions on the same Python/platform.
-Use `--output-dir` to generate separate experiments.
+Regeneration is deterministic for identical config/tool versions on the same
+Python/platform. Use `--output-dir` to generate a separate bank.
 
 The engine config's `voices` catalog maps stable profile IDs to manifests. Adding
 a profile means adding authoring JSON, generating its WAVs, and adding its manifest
@@ -286,11 +281,10 @@ reload the level to load changed WAVs. A missing profile stays visible as
 
 ## Engine speech previews
 
-The accepted reference is
-`audio_generation/previews/male_stable_soft_pulse.wav`. Previous rattle and breath
-comparisons remain under `male_rattle_diagnostics/` and `male_breath_diagnostics/`.
-They describe the former texture bank, including copied generation code/config;
-their breath experiments are not applicable to the current noise-free source.
+The accepted source reference is
+`audio_generation/previews/male_stable_soft_pulse.wav`; the approved neutral
+intonation comparison is `male_lighter_delivery_comparison.wav` in that directory.
+Discarded noise auditions and their asset snapshots have been removed.
 
 The headless C++ utility reads the production manifests and calls the same timeline
 planner and pitch-modulation helper as runtime. No window/audio device is opened.
@@ -311,131 +305,3 @@ the same sentence. Check vowel quality, recognizable identity, mood distinction,
 word-like associations, overlap harshness and clicking. Automated checks cannot
 establish that these presets sound good. In-game listening must still check
 interruption, mute/unmute, pause, positional audio and left-click reveal/dismiss.
-
-## Revision 2 listening comparisons
-
-Before regeneration, preserve the old `assets/audio/dialogue_vowels` tree and
-`assets/config/dialogue_speech.json` in a separate assets root. The initial
-revision-1 snapshot for this change is in the ignored directory
-`audio_generation/previews/vowel_revision_2/baseline_assets/`, alongside copies of
-its original generator and authoring config. Do not overwrite that baseline when
-regenerating the new assets.
-
-```sh
-python3 tools/dialogue_voice_generator/compare_vowel_voices.py \
-  --baseline-assets audio_generation/previews/vowel_revision_2/baseline_assets
-```
-
-The tool invokes the headless C++ preview for both assets roots, then produces
-16 comparisons under `audio_generation/previews/vowel_revision_2/comparisons/`:
-
-- `*_three_way.wav`: original, original +6 dB, revised; one second separates versions.
-- `*_matched.wav`: original boosted and revised, matched in whole-clip RMS.
-- Matching CSVs label sections, exact times, applied gain, RMS and peak.
-- `comparison_report.json` reports the achieved speech RMS increase.
-- `before/` and `after/` contain every profile/mood, including fixed-rate examples.
-
-The comparisons include neutral examples for all six profiles plus adult male
-and female panic. Matching downward preserves headroom and helps separate timbre
-from volume; RMS matching does not guarantee equal perceived loudness. Listen for
-audible breath without continuous hiss, reduced electronic tone, recognizable
-vowels and identities, and sufficient in-game speech level. No automated listening
-or interactive GUI verification is claimed.
-
-## Texture and continuous-pitch audition
-
-The following describes the pre-integration experiments; their saved WAVs remain
-under `audio_generation/previews/`. The softened source, continuous pitch and
-quiet consonants are now implemented by the production generator and runtime.
-Audition tools share those synthesis helpers to prevent drift.
-
-Running this comparison tool leaves the game's bank unchanged. It renders
-four versions in a fixed order: **baseline, source/breath only, continuous pitch
-only, combined**. Male/female neutral and panicked speech use the same production
-planner, text, event times, starting pitches and gains. The renderer's optional
-`--continuous-pitch` flag interpolates pitch logarithmically between vowel starts
-within each phrase, sharing the trajectory across overlapping samples. It holds
-the last pitch at phrase ends, retains existing mood wobble, and resets at
-punctuation. This flag forces continuous pitch for older manifests in the headless
-tool; production manifests already enable it.
-
-```sh
-cmake --build cmake-build-debug --target dialogue_speech_preview -j2
-python3 tools/dialogue_voice_generator/audition_vowel_texture.py
-```
-
-Output is under `audio_generation/previews/vowel_texture_audition/`. The script
-requires a fresh output directory; use `--output-dir` for another run to preserve
-previous listening baselines. It snapshots the input assets, generator code and
-authoring settings, then verifies production asset hashes remain unchanged.
-
-Start with `male_quick_four_way.wav` and `female_quick_four_way.wav`. Each repeats
-“Yes finally another person! Come closer. Are you hurt?” in the four versions,
-with one-second separators. Full comparisons include repeated names, questions,
-capitals and ellipses. `*_fixed_rate_four_way.wav` holds every mood at 30 cps;
-`individual/` contains standalone matched versions. CSVs label section times.
-
-The source experiment uses a fixed neutral calibration for the resonances,
-instead of normalizing away each new source's spectral changes. Softer glottal
-closure, extra spectral tilt and seeded cycle-to-cycle timing/amplitude/shape
-changes reduce source regularity. Breath uses broader formant filters plus a
-600–6500 Hz broad noise branch, with a measured breath/voice ratio 3 dB above
-the baseline (capped at -12 dB). Parameters now live in the production generator and are recorded in `report.json`.
-
-Texture revision 2 softens the first audition's raspy character: cycle timing
-variation is reduced from 1.2% to 0.6%, amplitude variation from 4% to 2%, and
-pulse-shape excursions are halved around the same average shape. The nominal
-broad-noise energy weight falls from 25% to 12.5%; measured breath/voice level
-falls by 3 dB (neutral -12 to -15 dB, panicked -9 to -12 dB). Overall vowel
-loudness, pitch trajectories, consonant settings and reveal timing are retained.
-The original audition remains available for comparison. Generate a fresh set with:
-
-```sh
-python3 tools/dialogue_voice_generator/audition_vowel_texture.py \
-  --output-dir audio_generation/previews/vowel_texture_softened
-python3 tools/dialogue_voice_generator/audition_consonants.py \
-  --audition-dir audio_generation/previews/vowel_texture_softened
-```
-
-Individual assets retain the current -20 dBFS RMS / -12 dBFS peak targets.
-Comparisons match whole-clip RMS downward to the quietest variant, pad differing
-tails, and reject clipping. Matching is not a guarantee of equal perceived
-loudness. The report audits unchanged event scheduling, continuous pitch steps,
-measured levels and source asset hashes. The next choice depends on listening:
-less musical/buzzy, audible breath without constant hiss, and retained identity.
-
-### Optional quiet consonants
-
-After generating the texture audition, run:
-
-```sh
-python3 tools/dialogue_voice_generator/audition_consonants.py
-```
-
-This adds a separate `consonants/` audition directory. Its two-way comparisons
-play the combined vowel experiment first, then the same speech with consonants.
-Start with `male_quick_comparison.wav` and `female_quick_comparison.wav`.
-The existing four-way comparisons remain intact. As with the texture tool,
-use a fresh audition directory for a new run; prior results are not overwritten.
-
-Hard t/d/k/p (also b/g) are 24 ms filtered-noise bursts with 2.5 ms attacks and
-smooth decays, at 18% of vowel RMS (about -15 dB). Soft s/z/v/f/h/sh/th are 50 ms
-shaped-noise sounds at 25% of vowel RMS (-12 dB). Capitals boost consonants by
-1.6x (about 4 dB), keeping them below the vowel reference. The noise is seeded by
-voice, mood, word and character position. No impulses or added text delays are used.
-
-Spelling rules select soft c before e/i/y and hard c otherwise; ch defaults to
-burst-plus-noise, with a few explicit k/sh exceptions; initial x uses z noise,
-other x uses k+s. Digraphs and doubled letters trigger once. w/y/j and
-nasals/liquids add no consonant events; the existing vowel treatment of y remains.
-This is intentionally approximate English spelling. General pronunciation,
-silent-letter recognition, and voiced/unvoiced consonant distinctions are not
-implemented in this audition.
-
-The preview exports actual character reveal times in `*_reveal_cues.csv`, which
-the consonant tool uses for scheduling. It verifies its vowel-only reference
-matches the saved combined audition before mixing. Both comparison sections are
-RMS-matched downward after summation and checked for clipping. The report lists
-every consonant's spelling, sound, onset, duration, emphasis and relative RMS.
-The saved audition remains separate; the runtime now uses pre-generated
-consonants with the same envelopes, levels and spelling rules.
