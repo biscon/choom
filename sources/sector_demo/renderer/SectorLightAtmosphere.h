@@ -79,6 +79,8 @@ bool MakeSectorLightAtmosphereVolume(
         Vector3 originOffsetWorld,
         SectorLightAtmosphereVolume& outVolume);
 
+Vector3 SectorLightAtmosphereRuntimeOffset(const SectorLightAtmosphereSource& source,
+        const SectorBillboardDynamicLightContext& lights);
 bool IsSectorLightAtmosphereSourceDynamic(const SectorLightAtmosphereSource& source);
 bool IsSectorLightAtmosphereSourceSelected(
         const SectorLightAtmosphereSource& source,

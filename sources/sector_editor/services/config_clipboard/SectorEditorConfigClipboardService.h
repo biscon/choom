@@ -14,6 +14,8 @@ class AssetManager;
 
 namespace game {
 
+class SectorEditorAuthoringFogVolumeEditingService;
+class SectorEditorStructuralPrimitiveEditingService;
 class SectorEditorLightEditingService;
 class SectorEditorMaterialEditingService;
 class SectorEditorRuntimeObjectEditingService;
@@ -43,6 +45,8 @@ struct SectorEditorConfigClipboardServiceContext {
     SectorEditorLightEditingService& lightEditing;
     SectorEditorRuntimeObjectEditingService& runtimeObjectEditing;
     SectorEditorMaterialEditingService& materialEditing;
+    SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
+    SectorEditorStructuralPrimitiveEditingService& structuralPrimitiveEditing;
     engine::AssetManager& assets;
     std::string& statusText;
 };

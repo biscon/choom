@@ -471,6 +471,15 @@ Json LevelJson(const GameSaveLevelState& level)
                 {"timeSeconds", value.timeSeconds}, {"speed", value.speed},
                 {"playing", value.playing}, {"loop", value.loop}, {"finished", value.finished}});
     }
+    if (!level.particleEmitters.empty()) {
+        root["particleEmitters"] = Json::array();
+        for (const auto& e : level.particleEmitters) {
+            RequireFinite(e.intensity, "particle intensity");
+            Require(e.intensity >= 0 && e.intensity <= 100, "invalid particle intensity");
+            root["particleEmitters"].push_back(Json{{"instanceId", e.instanceId},
+                    {"enabled", e.enabled}, {"intensity", e.intensity}});
+        }
+    }
     if (!level.fogVolumes.empty()) {
         root["fogVolumes"] = Json::array();
         for (const auto& volume : level.fogVolumes) {
@@ -653,6 +662,18 @@ GameSaveLevelState ReadLevel(const Json& root)
         RequireFinite(state.speed, "billboard.speed");
         Require(state.timeSeconds >= 0.0f, "billboard time must not be negative");
         level.billboards.push_back(std::move(state));
+    }
+    if (const auto particles = root.find("particleEmitters"); particles != root.end()) {
+        Require(particles->is_array(), "particleEmitters must be an array");
+        std::set<std::string> ids;
+        for (const auto& value : *particles) {
+            GameSaveParticleEmitterState e{value.at("instanceId").get<std::string>(),
+                    value.value("enabled", true), value.value("intensity", 1.0f)};
+            Require(!e.instanceId.empty() && ids.insert(e.instanceId).second, "duplicate or invalid particle emitter ID");
+            RequireFinite(e.intensity, "particle intensity");
+            Require(e.intensity >= 0 && e.intensity <= 100, "invalid particle intensity");
+            level.particleEmitters.push_back(std::move(e));
+        }
     }
     if (const auto fog = root.find("fogVolumes"); fog != root.end()) {
         Require(fog->is_array(), "fogVolumes must be an array");

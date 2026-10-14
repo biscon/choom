@@ -11,6 +11,7 @@
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/cameras/SectorEditorCameraEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
+#include "sector_editor/services/particle_emitters/SectorEditorParticleEmitterEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingService.h"
@@ -47,6 +48,7 @@ struct SectorEditorToolContext {
     SectorEditorLevelMarkerEditingService* levelMarkerEditing = nullptr;
     SectorEditorCameraEditingService* cameraEditing = nullptr;
     SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr;
+    SectorEditorParticleEmitterEditingService* particleEmitterEditing = nullptr;
     SectorEditorAuthoringFaceMergeService* authoringFaceMerge = nullptr;
     SectorEditorTriggerEditingService* triggerEditing = nullptr;
     TriggerEditingState* triggerEditingState = nullptr;

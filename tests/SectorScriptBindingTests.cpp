@@ -2212,6 +2212,11 @@ void StableDoorAndDynamicLightBindingsMutateRuntimeTargets()
     light.instanceId = "warning_light";
     map.dynamicPointLights.push_back(light);
     game::SectorCompiledLocalFogVolume fog;
+    game::SectorCompiledParticleEmitter emitter;
+    emitter.id = "furnace"; emitter.sectorId = 1;
+    map.particleEmitters.push_back(emitter);
+    emitter.id = "unresolved"; emitter.sectorId = -1;
+    map.particleEmitters.push_back(emitter);
     fog.instanceId = "engine_room_fog";
     fog.enabled = false;
     map.compiledLocalFogVolumes.push_back(fog);
@@ -2221,6 +2226,17 @@ void StableDoorAndDynamicLightBindingsMutateRuntimeTargets()
     files.Write(R"(
 function init()
     local opened = openDoor("test_door")
+    assert(setParticleEmitterEnabled("furnace", false))
+    assert(not triggerParticleEmitter("furnace"))
+    assert(setParticleEmitterEnabled("furnace", true))
+    assert(setParticleEmitterIntensity("furnace", 0.5))
+    assert(triggerParticleEmitter("furnace"))
+    assert(not triggerParticleEmitter("furnace", -1))
+    assert(not setParticleEmitterIntensity("furnace", 0/0))
+    assert(not setParticleEmitterIntensity("furnace", 101))
+    assert(not setParticleEmitterEnabled("missing", true))
+    assert(not setParticleEmitterEnabled("unresolved", true))
+    assert(not pcall(setParticleEmitterEnabled, "furnace", 1))
     assert(setFogVolumeEnabled("engine_room_fog", true))
     assert(setFogVolumeEnabled("engine_room_fog", true))
     assert(setFogVolumeEnabled("engine_room_fog", false))
@@ -2244,6 +2260,8 @@ end
     assert(Create(context, runtime, persistent, host, files));
     assert(persistent.bools.at("bindings_ok"));
     assert(context.world.Get<game::SectorDoorMotion>(door).targetOpenFraction == 1.0f);
+    assert(map.particleEmitters[0].enabled && map.particleEmitters[0].runtimeIntensity == 0.5f);
+    assert(map.particleEmitters[0].pendingBurst == 1);
     assert(!map.compiledLocalFogVolumes[0].enabled);
     assert(engine::ScriptSystemExecuteConsole(runtime,
             "assert(setFogVolumeEnabled('engine_room_fog', true))").success);

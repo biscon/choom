@@ -36,6 +36,9 @@ struct SectorEditorSelectionUiDependencies {
     engine::UIFloatInputState& lightStartFeatherInput;
     engine::UIFloatInputState& lightFlickerSpeedInput;
     engine::UIFloatInputState& lightFlickerAmountInput;
+    engine::UIFloatInputState& lightSwayHorizontalInput;
+    engine::UIFloatInputState& lightSwayVerticalInput;
+    engine::UIFloatInputState& lightSwaySpeedInput;
     engine::UIIntInputState& lightRedInput;
     engine::UIIntInputState& lightGreenInput;
     engine::UIIntInputState& lightBlueInput;

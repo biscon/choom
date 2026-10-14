@@ -357,9 +357,31 @@ void FogVolumeStatesRoundTripAndDefault()
     assert(!game::DeserializeGameSave(parsed.dump(), restored, error));
 }
 
+void ParticleStatesRoundTripAndDefault()
+{
+    auto save = MakeSave();
+    save.levels[0].particleEmitters = {{"furnace",false,0.5f},{"sparks",true,2}};
+    std::string json,error; game::GameSaveData restored;
+    assert(game::SerializeGameSave(save,json,error));
+    assert(game::DeserializeGameSave(json,restored,error));
+    assert(restored.levels[0].particleEmitters.size() == 2);
+    assert(!restored.levels[0].particleEmitters[0].enabled);
+    assert(restored.levels[0].particleEmitters[0].intensity == 0.5f);
+    auto value = nlohmann::ordered_json::parse(json);
+    value["levels"][0]["particleEmitters"][0]["intensity"] = -1;
+    assert(!game::DeserializeGameSave(value.dump(),restored,error));
+    value = nlohmann::ordered_json::parse(json);
+    value["levels"][0]["particleEmitters"][1]["instanceId"] = "furnace";
+    assert(!game::DeserializeGameSave(value.dump(),restored,error));
+    value["levels"][0].erase("particleEmitters");
+    assert(game::DeserializeGameSave(value.dump(),restored,error));
+    assert(restored.levels[0].particleEmitters.empty());
+}
+
 int main()
 {
     FogVolumeStatesRoundTripAndDefault();
+    ParticleStatesRoundTripAndDefault();
     ObjectEnabledStatesRoundTripAndDefault();
     DragProgressRoundTrips();
     InventorySourcesRoundTripAndValidate();

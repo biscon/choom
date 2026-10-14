@@ -421,6 +421,20 @@ struct SectorTopologyStaticRectLight {
     bool castsShadow = true;
 };
 
+// Runtime displacement around the authored point; distances are meters.
+struct SectorLightPositionSway {
+    bool enabled = false;
+    float horizontalRadiusWorld = 0.05f;
+    float verticalAmountWorld = 0.03f;
+    float speed = 1.0f;
+};
+inline bool operator==(const SectorLightPositionSway& a, const SectorLightPositionSway& b)
+{
+    return a.enabled == b.enabled && a.horizontalRadiusWorld == b.horizontalRadiusWorld
+            && a.verticalAmountWorld == b.verticalAmountWorld && a.speed == b.speed;
+}
+inline bool operator!=(const SectorLightPositionSway& a, const SectorLightPositionSway& b) { return !(a == b); }
+
 struct SectorTopologyDynamicPointLight {
     int id = -1;
     Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
@@ -439,6 +453,7 @@ struct SectorTopologyDynamicPointLight {
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
     float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
     std::string instanceId;
+    SectorLightPositionSway positionSway;
 };
 
 struct SectorTopologyDynamicSpotLight {

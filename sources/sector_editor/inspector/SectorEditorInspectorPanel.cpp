@@ -806,6 +806,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringCamera
             ? FindSectorAuthoringCamera(authoringGraph, inspectorTarget.cameraId)
             : nullptr;
+    const SectorAuthoringParticleEmitter* selectedParticleEmitter =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringParticleEmitter
+            ? FindSectorAuthoringParticleEmitter(authoringGraph, inspectorTarget.particleEmitterId)
+            : nullptr;
+    if (selectedParticleEmitter == nullptr) context.particleEmitterUiState.bufferedEmitterId = -1;
     const SectorAuthoringSoundEmitter* selectedSoundEmitter =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringSoundEmitter
             ? FindSectorAuthoringSoundEmitter(authoringGraph, inspectorTarget.soundEmitterId)
@@ -1013,6 +1018,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     context.cameraUiState,
                     rowH,
                     gap);
+        }
+        if (selectedParticleEmitter != nullptr) {
+            return MeasureSectorEditorParticleEmitterInspectorContentHeight(
+                    *selectedParticleEmitter, context.particleEmitterUiState, rowH, gap);
         }
         if (selectedSoundEmitter != nullptr) {
             return MeasureSectorEditorSoundEmitterInspectorContentHeight(
@@ -3573,6 +3582,19 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         return result;
     }
 
+    if (selectedParticleEmitter != nullptr) {
+        const bool deleteRequested = DrawSectorEditorParticleEmitterInspector(
+                ui, config, input, assets, font, contentW, rowH, gap,
+                *selectedParticleEmitter, context.particleEmitterUiState,
+                context.particleEmitterEditing, context.particlePreview);
+        if (deleteRequested) {
+            AppendRequest(result,
+                    SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedParticleEmitterConfirmation);
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
     if (selectedSoundEmitter != nullptr) {
         const bool deleteRequested = DrawSectorEditorSoundEmitterInspector(
                 ui, config, input, assets, font, contentW, rowH, gap,

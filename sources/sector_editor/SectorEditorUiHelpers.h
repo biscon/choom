@@ -64,6 +64,7 @@ inline constexpr SectorEditorTool SectorEditorMapTools[] = {
         SectorEditorTool::Camera,
         SectorEditorTool::Path,
         SectorEditorTool::SoundEmitter,
+        SectorEditorTool::ParticleEmitter,
         SectorEditorTool::AuthoringFogVolume,
         SectorEditorTool::ReflectionProbe,
         SectorEditorTool::StaticLight,

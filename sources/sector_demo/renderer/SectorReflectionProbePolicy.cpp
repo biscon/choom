@@ -164,6 +164,7 @@ SectorPreviewDynamicPointLightUniform NormalizeSectorReflectionLight(
 {
     // Reflections represent the base light, not its sampled flicker envelope.
     light.flicker = false;
+    light.positionSway = {};
     light.selectionFadeEnabled = false;
     light.selectionFadeMultiplier = 1.0f;
     return light;

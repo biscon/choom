@@ -134,7 +134,8 @@ bool SectorLightProxyRenderer::Apply(
         if (!proxy.halo.enabled || proxy.halo.brightness <= 0.0f
                 || proxy.halo.radiusWorld <= 0.0f) continue;
         const Vector3 centerWorld = Vector3Add(
-                source.positionWorld, proxy.halo.centerOffsetWorld);
+                source.positionWorld, Vector3Add(proxy.halo.centerOffsetWorld,
+                        SectorLightAtmosphereRuntimeOffset(source,dynamicLights)));
         SectorLightAtmosphereVolume volume;
         volume.source = &source;
         volume.originWorld = centerWorld;

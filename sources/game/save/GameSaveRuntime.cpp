@@ -210,6 +210,9 @@ GameSaveLevelState CaptureGameSaveLevelState(
     CaptureLights(map.dynamicPointLights, result.dynamicLights);
     CaptureLights(map.dynamicSpotLights, result.dynamicLights);
     CaptureLights(map.dynamicRectLights, result.dynamicLights);
+    for (const auto& emitter : map.particleEmitters) {
+        result.particleEmitters.push_back({emitter.id, emitter.enabled, emitter.runtimeIntensity});
+    }
     for (const auto& volume : map.compiledLocalFogVolumes) {
         if (!volume.instanceId.empty()) {
             result.fogVolumes.push_back({volume.instanceId, volume.enabled});
@@ -373,6 +376,14 @@ void ApplyGameSaveLevelMapState(
     ApplyLights(map.dynamicPointLights, state);
     ApplyLights(map.dynamicSpotLights, state);
     ApplyLights(map.dynamicRectLights, state);
+    for (auto& emitter : map.particleEmitters) {
+        const auto saved = std::find_if(state.particleEmitters.begin(), state.particleEmitters.end(),
+                [&](const auto& value) { return value.instanceId == emitter.id; });
+        if (saved != state.particleEmitters.end()) {
+            emitter.enabled = saved->enabled; emitter.runtimeIntensity = saved->intensity;
+        }
+        emitter.pendingBurst = 0;
+    }
     for (auto& volume : map.compiledLocalFogVolumes) {
         const auto saved = std::find_if(state.fogVolumes.begin(), state.fogVolumes.end(),
                 [&volume](const auto& value) { return value.instanceId == volume.instanceId; });

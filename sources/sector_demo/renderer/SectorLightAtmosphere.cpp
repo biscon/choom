@@ -267,6 +267,16 @@ bool MakeSectorLightAtmosphereVolume(
     return std::isfinite(outVolume.boundsRadiusWorld) && outVolume.boundsRadiusWorld > 0.0f;
 }
 
+Vector3 SectorLightAtmosphereRuntimeOffset(const SectorLightAtmosphereSource& source,
+        const SectorBillboardDynamicLightContext& lights)
+{
+    if (source.kind != SectorLightAtmosphereSourceKind::DynamicPoint) return {};
+    for (int i = 0; i < lights.dynamicLightCount; ++i)
+        if (lights.dynamicLightIds[i] == source.lightId && lights.dynamicLightTypes[i] == 0)
+            return Vector3Subtract(lights.dynamicLightPositions[i],source.positionWorld);
+    return {};
+}
+
 bool IsSectorLightAtmosphereSourceDynamic(const SectorLightAtmosphereSource& source)
 {
     return source.kind == SectorLightAtmosphereSourceKind::DynamicPoint

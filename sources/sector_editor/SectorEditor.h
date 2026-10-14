@@ -53,6 +53,7 @@
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
 #include "sector_editor/services/cameras/SectorEditorCameraEditingState.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
+#include "sector_editor/inspector/SectorEditorParticleEmitterInspector.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
@@ -674,6 +675,10 @@ private:
     SoundEmitterEditingState soundEmitterEditingState;
     SoundEmitterEditingUiState soundEmitterEditingUiState;
     std::optional<SectorEditorSoundEmitterEditingService> soundEmitterEditingService;
+    ParticleEmitterEditingState particleEmitterEditingState;
+    ParticleEmitterEditingUiState particleEmitterEditingUiState;
+    std::optional<SectorEditorParticleEmitterEditingService> particleEmitterEditingService;
+    SectorEditorParticlePreview particlePreview;
     TriggerEditingState triggerEditingState;
     TriggerEditingUiState triggerEditingUiState;
     std::optional<SectorEditorTriggerEditingService> triggerEditingService;

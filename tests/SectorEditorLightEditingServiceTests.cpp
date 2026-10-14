@@ -111,6 +111,9 @@ game::SectorEditorLightEditingService MakeService(
                             uiState.lightStartFeatherInput,
                             uiState.lightFlickerSpeedInput,
                             uiState.lightFlickerAmountInput,
+                            uiState.lightSwayHorizontalInput,
+                            uiState.lightSwayVerticalInput,
+                            uiState.lightSwaySpeedInput,
                             uiState.lightShadowPriorityInput,
                             uiState.lightShadowBiasInput,
                             uiState.lightShadowStrengthInput,
@@ -1149,6 +1152,15 @@ void TestStaticShadowEditsUseDocumentMutationBoundary()
     Check(!documentState.map.topologyMap.staticSpotLights.front().castsShadow,
           "static spot shadow edit writes the flag");
     CheckDirtyOnce(state, documentState, statusText, "Updated static spot 32 shadow");
+    auto& dynamic = documentState.map.topologyMap.dynamicPointLights.emplace_back();
+    dynamic.id = 33;
+    ResetDirty(state,documentState,statusText);
+    Check(service.SetDynamicLightPositionSway(dynamic,{true,0.05f,0.03f,1}),"sway edit commits");
+    CheckDirtyOnce(state,documentState,statusText,"Updated dynamic light 33 position sway");
+    ResetDirty(state,documentState,statusText);
+    Check(!service.SetDynamicLightPositionSway(dynamic,dynamic.positionSway),"unchanged sway does not dirty document");
+    CheckClean(state,documentState,statusText,"old");
+
 }
 
 void TestAtmosphereEditUsesDocumentMutationBoundary()

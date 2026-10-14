@@ -104,6 +104,16 @@ struct CachedAuthoringCameraDraw {
     float yawDegrees = 0.0f;
 };
 
+struct CachedAuthoringParticleEmitterDraw {
+    std::array<Vector2, 16> footprint{};
+    int footprintCount = 0;
+    Vector2 direction{};
+    bool enabled = true;
+    int emitterId = -1;
+    std::string referenceId;
+    Vector2 map = {};
+};
+
 struct CachedAuthoringSoundEmitterDraw {
     int emitterId = -1;
     std::string referenceId;
@@ -179,6 +189,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedAuthoringLevelMarkerDraw> levelMarkers;
     std::vector<CachedAuthoringCameraDraw> cameras;
     std::vector<CachedAuthoringSoundEmitterDraw> soundEmitters;
+    std::vector<CachedAuthoringParticleEmitterDraw> particleEmitters;
     std::vector<CachedAuthoringTriggerDraw> triggers;
     std::vector<CachedStructuralPrimitiveDraw> structuralPrimitives;
     std::vector<CachedAuthoringLineDraw> authoringLines;

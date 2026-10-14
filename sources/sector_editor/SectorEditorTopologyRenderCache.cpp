@@ -7,6 +7,7 @@
 #include "util/earcut.h"
 
 #include <raylib.h>
+#include <raymath.h>
 
 #include <algorithm>
 #include <array>
@@ -773,6 +774,41 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cache.cameras.push_back(std::move(cached));
     }
 
+    cache.particleEmitters.reserve(authoringGraph.particleEmitters.size());
+    for (const SectorAuthoringParticleEmitter& emitter : authoringGraph.particleEmitters) {
+        CachedAuthoringParticleEmitterDraw cached;
+        cached.emitterId = emitter.id;
+        cached.referenceId = emitter.referenceId;
+        cached.map = {SectorCoordToVisibleAuthoring(emitter.x),
+                SectorCoordToVisibleAuthoring(emitter.z)};
+        cached.enabled = emitter.enabled;
+        SectorCompiledParticleEmitter source;
+        source.settings = emitter.settings;
+        source.yawDegrees = emitter.yawDegrees;
+        source.pitchDegrees = emitter.pitchDegrees;
+        const auto definition = CompileSectorParticleDefinition(source);
+        const Vector3 direction = definition.direction;
+        cached.direction = {direction.x, direction.z};
+        const Vector3 right = Vector3Normalize(Vector3CrossProduct(direction,
+                std::fabs(direction.y) < 0.95f ? Vector3{0,1,0} : Vector3{0,0,1}));
+        const Vector3 up = Vector3CrossProduct(right, direction);
+        if (definition.shape == engine::ParticleShape::Disc) {
+            cached.footprintCount = 16;
+            for (int i = 0; i < 16; ++i) {
+                const float angle = i * 2 * PI / 16;
+                const Vector3 offset = Vector3Add(Vector3Scale(right,std::cos(angle)*definition.dimensions.x*0.5f),
+                        Vector3Scale(up,std::sin(angle)*definition.dimensions.z*0.5f));
+                cached.footprint[i] = {SectorWorldToAuthoringDistance(offset.x),SectorWorldToAuthoringDistance(offset.z)};
+            }
+        } else if (definition.shape == engine::ParticleShape::Box) {
+            cached.footprintCount = 4;
+            const float x = SectorWorldToAuthoringDistance(definition.dimensions.x)*0.5f;
+            const float z = SectorWorldToAuthoringDistance(definition.dimensions.z)*0.5f;
+            cached.footprint[0] = {-x,-z}; cached.footprint[1] = {x,-z};
+            cached.footprint[2] = {x,z}; cached.footprint[3] = {-x,z};
+        }
+        cache.particleEmitters.push_back(std::move(cached));
+    }
     cache.soundEmitters.reserve(authoringGraph.soundEmitters.size());
     for (const SectorAuthoringSoundEmitter& emitter : authoringGraph.soundEmitters) {
         CachedAuthoringSoundEmitterDraw cached;
@@ -1323,6 +1359,38 @@ void AppendCachedCameraPickCandidates(
             outCandidates.push_back(SectorEditorPickCandidate{
                     SectorEditorPickTarget{SectorEditorPickKind::Camera, marker.cameraId},
                     distance2});
+        }
+    }
+}
+
+void AppendCachedParticleEmitterPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates)
+{
+    if (!cache.valid || tolerancePixels < 0.0f) return;
+    const float tolerance2 = tolerancePixels * tolerancePixels;
+    for (const CachedAuthoringParticleEmitterDraw& emitter : cache.particleEmitters) {
+        const Vector2 center = CachedMapToScreen(context, emitter.map);
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        float distance2 = dx * dx + dy * dy;
+        const auto edgeDistance = [&](Vector2 a, Vector2 b) {
+            const Vector2 delta = Vector2Subtract(b,a);
+            const float length2 = Vector2LengthSqr(delta);
+            const float t = length2 > 0 ? std::clamp(Vector2DotProduct(Vector2Subtract(screenPoint,a),delta)/length2,0.0f,1.0f) : 0;
+            return Vector2DistanceSqr(screenPoint,Vector2Add(a,Vector2Scale(delta,t)));
+        };
+        for (int i = 0; i < emitter.footprintCount; ++i) {
+            const auto a = CachedMapToScreen(context,Vector2Add(emitter.map,emitter.footprint[i]));
+            const auto b = CachedMapToScreen(context,Vector2Add(emitter.map,emitter.footprint[(i+1)%emitter.footprintCount]));
+            distance2 = std::min(distance2,edgeDistance(a,b));
+        }
+        distance2 = std::min(distance2,edgeDistance(center,Vector2Add(center,Vector2Scale(emitter.direction,24))));
+        if (distance2 <= tolerance2) {
+            outCandidates.push_back({{SectorEditorPickKind::ParticleEmitter, emitter.emitterId}, distance2});
         }
     }
 }
@@ -2173,6 +2241,42 @@ void DrawCachedCameras(
         DrawLineEx(center, tip, selected ? 3.0f : 2.0f, color);
         DrawEditorMarkerDisc(tip, selected ? 3.5f : 3.0f, color);
         DrawText(marker.referenceId.c_str(), static_cast<int>(center.x + 11.0f),
+                static_cast<int>(center.y - 16.0f), 12, color);
+    }
+}
+
+void DrawCachedParticleEmitters(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const ParticleEmitterDragState* drag)
+{
+    const Color outline{18, 30, 34, 255};
+    const Color normal{255, 156, 72, 255};
+    const Color selectedColor{248, 232, 102, 255};
+    const Color hoveredColor{142, 246, 211, 255};
+    for (const CachedAuthoringParticleEmitterDraw& emitter : cache.particleEmitters) {
+        Vector2 map = emitter.map;
+        if (drag != nullptr && drag->active && drag->emitterId == emitter.emitterId) {
+            map = {SectorCoordToVisibleAuthoring(drag->previewX),
+                    SectorCoordToVisibleAuthoring(drag->previewZ)};
+        }
+        const bool selected = context.selectedAuthoring.kind == SectorAuthoringSelectionKind::ParticleEmitter
+                && context.selectedAuthoring.particleEmitterId == emitter.emitterId;
+        const bool hovered = context.hoveredAuthoring.kind == SectorAuthoringSelectionKind::ParticleEmitter
+                && context.hoveredAuthoring.particleEmitterId == emitter.emitterId;
+        const Color color = selected ? selectedColor : hovered ? hoveredColor : emitter.enabled ? normal : Color{125,110,98,255};
+        const Vector2 center = CachedMapToScreen(context, map);
+        const float radius = selected ? 9.0f : 7.0f;
+        DrawPoly(center, 4, radius, 45, color);
+        DrawPolyLines(center, 4, radius, 45, outline);
+        DrawLineEx({center.x,center.y-4},{center.x,center.y+4},2,outline);
+        DrawLineEx({center.x-4,center.y},{center.x+4,center.y},2,outline);
+        for (int i = 0; i < emitter.footprintCount; ++i) {
+            DrawLineEx(CachedMapToScreen(context,Vector2Add(map,emitter.footprint[i])),
+                    CachedMapToScreen(context,Vector2Add(map,emitter.footprint[(i+1)%emitter.footprintCount])),1,color);
+        }
+        DrawLineEx(center,Vector2Add(center,Vector2Scale(emitter.direction,24)),2,color);
+        DrawText(emitter.referenceId.c_str(), static_cast<int>(center.x + 11.0f),
                 static_cast<int>(center.y - 16.0f), 12, color);
     }
 }

@@ -125,6 +125,12 @@ bool SelectPickTarget(
             SelectSectorEditorAuthoringCameraTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Camera
                     && context.selectionState.selectedAuthoring.cameraId == target.id;
+        case SectorEditorPickKind::ParticleEmitter:
+            ClearSectorEditorSelection(selectionContext);
+            SelectSectorEditorAuthoringParticleEmitter(
+                    context.authoringGraph, context.selectionState, target.id);
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::ParticleEmitter
+                    && context.selectionState.selectedAuthoring.particleEmitterId == target.id;
         case SectorEditorPickKind::SoundEmitter:
             ClearSectorEditorSelection(selectionContext);
             SelectSectorEditorAuthoringSoundEmitter(
@@ -193,6 +199,9 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
                     context.authoringGraph,
                     context.selectionState,
                     target.id);
+        } else if (target.kind == SectorEditorPickKind::ParticleEmitter) {
+            SetHoveredSectorEditorAuthoringParticleEmitter(
+                    context.authoringGraph, context.selectionState, target.id);
         } else if (target.kind == SectorEditorPickKind::SoundEmitter) {
             SetHoveredSectorEditorAuthoringSoundEmitter(
                     context.authoringGraph, context.selectionState, target.id);

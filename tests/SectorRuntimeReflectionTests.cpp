@@ -365,6 +365,9 @@ void TestSteadyReflectedFlicker()
     Check(capture.intensity == 3 && !capture.flicker && !capture.selectionFadeEnabled
                   && capture.selectionFadeMultiplier == 1,
           "capture preserves base intensity and omits direct-light flicker and selection fade");
+    light.positionSway = {true,0.5f,0.3f,2};
+    Check(!game::NormalizeSectorReflectionLight(light).positionSway.enabled,
+            "reflection captures omit direct-light position sway");
     light.flickerAmount = 0.99f;
     light.flickerSpeed = 8;
     Check(game::SectorReflectionLightsMatch(capture, game::NormalizeSectorReflectionLight(light)),

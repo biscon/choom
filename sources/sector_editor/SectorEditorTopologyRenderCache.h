@@ -94,6 +94,12 @@ void AppendCachedSoundEmitterPickCandidates(
         Vector2 screenPoint,
         float tolerancePixels,
         std::vector<SectorEditorPickCandidate>& outCandidates);
+void AppendCachedParticleEmitterPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates);
 void AppendCachedStructuralPrimitivePickCandidates(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
@@ -137,6 +143,10 @@ void DrawCachedSoundEmitters(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
         const SoundEmitterDragState* drag = nullptr);
+void DrawCachedParticleEmitters(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const ParticleEmitterDragState* drag = nullptr);
 void DrawCachedTriggers(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,

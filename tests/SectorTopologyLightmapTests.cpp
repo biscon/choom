@@ -1425,6 +1425,15 @@ void TestItemDropTargetDoesNotChangeLightmapHash()
     }
 }
 
+void TestDynamicSwayDoesNotChangeLightmapHash()
+{
+    game::SectorTopologyMap map;
+    map.dynamicPointLights.emplace_back();
+    const auto hash = game::ComputeSectorLightmapSourceHash(map);
+    map.dynamicPointLights[0].positionSway = {true,0.2f,0.1f,2};
+    Check(game::ComputeSectorLightmapSourceHash(map) == hash,"dynamic position sway is excluded from baked lightmap hashes");
+}
+
 void TestSourceHashChanges()
 {
     const game::SectorTopologyMap base = MakeSquare();
@@ -5387,6 +5396,7 @@ int main()
     TestObjectLightProbeSpotlightCone();
     TestObjectLightProbeOcclusionAndAlphaOcclusion();
     TestObjectLightProbeAmbientAndDegenerateFiniteOutput();
+    TestDynamicSwayDoesNotChangeLightmapHash();
     TestSourceHashChanges();
     TestItemDropTargetDoesNotChangeLightmapHash();
     TestSourceHashIncludesMiddleTextureData();

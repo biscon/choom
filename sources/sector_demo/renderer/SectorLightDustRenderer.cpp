@@ -267,7 +267,8 @@ void SectorLightDustRenderer::BuildEmitters(
             continue;
         }
         SectorLightAtmosphereVolume volume;
-        if (!MakeSectorLightAtmosphereVolume(source, source.atmosphere.dust.extentScale, 0.0f, volume)
+        if (!MakeSectorLightAtmosphereVolume(source, source.atmosphere.dust.extentScale,
+                    SectorLightAtmosphereRuntimeOffset(source,dynamicLights), volume)
                 || !IsSectorLightAtmosphereVolumeVisible(
                         volume, visibility, receiverBounds, camera, aspectRatio, nearPlane, farPlane)) {
             continue;

@@ -65,6 +65,9 @@ struct SectorEditorLightEditingServiceContext {
         engine::UIFloatInputState& lightStartFeatherInput;
         engine::UIFloatInputState& lightFlickerSpeedInput;
         engine::UIFloatInputState& lightFlickerAmountInput;
+        engine::UIFloatInputState& lightSwayHorizontalInput;
+        engine::UIFloatInputState& lightSwayVerticalInput;
+        engine::UIFloatInputState& lightSwaySpeedInput;
         engine::UIIntInputState& lightShadowPriorityInput;
         engine::UIFloatInputState& lightShadowBiasInput;
         engine::UIFloatInputState& lightShadowStrengthInput;
@@ -178,6 +181,7 @@ public:
 
     bool SetDynamicLightEnabled(SectorTopologyDynamicPointLight& light, bool enabled);
     bool SetDynamicLightInstanceId(SectorTopologyDynamicPointLight& light, const std::string& value, std::string& error);
+    bool SetDynamicLightPositionSway(SectorTopologyDynamicPointLight& light, SectorLightPositionSway sway);
     bool SetDynamicLightFlicker(SectorTopologyDynamicPointLight& light, bool flicker);
     bool SetDynamicLightFlickerSpeed(SectorTopologyDynamicPointLight& light, float flickerSpeed);
     bool SetDynamicLightFlickerAmount(SectorTopologyDynamicPointLight& light, float flickerAmount);

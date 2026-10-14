@@ -47,6 +47,7 @@ enum class SectorEditorTool {
     Camera,
     Path,
     SoundEmitter,
+    ParticleEmitter,
     StaticLight,
     StaticSpotLight,
     StaticRectLight,
@@ -149,6 +150,9 @@ struct SectorEditorUiState {
     engine::UIFloatInputState lightStartFeatherInput;
     engine::UIFloatInputState lightFlickerSpeedInput;
     engine::UIFloatInputState lightFlickerAmountInput;
+    engine::UIFloatInputState lightSwayHorizontalInput;
+    engine::UIFloatInputState lightSwayVerticalInput;
+    engine::UIFloatInputState lightSwaySpeedInput;
     engine::UIIntInputState lightShadowPriorityInput;
     engine::UIFloatInputState lightShadowBiasInput;
     engine::UIFloatInputState lightShadowStrengthInput;

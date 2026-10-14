@@ -3,6 +3,7 @@
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
+#include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardTypes.h"
 #include "sector_editor/services/structural_primitives/SectorEditorStructuralPrimitiveEditingState.h"
 
 #include <functional>
@@ -63,6 +64,8 @@ public:
             int primitiveId,
             const SectorAuthoringStructuralPrimitive& value,
             const char* status);
+    bool CopySelectedConfig(SectorEditorConfigClipboardState& clipboard) const;
+    bool PasteSelectedConfig(const SectorEditorConfigClipboardState& clipboard);
     bool DeleteSelected();
 
     bool BeginPreviewAdjustment();

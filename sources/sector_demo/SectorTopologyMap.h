@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sector_demo/particles/SectorParticleSettings.h"
+
 #include "sector_demo/SectorPaths.h"
 
 #include "game/items/ItemSourceQuantity.h"
@@ -483,6 +485,7 @@ struct SectorTopologyMap {
     std::vector<SectorCompiledPatrol> patrols;
     std::vector<SectorCompiledPath> paths;
     std::vector<SectorCompiledSoundEmitter> soundEmitters;
+    std::vector<SectorCompiledParticleEmitter> particleEmitters;
     std::vector<SectorCompiledTrigger> triggers;
     std::vector<SectorCompiledStructuralPrimitive> compiledStructuralPrimitives;
     SectorPreviewSettings previewSettings;

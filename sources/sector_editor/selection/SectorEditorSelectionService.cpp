@@ -780,6 +780,9 @@ void SelectSectorEditorTopologyDynamicSpotLight(SectorEditorSelectionServiceCont
     context.ui.lightOuterConeInput = engine::UIFloatInputState{};
     context.ui.lightFlickerSpeedInput = engine::UIFloatInputState{};
     context.ui.lightFlickerAmountInput = engine::UIFloatInputState{};
+    context.ui.lightSwayHorizontalInput = engine::UIFloatInputState{};
+    context.ui.lightSwayVerticalInput = engine::UIFloatInputState{};
+    context.ui.lightSwaySpeedInput = engine::UIFloatInputState{};
     context.ui.lightRedInput = engine::UIIntInputState{};
     context.ui.lightGreenInput = engine::UIIntInputState{};
     context.ui.lightBlueInput = engine::UIIntInputState{};

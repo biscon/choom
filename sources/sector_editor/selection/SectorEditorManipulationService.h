@@ -11,6 +11,7 @@
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/cameras/SectorEditorCameraEditingService.h"
 #include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
+#include "sector_editor/services/particle_emitters/SectorEditorParticleEmitterEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_demo/SectorAuthoringGraph.h"
 
@@ -55,6 +56,7 @@ struct SectorEditorManipulationServiceContext {
     SectorEditorLevelMarkerEditingService* levelMarkerEditing = nullptr;
     SectorEditorCameraEditingService* cameraEditing = nullptr;
     SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr;
+    SectorEditorParticleEmitterEditingService* particleEmitterEditing = nullptr;
     SectorEditorTriggerEditingService* triggerEditing = nullptr;
     std::function<Vector2(Vector2)> screenToMap;
     std::function<Vector2(Vector2)> snapMapPoint;

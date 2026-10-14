@@ -18,6 +18,13 @@ enum class SectorEditorConfigKind {
     DynamicPointLight,
     DynamicSpotLight,
     DynamicRectLight,
+    FogVolume,
+    StructureBox,
+    StructureRamp,
+    StructureStairs,
+    StructureCylinder,
+    StructureSphere,
+    StructureLadder,
     SurfaceFloor,
     SurfaceCeiling,
     SurfaceWall,
@@ -45,6 +52,8 @@ using SectorEditorConfigPayload = std::variant<
         std::monostate,
         SectorAuthoringFaceAnchor,
         SectorPlacedDoor,
+        SectorAuthoringFogVolume,
+        SectorAuthoringStructuralPrimitive,
         SectorEditorStaticModelConfig,
         SectorEditorDynamicModelConfig,
         SectorTopologyStaticPointLight,
@@ -73,6 +82,13 @@ inline const char* SectorEditorConfigKindName(SectorEditorConfigKind kind)
         case SectorEditorConfigKind::DynamicPointLight: return "dynamic point light";
         case SectorEditorConfigKind::DynamicSpotLight: return "dynamic spot light";
         case SectorEditorConfigKind::DynamicRectLight: return "dynamic rect light";
+        case SectorEditorConfigKind::FogVolume: return "fog volume";
+        case SectorEditorConfigKind::StructureBox: return "box structure";
+        case SectorEditorConfigKind::StructureRamp: return "ramp structure";
+        case SectorEditorConfigKind::StructureStairs: return "stairs structure";
+        case SectorEditorConfigKind::StructureCylinder: return "cylinder structure";
+        case SectorEditorConfigKind::StructureSphere: return "sphere structure";
+        case SectorEditorConfigKind::StructureLadder: return "ladder structure";
         case SectorEditorConfigKind::SurfaceFloor: return "floor material";
         case SectorEditorConfigKind::SurfaceCeiling: return "ceiling material";
         case SectorEditorConfigKind::SurfaceWall: return "wall material";
@@ -81,6 +97,35 @@ inline const char* SectorEditorConfigKindName(SectorEditorConfigKind kind)
         case SectorEditorConfigKind::None: return "config";
     }
     return "config";
+}
+
+inline SectorEditorConfigKind SectorEditorStructuralConfigKind(
+        SectorStructuralPrimitiveKind kind)
+{
+    switch (kind) {
+        case SectorStructuralPrimitiveKind::Box: return SectorEditorConfigKind::StructureBox;
+        case SectorStructuralPrimitiveKind::Ramp: return SectorEditorConfigKind::StructureRamp;
+        case SectorStructuralPrimitiveKind::Stairs: return SectorEditorConfigKind::StructureStairs;
+        case SectorStructuralPrimitiveKind::Cylinder: return SectorEditorConfigKind::StructureCylinder;
+        case SectorStructuralPrimitiveKind::Sphere: return SectorEditorConfigKind::StructureSphere;
+        case SectorStructuralPrimitiveKind::Ladder: return SectorEditorConfigKind::StructureLadder;
+    }
+    return SectorEditorConfigKind::None;
+}
+
+inline bool IsSectorEditorStructuralConfigKind(SectorEditorConfigKind kind)
+{
+    switch (kind) {
+        case SectorEditorConfigKind::StructureBox:
+        case SectorEditorConfigKind::StructureRamp:
+        case SectorEditorConfigKind::StructureStairs:
+        case SectorEditorConfigKind::StructureCylinder:
+        case SectorEditorConfigKind::StructureSphere:
+        case SectorEditorConfigKind::StructureLadder:
+            return true;
+        default:
+            return false;
+    }
 }
 
 inline SectorEditorConfigKind SectorEditorSurfaceConfigKind(

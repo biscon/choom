@@ -35,6 +35,7 @@ enum class GameShader {
     ScenePresentation,
     WindowFlatTransmission,
     WindowFlatReflection,
+    Particle,
     Count
 };
 
@@ -72,6 +73,7 @@ inline constexpr std::array<engine::ShaderProgramDefinition,
     {"scene_presentation", nullptr, "engine/scene_presentation.frag.glsl"},
     {"window_flat_transmission", "sector/window.vert.glsl", "sector/window.frag.glsl", WindowTransmissionDefines, 1},
     {"window_flat_reflection", "sector/window.vert.glsl", "sector/window.frag.glsl", WindowReflectionDefines, 1},
+    {"particle", "sector/particle.vert.glsl", "sector/particle.frag.glsl"},
 }};
 
 inline constexpr GameShader WindowShaderVariant(int variant)

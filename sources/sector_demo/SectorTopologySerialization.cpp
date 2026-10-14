@@ -8,6 +8,7 @@
 #include "sector_demo/SectorTriggers.h"
 
 #include "util/json.hpp"
+#include "sector_demo/particles/SectorParticleJson.h"
 
 #include <algorithm>
 #include <cctype>
@@ -3337,6 +3338,15 @@ Json WriteDynamicPointLight(const SectorTopologyDynamicPointLight& light, const 
             {"color", WriteColor(light.color)}};
     if (!light.enabled) lightJson["enabled"] = false;
     WriteDynamicLightFlickerFields(lightJson, light, context);
+    const auto& sway = light.positionSway;
+    RequireFinite(sway.horizontalRadiusWorld, context + ".positionSway.horizontalRadiusWorld");
+    RequireFinite(sway.verticalAmountWorld, context + ".positionSway.verticalAmountWorld");
+    RequireFinite(sway.speed, context + ".positionSway.speed");
+    if (sway != SectorLightPositionSway{}) lightJson["positionSway"] = {
+            {"enabled", sway.enabled},
+            {"horizontalRadiusWorld", std::clamp(sway.horizontalRadiusWorld,0.0f,1.0f)},
+            {"verticalAmountWorld", std::clamp(sway.verticalAmountWorld,0.0f,1.0f)},
+            {"speed", std::clamp(sway.speed,0.05f,5.0f)}};
     if (light.castsShadow) lightJson["castsShadow"] = true;
     if (shadowPriority != DynamicSpotLightDefaultShadowPriority) {
         lightJson["shadowPriority"] = shadowPriority;
@@ -4325,6 +4335,15 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
             light.enabled = ReadOptionalBool(value, "enabled", context, true);
+            if (const auto it = value.find("positionSway"); it != value.end()) {
+                if (!it->is_object()) Fail(context + ".positionSway must be an object");
+                auto& sway = light.positionSway;
+                const auto swayContext = context + ".positionSway";
+                sway.enabled = ReadOptionalBool(*it,"enabled",swayContext,false);
+                sway.horizontalRadiusWorld = ReadOptionalClampedFloat(*it,"horizontalRadiusWorld",swayContext,0.05f,0.0f,1.0f);
+                sway.verticalAmountWorld = ReadOptionalClampedFloat(*it,"verticalAmountWorld",swayContext,0.03f,0.0f,1.0f);
+                sway.speed = ReadOptionalClampedFloat(*it,"speed",swayContext,1.0f,0.05f,5.0f);
+            }
             light.flicker = ReadOptionalBool(value, "flicker", context, false);
             light.flickerSpeed = ReadOptionalClampedFloat(
                     value,
@@ -4928,6 +4947,23 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    if (const auto particles = value.find("particleEmitters"); particles != value.end()) {
+        if (!particles->is_array()) Fail("authoringGraph.particleEmitters must be an array");
+        for (const auto& j : *particles) {
+            const std::string context = "authoring particle emitter";
+            SectorAuthoringParticleEmitter e;
+            e.id = ReadInt(j, "editorId", context);
+            e.referenceId = ReadString(j, "id", context);
+            e.x = ReadCoord(j, "x", context); e.z = ReadCoord(j, "z", context);
+            e.heightWorld = ReadOptionalFloat(j, "heightWorld", context, e.heightWorld);
+            e.yawDegrees = ReadOptionalFloat(j, "yawDegrees", context, e.yawDegrees);
+            e.pitchDegrees = ReadOptionalFloat(j, "pitchDegrees", context, e.pitchDegrees);
+            e.enabled = ReadOptionalBool(j, "enabled", context, true);
+            if (j.contains("settings")) e.settings = ReadSectorParticleSettings(j.at("settings"));
+            graph.particleEmitters.push_back(std::move(e));
+        }
+    }
+
     const auto soundEmittersIt = value.find("soundEmitters");
     if (soundEmittersIt != value.end()) {
         if (!soundEmittersIt->is_array()) {
@@ -5113,6 +5149,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
                 || issue.objectKind == SectorAuthoringObjectKind::LevelMarker
                         || issue.objectKind == SectorAuthoringObjectKind::Patrol
                         || issue.objectKind == SectorAuthoringObjectKind::SoundEmitter
+                        || issue.objectKind == SectorAuthoringObjectKind::ParticleEmitter
                         || issue.objectKind == SectorAuthoringObjectKind::Trigger
                         || issue.objectKind == SectorAuthoringObjectKind::FogVolume)
                 && issue.severity == SectorAuthoringValidationSeverity::Error;
@@ -5603,6 +5640,22 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         }
     }
 
+
+    if (!graph.particleEmitters.empty()) {
+        const auto issues = ValidateSectorAuthoringGraphReferences(graph);
+        for (const auto& issue : issues) {
+            if (issue.objectKind == SectorAuthoringObjectKind::ParticleEmitter
+                    && issue.severity == SectorAuthoringValidationSeverity::Error) Fail(issue.message);
+        }
+        graphJson["particleEmitters"] = Json::array();
+        for (const auto* e : SortedById(graph.particleEmitters)) {
+            Json j{{"editorId", e->id}, {"id", e->referenceId}, {"x", e->x}, {"z", e->z},
+                    {"heightWorld", e->heightWorld}, {"yawDegrees", e->yawDegrees},
+                    {"pitchDegrees", e->pitchDegrees}, {"settings", WriteSectorParticleSettings(e->settings)}};
+            if (!e->enabled) j["enabled"] = false;
+            graphJson["particleEmitters"].push_back(std::move(j));
+        }
+    }
 
     if (!graph.soundEmitters.empty()) {
         const std::vector<SectorAuthoringValidationIssue> issues =
