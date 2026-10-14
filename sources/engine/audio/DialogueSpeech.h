@@ -39,6 +39,7 @@ struct DialogueProsody {
     float gain = 1;
     float wobbleHz = 0;
     float wobbleSemitones = 0;
+    float wordAccentSemitones = 0;
 };
 struct DialogueClip {
     SoundHandle sound{};

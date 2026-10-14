@@ -232,8 +232,14 @@ The original ah/eh/ee/oh/oo formants derive from the first three bass bands in t
 [Csound tables](https://csound.com/manual/misc/formants/); uh is an authored central
 vowel. The six presets are artistic starting points, not physiological models.
 
-All six profiles and seven moods retain the existing typewriter timing, phrase
-contours, question/capitals emphasis and smooth runtime pitch interpolation.
+All six profiles use the accepted lighter neutral delivery: a half-semitone base
+pitch lift, a half-semitone phrase descent, and up to 0.75 semitones of gentle
+word emphasis. The optional mood-level `word_accent_semitones` selects the first
+word of at least five letters in each phrase and gives its vowel cues a smooth
+rise/fall accent. This spelling heuristic resets at punctuation; it does not
+quantize pitch to a musical scale. Missing accent settings default to zero.
+Other moods retain their authored contours. Typewriter timing, question/capitals
+emphasis and continuous runtime pitch interpolation are unchanged.
 Elderly runtime wobble remains 2 Hz with a 0.15-semitone base depth; emotional
 wobble is at most 0.2 semitones. These phrase-level controls are separate from
 the removed cycle-level instability. Files last 140 ms with mood-specific attacks,
@@ -245,7 +251,8 @@ preserves the relative vowel levels measured in the accepted male audition.
 A -5.5 dBFS pre-headroom peak ceiling can lower a vowel if needed. Global
 `output_gain_db: -3` then leaves overlap headroom; angry adds another -2 dB
 because its denser, emphasized stress mix otherwise clipped. Thus neutral male
-playback matches the accepted waveform and balance at 3 dB lower level.
+vowel assets preserve the accepted waveform and balance at 3 dB lower level;
+the later lighter-delivery audition supplies the current neutral pitch contour.
 Runtime volume stays 0.65; positional attenuation and other sounds are unchanged.
 
 The headless ordinary and 60-character/second capitalized stress corpora check

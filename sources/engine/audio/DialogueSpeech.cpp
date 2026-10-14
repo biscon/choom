@@ -99,6 +99,7 @@ void BeginLoadDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library
                     out.gain = Number(p, "gain", 1, 0, 1.5f);
                     out.wobbleHz = Number(p, "wobble_hz", 0, 0, 8);
                     out.wobbleSemitones = Number(p, "wobble_semitones", 0, 0, 1);
+                    out.wordAccentSemitones = Number(p, "word_accent_semitones", 0, 0, 1.5f);
                 }
             }
             library.voices.push_back(std::move(voice));

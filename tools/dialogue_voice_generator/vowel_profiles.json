@@ -181,8 +181,9 @@
   },
   "moods": {
     "neutral": {
-      "pitch_semitones": 0,
-      "contour_semitones": 2,
+      "pitch_semitones": 0.5,
+      "contour_semitones": 0.5,
+      "word_accent_semitones": 0.75,
       "gain": 1,
       "wobble_hz": 0,
       "wobble_semitones": 0,

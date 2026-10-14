@@ -49,6 +49,8 @@ def validate(config):
         data = config['moods'][mood]
         if not finite(data.get('output_gain_db', 0), -12, 0):
             raise ValueError(f'Invalid {mood}.output_gain_db')
+        if not finite(data.get('word_accent_semitones', 0), 0, 1.5):
+            raise ValueError(f'Invalid {mood}.word_accent_semitones')
         for key, lo, hi in [('pitch_semitones', -3, 3), ('contour_semitones', 0, 6), ('gain', 0, 1.5), ('wobble_hz', 0, 8), ('wobble_semitones', 0, 1), ('tilt_offset', -.5, 1), ('breath_offset_db', -10, 15), ('attack_ms', 5, 35)]:
             if not finite(data[key], lo, hi):
                 raise ValueError(f'Invalid {mood}.{key}')
@@ -523,6 +525,8 @@ def generate(config, output):
             emotion = config['moods'][mood]
             manifest['moods'][mood] = {}
             prosody = {k: emotion[k] for k in ('pitch_semitones', 'contour_semitones', 'gain', 'wobble_hz', 'wobble_semitones')}
+            if emotion.get('word_accent_semitones', 0):
+                prosody['word_accent_semitones'] = emotion['word_accent_semitones']
             # Elderly identity wobble remains regular, even in emotional banks.
             if profile['wobble_hz']:
                 prosody['wobble_hz'] = profile['wobble_hz']

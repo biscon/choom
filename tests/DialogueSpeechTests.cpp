@@ -90,6 +90,48 @@ void DeterministicWordsAndExpression()
     assert(engine::DialogueCuePitch(cue, .125) > cue.pitch);
     assert(engine::DialogueCuePitch(cue, .375) < cue.pitch);
 }
+void WordAccents()
+{
+    auto voice = Voice();
+    voice.continuousPitch = true;
+    auto& neutral = voice.prosody[static_cast<size_t>(engine::DialogueMood::Neutral)];
+    neutral.pitchSemitones = .5f;
+    neutral.contourSemitones = .5f;
+    const std::string text = "Hello people, another person.";
+    const size_t another = text.find("another");
+    engine::DialogueTimeline plain, accented;
+    engine::ReserveDialogueTimeline(plain); engine::ReserveDialogueTimeline(accented);
+    assert(engine::BuildDialogueTimeline(text, engine::DialogueMood::Neutral, {}, &voice, plain));
+    neutral.wordAccentSemitones = .75f;
+    assert(engine::BuildDialogueTimeline(text, engine::DialogueMood::Neutral, {}, &voice, accented));
+    assert(plain.seconds == accented.seconds && plain.cues.size() == accented.cues.size());
+    assert(plain.reveals.size() == accented.reveals.size());
+    for (size_t i = 0; i < plain.reveals.size(); ++i) {
+        assert(plain.reveals[i].seconds == accented.reveals[i].seconds);
+        assert(plain.reveals[i].byteCount == accented.reveals[i].byteCount);
+    }
+    size_t firstAccents = 0, secondAccents = 0;
+    for (size_t i = 0; i < plain.cues.size(); ++i) {
+        const auto& a = plain.cues[i];
+        const auto& b = accented.cues[i];
+        assert(a.source == b.source && a.sound == b.sound);
+        assert(a.start == b.start && a.volume == b.volume);
+        const float lift = 12*std::log2(b.pitch/a.pitch);
+        const bool firstWord = b.beginByte < 5;
+        const bool secondPhrase = b.beginByte >= another && b.beginByte < another+7;
+        if (firstWord || secondPhrase) {
+            assert(lift >= -1e-5f && lift <= .75001f);
+            if (lift > .01f) (firstWord ? firstAccents : secondAccents)++;
+        } else assert(std::abs(lift) < 1e-5f);
+    }
+    assert(firstAccents > 0 && secondAccents > 0); // comma resets word selection
+    // A neutral-only accent must not spill into explicitly emotional delivery.
+    assert(engine::BuildDialogueTimeline(text, engine::DialogueMood::Happy, {}, &voice, accented));
+    neutral.wordAccentSemitones = 0;
+    assert(engine::BuildDialogueTimeline(text, engine::DialogueMood::Happy, {}, &voice, plain));
+    for (size_t i = 0; i < plain.cues.size(); ++i) assert(plain.cues[i].pitch == accented.cues[i].pitch);
+}
+
 void FrameStallsAndUnavailableDevice()
 {
     auto voice = Voice();
@@ -260,6 +302,7 @@ void LibraryLoading()
     engine::DialogueVoiceLibrary library;
     engine::BeginLoadDialogueVoices(assets, library, root);
     assert(library.pending.size() == 1 && library.voices.size() == 1);
+    assert(library.voices[0].prosody[0].wordAccentSemitones == 0); // optional for old manifests
     assert(!engine::DialogueVoicesFinished(assets, library));
     engine::PrepareDialogueVoices(assets, library, 1);
     assert(library.prepared == 1 && library.voices[0].banks[0].size() == engine::DialogueVowelCount);
@@ -269,10 +312,15 @@ void LibraryLoading()
     engine::UnloadDialogueVoices(assets, library);
     assert(assets.IsFinished(handle));
     manifest["continuous_pitch"] = true;
+    manifest["prosody"]["neutral"] = {{"pitch_semitones", .5}, {"contour_semitones", .5}, {"word_accent_semitones", .75}};
     manifest["consonants"]["neutral"]["t"] = "source.wav";
     std::ofstream(root / "voice/manifest.json") << manifest.dump();
     engine::BeginLoadDialogueVoices(assets, library, root);
     assert(library.pending.size() == 2 && library.voices[0].continuousPitch);
+    assert(library.voices[0].prosody[0].pitchSemitones == .5f);
+    assert(library.voices[0].prosody[0].contourSemitones == .5f);
+    assert(library.voices[0].prosody[0].wordAccentSemitones == .75f);
+    assert(library.voices[0].prosody[1].wordAccentSemitones == 0);
     engine::PrepareDialogueVoices(assets, library, 2);
     assert(library.voices[0].consonants[0][0].seconds == 1.f);
     engine::UnloadDialogueVoices(assets, library);
@@ -296,6 +344,7 @@ void TestDialogueSpeech()
 {
     Timelines();
     DeterministicWordsAndExpression();
+    WordAccents();
     FrameStallsAndUnavailableDevice();
     ConsonantsAndContinuousPitch();
     PcmOwnership();

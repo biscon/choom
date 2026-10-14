@@ -213,6 +213,7 @@ bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
             dots += c == '.';
         }
         ellipsis |= dots >= 3;
+        size_t accentedWord = count;
         size_t finalWord = phrase;
         uint32_t previousVowel = UINT32_MAX;
         for (size_t n = phrase; n < end; ++n)
@@ -230,6 +231,10 @@ bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
                 wordHash = Hash(wordHash, Fold(c));
             }
             capitals &= letters >= 2;
+            // One restrained accent per phrase, on its first longer word.
+            // This is a spelling heuristic, not linguistic stress analysis.
+            if (prosody.wordAccentSemitones > 0 && accentedWord == count && letters >= 5)
+                accentedWord = word;
             size_t group = 0;
             for (size_t n = word; n < wordEnd;) {
                 if (!Vowel(characters[n].value, n == word)) {
@@ -279,6 +284,8 @@ bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
                 const float wordProgress = float(begin-word+1) / (wordEnd-word);
                 const float jitter = (Hash(wordHash, static_cast<uint32_t>(group++)) & 65535u) / 65535.0f * 0.3f - 0.15f;
                 float semitones = prosody.pitchSemitones + (0.5f-progress)*prosody.contourSemitones + jitter;
+                if (word == accentedWord)
+                    semitones += prosody.wordAccentSemitones * std::sin(3.14159265358979323846f * wordProgress);
                 if (question && word == finalWord) semitones += 3.0f * wordProgress;
                 if (exclamation) semitones += 1.5f * (1-progress);
                 if (capitals) semitones += 1.5f;
