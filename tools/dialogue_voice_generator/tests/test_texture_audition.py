@@ -13,6 +13,9 @@ sys.path.pop(0)
 class TextureAuditionTests(unittest.TestCase):
     def setUp(self):
         self.config = json.loads((TOOL/'vowel_profiles.json').read_text())
+        # Retained revision-3 texture coverage; production uses stable vowels.
+        self.config['synthesis'].update(source='texture', consonants_enabled=True,
+            peak_db=-12, rms_db=-20, jitter_percent=.6, shimmer_percent=2, formant_drift_percent=1)
 
     def test_source_is_repeatable_and_preserves_level_and_edges(self):
         for identity, vowel in [('male', 'ah'), ('female', 'oo')]:

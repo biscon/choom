@@ -25,6 +25,13 @@ def finite(value, low, high):
 def validate(config):
     if config['schema_version'] != 2:
         raise ValueError('Unsupported authoring schema')
+    settings = config['synthesis']
+    if settings.get('source', 'texture') not in ('texture', 'stable_pulse'):
+        raise ValueError('Unsupported synthesis source')
+    if not isinstance(settings.get('consonants_enabled', True), bool):
+        raise ValueError('Invalid consonants_enabled')
+    if not finite(settings.get('output_gain_db', 0), -12, 0):
+        raise ValueError('Invalid synthesis.output_gain_db')
     for name, profile in config['profiles'].items():
         if not name or len(name) > 63 or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789_-' for c in name):
             raise ValueError('Invalid profile ID')
@@ -33,15 +40,19 @@ def validate(config):
                 raise ValueError(f'Invalid {name}.{key}')
     for vowel in VOWELS:
         data = config['vowels'][vowel]
+        if not finite(data.get('rms_offset_db', 0), -6, 6):
+            raise ValueError(f'Invalid {vowel}.rms_offset_db')
         for key, lo, hi in [('formants', 150, 5000), ('bandwidths', 20, 500), ('gains_db', -50, 0)]:
             if len(data[key]) != 3 or not all(finite(x, lo, hi) for x in data[key]):
                 raise ValueError(f'Invalid {vowel}.{key}')
     for mood in MOODS:
         data = config['moods'][mood]
+        if not finite(data.get('output_gain_db', 0), -12, 0):
+            raise ValueError(f'Invalid {mood}.output_gain_db')
         for key, lo, hi in [('pitch_semitones', -3, 3), ('contour_semitones', 0, 6), ('gain', 0, 1.5), ('wobble_hz', 0, 8), ('wobble_semitones', 0, 1), ('tilt_offset', -.5, 1), ('breath_offset_db', -10, 15), ('attack_ms', 5, 35)]:
             if not finite(data[key], lo, hi):
                 raise ValueError(f'Invalid {mood}.{key}')
-    for key, lo, hi in [('duration_ms', 100, 200), ('release_ms', 20, 60), ('peak_db', -30, -12), ('rms_db', -40, -15), ('jitter_percent', 0, 1), ('shimmer_percent', 0, 4), ('formant_drift_percent', 0, 2)]:
+    for key, lo, hi in [('duration_ms', 100, 200), ('release_ms', 20, 60), ('peak_db', -30, -3), ('rms_db', -40, -15), ('jitter_percent', 0, 1), ('shimmer_percent', 0, 4), ('formant_drift_percent', 0, 2)]:
         if not finite(config['synthesis'][key], lo, hi):
             raise ValueError(f'Invalid synthesis.{key}')
 
@@ -75,7 +86,7 @@ def irregular_curve(rng, frames, depth, min_ms, max_ms):
 
 
 @lru_cache(maxsize=64)
-def glottal_table(harmonics, tilt, opening=.60, closing=.16):
+def glottal_table(harmonics, tilt, opening=.60, closing=.16, rounded_closure=False):
     """Band-limited differentiated glottal flow, opening slowly and closing fast.
 
     Project the asymmetric pulse onto a finite Fourier series, then tabulate it.
@@ -89,7 +100,12 @@ def glottal_table(harmonics, tilt, opening=.60, closing=.16):
         if phase < opening:
             value = .5 * math.pi / opening * math.sin(math.pi * phase / opening)
         elif phase < opening + closing:
-            value = -math.pi / (2*closing) * math.sin(math.pi * (phase-opening) / (2*closing))
+            if rounded_closure:
+                # Return to zero over a full half-sine instead of cutting the
+                # closing pulse off at its largest negative value.
+                value = -.5*math.pi/closing*math.sin(math.pi*(phase-opening)/closing)
+            else:
+                value = -math.pi / (2*closing) * math.sin(math.pi * (phase-opening) / (2*closing))
         else:
             value = 0
         pulse.append(value)
@@ -207,6 +223,9 @@ TEXTURE_PARAMETERS = dict(cycle_jitter_percent=.6, cycle_amplitude_percent=2,
                   broadband_air_energy_fraction=.125, broadband_highpass_hz=600,
                   broadband_lowpass_hz=6500, breath_boost_db=3, breath_ceiling_db=-12)
 
+STABLE_PARAMETERS = dict(opening=.58, closing=.24, extra_tilt=.4,
+                         voiced_bandwidth_scale=1.25)
+
 
 def table_sample(table, phase):
     position = phase * len(table)
@@ -214,7 +233,57 @@ def table_sample(table, phase):
     return table[lo] + (table[(lo+1) % len(table)]-table[lo])*(position-lo)
 
 
+def stable_synthesize_stems(config, identity, mood, vowel):
+    """Accepted soft pulse: no noise, pulse variation or moving resonances.
+
+    Preserve the old neutral filter calibration; recalibrating with the soft
+    pulse would boost its upper harmonics and undo the accepted spectral shape.
+    Runtime still supplies phrase intonation and the authored emotional wobble.
+    """
+    profile, emotion = config['profiles'][identity], config['moods'][mood]
+    formants, settings = config['vowels'][vowel], config['synthesis']
+    frames = round(settings['duration_ms']*RATE/1000)
+    warmup = round(.03*RATE)
+    total = frames+warmup
+    fundamental = profile['fundamental_hz']
+    harmonics = int(8000/fundamental)
+    table = glottal_table(harmonics, profile['tilt']+emotion['tilt_offset']+STABLE_PARAMETERS['extra_tilt'],
+                          STABLE_PARAMETERS['opening'], STABLE_PARAMETERS['closing'], rounded_closure=True)
+    reference_table = glottal_table(harmonics, profile['tilt'])
+    source, reference = [], []
+    phase = reference_phase = 0.0
+    for _ in range(total):
+        phase += fundamental/RATE
+        if phase >= 1:
+            phase -= 1
+        source.append(table_sample(table, phase))
+        reference_phase = (reference_phase+fundamental/RATE) % 1
+        reference.append(table_sample(reference_table, reference_phase))
+    tone, drift, band_levels = [0.0]*frames, [0.0]*total, []
+    for f, bw, gain_db in zip(formants['formants'], formants['bandwidths'], formants['gains_db']):
+        f *= profile['formant_scale']
+        calibration = resonator(reference, f, bw, drift)[warmup:]
+        band = resonator(source, f, bw*STABLE_PARAMETERS['voiced_bandwidth_scale'], drift)[warmup:]
+        gain = 10**(gain_db/20)/max(rms(calibration), 1e-12)
+        band_levels.append(rms(band)*gain)
+        for n in range(frames):
+            tone[n] += band[n]*gain
+    attack = round(emotion['attack_ms']*RATE/1000)
+    release = round(settings['release_ms']*RATE/1000)
+    for n in range(frames):
+        envelope = 1.0
+        if n < attack:
+            envelope = .5-.5*math.cos(math.pi*n/attack)
+        if n >= frames-release:
+            envelope *= .5-.5*math.cos(math.pi*(frames-1-n)/release)
+        tone[n] *= envelope
+    return remove_dc(tone), [0.0]*frames, dict(target_breath_to_voice_db=None,
+        relative_formant_band_rms_db=[db(x/band_levels[0]) for x in band_levels])
+
+
 def synthesize_stems(config, identity, mood, vowel):
+    if config['synthesis'].get('source', 'texture') == 'stable_pulse':
+        return stable_synthesize_stems(config, identity, mood, vowel)
     profile, emotion = config['profiles'][identity], config['moods'][mood]
     formants, settings = config['vowels'][vowel], config['synthesis']
     frames = round(settings['duration_ms']*RATE/1000)
@@ -356,19 +425,27 @@ def control_crest(voiced, breath, target_ratio):
 def synthesize_with_report(config, identity, mood, vowel):
     voiced, breath, report = synthesize_stems(config, identity, mood, vowel)
     settings = config['synthesis']
-    target_crest = 10**((settings['peak_db']-settings['rms_db']-.05)/20)
-    voiced, breath, drive = control_crest(voiced, breath, target_crest)
+    stable = settings.get('source', 'texture') == 'stable_pulse'
+    target_rms = settings['rms_db'] + (config['vowels'][vowel].get('rms_offset_db', 0) if stable else 0)
+    drive = 0.0
+    if not stable:
+        target_crest = 10**((settings['peak_db']-target_rms-.05)/20)
+        voiced, breath, drive = control_crest(voiced, breath, target_crest)
     report['peak_control_drive'] = drive
-    report['breath_to_voice_db'] = db(rms(breath)/rms(voiced))
+    report['breath_to_voice_db'] = None if stable else db(rms(breath)/rms(voiced))
+    report['source'] = settings.get('source', 'texture')
     samples = [v+b for v, b in zip(voiced, breath)]
     peak_gain = 10**(settings['peak_db']/20)/max(abs(x) for x in samples)
-    rms_gain = 10**(settings['rms_db']/20)/rms(samples)
+    rms_gain = 10**(target_rms/20)/rms(samples)
     gain = min(peak_gain, rms_gain)
+    output_db = (settings.get('output_gain_db', 0)+config['moods'][mood].get('output_gain_db', 0)) if stable else 0
+    gain *= 10**(output_db/20)
     pcm = [round(x*gain*32767) for x in samples]
     pcm[0] = pcm[-1] = 0
     quantized = [x/32768 for x in pcm]
     report.update(rms_dbfs=db(rms(quantized)), peak_dbfs=db(max(map(abs, quantized))),
-                  peak_limited=peak_gain < rms_gain, target_rms_dbfs=settings['rms_db'],
+                  peak_limited=peak_gain < rms_gain, target_rms_dbfs=target_rms+output_db,
+                  output_gain_db=output_db,
                   dc_offset=sum(quantized)/len(quantized),
                   first_step=pcm[1]-pcm[0], last_step=pcm[-1]-pcm[-2])
     return struct.pack('<'+'h'*len(pcm), *pcm), report
@@ -430,12 +507,18 @@ def synthesize_consonant(sound, identity, mood, word, position, vowel_rms, empha
 
 def generate(config, output):
     validate(config)
-    report = {'generator_version': 3, 'config_sha256': hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest(),
-              'texture': TEXTURE_PARAMETERS, 'consonants': CONSONANT_PARAMETERS, 'assets': []}
+    consonants = config['synthesis'].get('consonants_enabled', True)
+    stable = config['synthesis'].get('source', 'texture') == 'stable_pulse'
+    report = {'generator_version': 4, 'config_sha256': hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest(),
+              'texture': STABLE_PARAMETERS if stable else TEXTURE_PARAMETERS,
+              'breath_enabled': not stable, 'consonants_enabled': consonants,
+              'consonants': CONSONANT_PARAMETERS if consonants else None, 'assets': []}
     for identity, profile in config['profiles'].items():
         folder = output / identity
         manifest = {'schema_version': 2, 'voice_identity_id': identity, 'display_name': profile['label'],
-                    'continuous_pitch': True, 'moods': {}, 'consonants': {}, 'prosody': {}}
+                    'continuous_pitch': True, 'moods': {}, 'prosody': {}}
+        if consonants:
+            manifest['consonants'] = {}
         for mood in MOODS:
             emotion = config['moods'][mood]
             manifest['moods'][mood] = {}
@@ -457,6 +540,8 @@ def generate(config, output):
                     wav.writeframes(pcm)
                 manifest['moods'][mood][vowel] = relative
                 report['assets'].append({'path': f'{identity}/{relative}', 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), **measurements})
+            if not consonants:
+                continue
             manifest['consonants'][mood] = {}
             for sound in CONSONANTS:
                 # One immutable noise texture per class/voice/mood. Word timing
@@ -489,7 +574,8 @@ def main():
     config = json.loads(args.config.read_text())
     validate(config)
     if args.dry_run:
-        print(f'Validated {len(config["profiles"])} profiles; {len(config["profiles"])*len(MOODS)*(len(VOWELS)+len(CONSONANTS))} WAVs; no writes')
+        count = len(VOWELS)+(len(CONSONANTS) if config['synthesis'].get('consonants_enabled', True) else 0)
+        print(f'Validated {len(config["profiles"])} profiles; {len(config["profiles"])*len(MOODS)*count} WAVs; no writes')
     else:
         generate(config, args.output_dir)
 

@@ -204,9 +204,9 @@ regeneration; all source text and mood directions remain editable in JSON.
 
 ## Current vowel speech system
 
-The engine now uses deterministic synthetic vowels and quiet consonants, not the TTS fragment
-banks described above. The old generator, raw takes, accounting, and final clips
-are retained as references. No network or API key is used by the vowel generator.
+The engine uses deterministic, stable synthesized vowels. Breath and consonants
+are disabled in the shipped bank. TTS assets and earlier noise experiments remain
+as references; no network or API key is needed to generate the current voices.
 
 ```sh
 python3 tools/dialogue_voice_generator/generate_vowel_voices.py --dry-run
@@ -214,69 +214,61 @@ python3 tools/dialogue_voice_generator/generate_vowel_voices.py
 python3 -m unittest discover -s tools/dialogue_voice_generator/tests
 cmake --build cmake-build-debug --target dialogue_speech_preview -j2
 cmake-build-debug/dialogue_speech_preview
+cmake-build-debug/dialogue_speech_preview --stress --output-dir /tmp/dialogue-stress
 ```
 
-`vowel_profiles.json` (authoring schema 2) controls six profiles, seven moods and
-six vowel identities and fifteen consonant classes. Generator revision 3 ships
-the accepted softened texture. It uses a band-limited differentiated glottal
-pulse with a slow opening and faster closure, then filters it through three
-resonators. Fundamental frequency and vocal-tract scale remain independent.
-The original formant centers for ah/eh/ee/oh/oo derive from the first three bass
-bands in the [Csound tables](https://csound.com/manual/misc/formants/); uh is an
-authored central vowel. Resonances use fixed neutral calibration, allowing softer
-upper harmonics instead of renormalizing them away. Breath uses broadened vowel
-resonances plus a restrained 600–6500 Hz noise branch. The softer pulse shape
-and modest seeded cycle variation are preserved from the accepted audition.
+`vowel_profiles.json` (authoring schema 2) selects `synthesis.source: stable_pulse`
+and `consonants_enabled: false`. Generator revision 4 implements the accepted
+`male_stable_soft_pulse.wav` audition. The glottal pulse opens over 58% of its
+period and closes over 24%, with a full half-sine closure returning to zero
+before the closed phase. Its band-limited waveform is fixed from cycle to cycle:
+no pitch jitter, amplitude shimmer, pulse-shape variation, moving formants or
+breath noise. `STABLE_PARAMETERS` holds the shared pulse and bandwidth controls.
 
-Breath is measured relative to the voiced stem after envelope shaping. The
-source adds 3 dB to each profile's `breath_to_voice_db`: neutral adult -15 dB,
-young -17 dB, elderly -13 dB before mood offsets, capped at -12 dB. Its envelope
-is slightly stronger near onset/release. Seeded streams supply smooth pitch
-movement (+/-0.6%), cycle timing variation (+/-0.6%), cycle amplitude variation
-(+/-2%), and formant movement (+/-1%). Elderly runtime wobble remains 2 Hz with
-a 0.15-semitone base depth; emotional wobble is at most 0.2 semitones.
-Profile/mood settings live in JSON; `TEXTURE_PARAMETERS` and
-`CONSONANT_PARAMETERS` in the generator hold the shared synthesis controls.
+Three resonators shape each vowel. The old neutral reference still calibrates
+band gains, so normalization does not undo the new pulse's softer upper spectrum.
+Fundamental frequency and vocal-tract scale remain independent authoring controls.
+The original ah/eh/ee/oh/oo formants derive from the first three bass bands in the
+[Csound tables](https://csound.com/manual/misc/formants/); uh is an authored central
+vowel. The six presets are artistic starting points, not physiological models.
 
-Files still last 140 ms, with mood-specific attacks, 40 ms releases and zero
-endpoints. The configurable RMS target is now -20 dBFS and the peak ceiling
--12 dBFS, both 6 dB above revision 1. Because the richer glottal signal has larger
-peaks, normalization alone would not reach the intended level. Minimal offline
-soft-knee peak control reduces the peak/RMS ratio before normalization, using a
-shared smooth gain for both stems and restoring their authored breath ratio.
-Drive is bounded and reported; unusual authoring can still produce a reported
-peak-limited result. There is no runtime compressor, ducking, or change to other
-sounds. Runtime volume remains 0.65 and distance attenuation is unchanged.
+All six profiles and seven moods retain the existing typewriter timing, phrase
+contours, question/capitals emphasis and smooth runtime pitch interpolation.
+Elderly runtime wobble remains 2 Hz with a 0.15-semitone base depth; emotional
+wobble is at most 0.2 semitones. These phrase-level controls are separate from
+the removed cycle-level instability. Files last 140 ms with mood-specific attacks,
+40 ms releases and zero endpoints.
 
-The generation manifest records achieved RMS/peak, target and measured breath
-ratio, peak-control drive, peak-limited status, DC offset and endpoint steps.
-The vowel-only four-overlap bound stays below full scale. The headless preview
-also checks summed vowels plus consonants; `--stress` exercises dense capitalized
-speech at 60 characters/second across all profiles and moods. These are headroom
-checks, not proof that other sounds cannot mask speech in a particular scene.
+Stable vowels use linear gain only; no crest shaping, compression or limiting.
+The pre-headroom RMS target is -16 dBFS plus each vowel's `rms_offset_db`, which
+preserves the relative vowel levels measured in the accepted male audition.
+A -5.5 dBFS pre-headroom peak ceiling can lower a vowel if needed. Global
+`output_gain_db: -3` then leaves overlap headroom; angry adds another -2 dB
+because its denser, emphasized stress mix otherwise clipped. Thus neutral male
+playback matches the accepted waveform and balance at 3 dB lower level.
+Runtime volume stays 0.65; positional attenuation and other sounds are unchanged.
 
-Generated files go to `assets/audio/dialogue_vowels/{profile}/{mood}/{vowel}.wav`.
-Version-2 runtime manifests map each mood's vowel names to relative WAV paths and
-include pitch contour, gain and wobble controls. Optional `continuous_pitch: true`
-enables a shared logarithmic pitch contour between vowel cues within each phrase.
-Optional `consonants` maps each mood's consonant names to WAV paths under
-`{mood}/consonants/`. Legacy manifests remain vowel-only with stepped pitch.
-The generation manifest records
-configuration and WAV SHA-256 hashes. Regeneration is deterministic for identical
-configuration/tool versions on the same Python/platform. `--output-dir` can send
-experiments to a separate directory. The six presets are artistic starting points,
-not physiological models of age or gender.
+The headless ordinary and 60-character/second capitalized stress corpora check
+summed output across all profiles and moods. This is measured corpus headroom,
+not a guarantee against clipping from arbitrary overlapping game sounds.
+The generation report records actual RMS/peak, output gain, peak-limited status,
+zero peak-control drive, absent breath ratio, DC offset and endpoint steps.
 
-The generator writes 252 vowels and 630 consonants across six profiles and seven
-moods. Consonants use the audition's levels/envelopes: 24 ms softened hard bursts
-at 18% of vowel RMS and 50 ms shaped noise at 25%, with ch/ks combining both.
-Runtime applies the same mood gain and up to a 1.6x capitals boost, respecting
-the audio system's unit-volume ceiling. Each class has one
-fixed seeded texture per voice/mood, rather than the audition's per-word noise
-generation; no synthesis or asset loading occurs during playback. Four vowel
-slots and two separate consonant slots share pause/release/skip logic. Late frames
-consume both streams without replaying a backlog. Releasing sounds freeze their
-last pitch before a replacement timeline can be used.
+Regeneration writes 252 vowels under
+`assets/audio/dialogue_vowels/{profile}/{mood}/{vowel}.wav`, plus six runtime
+manifests and a generation report containing config/WAV SHA-256 hashes.
+Version-2 runtime manifests retain `continuous_pitch: true` and omit the entire
+`consonants` map. Existing consonant WAVs stay on disk as inactive references;
+they are neither requested nor played. Regenerating a bank cannot accidentally
+reactivate them. Four vowel playback slots retain pause, release and skip logic.
+No synthesis or asset loading occurs during ordinary playback.
+
+The old `texture` source, breath settings, crest control and consonant synthesis
+remain available for historical experiments. Those controls do not affect the
+stable source. Older authoring files without `source` retain texture behavior;
+`consonants_enabled` defaults to true for those older files. Regeneration is
+deterministic for identical config/tool versions on the same Python/platform.
+Use `--output-dir` to generate separate experiments.
 
 The engine config's `voices` catalog maps stable profile IDs to manifests. Adding
 a profile means adding authoring JSON, generating its WAVs, and adding its manifest
@@ -286,6 +278,12 @@ reload the level to load changed WAVs. A missing profile stays visible as
 `Missing: <id>` in the picker and is preserved on save.
 
 ## Engine speech previews
+
+The accepted reference is
+`audio_generation/previews/male_stable_soft_pulse.wav`. Previous rattle and breath
+comparisons remain under `male_rattle_diagnostics/` and `male_breath_diagnostics/`.
+They describe the former texture bank, including copied generation code/config;
+their breath experiments are not applicable to the current noise-free source.
 
 The headless C++ utility reads the production manifests and calls the same timeline
 planner and pitch-modulation helper as runtime. No window/audio device is opened.
