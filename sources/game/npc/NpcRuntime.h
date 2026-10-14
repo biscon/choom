@@ -30,7 +30,6 @@ struct NpcRuntimeInstance {
     bool actionLockedByAi = false;
     std::string voice = "male";
     bool dialogueSpeaking = false;
-    engine::DialogueSelectionHistory dialogueHistory;
     std::string displayName;
     std::array<int, 3> speechColor = kDefaultNpcSpeechColor;
     std::string onUseScript;

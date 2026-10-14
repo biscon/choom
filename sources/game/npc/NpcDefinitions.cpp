@@ -290,8 +290,8 @@ bool ValidateNpcDefinition(
             return false;
         }
     }
-    if (definition.voice != "male" && definition.voice != "female") {
-        outError = "NPC voice must be male or female";
+    if (!IsValidNpcDefinitionId(definition.voice)) {
+        outError = "NPC voice must contain 1-63 letters, digits, underscores, or dashes";
         return false;
     }
     if (!IsValidNpcDefinitionId(definition.id)) {

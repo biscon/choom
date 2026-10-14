@@ -1,4 +1,10 @@
-# Offline dialogue voice generator
+# Offline dialogue voice tools
+
+The current engine uses [locally synthesized vowels](#current-vowel-speech-system).
+The TTS workflow below is retained for reference; it no longer supplies dialogue
+playback. See [engine speech previews](#engine-speech-previews) for listening files.
+
+## Retained TTS generator
 
 Authoring only: generates short invented conversational fragments for later use
 as typewriter dialogue chatter. It does not implement playback or change the
@@ -196,36 +202,64 @@ sound, and edge artifacts. Give special attention to duration/gain warnings and
 the afraid, panicked, and pained banks. Report undesirable asset IDs for selective
 regeneration; all source text and mood directions remain editable in JSON.
 
-## Engine speech previews
+## Current vowel speech system
 
-The C++ preview utility uses the engine's current voice loader, complete-fragment
-selection, pitch/volume settings, word grouping, persistent per-identity/mood selection pools, and punctuation schedule. It
-needs no API key, network, audio device, window, or running game.
+The engine now uses the deterministic synthetic vowels, not the TTS fragment
+banks described above. The old generator, raw takes, accounting, and final clips
+are retained as references. No network or API key is used by the vowel generator.
 
 ```sh
+python3 tools/dialogue_voice_generator/generate_vowel_voices.py --dry-run
+python3 tools/dialogue_voice_generator/generate_vowel_voices.py
+python3 -m unittest discover -s tools/dialogue_voice_generator/tests
 cmake --build cmake-build-debug --target dialogue_speech_preview -j2
 cmake-build-debug/dialogue_speech_preview
 ```
 
-This target is available with `BUILD_TESTING=ON`. Run from the repository root,
-or pass `--assets-root /path/to/assets` and `--output-dir /path/to/previews`.
-Defaults write only to the ignored `audio_generation/previews/engine_speech/`:
+`vowel_profiles.json` controls six profiles, seven moods and six vowel identities.
+The generator uses additive band-limited excitation shaped by three resonances,
+with independently authored fundamental frequency and formant scale. Initial
+formant frequencies/bandwidths/gains for ah/eh/ee/oh/oo come from the first three
+bass bands in the [Csound tables](https://csound.com/manual/misc/formants/);
+uh is an authored central vowel. Spectral tilt, breath, deterministic smooth
+periodicity changes, and raised-cosine envelopes keep the sustained portions from
+being perfectly mechanical. Files last 140 ms, with mood-specific attacks and
+40 ms releases. Peak is capped at -18 dBFS and RMS targets -26 dBFS where the peak
+limit permits. Runtime gain and overlap are checked again in the preview mixer.
 
-- `female_speech.wav` and `male_speech.wav`: all seven moods, in manifest mood
-  order, with a short line and a longer punctuated line in each bank.
-- `<identity>_<mood>_speech.wav`: the same individual mood sections.
-- `<identity>_speech_cues.csv`: exact timestamps in the combined identity WAV,
-  source asset IDs, pitch, volume, and the English group revealed by each clip.
+Generated files go to `assets/audio/dialogue_vowels/{profile}/{mood}/{vowel}.wav`.
+Version-2 runtime manifests map each mood's vowel names to relative WAV paths and
+include pitch contour, gain and wobble controls. The generation manifest records
+configuration and WAV SHA-256 hashes. Regeneration is deterministic for identical
+configuration/tool versions on the same Python/platform. `--output-dir` can send
+experiments to a separate directory. The six presets are artistic starting points,
+not physiological models of age or gender.
 
-Start with `male_neutral_speech.wav` and `female_neutral_speech.wav`, then both
-panicked previews. The cue
-sheet identifies the source if a particular fragment sounds undesirable.
-Half-second gaps separate example lines; one-second gaps separate mood groups in
-combined WAVs. These review separators are additional to dialogue timing.
+The engine config's `voices` catalog maps stable profile IDs to manifests. Adding
+a profile means adding authoring JSON, generating its WAVs, and adding its manifest
+to this catalog; no C++ enum changes are required. Existing `male`/`female` IDs now
+select the middle-aged profiles. Reopen the NPC editor to refresh its metadata;
+reload the level to load changed WAVs. A missing profile stays visible as
+`Missing: <id>` in the picker and is preserved on save.
 
-Offline previews render ideal uninterrupted scheduling and use linear pitch
-resampling. Device resampling, frame-boundary delays, spatial propagation,
-interruptions, and pause/resume still need in-game listening. Successful rendering
-checks that samples do not clip; it does not establish that speech sounds natural.
-The original Python generation previews remain useful for reviewing individual
-source recordings with equal gaps.
+## Engine speech previews
+
+The headless C++ utility reads the production manifests and calls the same timeline
+planner and pitch-modulation helper as runtime. No window/audio device is opened.
+It sums overlapping samples in floating point, includes full tails and rejects
+clipping before quantizing. Output defaults to the ignored directory
+`audio_generation/previews/vowel_speech/`; old `engine_speech/` previews are kept.
+Use `--assets-root` or `--output-dir` to override paths.
+
+Each profile has a combined WAV, seven mood WAVs, and a CSV with vowel IDs,
+timestamps, pitch, gain and text groups. The `fixed_rate/` subdirectory renders
+all moods at 30 characters/second, allowing texture/intonation differences to be
+judged independently of speed. The corpus includes repeated words/names, questions,
+capitals and ellipses. Half-second line gaps and one-second mood gaps are audition
+separators, not runtime delays.
+
+Start with male/female neutral and panicked, then compare young/adult/elderly using
+the same sentence. Check vowel quality, recognizable identity, mood distinction,
+word-like associations, overlap harshness and clicking. Automated checks cannot
+establish that these presets sound good. In-game listening must still check
+interruption, mute/unmute, pause, positional audio and left-click reveal/dismiss.

@@ -1547,8 +1547,10 @@ feedback timers continue normally while hidden. This only changes text visibilit
 not interaction input or targeting.
 
 The NPC form requires a placed NPC instance ID (the same IDs used by `moveNpc`). The
-NPC editor's Voice setting selects `male` or `female`; older definitions default
-to male. The optional mood is `neutral` (default), `happy`, `angry`, `afraid`,
+NPC editor's Voice setting selects a profile from the dialogue catalog. Bundled
+profiles are `male`, `female`, `male_young`, `female_young`, `male_elderly`, and
+`female_elderly`. `male` and `female` are middle-aged presets; older definitions
+default to male. Unknown profile IDs are preserved but produce silent speech. The optional mood is `neutral` (default), `happy`, `angry`, `afraid`,
 `panicked`, `pained`, or `relieved`. Pass `nil` for mood to specify only `holdMs`.
 Unknown NPC IDs or moods fail before replacing the current caption.
 
@@ -1560,8 +1562,7 @@ falls back to the placed instance ID. The entire line uses the speech color;
 the name appears immediately while the message types out. The prefix does not
 change voice playback, message reveal timing, or hold duration.
 
-`say(message)` speaks as the player using the **male** voice, with independent
-session-only clip history and local, non-positional playback. Its optional second
+`say(message)` speaks as the player using the **male** voice with local, non-positional playback. Its optional second
 argument is a table with `mood` and `holdMs`; omitted fields use the same defaults
 as NPC speech. A second string selects the existing NPC signature. `startSay`
 accepts both forms and retains the same shared-caption operation behavior.
@@ -1577,93 +1578,73 @@ say("I'm here.")
 say("What was that?", { mood = "afraid", holdMs = 2000 })
 ```
 
-With dialogue voices enabled, Enter or a left/right mouse press reveals the
-entire current spoken line and interrupts its audio using the existing short
-release. The text stays fully visible for **2 seconds**, then fades out over
-350 ms before returning `true` to the waiting script. This fresh reading hold
-replaces any remaining reveal or hold, including explicit `holdMs` values, and
-also applies when the first press occurs during the normal hold or fade.
-A second press immediately dismisses the line and returns `true`. Pausing freezes
-the reading hold and fade; toggling voices preserves their progress without
-restarting speech. With voices disabled, a press immediately finishes the line,
-including its remaining reveal and hold. One input pass affects only that line;
-it does not select a subsequently opened menu, skip another line, fire, or become
-a world interaction. The line also completes automatically through its normal
-timing. `startSay` lines are equally skippable; `text` is unchanged. Console,
-pause, inventory, and held-item UI retain input priority over speech advancing.
+Enter or a left/right mouse press reveals the entire current spoken line and
+interrupts all active vowels with a short release. The text stays fully visible
+for **2 seconds**, then fades over 350 ms before returning `true` to the waiting
+script. This fresh reading hold replaces any remaining reveal or hold, including
+explicit `holdMs`, and also applies during a normal hold or fade. A second press
+dismisses immediately. **This two-step behavior is identical with voices muted.**
+Pausing freezes timing and audio. One input pass affects only the current line;
+it cannot select a following menu, skip another line, fire, or become a world
+interaction. `startSay` uses the same behavior; silent `text` is unchanged.
+Console, pause, inventory, and held-item UI keep input priority.
 
-`say` is bottom-centered. Text follows complete spoken fragments. Each English
-word gets a recording, except two adjacent words of at most three letters each
-may share one. Groups never cross punctuation. The processed WAV duration sets
-the reveal time; playback must finish before the next group advances.
+`say` is bottom-centered. One text clock drives UTF-8 reveal and short synthesized
+vowels; sound duration and device completion never hold text back. Rates are
+neutral 30, happy 34, angry 34, afraid 28, panicked 40, pained 26, relieved 28
+codepoints/second. Spaces count. Punctuation intervals replace the normal interval:
+comma 100 ms, clause 150 ms, sentence 200 ms, ellipsis 350 ms at neutral speed,
+scaled by `30 / characters_per_second`. Punctuation runs have one bounded pause;
+terminal punctuation adds no extra hold.
 
-Each NPC keeps a separate selection pool for each mood. All usable clips are
-consumed once before refilling, and the last three are avoided where bank size
-permits. Selection persists across dialogue lines. Only clips that actually
-start consume the pool; planning or cancelling unplayed text does not. Missing
-mood audio shares the neutral pool. Small banks relax the oldest repeat
-restriction as necessary. This history is session-only and resets on level load.
+One sound starts at each contiguous vowel group's first revealed character.
+Case-insensitive mappings are `a→ah`, `e→eh`, `i→ee`, `o→oh`, `u→uh`, with leading
+`oo`/`ou→oo`, `ee`/`ea→ee`, and noninitial `y→ee`. Common accented Latin vowels
+fold to their base vowels. Other scripts reveal correctly without guessed
+phonetics. This is spelling-based babble, not TTS. Word vowel patterns and tiny
+pitch variations are deterministic; prior lines and operation IDs have no effect.
+Phrase contours, questions, exclamations, ellipses, capital words, mood, and voice
+modulation add expression. Elderly presets have a gentle 2 Hz pitch wobble.
 
-The editor's **Settings → Dialogue voices** checkbox enables or disables chatter
-globally. It defaults to enabled and is saved as `dialogueVoicesEnabled` in
-`assets/config/application_settings.json`; it is not exposed in player options.
-Disabling fades active chatter out and restores the original steady typewriter:
-40 Unicode codepoints per second, including spaces and punctuation, with no
-speech-driven pauses or dependence on clip lengths or mood. Hold and fade start
-after that text reveal completes. Switching during a line preserves the visible
-text and elapsed hold progress, capped at the new hold duration. An ongoing fade
-keeps its progress without restarting or brightening. Re-enabling resumes speech timing at the
-visible position and plays subsequent complete words without replaying the
-partially revealed word. Silent text does not consume the voice selection pool.
+The editor's **Settings → Dialogue voices** checkbox only mutes chatter. It is
+saved as `dialogueVoicesEnabled` in `assets/config/application_settings.json`.
+Disabling releases active vowels without changing reveal/hold/fade timing;
+re-enabling plays future events without replaying missed ones. Missing voices,
+missing audio, and unavailable devices use exactly the same text clock. Missing
+mood vowels fall back individually to the neutral vowel, then silence.
 
-The configured character rates—neutral 36, happy 42, angry 45, afraid 30,
-panicked 54, pained 24, relieved 33—guide silent fallback timing and pause scaling.
-They do not stretch recordings or determine how many words a clip absorbs.
-Mood recordings retain their own delivery and intonation; their offline tempo
-settings are authored separately in the dialogue voice generator configuration.
+At most four vowels overlap. Late frames discard stale events and start at most
+the newest cue if it is within 50 ms of its scheduled time; no backlog is played.
+Final tails may finish during the reading hold. Replacement, cancellation,
+skipping, mute, or speaker death/removal releases active sounds. NPC sound
+originates near the upper body and uses existing spatial propagation. Speaking
+suppresses ambient vocalizations without changing combat sounds or AI hearing.
 
-Punctuation adds mood-scaled pauses; repeated punctuation produces one bounded
-pause. Between fragments within a phrase, the configured 20–60 ms gaps are scaled
-by `24 / characters_per_second`, giving approximately 13–40 ms for neutral. Pitch stays
-constant within each fragment with up to ±2% variation between fragments,
-bounded by the voice manifest, and volume varies within the manifest's range.
-Sound originates near the NPC and follows existing distance/propagation effects.
+The session owns a dialogue asset scope; `AssetManager` owns all sounds and
+preallocated playback aliases. WAV loading occurs during level load. Configuration
+is `assets/config/dialogue_speech.json`, with version-2 vowel manifests under
+`assets/audio/dialogue_vowels`. Restart the level after changing profiles,
+configuration, or NPC voice assignments. The profile picker reads metadata when
+the NPC editor opens. Voice authoring and deterministic offline generation use
+`tools/dialogue_voice_generator/vowel_profiles.json` and
+`generate_vowel_voices.py`; existing TTS assets remain reference material.
 
-The session owns a dedicated dialogue asset scope. Each final WAV is decoded
-whole during level loading, preserving its prepared fades. `AssetManager` owns
-its sound and playback aliases. Source WAVs remain unchanged; no slicing or
-asset loading occurs during speech. Settings are in
-`assets/config/dialogue_speech.json`; restart the level after changing them,
-voice manifests, or an NPC's voice. The manifest's old characters-per-sound and
-minimum-trigger-interval recommendations do not drive this complete-fragment
-scheduler.
-
-Playback completion gates progression: late starts receive their full duration,
-and a frame stall cannot truncate a fragment or queue a burst of new sounds.
-The caption hold timer begins after the final fragment and punctuation pause.
-Replacement/cancellation uses a short release, and pause/resume follows the game.
-Speaker death/removal releases speech while the caption continues with estimated
-timing. Missing mood audio falls back to neutral; missing voices or unavailable
-audio use silent estimated timing. Dialogue suppresses ambient vocalizations
-without adding AI-hearing events or changing combat sounds.
-
-Headless speech previews and cue sheets can be rebuilt with
-`cmake-build-debug/dialogue_speech_preview`. See
-[the preview instructions](../tools/dialogue_voice_generator/README.md#engine-speech-previews).
-Tests cover planning, UTF-8, ownership, completion gating, and script lifecycle.
-Listening still needs to verify naturalness, interruptions, positional
-propagation, and pause/resume on the actual audio device.
+Headless speech previews and cue sheets, including fixed-rate mood comparisons,
+are produced by `cmake-build-debug/dialogue_speech_preview` under
+`audio_generation/previews/vowel_speech`. See
+[the authoring instructions](../tools/dialogue_voice_generator/README.md).
+Listening on the actual audio device is still needed to assess timbre, expression,
+interruptions, positional propagation, and pause/resume.
 
 `text` displays the whole message
 and fades in over 250 ms at the selected vertical position. Both word-wrap
 within 80% of the viewport, use the game's 48-pixel bold font, and fade out
 over 350 ms. `holdMs` is the interval after reveal/fade-in and before fade-out.
-When omitted for `say`/`startSay` with dialogue voices enabled, the hold is
+When omitted for `say`/`startSay`, whether voiced or muted, the hold is
 350 ms after the final text reveal, with no additional terminal punctuation
-pause. The final audio fragment still finishes before the hold advances. The
-350 ms fade follows, so a blocking `say` normally returns about 700 ms after
+pause. Vowel tails do not delay that hold. The 350 ms fade follows, so a blocking `say` normally returns about 700 ms after
 reveal completion. Explicit `holdMs` values retain their existing timing.
-With voices disabled, or for `text`/`startText`, the automatic hold remains
+For `text`/`startText`, the automatic hold remains
 45 ms per codepoint, clamped to `1500..8000` ms. Starting a new caption replaces
 and cancels the current caption.
 

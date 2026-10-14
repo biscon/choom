@@ -19,15 +19,24 @@ const char* DialogueMoodName(DialogueMood mood);
 bool ParseDialogueMood(std::string_view text, DialogueMood& mood);
 
 struct DialogueSettings {
-    std::array<float, DialogueMoodCount> charactersPerSecond{24, 28, 30, 20, 36, 16, 22};
-    std::array<float, 2> gapSeconds{0.02f, 0.06f};
+    std::array<float, DialogueMoodCount> charactersPerSecond{30, 34, 34, 28, 40, 26, 28};
     float volume = 0.65f;
-    float commaPause = 0.12f;
-    float clausePause = 0.18f;
-    float sentencePause = 0.26f;
-    float ellipsisPause = 0.45f;
+    float commaPause = 0.10f;
+    float clausePause = 0.15f;
+    float sentencePause = 0.20f;
+    float ellipsisPause = 0.35f;
 };
 
+enum class DialogueVowel : uint8_t { Ah, Eh, Ee, Oh, Oo, Uh, Count };
+inline constexpr size_t DialogueVowelCount = static_cast<size_t>(DialogueVowel::Count);
+const char* DialogueVowelName(DialogueVowel vowel);
+struct DialogueProsody {
+    float pitchSemitones = 0;
+    float contourSemitones = 2;
+    float gain = 1;
+    float wobbleHz = 0;
+    float wobbleSemitones = 0;
+};
 struct DialogueClip {
     SoundHandle sound{};
     float seconds = 0.0f;
@@ -35,10 +44,17 @@ struct DialogueClip {
 };
 struct DialogueVoice {
     std::string id;
-    std::array<std::vector<DialogueClip>, DialogueMoodCount> banks;
-    std::array<float, 2> pitchRange{0.96f, 1.04f};
-    std::array<float, 2> volumeRange{0.92f, 1.08f};
+    std::array<std::array<DialogueClip, DialogueVowelCount>, DialogueMoodCount> banks{};
+    std::array<DialogueProsody, DialogueMoodCount> prosody{};
 };
+struct DialogueVoiceCatalogEntry {
+    std::string id;
+    std::string label;
+    std::filesystem::path manifest;
+};
+// Metadata only; safe without an audio device. Read during load/editor open.
+std::vector<DialogueVoiceCatalogEntry> ReadDialogueVoiceCatalog(const std::filesystem::path& assetsRoot);
+
 struct DialogueSourceRequest {
     std::filesystem::path path;
     size_t voice = 0;
@@ -51,16 +67,6 @@ struct DialogueVoiceLibrary {
     std::vector<DialogueVoice> voices;
     std::vector<DialogueSourceRequest> pending;
     size_t prepared = 0;
-};
-
-// Fixed-size per-speaker state. Sources are stable bank-local indices (0..63).
-struct DialogueSelectionState {
-    uint64_t available = 0;
-    uint64_t remaining = 0;
-    std::array<uint32_t, 3> recent{UINT32_MAX, UINT32_MAX, UINT32_MAX};
-};
-struct DialogueSelectionHistory {
-    std::array<DialogueSelectionState, DialogueMoodCount> banks;
 };
 
 struct DialogueReveal {
@@ -77,7 +83,8 @@ struct DialogueCue {
     size_t beginByte = 0;
     size_t endByte = 0;
     DialogueMood bankMood = DialogueMood::Neutral;
-    DialogueSelectionState selectionAfter;
+    float wobbleHz = 0;
+    float wobbleSemitones = 0;
 };
 struct DialogueTimeline {
     std::vector<DialogueReveal> reveals;
@@ -85,37 +92,34 @@ struct DialogueTimeline {
     double seconds = 0.0;
     size_t revealCursor = 0;
 };
-// Logical text clock held at each fragment until its playback finishes.
+// Text clock and cue cursor never depend on playback completion.
 struct DialogueSequence {
     double position = 0.0;
-    double fragmentElapsed = 0.0;
     size_t nextCue = 0;
-    bool fragmentActive = false;
-    bool usesDevice = false;
     bool finished = false;
 };
-struct DialoguePlayback {
+struct DialoguePlaybackSlot {
     SoundPlaybackHandle handle{};
-    uint64_t token = 0;
-    DialogueSequence sequence;
+    DialogueCue cue;
+    double elapsed = 0;
     bool releasing = false;
     float releaseRemaining = 0.0f;
-    SoundPlaybackSettings mix;
+};
+struct DialoguePlayback {
+    std::array<DialoguePlaybackSlot, 4> slots{};
+    uint64_t token = 0;
+    DialogueSequence sequence;
 };
 
 void ReserveDialogueTimeline(DialogueTimeline& timeline);
 // Pure, bounded planner. Does not touch a device or allocate after Reserve.
 bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
-        uint32_t seed, const DialogueSettings& settings,
-        const DialogueVoice* voice, DialogueTimeline& timeline,
-        const DialogueSelectionHistory* history = nullptr);
-// Commit only cues that actually started; planning and cancelled future cues do not consume the pool.
-void CommitDialogueSelection(DialogueSelectionHistory& history, const DialogueCue& cue);
+        const DialogueSettings& settings, const DialogueVoice* voice, DialogueTimeline& timeline);
 size_t AdvanceDialogueReveal(DialogueTimeline& timeline, double elapsed);
-// Returns at most one fragment to start. Device completion gates progress;
-// absent audio uses the same duration estimate. Excess frame time is not replayed.
+// Consume all due events; return only the newest if at most 50 ms late.
 const DialogueCue* AdvanceDialogueSequence(const DialogueTimeline& timeline,
-        DialogueSequence& sequence, float dt, bool devicePlaying, bool paused = false);
+        DialogueSequence& sequence, float dt, bool paused = false);
+float DialogueCuePitch(const DialogueCue& cue, double elapsed);
 
 void BeginLoadDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library,
         const std::filesystem::path& assetsRoot);
@@ -125,7 +129,7 @@ bool DialogueVoicesFinished(const AssetManager& assets, const DialogueVoiceLibra
 void UnloadDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library);
 const DialogueVoice* FindDialogueVoice(const DialogueVoiceLibrary& library, std::string_view id);
 
-const DialogueCue* UpdateDialoguePlayback(AssetManager& assets, AudioSystem& audio,
+void UpdateDialoguePlayback(AssetManager& assets, AudioSystem& audio,
         DialoguePlayback& playback, const DialogueTimeline& timeline,
         uint64_t token, bool active, bool audible, Vector3 position, float dt,
         bool positional = true);

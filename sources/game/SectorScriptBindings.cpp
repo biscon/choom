@@ -1649,9 +1649,6 @@ int StartCaption(
     if (player) {
         if (originalTop > 2) return PushCutsceneStartError(state, async, "player say expects message and optional mood/holdMs table");
         speech.playerSpeaker = true;
-        speech.history = &host.cutscene->playerSpeechHistory;
-        speech.seed = 2166136261u ^ static_cast<uint32_t>(host.cutscene->nextToken);
-        for (size_t i = 0; i < textLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(rawText[i])) * 16777619u;
         if (lua_istable(state, 2)) {
             lua_getfield(state, 2, "mood");
             if (!lua_isnil(state, -1)) {
@@ -1667,7 +1664,6 @@ int StartCaption(
         } else {
             holdArgument = originalTop + 1;
         }
-        speech.seed ^= static_cast<uint32_t>(speech.mood) * 0x9e3779b9u;
         if (host.dialogueVoices) {
             speech.settings = &host.dialogueVoices->settings;
             speech.voice = engine::FindDialogueVoice(*host.dialogueVoices, "male");
@@ -1692,16 +1688,11 @@ int StartCaption(
         if (originalTop > 4)
             return PushCutsceneStartError(state, async, "say expects npcId, message, optional mood and holdMs");
         const auto& npc = context.world.Get<NpcRuntimeInstance>(speech.speaker);
-        speech.history = &npc.dialogueHistory;
         speech.speakerName = npc.displayName.empty() ? npc.instanceId : npc.displayName;
         speech.color = Color{
                 static_cast<unsigned char>(npc.speechColor[0]),
                 static_cast<unsigned char>(npc.speechColor[1]),
                 static_cast<unsigned char>(npc.speechColor[2]), 255};
-        speech.seed = 2166136261u ^ static_cast<uint32_t>(host.cutscene->nextToken);
-        for (size_t i = 0; i < idLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(id[i])) * 16777619u;
-        for (size_t i = 0; i < textLength; ++i) speech.seed = (speech.seed ^ static_cast<unsigned char>(rawText[i])) * 16777619u;
-        speech.seed ^= static_cast<uint32_t>(speech.mood) * 0x9e3779b9u;
         if (host.dialogueVoices) {
             speech.settings = &host.dialogueVoices->settings;
             speech.voice = engine::FindDialogueVoice(*host.dialogueVoices,

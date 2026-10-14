@@ -337,8 +337,14 @@ void TestDialogueVoiceDefinition()
                   && Json::parse(json)["voice"] == "female"
                   && game::ParseNpcDefinitionJson(json, parsed, error)
                   && parsed.voice == "female", "female dialogue voice round-trips");
+    for (const char* id : {"male_elderly", "custom_missing_voice"}) {
+        definition.voice = id;
+        Check(game::SerializeNpcDefinitionJson(definition, json, error)
+                && game::ParseNpcDefinitionJson(json, parsed, error) && parsed.voice == id,
+                "custom and unresolved profile IDs round-trip");
+    }
     auto invalid = Json::parse(json);
-    for (const Json& value : {Json("unknown"), Json(""), Json(42), Json(nullptr)}) {
+    for (const Json& value : {Json("bad/id"), Json(""), Json(42), Json(nullptr)}) {
         invalid["voice"] = value;
         Check(!game::ParseNpcDefinitionJson(invalid.dump(), parsed, error),
               "invalid dialogue voice values are rejected");
@@ -779,6 +785,16 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
 {
     Sandbox sandbox;
     const std::filesystem::path definitionsRoot = sandbox.root / "npcs";
+    std::filesystem::create_directories(sandbox.root / "config");
+    std::filesystem::create_directories(sandbox.root / "voices");
+    for (const char* id : {"male", "female", "male_elderly"}) {
+        std::ofstream(sandbox.root / "voices" / (std::string(id)+".json"))
+                << Json{{"schema_version",2},{"voice_identity_id",id},{"display_name",id}}.dump();
+    }
+    std::ofstream(sandbox.root / "config/dialogue_speech.json") << Json{{"voices", {
+            {"male","voices/male.json"},{"female","voices/female.json"},
+            {"male_elderly","voices/male_elderly.json"}}}}.dump();
+
     const std::filesystem::path modelPath = sandbox.root / "Zombie1.glb";
     {
         std::ofstream model(modelPath, std::ios::binary);
@@ -1007,6 +1023,16 @@ void TestCatalogErrorsBlockEditorSave()
 {
     Sandbox sandbox;
     const std::filesystem::path definitionsRoot = sandbox.root / "npcs";
+    std::filesystem::create_directories(sandbox.root / "config");
+    std::filesystem::create_directories(sandbox.root / "voices");
+    for (const char* id : {"male", "female", "male_elderly"}) {
+        std::ofstream(sandbox.root / "voices" / (std::string(id)+".json"))
+                << Json{{"schema_version",2},{"voice_identity_id",id},{"display_name",id}}.dump();
+    }
+    std::ofstream(sandbox.root / "config/dialogue_speech.json") << Json{{"voices", {
+            {"male","voices/male.json"},{"female","voices/female.json"},
+            {"male_elderly","voices/male_elderly.json"}}}}.dump();
+
     std::filesystem::create_directories(definitionsRoot);
     {
         std::ofstream malformed(definitionsRoot / "broken.json");

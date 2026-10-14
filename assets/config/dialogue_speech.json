@@ -1,22 +1,24 @@
 {
   "voices": {
-    "male": "audio/dialogue_voices/male/voice_manifest.json",
-    "female": "audio/dialogue_voices/female/voice_manifest.json"
+    "male": "audio/dialogue_vowels/male/voice_manifest.json",
+    "female": "audio/dialogue_vowels/female/voice_manifest.json",
+    "male_young": "audio/dialogue_vowels/male_young/voice_manifest.json",
+    "female_young": "audio/dialogue_vowels/female_young/voice_manifest.json",
+    "male_elderly": "audio/dialogue_vowels/male_elderly/voice_manifest.json",
+    "female_elderly": "audio/dialogue_vowels/female_elderly/voice_manifest.json"
   },
   "characters_per_second": {
-    "neutral": 36,
-    "happy": 42,
-    "angry": 45,
-    "afraid": 30,
-    "panicked": 54,
-    "pained": 24,
-    "relieved": 33
+    "neutral": 30,
+    "happy": 34,
+    "angry": 34,
+    "afraid": 28,
+    "panicked": 40,
+    "pained": 26,
+    "relieved": 28
   },
   "volume": 0.65,
-  "comma_pause_ms": 120,
-  "clause_pause_ms": 180,
-  "sentence_pause_ms": 260,
-  "ellipsis_pause_ms": 450,
-  "minimum_gap_ms": 20,
-  "maximum_gap_ms": 60
+  "comma_pause_ms": 100,
+  "clause_pause_ms": 150,
+  "sentence_pause_ms": 200,
+  "ellipsis_pause_ms": 350
 }

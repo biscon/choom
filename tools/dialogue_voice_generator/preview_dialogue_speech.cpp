@@ -39,62 +39,70 @@ const Pcm& ReadPcm(std::map<std::filesystem::path, Pcm>& cache, const std::files
 }
 } // namespace
 
-int PreviewDialogue(const std::filesystem::path& assetsRoot, const std::filesystem::path& output)
+int PreviewDialogue(const std::filesystem::path& assetsRoot, const std::filesystem::path& output, bool fixedRate = false)
 {
     engine::AssetManager assets;
     if (!assets.Initialize()) throw std::runtime_error("AssetManager initialization failed");
     engine::DialogueVoiceLibrary library;
     engine::BeginLoadDialogueVoices(assets, library, assetsRoot);
     engine::PrepareDialogueVoices(assets, library, library.pending.size());
+    if (fixedRate) library.settings.charactersPerSecond.fill(30);
     // Never initialize an audio device or upload the queued sounds. The same
     // loaded durations/manifest settings and pure planner drive offline mixing.
-    if (library.voices.size() != 2) throw std::runtime_error("Both voice manifests are required");
+    if (library.voices.empty()) throw std::runtime_error("No vowel profiles available");
     std::filesystem::create_directories(output);
     std::map<std::filesystem::path, Pcm> cache;
-    const std::array<std::string, 2> lines{
-            "Wait!", "Yes finally another person!!. Come closer. Are you hurt?"};
+    const std::array<std::string, 4> lines{
+            "Wait!", "Yes finally another person! Come closer. Are you hurt?",
+            "Elin, Elin. Moon, moon. Keep moving, stay with me!",
+            "Are you there? STOP! I thought... never mind."};
     engine::DialogueTimeline timeline;
     engine::ReserveDialogueTimeline(timeline);
     size_t rendered = 0;
     for (size_t v = 0; v < library.voices.size(); ++v) {
         const auto& voice = library.voices[v];
         Pcm combined;
-        engine::DialogueSelectionHistory history;
         std::ofstream cues(output / (voice.id + "_speech_cues.csv"));
         if (!cues) throw std::runtime_error("Cannot write cue sheet");
         cues << "mood,line,clip,start_seconds,end_seconds,pitch,volume,text_group\n" << std::fixed << std::setprecision(6);
         for (size_t m = 0; m < engine::DialogueMoodCount; ++m) {
             const auto mood = static_cast<engine::DialogueMood>(m);
-            if (voice.banks[m].empty()) throw std::runtime_error("Missing mood bank");
+            std::vector<double> mix;
             Pcm moodPcm;
             for (size_t line = 0; line < lines.size(); ++line) {
-                if (!engine::BuildDialogueTimeline(lines[line], mood, 456u + line,
-                        library.settings, &voice, timeline, &history)) throw std::runtime_error("Planning failed");
-                const size_t lineStart = moodPcm.size();
-                moodPcm.resize(lineStart + static_cast<size_t>(std::ceil(timeline.seconds * Rate)), 0);
+                if (!engine::BuildDialogueTimeline(lines[line], mood,
+                        library.settings, &voice, timeline)) throw std::runtime_error("Planning failed");
+                const size_t lineStart = mix.size();
+                mix.resize(lineStart + static_cast<size_t>(std::ceil(timeline.seconds * Rate)), 0);
                 for (const auto& cue : timeline.cues) {
                     const auto source = std::find_if(library.pending.begin(), library.pending.end(), [&](const auto& request) {
-                        return request.voice == v && request.mood == mood && request.source == cue.source;
+                        return request.voice == v && request.mood == cue.bankMood && request.source == cue.source;
                     });
                     if (source == library.pending.end()) throw std::runtime_error("Cue source missing");
                     const auto& pcm = ReadPcm(cache, source->path);
                     const size_t start = lineStart + static_cast<size_t>(std::llround(cue.start * Rate));
-                    const size_t length = static_cast<size_t>(std::ceil(pcm.size() / double(cue.pitch)));
-                    moodPcm.resize(std::max(moodPcm.size(), start + length), 0);
-                    for (size_t n = 0; n < length; ++n) {
-                        const double sample = std::min(double(pcm.size()-1), n * double(cue.pitch));
+                    double sample = 0;
+                    size_t n = 0;
+                    while (sample < pcm.size()) {
                         const size_t lo = static_cast<size_t>(sample), hi = std::min(lo+1, pcm.size()-1);
                         const double value = (pcm[lo] + (pcm[hi]-double(pcm[lo])) * (sample-lo)) * cue.volume;
-                        if (std::abs(value) >= 32767) throw std::runtime_error("Preview clipping");
-                        moodPcm[start+n] = static_cast<int16_t>(std::lround(value));
+                        if (start+n >= mix.size()) mix.resize(start+n+1, 0);
+                        mix[start+n] += value;
+                        sample += engine::DialogueCuePitch(cue, cue.start+n/double(Rate));
+                        ++n;
                     }
+                    const size_t length = n;
                     cues << engine::DialogueMoodName(mood) << ',' << line+1 << ',' << Csv(source->path.stem().string()) << ','
                          << (combined.size()+start)/double(Rate) << ',' << (combined.size()+start+length)/double(Rate) << ','
                          << cue.pitch << ',' << cue.volume << ',' << Csv(lines[line].substr(cue.beginByte, cue.endByte-cue.beginByte)) << '\n';
-                    engine::CommitDialogueSelection(history, cue);
                     ++rendered;
                 }
-                moodPcm.resize(moodPcm.size() + Rate/2, 0);
+                mix.resize(mix.size() + Rate/2, 0);
+            }
+            moodPcm.reserve(mix.size());
+            for (double value : mix) {
+                if (std::abs(value) > 32767) throw std::runtime_error("Overlapping preview clips");
+                moodPcm.push_back(static_cast<int16_t>(std::lround(value)));
             }
             WriteWave(output / (voice.id + "_" + engine::DialogueMoodName(mood) + "_speech.wav"), moodPcm);
             combined.insert(combined.end(), moodPcm.begin(), moodPcm.end());
@@ -106,14 +114,15 @@ int PreviewDialogue(const std::filesystem::path& assetsRoot, const std::filesyst
     }
     engine::UnloadDialogueVoices(assets, library);
     assets.Shutdown();
-    std::cout << "Rendered " << rendered << " complete fragments. No listening validation performed.\n";
+    std::cout << "Rendered " << rendered << " vowel events. No listening validation performed.\n";
+    if (!fixedRate) return PreviewDialogue(assetsRoot, output / "fixed_rate", true);
     return 0;
 }
 } // namespace game
 
 int main(int argc, char** argv)
 {
-    std::filesystem::path assets = "assets", output = "audio_generation/previews/engine_speech";
+    std::filesystem::path assets = "assets", output = "audio_generation/previews/vowel_speech";
     for (int i = 1; i < argc; ++i) {
         const std::string argument = argv[i];
         if (argument == "--help") {

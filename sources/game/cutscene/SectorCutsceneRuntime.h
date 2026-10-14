@@ -131,7 +131,7 @@ struct SectorCutsceneCaptionState {
     bool playerSpeaker = false;
     engine::DialogueMood mood = engine::DialogueMood::Neutral;
     engine::DialogueTimeline speechTimeline;
-    bool voiceTiming = true;
+    bool voicesEnabled = true;
     bool speechDriven = false;
     bool speechFinished = false;
     bool skippedForReading = false;
@@ -145,9 +145,7 @@ struct SectorCutsceneSpeechOptions {
     bool playerSpeaker = false;
     engine::DialogueMood mood = engine::DialogueMood::Neutral;
     const engine::DialogueVoice* voice = nullptr;
-    const engine::DialogueSelectionHistory* history = nullptr;
     const engine::DialogueSettings* settings = nullptr;
-    uint32_t seed = 1;
 };
 
 struct SectorCutsceneFadeState {
@@ -201,7 +199,6 @@ struct SectorCutsceneRuntime {
     SectorCutscenePresentationState presentation;
     engine::DialoguePlayback speechPlayback;
     engine::Entity speechSpeaker = engine::NullEntity();
-    engine::DialogueSelectionHistory playerSpeechHistory;
     engine::ScriptTaskHandle controlsOwnerTask{};
     uint64_t nextToken = 1;
     bool controlsEnabled = true;
@@ -319,7 +316,7 @@ void CancelSectorCutsceneCaption(SectorCutsceneRuntime& runtime, uint64_t token)
 // First voiced advance reveals and holds; the next advance dismisses immediately.
 bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts,
         bool voicesEnabled);
-void SetSectorCutsceneCaptionVoiceTiming(SectorCutsceneRuntime& runtime, bool enabled);
+void SetSectorCutsceneCaptionVoicesEnabled(SectorCutsceneRuntime& runtime, bool enabled);
 void UpdateSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& world,
         engine::AssetManager& assets, engine::AudioSystem& audio, float dt,
         bool voicesEnabled = true);

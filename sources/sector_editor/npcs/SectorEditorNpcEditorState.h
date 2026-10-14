@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "engine/ui/UI.h"
+#include "engine/audio/DialogueSpeech.h"
 #include "game/npc/NpcDefinitions.h"
 #include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
 
@@ -43,6 +44,8 @@ struct SectorEditorNpcAudioPickerState {
 
 struct SectorEditorNpcEditorState {
     bool open = false;
+    std::vector<engine::DialogueVoiceCatalogEntry> voices;
+    std::vector<const char*> voiceLabels;
     std::vector<SectorEditorNpcDefinitionDraft> drafts;
     std::vector<std::string> stagedDeleteIds;
     std::vector<NpcDefinitionCatalogError> catalogErrors;

@@ -28,7 +28,6 @@ constexpr float ArrivalTolerance = 0.10f;
 constexpr float MovementEpsilon = 0.0001f;
 constexpr float ReplanAfterSeconds = 1.50f;
 constexpr uint32_t MaximumReplans = 3;
-constexpr double SayCodepointsPerSecond = 40.0;
 constexpr double AutomaticHoldSecondsPerCodepoint = 0.045;
 constexpr double MinimumAutomaticHoldSeconds = 1.5;
 constexpr double MaximumAutomaticHoldSeconds = 8.0;
@@ -295,17 +294,6 @@ size_t CountCodepoints(std::string_view text, bool& valid)
         ++count;
     }
     return count;
-}
-
-size_t BytePrefixForCodepoints(std::string_view text, size_t count)
-{
-    size_t cursor = 0;
-    for (size_t seen = 0; cursor < text.size() && seen < count; ++seen) {
-        int bytes = 0;
-        GetCodepointNext(text.data() + cursor, &bytes);
-        cursor += static_cast<size_t>(std::max(1, bytes));
-    }
-    return std::min(cursor, text.size());
 }
 
 bool ResolveLookTargetPoint(
@@ -1014,19 +1002,14 @@ bool BeginSectorCutsceneCaption(
         const engine::DialogueSettings defaults;
         if (!engine::BuildDialogueTimeline(text,
                 speech ? speech->mood : engine::DialogueMood::Neutral,
-                speech ? speech->seed : static_cast<uint32_t>(runtime.nextToken),
                 speech && speech->settings ? *speech->settings : defaults,
-                speech ? speech->voice : nullptr, caption.speechTimeline,
-                speech ? speech->history : nullptr)) {
+                speech ? speech->voice : nullptr, caption.speechTimeline)) {
             error = "could not construct dialogue timeline";
             return false;
         }
-        if (holdSeconds == nullptr && !caption.speechTimeline.reveals.empty()) {
-            // Terminal punctuation must not add a second pause after the last reveal.
-            caption.speechTimeline.seconds = caption.speechTimeline.reveals.back().seconds;
-        }
+
     }
-    caption.voiceTiming = true;
+    caption.voicesEnabled = true;
     caption.speechDriven = false;
     caption.speechFinished = false;
     caption.skippedForReading = false;
@@ -1072,55 +1055,10 @@ bool BeginSectorCutsceneCaption(
     return true;
 }
 
-void SetSectorCutsceneCaptionVoiceTiming(SectorCutsceneRuntime& runtime, bool enabled)
+void SetSectorCutsceneCaptionVoicesEnabled(SectorCutsceneRuntime& runtime, bool enabled)
 {
-    auto& caption = runtime.caption;
-    if (!caption.active || caption.kind != SectorCutsceneCaptionKind::Say
-            || caption.skippedForReading || caption.voiceTiming == enabled) return;
-
-    const double oldRevealSeconds = caption.revealSeconds;
-    const double newRevealSeconds = enabled ? caption.speechTimeline.seconds
-            : static_cast<double>(caption.codepointCount) / SayCodepointsPerSecond;
-    const double newHoldSeconds = caption.explicitHold ? caption.holdSeconds
-            : enabled ? VoicedAutomaticHoldSeconds : std::clamp(
-                    static_cast<double>(caption.codepointCount) * AutomaticHoldSecondsPerCodepoint,
-                    MinimumAutomaticHoldSeconds, MaximumAutomaticHoldSeconds);
-    if (caption.elapsedSeconds >= oldRevealSeconds) {
-        const double elapsedHold = caption.elapsedSeconds - oldRevealSeconds;
-        // Preserve a fade already in progress; a shorter hold starts fading now
-        // instead of consuming the entire fade or restoring opacity.
-        caption.elapsedSeconds = newRevealSeconds + (elapsedHold >= caption.holdSeconds
-                ? newHoldSeconds + elapsedHold - caption.holdSeconds
-                : std::min(elapsedHold, newHoldSeconds));
-    } else if (enabled) {
-        caption.elapsedSeconds = 0.0;
-        for (const auto& reveal : caption.speechTimeline.reveals) {
-            if (reveal.byteCount > caption.visibleByteCount) break;
-            caption.elapsedSeconds = reveal.seconds;
-        }
-    } else {
-        bool valid = false;
-        const size_t shown = CountCodepoints(std::string_view(caption.text).substr(
-                0, caption.visibleByteCount), valid);
-        caption.elapsedSeconds = static_cast<double>(shown) / SayCodepointsPerSecond;
-    }
-    caption.revealSeconds = newRevealSeconds;
-    caption.holdSeconds = newHoldSeconds;
-    caption.voiceTiming = enabled;
-    caption.speechDriven = enabled;
-    caption.speechFinished = caption.elapsedSeconds >= newRevealSeconds;
-    if (enabled) {
-        caption.speechTimeline.revealCursor = 0;
-        auto& sequence = runtime.speechPlayback.sequence;
-        sequence = {};
-        sequence.position = caption.elapsedSeconds;
-        sequence.finished = caption.speechFinished;
-        // Resume at the next complete word; never replay already revealed words
-        // or start partway through a recorded fragment.
-        while (sequence.nextCue < caption.speechTimeline.cues.size()
-                && caption.speechTimeline.cues[sequence.nextCue].beginByte < caption.visibleByteCount)
-            ++sequence.nextCue;
-    }
+    // Audibility never changes the text clock or reading hold.
+    runtime.caption.voicesEnabled = enabled;
 }
 
 void BindSectorCutsceneCaptionOperation(
@@ -1141,11 +1079,11 @@ void CancelSectorCutsceneCaption(SectorCutsceneRuntime& runtime, uint64_t token)
 }
 
 bool AdvanceSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::ScriptRuntime& scripts,
-        bool voicesEnabled)
+        bool /*voicesEnabled*/)
 {
     auto& caption = runtime.caption;
     if (!caption.active || caption.kind != SectorCutsceneCaptionKind::Say) return false;
-    if (voicesEnabled && !caption.skippedForReading) {
+    if (!caption.skippedForReading) {
         caption.skippedForReading = true;
         caption.speechFinished = true;
         caption.speechDriven = false;
@@ -1236,17 +1174,8 @@ void UpdateSectorCutsceneTimelines(
                     caption.elapsedSeconds - revealStart,
                     0.0,
                     caption.revealSeconds);
-            if (caption.voiceTiming) {
-                caption.visibleByteCount = engine::AdvanceDialogueReveal(
-                        caption.speechTimeline, revealElapsed);
-            } else {
-                const size_t visibleCodepoints = revealElapsed >= caption.revealSeconds
-                        ? caption.codepointCount : std::min(caption.codepointCount,
-                                static_cast<size_t>(std::floor(revealElapsed * SayCodepointsPerSecond)));
-                caption.visibleByteCount = std::max(caption.visibleByteCount,
-                        BytePrefixForCodepoints(caption.text, visibleCodepoints));
-                caption.speechFinished = revealElapsed >= caption.revealSeconds;
-            }
+            caption.visibleByteCount = engine::AdvanceDialogueReveal(caption.speechTimeline, revealElapsed);
+            caption.speechFinished = revealElapsed >= caption.revealSeconds;
         }
         if (caption.elapsedSeconds >= end) {
             const engine::ScriptOperationHandle operation = caption.operation;

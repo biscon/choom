@@ -9,13 +9,6 @@ namespace engine {
 namespace {
 constexpr std::array<const char*, DialogueMoodCount> MoodNames{
         "neutral", "happy", "angry", "afraid", "panicked", "pained", "relieved"};
-uint32_t Random(uint32_t& seed)
-{
-    if (!seed) seed = 0x6d2b79f5u;
-    seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
-    return seed;
-}
-float Unit(uint32_t& seed) { return (Random(seed) & 0xffffu) / 65535.0f; }
 struct Character { uint32_t value; size_t end; };
 bool Decode(std::string_view text, std::array<Character, DialogueMaximumCodepoints>& out, size_t& count)
 {
@@ -61,37 +54,37 @@ bool Letter(uint32_t c)
     if (c < 128) return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
     return c != 0x2018 && c != 0x2019 && c != 0x201c && c != 0x201d;
 }
-const DialogueClip* SelectClip(const std::vector<DialogueClip>* bank,
-        DialogueSelectionState& state, uint32_t& seed)
+uint32_t Fold(uint32_t c)
 {
-    uint64_t available = 0;
-    if (bank) for (const auto& clip : *bank)
-        if (clip.source < 64 && !IsNull(clip.sound) && std::isfinite(clip.seconds) && clip.seconds > 0)
-            available |= uint64_t(1) << clip.source;
-    if (!available) return nullptr;
-    if (state.available != available) { state = {}; state.available = available; }
-    if (!state.remaining) state.remaining = available;
-    uint64_t candidates = state.remaining;
-    // Prefer excluding all three recent sources. With a small bank, relax the
-    // oldest restriction first; even one-clip fallback banks must keep working.
-    for (size_t retained = state.recent.size();; --retained) {
-        candidates = state.remaining;
-        for (size_t n = 0; n < retained; ++n)
-            if (state.recent[n] < 64) candidates &= ~(uint64_t(1) << state.recent[n]);
-        if (candidates || retained == 0) break;
-    }
-    unsigned count = 0;
-    for (uint64_t bits = candidates; bits; bits &= bits-1) ++count;
-    unsigned selected = Random(seed) % count;
-    uint32_t source = 0;
-    for (; source < 64; ++source) if (candidates & (uint64_t(1) << source)) {
-        if (selected-- == 0) break;
-    }
-    state.remaining &= ~(uint64_t(1) << source);
-    state.recent = {source, state.recent[0], state.recent[1]};
-    for (const auto& clip : *bank) if (clip.source == source) return &clip;
-    return nullptr;
+    if (c >= 'A' && c <= 'Z') return c + 32;
+    if (c >= 0xc0 && c <= 0xde && c != 0xd7) c += 32;
+    if (c >= 0xe0 && c <= 0xe5) return 'a';
+    if (c >= 0xe8 && c <= 0xeb) return 'e';
+    if (c >= 0xec && c <= 0xef) return 'i';
+    if ((c >= 0xf2 && c <= 0xf6) || c == 0xf8) return 'o';
+    if (c >= 0xf9 && c <= 0xfc) return 'u';
+    if (c == 0xfd || c == 0xff) return 'y';
+    return c;
 }
+bool Vowel(uint32_t c, bool initial)
+{
+    c = Fold(c);
+    return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' || (c == 'y' && !initial);
+}
+DialogueVowel MapVowel(uint32_t first, uint32_t second)
+{
+    first = Fold(first); second = Fold(second);
+    if (first == 'o' && (second == 'o' || second == 'u')) return DialogueVowel::Oo;
+    if (first == 'e' && (second == 'e' || second == 'a')) return DialogueVowel::Ee;
+    switch (first) {
+    case 'a': return DialogueVowel::Ah;
+    case 'e': return DialogueVowel::Eh;
+    case 'i': case 'y': return DialogueVowel::Ee;
+    case 'o': return DialogueVowel::Oh;
+    default: return DialogueVowel::Uh;
+    }
+}
+uint32_t Hash(uint32_t hash, uint32_t value) { return (hash ^ value) * 16777619u; }
 } // namespace
 
 const char* DialogueMoodName(DialogueMood mood)
@@ -112,102 +105,117 @@ void ReserveDialogueTimeline(DialogueTimeline& timeline)
     timeline.cues.reserve(DialogueMaximumCodepoints);
 }
 
-bool BuildDialogueTimeline(std::string_view text, DialogueMood mood, uint32_t seed,
-        const DialogueSettings& settings, const DialogueVoice* voice, DialogueTimeline& timeline,
-        const DialogueSelectionHistory* history)
+const char* DialogueVowelName(DialogueVowel vowel)
+{
+    constexpr std::array<const char*, DialogueVowelCount> names{"ah", "eh", "ee", "oh", "oo", "uh"};
+    const size_t i = static_cast<size_t>(vowel);
+    return i < names.size() ? names[i] : "uh";
+}
+
+bool BuildDialogueTimeline(std::string_view text, DialogueMood mood,
+        const DialogueSettings& settings, const DialogueVoice* voice, DialogueTimeline& timeline)
 {
     std::array<Character, DialogueMaximumCodepoints> characters{};
     size_t count = 0;
-    if (text.size() > 8192 || !Decode(text, characters, count)
-            || static_cast<size_t>(mood) >= DialogueMoodCount) return false;
-    const float rate = settings.charactersPerSecond[static_cast<size_t>(mood)];
+    const size_t m = static_cast<size_t>(mood);
+    if (text.size() > 8192 || !Decode(text, characters, count) || m >= DialogueMoodCount) return false;
+    const float rate = settings.charactersPerSecond[m];
     if (!std::isfinite(rate) || rate <= 0) return false;
-    if (voice && (!std::isfinite(voice->pitchRange[0]) || !std::isfinite(voice->pitchRange[1])
-            || voice->pitchRange[0] <= 0 || voice->pitchRange[0] > voice->pitchRange[1])) return false;
     if (timeline.reveals.capacity() < count || timeline.cues.capacity() < count) {
         std::fprintf(stderr, "[Dialogue WARNING] Timeline was not pre-reserved; growing storage.\n");
         ReserveDialogueTimeline(timeline);
     }
     timeline.reveals.clear(); timeline.cues.clear(); timeline.revealCursor = 0;
     timeline.seconds = 0;
-    const auto* bank = voice ? &voice->banks[static_cast<size_t>(mood)] : nullptr;
-    DialogueMood bankMood = mood;
-    if (bank && bank->empty()) { bank = &voice->banks[0]; bankMood = DialogueMood::Neutral; }
-    DialogueSelectionHistory planned = history ? *history : DialogueSelectionHistory{};
-    auto& selection = planned.banks[static_cast<size_t>(bankMood)];
+    // Reveal each codepoint, but bound a run of punctuation to one pause.
+    double clock = 0;
     for (size_t i = 0; i < count;) {
-        const float punctuation = Pause(characters[i].value, settings);
+        clock += 1.0 / rate;
         if (Punctuation(characters[i].value)) {
-            float delay = punctuation;
-            int dots = 0;
+            float pause = 0;
+            size_t dots = 0;
             while (i < count && Punctuation(characters[i].value)) {
-                const uint32_t c = characters[i].value;
-                delay = std::max(delay, Pause(c, settings));
-                dots += c == '.';
-                timeline.reveals.push_back({timeline.seconds, characters[i++].end});
+                pause = std::max(pause, Pause(characters[i].value, settings));
+                dots += characters[i].value == '.';
+                timeline.reveals.push_back({clock, characters[i++].end});
             }
-            if (dots >= 3) delay = std::max(delay, settings.ellipsisPause);
-            timeline.seconds += delay * (24.0 / rate);
-            continue;
+            if (dots >= 3) pause = std::max(pause, settings.ellipsisPause);
+            if (i < count) clock += std::max(0.0, pause * 30.0 / rate - 1.0 / rate);
+        } else timeline.reveals.push_back({clock, characters[i++].end});
+    }
+    timeline.seconds = timeline.reveals.back().seconds;
+    const auto prosody = voice ? voice->prosody[m] : DialogueProsody{};
+    uint32_t identity = 2166136261u;
+    if (voice) for (unsigned char c : voice->id) identity = Hash(identity, c);
+    for (size_t phrase = 0; phrase < count;) {
+        if (Punctuation(characters[phrase].value)) { ++phrase; continue; }
+        size_t end = phrase;
+        while (end < count && !Punctuation(characters[end].value)) ++end;
+        bool question = false, exclamation = false, ellipsis = false;
+        size_t dots = 0;
+        for (size_t n = end; n < count && Punctuation(characters[n].value); ++n) {
+            const auto c = characters[n].value;
+            question |= c == '?' || c == 0xff1f;
+            exclamation |= c == '!' || c == 0xff01;
+            ellipsis |= c == 0x2026;
+            dots += c == '.';
         }
-        if (!Letter(characters[i].value)) {
-            timeline.reveals.push_back({timeline.seconds, characters[i++].end});
-            continue;
+        ellipsis |= dots >= 3;
+        size_t finalWord = phrase;
+        for (size_t n = phrase; n < end; ++n)
+            if (Letter(characters[n].value) && (n == phrase || !Letter(characters[n-1].value))) finalWord = n;
+        for (size_t word = phrase; word < end;) {
+            if (!Letter(characters[word].value)) { ++word; continue; }
+            size_t wordEnd = word;
+            uint32_t wordHash = identity;
+            bool capitals = true;
+            size_t letters = 0;
+            while (wordEnd < end && Letter(characters[wordEnd].value)) {
+                const auto c = characters[wordEnd++].value;
+                capitals &= c >= 'A' && c <= 'Z';
+                ++letters;
+                wordHash = Hash(wordHash, Fold(c));
+            }
+            capitals &= letters >= 2;
+            size_t group = 0;
+            for (size_t n = word; n < wordEnd;) {
+                if (!Vowel(characters[n].value, n == word)) { ++n; continue; }
+                const size_t begin = n++;
+                while (n < wordEnd && Vowel(characters[n].value, false)) ++n;
+                const auto vowel = MapVowel(characters[begin].value, begin+1 < n ? characters[begin+1].value : 0);
+                const size_t v = static_cast<size_t>(vowel);
+                DialogueCue cue;
+                cue.start = timeline.reveals[begin].seconds;
+                cue.source = static_cast<uint32_t>(v);
+                cue.beginByte = begin ? characters[begin-1].end : 0;
+                cue.endByte = characters[n-1].end;
+                cue.bankMood = mood;
+                if (voice) {
+                    const DialogueClip* clip = &voice->banks[m][v];
+                    if (IsNull(clip->sound)) { clip = &voice->banks[0][v]; cue.bankMood = DialogueMood::Neutral; }
+                    cue.sound = clip->sound;
+                    cue.end = clip->seconds;
+                }
+                const float progress = float(begin-phrase) / std::max(size_t(1), end-phrase-1);
+                const float wordProgress = float(begin-word+1) / (wordEnd-word);
+                const float jitter = (Hash(wordHash, static_cast<uint32_t>(group++)) & 65535u) / 65535.0f * 0.3f - 0.15f;
+                float semitones = prosody.pitchSemitones + (0.5f-progress)*prosody.contourSemitones + jitter;
+                if (question && word == finalWord) semitones += 3.0f * wordProgress;
+                if (exclamation) semitones += 1.5f * (1-progress);
+                if (capitals) semitones += 1.5f;
+                cue.pitch = std::pow(2.0f, std::clamp(semitones, -5.0f, 5.0f) / 12);
+                cue.volume = settings.volume * prosody.gain * (capitals ? 1.25f : 1.0f);
+                if (ellipsis && word == finalWord) cue.volume *= 1.0f - 0.8f * wordProgress;
+                cue.wobbleHz = prosody.wobbleHz;
+                cue.wobbleSemitones = prosody.wobbleSemitones;
+                cue.end = cue.start + cue.end / cue.pitch;
+                timeline.cues.push_back(cue);
+            }
+            word = wordEnd;
         }
-        const size_t begin = i;
-        size_t wordLetters = 0;
-        while (i < count && !Space(characters[i].value) && !Punctuation(characters[i].value)) {
-            wordLetters += Letter(characters[i].value);
-            ++i;
-        }
-        // Pair only adjacent short words; never bridge punctuation or let a
-        // long recording swallow an arbitrary number of displayed words.
-        size_t nextWord = i;
-        while (nextWord < count && Space(characters[nextWord].value)) ++nextWord;
-        size_t nextEnd = nextWord, nextLetters = 0;
-        while (nextEnd < count && !Space(characters[nextEnd].value) && !Punctuation(characters[nextEnd].value)) {
-            nextLetters += Letter(characters[nextEnd].value);
-            ++nextEnd;
-        }
-        if (wordLetters <= 3 && nextLetters > 0 && nextLetters <= 3) i = nextEnd;
-        const float pitch = voice ? std::clamp(0.98f + Unit(seed) * 0.04f,
-                voice->pitchRange[0], voice->pitchRange[1]) : 1.0f;
-        const DialogueClip* chosen = SelectClip(bank, selection, seed);
-        size_t letters = 0;
-        for (size_t n = begin; n < i; ++n) letters += Letter(characters[n].value);
-        const double duration = chosen ? chosen->seconds / pitch : std::max(0.08, letters / double(rate));
-        const double start = timeline.seconds;
-        const float volume = voice ? settings.volume * (voice->volumeRange[0]
-                + Unit(seed) * (voice->volumeRange[1]-voice->volumeRange[0])) : 0;
-        timeline.cues.push_back({start, start+duration,
-                chosen ? chosen->sound : SoundHandle{},
-                chosen ? chosen->source : UINT32_MAX, pitch, volume,
-                begin ? characters[begin-1].end : 0, characters[i-1].end});
-        timeline.cues.back().bankMood = bankMood;
-        timeline.cues.back().selectionAfter = selection;
-        for (size_t n = begin; n < i; ++n)
-            timeline.reveals.push_back({start + duration * double(n-begin+1) / double(i-begin), characters[n].end});
-        timeline.seconds += duration;
-        // Punctuation owns the pause at phrase boundaries; gaps only join words.
-        size_t next = i;
-        while (next < count && Space(characters[next].value)) ++next;
-        if (next < count && !Punctuation(characters[next].value))
-            timeline.seconds += (settings.gapSeconds[0] + Unit(seed) * (settings.gapSeconds[1]-settings.gapSeconds[0])) * 24.0 / rate;
+        phrase = end;
     }
     return true;
-}
-
-void CommitDialogueSelection(DialogueSelectionHistory& history, const DialogueCue& cue)
-{
-    if (IsNull(cue.sound) || cue.source >= 64 || static_cast<size_t>(cue.bankMood) >= DialogueMoodCount) return;
-    auto& state = history.banks[static_cast<size_t>(cue.bankMood)];
-    const uint64_t available = cue.selectionAfter.available;
-    if (state.available != available) { state = {}; state.available = available; }
-    if (!state.remaining) state.remaining = available;
-    // Earlier planned cues may have failed to play. Consume only this actual
-    // start, rather than copying the provisional history of the whole prefix.
-    state.remaining &= ~(uint64_t(1) << cue.source);
-    state.recent = {cue.source, state.recent[0], state.recent[1]};
 }
 
 size_t AdvanceDialogueReveal(DialogueTimeline& timeline, double elapsed)
@@ -218,34 +226,22 @@ size_t AdvanceDialogueReveal(DialogueTimeline& timeline, double elapsed)
 }
 
 const DialogueCue* AdvanceDialogueSequence(const DialogueTimeline& timeline,
-        DialogueSequence& sequence, float rawDt, bool devicePlaying, bool paused)
+        DialogueSequence& sequence, float rawDt, bool paused)
 {
-    if (paused || sequence.finished) return nullptr;
+    if (paused) return nullptr;
     const double dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
-    if (sequence.fragmentActive) {
-        const auto& cue = timeline.cues[sequence.nextCue-1];
-        sequence.fragmentElapsed += dt;
-        sequence.position = std::min(cue.end, cue.start + sequence.fragmentElapsed);
-        const bool finished = sequence.usesDevice ? !devicePlaying
-                : sequence.fragmentElapsed >= cue.end-cue.start;
-        if (!finished) return nullptr;
-        sequence.position = cue.end;
-        sequence.fragmentActive = false;
-        sequence.usesDevice = false;
-        // Do not apply time from the old sound to a new sound or its gap.
-    } else if (sequence.nextCue < timeline.cues.size()) {
-        const auto& cue = timeline.cues[sequence.nextCue];
-        sequence.position = std::min(cue.start, sequence.position + dt);
-        if (sequence.position < cue.start) return nullptr;
-        sequence.fragmentActive = true;
-        sequence.fragmentElapsed = 0;
-        ++sequence.nextCue;
-        return &cue;
-    } else {
-        sequence.position = std::min(timeline.seconds, sequence.position + dt);
-    }
-    sequence.finished = !sequence.fragmentActive && sequence.nextCue == timeline.cues.size()
-            && sequence.position >= timeline.seconds;
-    return nullptr;
+    const double elapsed = sequence.position + dt;
+    sequence.position = elapsed;
+    const DialogueCue* newest = nullptr;
+    while (sequence.nextCue < timeline.cues.size() && timeline.cues[sequence.nextCue].start <= sequence.position)
+        newest = &timeline.cues[sequence.nextCue++];
+    sequence.finished = sequence.position >= timeline.seconds;
+    return newest && elapsed - newest->start <= 0.05 ? newest : nullptr;
+}
+
+float DialogueCuePitch(const DialogueCue& cue, double elapsed)
+{
+    const double wobble = cue.wobbleSemitones * std::sin(elapsed * cue.wobbleHz * 6.283185307179586);
+    return cue.pitch * std::pow(2.0, wobble / 12.0);
 }
 } // namespace engine
