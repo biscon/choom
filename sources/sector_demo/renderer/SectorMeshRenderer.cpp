@@ -780,7 +780,8 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
 
-    if (!BuildSectorGeneratedGeometry(map, generatedGeometry, &error)) {
+    if (!engine::MeasureLoadPhase(assets.LoadingDiagnostics(), engine::LoadPhase::Geometry,
+            [&] { return BuildSectorGeneratedGeometry(map, generatedGeometry, &error); })) {
         error = error.empty()
                 ? "Preview failed: topology generated no geometry"
                 : "Preview failed: " + error;
@@ -833,6 +834,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
             map,
             pbrEnvironment);
 
+    const auto lightmapStarted = engine::LoadClock::now();
     SectorLightmapLayout lightmapLayout;
     const std::vector<SectorLightmapAtlasMetadata> lightmapAtlases =
             GetSectorLightmapAtlases(map.bakedLightmap);
@@ -958,8 +960,12 @@ bool SectorMeshRenderer::RebuildRendererResources(
         }
     }
 
+    if (assets.LoadingDiagnostics().active)
+        assets.LoadingDiagnostics().milliseconds[static_cast<size_t>(engine::LoadPhase::Lightmaps)] +=
+                std::chrono::duration<double, std::milli>(engine::LoadClock::now() - lightmapStarted).count();
     std::string meshError;
-    meshes = BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr, &meshError);
+    meshes = engine::MeasureLoadPhase(assets.LoadingDiagnostics(), engine::LoadPhase::Geometry,
+            [&] { return BuildSectorMeshes(map, useLightmapLayout ? &lightmapLayout : nullptr, &meshError); });
     visibleSectorDraws.reserve(meshes.sectorDrawRecords.size());
     if (meshes.sectorDrawRecords.empty()) {
         Shutdown(assets);
@@ -1919,7 +1925,19 @@ void SectorMeshRenderer::UpdateRuntimeReflections(engine::AssetManager& assets,
     pbrEnvironment.seconds = GetTime();
     runtimeReflections.ObserveLights(pbrEnvironment, dynamicLightState, runtimeSeconds);
     if (preparing) runtimeReflections.RequireInitial(pbrEnvironment, visibilityResult, visibilityResult.startSectorId);
-    runtimeReflections.Step(assets, pbrEnvironment, *this, world, lighting, preparing);
+    // Initial capture can advance several stages while the loading UI is shown.
+    // Bound both CPU submission time and estimated GPU work; never wait for a query.
+    double gpuBudget = preparing ? std::min(8.0f, assets.PreparationBudget().RemainingMilliseconds()) : 0.0;
+    int steps = 0;
+    do {
+        if (preparing && assets.PreparationBudget().enabled
+                && assets.PreparationBudget().RemainingMilliseconds() <= 0) break;
+        runtimeReflections.Step(assets, pbrEnvironment, *this, world, lighting, preparing);
+        const auto& stats = runtimeReflections.Stats();
+        if (!preparing || stats.stage == SectorReflectionCaptureStage::Idle) break;
+        const double estimate = stats.lastStageGpuMilliseconds[static_cast<size_t>(stats.stage)];
+        gpuBudget -= std::max(estimate, stats.stage == SectorReflectionCaptureStage::Filter ? 0.5 : 2.0);
+    } while (++steps < 32 && gpuBudget > 0 && !runtimeReflections.InitialReady(pbrEnvironment));
 }
 
 void SectorMeshRenderer::PrepareReflectionCapture(SectorReflectionCaptureDrawContext& draw,

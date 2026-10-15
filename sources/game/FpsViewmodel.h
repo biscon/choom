@@ -233,6 +233,7 @@ bool QueueFpsWeaponSlotSwitch(
         int targetSlot,
         int& pendingWeaponSlot);
 void BeginFpsWeaponSlotTargetUnholster(FpsViewmodelRuntimeState& state);
+bool FpsViewmodelLoadFinished(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelReadyForUse(const FpsViewmodelRuntimeState& state);
 bool IsFpsWeaponReloading(const FpsViewmodelRuntimeState& state);
 float FpsWeaponReloadProgress(const FpsViewmodelRuntimeState& state);

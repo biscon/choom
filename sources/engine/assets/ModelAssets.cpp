@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <functional>
@@ -1676,7 +1677,8 @@ ModelHandle ModelAssets::RequestModel(
     }
 
     ModelScopeData& data = scopeData[scope.index];
-    const std::string requestKey = MakeRequestKey(key, path, flags);
+    const std::string normalizedPath = NormalizeAssetSourcePath(path);
+    const std::string requestKey = MakeRequestKey(key, normalizedPath.c_str(), flags);
     const auto existing = data.modelByRequest.find(requestKey);
     if (existing != data.modelByRequest.end()) {
         return existing->second;
@@ -1686,16 +1688,34 @@ ModelHandle ModelAssets::RequestModel(
     ModelSlot slot;
     slot.state = ModelState::Queued;
     slot.key = key;
-    slot.path = path;
+    slot.path = normalizedPath;
     slot.flags = flags;
+    const auto revisionStarted = LoadClock::now();
+    slot.resourceKey = requestKey + "#revision:" + revisions.Model(normalizedPath);
+    if (diagnostics && diagnostics->active)
+        diagnostics->milliseconds[static_cast<size_t>(LoadPhase::Fingerprints)] +=
+                std::chrono::duration<double, std::milli>(LoadClock::now() - revisionStarted).count();
+    const auto retained = cachedModels.find(slot.resourceKey);
+    if (reuseEnabled && retained != cachedModels.end()) {
+        slot.resource = retained->second;
+        slot.resource->lastUse = ++cacheClock;
+        slot.state = ModelState::Ready;
+        if (diagnostics && diagnostics->active) ++diagnostics->modelHits;
+    } else {
+        slot.resource = std::make_shared<CachedModel>();
+    }
     slot.scope = scope;
 
+    // Only glTF has a complete dependency manifest here. Other raylib formats
+    // still load normally, but cannot reuse potentially stale .mtl/texture data.
+    if (!reuseEnabled || !IsFileExtension(normalizedPath.c_str(), ".gltf;.glb"))
+        slot.resourceKey += "#uncached:" + std::to_string(modelSlots.size());
     const uint32_t index = static_cast<uint32_t>(modelSlots.size());
     modelSlots.push_back(std::move(slot));
     const ModelHandle handle{index, modelSlots[index].generation};
     data.models.push_back(handle);
     data.modelByRequest.emplace(requestKey, handle);
-    pendingLoads.push_back(handle);
+    if (modelSlots[index].state == ModelState::Queued) pendingLoads.push_back(handle);
     return handle;
 }
 
@@ -1727,8 +1747,8 @@ const Model* ModelAssets::GetModel(ModelHandle handle) const
         return nullptr;
     }
     const ModelSlot& slot = modelSlots[handle.index];
-    return slot.state == ModelState::Ready && IsModelValid(slot.asset.model)
-            ? &slot.asset.model
+    return slot.state == ModelState::Ready && IsModelValid(slot.resource->asset.model)
+            ? &slot.resource->asset.model
             : nullptr;
 }
 
@@ -1739,8 +1759,8 @@ const ModelAsset* ModelAssets::GetModelAsset(ModelHandle handle) const
         return nullptr;
     }
     const ModelSlot& slot = modelSlots[handle.index];
-    return slot.state == ModelState::Ready && IsModelValid(slot.asset.model)
-            ? &slot.asset
+    return slot.state == ModelState::Ready && IsModelValid(slot.resource->asset.model)
+            ? &slot.resource->asset
             : nullptr;
 }
 
@@ -1756,8 +1776,8 @@ ModelHandle ModelAssets::FindReadyModelByPath(const char* path) const
             ++index) {
         const ModelSlot& slot = modelSlots[index];
         if (slot.state == ModelState::Ready
-                && slot.path == path
-                && IsModelValid(slot.asset.model)) {
+                && slot.path == NormalizeAssetSourcePath(path)
+                && IsModelValid(slot.resource->asset.model)) {
             return ModelHandle{index, slot.generation};
         }
     }
@@ -1813,6 +1833,145 @@ void ModelAssets::GetScopeProgress(
     }
 }
 
+void ModelAssets::BeginLoad(LoadDiagnostics& report)
+{
+    diagnostics = &report;
+    revisions.Clear();
+    const char* disabled = std::getenv("ENGINE_DISABLE_MODEL_CACHE");
+    reuseEnabled = !disabled || std::strcmp(disabled, "1") != 0;
+}
+
+Texture2D ModelAssets::UploadCachedTexture(Image image)
+{
+    Texture2D texture = LoadTextureFromImage(image);
+    if (texture.id) ApplyPbrTextureQuality(texture);
+    return texture;
+}
+
+Texture2D ModelAssets::ResolveGltfTexture(const char* modelPath, const char* uri,
+        int imageIndex, int map, Image (*loadImage)(void*), void* imageContext, void* userData)
+{
+    auto& self = *static_cast<ModelAssets*>(userData);
+    const bool external = uri && std::strncmp(uri, "data:", 5) != 0;
+    const std::string source = external ? ResolveModelImagePath(modelPath, uri)
+            : NormalizeAssetSourcePath(modelPath) + "#image:" + std::to_string(imageIndex);
+    const std::string revision = external ? self.revisions.File(source) : self.revisions.Model(modelPath);
+    const std::string base = source + "#revision:" + revision;
+    const bool packed = map == MATERIAL_MAP_METALNESS || map == MATERIAL_MAP_ROUGHNESS;
+    const bool srgb = map == MATERIAL_MAP_ALBEDO || map == MATERIAL_MAP_EMISSION;
+    const auto keyFor = [&](int role) {
+        return base + (role == MATERIAL_MAP_METALNESS ? "#metallic-b" :
+                role == MATERIAL_MAP_ROUGHNESS ? "#roughness-g" : srgb ? "#srgb-bytes" : "#linear-bytes")
+                + "#trilinear-aniso8";
+    };
+    const std::string key = keyFor(map);
+    auto hit = self.cachedTextures.find(key);
+    if (hit == self.cachedTextures.end()) {
+        if (self.diagnostics && self.diagnostics->active) ++self.diagnostics->textureMisses;
+        const auto begin = LoadClock::now();
+        Image image = loadImage(imageContext);
+        const auto decoded = LoadClock::now();
+        if (self.diagnostics && self.diagnostics->active)
+            self.diagnostics->milliseconds[static_cast<size_t>(LoadPhase::ImageDecode)] +=
+                    std::chrono::duration<double, std::milli>(decoded - begin).count();
+        if (!image.data) return {};
+        const auto upload = [&](const std::string& textureKey, const Image& pixels) {
+            const auto start = LoadClock::now();
+            Texture2D texture = self.uploadTexture(pixels);
+            if (texture.id) {
+                auto resource = std::make_shared<CachedTexture>();
+                resource->texture = texture;
+                resource->bytes = static_cast<size_t>(GetPixelDataSize(texture.width, texture.height, texture.format)) * 4 / 3;
+                resource->lastUse = ++self.cacheClock;
+                self.cachedTextures.emplace(textureKey, std::move(resource));
+            }
+            if (self.diagnostics && self.diagnostics->active)
+                self.diagnostics->milliseconds[static_cast<size_t>(LoadPhase::TextureUpload)] +=
+                        std::chrono::duration<double, std::milli>(LoadClock::now() - start).count();
+        };
+        if (packed) {
+            // Extract both channels in one linear pass. Keep raylib's R8 layout.
+            const size_t count = static_cast<size_t>(image.width) * image.height;
+            std::vector<unsigned char> metallic(count), roughness(count);
+            for (int y = 0; y < image.height; ++y) for (int x = 0; x < image.width; ++x) {
+                const Color pixel = GetImageColor(image, x, y);
+                const size_t i = static_cast<size_t>(y) * image.width + x;
+                metallic[i] = pixel.b; roughness[i] = pixel.g;
+            }
+            if (self.diagnostics && self.diagnostics->active)
+                self.diagnostics->milliseconds[static_cast<size_t>(LoadPhase::ImageConvert)] +=
+                        std::chrono::duration<double, std::milli>(LoadClock::now() - decoded).count();
+            Image channel{metallic.data(), image.width, image.height, 1, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE};
+            if (self.cachedTextures.find(keyFor(MATERIAL_MAP_METALNESS)) == self.cachedTextures.end())
+                upload(keyFor(MATERIAL_MAP_METALNESS), channel);
+            channel.data = roughness.data();
+            if (self.cachedTextures.find(keyFor(MATERIAL_MAP_ROUGHNESS)) == self.cachedTextures.end())
+                upload(keyFor(MATERIAL_MAP_ROUGHNESS), channel);
+        } else upload(key, image);
+        UnloadImage(image);
+        hit = self.cachedTextures.find(key);
+        if (hit == self.cachedTextures.end()) return {};
+    } else if (self.diagnostics && self.diagnostics->active) ++self.diagnostics->textureHits;
+    hit->second->lastUse = ++self.cacheClock;
+    const auto& texture = hit->second;
+    if (std::find(self.importing->textures.begin(), self.importing->textures.end(), texture)
+            == self.importing->textures.end()) self.importing->textures.push_back(texture);
+    return texture->texture;
+}
+
+void ModelAssets::RetireResource(CachedModel& resource)
+{
+    auto& asset = resource.asset;
+    DetachModelTextures(asset.model);
+    pendingUnloads.push_back({asset.model, asset.animations, asset.animationCount});
+    asset = {};
+    resource.textures.clear();
+}
+
+void ModelAssets::TrimCache(bool all)
+{
+    if (!cacheDirty && !all) return;
+    cacheDirty = false;
+    const size_t budget = all || !reuseEnabled ? 0 : UnusedCacheBudget;
+    // Texture storage shared by dormant models is conservatively counted for
+    // each model. Active leases are never evicted, even above the cache budget.
+    const auto unusedBytes = [&]() {
+        size_t bytes = 0;
+        for (const auto& entry : cachedModels) if (entry.second.use_count() == 1) {
+            bytes += entry.second->bytes;
+            for (const auto& texture : entry.second->textures) bytes += texture->bytes;
+        }
+        for (const auto& entry : cachedTextures)
+            if (entry.second.use_count() == 1) bytes += entry.second->bytes;
+        return bytes;
+    };
+    size_t bytes = unusedBytes();
+    if (diagnostics && diagnostics->active)
+        diagnostics->peakRetainedBytes = std::max<uint64_t>(diagnostics->peakRetainedBytes, bytes);
+    while (bytes > budget || (all && (!cachedModels.empty() || !cachedTextures.empty()))) {
+        auto model = cachedModels.end();
+        auto texture = cachedTextures.end();
+        uint64_t oldest = UINT64_MAX;
+        for (auto it = cachedModels.begin(); it != cachedModels.end(); ++it)
+            if (it->second.use_count() == 1 && it->second->lastUse < oldest) {
+                model = it; oldest = it->second->lastUse;
+            }
+        for (auto it = cachedTextures.begin(); it != cachedTextures.end(); ++it)
+            if (it->second.use_count() == 1 && it->second->lastUse < oldest) {
+                texture = it; oldest = it->second->lastUse;
+            }
+        if (texture != cachedTextures.end()) {
+            pendingTextureUnloads.push_back(texture->second->texture);
+            cachedTextures.erase(texture);
+        } else if (model != cachedModels.end()) {
+            RetireResource(*model->second);
+            cachedModels.erase(model);
+        } else break;
+        bytes = unusedBytes();
+    }
+    if (diagnostics && diagnostics->active) diagnostics->retainedBytes = bytes;
+}
+
 void ModelAssets::UpdateMainThread(float maxMilliseconds)
 {
     const auto start = std::chrono::steady_clock::now();
@@ -1831,13 +1990,31 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                     || modelSlots[handle.index].state != ModelState::Queued) {
                 continue;
             }
-            path = modelSlots[handle.index].path;
-            flags = modelSlots[handle.index].flags;
+            ModelSlot& slot = modelSlots[handle.index];
+            const auto retained = cachedModels.find(slot.resourceKey);
+            if (reuseEnabled && retained != cachedModels.end()) {
+                slot.resource = retained->second;
+                slot.resource->lastUse = ++cacheClock;
+                slot.state = ModelState::Ready;
+                if (diagnostics && diagnostics->active) ++diagnostics->modelHits;
+                continue;
+            }
+            path = slot.path;
+            flags = slot.flags;
+            importing = slot.resource;
+            if (diagnostics && diagnostics->active) ++diagnostics->modelMisses;
         }
 
         // raylib glTF loading performs GPU mesh and texture creation. Keep the
         // entire operation on the main thread.
+        const auto modelStarted = LoadClock::now();
+        if (reuseEnabled) SetGltfTextureResolver(&ModelAssets::ResolveGltfTexture, this);
         Model loaded = LoadModel(path.c_str());
+        SetGltfTextureResolver(nullptr, nullptr);
+        const auto importFinished = LoadClock::now();
+        if (diagnostics && diagnostics->active)
+            diagnostics->milliseconds[static_cast<size_t>(LoadPhase::ModelImport)] +=
+                    std::chrono::duration<double, std::milli>(importFinished - modelStarted).count();
         const bool loadedModel = IsModelValid(loaded);
         ModelAnimation* loadedAnimations = nullptr;
         int loadedAnimationCount = 0;
@@ -1865,7 +2042,9 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                         Texture2D& texture = material.maps[mapIndex].texture;
                         if (texture.id != 0
                                 && texture.id != rlGetTextureIdDefault()
-                                && unloaded.insert(texture.id).second) {
+                                && unloaded.insert(texture.id).second
+                                && std::none_of(importing->textures.begin(), importing->textures.end(),
+                                    [&](const auto& owned) { return owned->texture.id == texture.id; })) {
                             UnloadTexture(texture);
                         }
                         texture = {};
@@ -1960,7 +2139,9 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                             Texture2D& texture = material.maps[mapIndex].texture;
                             if (texture.id != 0
                                     && texture.id != rlGetTextureIdDefault()
-                                    && unloaded.insert(texture.id).second) {
+                                    && unloaded.insert(texture.id).second
+                                    && std::none_of(importing->textures.begin(), importing->textures.end(),
+                                        [&](const auto& owned) { return owned->texture.id == texture.id; })) {
                                 pendingTextureUnloads.push_back(texture);
                             }
                             texture = {};
@@ -1972,89 +2153,83 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
             } else {
                 ModelSlot& slot = modelSlots[handle.index];
                 if (loadedModel) {
-                    ModelScopeData& scope = scopeData[slot.scope.index];
-                    const unsigned int defaultTextureId = rlGetTextureIdDefault();
-                    for (int materialIndex = 0;
-                            materialIndex < loaded.materialCount;
-                            ++materialIndex) {
-                        Material& material = loaded.materials[materialIndex];
-                        if (material.maps == nullptr) {
-                            continue;
-                        }
-                        for (int mapIndex = 0;
-                                mapIndex < RaylibMaterialMapCount;
-                                ++mapIndex) {
-                            Texture2D& texture = material.maps[mapIndex].texture;
-                            if (texture.id == 0 || texture.id == defaultTextureId) {
-                                continue;
-                            }
+                    // Resolver textures are already owned by the shared cache. Adopt
+                    // textures from other raylib formats (and diagnostic cache-off loads).
+                    for (int m = 0; m < loaded.materialCount; ++m) {
+                        if (!loaded.materials[m].maps) continue;
+                        for (int k = 0; k < RaylibMaterialMapCount; ++k) {
+                            Texture2D& texture = loaded.materials[m].maps[k].texture;
+                            if (!texture.id || texture.id == rlGetTextureIdDefault()) continue;
+                            const auto owned = std::find_if(importing->textures.begin(), importing->textures.end(),
+                                    [&](const auto& entry) { return entry->texture.id == texture.id; });
+                            if (owned != importing->textures.end()) continue;
+                            // Keep the old late-deduplication behavior for non-glTF
+                            // imports and ENGINE_DISABLE_MODEL_CACHE comparisons.
                             std::string sourceKey;
-                            if (materialIndex < static_cast<int>(parsed.textureSources.size())
-                                    && mapIndex < PbrMaterialMapCount) {
-                                sourceKey = parsed.textureSources[
-                                        static_cast<size_t>(materialIndex)][
-                                        static_cast<size_t>(mapIndex)];
-                            }
-                            if (sourceKey.empty()) {
-                                sourceKey = path
-                                        + "#material:"
-                                        + std::to_string(materialIndex)
-                                        + "#map:"
-                                        + std::to_string(mapIndex);
-                            }
-
-                            const auto existing = scope.sharedTextureBySource.find(sourceKey);
-                            if (existing != scope.sharedTextureBySource.end()) {
-                                if (existing->second.id != texture.id) {
-                                    pendingTextureUnloads.push_back(texture);
-                                }
-                                texture = existing->second;
+                            if (m < static_cast<int>(parsed.textureSources.size()) && k < PbrMaterialMapCount)
+                                sourceKey = parsed.textureSources[static_cast<size_t>(m)][static_cast<size_t>(k)];
+                            if (sourceKey.empty()) sourceKey = path + "#material:" + std::to_string(m) + "#map:" + std::to_string(k);
+                            sourceKey = "late:" + std::to_string(slot.scope.index) + ":"
+                                    + std::to_string(slot.scope.generation) + ":" + sourceKey;
+                            const auto shared = cachedTextures.find(sourceKey);
+                            if (shared != cachedTextures.end()) {
+                                if (texture.id != shared->second->texture.id) pendingTextureUnloads.push_back(texture);
+                                texture = shared->second->texture;
+                                if (std::find(importing->textures.begin(), importing->textures.end(), shared->second)
+                                        == importing->textures.end()) importing->textures.push_back(shared->second);
                                 continue;
                             }
-
-                            const auto sameId = std::find_if(
-                                    scope.sharedTextures.begin(),
-                                    scope.sharedTextures.end(),
-                                    [&texture](const Texture2D& candidate) {
-                                        return candidate.id == texture.id;
-                                    });
-                            if (sameId != scope.sharedTextures.end()) {
-                                texture = *sameId;
-                                scope.sharedTextureBySource.emplace(sourceKey, texture);
-                                continue;
-                            }
-
                             ApplyPbrTextureQuality(texture);
-                            scope.sharedTextures.push_back(texture);
-                            scope.sharedTextureBySource.emplace(sourceKey, texture);
+                            auto resource = std::make_shared<CachedTexture>();
+                            resource->texture = texture;
+                            resource->bytes = static_cast<size_t>(GetPixelDataSize(texture.width, texture.height, texture.format)) * 4 / 3;
+                            resource->lastUse = ++cacheClock;
+                            cachedTextures[sourceKey] = resource;
+                            importing->textures.push_back(std::move(resource));
                         }
                     }
                     PopulateModelMaterialTextureInfo(
                             path,
                             loaded,
                             parsed.materials);
-                    slot.asset.model = loaded;
-                    slot.asset.animations = loadedAnimations;
-                    slot.asset.animationCount = loadedAnimationCount;
-                    slot.asset.nodes = std::move(
+                    slot.resource->asset.model = loaded;
+                    slot.resource->asset.animations = loadedAnimations;
+                    slot.resource->asset.animationCount = loadedAnimationCount;
+                    slot.resource->asset.nodes = std::move(
                             nodeAnimationAsset.nodes);
-                    slot.asset.nodeEvaluationOrder = std::move(
+                    slot.resource->asset.nodeEvaluationOrder = std::move(
                             nodeAnimationAsset.nodeEvaluationOrder);
-                    slot.asset.meshNodeBindings = std::move(
+                    slot.resource->asset.meshNodeBindings = std::move(
                             nodeAnimationAsset.meshNodeBindings);
-                    slot.asset.gltfSkin = std::move(
+                    slot.resource->asset.gltfSkin = std::move(
                             nodeAnimationAsset.gltfSkin);
-                    slot.asset.nodeAnimationClips = std::move(
+                    slot.resource->asset.nodeAnimationClips = std::move(
                             nodeAnimationAsset.nodeAnimationClips);
-                    slot.asset.materials = std::move(parsed.materials);
-                    slot.asset.materialNames = std::move(parsed.materialNames);
-                    slot.asset.localBounds = localBounds;
-                    slot.asset.animatedLocalBounds = animatedLocalBounds;
-                    slot.asset.localCollisionBounds = localCollisionBounds;
-                    slot.asset.hasLocalBounds = hasLocalBounds;
-                    slot.asset.hasAnimatedLocalBounds = hasAnimatedLocalBounds;
-                    slot.asset.hasLocalCollisionBounds =
+                    slot.resource->asset.materials = std::move(parsed.materials);
+                    slot.resource->asset.materialNames = std::move(parsed.materialNames);
+                    slot.resource->asset.localBounds = localBounds;
+                    slot.resource->asset.animatedLocalBounds = animatedLocalBounds;
+                    slot.resource->asset.localCollisionBounds = localCollisionBounds;
+                    slot.resource->asset.hasLocalBounds = hasLocalBounds;
+                    slot.resource->asset.hasAnimatedLocalBounds = hasAnimatedLocalBounds;
+                    slot.resource->asset.hasLocalCollisionBounds =
                             hasLocalCollisionBounds;
+                    slot.resource->lastUse = ++cacheClock;
+                    // Conservative CPU + GPU estimate for mesh attributes and indices.
+                    size_t bytes = sizeof(CachedModel);
+                    for (int i = 0; i < loaded.meshCount; ++i)
+                        bytes += static_cast<size_t>(loaded.meshes[i].vertexCount) * 160
+                                + static_cast<size_t>(loaded.meshes[i].triangleCount) * 12;
+                    for (int i = 0; i < loadedAnimationCount; ++i)
+                        bytes += static_cast<size_t>(loadedAnimations[i].keyframeCount)
+                                * loadedAnimations[i].boneCount * sizeof(Transform);
+                    for (const auto& clip : slot.resource->asset.nodeAnimationClips)
+                        for (const auto& channel : clip.channels)
+                            bytes += channel.times.capacity() * sizeof(float) + channel.values.capacity() * sizeof(Vector4);
+                    bytes += slot.resource->asset.nodes.capacity() * sizeof(ModelNodeAsset)
+                            + slot.resource->asset.materials.capacity() * sizeof(ModelMaterialAsset);
+                    slot.resource->bytes = bytes;
+                    cachedModels[slot.resourceKey] = slot.resource;
                     slot.state = ModelState::Ready;
                     slot.error.clear();
                     if (parsed.hasUnsupportedMaterial) {
@@ -2070,6 +2245,14 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
             }
         }
 
+        importing.reset();
+        cacheDirty = true;
+        if (diagnostics && diagnostics->active) {
+            const auto finished = LoadClock::now();
+            diagnostics->milliseconds[static_cast<size_t>(LoadPhase::ModelFinalize)] +=
+                    std::chrono::duration<double, std::milli>(finished - importFinished).count();
+            diagnostics->ModelLoaded(path, std::chrono::duration<double, std::milli>(finished - modelStarted).count());
+        }
         if (maxMilliseconds > 0.0f) {
             const float elapsed = std::chrono::duration<float, std::milli>(
                     std::chrono::steady_clock::now() - start).count();
@@ -2079,6 +2262,7 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
         }
     }
 
+    TrimCache();
     UnloadReadyModels();
 }
 
@@ -2106,52 +2290,21 @@ void ModelAssets::UnloadScope(AssetScopeHandle scope)
     for (ModelHandle handle : data.models) {
         QueueModelUnloadNoLock(handle);
     }
-    pendingTextureUnloads.insert(
-            pendingTextureUnloads.end(),
-            data.sharedTextures.begin(),
-            data.sharedTextures.end());
     data.models.clear();
     data.modelByRequest.clear();
-    data.sharedTextureBySource.clear();
-    data.sharedTextures.clear();
 }
 
 void ModelAssets::ShutdownMainThread()
 {
-    {
-        std::lock_guard<std::mutex> lock(stateMutex);
-        pendingLoads.clear();
-        for (ModelSlot& slot : modelSlots) {
-            if ((slot.state == ModelState::Ready
-                    || slot.state == ModelState::QueuedForUnload)
-                    && IsModelValid(slot.asset.model)) {
-                DetachModelTextures(slot.asset.model);
-                pendingUnloads.push_back(PendingModelUnload{
-                        slot.asset.model,
-                        slot.asset.animations,
-                        slot.asset.animationCount});
-                slot.asset = {};
-            }
-            slot.state = ModelState::Unloaded;
-        }
-        for (ModelScopeData& scope : scopeData) {
-            pendingTextureUnloads.insert(
-                    pendingTextureUnloads.end(),
-                    scope.sharedTextures.begin(),
-                    scope.sharedTextures.end());
-            scope.sharedTextureBySource.clear();
-            scope.sharedTextures.clear();
-        }
-    }
+    for (auto& slot : modelSlots) { slot.resource.reset(); slot.state = ModelState::Unloaded; }
+    importing.reset();
+    TrimCache(true);
     UnloadReadyModels();
-    {
-        std::lock_guard<std::mutex> lock(stateMutex);
-        modelSlots.clear();
-        scopeData.clear();
-        pendingLoads.clear();
-        pendingUnloads.clear();
-        pendingTextureUnloads.clear();
-    }
+    modelSlots.clear();
+    scopeData.clear();
+    pendingLoads.clear();
+    revisions.Clear();
+    diagnostics = nullptr;
 }
 
 bool ModelAssets::IsValidModelNoLock(ModelHandle handle) const
@@ -2206,14 +2359,9 @@ void ModelAssets::QueueModelUnloadNoLock(ModelHandle handle)
         return;
     }
     ModelSlot& slot = modelSlots[handle.index];
-    if (IsModelValid(slot.asset.model)) {
-        DetachModelTextures(slot.asset.model);
-        pendingUnloads.push_back(PendingModelUnload{
-                slot.asset.model,
-                slot.asset.animations,
-                slot.asset.animationCount});
-        slot.asset = {};
-    }
+    slot.resource.reset();
+    slot.resourceKey.clear();
+    cacheDirty = true;
     slot.state = ModelState::QueuedForUnload;
     ++slot.generation;
 }
@@ -2240,7 +2388,7 @@ void ModelAssets::UnloadReadyModels()
         if (texture.id != 0
                 && texture.id != rlGetTextureIdDefault()
                 && unloadedTextureIds.insert(texture.id).second) {
-            UnloadTexture(texture);
+            unloadTexture(texture);
         }
     }
 }

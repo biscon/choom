@@ -8,6 +8,18 @@
 
 namespace game {
 
+bool FpsViewmodelLoadFinished(const FpsViewmodelRuntimeState& state)
+{
+    if (state.loadState == FpsViewmodelLoadState::Failed
+            || state.loadState == FpsViewmodelLoadState::Inactive) {
+        return true;
+    }
+    return state.loadState == FpsViewmodelLoadState::Ready
+            && state.attachment.loadState
+                    != FpsViewmodelAttachmentLoadState::Pending;
+}
+
+
 void ResetFpsViewmodelRuntime(FpsViewmodelRuntimeState& state)
 {
     state = {};

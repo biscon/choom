@@ -1,6 +1,9 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/assets/AssetSourceRevision.h"
+#include "engine/assets/LoadPreparation.h"
+#include <memory>
 
 #include <raylib.h>
 
@@ -272,11 +275,27 @@ public:
     bool IsScopeFinished(AssetScopeHandle scope) const;
     void GetScopeProgress(AssetScopeHandle scope, size_t& finished, size_t& total) const;
 
+    void BeginLoad(LoadDiagnostics& diagnostics);
     void UpdateMainThread(float maxMilliseconds);
     void UnloadScope(AssetScopeHandle scope);
     void ShutdownMainThread();
 
 private:
+    friend struct ModelAssetCacheTestAccess;
+    static Texture2D UploadCachedTexture(Image image);
+    Texture2D (*uploadTexture)(Image) = &UploadCachedTexture;
+    void (*unloadTexture)(Texture2D) = &UnloadTexture;
+    struct CachedTexture {
+        Texture2D texture{};
+        size_t bytes = 0;
+        uint64_t lastUse = 0;
+    };
+    struct CachedModel {
+        ModelAsset asset;
+        std::vector<std::shared_ptr<CachedTexture>> textures;
+        size_t bytes = 0;
+        uint64_t lastUse = 0;
+    };
     struct ModelSlot {
         uint32_t generation = 1;
         ModelState state = ModelState::Unloaded;
@@ -284,15 +303,15 @@ private:
         std::string path;
         ModelLoadFlags flags = ModelLoad_None;
         AssetScopeHandle scope;
-        ModelAsset asset;
+        std::shared_ptr<CachedModel> resource;
+        std::string resourceKey;
         std::string error;
     };
 
     struct ModelScopeData {
         std::vector<ModelHandle> models;
         std::unordered_map<std::string, ModelHandle> modelByRequest;
-        std::unordered_map<std::string, Texture2D> sharedTextureBySource;
-        std::vector<Texture2D> sharedTextures;
+
     };
 
     bool IsValidModelNoLock(ModelHandle handle) const;
@@ -304,6 +323,20 @@ private:
 
     void QueueModelUnloadNoLock(ModelHandle handle);
     void UnloadReadyModels();
+
+    static Texture2D ResolveGltfTexture(const char* modelPath, const char* uri,
+            int imageIndex, int map, Image (*loadImage)(void*), void* imageContext, void* userData);
+    void TrimCache(bool all = false);
+    void RetireResource(CachedModel& resource);
+    AssetSourceRevisions revisions;
+    std::unordered_map<std::string, std::shared_ptr<CachedModel>> cachedModels;
+    std::unordered_map<std::string, std::shared_ptr<CachedTexture>> cachedTextures;
+    std::shared_ptr<CachedModel> importing;
+    LoadDiagnostics* diagnostics = nullptr;
+    uint64_t cacheClock = 0;
+    bool reuseEnabled = true;
+    bool cacheDirty = false;
+    static constexpr size_t UnusedCacheBudget = 512ull * 1024 * 1024;
 
     mutable std::mutex stateMutex;
     std::vector<ModelSlot> modelSlots;

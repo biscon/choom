@@ -102,7 +102,10 @@ void BeginLoadDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library
 
 void PrepareDialogueVoices(AssetManager& assets, DialogueVoiceLibrary& library, size_t sourceBudget)
 {
-    while (sourceBudget-- && library.prepared < library.pending.size()) {
+    ScopedLoadPhase timer(assets.LoadingDiagnostics(), LoadPhase::Dialogue);
+    const bool loading = assets.PreparationBudget().enabled;
+    while (library.prepared < library.pending.size()
+            && (loading ? assets.PreparationBudget().RemainingMilliseconds() > 0 : sourceBudget-- > 0)) {
         const auto& request = library.pending[library.prepared++];
         Wave wave = LoadWave(request.path.string().c_str());
         if (!IsWaveValid(wave)) {

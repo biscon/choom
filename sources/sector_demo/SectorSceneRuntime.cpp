@@ -55,11 +55,8 @@ bool SectorSceneRuntime::Rebuild(
     navigation.Shutdown();
     StopLevelAudio(context);
     soundPropagation.Clear();
-    if (!renderer.RebuildRendererResources(
-                context.assets,
-                map,
-                assetScopeName,
-                error)) {
+    if (!engine::MeasureLoadPhase(context.assets.LoadingDiagnostics(), engine::LoadPhase::Renderer,
+                [&] { return renderer.RebuildRendererResources(context.assets, map, assetScopeName, error); })) {
         return false;
     }
     std::string soundPropagationError;
@@ -72,13 +69,9 @@ bool SectorSceneRuntime::Rebuild(
     if (!navigation.Initialize(BuildSectorNavigationSettingsForMap(map))) {
         TraceLog(LOG_WARNING, "Navigation service initialization failed");
     }
-    ResetSectorRuntimeObjectsForMap(
-            context.world,
-            context.assets,
-            runtimeObjects,
-            map,
-            itemRegistry,
-            itemModelAssets);
+    engine::MeasureLoadPhase(context.assets.LoadingDiagnostics(), engine::LoadPhase::RuntimeObjects, [&] {
+        ResetSectorRuntimeObjectsForMap(context.world, context.assets, runtimeObjects, map, itemRegistry, itemModelAssets);
+    });
     InitializeNpcAudioRuntime(
             context.world,
             context.assets,
@@ -318,10 +311,9 @@ void SectorSceneRuntime::Update(
                     &map);
         }
     }
-    navigation.UpdateBuild(
-            map,
-            runtimeObjects.physicalModelColliders,
-            runtimeObjects.staticModelPendingCount);
+    engine::MeasureLoadPhase(context.assets.LoadingDiagnostics(), engine::LoadPhase::Navigation, [&] {
+        navigation.UpdateBuild(map, runtimeObjects.physicalModelColliders, runtimeObjects.staticModelPendingCount);
+    });
     navigation.UpdateDynamicObstacles(
             runtimeObjects.dynamicModelColliders,
             dt);
@@ -459,6 +451,7 @@ void SectorSceneRuntime::UpdateLoadPreparation(
         engine::EngineContext& context,
         const SectorTopologyMap& map)
 {
+    engine::ScopedLoadPhase timer(context.assets.LoadingDiagnostics(), engine::LoadPhase::RuntimeObjects);
     UpdateSectorRuntimeObjects(
             context.world,
             context.assets,
@@ -481,10 +474,9 @@ void SectorSceneRuntime::UpdateLoadPreparation(
                 runtimeObjects.dynamicPortalBlockers);
         runtimeObjects.doorCollisionCacheInitialized = true;
     }
-    navigation.UpdateBuild(
-            map,
-            runtimeObjects.physicalModelColliders,
-            runtimeObjects.staticModelPendingCount);
+    engine::MeasureLoadPhase(context.assets.LoadingDiagnostics(), engine::LoadPhase::Navigation, [&] {
+        navigation.UpdateBuild(map, runtimeObjects.physicalModelColliders, runtimeObjects.staticModelPendingCount);
+    });
     navigation.UpdateDynamicObstacles(
             runtimeObjects.dynamicModelColliders,
             0.0f);
@@ -1250,6 +1242,7 @@ void SectorSceneRuntime::RenderScene(
         renderer.RefreshRuntimeReflections();
         runtimeObjects.objectVisibilityChanged = false;
     } else if (runtimeObjects.doorSpatialStateChanged) renderer.RefreshRuntimeReflections(false);
+    engine::ScopedLoadPhase timer(context.assets.LoadingDiagnostics(), engine::LoadPhase::Reflections);
     renderer.UpdateRuntimeReflections(context.assets, &context.world,
             SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes,
                     &map, runtimeObjects.staticLightingRevision});
@@ -1277,7 +1270,13 @@ bool SectorSceneRuntime::PrepareInitialReflections(engine::EngineContext& contex
     renderer.UpdateRuntimeReflections(context.assets, &context.world,
             SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes,
                     &map, runtimeObjects.staticLightingRevision}, true);
-    return renderer.InitialReflectionsReady();
+    const bool ready = renderer.InitialReflectionsReady();
+    if (ready && context.assets.LoadingDiagnostics().active) {
+        const auto& stats = renderer.ReflectionStats();
+        TraceLog(LOG_INFO, "LOAD: initial reflections finished: %zu required, %zu successful captures; last GPU sample %.2f ms",
+                stats.required, stats.completed, stats.gpuMilliseconds);
+    }
+    return ready;
 }
 
 void SectorSceneRuntime::ApplyWorldAtmosphere(

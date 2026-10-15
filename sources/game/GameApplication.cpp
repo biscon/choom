@@ -913,13 +913,21 @@ void GameApplication::Render3DHud(
     }
 }
 
+bool GameApplication::IsPreparingScene() const
+{
+    return (BackgroundScreen() == ApplicationScreen::Game && gameSession.IsLoadScreenOpaque())
+            || (BackgroundScreen() == ApplicationScreen::Editor && editor.IsPreviewPreparing());
+}
+
 void GameApplication::RenderLoadingOverlay(
+        engine::AssetManager& assets, engine::FontHandle font,
         Rectangle presentationViewport,
         int outputWidth,
         int outputHeight) const
 {
-    if (!gameSession.IsLoadOverlayVisible()) return;
-    const float opacity = gameSession.LoadOverlayOpacity();
+    const bool editorPreparing = BackgroundScreen() == ApplicationScreen::Editor && editor.IsPreviewPreparing();
+    if (!editorPreparing && !gameSession.IsLoadOverlayVisible()) return;
+    const float opacity = editorPreparing ? 1.0f : gameSession.LoadOverlayOpacity();
     if (opacity <= 0.0f) return;
 
     DrawRectangle(
@@ -941,7 +949,17 @@ void GameApplication::RenderLoadingOverlay(
             barHeight};
     DrawRectangleRec(track, Fade(Color{20, 28, 40, 255}, opacity));
     Rectangle fill = track;
-    fill.width *= std::clamp(gameSession.LoadProgress(), 0.0f, 1.0f);
+    fill.width *= editorPreparing ? editor.PreviewLoadingProgress() : std::clamp(gameSession.LoadProgress(), 0.0f, 1.0f);
+    if (editorPreparing) {
+        const char* text = "Preparing 3D preview...  Esc to cancel";
+        if (const engine::FontAsset* loaded = assets.GetFont(font)) {
+            const float size = static_cast<float>(loaded->pixelSize);
+            const Vector2 textSize = MeasureTextEx(loaded->font, text, size, 1.0f);
+            DrawTextEx(loaded->font, text,
+                    {track.x + (track.width - textSize.x) * 0.5f, track.y - size - 8.0f},
+                    size, 1.0f, RAYWHITE);
+        }
+    }
     DrawRectangleRec(fill, Fade(Color{40, 120, 255, 255}, opacity));
 }
 

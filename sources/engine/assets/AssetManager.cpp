@@ -27,6 +27,7 @@ bool AssetManager::Initialize()
         return false;
     }
 
+    models.BeginLoad(loadingDiagnostics);
     worker = std::thread(&AssetManager::WorkerLoop, this);
     return true;
 }
@@ -515,13 +516,47 @@ void AssetManager::GetScopeProgressCounts(
     music.GetScopeProgress(scope, finished, total);
 }
 
+void AssetManager::BeginLoading(const std::string& label)
+{
+    if (loadingDiagnostics.active) loadingDiagnostics.Finish("superseded");
+    loadingDiagnostics.Begin(label);
+    models.BeginLoad(loadingDiagnostics);
+    preparationBudget.Begin();
+}
+
+void AssetManager::FinishLoading(const char* outcome)
+{
+    loadingDiagnostics.Finish(outcome);
+    preparationBudget.enabled = false;
+}
+
+void AssetManager::BeginPreparationFrame()
+{
+    if (loadingDiagnostics.active) {
+        ++loadingDiagnostics.frames;
+        preparationBudget.Begin();
+    } else preparationBudget.enabled = false;
+}
+
 void AssetManager::UpdateMainThread(float maxMilliseconds)
 {
-    textures.UpdateMainThread(maxMilliseconds);
-    fonts.UpdateMainThread(maxMilliseconds);
-    models.UpdateMainThread(maxMilliseconds);
-    sounds.UpdateMainThread(maxMilliseconds);
-    music.UpdateMainThread(maxMilliseconds);
+    const auto update = [&](auto& subsystem, LoadPhase phase) {
+        const float remaining = preparationBudget.enabled
+                ? preparationBudget.RemainingMilliseconds() : maxMilliseconds;
+        if (preparationBudget.enabled && remaining <= 0) return;
+        const auto started = LoadClock::now();
+        subsystem.UpdateMainThread(remaining);
+        if (loadingDiagnostics.active && phase != LoadPhase::ModelImport)
+            loadingDiagnostics.milliseconds[static_cast<size_t>(phase)] +=
+                    std::chrono::duration<double, std::milli>(LoadClock::now() - started).count();
+    };
+    update(textures, LoadPhase::OtherAssets);
+    update(fonts, LoadPhase::OtherAssets);
+    update(models, LoadPhase::ModelImport);
+    update(sounds, LoadPhase::OtherAssets);
+    update(music, LoadPhase::OtherAssets);
+    if (preparationBudget.enabled && preparationBudget.RemainingMilliseconds() <= 0)
+        ++loadingDiagnostics.budgetOverruns;
 }
 
 bool AssetManager::IsValidScopeNoLock(AssetScopeHandle scope) const

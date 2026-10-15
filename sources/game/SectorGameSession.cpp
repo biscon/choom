@@ -58,17 +58,6 @@ bool ScopeFinishedOrEmpty(
     return engine::IsNull(scope) || assets.IsScopeFinished(scope);
 }
 
-bool FpsViewmodelLoadFinished(const FpsViewmodelRuntimeState& state)
-{
-    if (state.loadState == FpsViewmodelLoadState::Failed
-            || state.loadState == FpsViewmodelLoadState::Inactive) {
-        return true;
-    }
-    return state.loadState == FpsViewmodelLoadState::Ready
-            && state.attachment.loadState
-                    != FpsViewmodelAttachmentLoadState::Pending;
-}
-
 bool HasRuntimeNpcs(const SectorSceneRuntime& scene)
 {
     return std::any_of(
@@ -1069,6 +1058,12 @@ bool SectorGameSession::StartNew(
         bool restoreVisitedLevel,
         std::string& error)
 {
+    context.assets.BeginLoading("level:" + entry.levelName);
+    struct LoadingGuard {
+        engine::AssetManager& assets;
+        bool success = false;
+        ~LoadingGuard() { if (!success) assets.FinishLoading("failed"); }
+    } loadingGuard{context.assets};
     failureError.clear();
     dialogueCameraIdle.randomState = static_cast<uint32_t>(
             std::chrono::steady_clock::now().time_since_epoch().count());
@@ -1101,7 +1096,8 @@ bool SectorGameSession::StartNew(
     }
 
     SectorTopologyMap loaded;
-    if (!LoadSectorRuntimeLevel(path, materials, loaded, error)) {
+    if (!engine::MeasureLoadPhase(context.assets.LoadingDiagnostics(), engine::LoadPhase::Document,
+            [&] { return LoadSectorRuntimeLevel(path, materials, loaded, error); })) {
         return false;
     }
     pendingLevelRestore.reset();
@@ -1131,9 +1127,8 @@ bool SectorGameSession::StartNew(
     const std::string resolvedEntryMarkerId =
             entryMarker != nullptr ? entryMarker->id : std::string{};
     std::string fingerprintError;
-    if (!RefreshSectorStaticModelGeometryFingerprints(
-                loaded,
-                fingerprintError)
+    if (!engine::MeasureLoadPhase(context.assets.LoadingDiagnostics(), engine::LoadPhase::Fingerprints,
+                [&] { return RefreshSectorStaticModelGeometryFingerprints(loaded, fingerprintError); })
             && !fingerprintError.empty()) {
         TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
     }
@@ -1176,7 +1171,8 @@ bool SectorGameSession::StartNew(
             controller.freeflyController,
             scene.Renderer().RendererPose());
     controller.previewControlMode = SectorPreviewControlMode::FreeFly;
-    if (!BuildCollisionAndPlayer(scene, true, entryMarker, &error)) {
+    if (!engine::MeasureLoadPhase(context.assets.LoadingDiagnostics(), engine::LoadPhase::Collision,
+            [&] { return BuildCollisionAndPlayer(scene, true, entryMarker, &error); })) {
         if (error.empty()) {
             error = collision.sectorCollisionWorldWarning.empty()
                     ? "Could not build the game collision world"
@@ -1285,6 +1281,7 @@ bool SectorGameSession::StartNew(
     saveGameBlockedReason.clear();
     loadStateInitialized = false;
     BeginGameLevelLoading(loading);
+    loadingGuard.success = true;
     error.clear();
     return true;
 }
@@ -1293,6 +1290,7 @@ void SectorGameSession::Shutdown(
         engine::EngineContext& context,
         SectorSceneRuntime& scene)
 {
+    if (IsGameLevelLoading(loading)) context.assets.FinishLoading("cancelled");
     if (playerAudio != nullptr) {
         StopPlayerBreathingAudio(
                 context.assets,
@@ -2533,7 +2531,8 @@ void SectorGameSession::UpdateLoading(
             && InitialNavigationObstaclesSettled(scene.Navigation());
     if (complete && !loadStateInitialized) {
         std::string error;
-        if (!ActivateLoadedMap(context, scene, error)) {
+        if (!engine::MeasureLoadPhase(context.assets.LoadingDiagnostics(), engine::LoadPhase::Activation,
+                    [&] { return ActivateLoadedMap(context, scene, error); })) {
             Shutdown(context, scene);
             failureError=error.empty()?"Map script activation failed":error;
             return;
@@ -2564,7 +2563,17 @@ void SectorGameSession::UpdateLoading(
                     : static_cast<float>(scene.Renderer().ReflectionStats().prepared) / scene.Renderer().ReflectionStats().required)),
             NavigationLoadProgress(scene.Navigation()),
             complete);
-    if (complete) BeginGameLevelLoadingFade(loading);
+    auto& report = context.assets.LoadingDiagnostics();
+    report.waitingFrames[0] += !assetsFinished;
+    report.waitingFrames[1] += !runtimeObjectsFinished || !viewmodelFinished;
+    report.waitingFrames[2] += navigationGate != GameLevelNavigationGate::Ready
+            || !InitialNavigationObstaclesSettled(scene.Navigation());
+    report.waitingFrames[3] += assetsFinished && runtimeObjectsFinished
+            && !scene.Renderer().InitialReflectionsReady();
+    if (complete) {
+        context.assets.FinishLoading();
+        BeginGameLevelLoadingFade(loading);
+    }
 }
 
 bool SectorGameSession::ActivateLoadedMap(
@@ -2779,6 +2788,12 @@ bool SectorGameSession::RebuildFromMap(
         error = "No game session is running";
         return false;
     }
+    context.assets.BeginLoading("level rebuild:" + levelName);
+    struct LoadingGuard {
+        engine::AssetManager& assets;
+        bool success = false;
+        ~LoadingGuard() { if (!success) assets.FinishLoading("failed"); }
+    } loadingGuard{context.assets};
     engine::ScriptSystemShutdownForMap(context, scripts);
     EndSectorScriptConversation(context, scriptHost);
     CancelSectorNote(scriptHost, "session ended");
@@ -2909,6 +2924,7 @@ bool SectorGameSession::RebuildFromMap(
     pendingLoadingSave = false;
     loadStateInitialized = false;
     BeginGameLevelLoading(loading);
+    loadingGuard.success = true;
     error.clear();
     return true;
 }

@@ -149,6 +149,12 @@ public:
             size_t& finished,
             size_t& total) const;
 
+    void BeginLoading(const std::string& label);
+    void FinishLoading(const char* outcome = "ready");
+    void BeginPreparationFrame();
+    LoadPreparationBudget& PreparationBudget() { return preparationBudget; }
+    LoadDiagnostics& LoadingDiagnostics() { return loadingDiagnostics; }
+    const LoadDiagnostics& LoadingDiagnostics() const { return loadingDiagnostics; }
     void UpdateMainThread(float maxMilliseconds);
 
 private:
@@ -181,6 +187,8 @@ private:
     AssetScopeHandle globalScope;
     bool initialized = false;
 
+    LoadPreparationBudget preparationBudget;
+    LoadDiagnostics loadingDiagnostics;
     TextureAssets textures;
     FontAssets fonts;
     ModelAssets models;

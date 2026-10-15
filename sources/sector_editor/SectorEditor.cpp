@@ -646,6 +646,29 @@ void SectorEditor::UpdateFpsViewmodelTransformsAndLight(float dt)
 }
 void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
+    if (previewEntryPending) {
+        for (auto& event : context.input.Events()) {
+            if (!event.handled && event.type == engine::InputEventType::KeyPressed && event.key.key == KEY_ESCAPE) {
+                engine::ConsumeEvent(event);
+                previewEntryPending = false;
+                context.assets.FinishLoading("cancelled");
+                return;
+            }
+        }
+        if (previewEntryDelayFrames-- > 0) return;
+        previewEntryPending = false;
+        if (!TryEnterPreview3D(context)) context.assets.FinishLoading("failed");
+        return;
+    }
+
+    if (state.mode == SectorEditorMode::Preview3D
+            && !sceneRuntime.Renderer().InitialReflectionsReady()) {
+        // Preparation owns the zero-delta object/navigation update. Do not also
+        // run the regular scene update while waiting behind the loading screen.
+        UpdatePreview3D(context.input, context.assets, dt);
+        return;
+    }
+
     engine::Input& input = context.input;
     engine::AssetManager& assets = context.assets;
     particlePreview.Synchronize(assets,
@@ -981,13 +1004,9 @@ void SectorEditor::RenderUI(
     PollLightmapBakeResult(assets);
 
     engine::BeginUI(ui, input);
-    if (state.mode == SectorEditorMode::Preview3D && !sceneRuntime.Renderer().InitialReflectionsReady()) {
-        const auto& progress=sceneRuntime.Renderer().ReflectionStats();
-        engine::Text(ui,config,assets,Rectangle{32,80,700,40},font,
-                TextFormat("Preparing room reflections: %zu / %zu   |   Esc: cancel",progress.prepared,progress.required),
-                engine::UITextJustify::Left,config.textColor);
-        uiState.keyboardCaptured=true;
-        engine::EndUI(ui,config,input,assets);
+    if (IsPreviewPreparing()) {
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
         return;
     }
     const bool mainMenuVisible = state.mode != SectorEditorMode::Preview3D
@@ -1358,6 +1377,24 @@ bool SectorEditor::IsPreview3DActive() const
     return state.mode == SectorEditorMode::Preview3D;
 }
 
+bool SectorEditor::IsPreviewPreparing() const
+{
+    return previewEntryPending || (state.mode == SectorEditorMode::Preview3D
+            && !sceneRuntime.Renderer().InitialReflectionsReady());
+}
+
+float SectorEditor::PreviewLoadingProgress() const
+{
+    if (previewEntryPending || !engineContext) return 0.0f;
+    size_t finished = 0, total = 0;
+    sceneRuntime.AccumulateLoadAssetProgress(engineContext->assets, finished, total);
+    const float assets = total ? static_cast<float>(finished) / total : 1.0f;
+    const auto& reflections = sceneRuntime.Renderer().ReflectionStats();
+    const float probes = reflections.required
+            ? static_cast<float>(reflections.prepared) / reflections.required : 0.0f;
+    return std::min(0.99f, assets * 0.7f + probes * 0.3f);
+}
+
 float SectorEditor::VisibleMainMenuHeight() const
 {
     return state.mode == SectorEditorMode::Preview3D
@@ -1376,6 +1413,10 @@ bool SectorEditor::OpenLevel(
 
 void SectorEditor::SuspendRuntime(engine::EngineContext& context)
 {
+    if (previewEntryPending) {
+        previewEntryPending = false;
+        context.assets.FinishLoading("cancelled");
+    }
     if (state.mode == SectorEditorMode::Preview3D) {
         LeavePreview3D();
     }
@@ -1735,7 +1776,13 @@ void SectorEditor::HandleMainMenuCommand(
             if (state.mode == SectorEditorMode::Preview3D) {
                 LeavePreview3D();
             } else if (engineContext != nullptr) {
-                TryEnterPreview3D(*engineContext, ui);
+                if (!previewEntryPending) {
+                    ui.hotId = ui.activeId = ui.openOptionId = ui.focusedId = 0;
+                    engine::CloseMainMenu(uiState.mainMenu);
+                    previewEntryPending = true;
+                    previewEntryDelayFrames = 1;
+                    engineContext->assets.BeginLoading("editor preview");
+                }
             }
             break;
         case SectorEditorMainMenuCommand::OpenMaterialEditor:
@@ -3059,9 +3106,18 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             }
         }
         sceneRuntime.UpdateLoadPreparation(*engineContext,TopologyMap());
+        UpdateFpsViewmodel(assets, 0.0f);
+        UpdateFpsViewmodelTransformsAndLight(0.0f);
+        auto& report = assets.LoadingDiagnostics();
+        report.waitingFrames[0] += !sceneRuntime.AreLoadAssetScopesFinished(assets);
+        report.waitingFrames[1] += sceneRuntime.RuntimeObjects().staticModelPendingCount != 0;
+        report.waitingFrames[3] += sceneRuntime.AreLoadAssetScopesFinished(assets);
         if (sceneRuntime.AreLoadAssetScopesFinished(assets)
-                && sceneRuntime.RuntimeObjects().staticModelPendingCount==0) {
-            sceneRuntime.PrepareInitialReflections(*engineContext,TopologyMap());
+                && sceneRuntime.RuntimeObjects().staticModelPendingCount == 0
+                && sceneRuntime.RuntimeObjects().spriteAnimationPendingCount == 0
+                && FpsViewmodelLoadFinished(fpsPlayer.State())) {
+            if (sceneRuntime.PrepareInitialReflections(*engineContext,TopologyMap()))
+                assets.FinishLoading();
         }
         return;
     }
@@ -5082,10 +5138,6 @@ bool SectorEditor::CompositePreview3DViewmodel(
 
 void SectorEditor::RenderPreview3DOverlays()
 {
-    if (state.mode==SectorEditorMode::Preview3D && !sceneRuntime.Renderer().InitialReflectionsReady()) {
-        DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Color{18,22,28,255});
-        return;
-    }
     if (!previewState.overlay.previewUiHidden) {
         DrawPreviewSurfaceHighlights();
         DrawPreviewObjectAdjustmentGizmo();
@@ -8099,7 +8151,7 @@ bool SectorEditor::HasDocumentModalOpen() const
             || playerSettingsState.open;
 }
 
-bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui)
+bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
     if (!initialized) {
@@ -8124,10 +8176,6 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     if (soundEmitterEditingService) {
         soundEmitterEditingService->CancelMove(nullptr);
     }
-    ui.hotId = 0;
-    ui.activeId = 0;
-    ui.openOptionId = 0;
-    ui.focusedId = 0;
     engine::CloseMainMenu(uiState.mainMenu);
     uiState.keyboardCaptured = false;
 
@@ -8141,9 +8189,8 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
     RefreshResolvedMaterials();
     std::string fingerprintError;
-    if (!RefreshSectorStaticModelGeometryFingerprints(
-                TopologyMap(),
-                fingerprintError)
+    if (!engine::MeasureLoadPhase(assets.LoadingDiagnostics(), engine::LoadPhase::Fingerprints,
+                [&] { return RefreshSectorStaticModelGeometryFingerprints(TopologyMap(), fingerprintError); })
             && !fingerprintError.empty()) {
         TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
     }
@@ -8203,7 +8250,8 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     previewState.selection.selectedSurface3D = SectorSurfaceRef{};
     previewState.selection.selectedTopologySurface3D = TopologySurfaceEditTarget{};
     ResetSurface3DUiState();
-    RebuildSectorCollisionWorld();
+    engine::MeasureLoadPhase(assets.LoadingDiagnostics(), engine::LoadPhase::Collision,
+            [&] { RebuildSectorCollisionWorld(); });
     statusText = TextFormat(
             "3D mode rebuilt: %zu batches, %d triangles",
             sceneRuntime.Renderer().BatchCount(),
@@ -8214,6 +8262,9 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
 void SectorEditor::LeavePreview3D()
 {
+    previewEntryPending = false;
+    if (engineContext && engineContext->assets.LoadingDiagnostics().active)
+        engineContext->assets.FinishLoading("cancelled");
     if (PreviewAdjustmentActive()) {
         CancelPreviewAdjustment(
                 "3D adjustment cancelled on return to 2D");
@@ -9918,11 +9969,11 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     const SectorSurfaceRef selected = previewState.selection.selectedSurface3D;
     const TopologySurfaceEditTarget selectedTarget = previewState.selection.selectedTopologySurface3D;
 
+    assets.BeginLoading("editor preview rebuild");
     RefreshResolvedMaterials();
     std::string fingerprintError;
-    if (!RefreshSectorStaticModelGeometryFingerprints(
-                TopologyMap(),
-                fingerprintError)
+    if (!engine::MeasureLoadPhase(assets.LoadingDiagnostics(), engine::LoadPhase::Fingerprints,
+                [&] { return RefreshSectorStaticModelGeometryFingerprints(TopologyMap(), fingerprintError); })
             && !fingerprintError.empty()) {
         TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
     }
@@ -9934,6 +9985,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
                 applicationSettings.footsteps.defaultSet,
                 applicationSettings.footsteps.volume,
                 error)) {
+        assets.FinishLoading("failed");
         sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         sceneRuntime.RuntimeObjects().objectProbeStatus.clear();
         sceneRuntime.RuntimeObjects().objectSectorLookupWorld = SectorCollisionWorld{};
@@ -9968,7 +10020,8 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     previewState.selection.selectedTopologySurface3D = selectedStillValid && IsValidTopologySurfaceEditTarget(selectedTarget)
             ? selectedTarget
             : TopologySurfaceEditTarget{};
-    RebuildSectorCollisionWorld();
+    engine::MeasureLoadPhase(assets.LoadingDiagnostics(), engine::LoadPhase::Collision,
+            [&] { RebuildSectorCollisionWorld(); });
     return true;
 }
 

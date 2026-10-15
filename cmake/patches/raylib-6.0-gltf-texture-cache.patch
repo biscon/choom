@@ -1,0 +1,209 @@
+--- a/src/raylib.h
++++ b/src/raylib.h
+@@ -1588,6 +1588,12 @@
+ //------------------------------------------------------------------------------------
+
+ // Model management functions
++// Optional main-thread glTF texture resolver. Returned textures belong to the
++// resolver; callers must detach borrowed textures before destroying a model.
++// The image loader and its context are valid only during the callback.
++typedef Texture2D (*GltfTextureResolver)(const char *modelPath, const char *imageUri,
++    int imageIndex, int materialMap, Image (*loadImage)(void *), void *imageContext, void *userData);
++RLAPI void SetGltfTextureResolver(GltfTextureResolver resolver, void *userData);
+ RLAPI Model LoadModel(const char *fileName);                                                // Load model from files (meshes and materials)
+ RLAPI Model LoadModelFromMesh(Mesh mesh);                                                   // Load model from generated mesh (default material)
+ RLAPI bool IsModelValid(Model model);                                                       // Check if a model is valid (loaded in GPU, VAO/VBOs)
+--- a/src/rmodels.c
++++ b/src/rmodels.c
+@@ -5392,6 +5392,28 @@
+     return bones;
+ }
+
++// Engine glTF texture cache hook: consult before decoding or uploading.
++static GltfTextureResolver gltfTextureResolver = NULL;
++static void *gltfTextureResolverUserData = NULL;
++void SetGltfTextureResolver(GltfTextureResolver resolver, void *userData)
++{
++    gltfTextureResolver = resolver;
++    gltfTextureResolverUserData = userData;
++}
++typedef struct GltfImageLoadContext { cgltf_image *image; const char *directory; } GltfImageLoadContext;
++static Image LoadGltfResolverImage(void *context)
++{
++    GltfImageLoadContext *source = (GltfImageLoadContext *)context;
++    return LoadImageFromCgltfImage(source->image, source->directory);
++}
++static Texture2D ResolveGltfTexture(cgltf_data *data, cgltf_image *image,
++    const char *directory, const char *modelPath, int map)
++{
++    GltfImageLoadContext context = { image, directory };
++    return gltfTextureResolver(modelPath, image->uri, (int)(image - data->images), map,
++        LoadGltfResolverImage, &context, gltfTextureResolverUserData);
++}
++
+ // Load glTF file into model struct, .gltf and .glb supported
+ static Model LoadGLTF(const char *fileName)
+ {
+@@ -5533,11 +5555,17 @@
+                 // Load base color texture (albedo)
+                 if (data->materials[i].pbr_metallic_roughness.base_color_texture.texture)
+                 {
+-                    Image imAlbedo = LoadImageFromCgltfImage(data->materials[i].pbr_metallic_roughness.base_color_texture.texture->image, texPath);
+-                    if (imAlbedo.data != NULL)
++                    if (gltfTextureResolver != NULL)
++                        model.materials[j].maps[MATERIAL_MAP_ALBEDO].texture = ResolveGltfTexture(
++                            data, data->materials[i].pbr_metallic_roughness.base_color_texture.texture->image, texPath, fileName, MATERIAL_MAP_ALBEDO);
++                    else
+                     {
+-                        model.materials[j].maps[MATERIAL_MAP_ALBEDO].texture = LoadTextureFromImage(imAlbedo);
+-                        UnloadImage(imAlbedo);
++                        Image imAlbedo = LoadImageFromCgltfImage(data->materials[i].pbr_metallic_roughness.base_color_texture.texture->image, texPath);
++                        if (imAlbedo.data != NULL)
++                        {
++                            model.materials[j].maps[MATERIAL_MAP_ALBEDO].texture = LoadTextureFromImage(imAlbedo);
++                            UnloadImage(imAlbedo);
++                        }
+                     }
+                 }
+                 // Load base color factor (tint)
+@@ -5549,38 +5577,49 @@
+                 // Load metallic/roughness texture
+                 if (data->materials[i].pbr_metallic_roughness.metallic_roughness_texture.texture)
+                 {
+-                    Image imMetallicRoughness = LoadImageFromCgltfImage(data->materials[i].pbr_metallic_roughness.metallic_roughness_texture.texture->image, texPath);
+-                    if (imMetallicRoughness.data != NULL)
++                    if (gltfTextureResolver != NULL)
+                     {
+-                        Image imMetallic = { 0 };
+-                        Image imRoughness = { 0 };
+-
+-                        imMetallic.data = RL_MALLOC(imMetallicRoughness.width*imMetallicRoughness.height);
+-                        imRoughness.data = RL_MALLOC(imMetallicRoughness.width*imMetallicRoughness.height);
+-
+-                        imMetallic.width = imRoughness.width = imMetallicRoughness.width;
+-                        imMetallic.height = imRoughness.height = imMetallicRoughness.height;
+-
+-                        imMetallic.format = imRoughness.format = PIXELFORMAT_UNCOMPRESSED_GRAYSCALE;
+-                        imMetallic.mipmaps = imRoughness.mipmaps = 1;
+-
+-                        for (int x = 0; x < imRoughness.width; x++)
++                        cgltf_image *image = data->materials[i].pbr_metallic_roughness.metallic_roughness_texture.texture->image;
++                        model.materials[j].maps[MATERIAL_MAP_METALNESS].texture = ResolveGltfTexture(
++                            data, image, texPath, fileName, MATERIAL_MAP_METALNESS);
++                        model.materials[j].maps[MATERIAL_MAP_ROUGHNESS].texture = ResolveGltfTexture(
++                            data, image, texPath, fileName, MATERIAL_MAP_ROUGHNESS);
++                    }
++                    else
++                    {
++                        Image imMetallicRoughness = LoadImageFromCgltfImage(data->materials[i].pbr_metallic_roughness.metallic_roughness_texture.texture->image, texPath);
++                        if (imMetallicRoughness.data != NULL)
+                         {
+-                            for (int y = 0; y < imRoughness.height; y++)
++                            Image imMetallic = { 0 };
++                            Image imRoughness = { 0 };
++
++                            imMetallic.data = RL_MALLOC(imMetallicRoughness.width*imMetallicRoughness.height);
++                            imRoughness.data = RL_MALLOC(imMetallicRoughness.width*imMetallicRoughness.height);
++
++                            imMetallic.width = imRoughness.width = imMetallicRoughness.width;
++                            imMetallic.height = imRoughness.height = imMetallicRoughness.height;
++
++                            imMetallic.format = imRoughness.format = PIXELFORMAT_UNCOMPRESSED_GRAYSCALE;
++                            imMetallic.mipmaps = imRoughness.mipmaps = 1;
++
++                            for (int x = 0; x < imRoughness.width; x++)
+                             {
+-                                Color color = GetImageColor(imMetallicRoughness, x, y);
+-
+-                                ((unsigned char *)imRoughness.data)[y*imRoughness.width + x] = color.g; // Roughness color channel
+-                                ((unsigned char *)imMetallic.data)[y*imMetallic.width + x] = color.b; // Metallic color channel
++                                for (int y = 0; y < imRoughness.height; y++)
++                                {
++                                    Color color = GetImageColor(imMetallicRoughness, x, y);
++
++                                    ((unsigned char *)imRoughness.data)[y*imRoughness.width + x] = color.g; // Roughness color channel
++                                    ((unsigned char *)imMetallic.data)[y*imMetallic.width + x] = color.b; // Metallic color channel
++                                }
+                             }
++
++                            model.materials[j].maps[MATERIAL_MAP_ROUGHNESS].texture = LoadTextureFromImage(imRoughness);
++                            model.materials[j].maps[MATERIAL_MAP_METALNESS].texture = LoadTextureFromImage(imMetallic);
++
++                            UnloadImage(imRoughness);
++                            UnloadImage(imMetallic);
++                            UnloadImage(imMetallicRoughness);
+                         }
+-
+-                        model.materials[j].maps[MATERIAL_MAP_ROUGHNESS].texture = LoadTextureFromImage(imRoughness);
+-                        model.materials[j].maps[MATERIAL_MAP_METALNESS].texture = LoadTextureFromImage(imMetallic);
+-
+-                        UnloadImage(imRoughness);
+-                        UnloadImage(imMetallic);
+-                        UnloadImage(imMetallicRoughness);
+                     }
+
+                     // Load metallic/roughness material properties
+@@ -5594,33 +5633,51 @@
+                 // Load normal texture
+                 if (data->materials[i].normal_texture.texture)
+                 {
+-                    Image imNormal = LoadImageFromCgltfImage(data->materials[i].normal_texture.texture->image, texPath);
+-                    if (imNormal.data != NULL)
++                    if (gltfTextureResolver != NULL)
++                        model.materials[j].maps[MATERIAL_MAP_NORMAL].texture = ResolveGltfTexture(
++                            data, data->materials[i].normal_texture.texture->image, texPath, fileName, MATERIAL_MAP_NORMAL);
++                    else
+                     {
+-                        model.materials[j].maps[MATERIAL_MAP_NORMAL].texture = LoadTextureFromImage(imNormal);
+-                        UnloadImage(imNormal);
++                        Image imNormal = LoadImageFromCgltfImage(data->materials[i].normal_texture.texture->image, texPath);
++                        if (imNormal.data != NULL)
++                        {
++                            model.materials[j].maps[MATERIAL_MAP_NORMAL].texture = LoadTextureFromImage(imNormal);
++                            UnloadImage(imNormal);
++                        }
+                     }
+                 }
+
+                 // Load ambient occlusion texture
+                 if (data->materials[i].occlusion_texture.texture)
+                 {
+-                    Image imOcclusion = LoadImageFromCgltfImage(data->materials[i].occlusion_texture.texture->image, texPath);
+-                    if (imOcclusion.data != NULL)
++                    if (gltfTextureResolver != NULL)
++                        model.materials[j].maps[MATERIAL_MAP_OCCLUSION].texture = ResolveGltfTexture(
++                            data, data->materials[i].occlusion_texture.texture->image, texPath, fileName, MATERIAL_MAP_OCCLUSION);
++                    else
+                     {
+-                        model.materials[j].maps[MATERIAL_MAP_OCCLUSION].texture = LoadTextureFromImage(imOcclusion);
+-                        UnloadImage(imOcclusion);
++                        Image imOcclusion = LoadImageFromCgltfImage(data->materials[i].occlusion_texture.texture->image, texPath);
++                        if (imOcclusion.data != NULL)
++                        {
++                            model.materials[j].maps[MATERIAL_MAP_OCCLUSION].texture = LoadTextureFromImage(imOcclusion);
++                            UnloadImage(imOcclusion);
++                        }
+                     }
+                 }
+
+                 // Load emissive texture
+                 if (data->materials[i].emissive_texture.texture)
+                 {
+-                    Image imEmissive = LoadImageFromCgltfImage(data->materials[i].emissive_texture.texture->image, texPath);
+-                    if (imEmissive.data != NULL)
++                    if (gltfTextureResolver != NULL)
++                        model.materials[j].maps[MATERIAL_MAP_EMISSION].texture = ResolveGltfTexture(
++                            data, data->materials[i].emissive_texture.texture->image, texPath, fileName, MATERIAL_MAP_EMISSION);
++                    else
+                     {
+-                        model.materials[j].maps[MATERIAL_MAP_EMISSION].texture = LoadTextureFromImage(imEmissive);
+-                        UnloadImage(imEmissive);
++                        Image imEmissive = LoadImageFromCgltfImage(data->materials[i].emissive_texture.texture->image, texPath);
++                        if (imEmissive.data != NULL)
++                        {
++                            model.materials[j].maps[MATERIAL_MAP_EMISSION].texture = LoadTextureFromImage(imEmissive);
++                            UnloadImage(imEmissive);
++                        }
+                     }
+
+                     // Load emissive color factor

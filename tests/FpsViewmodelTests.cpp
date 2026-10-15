@@ -2919,6 +2919,17 @@ void CameraRecoilRuntime()
 
 int main()
 {
+    game::FpsViewmodelRuntimeState loadGate;
+    assert(game::FpsViewmodelLoadFinished(loadGate));
+    loadGate.loadState = game::FpsViewmodelLoadState::Pending;
+    assert(!game::FpsViewmodelLoadFinished(loadGate));
+    loadGate.loadState = game::FpsViewmodelLoadState::Ready;
+    loadGate.attachment.loadState = game::FpsViewmodelAttachmentLoadState::Pending;
+    assert(!game::FpsViewmodelLoadFinished(loadGate));
+    loadGate.attachment.loadState = game::FpsViewmodelAttachmentLoadState::Failed;
+    assert(game::FpsViewmodelLoadFinished(loadGate));
+    loadGate.loadState = game::FpsViewmodelLoadState::Failed;
+    assert(game::FpsViewmodelLoadFinished(loadGate));
     RegistrySuccess(); RegistryRoundTripAndSharedArmsConfiguration();
     PelletDirectionGeneration();
     RegistryValidation(); WeaponSlotSchemaAndKeys();

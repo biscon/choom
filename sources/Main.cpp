@@ -715,6 +715,7 @@ int main(int argc, char** argv)
 
     while (!WindowShouldClose()
             && (!assets.IsFinished(uiFont) || !assets.IsFinished(smallFont))) {
+        assets.BeginPreparationFrame();
         assets.UpdateMainThread(2.0f);
 
         BeginDrawing();
@@ -784,9 +785,11 @@ int main(int argc, char** argv)
                     && IsShaderValid(fxaaShader),
             application.ApplicationSettings().toneMapping});
 
+    assets.BeginLoading("global assets");
     while (!WindowShouldClose()
             && (!assets.IsScopeFinished(assets.GlobalScope())
                     || !application.IsGlobalPreparationFinished())) {
+        assets.BeginPreparationFrame();
         assets.UpdateMainThread(2.0f);
         application.UpdateMainThreadPreparation(context);
         BeginDrawing();
@@ -802,6 +805,8 @@ int main(int argc, char** argv)
         CloseWindow();
         return 0;
     }
+
+    assets.FinishLoading();
 
     BeginTextureMode(editorTarget);
     ClearBackground(Color{8, 10, 14, 255});
@@ -832,6 +837,7 @@ int main(int argc, char** argv)
         const double frameStartSeconds = frameDipTrace.Enabled()
                 ? frameDipTrace.TimestampSeconds()
                 : 0.0;
+        assets.BeginPreparationFrame();
         assets.UpdateMainThread(2.0f);
         application.UpdateMainThreadPreparation(context);
 
@@ -986,7 +992,8 @@ int main(int argc, char** argv)
         const game::ApplicationContentKind contentKind =
                 application.BackgroundContentKind();
         const bool render3D =
-                contentKind == game::ApplicationContentKind::Sector3D;
+                contentKind == game::ApplicationContentKind::Sector3D
+                        && !application.IsPreparingScene();
         const bool useWorldFxaa = application.ApplicationSettings().graphics.fxaa
                 && IsShaderValid(fxaaShader);
         const double preRenderEndSeconds = frameDipTrace.Enabled()
@@ -1222,7 +1229,7 @@ int main(int argc, char** argv)
                     {0,0},
                     0.0f,
                     WHITE);
-            application.RenderLoadingOverlay(dst, screenW, screenH);
+            application.RenderLoadingOverlay(assets, smallFont, dst, screenW, screenH);
             application.RenderCursor(
                     assets, context.input,
                     {static_cast<float>(INTERNAL_WIDTH), static_cast<float>(INTERNAL_HEIGHT)}, dst);

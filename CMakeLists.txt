@@ -193,6 +193,16 @@ execute_process(
 if(NOT RAYLIB_AUDIO_LOW_PASS_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to apply the raylib audio low-pass patch")
 endif()
+execute_process(
+        COMMAND ${CMAKE_COMMAND}
+                "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
+                "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-gltf-texture-cache.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibGltfTextureCachePatch.cmake"
+        RESULT_VARIABLE RAYLIB_TEXTURE_CACHE_PATCH_RESULT
+)
+if(NOT RAYLIB_TEXTURE_CACHE_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to apply the raylib glTF texture cache hook")
+endif()
 target_compile_definitions(raylib PRIVATE
     SUPPORT_FILEFORMAT_JPG=1
     SUPPORT_GPU_SKINNING=1
@@ -319,6 +329,13 @@ if(BUILD_TESTING)
     target_link_libraries(render_color_foundations_tests PRIVATE raylib shader_source)
     target_compile_definitions(render_color_foundations_tests PRIVATE SHADER_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders")
     add_test(NAME render_color_foundations COMMAND render_color_foundations_tests)
+
+    add_executable(model_asset_cache_tests
+            tests/ModelAssetCacheTests.cpp
+            sources/engine/assets/ModelAssets.cpp)
+    target_include_directories(model_asset_cache_tests PRIVATE sources)
+    target_link_libraries(model_asset_cache_tests PRIVATE raylib)
+    add_test(NAME model_asset_cache COMMAND model_asset_cache_tests)
 
     add_executable(model_node_animation_tests
             tests/ModelNodeAnimationTests.cpp

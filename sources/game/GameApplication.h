@@ -76,6 +76,7 @@ public:
     ApplicationContentKind BackgroundContentKind() const;
     float EditorUiTopInset() const;
     bool ShouldRefreshBackground() const;
+    bool IsPreparingScene() const;
     bool IsMenuOpen() const;
     bool QuitRequested() const { return flow.quitRequested; }
     const FpsApplicationSettings& ApplicationSettings() const {
@@ -115,6 +116,7 @@ public:
             engine::FontHandle font,
             Rectangle playableViewport) const;
     void RenderLoadingOverlay(
+            engine::AssetManager& assets, engine::FontHandle font,
             Rectangle presentationViewport,
             int outputWidth,
             int outputHeight) const;

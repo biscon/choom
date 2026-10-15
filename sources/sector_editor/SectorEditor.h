@@ -159,6 +159,8 @@ public:
             engine::FontHandle font,
             engine::FontHandle smallFont);
     bool IsPreview3DActive() const;
+    bool IsPreviewPreparing() const;
+    float PreviewLoadingProgress() const;
     float VisibleMainMenuHeight() const;
     bool OpenLevel(
             engine::EngineContext& context,
@@ -479,7 +481,7 @@ private:
             std::string& errorMessage);
     void RefreshLevelList();
     bool HasDocumentModalOpen() const;
-    bool TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui);
+    bool TryEnterPreview3D(engine::EngineContext& context);
     void LeavePreview3D();
     bool BeginPreviewAdjustment();
     bool ApplyPreviewAdjustment();
@@ -632,6 +634,8 @@ private:
     SectorEditorState state;
     SectorEditorDocumentState documentState;
     SectorEditorPreviewState previewState;
+    bool previewEntryPending = false;
+    int previewEntryDelayFrames = 0;
     SelectionState selectionState;
     ManipulationState manipulationState;
     LightEditingState lightEditingState;

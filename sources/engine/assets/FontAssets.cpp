@@ -1,3 +1,4 @@
+#include <chrono>
 #include "engine/assets/FontAssets.h"
 
 #include <raylib.h>
@@ -152,8 +153,9 @@ void FontAssets::GetScopeProgress(AssetScopeHandle scope, size_t& finished, size
     }
 }
 
-void FontAssets::UpdateMainThread(float)
+void FontAssets::UpdateMainThread(float maxMilliseconds)
 {
+    const auto start = std::chrono::steady_clock::now();
     while (true) {
         FontHandle handle = NullFontHandle();
         std::string path;
@@ -224,6 +226,8 @@ void FontAssets::UpdateMainThread(float)
                 slot.error = "Failed to load font: " + path;
             }
         }
+        if (maxMilliseconds > 0 && std::chrono::duration<float, std::milli>(
+                    std::chrono::steady_clock::now() - start).count() >= maxMilliseconds) break;
     }
 
     UnloadReadyFonts();
