@@ -28,42 +28,41 @@ void UpdateSectorCutsceneSpeech(SectorCutsceneRuntime& runtime, engine::World& w
     auto& caption = runtime.caption;
     const engine::Entity speaker = caption.speaker;
     const bool active = caption.active && caption.kind == SectorCutsceneCaptionKind::Say;
-    SetSectorCutsceneCaptionVoiceTiming(runtime, voicesEnabled);
-    const bool playerSpeaking = voicesEnabled && active && !caption.speechFinished && caption.playerSpeaker;
-    bool speaking = voicesEnabled && active && !caption.speechFinished
+    SetSectorCutsceneCaptionVoicesEnabled(runtime, voicesEnabled);
+    const bool playerAudible = voicesEnabled && active && !caption.skippedForReading && caption.playerSpeaker;
+    bool npcAudible = voicesEnabled && active && !caption.skippedForReading
             && world.IsAlive(speaker) && world.Has<NpcRuntimeInstance>(speaker)
             && world.Has<SectorObjectTransform>(speaker);
-    if (speaking && world.Has<NpcCombatState>(speaker))
-        speaking = !world.Get<NpcCombatState>(speaker).dead;
+    if (npcAudible && world.Has<NpcCombatState>(speaker))
+        npcAudible = !world.Get<NpcCombatState>(speaker).dead;
+    const bool speaking = npcAudible && !caption.speechFinished;
     if (runtime.speechSpeaker != speaker || !speaking) {
         ClearSpeaker(world, runtime.speechSpeaker);
         runtime.speechSpeaker = engine::NullEntity();
     }
     Vector3 position{};
-    if (speaking) {
-        world.Get<NpcRuntimeInstance>(speaker).dialogueSpeaking = true;
-        runtime.speechSpeaker = speaker;
+    if (npcAudible) {
+        if (speaking) {
+            world.Get<NpcRuntimeInstance>(speaker).dialogueSpeaking = true;
+            runtime.speechSpeaker = speaker;
+        }
         position = world.Get<SectorObjectTransform>(speaker).position;
         // A stable upper-body emitter avoids skeleton evaluation for audio.
         position.y += 1.35f;
     }
-    const auto* started = engine::UpdateDialoguePlayback(assets, audio, runtime.speechPlayback,
+    engine::UpdateDialoguePlayback(assets, audio, runtime.speechPlayback,
             caption.speechTimeline, caption.token,
-            active && caption.voiceTiming && !caption.skippedForReading,
-            speaking || playerSpeaking, position, dt, !caption.playerSpeaker);
-    if (started && speaking)
-        engine::CommitDialogueSelection(world.Get<NpcRuntimeInstance>(speaker).dialogueHistory, *started);
-    if (started && playerSpeaking)
-        engine::CommitDialogueSelection(runtime.playerSpeechHistory, *started);
-    if (active && (!caption.voiceTiming || caption.skippedForReading)) {
-        // The regular caption update owns silent reveal and skipped reading
-        // holds. Audio release must not hold up either clock or advance it twice.
+            active && !caption.skippedForReading,
+            npcAudible || playerAudible, position, dt, !caption.playerSpeaker);
+    if (active && caption.skippedForReading) {
+        // The regular caption update owns the skipped reading hold.
+        // Audio release must not hold up its clock or advance it twice.
         caption.speechDriven = audio.IsPaused();
         return;
     }
-    if (active && caption.speechFinished && !audio.IsPaused()) {
-        caption.elapsedSeconds += std::isfinite(dt) ? std::max(0.0f, dt) : 0.0f;
-    } else if (active && !caption.speechFinished) {
+    if (active) {
+        // Playback's logical clock also owns the reading hold and fade. Audio
+        // availability and natural vowel tails never alter this position.
         caption.speechDriven = true;
         caption.elapsedSeconds = runtime.speechPlayback.sequence.position;
         caption.speechFinished = runtime.speechPlayback.sequence.finished;

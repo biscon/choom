@@ -6567,7 +6567,8 @@
         "instanceId": "prop_420",
         "modelPath": "assets/models/cafeteria/Painting_Quiet_Farmland.gltf",
         "heightOffsetWorld": 1.399999737739563,
-        "scale": 1.5
+        "scale": 1.5,
+        "castsShadow": false
       },
       "position": [
         -71.80001831054688,
@@ -7864,6 +7865,67 @@
         112.0
       ],
       "yawDegrees": 180.0
+    },
+    {
+      "id": 499,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "staffing_notice",
+        "useTitle": "Read notice",
+        "useDistance": 2.0,
+        "onUseScript": "useStaffingNotice",
+        "modelPath": "assets/models/room_clutter/Note_Paper_Cream.gltf",
+        "heightOffsetWorld": 0.9700000286102295,
+        "loop": false,
+        "shadowMode": "none"
+      },
+      "position": [
+        -39.599998474121094,
+        0.0,
+        49.599998474121094
+      ],
+      "yawDegrees": -84.0
+    },
+    {
+      "id": 500,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "service_reminder_notice",
+        "useTitle": "Read",
+        "useDistance": 2.0,
+        "onUseScript": "useServiceReminderNotice",
+        "modelPath": "assets/models/room_clutter/Note_Paper_Cream.gltf",
+        "rotationXDegrees": 90.0,
+        "heightOffsetWorld": 1.600000023841858,
+        "loop": false,
+        "shadowMode": "none"
+      },
+      "position": [
+        -57.20000076293945,
+        0.0,
+        112.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 501,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "password_complaint",
+        "useTitle": "Read",
+        "useDistance": 2.0,
+        "onUseScript": "usePasswordComplaint",
+        "modelPath": "assets/models/room_clutter/Sticky_Note_Pink.gltf",
+        "heightOffsetWorld": 0.8999999761581421,
+        "loop": false,
+        "shadowMode": "none"
+      },
+      "position": [
+        -66.80000305175781,
+        0.0,
+        130.8000030517578
+      ],
+      "yawDegrees": 90.0
     }
   ],
   "staticLights": [
@@ -14189,7 +14251,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -14317,7 +14379,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "3e7db0b920af14bb",
+    "sourceHash": "aad34030330670da",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -14325,19 +14387,19 @@
         0.0
       ],
       "rgbMax": [
-        1.587890625,
-        1.564453125,
-        1.564453125
+        1.666015625,
+        1.666015625,
+        1.666015625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 179
+      "sampleCount": 12582912,
+      "rgbChannelsAboveOne": 1034
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "3e7db0b920af14bb",
+      "sourceHash": "aad34030330670da",
       "count": 3946,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -14350,24 +14412,36 @@
           0.04647058993577957
         ],
         "rgbMax": [
-          2.150747299194336,
-          1.9708508253097534,
-          1.8839268684387207
+          2.153351306915283,
+          1.9732475280761719,
+          1.8862031698226929
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 23676,
-        "rgbChannelsAboveOne": 23
+        "rgbChannelsAboveOne": 22
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "3e7db0b920af14bb",
+      "sourceHash": "aad34030330670da",
       "modelCount": 141,
       "objectCount": 399,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/hub/hub.lightmap.2.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1

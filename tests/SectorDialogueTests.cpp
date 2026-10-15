@@ -49,11 +49,13 @@ struct DialogueFixture {
         };
         engine::DialogueVoice male;
         male.id = "male";
-        male.banks[0].push_back({engine::SoundHandle{123, 1}, 0.09f, 17});
+        for (size_t v = 0; v < engine::DialogueVowelCount; ++v)
+            male.banks[0][v] = {engine::SoundHandle{123, 1}, .14f, static_cast<uint32_t>(v)};
         voices.voices.push_back(std::move(male));
         engine::DialogueVoice female;
         female.id = "female";
-        female.banks[0].push_back({engine::SoundHandle{124, 1}, 0.09f, 23});
+        for (size_t v = 0; v < engine::DialogueVowelCount; ++v)
+            female.banks[0][v] = {engine::SoundHandle{124, 1}, .14f, static_cast<uint32_t>(v)};
         voices.voices.push_back(std::move(female));
         host.dialogueVoices = &voices;
     }
@@ -253,11 +255,13 @@ void ConversationsYieldFilterNestAndPersist(bool cinematic)
     assert(f.cutscene.caption.mood == engine::DialogueMood::Afraid);
     assert(std::fabs(f.cutscene.caption.holdSeconds - 0.01) < 0.0001);
     assert(!f.cutscene.caption.speechTimeline.cues.empty());
-    assert(f.cutscene.caption.speechTimeline.cues[0].source == 17); // male neutral fallback
+    assert(f.cutscene.caption.speechTimeline.cues[0].sound == (engine::SoundHandle{123, 1})); // male neutral fallback
     auto& input = f.context.input;
     input.Events().push_back(Key(KEY_ENTER));
     input.Events().push_back(Key(KEY_ENTER));
     assert(game::ConsumeSectorSpeechAdvance(f.dialogue, input, true));
+    assert(game::AdvanceSectorCutsceneSpeech(f.cutscene, f.scripts, false));
+    assert(f.cutscene.caption.skippedForReading);
     assert(game::AdvanceSectorCutsceneSpeech(f.cutscene, f.scripts, false));
     assert(!game::AdvanceSectorCutsceneSpeech(f.cutscene, f.scripts, false));
     f.Tick(0);
@@ -278,7 +282,7 @@ void ConversationsYieldFilterNestAndPersist(bool cinematic)
     game::UpdateSectorDialogueInput(f.dialogue, f.scripts, input);
     f.Tick();
     assert(f.cutscene.caption.text == "Bye.");
-    game::SetSectorCutsceneCaptionVoiceTiming(f.cutscene, false);
+    game::SetSectorCutsceneCaptionVoicesEnabled(f.cutscene, false);
     game::UpdateSectorCutsceneTimelines(f.cutscene, f.scripts, 30);
     f.Tick();
     assert(f.persistent.strings.at("result") == "goodbye");
@@ -443,7 +447,7 @@ void OwnershipFailureCancellationAndPlayerOverloads()
     assert(f.cutscene.caption.playerSpeaker && f.cutscene.caption.text == "Player test");
     assert(f.cutscene.caption.mood == engine::DialogueMood::Happy);
     assert(std::fabs(f.cutscene.caption.holdSeconds - 0.125) < 0.0001);
-    assert(f.cutscene.caption.speechTimeline.cues[0].source == 17);
+    assert(f.cutscene.caption.speechTimeline.cues[0].sound == (engine::SoundHandle{123, 1}));
     assert(engine::ScriptSystemExecuteConsole(f.scripts, "assert(cancelOperation(op))").success);
     assert(!f.cutscene.caption.active);
     assert(f.Call("simple_menu").result == engine::ScriptCallResult::Started);

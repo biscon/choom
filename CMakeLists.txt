@@ -356,6 +356,7 @@ if(BUILD_TESTING)
     add_executable(dialogue_speech_preview
             tools/dialogue_voice_generator/preview_dialogue_speech.cpp
             sources/engine/audio/DialogueTimeline.cpp
+            sources/engine/audio/DialogueVoiceCatalog.cpp
             sources/engine/audio/DialogueSpeech.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
@@ -372,6 +373,7 @@ if(BUILD_TESTING)
             tests/AudioSystemTests.cpp
             tests/DialogueSpeechTests.cpp
             sources/engine/audio/DialogueTimeline.cpp
+            sources/engine/audio/DialogueVoiceCatalog.cpp
             sources/engine/audio/DialogueSpeech.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
@@ -837,6 +839,7 @@ if(BUILD_TESTING)
             sources/game/dialogue/SectorConversation.cpp
             sources/engine/input/Input.cpp
             sources/engine/audio/DialogueTimeline.cpp
+            sources/engine/audio/DialogueVoiceCatalog.cpp
             sources/engine/audio/DialogueSpeech.cpp
             sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
@@ -903,6 +906,7 @@ if(BUILD_TESTING)
             tests/NpcDefinitionTests.cpp
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/ai/NpcAiTypes.cpp
+            sources/engine/audio/DialogueVoiceCatalog.cpp
             sources/sector_editor/npcs/SectorEditorNpcEditorService.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/engine/assets/AssetManager.cpp

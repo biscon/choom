@@ -2,6 +2,7 @@
   "formatVersion": 1,
   "id": "draymond",
   "name": "Draymond",
+  "voice": "male_elderly",
   "speechColor": [
     85,
     200,

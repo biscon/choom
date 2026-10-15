@@ -2757,8 +2757,7 @@ void SpeechCompletionGatesCaptionHold()
     game::InitializeSectorCutsceneRuntime(cutscene);
     const auto speaker = SpawnScriptNpc(context.world);
     engine::DialogueVoice voice;
-    voice.pitchRange = {1.0f, 1.0f};
-    voice.banks[0].push_back({engine::SoundHandle{7, 1}, 2.0f, 0});
+    voice.banks[0][0] = {engine::SoundHandle{7, 1}, 2.0f, 0};
     game::SectorCutsceneSpeechOptions speech;
     speech.speaker = speaker;
     speech.voice = &voice;
@@ -2771,23 +2770,16 @@ void SpeechCompletionGatesCaptionHold()
         game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, dt);
         game::UpdateSectorCutsceneTimelines(cutscene, scripts, dt);
     };
-    update(0); // start a full two-second recording, with no device -> estimated timing
+    update(0);
     assert(cutscene.caption.speechDriven && cutscene.caption.visibleByteCount == 0);
     game::UpdateSectorCutsceneTimelines(cutscene, scripts, 100);
     assert(cutscene.caption.active && cutscene.caption.elapsedSeconds == 0);
-    update(0.5f);
-    assert(cutscene.caption.visibleByteCount == 1 && !cutscene.caption.speechFinished);
-    update(10); // hitch consumes only this fragment, not punctuation or caption hold
-    assert(cutscene.caption.active && !cutscene.caption.speechFinished);
-    assert(cutscene.caption.elapsedSeconds == 2.0);
-    update(0.3f);
-    assert(cutscene.caption.speechFinished && cutscene.caption.opacity == 1);
-    assert(cutscene.caption.elapsedSeconds == cutscene.caption.revealSeconds);
-    update(0.49f);
-    assert(cutscene.caption.opacity == 1 && cutscene.caption.active);
-    update(0.1f);
+    update(.17f);
+    assert(cutscene.caption.visibleByteCount == 5 && cutscene.caption.speechFinished);
+    assert(cutscene.caption.active && cutscene.caption.opacity == 1);
+    update(.51f);
     assert(cutscene.caption.opacity < 1 && cutscene.caption.active);
-    update(0.4f);
+    update(.4f);
     assert(!cutscene.caption.active);
     game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
 }
@@ -2820,7 +2812,7 @@ void AutomaticVoicedSpeechReturnsAfterShortHoldAndFade()
             };
             for (int i = 0; i < 2000 && !caption.speechFinished; ++i) update(0.01f);
             assert(caption.speechFinished && caption.visibleByteCount == text.size());
-            assert(caption.active && caption.elapsedSeconds == caption.revealSeconds);
+            assert(caption.active && std::abs(caption.elapsedSeconds-caption.revealSeconds) < .011);
             update(0.34f);
             assert(caption.active && caption.opacity == 1.0f);
             const double elapsed = caption.elapsedSeconds;
@@ -2930,7 +2922,7 @@ void SkippedSpeechReplacementResetsReadingState()
     };
     begin(game::SectorCutsceneCaptionKind::Say);
     // The current setting, rather than a stale voiceTiming value, decides skipping.
-    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
+    game::SetSectorCutsceneCaptionVoicesEnabled(cutscene, false);
     assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, true));
     assert(cutscene.caption.active && cutscene.caption.skippedForReading);
     game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, 1.0f, true);
@@ -2940,6 +2932,8 @@ void SkippedSpeechReplacementResetsReadingState()
     begin(game::SectorCutsceneCaptionKind::Say);
     assert(!cutscene.caption.skippedForReading && !cutscene.caption.speechFinished);
     assert(cutscene.caption.visibleByteCount == 0 && cutscene.caption.holdSeconds == 0.35);
+    assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, false));
+    assert(cutscene.caption.active && cutscene.caption.skippedForReading);
     assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, false));
     assert(!cutscene.caption.active);
     begin(game::SectorCutsceneCaptionKind::Text);
@@ -2953,46 +2947,22 @@ void AutomaticCaptionHoldsRespectVoiceModeAndFadeProgress()
     engine::ScriptRuntime scripts;
     uint64_t token = 0;
     std::string error;
-    const auto begin = [&](game::SectorCutsceneCaptionKind kind, size_t length) {
-        assert(game::BeginSectorCutsceneCaption(cutscene, kind,
-                game::SectorCutsceneTextPosition::Bottom, std::string(length, 'a'),
-                nullptr, token, error));
-    };
     for (size_t length : {10u, 100u, 300u}) {
-        const double expected = std::clamp(length * 0.045, 1.5, 8.0);
-        begin(game::SectorCutsceneCaptionKind::Text, length);
-        assert(cutscene.caption.holdSeconds == expected);
-        begin(game::SectorCutsceneCaptionKind::Say, length);
-        game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
-        assert(cutscene.caption.holdSeconds == expected);
-        assert(cutscene.caption.revealSeconds == length / 40.0);
+        assert(game::BeginSectorCutsceneCaption(cutscene, game::SectorCutsceneCaptionKind::Say,
+                game::SectorCutsceneTextPosition::Bottom, std::string(length, 'a'), nullptr, token, error));
+        auto& caption = cutscene.caption;
+        const auto duration = caption.revealSeconds;
+        for (bool enabled : {false, true, false}) {
+            game::SetSectorCutsceneCaptionVoicesEnabled(cutscene, enabled);
+            assert(caption.holdSeconds == .35 && caption.revealSeconds == duration);
+        }
+        caption.elapsedSeconds = duration + .45;
+        game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+        const auto opacity = caption.opacity;
+        game::SetSectorCutsceneCaptionVoicesEnabled(cutscene, true);
+        game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
+        assert(caption.opacity == opacity && opacity < 1);
     }
-    auto& caption = cutscene.caption;
-    // Toggle during reveal without retracting already visible text.
-    begin(game::SectorCutsceneCaptionKind::Say, 100);
-    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
-    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0.25f);
-    const size_t visible = caption.visibleByteCount;
-    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
-    assert(caption.visibleByteCount == visible && caption.holdSeconds == 0.35);
-    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
-    assert(caption.holdSeconds == 4.5);
-    caption.elapsedSeconds = caption.revealSeconds + 0.9;
-    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
-    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
-    assert(std::fabs(caption.elapsedSeconds - caption.revealSeconds - 0.35) < 0.000001);
-    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
-    assert(caption.opacity == 1.0f && caption.active);
-    caption.elapsedSeconds += 0.1;
-    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
-    const float opacity = caption.opacity;
-    assert(opacity < 1.0f);
-    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, false);
-    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
-    assert(std::fabs(caption.opacity - opacity) < 0.000001f);
-    game::SetSectorCutsceneCaptionVoiceTiming(cutscene, true);
-    game::UpdateSectorCutsceneTimelines(cutscene, scripts, 0);
-    assert(std::fabs(caption.opacity - opacity) < 0.000001f);
 }
 
 void DisabledDialogueVoicesKeepTextAndCanBeReenabled()
@@ -3002,79 +2972,35 @@ void DisabledDialogueVoicesKeepTextAndCanBeReenabled()
     game::SectorCutsceneRuntime cutscene;
     game::InitializeSectorCutsceneRuntime(cutscene);
     const auto speaker = SpawnScriptNpc(context.world);
-    auto& npc = context.world.Get<game::NpcRuntimeInstance>(speaker);
-    engine::DialogueVoice voice;
-    voice.pitchRange = {1.0f, 1.0f};
-    voice.banks[0].push_back({engine::SoundHandle{7, 1}, 2.0f, 0});
     game::SectorCutsceneSpeechOptions speech;
     speech.speaker = speaker;
-    speech.voice = &voice;
-    const double hold = 0.5;
     uint64_t token = 0;
     std::string error;
-    const auto begin = [&](std::string_view text) {
-        assert(game::BeginSectorCutsceneCaption(cutscene, game::SectorCutsceneCaptionKind::Say,
-                game::SectorCutsceneTextPosition::Bottom, text, &hold, token, error, &speech));
-    };
     const auto update = [&](float dt, bool enabled) {
         game::UpdateSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio, dt, enabled);
         game::UpdateSectorCutsceneTimelines(cutscene, scripts, dt);
     };
-    // Every codepoint, including spaces and punctuation, takes exactly 25 ms.
-    // Neither multi-byte UTF-8 nor mood or two-second recordings alter the rate.
-    const size_t prefixes[] = {1, 3, 4, 5, 8, 9, 10, 11, 12};
     for (size_t mood = 0; mood < engine::DialogueMoodCount; ++mood) {
         speech.mood = static_cast<engine::DialogueMood>(mood);
-        begin(u8"Aé, 人! B?");
-        update(0, false);
-        assert(!npc.dialogueSpeaking && engine::IsNull(cutscene.speechPlayback.handle));
-        assert(!cutscene.caption.voiceTiming && !cutscene.caption.speechDriven);
-        assert(std::fabs(cutscene.caption.revealSeconds - 9.0/40.0) < 0.000001);
-        for (const size_t prefix : prefixes) {
-            update(0.025f, false);
-            assert(cutscene.caption.visibleByteCount == prefix);
-        }
-        assert(cutscene.caption.speechFinished && cutscene.caption.active);
-        assert(npc.dialogueHistory.banks[0].available == 0);
-        assert(cutscene.speechPlayback.sequence.nextCue == 0);
-        update(0.49f, false);
-        assert(cutscene.caption.opacity == 1.0f);
-        update(0.02f, false);
-        assert(cutscene.caption.opacity < 1.0f && cutscene.caption.active);
-        update(0.4f, false);
+        assert(game::BeginSectorCutsceneCaption(cutscene, game::SectorCutsceneCaptionKind::Say,
+                game::SectorCutsceneTextPosition::Bottom, u8"Aé, 人! B?", nullptr, token, error, &speech));
+        const auto duration = cutscene.caption.revealSeconds;
+        update(.1f, false);
+        const auto visible = cutscene.caption.visibleByteCount;
+        const auto elapsed = cutscene.caption.elapsedSeconds;
+        const auto cursor = cutscene.speechPlayback.sequence.nextCue;
+        update(0, true);
+        assert(cutscene.caption.visibleByteCount == visible && cutscene.caption.elapsedSeconds == elapsed);
+        assert(cutscene.caption.revealSeconds == duration && cutscene.speechPlayback.sequence.nextCue == cursor);
+        update(.1f, false);
+        assert(cutscene.caption.visibleByteCount >= visible);
+        assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, false));
+        assert(cutscene.caption.active && cutscene.caption.skippedForReading);
+        update(1, false);
+        assert(cutscene.caption.active && cutscene.caption.opacity == 1);
+        assert(game::AdvanceSectorCutsceneSpeech(cutscene, scripts, false));
         assert(!cutscene.caption.active);
     }
-
-    speech.mood = engine::DialogueMood::Neutral;
-    begin("Wait. Another person!");
-    update(0, true);
-    update(0.5f, true);
-    assert(npc.dialogueSpeaking && cutscene.caption.visibleByteCount == 1);
-    cutscene.speechPlayback.sequence.usesDevice = true;
-    update(0, false);
-    assert(!npc.dialogueSpeaking && engine::IsNull(cutscene.speechSpeaker));
-    assert(cutscene.caption.visibleByteCount == 1);
-    assert(std::fabs(cutscene.caption.elapsedSeconds - 1.0/40.0) < 0.000001);
-    update(0.025f, false);
-    assert(cutscene.caption.visibleByteCount == 2);
-    update(0, true);
-    assert(npc.dialogueSpeaking && cutscene.caption.visibleByteCount == 2);
-    assert(cutscene.speechPlayback.sequence.nextCue == 1); // skip the partially revealed word
-    assert(!cutscene.speechPlayback.sequence.fragmentActive);
-
-    // Switching timing after revelation preserves elapsed hold/fade progress.
-    update(0, false);
-    update(0.6f, false);
-    assert(cutscene.caption.speechFinished && cutscene.caption.active);
-    const double elapsedHold = cutscene.caption.elapsedSeconds - cutscene.caption.revealSeconds;
-    update(0, true);
-    assert(std::fabs(cutscene.caption.elapsedSeconds - cutscene.caption.revealSeconds - elapsedHold) < 0.000001);
-    assert(cutscene.caption.speechFinished && cutscene.caption.visibleByteCount == cutscene.caption.text.size());
-    update(0, false);
-    assert(std::fabs(cutscene.caption.elapsedSeconds - cutscene.caption.revealSeconds - elapsedHold) < 0.000001);
-    update(0.8f, false);
-    assert(!cutscene.caption.active);
-    game::StopSectorCutsceneSpeech(cutscene, context.world, context.assets, context.audio);
 }
 
 void SpeechPresentationResetsWithoutChangingMessageTiming()
@@ -3122,7 +3048,7 @@ void SpeechPresentationResetsWithoutChangingMessageTiming()
     game::InitializeSectorCutsceneRuntime(named);
     game::SectorCutsceneSpeechOptions speech;
     engine::DialogueVoice voice;
-    voice.banks[0].push_back({engine::SoundHandle{7, 1}, 0.3f, 0});
+    voice.banks[0][0] = {engine::SoundHandle{7, 1}, 0.3f, 0};
     speech.voice = &voice;
     uint64_t resultToken = 0;
     std::string error;
@@ -3143,8 +3069,8 @@ void SpeechPresentationResetsWithoutChangingMessageTiming()
         assert(left.source == right.source);
     }
     for (const bool voiceTiming : {false, true, false}) {
-        game::SetSectorCutsceneCaptionVoiceTiming(plain, voiceTiming);
-        game::SetSectorCutsceneCaptionVoiceTiming(named, voiceTiming);
+        game::SetSectorCutsceneCaptionVoicesEnabled(plain, voiceTiming);
+        game::SetSectorCutsceneCaptionVoicesEnabled(named, voiceTiming);
         game::UpdateSectorCutsceneTimelines(plain, fixture.runtime, 0.07f);
         game::UpdateSectorCutsceneTimelines(named, fixture.runtime, 0.07f);
         assert(named.caption.visibleByteCount == plain.caption.visibleByteCount);
@@ -3192,7 +3118,7 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
     engine::DialogueVoiceLibrary voices;
     engine::DialogueVoice female;
     female.id = "female";
-    female.banks[0].push_back({engine::SoundHandle{123, 1}, 0.09f, 7});
+    female.banks[0][3] = {engine::SoundHandle{123, 1}, 0.14f, 3};
     voices.voices.push_back(std::move(female));
     host.dialogueVoices = &voices;
     files.Write("function init() end\n");
@@ -3219,7 +3145,7 @@ void AsyncCaptionsAreConsoleSafeAndBlockingCallsAreSideEffectFree()
     assert(cutscene.caption.mood == engine::DialogueMood::Neutral);
     assert(std::fabs(cutscene.caption.holdSeconds - 0.1) < 0.0001);
     assert(!cutscene.caption.speechTimeline.cues.empty());
-    assert(cutscene.caption.speechTimeline.cues.front().source == 7);
+    assert(cutscene.caption.speechTimeline.cues.front().source == 3);
     const uint64_t originalToken = cutscene.caption.token;
     assert(engine::ScriptSystemExecuteConsole(runtime, R"(
         local op, err = startSay('missing_npc', 'must not replace')

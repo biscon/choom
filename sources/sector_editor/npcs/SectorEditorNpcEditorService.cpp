@@ -149,6 +149,7 @@ bool SectorEditorNpcEditorService::Open()
 
     state_ = SectorEditorNpcEditorState{};
     state_.open = true;
+    state_.voices = engine::ReadDialogueVoiceCatalog(definitionsRoot_.parent_path());
     state_.catalogErrors = std::move(catalog.errors);
     state_.drafts.reserve(catalog.definitions.size());
     for (NpcDefinition& definition : catalog.definitions) {
@@ -158,6 +159,15 @@ bool SectorEditorNpcEditorService::Open()
         draft.definition = std::move(definition);
         state_.drafts.push_back(std::move(draft));
     }
+    // Preserve unresolved IDs visibly instead of silently selecting a different voice.
+    for (const auto& draft : state_.drafts) {
+        const auto& id = draft.definition.voice;
+        if (std::none_of(state_.voices.begin(), state_.voices.end(),
+                [&](const auto& entry) { return entry.id == id; }))
+            state_.voices.push_back({id, "Missing: " + id, {}});
+    }
+    state_.voiceLabels.reserve(state_.voices.size());
+    for (const auto& voice : state_.voices) state_.voiceLabels.push_back(voice.label.c_str());
     RebuildListLabels();
 
     state_.selectedIndex = -1;
@@ -417,7 +427,8 @@ void SectorEditorNpcEditorService::SetSelectedHostile(bool hostile)
 
 void SectorEditorNpcEditorService::SetSelectedVoice(const std::string& voice)
 {
-    if (voice != "male" && voice != "female") return;
+    if (std::none_of(state_.voices.begin(), state_.voices.end(),
+            [&](const auto& entry) { return entry.id == voice; })) return;
     if (auto* draft = SelectedDraft()) draft->definition.voice = voice;
 }
 

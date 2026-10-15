@@ -5,23 +5,23 @@
             "options": [
                 {
                     "id": "identity",
-                    "text": "I'm James."
+                    "text": "Thanks for patching me up. I'm James."
                 },
                 {
                     "id": "place",
-                    "text": "What is this place?."
+                    "text": "Any idea what this place is?"
                 },
                 {
                     "id": "people",
-                    "text": "Have you seen anyone else down here?."
+                    "text": "Have you seen anyone else down here?"
                 },
                 {
                     "id": "locked_door",
-                    "text": "Unlocking the door in the hallway."
+                    "text": "Found any keys? That door in the hallway's locked."
                 },
                 {
                     "id": "goodbye",
-                    "text": "I'll look around. Stay close."
+                    "text": "I'll have a look around. Stay close."
                 }
             ]
         },
@@ -30,7 +30,7 @@
             "options": [
                 {
                     "id": "elin_arrival",
-                    "text": "How did you get here?."
+                    "text": "How did you get here?"
                 },
                 {
                     "id": "back",

@@ -276,7 +276,7 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         editor.RefreshAnimationOptions(assets);
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 9.0f * (RowHeight + RowGap) + 84.0f;
-        const float voiceRowExtent = RowHeight + RowGap;
+        const float voiceRowExtent = 2 * (RowHeight + RowGap);
         static constexpr std::array<const char*, 3> speechColorLabels{"Red", "Green", "Blue"};
         static constexpr std::array<const char*, 3> speechColorIds{
                 "sector_editor_npc_speech_red", "sector_editor_npc_speech_green",
@@ -344,14 +344,19 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         if (nameResult.changed) editor.ApplyNameBuffer();
         y += RowHeight + RowGap;
 
+        const float voiceY = y;
         drawLabel("Voice");
-        static constexpr const char* voiceOptions[]{"Male", "Female"};
-        int voiceIndex = selected->definition.voice == "female" ? 1 : 0;
-        if (engine::Option(ui, config, input, assets, "sector_editor_npc_voice",
-                Rectangle{fieldX, y, fieldW, RowHeight}, font, voiceOptions, 2, voiceIndex)) {
-            editor.SetSelectedVoice(voiceIndex == 1 ? "female" : "male");
+        y += voiceRowExtent / 2;
+        int voiceIndex = -1;
+        for (size_t i = 0; i < state.voices.size(); ++i)
+            if (state.voices[i].id == selected->definition.voice) voiceIndex = static_cast<int>(i);
+
+        if (!state.voiceLabels.empty() && engine::Option(ui, config, input, assets, "sector_editor_npc_voice",
+                Rectangle{0, y, formScroll.viewport.width, RowHeight}, font,
+                state.voiceLabels.data(), static_cast<int>(state.voiceLabels.size()), voiceIndex)) {
+            if (voiceIndex >= 0) editor.SetSelectedVoice(state.voices[voiceIndex].id);
         }
-        y += voiceRowExtent;
+        y = voiceY + voiceRowExtent;
 
         const float speechColorY = y;
         drawLabel("Speech color");

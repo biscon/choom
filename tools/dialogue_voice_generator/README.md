@@ -1,4 +1,10 @@
-# Offline dialogue voice generator
+# Offline dialogue voice tools
+
+The current engine uses [locally synthesized vowels](#current-vowel-speech-system).
+The TTS workflow below is retained for reference; it no longer supplies dialogue
+playback. See [engine speech previews](#engine-speech-previews) for listening files.
+
+## Retained TTS generator
 
 Authoring only: generates short invented conversational fragments for later use
 as typewriter dialogue chatter. It does not implement playback or change the
@@ -196,36 +202,106 @@ sound, and edge artifacts. Give special attention to duration/gain warnings and
 the afraid, panicked, and pained banks. Report undesirable asset IDs for selective
 regeneration; all source text and mood directions remain editable in JSON.
 
-## Engine speech previews
+## Current vowel speech system
 
-The C++ preview utility uses the engine's current voice loader, complete-fragment
-selection, pitch/volume settings, word grouping, persistent per-identity/mood selection pools, and punctuation schedule. It
-needs no API key, network, audio device, window, or running game.
+The engine uses deterministic, stable synthesized vowels. The discarded breath,
+consonant and unstable-source experiments have been removed from the generator,
+runtime and assets. The original TTS archive is retained separately; no network
+or API key is needed to generate the current voices.
 
 ```sh
+python3 tools/dialogue_voice_generator/generate_vowel_voices.py --dry-run
+python3 tools/dialogue_voice_generator/generate_vowel_voices.py
+python3 -m unittest discover -s tools/dialogue_voice_generator/tests
 cmake --build cmake-build-debug --target dialogue_speech_preview -j2
 cmake-build-debug/dialogue_speech_preview
+cmake-build-debug/dialogue_speech_preview --stress --output-dir /tmp/dialogue-stress
 ```
 
-This target is available with `BUILD_TESTING=ON`. Run from the repository root,
-or pass `--assets-root /path/to/assets` and `--output-dir /path/to/previews`.
-Defaults write only to the ignored `audio_generation/previews/engine_speech/`:
+`vowel_profiles.json` (authoring schema 2) uses `synthesis.source: stable_pulse`,
+the only supported source. Generator revision 5 preserves the accepted
+`male_stable_soft_pulse.wav` audition. The glottal pulse opens over 58% of its
+period and closes over 24%, with a full half-sine closure returning to zero
+before the closed phase. Its band-limited waveform is fixed from cycle to cycle:
+no pitch jitter, amplitude shimmer, pulse-shape variation, moving formants or
+breath noise. `STABLE_PARAMETERS` holds the shared pulse and bandwidth controls.
 
-- `female_speech.wav` and `male_speech.wav`: all seven moods, in manifest mood
-  order, with a short line and a longer punctuated line in each bank.
-- `<identity>_<mood>_speech.wav`: the same individual mood sections.
-- `<identity>_speech_cues.csv`: exact timestamps in the combined identity WAV,
-  source asset IDs, pitch, volume, and the English group revealed by each clip.
+Three resonators shape each vowel. The old neutral reference still calibrates
+band gains, so normalization does not undo the new pulse's softer upper spectrum.
+Fundamental frequency and vocal-tract scale remain independent authoring controls.
+The original ah/eh/ee/oh/oo formants derive from the first three bass bands in the
+[Csound tables](https://csound.com/manual/misc/formants/); uh is an authored central
+vowel. The six presets are artistic starting points, not physiological models.
 
-Start with `male_neutral_speech.wav` and `female_neutral_speech.wav`, then both
-panicked previews. The cue
-sheet identifies the source if a particular fragment sounds undesirable.
-Half-second gaps separate example lines; one-second gaps separate mood groups in
-combined WAVs. These review separators are additional to dialogue timing.
+All six profiles use the accepted lighter neutral delivery: a half-semitone base
+pitch lift, a half-semitone phrase descent, and up to 0.75 semitones of gentle
+word emphasis. The optional mood-level `word_accent_semitones` selects the first
+word of at least five letters in each phrase and gives its vowel cues a smooth
+rise/fall accent. This spelling heuristic resets at punctuation; it does not
+quantize pitch to a musical scale. Missing accent settings default to zero.
+Other moods retain their authored contours. Typewriter timing, question/capitals
+emphasis and continuous runtime pitch interpolation are unchanged.
+Elderly runtime wobble remains 2 Hz with a 0.15-semitone base depth; emotional
+wobble is at most 0.2 semitones. These phrase-level controls are separate from
+the removed cycle-level instability. Files last 140 ms with mood-specific attacks,
+40 ms releases and zero endpoints.
 
-Offline previews render ideal uninterrupted scheduling and use linear pitch
-resampling. Device resampling, frame-boundary delays, spatial propagation,
-interruptions, and pause/resume still need in-game listening. Successful rendering
-checks that samples do not clip; it does not establish that speech sounds natural.
-The original Python generation previews remain useful for reviewing individual
-source recordings with equal gaps.
+Stable vowels use linear gain only; no crest shaping, compression or limiting.
+The pre-headroom RMS target is -16 dBFS plus each vowel's `rms_offset_db`, which
+preserves the relative vowel levels measured in the accepted male audition.
+A -5.5 dBFS pre-headroom peak ceiling can lower a vowel if needed. Global
+`output_gain_db: -3` then leaves overlap headroom; angry adds another -2 dB
+because its denser, emphasized stress mix otherwise clipped. Thus neutral male
+vowel assets preserve the accepted waveform and balance at 3 dB lower level;
+the later lighter-delivery audition supplies the current neutral pitch contour.
+Runtime volume stays 0.65; positional attenuation and other sounds are unchanged.
+
+The headless ordinary and 60-character/second capitalized stress corpora check
+summed output across all profiles and moods. This is measured corpus headroom,
+not a guarantee against clipping from arbitrary overlapping game sounds.
+The generation report records actual RMS/peak, output gain, peak-limited status,
+DC offset and endpoint steps.
+
+Regeneration writes 252 vowels under
+`assets/audio/dialogue_vowels/{profile}/{mood}/{vowel}.wav`, plus six runtime
+manifests and a generation report containing config/WAV SHA-256 hashes.
+Version-2 runtime manifests retain `continuous_pitch: true`. Four vowel playback
+slots retain pause, release and skip logic. No synthesis or asset loading occurs
+during ordinary playback.
+
+Regeneration is deterministic for identical config/tool versions on the same
+Python/platform. Use `--output-dir` to generate a separate bank.
+
+The engine config's `voices` catalog maps stable profile IDs to manifests. Adding
+a profile means adding authoring JSON, generating its WAVs, and adding its manifest
+to this catalog; no C++ enum changes are required. Existing `male`/`female` IDs now
+select the middle-aged profiles. Reopen the NPC editor to refresh its metadata;
+reload the level to load changed WAVs. A missing profile stays visible as
+`Missing: <id>` in the picker and is preserved on save.
+
+## Engine speech previews
+
+The accepted source reference is
+`audio_generation/previews/male_stable_soft_pulse.wav`; the approved neutral
+intonation comparison is `male_lighter_delivery_comparison.wav` in that directory.
+Discarded noise auditions and their asset snapshots have been removed.
+
+The headless C++ utility reads the production manifests and calls the same timeline
+planner and pitch-modulation helper as runtime. No window/audio device is opened.
+It sums overlapping samples in floating point, includes full tails and rejects
+clipping before quantizing. Output defaults to the ignored directory
+`audio_generation/previews/vowel_speech/`; old `engine_speech/` previews are kept.
+Use `--assets-root` or `--output-dir` to override paths.
+
+Each profile has a combined WAV, seven mood WAVs, and a CSV with vowel IDs,
+timestamps, pitch, gain and text groups. The `fixed_rate/` subdirectory renders
+all moods at 30 characters/second, allowing texture/intonation differences to be
+judged independently of speed. The corpus includes repeated words/names, questions,
+capitals and ellipses. Half-second line gaps and one-second mood gaps are audition
+separators, not runtime delays.
+
+Start with male/female neutral and panicked, then compare young/adult/elderly using
+the same sentence. Check vowel quality, recognizable identity, mood distinction,
+word-like associations, overlap harshness and clicking. Automated checks cannot
+establish that these presets sound good. In-game listening must still check
+interruption, mute/unmute, pause, positional audio and left-click reveal/dismiss.

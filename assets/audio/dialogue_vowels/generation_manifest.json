@@ -1,0 +1,4297 @@
+{
+  "generator_version": 5,
+  "config_sha256": "45410f553e53c77506b993138ddca764a9d4675ef4430b227a6a258b7f579698",
+  "source": "stable_pulse",
+  "pulse": {
+    "opening": 0.58,
+    "closing": 0.24,
+    "extra_tilt": 0.4,
+    "voiced_bandwidth_scale": 1.25
+  },
+  "assets": [
+    {
+      "path": "male/neutral/ah.wav",
+      "sha256": "2ad620b92056d979ec3547caf6209646b939419354206bb2c5824634999887f3",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.234709567254948,
+        -19.194650150147694
+      ],
+      "rms_dbfs": -18.783229259802184,
+      "peak_dbfs": -9.203726183510678,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 1.2261526925223213e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/neutral/eh.wav",
+      "sha256": "ed493c23f583f38a0e169682770ca5f0bc1e9428e082d121ccdf3528770e9de9",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.217891382315681,
+        -22.59638153709533
+      ],
+      "rms_dbfs": -18.69811605987264,
+      "peak_dbfs": -10.988042277665283,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/neutral/ee.wav",
+      "sha256": "aed1070223bf375b5d80ba755be38811b18a354fab8f56d445089cf72e209f91",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -20.566279767967757,
+        -28.55015233761804
+      ],
+      "rms_dbfs": -15.976880065444032,
+      "peak_dbfs": -8.713800305992494,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 7.720220656622024e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/neutral/oh.wav",
+      "sha256": "4288cf60735283c9bc61b0438f173e4edd608b6faee7afc41c7e6ce9bfaedc0f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.196574775189427,
+        -26.59638153709533
+      ],
+      "rms_dbfs": -18.692495104106698,
+      "peak_dbfs": -11.09958314850838,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -4.0871756417410715e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/neutral/oo.wav",
+      "sha256": "a25d1c84c8e038b2e1ca543faa3c62035f1766f7709474e5666d7cb0750e861f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.08552336942652,
+        -32.31041300859133
+      ],
+      "rms_dbfs": -17.420240011144564,
+      "peak_dbfs": -9.555688832178308,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 7.266090029761905e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/neutral/uh.wav",
+      "sha256": "8ea72a526395cc8a77d67a2cc65a9e06e1f167920c11842eeb857ce0d2ec970b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.53351430870105,
+        -23.16974903835737
+      ],
+      "rms_dbfs": -19.34754695080323,
+      "peak_dbfs": -9.868683902839953,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 3.178914388020833e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/happy/ah.wav",
+      "sha256": "89d79da72507e3f87886a9f42f0321938d301734b6c41a8298721d5d35e94982",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -7.841893945730721,
+        -19.16888822638889
+      ],
+      "rms_dbfs": -18.783220519564413,
+      "peak_dbfs": -8.975772653180819,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 2.316066196986607e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/happy/eh.wav",
+      "sha256": "e5bb151cf9e0d3c92310e400c11849d1d2c7470f2ba871b1d2fb14767348311e",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.796820474008513,
+        -22.556359068733343
+      ],
+      "rms_dbfs": -18.698103264122086,
+      "peak_dbfs": -10.902061174592493,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/happy/ee.wav",
+      "sha256": "081c383a74007820242f2eed627c00560cdf27e485d9afd19c108ab48a0356e9",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.276400901663756,
+        -27.283078275615896
+      ],
+      "rms_dbfs": -15.976894534844583,
+      "peak_dbfs": -8.621048316371372,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -6.357828776041667e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/happy/oh.wav",
+      "sha256": "18f928b6a3507b50fc5debd2aa3eb0c8a5f32dfad95e99d91634eda9e1e116aa",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.249206010923146,
+        -26.55635906873335
+      ],
+      "rms_dbfs": -18.692486622570208,
+      "peak_dbfs": -11.219324356083316,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 1.1807396298363096e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/happy/oo.wav",
+      "sha256": "c0bc3fbb8b50e5f923602b3379f5bc0aacdc2a6740ddf779675711d5551cad4b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.71472058117896,
+        -31.986693349513576
+      ],
+      "rms_dbfs": -17.42024077192771,
+      "peak_dbfs": -9.574026115750314,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/happy/uh.wav",
+      "sha256": "9f39da3d43d66898ae8d03bbc248c7e21a57e3bea034854cbe35f5a26515d773",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.47594377900638,
+        -23.203270030879523
+      ],
+      "rms_dbfs": -19.347537488983768,
+      "peak_dbfs": -9.6228481072631,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/angry/ah.wav",
+      "sha256": "b3a388da5e8cf0d5a4527581eed6863361190266bcd80e293e6a681fdea6e1f3",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -7.213832128576706,
+        -18.55713371695713
+      ],
+      "rms_dbfs": -20.78321999729166,
+      "peak_dbfs": -10.904851523057264,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.782969,
+      "output_gain_db": -5,
+      "dc_offset": 4.0871756417410715e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/angry/eh.wav",
+      "sha256": "4d6ee579a2f8c536990c301383dd63ad4480f502d6c06a909e1899cfe207864d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.804009831487178,
+        -21.869473555552894
+      ],
+      "rms_dbfs": -20.698113640722116,
+      "peak_dbfs": -12.815884047232338,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.69784,
+      "output_gain_db": -5,
+      "dc_offset": 9.082612537202382e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/angry/ee.wav",
+      "sha256": "f08bbc070a506049bb5b516bd5b0e79835e0d07b5fb78ff81436f76eba186202",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.450457344709676,
+        -25.26344961152195
+      ],
+      "rms_dbfs": -17.97687804181531,
+      "peak_dbfs": -10.547634631341653,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.976619,
+      "output_gain_db": -5,
+      "dc_offset": -3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/angry/oh.wav",
+      "sha256": "27f965893a3af70b332fef7ed8f70b27b75149041d8f4c7ebc9e7620e81e71f9",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.126437738365336,
+        -25.86947355555289
+      ],
+      "rms_dbfs": -20.692491437950622,
+      "peak_dbfs": -13.400835906758491,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.692237,
+      "output_gain_db": -5,
+      "dc_offset": -1.816522507440476e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/angry/oo.wav",
+      "sha256": "eeee273ad30913e0370f3676f06c7355245f1ae563c0eb551268e8479ad3cf95",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.281745339482836,
+        -31.06376278689316
+      ],
+      "rms_dbfs": -19.42023908226121,
+      "peak_dbfs": -11.670692357569436,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.419983000000002,
+      "output_gain_db": -5,
+      "dc_offset": 4.9954368954613096e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/angry/uh.wav",
+      "sha256": "e7c13026abe9bbfbdf13ab8bfb6cd8b7f1d426c135f2b7add4f43890e8bc97ec",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.027024015253346,
+        -22.680365928884576
+      ],
+      "rms_dbfs": -21.34752976074847,
+      "peak_dbfs": -11.485729496024891,
+      "peak_limited": false,
+      "target_rms_dbfs": -21.347272,
+      "output_gain_db": -5,
+      "dc_offset": 0.0,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/afraid/ah.wav",
+      "sha256": "e8cf26cf9fba03f3ea8e272b35754c29119fd8c0c31c6350d54ed6aed5618482",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.338223110745464,
+        -18.532091855836477
+      ],
+      "rms_dbfs": -18.783243550085622,
+      "peak_dbfs": -9.71888819066282,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -7.266090029761905e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/afraid/eh.wav",
+      "sha256": "0f9e3145b4c78cba4c1df18e497edc49f030d4519dd7c84c36f93b3843575dec",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.884700186779757,
+        -21.820869441904826
+      ],
+      "rms_dbfs": -18.69809836946958,
+      "peak_dbfs": -11.051198951358536,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/afraid/ee.wav",
+      "sha256": "923ed2a1d13df64f21bc0210fbb52d5b76fc479719d5b78cad595594491e8e4a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -21.62956932382269,
+        -29.444630023116876
+      ],
+      "rms_dbfs": -15.976895713147057,
+      "peak_dbfs": -8.822179851892814,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 5.903698149181548e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/afraid/oh.wav",
+      "sha256": "ff6206b17f741de51949155135296a31c37cae25196f18f077ea8e500b8aba42",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.75890794654529,
+        -25.820869441904826
+      ],
+      "rms_dbfs": -18.69251675702302,
+      "peak_dbfs": -10.952425112591254,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 1.2261526925223213e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/afraid/oo.wav",
+      "sha256": "385e33a0c9f5965b52046b5e165809870449579cae0ea537d0ac7c1dbb2f3017",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.480865722409943,
+        -32.05621015748297
+      ],
+      "rms_dbfs": -17.420240909535966,
+      "peak_dbfs": -9.604407572190116,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 1.5894571940104166e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/afraid/uh.wav",
+      "sha256": "8360ed7e34f9ffedf90d7675527712504e0d59827de5a580d815b2fb9f526256",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.07877945314355,
+        -22.511921696753035
+      ],
+      "rms_dbfs": -19.34754482258349,
+      "peak_dbfs": -10.333353302559642,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 6.357828776041667e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/panicked/ah.wav",
+      "sha256": "a4c0d7bee4cb5f89741e0dd0be6f7f1b2c7a12a17b2a892a8e2b1c8567812f8b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -7.9639958050888175,
+        -19.225126722680432
+      ],
+      "rms_dbfs": -18.783235105269558,
+      "peak_dbfs": -9.104110161229857,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 0.0,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/panicked/eh.wav",
+      "sha256": "b9c36e8c3c884d60dc2534dbb79844f696ea7cef8007d18592b227448da76084",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.956350834818188,
+        -22.621277743348678
+      ],
+      "rms_dbfs": -18.6981064817655,
+      "peak_dbfs": -11.00684698221324,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -9.5367431640625e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/panicked/ee.wav",
+      "sha256": "70f1be5bd21ff8ffff1ba44963be33e6de28773f779291416eab1d8662d87463",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.648941936068084,
+        -27.665609913932766
+      ],
+      "rms_dbfs": -15.97688223186713,
+      "peak_dbfs": -8.734064013722216,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/panicked/oh.wav",
+      "sha256": "a6ceb9fbce80d53150c8ec9764f7501db562f7c9b1dd9f0a8206aacb644ba11f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.253383359182923,
+        -26.62127774334868
+      ],
+      "rms_dbfs": -18.69250587821499,
+      "peak_dbfs": -11.267686895493352,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -1.9073486328125e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/panicked/oo.wav",
+      "sha256": "6aa5c33c8bf8e5b5765f6e3baea544b963dd99438be70e29cc628d5f83435bea",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.814048809237256,
+        -32.11786837091076
+      ],
+      "rms_dbfs": -17.42023230070423,
+      "peak_dbfs": -9.643741181504778,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 7.266090029761905e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/panicked/uh.wav",
+      "sha256": "0bb536cde3426178816a33c0963691a181823e6d891a1eb3b422ead206accda9",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.524846998997916,
+        -23.239792704915352
+      ],
+      "rms_dbfs": -19.347532115852495,
+      "peak_dbfs": -9.762822158483438,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -1.1807396298363096e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/pained/ah.wav",
+      "sha256": "501fb6528efd764f61e861063994f5cf5812b7327a825864a9bd94166c608256",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.20876083854013,
+        -18.07293456782482
+      ],
+      "rms_dbfs": -18.783242711261234,
+      "peak_dbfs": -10.029515158776036,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -4.0871756417410715e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/pained/eh.wav",
+      "sha256": "b483904b7beb72fe67d487275c513d1fc8470a4e11938cb2b0bbcee809afe5cd",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.411510245350687,
+        -21.215150065633566
+      ],
+      "rms_dbfs": -18.698099584301588,
+      "peak_dbfs": -11.023806095257381,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 1.9981747581845239e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/pained/ee.wav",
+      "sha256": "3788c6e2b6dccf64c62745895eff43459b2d417ff273ea148971afc4afe1053a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -21.883488009021978,
+        -29.626950046853786
+      ],
+      "rms_dbfs": -15.976877793126087,
+      "peak_dbfs": -8.822179851892814,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.5894571940104166e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/pained/oh.wav",
+      "sha256": "c4df9a4997cd2c4575a30789f639b6e2b9548ebb80259bd08379f65d6aa58c46",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.388182255804118,
+        -25.21515006563356
+      ],
+      "rms_dbfs": -18.69249758644883,
+      "peak_dbfs": -10.864015979942446,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -1.362391880580357e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/pained/oo.wav",
+      "sha256": "5104ae5b0811480578cd481e99ef227d7745712f02c42eb32a8c5b703e7995ad",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.592284760036613,
+        -31.751352316433213
+      ],
+      "rms_dbfs": -17.420235387696682,
+      "peak_dbfs": -9.612420386077623,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -1.1807396298363096e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/pained/uh.wav",
+      "sha256": "d4864c7b5cf016908e97a2a2e22caf50d29e9875e9b9a923c957b7e16d4015a6",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.71995998479186,
+        -22.0728945238682
+      ],
+      "rms_dbfs": -19.347532933348226,
+      "peak_dbfs": -10.581626827788899,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 9.08261253720238e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/relieved/ah.wav",
+      "sha256": "35950851628bfbdf4b7dcfd21d44bd75ec8a93581d5624c98035d690be79f5cf",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.338223110745464,
+        -18.532091855836477
+      ],
+      "rms_dbfs": -18.783235822109976,
+      "peak_dbfs": -9.667911189600977,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/relieved/eh.wav",
+      "sha256": "12b26c14d498084dd1e97173eb91f63d27fd264e96698551f77d8f37a9c901df",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.884700186779757,
+        -21.820869441904826
+      ],
+      "rms_dbfs": -18.69810200674158,
+      "peak_dbfs": -10.9974395409838,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -1.5440441313244048e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/relieved/ee.wav",
+      "sha256": "6c60b98c6cd96a8e4697309e780e8a0147927e41e15d10c697b6428c19f6ef8f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -21.62956932382269,
+        -29.444630023116876
+      ],
+      "rms_dbfs": -15.976888958332315,
+      "peak_dbfs": -8.768184732345137,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 1.3623918805803571e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/relieved/oh.wav",
+      "sha256": "cc430ba9e0e162c5d73e457e70ba5249b6c5c47ee3c3f3daa5383c547ce9bc42",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.75890794654529,
+        -25.820869441904826
+      ],
+      "rms_dbfs": -18.692482766355965,
+      "peak_dbfs": -10.90020144015908,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 9.08261253720238e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/relieved/oo.wav",
+      "sha256": "6d179207dcf75d2df3d35c36ff9e7f711d84a8abd6de97ce1dfec94a734c1d34",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.480865722409943,
+        -32.05621015748297
+      ],
+      "rms_dbfs": -17.420241190767243,
+      "peak_dbfs": -9.550911552946284,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -6.357828776041667e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male/relieved/uh.wav",
+      "sha256": "1275addce194ca06c98cc0b4ad1de9f1165e2be3a3d05768422e8ac452571d44",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.07877945314355,
+        -22.511921696753035
+      ],
+      "rms_dbfs": -19.347536209237056,
+      "peak_dbfs": -10.281248229461536,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -9.08261253720238e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/neutral/ah.wav",
+      "sha256": "283e01cc2ffc3b18ffd6eed6c79a86411f1080d194388d4c376df0e6c9b5a52a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.856506146771364,
+        -18.949941903731872
+      ],
+      "rms_dbfs": -18.78320472773631,
+      "peak_dbfs": -11.06634931322965,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/neutral/eh.wav",
+      "sha256": "31ef81ea4e8d0ead302d1840fd3fffa188a95372ee8636e8b6c69118036d121c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.266204231819406,
+        -23.23566024759621
+      ],
+      "rms_dbfs": -18.69812680382593,
+      "peak_dbfs": -12.064557568546048,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -4.5867193312872025e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/neutral/ee.wav",
+      "sha256": "dd8d0176b9f76f28fa587f0eeab3d33c646d7619a98e38baba001bf495e4c1e7",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -22.459935212272022,
+        -28.521225449992613
+      ],
+      "rms_dbfs": -15.976880883677085,
+      "peak_dbfs": -9.977523773811894,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -4.9954368954613096e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/neutral/oh.wav",
+      "sha256": "2012f4efdcef0eb11ce5f313172720dcff1906c56b75485ab7e7b7d78cb4b673",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.20899511361717,
+        -27.235660247596208
+      ],
+      "rms_dbfs": -18.692529917602577,
+      "peak_dbfs": -12.126439859409144,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 1.861935570126488e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/neutral/oo.wav",
+      "sha256": "883d5a1cbc1d67801e8a7dde670d253ae082de28247d9dafdac2d5f1891a0756",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.766013297291575,
+        -30.049669629718892
+      ],
+      "rms_dbfs": -17.420231665235203,
+      "peak_dbfs": -10.213116491420116,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -1.4986310686383928e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/neutral/uh.wav",
+      "sha256": "01b375033a9f4dbc3b3a669342d03fdd02d6cde8901367b3182c7136e143a79b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.221673308970443,
+        -20.976805695630016
+      ],
+      "rms_dbfs": -19.347543118133544,
+      "peak_dbfs": -11.875269189522317,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 7.220676967075893e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/happy/ah.wav",
+      "sha256": "9213404b9a9bd8e6e56072da97ef03ef088a9b6c7cadf0d6fcb6af9dadba3bbc",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.997904391167733,
+        -18.726648675153527
+      ],
+      "rms_dbfs": -18.783267302213766,
+      "peak_dbfs": -10.988042277665283,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/happy/eh.wav",
+      "sha256": "eff97810c59ee55fb31e0d54fe24bdb22c52c9baa53d5ffaffe13eb51541b298",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.522689888452433,
+        -22.69494247423985
+      ],
+      "rms_dbfs": -18.698133357650487,
+      "peak_dbfs": -11.948391963496757,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -3.269740513392857e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/happy/ee.wav",
+      "sha256": "d4c9790af60183fccfe8e4a3f88dd56a7ac176d649ac2ef79d941a3a05b76d13",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -21.158380595501267,
+        -27.188637908329717
+      ],
+      "rms_dbfs": -15.976899376309559,
+      "peak_dbfs": -9.796328477980401,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -7.720220656622024e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/happy/oh.wav",
+      "sha256": "21759c23ca217d8814c986323baf1eef00d76b59b27f03664e6571261547a251",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.3985981681748,
+        -26.694942474239845
+      ],
+      "rms_dbfs": -18.69248743224379,
+      "peak_dbfs": -12.123228215949345,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 2.724783761160714e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/happy/oo.wav",
+      "sha256": "7e56fd3593164fa50c36fed85ad4bfdc14af79c9b3a07167038034777161cac5",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.20915064749143,
+        -29.52322908481169
+      ],
+      "rms_dbfs": -17.42025119584003,
+      "peak_dbfs": -10.18567018948573,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 2.5885445731026784e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/happy/uh.wav",
+      "sha256": "c48d79521904988f2b049285cf9d7879be4232cb3cb3b81337c485193f9b220f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.831458957718906,
+        -21.089716538279113
+      ],
+      "rms_dbfs": -19.347511096155145,
+      "peak_dbfs": -11.777005621053808,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 2.9972621372767857e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/angry/ah.wav",
+      "sha256": "b3451545034648c71da6c0c00fb9f4a5f4192f8a5d060de26c24e29628d7d9e4",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.98049904700308,
+        -17.932979422382694
+      ],
+      "rms_dbfs": -20.783226697334083,
+      "peak_dbfs": -13.000996335608328,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.782969,
+      "output_gain_db": -5,
+      "dc_offset": -2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/angry/eh.wav",
+      "sha256": "390b50e4dc7943315f06d4a99914414511fbccd2b9cba04e63d7ed9c361500e9",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.374153780930227,
+        -21.621321629313073
+      ],
+      "rms_dbfs": -20.6981194954134,
+      "peak_dbfs": -13.84603750298048,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.69784,
+      "output_gain_db": -5,
+      "dc_offset": -9.990873790922619e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/angry/ee.wav",
+      "sha256": "011548c3788781b46a1223610a4e24247f160f8b143d227d37e7ffeb503c26dd",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.480456794260895,
+        -25.309907101162203
+      ],
+      "rms_dbfs": -17.976882090489937,
+      "peak_dbfs": -11.612971864263626,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.976619,
+      "output_gain_db": -5,
+      "dc_offset": 4.0871756417410715e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/angry/oh.wav",
+      "sha256": "1c9d5aa63fe4f56867a0dcf87df0ead2caad600465ab3e0cf89bf4001d8af98c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.520896408925037,
+        -25.621321629313076
+      ],
+      "rms_dbfs": -20.692497048508645,
+      "peak_dbfs": -14.19626337307566,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.692237,
+      "output_gain_db": -5,
+      "dc_offset": -2.497718447730655e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/angry/oo.wav",
+      "sha256": "6594a0d756bd89f031af4757382fc4df80f6fe8e001642d40048bf194334917e",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.570104502844142,
+        -28.421180521699437
+      ],
+      "rms_dbfs": -19.420246420632232,
+      "peak_dbfs": -12.172604389863452,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.419983000000002,
+      "output_gain_db": -5,
+      "dc_offset": 9.990873790922619e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/angry/uh.wav",
+      "sha256": "b187803e3b448c9774679ed0fc66cd1f26c493a3454188f9b8e543422cd4eac9",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.059411799708545,
+        -20.752034268958294
+      ],
+      "rms_dbfs": -21.347551459614763,
+      "peak_dbfs": -13.728071962130706,
+      "peak_limited": false,
+      "target_rms_dbfs": -21.347272,
+      "output_gain_db": -5,
+      "dc_offset": 2.951849074590774e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/afraid/ah.wav",
+      "sha256": "c2f40a7fdc4c0f0f17073508ae373451375f9d28a321d95e0e210a43c608cfa6",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.37760938681538,
+        -18.483385759417427
+      ],
+      "rms_dbfs": -18.783205879830625,
+      "peak_dbfs": -11.292942239901187,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -1.7711094447544643e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/afraid/eh.wav",
+      "sha256": "0044314f06ae2547d80959280df34c53df7f23923da188e979e8b187c13ac8c3",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.686077728697283,
+        -23.335131706764773
+      ],
+      "rms_dbfs": -18.698126139608902,
+      "peak_dbfs": -12.184453438147179,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 6.630307152157738e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/afraid/ee.wav",
+      "sha256": "d006df2f8af1366e0b55420426352a7764dc09d5a7f5dcd464eaa4a170940479",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -23.799228218138847,
+        -29.781250506744136
+      ],
+      "rms_dbfs": -15.976876518275633,
+      "peak_dbfs": -10.169414887708822,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -4.1325887044270835e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/afraid/oh.wav",
+      "sha256": "0ec3eda1a52aded33c6a56d47d427e3a82cd9fbfd12b1f2fe07e0ee807f06f0b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.21890382597634,
+        -27.335131706764773
+      ],
+      "rms_dbfs": -18.69251358841632,
+      "peak_dbfs": -12.173680908379803,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 7.129850841703869e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/afraid/oo.wav",
+      "sha256": "a9700067edc396ad589abccccb4840662594de3c68a7856a2b7065ec9ae06f0d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.398783480118595,
+        -30.04630841595578
+      ],
+      "rms_dbfs": -17.420187353171727,
+      "peak_dbfs": -10.215694034236815,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 4.0871756417410715e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/afraid/uh.wav",
+      "sha256": "15f223736b2a13c6cfee6ce9856ad1794c72bdddea6d0fc12958db41e9472ecc",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.139940289870717,
+        -20.281824774634536
+      ],
+      "rms_dbfs": -19.347574853517372,
+      "peak_dbfs": -12.011562348393351,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 4.54130626860119e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/panicked/ah.wav",
+      "sha256": "f352ee53efc8a96e4c3edc177d5738d60ea2cfef614bcfca85e5dce94b69d4ec",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.977433822822388,
+        -18.833728964597146
+      ],
+      "rms_dbfs": -18.78321056848606,
+      "peak_dbfs": -11.073934415458705,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 0.0,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/panicked/eh.wav",
+      "sha256": "c0b96176fa27a889badea39661918f47590fdf7da446931e69d51d64e4357127",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.746927154198417,
+        -22.87596855440305
+      ],
+      "rms_dbfs": -18.698101741957174,
+      "peak_dbfs": -12.050747675672419,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 1.9527616954985118e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/panicked/ee.wav",
+      "sha256": "0b62bd7e169b8f431a272f8b1dce60d5ca8234f1ba993cf8cecdeca78a423680",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -21.518183621714606,
+        -27.568372972763537
+      ],
+      "rms_dbfs": -15.976876845115717,
+      "peak_dbfs": -9.914214045700254,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/panicked/oh.wav",
+      "sha256": "70d25ef607ad7b2f229f9415eb89c2e3132db71683c5d6c7882c748ebceafd59",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.608864847144726,
+        -26.875968554403048
+      ],
+      "rms_dbfs": -18.692497659764154,
+      "peak_dbfs": -12.193081091836987,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -1.362391880580357e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/panicked/oo.wav",
+      "sha256": "c6132a7314ea27dca4fd1ce8fc98b41da19b6f5bc221eb7beffe993baf2c736d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.356922944338056,
+        -29.704741488366302
+      ],
+      "rms_dbfs": -17.420253333209878,
+      "peak_dbfs": -10.267406171331942,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -9.08261253720238e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/panicked/uh.wav",
+      "sha256": "62dddee6c8dc595a07d3f4043855e26208dd49233114957ee943e52f342e315b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.96563196776609,
+        -21.098350740781363
+      ],
+      "rms_dbfs": -19.347563256727035,
+      "peak_dbfs": -11.8721490710772,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 2.0890008835565476e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/pained/ah.wav",
+      "sha256": "5656c6d93ee5a160b10c87829d9f7a548569250b1ea2d0ab49407ee0cf5d501e",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.054908328254403,
+        -18.057811430306923
+      ],
+      "rms_dbfs": -18.78324295618175,
+      "peak_dbfs": -11.414411493128444,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 4.54130626860119e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/pained/eh.wav",
+      "sha256": "51e6d6a14c636b9b3ebcb48b6c5e0aa277a08bd051e379390d8bc8d0ee4976f3",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.661301788570396,
+        -23.19208897161102
+      ],
+      "rms_dbfs": -18.69808887154566,
+      "peak_dbfs": -12.16829964952602,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -1.453218005952381e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/pained/ee.wav",
+      "sha256": "b9cb232d9b175ff52ca567c2973cd2b9d435c41b7fca64b22b2c32cabb76c4c0",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -24.252709410444815,
+        -30.188716082886838
+      ],
+      "rms_dbfs": -15.976874898400009,
+      "peak_dbfs": -10.171979492708921,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.407804943266369e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/pained/oh.wav",
+      "sha256": "3288f1f8b7f9bee0e45c2264a94adfbb619a3ae76f702b17616bc5f6ea1dd8f4",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.60084112911912,
+        -27.19208897161102
+      ],
+      "rms_dbfs": -18.69251589870444,
+      "peak_dbfs": -12.15432395924125,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -1.2261526925223213e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/pained/oo.wav",
+      "sha256": "7776ac171767df34b9d82d898aaac4ebde46e49dbc0d0b718484d8c1bf88bb19",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.60616908573816,
+        -29.816313232983834
+      ],
+      "rms_dbfs": -17.420282699280712,
+      "peak_dbfs": -10.14551501906583,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -7.266090029761905e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/pained/uh.wav",
+      "sha256": "5c649a2e95e5c86963c812114219bcc417ae28ebd8ba8235032bc460a28f3229",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.883287946836774,
+        -19.82210174943456
+      ],
+      "rms_dbfs": -19.34755131885956,
+      "peak_dbfs": -12.024251743839539,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -1.7256963820684523e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/relieved/ah.wav",
+      "sha256": "fdb6bc933f929d0455e3ad74aa299f21927abaf448db1ded6a453485b2cb3047",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.37760938681538,
+        -18.483385759417427
+      ],
+      "rms_dbfs": -18.78321474206632,
+      "peak_dbfs": -11.238637070294505,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -2.6339576357886906e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/relieved/eh.wav",
+      "sha256": "9261fd718b8277748a18643bf25b287804f3a0e83baacadf1aa25e01bd3040aa",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.686077728697283,
+        -23.335131706764773
+      ],
+      "rms_dbfs": -18.69815107428679,
+      "peak_dbfs": -12.130723898774935,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -3.5876319521949404e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/relieved/ee.wav",
+      "sha256": "a769b33d994465f0599f179908d9eb749ca586880a70342a334f983d8f5307a8",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -23.799228218138847,
+        -29.781250506744136
+      ],
+      "rms_dbfs": -15.976897390852791,
+      "peak_dbfs": -10.11658188290786,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -9.5367431640625e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/relieved/oh.wav",
+      "sha256": "c828f88072ac8061d6b48dfd9b356e7d55a0ad6440543cee9d5c5cdddaf3fa0a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.21890382597634,
+        -27.335131706764773
+      ],
+      "rms_dbfs": -18.69249810094783,
+      "peak_dbfs": -12.120017759569027,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 3.860110328311012e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/relieved/oo.wav",
+      "sha256": "34dc4ca37e8095c81d7f2e7d65bdda97275503ca887a52d4559177956640da7d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.398783480118595,
+        -30.04630841595578
+      ],
+      "rms_dbfs": -17.420217750237946,
+      "peak_dbfs": -10.160871669120933,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -3.633045014880952e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female/relieved/uh.wav",
+      "sha256": "cc98a8818feaf2f35e3b809468835ac3d7b364ce15b10e935322380946c0c538",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.139940289870717,
+        -20.281824774634536
+      ],
+      "rms_dbfs": -19.34752168973966,
+      "peak_dbfs": -11.957838282685636,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 1.1353265671502976e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/neutral/ah.wav",
+      "sha256": "de3ac49f63a0c4588462c47295fe4341c08923e8fee1ad223ebc8b9815d7898b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.367932442897661,
+        -20.13799022447381
+      ],
+      "rms_dbfs": -18.7832258891438,
+      "peak_dbfs": -9.660653122538974,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 1.861935570126488e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/neutral/eh.wav",
+      "sha256": "4e76d4afdcb9869241dcb9f4fd0b3af7f3f26e4ad2d6aa5c5fd431ef5f8775c4",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.535539928167008,
+        -23.334188694295605
+      ],
+      "rms_dbfs": -18.69809675520951,
+      "peak_dbfs": -11.354444159928043,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 1.453218005952381e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/neutral/ee.wav",
+      "sha256": "2d555e168b9d939105b72045b9b823d0d950ede54fe6217cdb9d86c315f6a1b8",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -21.555748307785564,
+        -30.07097113265804
+      ],
+      "rms_dbfs": -15.976874963801366,
+      "peak_dbfs": -8.623194128455756,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.5894571940104166e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/neutral/oh.wav",
+      "sha256": "78841f23bb379122734b4fde94b6b7f4f78a56c707fdb6a9ed2318fde486f4fa",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.86256335772543,
+        -27.3341886942956
+      ],
+      "rms_dbfs": -18.692512310204112,
+      "peak_dbfs": -11.510630291813225,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 1.8165225074404764e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/neutral/oo.wav",
+      "sha256": "9a0cc56c1c25c88361a8edc10ae259486ce3ed6c48b70914959045470bf3eb4d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.619210343391295,
+        -33.70485262155463
+      ],
+      "rms_dbfs": -17.420236455496973,
+      "peak_dbfs": -9.714020327857622,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -7.720220656622024e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/neutral/uh.wav",
+      "sha256": "b9c62a66b3f32c1747bf7822513f1c48fcd476039570d33e73df17a7f14e65b3",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.49002925932899,
+        -25.039725950702678
+      ],
+      "rms_dbfs": -19.347528707170426,
+      "peak_dbfs": -10.382268337278681,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/happy/ah.wav",
+      "sha256": "a31bd859b7956f019859fb20f791238611b5d94a3585cf962e357156f8d06656",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.271420214633311,
+        -19.973374835232796
+      ],
+      "rms_dbfs": -18.783249793949594,
+      "peak_dbfs": -9.551707583706872,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 1.9073486328125e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/happy/eh.wav",
+      "sha256": "5e20ba66f9a90aad63ce44763e6b632eb0bbe4ef0988b0f90acd1d4501118e42",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.0338309561997,
+        -22.83724924940045
+      ],
+      "rms_dbfs": -18.69809288625045,
+      "peak_dbfs": -11.5726940752417,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/happy/ee.wav",
+      "sha256": "c9af93887ecd49417f03347d63d4f1c63af9ad2ecdef1973ef558cd5fb4c5474",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.906910699352093,
+        -28.854510374408274
+      ],
+      "rms_dbfs": -15.976886905405179,
+      "peak_dbfs": -8.50666048415416,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 1.7256963820684523e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/happy/oh.wav",
+      "sha256": "8bcd7bafe6d4d009281ccf71ece67df6fa2c3bb3f6d80f3e162d4ed6424a72e2",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.72944554963484,
+        -26.837249249400447
+      ],
+      "rms_dbfs": -18.692503568154912,
+      "peak_dbfs": -11.726753566101147,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/happy/oo.wav",
+      "sha256": "42ab814a53494fb98ced43600af80b2e8a1f74299af37c8ddd2eb6e3e1eacf75",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.985428539215006,
+        -32.768676415047466
+      ],
+      "rms_dbfs": -17.420246947256075,
+      "peak_dbfs": -9.666297761596326,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -1.2715657552083333e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/happy/uh.wav",
+      "sha256": "3b630e09148477999caccb016043f0dec00ffbb04e36690456ca235ce9109662",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.37000667182802,
+        -24.77553448245898
+      ],
+      "rms_dbfs": -19.347539050379893,
+      "peak_dbfs": -10.274324443014349,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 1.2715657552083333e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/angry/ah.wav",
+      "sha256": "a25aae8008724b153801ca09c8c699ccd613a5e4bbd1796028c1a7b1dd337937",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -7.923021509553346,
+        -19.1809307514663
+      ],
+      "rms_dbfs": -20.783238668744296,
+      "peak_dbfs": -11.457925092510159,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.782969,
+      "output_gain_db": -5,
+      "dc_offset": 9.5367431640625e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/angry/eh.wav",
+      "sha256": "a30886990a98025549e746da47d47a6e272b677fd945d0bbd3f6e679ee117736",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.008146885618132,
+        -21.61433587800383
+      ],
+      "rms_dbfs": -20.69810377390144,
+      "peak_dbfs": -13.832995624196798,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.69784,
+      "output_gain_db": -5,
+      "dc_offset": -1.5894571940104166e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/angry/ee.wav",
+      "sha256": "1e61f70dc8df659ab4423a9f3749f620086f18930e386b2043776cf5dc9fc13a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.744191775660006,
+        -27.01839053454695
+      ],
+      "rms_dbfs": -18.114640278764153,
+      "peak_dbfs": -10.500445529489088,
+      "peak_limited": true,
+      "target_rms_dbfs": -17.976619,
+      "output_gain_db": -5,
+      "dc_offset": -1.9527616954985118e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/angry/oh.wav",
+      "sha256": "db80e1f7eb5cf19fcb0d6fd4468e70359a0eb1e6902210eb6ac311ecbd1cc1c3",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.451459196586645,
+        -25.61433587800383
+      ],
+      "rms_dbfs": -20.692504274397365,
+      "peak_dbfs": -13.977544778672296,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.692237,
+      "output_gain_db": -5,
+      "dc_offset": 2.7247837611607142e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/angry/oo.wav",
+      "sha256": "0584f67e58a337d868e2b8abefb5c334ef3571e0d9eaed1756e340f565a1a68d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.32845311914939,
+        -31.15877150745859
+      ],
+      "rms_dbfs": -19.42025861193568,
+      "peak_dbfs": -11.672724620011572,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.419983000000002,
+      "output_gain_db": -5,
+      "dc_offset": -3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/angry/uh.wav",
+      "sha256": "78ae3a406cba256d513479492e62fe6cffe5835606c4c7857b0ca3bda6d2d9bf",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.902911008623615,
+        -23.900177597316414
+      ],
+      "rms_dbfs": -21.347545011499864,
+      "peak_dbfs": -12.207119332636934,
+      "peak_limited": false,
+      "target_rms_dbfs": -21.347272,
+      "output_gain_db": -5,
+      "dc_offset": 7.266090029761905e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/afraid/ah.wav",
+      "sha256": "d30331b8c635b9369236faeab96006da39c76f2eb63f36feb270326db673b070",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.045750671035208,
+        -19.505262484572867
+      ],
+      "rms_dbfs": -18.783215518939226,
+      "peak_dbfs": -9.950810781260579,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 1.1353265671502976e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/afraid/eh.wav",
+      "sha256": "9c7b34a6ff7b45fb937c1e92c7bd02a0de2a0bb145375f83637c65cf1cc15985",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.369680678060757,
+        -22.98911771793751
+      ],
+      "rms_dbfs": -18.698109220327744,
+      "peak_dbfs": -11.07867847021538,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 2.0435878208705356e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/afraid/ee.wav",
+      "sha256": "fc63075da5aa0af5fcf6de3a682d6462d6f0815d5f1348eccae180e867a40dc1",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -23.07409104850024,
+        -31.06472654082516
+      ],
+      "rms_dbfs": -15.976886076088007,
+      "peak_dbfs": -8.782016349325183,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -3.2243274507068454e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/afraid/oh.wav",
+      "sha256": "56a7e93ad31609f8b6aaacac8729f6378dc0059fd1726ed0f5af926bf21608ab",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.739249276084239,
+        -26.989117717937503
+      ],
+      "rms_dbfs": -18.692511790759305,
+      "peak_dbfs": -11.24153768466044,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 4.54130626860119e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/afraid/oo.wav",
+      "sha256": "634169fa3badb6d7d1332ab018f9cddfd3dbfe00563762b8f84e7230e0b52773",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.469404418601187,
+        -34.10719503925008
+      ],
+      "rms_dbfs": -17.420252308406052,
+      "peak_dbfs": -9.837365545895565,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 2.497718447730655e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/afraid/uh.wav",
+      "sha256": "6af62eb44e43042030eeb1f4e029dbf9718ad5ba09dda36825d910fe9cada631",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.15345548039611,
+        -24.656727756372398
+      ],
+      "rms_dbfs": -19.347545009918164,
+      "peak_dbfs": -10.652723456557109,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -5.903698149181548e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/panicked/ah.wav",
+      "sha256": "ee7d066863a6059a4903504165745e1592fe19fa9be373e063aca3b9384e08ac",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.320039904285544,
+        -20.070995531126865
+      ],
+      "rms_dbfs": -18.783233656170715,
+      "peak_dbfs": -9.643741181504778,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -1.407804943266369e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/panicked/eh.wav",
+      "sha256": "4b38a1d60b428430831bb048d6f4b3c43886e1f966e0f5dd0865f4a50490c205",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.209485072224833,
+        -23.027931322855558
+      ],
+      "rms_dbfs": -18.698110369512897,
+      "peak_dbfs": -11.579729219099422,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/panicked/ee.wav",
+      "sha256": "1c32485dd391ff37b465ed1a08703cec159c323054466bcc284a83d50a8f52d3",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -20.369725110214606,
+        -29.212025023043328
+      ],
+      "rms_dbfs": -15.976880899288584,
+      "peak_dbfs": -8.59676608976143,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 1.0899135044642857e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/panicked/oh.wav",
+      "sha256": "75fe70a41ff69e67f2ef410e0a916019eea2427c4c574602e7568aa5b422af38",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.777421912888984,
+        -27.027931322855558
+      ],
+      "rms_dbfs": -18.69250048521121,
+      "peak_dbfs": -11.735961766120466,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 1.8165225074404764e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/panicked/oo.wav",
+      "sha256": "91075fd1194605bff49513f03d541cfb99eeb5e6823ad880418c020974a82dfe",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.146928103081498,
+        -33.06431592007388
+      ],
+      "rms_dbfs": -17.420252013017752,
+      "peak_dbfs": -9.740827396884956,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -9.08261253720238e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/panicked/uh.wav",
+      "sha256": "e078259d778425a3c2a5417e99e3cccaa7324a625371b44418c84930e17ec843",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.431188159490596,
+        -24.89409533704618
+      ],
+      "rms_dbfs": -19.347543845615427,
+      "peak_dbfs": -10.361271011248093,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -2.1344139462425596e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/pained/ah.wav",
+      "sha256": "9c26a5c7fc38a512d25ae2935d1ba06a19a4586d1ad11e7b65df08b4ab94c6dc",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -7.723670654379059,
+        -18.982489014059688
+      ],
+      "rms_dbfs": -18.783234763427547,
+      "peak_dbfs": -10.12253083157409,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -1.9073486328125e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/pained/eh.wav",
+      "sha256": "7196b21fce5d2960019b43f145ec25b80e62c288d42dfc0a63354c133a6ef331",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.979495294498523,
+        -22.50990421793768
+      ],
+      "rms_dbfs": -18.698114571910796,
+      "peak_dbfs": -10.915090476824894,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 1.8165225074404764e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/pained/ee.wav",
+      "sha256": "37534a35f39ea2abf1315416147a89b33b5561b710b3e34f0f072b4de3906242",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -23.497654642021494,
+        -31.327743639472082
+      ],
+      "rms_dbfs": -15.976879832916193,
+      "peak_dbfs": -8.793681134879668,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 3.178914388020833e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/pained/oh.wav",
+      "sha256": "510fb8b2faa6738524cf53005eb6974066f54e420dfcffc0d5c46551a33a3f73",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.526721561741853,
+        -26.50990421793768
+      ],
+      "rms_dbfs": -18.692488703589298,
+      "peak_dbfs": -11.08817436012812,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 2.5885445731026784e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/pained/oo.wav",
+      "sha256": "f9a0f528c87883641d5dc32ec8d297ddb944009bfa34624d66e56765cadee4ff",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.822355743622463,
+        -34.031113701593014
+      ],
+      "rms_dbfs": -17.420242983895346,
+      "peak_dbfs": -9.861256185465594,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 4.54130626860119e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/pained/uh.wav",
+      "sha256": "017c56ed8521116a565b549c6b474513ea7a9023f09a27fc66cb42329a6143a7",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.84018242194435,
+        -24.28703803492347
+      ],
+      "rms_dbfs": -19.347531629933602,
+      "peak_dbfs": -10.791175971158502,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -6.357828776041667e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/relieved/ah.wav",
+      "sha256": "c9e25f1b75ab6014b5684f7216367bcfb3abc4af94d95aa289aed5c65997b5e4",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.045750671035208,
+        -19.505262484572867
+      ],
+      "rms_dbfs": -18.783229293094895,
+      "peak_dbfs": -9.895973339107522,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/relieved/eh.wav",
+      "sha256": "a0067d5809cf7cff8320d5424ec9e94256a9e61f0e9364c779d30c44d045b88d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.369680678060757,
+        -22.98911771793751
+      ],
+      "rms_dbfs": -18.698098894399703,
+      "peak_dbfs": -11.023806095257381,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 5.903698149181548e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/relieved/ee.wav",
+      "sha256": "759198d93e362cc10da7e27abe66eb0923169e5bd46c9b804701068377d97427",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -23.07409104850024,
+        -31.06472654082516
+      ],
+      "rms_dbfs": -15.976886944517396,
+      "peak_dbfs": -8.726097632539382,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 3.178914388020833e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/relieved/oh.wav",
+      "sha256": "5fcc33434232e6a4b1a0a297cd9a56163d19cf41fb10509ff77798f5c4c78b53",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.739249276084239,
+        -26.989117717937503
+      ],
+      "rms_dbfs": -18.69250773052212,
+      "peak_dbfs": -11.186590971333965,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/relieved/oo.wav",
+      "sha256": "6e59560f13d258ece03ab6c3fe5f88abe623c99cf64406af1a9a56a4a4423259",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.469404418601187,
+        -34.10719503925008
+      ],
+      "rms_dbfs": -17.4202402508042,
+      "peak_dbfs": -9.782419924747376,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 1.2715657552083333e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_young/relieved/uh.wav",
+      "sha256": "5bbea5dcac895c6005c65300db3ac29989ade195d2fd3cfc5ddd2e96d90be511",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.15345548039611,
+        -24.656727756372398
+      ],
+      "rms_dbfs": -19.34753388534975,
+      "peak_dbfs": -10.596877038145628,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 2.1344139462425596e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/neutral/ah.wav",
+      "sha256": "d1c8e0ff1d7b9c921330c67b957769bfaa150b5aa47355782c6d436ca9b496c1",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.37704792615067,
+        -19.892780825603364
+      ],
+      "rms_dbfs": -18.783227298352486,
+      "peak_dbfs": -10.975841015159203,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 4.9954368954613096e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/neutral/eh.wav",
+      "sha256": "cf123a2a2085e6349e92c99d7dfde9f21cc4fd50b16e48868ec715294b50da6f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.739076088025508,
+        -23.161234232715838
+      ],
+      "rms_dbfs": -18.698129760447014,
+      "peak_dbfs": -12.388400451269817,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -8.174351283482143e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/neutral/ee.wav",
+      "sha256": "e05f14de3e1340f3f7ccb829ae3dc5d4bbef7349f52f078cc9a93271ef724c2f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -20.983678032402864,
+        -29.030883626444126
+      ],
+      "rms_dbfs": -15.97689223437063,
+      "peak_dbfs": -10.243235522672851,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/neutral/oh.wav",
+      "sha256": "4420de571265df0433a5061bd069b59e8c27c678da83539dab3b193f5ec5dee7",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.851902608004355,
+        -27.161234232715834
+      ],
+      "rms_dbfs": -18.69250431079658,
+      "peak_dbfs": -11.975709408366415,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -7.266090029761905e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/neutral/oo.wav",
+      "sha256": "d549d4c2152cfb452d1b4f3f81cf5493532b3248503a4be22ab09260d06a2c44",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.126097003841378,
+        -30.701769382348743
+      ],
+      "rms_dbfs": -17.420227158634912,
+      "peak_dbfs": -11.388801003879061,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/neutral/uh.wav",
+      "sha256": "bbef32d69a36febfdaf248eeb5fc3a71f2510a697358d07dbdbbc1234ebd90f1",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.025924879589084,
+        -22.225264446809348
+      ],
+      "rms_dbfs": -19.3475348109372,
+      "peak_dbfs": -12.33010936186417,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 2.7247837611607142e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/happy/ah.wav",
+      "sha256": "0820a6f356388f4553ae3573e0f3b1db1182beb2e96eef45d9dcc9e6513f893c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.392522572889497,
+        -19.591771588473364
+      ],
+      "rms_dbfs": -18.783223759822334,
+      "peak_dbfs": -10.930005079567506,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -1.6348702566964286e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/happy/eh.wav",
+      "sha256": "6af111325cf88b29985ef0483dc340f30b0de744cf216eae66820971108564cc",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.481259269770732,
+        -21.925711691450207
+      ],
+      "rms_dbfs": -18.69810935296547,
+      "peak_dbfs": -12.401652923727122,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 2.951849074590774e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/happy/ee.wav",
+      "sha256": "f9fe2cc714fd8e3ee9b0f9462bdece693924a73ba3ec1381d7f4bc6d78849a46",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.220091459390005,
+        -27.389453118604365
+      ],
+      "rms_dbfs": -15.976885605883473,
+      "peak_dbfs": -9.982541618918555,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.3623918805803571e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/happy/oh.wav",
+      "sha256": "d275106ba4ad75cd39cf68a31e5754db73f37f60441fefe4f04c9a09c886dd0f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.895707455980403,
+        -25.925711691450207
+      ],
+      "rms_dbfs": -18.69248841781157,
+      "peak_dbfs": -12.024251743839539,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 1.0445004417782738e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/happy/oo.wav",
+      "sha256": "8d359237e001e330e54a219f4e5f0fb9044a20b1c4d5089b48f60212a9346b3c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.491784800304291,
+        -29.41535891373201
+      ],
+      "rms_dbfs": -17.42025232721467,
+      "peak_dbfs": -11.230906830925164,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 4.0871756417410715e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/happy/uh.wav",
+      "sha256": "2dc4b1f2201b2e86bc0814fddcb6e6296ec2f853aeca7aa25add20cacd38f319",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.19560811930084,
+        -21.840127864352993
+      ],
+      "rms_dbfs": -19.347539276455304,
+      "peak_dbfs": -12.572418605654716,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -9.5367431640625e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/angry/ah.wav",
+      "sha256": "545c76196654a5d64aba42a98596e67fc4b0920a98f4ee4a31f2923cca9a4cf5",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.240629592523279,
+        -18.720056994829783
+      ],
+      "rms_dbfs": -20.783235027709583,
+      "peak_dbfs": -12.945517882001592,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.782969,
+      "output_gain_db": -5,
+      "dc_offset": -9.08261253720238e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/angry/eh.wav",
+      "sha256": "f91cc90358c81f35d8b511173ddc887155deb9caa6f7ddb3643bc2cb87a31033",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.815072285353457,
+        -20.04166252532976
+      ],
+      "rms_dbfs": -20.69811774193154,
+      "peak_dbfs": -14.429002679504947,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.69784,
+      "output_gain_db": -5,
+      "dc_offset": 1.6802833193824406e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/angry/ee.wav",
+      "sha256": "ba61f6d16d434aaaf1448ab2bf47f2428e7dc0857d56e7e3df9a6b71fba79f45",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.026962957637128,
+        -25.15669286687111
+      ],
+      "rms_dbfs": -17.97688328364824,
+      "peak_dbfs": -11.674757358059246,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.976619,
+      "output_gain_db": -5,
+      "dc_offset": -3.178914388020833e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/angry/oh.wav",
+      "sha256": "c19cbbb535cd6f67f45f17de026a0f713778967428a3aa029a1f6a96bac957f1",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.886054800782917,
+        -24.04166252532976
+      ],
+      "rms_dbfs": -20.69251426326818,
+      "peak_dbfs": -14.121845294972244,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.692237,
+      "output_gain_db": -5,
+      "dc_offset": -2.7247837611607142e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/angry/oo.wav",
+      "sha256": "fcbffdb7889516ebea7e63717f85119b79c4c9cddf6c50a932c398bc608fba65",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.820331060142237,
+        -27.479315037039896
+      ],
+      "rms_dbfs": -19.420245224245434,
+      "peak_dbfs": -13.128635821416474,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.419983000000002,
+      "output_gain_db": -5,
+      "dc_offset": -9.082612537202382e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/angry/uh.wav",
+      "sha256": "b92613ae081767988f3d8ad542e0d6504feabfbdc560f100b725e557a9e6ffbc",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.05800730522097,
+        -20.930961674428357
+      ],
+      "rms_dbfs": -21.34752076571147,
+      "peak_dbfs": -14.717068874037867,
+      "peak_limited": false,
+      "target_rms_dbfs": -21.347272,
+      "output_gain_db": -5,
+      "dc_offset": -4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/afraid/ah.wav",
+      "sha256": "e438f9f15e7d8b245f03bfc64ec944593d3ed19ae662376c2b6010a5b4ac1ee6",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.017257712594791,
+        -19.44789651106379
+      ],
+      "rms_dbfs": -18.783245071367716,
+      "peak_dbfs": -11.114818214265759,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -1.5440441313244048e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/afraid/eh.wav",
+      "sha256": "72ca4d6b26efdd725cc06f7c2fe6627702723a4e8503141dc36348a80cf1b2a9",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.737485393634635,
+        -23.852011448029383
+      ],
+      "rms_dbfs": -18.698095136133343,
+      "peak_dbfs": -12.308213989447863,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 8.628481910342262e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/afraid/ee.wav",
+      "sha256": "2dc1a5d714bfa41881f1e5de82257e29410d3b851e4cc84c690233242ac5927c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -22.83173935479111,
+        -30.610849774217016
+      ],
+      "rms_dbfs": -15.976879623436172,
+      "peak_dbfs": -10.488023170140828,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 1.7256963820684523e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/afraid/oh.wav",
+      "sha256": "676daffd459362735c9894ac6e7e111e78dbd15242755421ae9ef98a50134cef",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.115693692574423,
+        -27.852011448029383
+      ],
+      "rms_dbfs": -18.69251014084764,
+      "peak_dbfs": -11.914888008211939,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 8.174351283482143e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/afraid/oo.wav",
+      "sha256": "994652c79143169008752d8dce1b352f3955127604645ee9b1c139ca84b993d1",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.971505845296514,
+        -31.46866339727337
+      ],
+      "rms_dbfs": -17.420223899813124,
+      "peak_dbfs": -10.97865517025852,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -1.8165225074404764e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/afraid/uh.wav",
+      "sha256": "e104ea064531a186da61c9e1cf1422d2275d173106d31db8d1b6294e8cfd768c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.615481391477003,
+        -22.08425511563604
+      ],
+      "rms_dbfs": -19.347532637197638,
+      "peak_dbfs": -12.153249836982035,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -9.082612537202382e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/panicked/ah.wav",
+      "sha256": "3eed3bc61f1670872e501b4f358bdd5b7a0062e31cdbf47998ee51dbf6fd899a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.4051827136783,
+        -19.720016805098414
+      ],
+      "rms_dbfs": -18.78323799450875,
+      "peak_dbfs": -11.007788286970388,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -8.628481910342262e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/panicked/eh.wav",
+      "sha256": "33df802947e7ba7d23a7899a533869d8a646927fcfc5edfad02496dee055d2aa",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.837797885058135,
+        -22.298077728856516
+      ],
+      "rms_dbfs": -18.69810303969973,
+      "peak_dbfs": -12.469334082155019,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -4.9954368954613096e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/panicked/ee.wav",
+      "sha256": "bbff8a7798d72357dc91df191a573d8454143177c166fa29ca0b8830754d5acb",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.70260310536047,
+        -27.852672362624304
+      ],
+      "rms_dbfs": -15.976880105366558,
+      "peak_dbfs": -10.12253083157409,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/panicked/oh.wav",
+      "sha256": "332bb955116a504c80845960e6da057e8db9dd8c5445b63bae00cc53734c9a54",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.140845039995813,
+        -26.298077728856516
+      ],
+      "rms_dbfs": -18.69249042774339,
+      "peak_dbfs": -12.07945435707231,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/panicked/oo.wav",
+      "sha256": "fb1cd81ac49d1ddfb2eb4e8cbbf5a6d20ba5266bd8c5d1dbc59ffc36522c91a0",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.654415850867053,
+        -29.800511473503548
+      ],
+      "rms_dbfs": -17.420251193646802,
+      "peak_dbfs": -11.339761297968687,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -6.811959402901785e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/panicked/uh.wav",
+      "sha256": "e809d064641d1a93f74227e05da9789a8e1fb7987eb9f5aa3ffe74bb48ecff5f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.43469526854731,
+        -21.98251077937849
+      ],
+      "rms_dbfs": -19.34753067415171,
+      "peak_dbfs": -12.56903778577237,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 1.5440441313244048e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/pained/ah.wav",
+      "sha256": "43c6b6c72341d89917d122dbbaf22be1f9950ccbe23a8fe3f5273287ac2ac8eb",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -9.701132799973571,
+        -18.96773670214323
+      ],
+      "rms_dbfs": -18.783240987585195,
+      "peak_dbfs": -11.176986934930824,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/pained/eh.wav",
+      "sha256": "af4e61e4f99470022e493a40c3cda0154543581f81f4b2fabc6b199506b0df28",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.87032967202556,
+        -23.816128756000865
+      ],
+      "rms_dbfs": -18.698112182645545,
+      "peak_dbfs": -12.189844717345817,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -2.7247837611607142e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/pained/ee.wav",
+      "sha256": "63288fc7832329d13e29c454dce4576a9d5503ccfa5c78e8664af12bf3425f3f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -23.45427988987884,
+        -31.121940738708634
+      ],
+      "rms_dbfs": -15.976876805217056,
+      "peak_dbfs": -10.49600693281727,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.6348702566964286e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/pained/oh.wav",
+      "sha256": "022bc5fd046a359fd611182bfa3a8d25ed103f062b87b90335677f18a6c2b917",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.63587027020316,
+        -27.816128756000865
+      ],
+      "rms_dbfs": -18.692497708715273,
+      "peak_dbfs": -11.832724277370566,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -5.903698149181548e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/pained/oo.wav",
+      "sha256": "e7bb997b6ebaa13bc0c0bc076f84b87c5e927fee3714c2e4d73c7b8cfdf24cc9",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.328825067261912,
+        -31.471203319567653
+      ],
+      "rms_dbfs": -17.420260372557625,
+      "peak_dbfs": -10.72714068642783,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 1.0899135044642857e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/pained/uh.wav",
+      "sha256": "b839c6e3685316a50b651d5237206e2d5829424a7ee3ae400f04ff49bf1190b4",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.648787281803006,
+        -21.830577363269246
+      ],
+      "rms_dbfs": -19.347527211606444,
+      "peak_dbfs": -12.086912343113639,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 1.7256963820684523e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/relieved/ah.wav",
+      "sha256": "9e513b15b87c3d80c46e4f205a1f9f7ede04aeb92378389c78901d7547f07230",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.017257712594791,
+        -19.44789651106379
+      ],
+      "rms_dbfs": -18.78324282323789,
+      "peak_dbfs": -11.060664830279334,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 3.769284202938988e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/relieved/eh.wav",
+      "sha256": "0b7314d9b2d33e3d6daaab9646b1837fbabd45ec9f7edbbdf9e2a1ed0e68d0a1",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.737485393634635,
+        -23.852011448029383
+      ],
+      "rms_dbfs": -18.698118070805073,
+      "peak_dbfs": -12.253715820712635,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -9.082612537202382e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/relieved/ee.wav",
+      "sha256": "d53b7fa3f0e06e184dea4a2e9655fd77202afe96e76e4b479b44fabe6b3f3f86",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -22.83173935479111,
+        -30.610849774217016
+      ],
+      "rms_dbfs": -15.97688124934365,
+      "peak_dbfs": -10.434984802787355,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/relieved/oh.wav",
+      "sha256": "96baf30bf595c5e77873fbaa4aaa2b519e8a61eba8d7921547af24877e164bc7",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.115693692574423,
+        -27.852011448029383
+      ],
+      "rms_dbfs": -18.69250151331913,
+      "peak_dbfs": -11.860718216281674,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -3.0880882626488097e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/relieved/oo.wav",
+      "sha256": "d0a654b665cbbe9cfa58ac69b61e70c2fd678c6a5c75e125ad68287c2ab2b5e5",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.971505845296514,
+        -31.46866339727337
+      ],
+      "rms_dbfs": -17.42024841532345,
+      "peak_dbfs": -10.92534151454913,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_young/relieved/uh.wav",
+      "sha256": "96ee7bf4ecc5735d39fac011da57e1b096d9173fc8bb16783dd2d35f96c0fd7f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.615481391477003,
+        -22.08425511563604
+      ],
+      "rms_dbfs": -19.347530008978598,
+      "peak_dbfs": -12.099712379282085,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 2.0435878208705356e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/neutral/ah.wav",
+      "sha256": "8bfaf3df8e9acfa1bc0d7eee7fa8ff2b2750bb5fb9da08c236c22b1a6e672dcd",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -4.892427264787864,
+        -13.444494895616492
+      ],
+      "rms_dbfs": -18.783239293791482,
+      "peak_dbfs": -9.714020327857622,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 1.6348702566964286e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/neutral/eh.wav",
+      "sha256": "85b342f8702a1e8fc4e1c5c6e5e37965b524b8a140700cefcdbf26dc8b2c62bb",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.32955638146394,
+        -17.924736023979175
+      ],
+      "rms_dbfs": -18.698138765012533,
+      "peak_dbfs": -10.860313160047056,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -9.5367431640625e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/neutral/ee.wav",
+      "sha256": "378eb31b1b5368b94dc7e35ee132fa74a87ddc486d9698770bca2d3b789ea5ca",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.781789767653773,
+        -23.05643589930799
+      ],
+      "rms_dbfs": -15.976872611569677,
+      "peak_dbfs": -9.162524591808673,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.5440441313244048e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/neutral/oh.wav",
+      "sha256": "2c7c460fbc84a9d61da85f995a7251ad6c1f435c4387aaa949152d86b5bf2a3a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.604132573695301,
+        -21.924736023979175
+      ],
+      "rms_dbfs": -18.69250609798322,
+      "peak_dbfs": -10.956167417534136,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -1.6348702566964286e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/neutral/oo.wav",
+      "sha256": "3520267e71f494fd930302db1baed4c757735f547f1cff1147c4fc65c71995f5",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.014544508394694,
+        -25.874883850648125
+      ],
+      "rms_dbfs": -17.420269015971908,
+      "peak_dbfs": -9.554892436483618,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 0.0,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/neutral/uh.wav",
+      "sha256": "5f38bd8f1ea911971f46e8564cecb31df1ae7c0a5f32680a633b6db57cdc133d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.861994196219747,
+        -17.717374580410176
+      ],
+      "rms_dbfs": -19.347528449294884,
+      "peak_dbfs": -10.28384607294974,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/happy/ah.wav",
+      "sha256": "8654fce18105568cd6917bebe354ec0b1a7f1040daf4d04a7174a4987fefeefc",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -4.99353858330928,
+        -14.005310376045482
+      ],
+      "rms_dbfs": -18.783233728896263,
+      "peak_dbfs": -9.222100923841747,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -1.2715657552083333e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/happy/eh.wav",
+      "sha256": "9ab9b7d6828f40ce02ca62e3c8d880a2b607a0033039ef66d0989373472fbb1b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.589752059365464,
+        -18.43885559712005
+      ],
+      "rms_dbfs": -18.698101841011606,
+      "peak_dbfs": -10.651819852952855,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 1.5440441313244048e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/happy/ee.wav",
+      "sha256": "e41904efbcfd12b633d6f7d82d9c71092ac4801e9ffdd93c57eed68e58808eaa",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.36402185445435,
+        -22.646914054703583
+      ],
+      "rms_dbfs": -15.97687354389615,
+      "peak_dbfs": -8.999645249881333,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.3169788178943453e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/happy/oh.wav",
+      "sha256": "f59d6f2f311793f3330a28751cac2686efa3536da254450436e2ba8d6639baee",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.940113103557698,
+        -22.43885559712005
+      ],
+      "rms_dbfs": -18.692504972060895,
+      "peak_dbfs": -10.898342103827874,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 1.453218005952381e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/happy/oo.wav",
+      "sha256": "8285a84c92eaaf56ba3576dfa599c8fffeb5dc6c86ef9948047d67235e45bfed",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.019820453850643,
+        -26.294150227327208
+      ],
+      "rms_dbfs": -17.420240657248634,
+      "peak_dbfs": -9.570036455288793,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -2.1344139462425596e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/happy/uh.wav",
+      "sha256": "19629ccf4cafebfa2216cde153ee69bd1d6a4494835f734696bf981594067635",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.18202066634008,
+        -18.180932571640454
+      ],
+      "rms_dbfs": -19.34752384928258,
+      "peak_dbfs": -9.82832074117626,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -5.903698149181548e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/angry/ah.wav",
+      "sha256": "af61825d97cc28dd507184825474c29bbd27ef08453431ab47f1a09d503914cc",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -4.8722731203172795,
+        -14.360224526656076
+      ],
+      "rms_dbfs": -20.783221800466194,
+      "peak_dbfs": -10.875133920197138,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.782969,
+      "output_gain_db": -5,
+      "dc_offset": -1.1807396298363096e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/angry/eh.wav",
+      "sha256": "ae4e5a8b86e69d0c6d41511c2d8e16c01a27a4bbfb33bbe4256f897e74b6407f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.38519545242652,
+        -18.5655489787651
+      ],
+      "rms_dbfs": -20.69808765180687,
+      "peak_dbfs": -12.469334082155019,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.69784,
+      "output_gain_db": -5,
+      "dc_offset": -1.816522507440476e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/angry/ee.wav",
+      "sha256": "3313ff3ef4d3264f16a96994100f4712b7cd380f6a8ab98487df756de3ef04b7",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -15.601657829987591,
+        -21.78974909682379
+      ],
+      "rms_dbfs": -17.97689081211979,
+      "peak_dbfs": -10.816922857453704,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.976619,
+      "output_gain_db": -5,
+      "dc_offset": -4.9954368954613096e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/angry/oh.wav",
+      "sha256": "350321505450c3f8cf37aaeadd26756df6b424dd67032a154246472ef4ceeba4",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.105038877701364,
+        -22.5655489787651
+      ],
+      "rms_dbfs": -20.692513444097735,
+      "peak_dbfs": -12.884547564000217,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.692237,
+      "output_gain_db": -5,
+      "dc_offset": 1.7256963820684523e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/angry/oo.wav",
+      "sha256": "1e78ed106dc2b6a38302d2cc9d09a36f35a300575e25d000cdf3d6fe2c971ecf",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.893505444449254,
+        -26.331132558212516
+      ],
+      "rms_dbfs": -19.420250068623844,
+      "peak_dbfs": -11.652423361177426,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.419983000000002,
+      "output_gain_db": -5,
+      "dc_offset": -1.407804943266369e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/angry/uh.wav",
+      "sha256": "c4a2eca32ce0e710d01f4471903c55da3807257060291d6cbcc7a52ed21c6ca6",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.21440843224293,
+        -18.336225535422216
+      ],
+      "rms_dbfs": -21.347544181198952,
+      "peak_dbfs": -11.430209409750029,
+      "peak_limited": false,
+      "target_rms_dbfs": -21.347272,
+      "output_gain_db": -5,
+      "dc_offset": 4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/afraid/ah.wav",
+      "sha256": "34a34f47cf557ae5ccac315446273311580c1c1d07c0f160869ca354372371b4",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -4.492328687947228,
+        -12.556570702928456
+      ],
+      "rms_dbfs": -18.78323959470009,
+      "peak_dbfs": -10.750870146451991,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -1.1807396298363096e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/afraid/eh.wav",
+      "sha256": "c4a6a102e6ce995666f6611221db85d46b1b47fcba54908a9427e4c1f4c3266c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.42504575274544,
+        -16.811748312469486
+      ],
+      "rms_dbfs": -18.69811218665947,
+      "peak_dbfs": -11.269627009336144,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/afraid/ee.wav",
+      "sha256": "ee092ebafe9e4fd0970883b991ba689e2145ad72c2d5e513e71cb3b76916de09",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.002974004763093,
+        -23.227337713829435
+      ],
+      "rms_dbfs": -15.976872296432553,
+      "peak_dbfs": -9.361943484115674,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 1.0899135044642857e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/afraid/oh.wav",
+      "sha256": "b22f389fb18db2a30fcc29b3ebcc9cf86b74b12329fe472f21df6e0570badfa5",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.84978832689509,
+        -20.811748312469483
+      ],
+      "rms_dbfs": -18.692516386703296,
+      "peak_dbfs": -11.181787625727917,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -4.0871756417410715e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/afraid/oo.wav",
+      "sha256": "5c03ba7eb4250569a86d9c2c4db15373b6c4d873353272a01d74aa2c3aaf0a84",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.765069811415382,
+        -24.90926467357777
+      ],
+      "rms_dbfs": -17.42025596349317,
+      "peak_dbfs": -9.67598282816908,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/afraid/uh.wav",
+      "sha256": "222bf370e00d2bc7724afe52fc2d57a09affaf0b6cac6fe8e1c43749a6b96794",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.148063882251932,
+        -16.85315669575034
+      ],
+      "rms_dbfs": -19.34755152727423,
+      "peak_dbfs": -11.16068440474098,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -9.082612537202382e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/panicked/ah.wav",
+      "sha256": "734efa7f927be237cfc2573bbaeef3d75f1fa12418ea397f5352a56ae76b088c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -4.986903464085709,
+        -13.877114176553423
+      ],
+      "rms_dbfs": -18.783235822382867,
+      "peak_dbfs": -9.40253912346121,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -2.0435878208705356e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/panicked/eh.wav",
+      "sha256": "88a46cc6cf3d4a0c31ce8a90622634afd1c0782aecb22b258d060faff2f2a479",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.562332076868703,
+        -18.33864707010821
+      ],
+      "rms_dbfs": -18.698100301542773,
+      "peak_dbfs": -10.764589766486651,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/panicked/ee.wav",
+      "sha256": "88172fffd282ecf9a362b56d4ed730ddfd2543b10c3b2dee5ebdb132fd363ae2",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.4961207966197,
+        -22.782591799968532
+      ],
+      "rms_dbfs": -15.976880789412245,
+      "peak_dbfs": -9.097308071977064,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.7256963820684523e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/panicked/oh.wav",
+      "sha256": "8083aeaded1e2b9997d2bd0262c00298323184b4dfd34b49472c10442465fe95",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.87145206966678,
+        -22.338647070108205
+      ],
+      "rms_dbfs": -18.692508795022263,
+      "peak_dbfs": -10.971152781851629,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 6.811959402901785e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/panicked/oo.wav",
+      "sha256": "df2893f93763e1d4a815697f3a9b00302b32de79f3bc05f01884ce08b8c20187",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.031178568145744,
+        -26.217214107832532
+      ],
+      "rms_dbfs": -17.42025243903621,
+      "peak_dbfs": -9.618033757224982,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 1.5440441313244048e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/panicked/uh.wav",
+      "sha256": "6dc69d53f353a50b458b1ef8c3e83264f9cabe419ef3a361432007a1c5534d8d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.123427473969082,
+        -18.08509759263138
+      ],
+      "rms_dbfs": -19.347538547523992,
+      "peak_dbfs": -10.001803591010074,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -4.9954368954613096e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/pained/ah.wav",
+      "sha256": "5811ce3e74a006b1800a97ee9865ac85e53efaefc9411214c92ca89fb4ea1b5f",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -4.262262026478748,
+        -12.17560363243486
+      ],
+      "rms_dbfs": -18.783234696023367,
+      "peak_dbfs": -11.290996911866616,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 2.270653134300595e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/pained/eh.wav",
+      "sha256": "56f5d3f5a191140caba9188d9108592999d0c237c37f1ec1c1bd64b74f4a9b98",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.879628263572414,
+        -16.214725732665823
+      ],
+      "rms_dbfs": -18.698096050858005,
+      "peak_dbfs": -11.456933722351227,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -8.628481910342262e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/pained/ee.wav",
+      "sha256": "149178cd2e02033d83b42ba9ba229da0232b85683c0ea82b689dc04896865d3c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.0083898464273,
+        -23.21250327007271
+      ],
+      "rms_dbfs": -15.97689017605537,
+      "peak_dbfs": -9.361943484115674,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 1.1807396298363096e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/pained/oh.wav",
+      "sha256": "e59c5041ab8d05c91fff6638417125b96394f6e8bab7c6016aeb12585030d4be",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.409674384098842,
+        -20.21472573266582
+      ],
+      "rms_dbfs": -18.692504036064133,
+      "peak_dbfs": -11.294888003717137,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -7.266090029761905e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/pained/oo.wav",
+      "sha256": "3f60104b2f834aaac2a821dc7ff0693a23e288002fce89547d32e27cb06083b0",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.554382356540273,
+        -24.384502802821565
+      ],
+      "rms_dbfs": -17.420250738053088,
+      "peak_dbfs": -9.735947226531989,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -9.5367431640625e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/pained/uh.wav",
+      "sha256": "596a26e98f7b70ed817eaeeaec879c8a352fc4bda1bcb3ec9f63e3b441cbf513",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.78823977177698,
+        -16.448929651404157
+      ],
+      "rms_dbfs": -19.347532712970338,
+      "peak_dbfs": -11.596838328836974,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 6.811959402901785e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/relieved/ah.wav",
+      "sha256": "1fd6f213561e9e368d2ad033db95534242e95cd6672914ddcaa327ed1142b782",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -4.492328687947228,
+        -12.556570702928456
+      ],
+      "rms_dbfs": -18.783215538769248,
+      "peak_dbfs": -10.696207350319614,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -1.1353265671502976e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/relieved/eh.wav",
+      "sha256": "b4a3eb8ab06d0234dc5b4b9214f39fede2f652e50ab9d70e6da947e18fcc2a7b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.42504575274544,
+        -16.811748312469486
+      ],
+      "rms_dbfs": -18.698125879505948,
+      "peak_dbfs": -11.215466960821487,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 4.450480143229167e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/relieved/ee.wav",
+      "sha256": "453640140d642fa7dcc25f128e37212fa2a7d224973ddec5303bcbd89d2933aa",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.002974004763093,
+        -23.227337713829435
+      ],
+      "rms_dbfs": -15.976879067261883,
+      "peak_dbfs": -9.308367451826324,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -1.0445004417782738e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/relieved/oh.wav",
+      "sha256": "41d91528a31b7457824d91a6b6ed5c3b718617688dade34f6b2e2449b516c7e0",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.84978832689509,
+        -20.811748312469483
+      ],
+      "rms_dbfs": -18.69250917710033,
+      "peak_dbfs": -11.127216411846515,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -1.3623918805803571e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/relieved/oo.wav",
+      "sha256": "61639eace1d178c387ea22da6c667fdfa65ba2269a1da1184bf7a59ac67d9860",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.765069811415382,
+        -24.90926467357777
+      ],
+      "rms_dbfs": -17.420248394521003,
+      "peak_dbfs": -9.622045530257395,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -9.08261253720238e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "male_elderly/relieved/uh.wav",
+      "sha256": "39824e98ca53dc017ea5d3b9abcfdb20a15609eaf15b4dc0168aa0c14abe8f9d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.148063882251932,
+        -16.85315669575034
+      ],
+      "rms_dbfs": -19.34752110515713,
+      "peak_dbfs": -11.10529316710214,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 6.357828776041667e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/neutral/ah.wav",
+      "sha256": "06f446b13e60ca223d533374893ca87694e67a73203810e6d686c65728599435",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.222273430988743,
+        -14.428380717433956
+      ],
+      "rms_dbfs": -18.783231925312137,
+      "peak_dbfs": -11.296834203509743,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -6.811959402901785e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/neutral/eh.wav",
+      "sha256": "9238090c4ae211de5077249a999f62197fbc80ef075ad6bb524cfd77635ef50a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.965402652639535,
+        -18.355958822789827
+      ],
+      "rms_dbfs": -18.69811346821566,
+      "peak_dbfs": -12.13501005214988,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 5.903698149181548e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/neutral/ee.wav",
+      "sha256": "1c827c8a72b3ac59d10edd464c5a0b3a8510eeda3301df4d0f9d8362d33cd842",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -18.666193927325015,
+        -24.666532191828317
+      ],
+      "rms_dbfs": -15.97688911020506,
+      "peak_dbfs": -10.01438879915929,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/neutral/oh.wav",
+      "sha256": "ef64618da20be78331866fcc3802a1bea1c3011f41078271d356c9c9685c960b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.733649197814321,
+        -22.355958822789827
+      ],
+      "rms_dbfs": -18.692497964517173,
+      "peak_dbfs": -12.33668875087064,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 2.7247837611607142e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/neutral/oo.wav",
+      "sha256": "b3eafc59fadc318e8c7388cbe20373495c7f6fc095ccbf7ec2ecdc4ee9601d54",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.589415753991071,
+        -25.786725441950857
+      ],
+      "rms_dbfs": -17.420241288398994,
+      "peak_dbfs": -10.136995263956008,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 1.362391880580357e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/neutral/uh.wav",
+      "sha256": "be6a337f764194e0099674ee895ab34a191f8f85a753468345707ad83128298e",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.433734802008079,
+        -17.497200961648385
+      ],
+      "rms_dbfs": -19.347535742688187,
+      "peak_dbfs": -11.809980920882147,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 9.08261253720238e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/happy/ah.wav",
+      "sha256": "2f0d0aade302accb0e70a4f5d0333ac8e848759a5387fa26a3b25a6e8db2cabd",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.65955073216118,
+        -14.977593140767237
+      ],
+      "rms_dbfs": -18.78324147415134,
+      "peak_dbfs": -11.054984065107536,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/happy/eh.wav",
+      "sha256": "b10b3c42c7206edbbcbd36f9db175d75f07cd6e919eadf1232592183f9b0b3fb",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.873933693675303,
+        -18.395126492215343
+      ],
+      "rms_dbfs": -18.6981055929061,
+      "peak_dbfs": -11.975709408366415,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 2.406892322358631e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/happy/ee.wav",
+      "sha256": "63046bedf4e8ebfeb68bab05dcbbbb4702114abccc4bb952e8e202ff5e423a96",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -17.849399357476326,
+        -23.793516074529308
+      ],
+      "rms_dbfs": -15.976887283895149,
+      "peak_dbfs": -9.807799327202781,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 1.0899135044642857e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/happy/oh.wav",
+      "sha256": "64c0c6320e12e9ab3a263219b7db77d67b501bfaacecf46da3401b09ae49c72e",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.187522322539648,
+        -22.395126492215343
+      ],
+      "rms_dbfs": -18.69250014045971,
+      "peak_dbfs": -12.280922162689322,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -1.1807396298363096e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/happy/oo.wav",
+      "sha256": "1f7e65fee043f6c41a203b060971eac8266da410824c95f15fe8c9a9db14ce7c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.101386982484925,
+        -25.835440214316
+      ],
+      "rms_dbfs": -17.420256588099285,
+      "peak_dbfs": -10.05900314842818,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 2.1798270089285714e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/happy/uh.wav",
+      "sha256": "6659b8c7bde973e8cea09c26c1ce8655e91d64a3e87f1fda879e8a9327ab909b",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.564702758128407,
+        -17.995099181915197
+      ],
+      "rms_dbfs": -19.347537781094854,
+      "peak_dbfs": -11.551622767917172,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 1.1353265671502976e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/angry/ah.wav",
+      "sha256": "79026d5d2d61e5fcbaafa2ed5661aab6d9bd9d2166e430f822b29cd039f32c22",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.973741745668612,
+        -15.243513942371214
+      ],
+      "rms_dbfs": -20.783228915642354,
+      "peak_dbfs": -12.963185302096676,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.782969,
+      "output_gain_db": -5,
+      "dc_offset": -7.720220656622024e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/angry/eh.wav",
+      "sha256": "7c4ad58725c6f33e2e9156a9c60cf7d3e1496e44af3171a324cb4dae0c53ec89",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.501507362570809,
+        -18.145487038179795
+      ],
+      "rms_dbfs": -20.698113697552756,
+      "peak_dbfs": -13.849953888244727,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.69784,
+      "output_gain_db": -5,
+      "dc_offset": -6.357828776041667e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/angry/ee.wav",
+      "sha256": "178d2dadf8fb0d8b435fc60bf25e3fbf5cc9687dc6be6b688f7cc0ecb1db73f4",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -16.723039438962054,
+        -22.453946032400513
+      ],
+      "rms_dbfs": -17.976888650107092,
+      "peak_dbfs": -11.585763880971207,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.976619,
+      "output_gain_db": -5,
+      "dc_offset": -1.9527616954985118e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/angry/oh.wav",
+      "sha256": "8e23e6803a1ea6f018444b2ce1179adde198cfc8f3bee5fb954a1a03a3b54e01",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.527326409034398,
+        -22.14548703817979
+      ],
+      "rms_dbfs": -20.692496034079795,
+      "peak_dbfs": -14.324945573183856,
+      "peak_limited": false,
+      "target_rms_dbfs": -20.692237,
+      "output_gain_db": -5,
+      "dc_offset": -4.541306268601191e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/angry/oo.wav",
+      "sha256": "2909a249ce7dc17fb4902c4f31b78bec7f0b230723c057edd617af80598cb2a3",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.495814675332863,
+        -25.540370653171212
+      ],
+      "rms_dbfs": -19.420259146140104,
+      "peak_dbfs": -12.039079506851888,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.419983000000002,
+      "output_gain_db": -5,
+      "dc_offset": 3.178914388020833e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/angry/uh.wav",
+      "sha256": "03e41caeabfb527f70961f236c841b291bd06313c4660a41d38765d461518066",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.344823897438713,
+        -18.215402721803432
+      ],
+      "rms_dbfs": -21.34753572371283,
+      "peak_dbfs": -13.383493850950094,
+      "peak_limited": false,
+      "target_rms_dbfs": -21.347272,
+      "output_gain_db": -5,
+      "dc_offset": 2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/afraid/ah.wav",
+      "sha256": "5f2b417e515a351b5bd77447379d4298c7ad9576f9785efafd5b40b2362f8d42",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -7.453249017884309,
+        -13.41414654784558
+      ],
+      "rms_dbfs": -18.783234273405533,
+      "peak_dbfs": -11.833759482620355,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -6.357828776041667e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/afraid/eh.wav",
+      "sha256": "0f66e7aa795f59f2cd60522d48eed1bcc9070588f9bad599372621ac68d31c8d",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.759695145669227,
+        -18.007510295582996
+      ],
+      "rms_dbfs": -18.698105639378323,
+      "peak_dbfs": -12.35425819228581,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 2.270653134300595e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/afraid/ee.wav",
+      "sha256": "355d0878cc61ea7a4df9636e10858545f193234d152ae59f94f9c389cb865645",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.460817990895233,
+        -25.4404978958156
+      ],
+      "rms_dbfs": -15.976881001371092,
+      "peak_dbfs": -10.219131948248872,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -9.5367431640625e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/afraid/oh.wav",
+      "sha256": "bb96065144f9f466fc5c3aa11bb71f22ca75a3bc2bdff6fecae683dc7cab83b7",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.288330063221569,
+        -22.007510295582996
+      ],
+      "rms_dbfs": -18.692507740054026,
+      "peak_dbfs": -12.484942153988449,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -1.5440441313244048e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/afraid/oo.wav",
+      "sha256": "b2bb15dbb81f6274876a23a83e8421e33ae9bd46f6cea79a932b2df306a4a098",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.058300916113907,
+        -25.326122405819312
+      ],
+      "rms_dbfs": -17.420256676825527,
+      "peak_dbfs": -10.257039084796187,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -4.54130626860119e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/afraid/uh.wav",
+      "sha256": "fafe6c282a37f4cc13b56ddb2db86b0425f4140d078556f42a3106367d0611b7",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.81383587044735,
+        -16.532513324132548
+      ],
+      "rms_dbfs": -19.347548088485265,
+      "peak_dbfs": -12.262412582027984,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -1.3623918805803571e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/panicked/ah.wav",
+      "sha256": "14e71c4dc1d832fe04b5e4a700c36d55ecb4a835208c3d3cc9dfddbd88eeae85",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -8.560043553388288,
+        -14.860188176189963
+      ],
+      "rms_dbfs": -18.783230674924603,
+      "peak_dbfs": -11.175067401301341,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -2.497718447730655e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/panicked/eh.wav",
+      "sha256": "552715ed612552a8b7763b42fbb7284b8c1bf290a108b00cf2640a2f121b2089",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.92003683418719,
+        -18.40725729959478
+      ],
+      "rms_dbfs": -18.698095374247174,
+      "peak_dbfs": -12.085846524394825,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/panicked/ee.wav",
+      "sha256": "71ef8f1a2065651e2794411b65842862704034cf3ea086923c5c2dbed034c423",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -18.079978104249236,
+        -24.048550531288587
+      ],
+      "rms_dbfs": -15.976881840411712,
+      "peak_dbfs": -9.936652848805526,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -9.082612537202382e-09,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/panicked/oh.wav",
+      "sha256": "be4d825c3e23abbba833ba40481b0b5aa0a694b9168ceb6895329ed1f2bb8d39",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.335958928323521,
+        -22.407257299594775
+      ],
+      "rms_dbfs": -18.692501396397564,
+      "peak_dbfs": -12.35865611118385,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 1.3169788178943453e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/panicked/oo.wav",
+      "sha256": "e75c48e9c8b47ec8f141caffd2e21d1755b22b3fef97e499f8bfb20b340d07fb",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -12.235356332925777,
+        -25.850320651190025
+      ],
+      "rms_dbfs": -17.420243212356404,
+      "peak_dbfs": -10.14551501906583,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -7.720220656622024e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/panicked/uh.wav",
+      "sha256": "0799ebe7c90105a11633dfd8e791209c815b320fc9d4cb99aae6de07f9ffca6e",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -11.561533870931635,
+        -17.890514127976452
+      ],
+      "rms_dbfs": -19.347530674669635,
+      "peak_dbfs": -11.681875689835799,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": 3.633045014880953e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/pained/ah.wav",
+      "sha256": "42b3f53eb80411b02222744da9b0863eacf90052aeeff6d1dec6cea155665f9a",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -7.073545562055539,
+        -12.925867168696481
+      ],
+      "rms_dbfs": -18.78323778279033,
+      "peak_dbfs": -12.1061194779041,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": 1.9073486328125e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/pained/eh.wav",
+      "sha256": "547dbb242fb6a2bebb37a8b9d0330b0aef2e204d2760722b8b7fa3f38727c80c",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.574653537660328,
+        -17.777324395922065
+      ],
+      "rms_dbfs": -18.69809137207238,
+      "peak_dbfs": -12.399442773680068,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": -5.903698149181548e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/pained/ee.wav",
+      "sha256": "960b65cd2beaaee67a7b2bbd91d7764aa9fa7ad1935fba1fe7c6ec6d99a61455",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.72103430409326,
+        -25.681619684721703
+      ],
+      "rms_dbfs": -15.976881741236973,
+      "peak_dbfs": -10.223431255191109,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": -4.9954368954613096e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/pained/oh.wav",
+      "sha256": "b3eab390d28faa1e5ed48e6982dac2c13d0f7f80051409caa12f88e346137d87",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.443625826018932,
+        -21.777324395922065
+      ],
+      "rms_dbfs": -18.692505776036576,
+      "peak_dbfs": -12.518482765770534,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": -5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/pained/oo.wav",
+      "sha256": "f8f947ad692a9db6f230489894fa5cd022a80a9995afc4299f7f6edd2b963073",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.16829992155533,
+        -25.001565381391234
+      ],
+      "rms_dbfs": -17.420248519933818,
+      "peak_dbfs": -10.259629696627709,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": 5.4495675223214284e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/pained/uh.wav",
+      "sha256": "6ebe10297aa698825eee673ca9705ffb47d2ad13411f2fe240bed48c5f3d2503",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.422594811539938,
+        -16.043847280216603
+      ],
+      "rms_dbfs": -19.347534750598694,
+      "peak_dbfs": -12.449307684980024,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -1.3623918805803571e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/relieved/ah.wav",
+      "sha256": "db6a90c47ce17a8471a6e110ba760d978e7caebcc7571212e3a5c506f2045677",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -7.453249017884309,
+        -13.41414654784558
+      ],
+      "rms_dbfs": -18.783249243070895,
+      "peak_dbfs": -11.779062913729952,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.782969,
+      "output_gain_db": -3,
+      "dc_offset": -2.0890008835565476e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/relieved/eh.wav",
+      "sha256": "1cb9568e9580487a40267364421e88f93d8815b3917e6732eeebb9b7d71fb601",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -14.759695145669227,
+        -18.007510295582996
+      ],
+      "rms_dbfs": -18.698100564097142,
+      "peak_dbfs": -12.300563630039607,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.69784,
+      "output_gain_db": -3,
+      "dc_offset": 7.720220656622024e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/relieved/ee.wav",
+      "sha256": "a59dcef6eee4494f3e49e9e13ec2490c28bf5afb17c9d5329dbad50036168bea",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -19.460817990895233,
+        -25.4404978958156
+      ],
+      "rms_dbfs": -15.976879756002775,
+      "peak_dbfs": -10.165142228053545,
+      "peak_limited": false,
+      "target_rms_dbfs": -15.976619,
+      "output_gain_db": -3,
+      "dc_offset": 1.362391880580357e-07,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/relieved/oh.wav",
+      "sha256": "25ea3a1c1db7cdb250b7b2472cc817af5094c91921cb7de54f46be57a9b387cc",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.288330063221569,
+        -22.007510295582996
+      ],
+      "rms_dbfs": -18.692497493401618,
+      "peak_dbfs": -12.43154512329273,
+      "peak_limited": false,
+      "target_rms_dbfs": -18.692237,
+      "output_gain_db": -3,
+      "dc_offset": 6.811959402901785e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/relieved/oo.wav",
+      "sha256": "7dbc2154fbebf212cbda30055093f8f8a5479f4b858f050d4c910acd4c7dcdc5",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -13.058300916113907,
+        -25.326122405819312
+      ],
+      "rms_dbfs": -17.420245937341118,
+      "peak_dbfs": -10.202813962224027,
+      "peak_limited": false,
+      "target_rms_dbfs": -17.419983000000002,
+      "output_gain_db": -3,
+      "dc_offset": -3.178914388020833e-08,
+      "first_step": 0,
+      "last_step": 0
+    },
+    {
+      "path": "female_elderly/relieved/uh.wav",
+      "sha256": "34c9ee77016343ca7797f54b11a6899c949300d92f4ad3d8593a739744d47d01",
+      "relative_formant_band_rms_db": [
+        0.0,
+        -10.81383587044735,
+        -16.532513324132548
+      ],
+      "rms_dbfs": -19.347538092938997,
+      "peak_dbfs": -12.208200137670126,
+      "peak_limited": false,
+      "target_rms_dbfs": -19.347272,
+      "output_gain_db": -3,
+      "dc_offset": -1.8165225074404764e-08,
+      "first_step": 0,
+      "last_step": 0
+    }
+  ]
+}

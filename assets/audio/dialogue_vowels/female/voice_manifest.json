@@ -1,0 +1,116 @@
+{
+  "schema_version": 2,
+  "voice_identity_id": "female",
+  "display_name": "Female \u00b7 middle-aged",
+  "continuous_pitch": true,
+  "moods": {
+    "neutral": {
+      "ah": "neutral/ah.wav",
+      "eh": "neutral/eh.wav",
+      "ee": "neutral/ee.wav",
+      "oh": "neutral/oh.wav",
+      "oo": "neutral/oo.wav",
+      "uh": "neutral/uh.wav"
+    },
+    "happy": {
+      "ah": "happy/ah.wav",
+      "eh": "happy/eh.wav",
+      "ee": "happy/ee.wav",
+      "oh": "happy/oh.wav",
+      "oo": "happy/oo.wav",
+      "uh": "happy/uh.wav"
+    },
+    "angry": {
+      "ah": "angry/ah.wav",
+      "eh": "angry/eh.wav",
+      "ee": "angry/ee.wav",
+      "oh": "angry/oh.wav",
+      "oo": "angry/oo.wav",
+      "uh": "angry/uh.wav"
+    },
+    "afraid": {
+      "ah": "afraid/ah.wav",
+      "eh": "afraid/eh.wav",
+      "ee": "afraid/ee.wav",
+      "oh": "afraid/oh.wav",
+      "oo": "afraid/oo.wav",
+      "uh": "afraid/uh.wav"
+    },
+    "panicked": {
+      "ah": "panicked/ah.wav",
+      "eh": "panicked/eh.wav",
+      "ee": "panicked/ee.wav",
+      "oh": "panicked/oh.wav",
+      "oo": "panicked/oo.wav",
+      "uh": "panicked/uh.wav"
+    },
+    "pained": {
+      "ah": "pained/ah.wav",
+      "eh": "pained/eh.wav",
+      "ee": "pained/ee.wav",
+      "oh": "pained/oh.wav",
+      "oo": "pained/oo.wav",
+      "uh": "pained/uh.wav"
+    },
+    "relieved": {
+      "ah": "relieved/ah.wav",
+      "eh": "relieved/eh.wav",
+      "ee": "relieved/ee.wav",
+      "oh": "relieved/oh.wav",
+      "oo": "relieved/oo.wav",
+      "uh": "relieved/uh.wav"
+    }
+  },
+  "prosody": {
+    "neutral": {
+      "pitch_semitones": 0.5,
+      "contour_semitones": 0.5,
+      "gain": 1,
+      "wobble_hz": 0,
+      "wobble_semitones": 0,
+      "word_accent_semitones": 0.75
+    },
+    "happy": {
+      "pitch_semitones": 1,
+      "contour_semitones": 3,
+      "gain": 1.05,
+      "wobble_hz": 0,
+      "wobble_semitones": 0
+    },
+    "angry": {
+      "pitch_semitones": -0.5,
+      "contour_semitones": 1.5,
+      "gain": 1.2,
+      "wobble_hz": 0,
+      "wobble_semitones": 0
+    },
+    "afraid": {
+      "pitch_semitones": 1,
+      "contour_semitones": 2.5,
+      "gain": 0.85,
+      "wobble_hz": 5,
+      "wobble_semitones": 0.2
+    },
+    "panicked": {
+      "pitch_semitones": 2.5,
+      "contour_semitones": 4,
+      "gain": 1.1,
+      "wobble_hz": 6,
+      "wobble_semitones": 0.2
+    },
+    "pained": {
+      "pitch_semitones": -1,
+      "contour_semitones": 3,
+      "gain": 0.85,
+      "wobble_hz": 3,
+      "wobble_semitones": 0.2
+    },
+    "relieved": {
+      "pitch_semitones": -0.5,
+      "contour_semitones": 3,
+      "gain": 0.9,
+      "wobble_hz": 0,
+      "wobble_semitones": 0
+    }
+  }
+}
