@@ -7825,7 +7825,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -7917,7 +7917,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "9155cf956bf855bb",
+    "sourceHash": "550f91074e0fe440",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -7927,17 +7927,17 @@
       "rgbMax": [
         0.97119140625,
         0.73095703125,
-        0.47314453125
+        0.5771484375
       ],
-      "auxiliaryMin": 0.450439453125,
+      "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
+      "sampleCount": 16777216,
       "rgbChannelsAboveOne": 0
     },
     "objectProbes": {
       "path": "assets/levels/intro/intro.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "9155cf956bf855bb",
+      "sourceHash": "550f91074e0fe440",
       "count": 4072,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -7950,24 +7950,41 @@
           0.0035294117406010628
         ],
         "rgbMax": [
-          1.0182116031646729,
-          0.9766853451728821,
-          0.904670000076294
+          1.0031827688217163,
+          0.9623183012008667,
+          0.8914503455162048
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 24432,
-        "rgbChannelsAboveOne": 12
+        "rgbChannelsAboveOne": 6
       }
     },
     "staticModels": {
       "path": "assets/levels/intro/intro.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "9155cf956bf855bb",
+      "sourceHash": "550f91074e0fe440",
       "modelCount": 87,
       "objectCount": 354,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/intro/intro.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/intro/intro.lightmap.2.bin",
+        "width": 2048,
+        "height": 2048
+      },
+      {
+        "path": "assets/levels/intro/intro.lightmap.3.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1

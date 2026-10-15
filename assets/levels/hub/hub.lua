@@ -3,14 +3,15 @@ local function elinPlaceQuestions()
         elin_arrival = function()
           say("How did you get here?")
           startPlayNpcAnimation("elin", "Talking_2")
-          say("elin", "I was at a subway station when the blackout happened. In the confusion a security person ushered me into a side tunnel.")
+          say("elin", "I was at the station when the lights went out. Everyone started pushing for the exits.")
           startPlayNpcAnimation("elin", "Rejected")
-          say("elin", "He then went back to look for more people and left me to wander alone in these dark tunnels..", "afraid")
+          say("elin", "A security guard opened a side door and waved me through. Then he went back for the others.", "afraid")
+          say("elin", "I kept going. Never saw him again.")
           setFlag("elin_asked_arrival", true)
         end,
         back = function()
           say("Let me ask you something else.")
-          say("elin", "Yes?")
+          say("elin", "Sure.")
           return "exit"
         end,
     }, function()
@@ -25,26 +26,28 @@ local function elinConversation()
     local returning = flag("elin_intro_conversation_finished")
     runConversationDynamic("elin_intro_topics", {
         identity = function()
-            say("Thanks for patching me up, I am James, who might you be?.")
+            say("Thanks for patching me up. I'm James.")
             startPlayNpcAnimation("elin", "Waving")
-            say("elin", "Hi James, my name is Elin. it's a pleasure to meet you.", "happy")
-            say("What happened back there? I remember the whole tunnel started to shake and a loud noise.")
-            say("I started running but then suddenly everything went dark. When I regained consciousness I ran into you.")
+            say("elin", "Elin. Nice to meet you, James. Could've picked a better place.", "happy")
+            say("What the hell happened back there? The tunnel started shaking, then there was this huge bang.")
+            say("I ran. Next thing I knew, I was on the floor. Managed to get up and find you.")
             startPlayNpcAnimation("elin", "Talking_2")
-            say("elin", "Apparently the section you were under started to collapse and you just barely made it out alive.")
+            say("elin", "I heard it too. Sounds like you only just got clear before the whole thing came down.")
             startPlayNpcAnimation("elin", "Talking")
-            say("elin", "You suffered a nasty blow to the head, luckily I was there to take care of you.")
-            say("Much appreciated, I owe you one.")
+            say("elin", "You had a nasty cut on your head. Didn't look like you were going to get much farther.")
+            say("Well, I owe you one.")
             setFlag("elin_asked_identity", true)
         end,
         place = function()
+            say("Any idea what this place is?")
             if not flag("elin_shown_place_questions") then
-                say("Do you know what this place is?")
                 startPlayNpcAnimation("elin", "Talking")
-                say("elin", "No. I found this office looking room and decided to stop, catch a breath and reevaluate my options.")
+                say("elin", "Not really. I found this office and stopped to catch my breath.")
                 startPlayNpcAnimation("elin", "Talking_2")
-                say("elin", "Sure beats walking the dark tunnels. Seems like somebody have been working here until recently.")
-                say("elin", "I figured I would way for them to return.")
+                say("elin", "There's a bed, the lights work... Beats stumbling around in the dark.")
+                say("elin", "I thought whoever works here would be back by now.")
+            else
+                say("elin", "Still no idea. What did you want to know?")
             end
             elinPlaceQuestions()
             setFlag("elin_shown_place_questions", true)
@@ -53,16 +56,16 @@ local function elinConversation()
         people = function()
             say("Have you seen anyone else down here?", { mood = "afraid" })
             startPlayNpcAnimation("elin", "No")
-            say("elin", "No one I could talk to. I was starting to think I was alone.")
+            say("elin", "Not down here. I was starting to think I was on my own.")
             startPlayNpcAnimation("elin", "Talking")
-            say("elin", "But there are two of us now. That's a start.", "relieved")
+            say("elin", "At least there's two of us now.", "relieved")
             startPlayNpcAnimation("elin", "Excited")
             setFlag("elin_asked_people", true)
         end,
         locked_door = function()
-            say("Have you seen a key or anything lying around that could be useful for unlocking the door in the hallway?")
+            say("Found any keys? That door in the hallway's locked.")
             local anim = startPlayNpcAnimation("elin", "No")
-            say("elin", "No I haven't found anything, have you looked around the office?.")
+            say("elin", "No luck. Have a proper look around the office. I haven't checked everywhere.")
             assert(await(anim))
             setFlag("elin_asked_storage_door", true)
             return "exit"
@@ -72,7 +75,7 @@ local function elinConversation()
                 say("Talk later.")
                 say("elin", "Later.")
             else
-                say("I'll look around. Stay close.")
+                say("I'll have a look around. Stay close.")
                 startPlayNpcAnimation("elin", "Talking")
                 say("elin", "Be careful. And don't disappear on me.")
             end
@@ -208,7 +211,7 @@ end
 function intro_trigger_1()
     assert(startCutscene())
     openDoor("office_door")
-    say("elin", "Who is there?!!...", "afraid")
+    say("elin", "Who's there?!", "afraid")
     assert(startPlayNpcAnimation("elin", "Waving"))
     movePlayer("intro_marker_1", "walk", 2.0, {
         lookAtNpc = "elin",
@@ -217,7 +220,7 @@ function intro_trigger_1()
     })
     delay(2000)
     startPlayNpcAnimation("elin", "Excited_2")
-    say("elin", "Yes finally another person!!. Come closer.", "relieved")
+    say("elin", "Oh, thank God. Come here.", "relieved")
     movePlayer("intro_marker_2", "walk", 2.0, {
         lookAtNpc = "elin",
         turnDurationMs = 1000,
@@ -225,7 +228,7 @@ function intro_trigger_1()
     })
     lookAtNpc("elin", 1500, 0.7)
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "Oh no you're hurt, follow me!", "afraid")
+    say("elin", "Shit, you're bleeding. Come on, this way.", "afraid")
     local elinArrival = assert(startMoveNpc("elin", "recovery_marker_1", "walk", 1.5, true))
     delay(1500)
     movePlayer("recovery_marker_2", "walk", 1.0, {
@@ -236,7 +239,7 @@ function intro_trigger_1()
     assert(await(elinArrival))
     startNpcLookAtPlayer("elin", 500)
     startPlayNpcAnimation("elin", "Reaching Out", 4000)
-    startSay("elin", "Lay down on the bed and let me help you.")
+    startSay("elin", "Lie down. Let me have a look.")
     --lookAtNpc("elin", 500, 0.7)
     fadeOut(3950)
 
@@ -249,7 +252,7 @@ function intro_trigger_1()
     assert(trackCameraNpc("elin", 2000, 0.75))
     delay(2000)
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "Lay still and relax, I think I saw a medkit over here.")
+    say("elin", "Keep still. I think I saw a first-aid kit over here.")
     moveNpc("elin", "recovery_marker_3", "walk", 1.5, true)
     startSay("elin", "Found it!", "happy")
     startPlayNpcAnimation("elin", "Reaching Out", 1000)
@@ -259,7 +262,7 @@ function intro_trigger_1()
     fadeOut(1950)
     delay(2000)
     setPlayerHealth(50)
-    say("elin", "There much better, now get a little rest.", "relieved")
+    say("elin", "There. That's better. Try to get some rest.", "relieved")
     delay(2000)
     text("A while later...", CENTER, 2000)
 
@@ -269,7 +272,7 @@ function intro_trigger_1()
 
     fadeIn(4000)
     startPlayNpcAnimation("elin", "Thankful")
-    say("elin", "Finally awake, you look much better now.", "happy")
+    say("elin", "Hey. You look a bit more alive.", "happy")
     moveNpc("elin", "intro_marker_3", "walk", 1.5, true)
 
     moveCamera("intro_marker_4", 3000, 1.65)
@@ -282,33 +285,45 @@ end
 function entrance_trigger()
     assert(startCutscene())
     delay(1000)
-    text("I wonder what it will take to get through this one.", BOTTOM)
+    text("How the hell am I getting through this?", BOTTOM)
     movePlayer("intro_marker_5", "walk", 1.5, {
         lookAtProp = "entrance_keypad",
     })
-    text("Looks like it will require a key card and a code as well.", BOTTOM)
+    text("Card reader and a keypad. Of course.", BOTTOM)
     assert(teleportNpc("elin", "intro_marker_6"))
 
     local elinArrival = assert(startMoveNpc("elin", "intro_marker_7", "walk", nil, true))
     delay(1000)
-    startSay("elin", "What have you found?")
+    startSay("elin", "Find something?")
     startLookAtNpc("elin", 2000, 0.7)
     delay(2000)
     startLookAtNpc("elin", 4000, 0.7)
     assert(await(elinArrival))
     lookAtNpc("elin", 350, 0.7)
     startPlayNpcAnimation("elin", "Excited_2")
-    say("elin", "Wow! that is a big door! How do we open it?")
-    say("It requires a key card and a pincode.")
-    if hasInventoryItemInstance("blue_key_card") then
-        say("I found a key card in the storage room. But I don't know the pincode.")
+    say("elin", "Jesus. What are they keeping behind that?")
+    say("Whatever it is, they want a keycard and a code.")
+    local cardAccepted = flag("entrance_card_accepted")
+    local pinAccepted = flag("entrance_pin_accepted")
+    local hasCard = hasInventoryItemInstance("blue_key_card")
+    if cardAccepted and pinAccepted then
+        say("Both accepted. Should open now.")
+    elseif cardAccepted then
+        say("The reader accepted the card. Still need the code.")
+    elseif pinAccepted and hasCard then
+        say("The code worked. Just need to try this card from the storage room.")
+    elseif pinAccepted then
+        say("The code worked. Still need a keycard.")
+    elseif hasCard then
+        say("I've got a card from the storage room. Still need the code.")
     else
-        say("I have neither.")
+        say("Haven't got either.")
     end
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "You should be careful. I don't like the noises coming from in there.")
+    say("elin", "Listen. You hear that?")
+    say("elin", "I don't like the sound of whatever's in there. Be careful.")
     startPlayNpcAnimation("elin", "No")
-    say("elin", "I'll hang out in the office.")
+    say("elin", "I'll be back in the office.")
     setFlag("elin_in_storage_room", false)
     startMoveNpc("elin", "intro_marker_3", "walk", nil, true)
     startLookAtNpc("elin", 2000, 0.55)
@@ -324,7 +339,7 @@ function storage_trigger()
     local elinArrival = assert(startMoveNpc("elin", "intro_marker_9", "run", nil, true))
     assert(await(elinArrival))
     local lookWait = startLookAtNpc("elin", 1000, 0.7)
-    local elinSay = startSay("elin", "A janitor room!, but where is the janitor?.")
+    local elinSay = startSay("elin", "Found the janitor's room, then. Any sign of the janitor?")
     setFlag("elin_in_storage_room", true)
     assert(await(lookWait))
     assert(await(elinSay))
@@ -333,23 +348,24 @@ function storage_trigger()
     assert(await(elinArrival))
     startPlayNpcAnimation("elin", "Reaching Out")
     lookAtNpc("elin", 250, 0.7)
-    say("elin", "Hmm he seemed to like the buff ones..")
+    say("elin", "Well. Someone likes muscles.")
     startPlayNpcAnimation("elin", "Talking_2")
-    say("elin", "This reminds me of my uncle, minus all the beer cans and the smell of old tobacco smoke.")
+    say("elin", "My uncle's a janitor. He'd never leave his tools like that.")
+    say("elin", "Mind you, there'd be beer cans everywhere and the whole place would stink of tobacco.")
     startNpcLookAtPlayer("elin", 1000)
-    say("Too bad, I could use a beer right about now, even a warm one.")
-    startSay("elin", "Me too.")
+    say("Shame about the beer. I'd take a warm one at this point.")
+    startSay("elin", "You and me both.")
 
     elinArrival = assert(startMoveNpc("elin", "intro_marker_11", "walk", nil, true))
     lookAtNpc("elin", 3000, 0.7)
     assert(await(elinArrival))
     startPlayNpcAnimation("elin", "Reaching Out")
     lookAtNpc("elin", 250, 0.7)
-    say("elin", "Seems like we have us a equal oppertunity amorist.")
+    say("elin", "Oh, he's not fussy. Fair enough.")
     startNpcLookAtPlayer("elin", 2000)
-    say("It would seem so. Two sixpacks so far and none of them of the drinkable varierity.")
+    say("Two six-packs, and neither one's any fucking use to me.")
     startPlayNpcAnimation("elin", "Talking")
-    say("elin", "Aww.")
+    say("elin", "Speak for yourself.")
 
     assert(endCutscene())
 end
@@ -472,6 +488,42 @@ end
 function usePasswordNote()
     showNote("Login:", "user: user\npassword: im2good")
 end
+
+function useStaffingNotice()
+    showNote("CHRISTMAS COVER", [[
+Most annex staff will be off from December 24 through December 27.
+
+Meals for the holiday crew are in the kitchen freezer. Please take only what you need. Last year's situation will not be repeated.
+
+Receiving is closed to outside deliveries until December 28. Internal transfers continue on the usual schedule.
+
+If a transfer fault occurs, call the duty supervisor. Do not enter the chamber to retrieve a stalled load.
+
+And whoever borrowed the lounge heater: bring it back.
+
+Merry Christmas.]])
+end
+
+function useServiceReminderNotice()
+    showNote("TRANSFER EQUIPMENT - SERVICE REMINDER", [[
+Before servicing a transfer unit, close and secure the inner shutter.
+
+Do not include newspapers, receipts, calendars, or original packaging with a load. Check beneath trays and inside empty containers.
+
+If you hear speech from the receiving side, do not answer. Report the unit number to the duty supervisor.
+
+A voice is not grounds for opening the shutter.]])
+end
+
+function usePasswordComplaint()
+    showNote([[
+Stop resetting the outer door code.
+
+It's the title of the book beside my bed. Four numbers. Even you should manage that.
+
+And put my spare key back when you're done. I'm tired of getting locked out of my own workshop.]])
+end
+
 
 local storageRadioOn = false
 
